@@ -151,11 +151,26 @@ export class AuthService {
         expiresAt,
       },
     });
-    await emailService.sendVerificationEmail(
-      normalizedEmail,
-      fullName.trim(),
-      verificationToken
-    );
+
+    // Sending the verification email must NOT fail registration. The user row
+    // and token are already committed above; if SMTP is down we'd otherwise
+    // 500 the client even though the account exists, leaving them stuck
+    // (re-registering hits EMAIL_EXISTS). Instead we log, flag it on the
+    // response, and let the user trigger a resend.
+    let emailSendFailed = false;
+    try {
+      await emailService.sendVerificationEmail(
+        normalizedEmail,
+        fullName.trim(),
+        verificationToken
+      );
+    } catch (err) {
+      emailSendFailed = true;
+      console.error(
+        `[register] Verification email failed for ${normalizedEmail} — account created, user can resend.`,
+        err
+      );
+    }
 
     // Generate tokens (user can use app but should verify email)
     const tokenPayload: JWTPayload = {
@@ -194,6 +209,7 @@ export class AuthService {
         expires_in: 3600,
       },
       requiresEmailVerification: true,
+      emailSendFailed,
     };
   }
 
