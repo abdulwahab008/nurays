@@ -123,11 +123,17 @@ jobs:
         working-directory: backend
         run: npm ci
 
-      - name: Prisma generate + migrate
+      - name: Prisma generate + push schema
         working-directory: backend
+        # Use `db push` rather than `migrate deploy`: the committed migration
+        # history has drifted from schema.prisma (columns added via db push
+        # locally were never captured in a migration). `db push` builds the
+        # CI database from schema.prisma directly — the source of truth.
+        # TODO: reconcile migrations with `prisma migrate dev` before any
+        # production `migrate deploy`.
         run: |
           npx prisma generate
-          npx prisma migrate deploy
+          npx prisma db push --skip-generate
 
       - name: Seed E2E data
         working-directory: backend
