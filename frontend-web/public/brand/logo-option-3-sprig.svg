@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 120" width="240" height="120">
+  
+  
+  <g transform="translate(22, 36)">
+    
+    <path d="M24 0 L24 48" stroke="#0a7a3a" stroke-width="1.6" stroke-linecap="round"></path>
+    <ellipse cx="14" cy="12" rx="9" ry="5" transform="rotate(-30 14 12)" fill="#0a7a3a"></ellipse>
+    <ellipse cx="34" cy="22" rx="9" ry="5" transform="rotate(30 34 22)" fill="#0a7a3a"></ellipse>
+    <ellipse cx="14" cy="34" rx="9" ry="5" transform="rotate(-30 14 34)" fill="#0a7a3a"></ellipse>
+  </g>
+  <text x="86" y="74" font-family="Geist, sans-serif" font-size="44" font-weight="500" fill="#1a1610" letter-spacing="-0.045em">nuray</text>
+</svg>

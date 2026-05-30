@@ -1,0 +1,124 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Nurays Operator — Web Back-Office</title>
+
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@500;600;700;800&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+
+<style>
+  :root {
+    --brand: #E63946;
+    --brand-2: #F77F00;
+    --green: #06A77D;
+    --orange: #F77F00;
+    --ink: #0F1419;
+    --ink-2: #1F2937;
+    --gray-1: #F5F4F1;
+    --gray-2: #EAE8E2;
+    --gray-3: #D4D1C9;
+    --gray-4: #A8A39A;
+    --gray-5: #6B6B66;
+    --red-soft: #FFE5E7;
+    --green-soft: #DFF5EE;
+    --orange-soft: #FEE9D6;
+    --shadow-sm: 0 1px 2px rgba(15, 20, 25, 0.04);
+    --shadow-md: 0 4px 16px rgba(15, 20, 25, 0.08);
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; background: #f0eee9; font-family: Inter, sans-serif; color: var(--ink); }
+  button { font-family: inherit; border: none; cursor: pointer; }
+  img { display: block; max-width: 100%; }
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.15); border-radius: 3px; }
+  @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.4; } }
+  .live-dot { animation: pulse 1.6s ease-in-out infinite; }
+</style>
+
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+</head>
+<body>
+<div id="app"></div>
+
+<script type="text/babel" data-presets="env,react">
+// Image assets (Unsplash food photography)
+const IMG = {
+  tomatoes: 'https://images.unsplash.com/photo-1592924357228-91a4daadcfea?w=400&q=80',
+  bread:    'https://images.unsplash.com/photo-1549931319-a545dcf3bc73?w=400&q=80',
+  yogurt:   'https://images.unsplash.com/photo-1488477181946-6428a0291777?w=400&q=80',
+  apples:   'https://images.unsplash.com/photo-1560806887-1e4cd0b6cbd6?w=400&q=80',
+  milk:     'https://images.unsplash.com/photo-1563636619-e9143da7973b?w=400&q=80',
+  carrots:  'https://images.unsplash.com/photo-1598170845058-32b9d6a5da37?w=400&q=80',
+  priya:    'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=200&q=80',
+  john:     'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=200&q=80',
+  sarah:    'https://images.unsplash.com/photo-1438761681033-6461ffad8d80?w=200&q=80',
+  mike:     'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=200&q=80',
+};
+window.IMG = IMG;
+
+// Icons
+const I = {
+  search: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>,
+  plus: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round"><path d="M12 5v14M5 12h14"/></svg>,
+  filter: <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>,
+  download: <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>,
+  more: <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/></svg>,
+  bell: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg>,
+  star: <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>,
+  chev: <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><polyline points="9 18 15 12 9 6"/></svg>,
+  edit: <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>,
+  alert: <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>,
+};
+window.I = I;
+</script>
+
+<script type="text/babel" src="ui_kits/operator/clean/design-canvas.jsx"></script>
+<script type="text/babel" src="ui_kits/operator/clean/web-shell.jsx"></script>
+<script type="text/babel" src="ui_kits/operator/clean/web-screens.jsx"></script>
+<script type="text/babel" src="ui_kits/operator/clean/web-screens2.jsx"></script>
+
+<script type="text/babel" data-presets="env,react">
+function App() {
+  const { WebLogin, WebDashboard, WebOrders, WebOrderDetail, WebInventory, WebProducts, WebProductDetail, WebVendors, WebReports, WebCustomer, WebNotifs, WebSettings, WebCheckout, WebDashAction } = window;
+
+  return (
+    <DesignCanvas>
+      <DCSection id="entry" title="Web back-office — entry & home" subtitle="Login + the two dashboard variants. 1440×900 default, responsive down to mobile.">
+        <DCArtboard id="login" label="01 · Login" width={1440} height={900}><WebLogin /></DCArtboard>
+        <DCArtboard id="dash" label="02 · Dashboard" width={1440} height={900}><WebDashboard /></DCArtboard>
+        <DCArtboard id="dash-action" label="03 · Action-first dashboard" width={1440} height={900}><WebDashAction /></DCArtboard>
+      </DCSection>
+
+      <DCSection id="ops" title="Operations" subtitle="The screens admin uses daily — orders, inventory, alerts.">
+        <DCArtboard id="inv" label="04 · Inventory" width={1440} height={900}><WebInventory /></DCArtboard>
+        <DCArtboard id="orders" label="05 · Orders" width={1440} height={900}><WebOrders /></DCArtboard>
+        <DCArtboard id="order-detail" label="06 · Order detail" width={1440} height={900}><WebOrderDetail /></DCArtboard>
+        <DCArtboard id="notifs" label="12 · Notifications" width={1440} height={900}><WebNotifs /></DCArtboard>
+      </DCSection>
+
+      <DCSection id="catalog" title="Catalog" subtitle="Products and the vendors who supply them.">
+        <DCArtboard id="prods" label="07 · Products" width={1440} height={900}><WebProducts /></DCArtboard>
+        <DCArtboard id="prod-detail" label="08 · Product detail" width={1440} height={900}><WebProductDetail /></DCArtboard>
+        <DCArtboard id="vendors" label="09 · Vendors" width={1440} height={900}><WebVendors /></DCArtboard>
+      </DCSection>
+
+      <DCSection id="growth" title="Customers, reports & account" subtitle="Looking back, looking out — and the everyday utility screens.">
+        <DCArtboard id="reports" label="10 · Reports" width={1440} height={900}><WebReports /></DCArtboard>
+        <DCArtboard id="cust" label="11 · Customer profile" width={1440} height={900}><WebCustomer /></DCArtboard>
+        <DCArtboard id="settings" label="13 · Settings" width={1440} height={900}><WebSettings /></DCArtboard>
+        <DCArtboard id="checkout" label="14 · Checkout" width={1440} height={900}><WebCheckout /></DCArtboard>
+      </DCSection>
+    </DesignCanvas>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('app')).render(<App />);
+</script>
+</body>
+</html>

@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8">
+<link rel="stylesheet" href="../colors_and_type.css">
+<style>
+  html, body { margin: 0; padding: 0; background: var(--gray-50); }
+  body { padding: 24px; display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .stat-card { position: relative; background: white; border: 1px solid var(--border-light); border-radius: var(--radius-xl); padding: 20px; box-shadow: var(--shadow-sm); overflow: hidden; }
+  .stat-card::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 4px; background: var(--gradient-primary); }
+  .stat-card.accent::before { background: var(--gradient-accent); }
+  .row { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; }
+  .stat-title { font-size: 13px; color: var(--fg-secondary); font-weight: 500; margin: 0 0 6px; }
+  .stat-value { font-size: 30px; font-weight: 800; color: var(--fg-primary); margin: 0; line-height: 1.1; }
+  .stat-change { display: flex; gap: 4px; align-items: center; margin-top: 8px; font-size: 13px; font-weight: 600; }
+  .pos { color: var(--success-600); }
+  .neg { color: var(--error-600); }
+  .stat-icon { width: 48px; height: 48px; border-radius: var(--radius-lg); display: flex; align-items: center; justify-content: center; flex-shrink: 0; color: white; font-size: 22px; font-weight: 700; }
+  .ic-blue { background: var(--accent-500); }
+  .ic-green { background: var(--primary-500); }
+  .ic-orange { background: var(--secondary-500); }
+  .ic-red { background: var(--error-500); }
+</style></head>
+<body>
+  <div class="stat-card">
+    <div class="row">
+      <div>
+        <p class="stat-title">Today's Orders</p>
+        <p class="stat-value">24</p>
+        <div class="stat-change pos">↑ +12%</div>
+      </div>
+      <div class="stat-icon ic-blue">📦</div>
+    </div>
+  </div>
+  <div class="stat-card accent">
+    <div class="row">
+      <div>
+        <p class="stat-title">Today's Revenue</p>
+        <p class="stat-value">₹12,450</p>
+        <div class="stat-change pos">↑ +8%</div>
+      </div>
+      <div class="stat-icon ic-green">₹</div>
+    </div>
+  </div>
+</body></html>

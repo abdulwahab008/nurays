@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8">
+<link rel="stylesheet" href="../colors_and_type.css">
+<style>
+  html, body { margin: 0; padding: 0; background: var(--bg-primary); }
+  body { padding: 20px; }
+  .row { display: flex; gap: 12px; align-items: stretch; flex-wrap: wrap; }
+  .swatch { flex: 1; min-width: 0; height: 96px; border-radius: var(--radius-lg); display: flex; align-items: flex-end; padding: 10px; color: white; font-size: 11px; font-weight: 600; }
+  .swatch .hex { opacity: 0.85; font-family: var(--font-mono); font-weight: 500; font-size: 10px; }
+  .stack { display: flex; flex-direction: column; gap: 2px; }
+  .dark-text { color: var(--gray-900); }
+  .border { border: 1px solid var(--border-light); }
+</style></head>
+<body>
+  <div class="row">
+    <div class="swatch border" style="background: var(--gray-50);"><span class="stack dark-text"><span>50</span><span class="hex">#f9fafb</span></span></div>
+    <div class="swatch" style="background: var(--gray-100);"><span class="stack dark-text"><span>100</span><span class="hex">#f3f4f6</span></span></div>
+    <div class="swatch" style="background: var(--gray-200);"><span class="stack dark-text"><span>200</span><span class="hex">#e5e7eb</span></span></div>
+    <div class="swatch" style="background: var(--gray-300);"><span class="stack dark-text"><span>300</span><span class="hex">#d1d5db</span></span></div>
+    <div class="swatch" style="background: var(--gray-400);"><span class="stack"><span>400</span><span class="hex">#9ca3af</span></span></div>
+    <div class="swatch" style="background: var(--gray-500);"><span class="stack"><span>500</span><span class="hex">#6b7280</span></span></div>
+    <div class="swatch" style="background: var(--gray-600);"><span class="stack"><span>600</span><span class="hex">#4b5563</span></span></div>
+    <div class="swatch" style="background: var(--gray-700);"><span class="stack"><span>700</span><span class="hex">#374151</span></span></div>
+    <div class="swatch" style="background: var(--gray-800);"><span class="stack"><span>800</span><span class="hex">#1f2937</span></span></div>
+    <div class="swatch" style="background: var(--gray-900);"><span class="stack"><span>900</span><span class="hex">#111827</span></span></div>
+  </div>
+</body></html>

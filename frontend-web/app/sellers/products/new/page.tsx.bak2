@@ -1,0 +1,1828 @@
+'use client';
+
+import { useState, useEffect, useRef } from 'react';
+import { useRouter } from 'next/navigation';
+import Link from 'next/link';
+import { DashboardLayout } from '@/components/layout/DashboardLayout';
+import { Button } from '@/components/ui/button';
+import { useToast } from '@/components/ui/toast';
+import { useAuthStore } from '@/lib/store/auth-store';
+import { apiClient } from '@/lib/api-client';
+import { CategoryRequestModal } from '@/components/CategoryRequestModal';
+
+const sidebarItems = [
+  { name: 'Dashboard', href: '/sellers/dashboard', icon: '📊' },
+  { name: 'Orders', href: '/sellers/orders', icon: '📦' },
+  { name: 'Products', href: '/sellers/products', icon: '🍽️' },
+  { name: 'Promotions', href: '/sellers/promotions', icon: '🏷️' },
+  { name: 'Earnings', href: '/sellers/earnings', icon: '💰' },
+  { name: 'Analytics', href: '/sellers/analytics', icon: '📈' },
+  { name: 'Notifications', href: '/sellers/notifications', icon: '🔔' },
+  { name: 'Settings', href: '/sellers/settings', icon: '⚙️' },
+];
+
+interface Category {
+  id: string;
+  name: string;
+  nameUrdu?: string;
+  iconUrl?: string;
+  productType?: string;
+  parentId?: string | null;
+  children?: Category[];
+}
+
+interface GroupedCategories {
+  frozen: Category[];
+  fresh: Category[];
+  ready_to_eat: Category[];
+  ready_to_cook: Category[];
+}
+
+interface ProductImage {
+  file?: File;
+  preview: string;
+  isPrimary: boolean;
+}
+
+export default function AddProductPage() {
+  const router = useRouter();
+  const { isAuthenticated, user } = useAuthStore();
+  const { showToast } = useToast();
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  
+  const [loading, setLoading] = useState(false);
+  const [groupedCategories, setGroupedCategories] = useState<GroupedCategories>({
+    frozen: [],
+    fresh: [],
+    ready_to_eat: [],
+    ready_to_cook: [],
+  });
+  const [images, setImages] = useState<ProductImage[]>([]);
+  const [selectedParentId, setSelectedParentId] = useState<string | null>(null);
+  const [showCategoryRequestModal, setShowCategoryRequestModal] = useState(false);
+  const [customUnit, setCustomUnit] = useState('');
+  const [showKeyboardHelp, setShowKeyboardHelp] = useState(false);
+  
+  // Variant system state
+  const [showVariants, setShowVariants] = useState(false);
+  const [variants, setVariants] = useState<Array<{
+    name: string;
+    nameUrdu?: string;
+    sku?: string;
+    price: number;
+    originalPrice?: number;
+    costPrice?: number;
+    stockQuantity: number;
+    stockThreshold?: number;
+    weightGrams?: number;
+    isDefault: boolean;
+    isActive: boolean;
+    sortOrder: number;
+  }>>([]);
+  
+  // Simple form data
+  const [formData, setFormData] = useState({
+    name: '',
+    nameUrdu: '',
+    categoryId: '',
+    description: '',
+    price: '',
+    originalPrice: '',
+    costPrice: '',  // Seller's cost to make the product
+    productType: '' as '' | 'frozen' | 'fresh' | 'ready_to_eat' | 'ready_to_cook',
+    shelfLifeHours: '',  // How long product stays fresh
+    preparationTime: '', // Minutes to prepare for made-to-order
+    unit: 'piece',
+    stockQuantity: '50',
+    stockType: 'direct' as 'direct' | 'hub' | 'both',
+    ingredients: '',
+    isHalal: true,
+  });
+
+  // Product type options
+  const productTypeOptions = [
+    { value: 'frozen', label: 'Frozen', labelUrdu: 'منجمد', icon: '❄️', description: 'Stored frozen, long shelf life', color: 'blue' },
+    { value: 'fresh', label: 'Fresh', labelUrdu: 'تازہ', icon: '🥬', description: 'Made fresh daily, same-day delivery', color: 'green' },
+    { value: 'ready_to_eat', label: 'Ready to Eat', labelUrdu: 'کھانے کے لیے تیار', icon: '🍽️', description: 'Ready to eat immediately', color: 'orange' },
+    { value: 'ready_to_cook', label: 'Ready to Cook', labelUrdu: 'پکانے کے لیے تیار', icon: '🍳', description: 'Prepared, needs cooking', color: 'purple' },
+  ];
+
+  // Unit options
+  const unitOptions = [
+    { value: 'piece', label: 'Per Piece', labelUrdu: 'فی عدد', example: '1 samosa' },
+    { value: 'pack', label: 'Per Pack', labelUrdu: 'فی پیک', example: '6 samosas' },
+    { value: 'dozen', label: 'Per Dozen', labelUrdu: 'فی درجن', example: '12 pieces' },
+    { value: '100g', label: 'Per 100g', labelUrdu: 'فی 100 گرام', example: '100 grams' },
+    { value: '250g', label: 'Per 250g', labelUrdu: 'فی 250 گرام', example: '250 grams' },
+    { value: '500g', label: 'Per 500g', labelUrdu: 'فی 500 گرام', example: '500 grams' },
+    { value: '1kg', label: 'Per 1 KG', labelUrdu: 'فی 1 کلو', example: '1000 grams' },
+    { value: 'kg', label: 'Per KG', labelUrdu: 'فی کلو', example: 'per kilogram' },
+    { value: 'other', label: 'Other (Custom)', labelUrdu: 'دیگر', example: 'Custom unit' },
+  ];
+
+  useEffect(() => {
+    if (!isAuthenticated) {
+      router.push('/login');
+      return;
+    }
+
+    if (user?.userType !== 'seller' && user?.user_type !== 'seller') {
+      router.push('/dashboard');
+      showToast('Access denied. Seller privileges required.', 'error');
+      return;
+    }
+
+    loadCategories();
+  }, [isAuthenticated, user, router]);
+
+  // Keyboard shortcuts
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Enter key: Move to next field (except for textareas)
+      if (e.key === 'Enter' && !e.shiftKey) {
+        const target = e.target as HTMLElement;
+        
+        // Allow Enter in textareas for new lines
+        if (target.tagName === 'TEXTAREA') {
+          return;
+        }
+        
+        // Prevent form submission on Enter in input fields
+        if (target.tagName === 'INPUT') {
+          e.preventDefault();
+          
+          // Find all focusable elements
+          const form = target.closest('form');
+          if (form) {
+            const focusableElements = Array.from(
+              form.querySelectorAll(
+                'input:not([disabled]):not([type="hidden"]), textarea:not([disabled]), select:not([disabled]), button:not([disabled])[type="button"]'
+              )
+            ) as HTMLElement[];
+            
+            const currentIndex = focusableElements.indexOf(target);
+            const nextElement = focusableElements[currentIndex + 1];
+            
+            if (nextElement) {
+              nextElement.focus();
+            }
+          }
+        }
+      }
+      
+      // Ctrl/Cmd + S: Save product
+      if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+        e.preventDefault();
+        if (!loading) {
+          const form = document.querySelector('form');
+          if (form) {
+            form.requestSubmit();
+          }
+        }
+      }
+      
+      // Ctrl/Cmd + Enter: Submit form
+      if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+        e.preventDefault();
+        if (!loading) {
+          const form = document.querySelector('form');
+          if (form) {
+            form.requestSubmit();
+          }
+        }
+      }
+      
+      // Ctrl/Cmd + K: Toggle keyboard shortcuts help
+      if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+        e.preventDefault();
+        setShowKeyboardHelp(prev => !prev);
+      }
+      
+      // Escape: Close keyboard help or clear focus
+      if (e.key === 'Escape') {
+        if (showKeyboardHelp) {
+          setShowKeyboardHelp(false);
+        } else {
+          (document.activeElement as HTMLElement)?.blur();
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [loading, showKeyboardHelp]);
+
+  const loadCategories = async () => {
+    try {
+      // Use the new grouped endpoint
+      const response = await apiClient.get('/categories/grouped');
+      console.log('Grouped categories response:', response.data);
+      if (response.data.success && response.data.data) {
+        console.log('Setting grouped categories:', response.data.data);
+        setGroupedCategories(response.data.data);
+      }
+    } catch (error) {
+      console.error('Failed to load categories:', error);
+      // Fallback to default structure
+      setGroupedCategories({
+        frozen: [],
+        fresh: [],
+        ready_to_eat: [],
+        ready_to_cook: [],
+      });
+    }
+  };
+
+  // Get categories for selected product type
+  const getCategoriesForSelectedType = (): Category[] => {
+    if (!formData.productType) return [];
+    const cats = groupedCategories[formData.productType] || [];
+    console.log('Categories for type', formData.productType, ':', cats);
+    return cats;
+  };
+
+  // Get selected parent category
+  const getSelectedParentCategory = (): Category | null => {
+    if (!selectedParentId) return null;
+    const categories = getCategoriesForSelectedType();
+    return categories.find(c => c.id === selectedParentId) || null;
+  };
+
+  // Get selected subcategory info for display
+  const getSelectedCategoryInfo = () => {
+    if (!formData.categoryId) return null;
+    const categories = getCategoriesForSelectedType();
+    
+    // Check if it's a parent category
+    const parentMatch = categories.find(c => c.id === formData.categoryId);
+    if (parentMatch) {
+      return { category: parentMatch, parent: null };
+    }
+    
+    // Check subcategories
+    for (const parent of categories) {
+      const subMatch = parent.children?.find(c => c.id === formData.categoryId);
+      if (subMatch) {
+        return { category: subMatch, parent };
+      }
+    }
+    return null;
+  };
+
+  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files) return;
+
+    Array.from(files).forEach((file) => {
+      if (images.length >= 4) {
+        showToast('Maximum 4 images allowed', 'warning');
+        return;
+      }
+
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        const newImage: ProductImage = {
+          file,
+          preview: event.target?.result as string,
+          isPrimary: images.length === 0,
+        };
+        setImages((prev) => [...prev, newImage]);
+      };
+      reader.readAsDataURL(file);
+    });
+  };
+
+  const removeImage = (index: number) => {
+    setImages((prev) => {
+      const updated = prev.filter((_, i) => i !== index);
+      if (prev[index].isPrimary && updated.length > 0) {
+        updated[0].isPrimary = true;
+      }
+      return updated;
+    });
+  };
+
+  const setPrimaryImage = (index: number) => {
+    setImages((prev) => {
+      const updated = prev.map((img, i) => ({
+        ...img,
+        isPrimary: i === index,
+      }));
+      return updated;
+    });
+  };
+
+  // Variant helper functions
+  const addVariant = () => {
+    if (variants.length >= 20) {
+      showToast('Maximum 20 variants allowed per product', 'warning');
+      return;
+    }
+    
+    setVariants([...variants, {
+      name: '',
+      price: 0,
+      stockQuantity: 50,
+      isDefault: variants.length === 0,
+      isActive: true,
+      sortOrder: variants.length,
+    }]);
+  };
+
+  const removeVariant = (index: number) => {
+    const newVariants = variants.filter((_, i) => i !== index);
+    if (variants[index].isDefault && newVariants.length > 0) {
+      newVariants[0].isDefault = true;
+    }
+    setVariants(newVariants);
+  };
+
+  const updateVariant = (index: number, field: string, value: any) => {
+    const newVariants = [...variants];
+    newVariants[index] = { ...newVariants[index], [field]: value };
+    setVariants(newVariants);
+  };
+
+  const setVariantAsDefault = (index: number) => {
+    const newVariants = variants.map((v, i) => ({
+      ...v,
+      isDefault: i === index,
+    }));
+    setVariants(newVariants);
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    // Validation
+    if (!formData.name.trim()) {
+      showToast('Please enter product name', 'error');
+      return;
+    }
+    if (!formData.categoryId) {
+      showToast('Please select a category', 'error');
+      return;
+    }
+    if (!formData.price || parseFloat(formData.price) <= 0) {
+      showToast('Please enter a valid price', 'error');
+      return;
+    }
+    if (formData.unit === 'other' && !customUnit.trim()) {
+      showToast('Please enter a custom unit type', 'error');
+      return;
+    }
+
+    try {
+      setLoading(true);
+
+      // Prepare JSON payload (backend expects JSON, not FormData)
+      // First, upload images if any
+      let imageUrls: string[] = [];
+      
+      if (images.length > 0) {
+        const uploadFormData = new FormData();
+        images.forEach((img) => {
+          if (img.file) {
+            uploadFormData.append('images', img.file);
+          }
+        });
+        
+        try {
+          const uploadResponse = await apiClient.post('/upload/product-images', uploadFormData, {
+            headers: { 'Content-Type': 'multipart/form-data' },
+          });
+          
+          console.log('Upload response:', uploadResponse.data);
+          
+          if (uploadResponse.data.success) {
+            imageUrls = uploadResponse.data.data.images.map((img: { url: string }) => img.url);
+            console.log('Image URLs:', imageUrls);
+          }
+        } catch (uploadError: any) {
+          console.error('Image upload failed:', uploadError);
+          console.error('Upload error response:', uploadError.response?.data);
+          showToast('Failed to upload images. Product will be created without images.', 'warning');
+        }
+      }
+
+      const productData = {
+        name: formData.name.trim(),
+        nameUrdu: formData.nameUrdu?.trim() || undefined,
+        categoryId: formData.categoryId,
+        description: formData.description?.trim() || undefined,
+        price: parseFloat(formData.price),
+        originalPrice: formData.originalPrice ? parseFloat(formData.originalPrice) : undefined,
+        costPrice: formData.costPrice ? parseFloat(formData.costPrice) : undefined,
+        productType: formData.productType,
+        shelfLifeHours: formData.shelfLifeHours ? parseInt(formData.shelfLifeHours) : undefined,
+        preparationTime: formData.preparationTime ? parseInt(formData.preparationTime) : undefined,
+        unit: formData.unit === 'other' ? customUnit.trim() : formData.unit,
+        stockQuantity: parseInt(formData.stockQuantity) || 50,
+        stockType: formData.stockType,
+        ingredients: formData.ingredients?.trim() || undefined,
+        dietaryInfo: formData.isHalal ? ['Halal'] : [],
+        images: imageUrls,
+      };
+
+      console.log('Sending product data:', productData);
+
+      const response = await apiClient.post('/products', productData);
+      
+      console.log('Product creation response:', response.data);
+      
+      if (response.data.success) {
+        const productId = response.data.data.id;
+        
+        // Create variants if any
+        if (variants.length > 0) {
+          try {
+            const variantData = {
+              productId: productId,
+              variants: variants.map((v, index) => ({
+                name: v.name,
+                nameUrdu: v.nameUrdu || null,
+                sku: v.sku || null,
+                price: v.price,
+                originalPrice: v.originalPrice || null,
+                costPrice: v.costPrice || null,
+                stockQuantity: v.stockQuantity,
+                stockThreshold: v.stockThreshold || 10,
+                weightGrams: v.weightGrams || null,
+                isDefault: v.isDefault,
+                isActive: v.isActive,
+                sortOrder: index,
+              })),
+            };
+            
+            console.log('Creating variants:', variantData);
+            
+            await apiClient.post('/product-variants/bulk', variantData);
+            
+            showToast(
+              `Product created with ${variants.length} variant${variants.length > 1 ? 's' : ''}! Pending admin approval.`,
+              'success'
+            );
+          } catch (variantError: any) {
+            console.error('Failed to create variants:', variantError);
+            showToast(
+              'Product created but variants failed. You can add them later by editing the product.',
+              'warning'
+            );
+          }
+        } else {
+          showToast('Product added successfully! Pending admin approval.', 'success');
+        }
+        
+        router.push('/sellers/products');
+      }
+    } catch (error: any) {
+      console.error('Failed to create product:', error);
+      console.error('Response data:', error.response?.data);
+      
+      // Handle validation errors
+      if (error.response?.data?.error?.details) {
+        const details = error.response.data.error.details;
+        const fieldErrors = details.map((d: any) => `${d.field}: ${d.message}`).join(', ');
+        showToast(`Validation error: ${fieldErrors}`, 'error');
+      } else {
+        const errorMsg = error.response?.data?.error?.message || 
+                         error.response?.data?.message ||
+                         'Failed to add product. Please try again.';
+        showToast(errorMsg, 'error');
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const selectedCategoryInfo = getSelectedCategoryInfo();
+  const discount = formData.originalPrice && formData.price 
+    ? Math.round(((parseFloat(formData.originalPrice) - parseFloat(formData.price)) / parseFloat(formData.originalPrice)) * 100)
+    : 0;
+
+  if (!isAuthenticated) return null;
+
+  return (
+    <DashboardLayout
+      title="Add New Product"
+      subtitle="List a new product in your store"
+      sidebarItems={sidebarItems}
+      userType="seller"
+    >
+      <div className="max-w-4xl mx-auto">
+        {/* Keyboard Shortcuts Help Button */}
+        <div className="mb-4 flex justify-end">
+          <button
+            type="button"
+            onClick={() => setShowKeyboardHelp(!showKeyboardHelp)}
+            className="flex items-center gap-2 px-3 py-2 text-xs font-medium text-gray-600 hover:text-blue-600 bg-white hover:bg-blue-50 rounded-lg border border-gray-200 hover:border-blue-300 transition-all"
+          >
+            <span>⌨️</span>
+            <span>Keyboard Shortcuts</span>
+            <kbd className="px-1.5 py-0.5 text-xs bg-gray-100 border border-gray-300 rounded">Ctrl+K</kbd>
+          </button>
+        </div>
+
+        {/* Keyboard Shortcuts Modal */}
+        {showKeyboardHelp && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" onClick={() => setShowKeyboardHelp(false)}>
+            <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full mx-4 p-6" onClick={(e) => e.stopPropagation()}>
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-xl font-bold text-gray-900">⌨️ Keyboard Shortcuts</h3>
+                <button
+                  onClick={() => setShowKeyboardHelp(false)}
+                  className="text-gray-400 hover:text-gray-600 text-2xl leading-none"
+                >
+                  ×
+                </button>
+              </div>
+              
+              <div className="space-y-3">
+                <div className="flex items-center justify-between p-3 bg-blue-50 rounded-lg">
+                  <span className="text-sm text-gray-700">Save / Submit Product</span>
+                  <div className="flex gap-1">
+                    <kbd className="px-2 py-1 text-xs font-semibold bg-white border border-gray-300 rounded shadow-sm">Ctrl</kbd>
+                    <span className="text-gray-400">+</span>
+                    <kbd className="px-2 py-1 text-xs font-semibold bg-white border border-gray-300 rounded shadow-sm">S</kbd>
+                  </div>
+                </div>
+                
+                <div className="flex items-center justify-between p-3 bg-emerald-50 rounded-lg">
+                  <span className="text-sm text-gray-700">Quick Submit</span>
+                  <div className="flex gap-1">
+                    <kbd className="px-2 py-1 text-xs font-semibold bg-white border border-gray-300 rounded shadow-sm">Ctrl</kbd>
+                    <span className="text-gray-400">+</span>
+                    <kbd className="px-2 py-1 text-xs font-semibold bg-white border border-gray-300 rounded shadow-sm">Enter</kbd>
+                  </div>
+                </div>
+                
+                <div className="flex items-center justify-between p-3 bg-purple-50 rounded-lg">
+                  <span className="text-sm text-gray-700">Toggle Shortcuts Help</span>
+                  <div className="flex gap-1">
+                    <kbd className="px-2 py-1 text-xs font-semibold bg-white border border-gray-300 rounded shadow-sm">Ctrl</kbd>
+                    <span className="text-gray-400">+</span>
+                    <kbd className="px-2 py-1 text-xs font-semibold bg-white border border-gray-300 rounded shadow-sm">K</kbd>
+                  </div>
+                </div>
+                
+                <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                  <span className="text-sm text-gray-700">Close / Clear Focus</span>
+                  <kbd className="px-2 py-1 text-xs font-semibold bg-white border border-gray-300 rounded shadow-sm">Esc</kbd>
+                </div>
+                
+                <div className="flex items-center justify-between p-3 bg-amber-50 rounded-lg">
+                  <span className="text-sm text-gray-700">Navigate Between Fields</span>
+                  <div className="flex gap-1">
+                    <kbd className="px-2 py-1 text-xs font-semibold bg-white border border-gray-300 rounded shadow-sm">Tab</kbd>
+                    <span className="text-gray-400">/</span>
+                    <kbd className="px-2 py-1 text-xs font-semibold bg-white border border-gray-300 rounded shadow-sm">Shift+Tab</kbd>
+                  </div>
+                </div>
+              </div>
+              
+              <div className="mt-4 p-3 bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-lg">
+                <p className="text-xs text-blue-800">
+                  <span className="font-bold">💡 Pro Tip:</span> Use Tab to quickly move between fields. Your changes are auto-saved in browser until you submit!
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Progress Indicator */}
+        <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-2xl p-5 mb-6 border border-blue-100">
+          <div className="flex items-center justify-between max-w-3xl mx-auto">
+            <div className="flex items-center gap-2">
+              <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold ${images.length > 0 ? 'bg-emerald-500 text-white' : 'bg-white text-gray-400 border-2 border-gray-300'}`}>
+                {images.length > 0 ? '✓' : '1'}
+              </div>
+              <span className={`text-sm font-medium ${images.length > 0 ? 'text-emerald-700' : 'text-gray-500'}`}>Photos</span>
+            </div>
+            <div className="flex-1 mx-4 h-1 bg-white rounded-full overflow-hidden">
+              <div className={`h-full bg-emerald-500 transition-all duration-500 ${images.length > 0 ? 'w-1/3' : 'w-0'}`}></div>
+            </div>
+            
+            <div className="flex items-center gap-2">
+              <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold ${formData.name && formData.categoryId ? 'bg-emerald-500 text-white' : 'bg-white text-gray-400 border-2 border-gray-300'}`}>
+                {formData.name && formData.categoryId ? '✓' : '2'}
+              </div>
+              <span className={`text-sm font-medium ${formData.name && formData.categoryId ? 'text-emerald-700' : 'text-gray-500'}`}>Details</span>
+            </div>
+            <div className="flex-1 mx-4 h-1 bg-white rounded-full overflow-hidden">
+              <div className={`h-full bg-emerald-500 transition-all duration-500 ${formData.name && formData.categoryId ? 'w-2/3' : 'w-0'}`}></div>
+            </div>
+            
+            <div className="flex items-center gap-2">
+              <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold ${formData.price ? 'bg-emerald-500 text-white' : 'bg-white text-gray-400 border-2 border-gray-300'}`}>
+                {formData.price ? '✓' : '3'}
+              </div>
+              <span className={`text-sm font-medium ${formData.price ? 'text-emerald-700' : 'text-gray-500'}`}>Pricing</span>
+            </div>
+          </div>
+        </div>
+
+        <form onSubmit={handleSubmit}>
+          {/* Product Images - Most Important First */}
+          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 mb-6 hover:shadow-md transition-shadow">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center shadow-lg">
+                <span className="text-2xl">📸</span>
+              </div>
+              <div>
+                <h2 className="text-xl font-bold text-gray-900">Product Photos</h2>
+                <p className="text-sm text-gray-500">Upload 1-4 images • First image will be the main photo</p>
+              </div>
+            </div>
+            
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-4">
+              {/* Existing Images */}
+              {images.map((img, index) => (
+                <div key={index} className="relative aspect-square rounded-xl overflow-hidden border-2 border-gray-200 group hover:border-purple-400 transition-all">
+                  <img src={img.preview} alt={`Product ${index + 1}`} className="w-full h-full object-cover" />
+                  {img.isPrimary && (
+                    <div className="absolute top-2 left-2 bg-gradient-to-r from-purple-500 to-pink-500 text-white text-xs px-2 py-1 rounded-full font-bold shadow-md">
+                      Main Photo
+                    </div>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => removeImage(index)}
+                    className="absolute top-2 right-2 bg-red-500 hover:bg-red-600 text-white p-1.5 rounded-full opacity-0 group-hover:opacity-100 transition-all shadow-lg"
+                  >
+                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
+                </div>
+              ))}
+              
+              {/* Upload Button */}
+              {images.length < 4 && (
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  className="aspect-square rounded-xl border-2 border-dashed border-purple-300 hover:border-purple-500 hover:bg-purple-50 transition-all flex flex-col items-center justify-center gap-2 text-purple-400 hover:text-purple-600 group"
+                >
+                  <div className="w-12 h-12 rounded-full bg-purple-100 group-hover:bg-purple-200 flex items-center justify-center transition-colors">
+                    <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+                    </svg>
+                  </div>
+                  <span className="text-xs font-semibold">
+                    {images.length === 0 ? 'Add Photos' : `Add More (${4 - images.length} left)`}
+                  </span>
+                </button>
+              )}
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*"
+                multiple
+                onChange={handleImageUpload}
+                className="hidden"
+              />
+            </div>
+            
+            {/* Photo Tips */}
+            <div className="bg-gradient-to-r from-purple-50 to-pink-50 border-2 border-purple-200 rounded-xl p-4">
+              <div className="flex items-start gap-3">
+                <span className="text-2xl">💡</span>
+                <div>
+                  <p className="text-sm font-bold text-purple-900 mb-2">Photo Tips for Better Sales:</p>
+                  <ul className="text-xs text-purple-800 space-y-1">
+                    <li>• Use good lighting - natural light works best</li>
+                    <li>• Show product from multiple angles</li>
+                    <li>• Include size reference (hand, coin, etc.)</li>
+                    <li>• Clean background makes product stand out</li>
+                    <li>• First photo is most important - make it count!</li>
+                  </ul>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Basic Info */}
+          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 mb-6 hover:shadow-md transition-shadow">
+            <div className="flex items-center gap-3 mb-6">
+              <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-blue-500 to-indigo-500 flex items-center justify-center shadow-lg">
+                <span className="text-2xl">✏️</span>
+              </div>
+              <div>
+                <h2 className="text-xl font-bold text-gray-900">Product Details</h2>
+                <p className="text-sm text-gray-500">Basic information about your product</p>
+              </div>
+            </div>
+            
+            {/* Product Name */}
+            <div className="mb-5">
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Product Name <span className="text-red-500">*</span>
+              </label>
+              <input
+                type="text"
+                value={formData.name}
+                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                placeholder="e.g., Chicken Samosa (Pack of 12)"
+                maxLength={100}
+                className="w-full px-4 py-3 text-lg border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+              />
+              <div className="flex justify-between items-center mt-1">
+                <p className="text-xs text-gray-400">💡 Be specific and include quantity/size</p>
+                <span className="text-xs text-gray-400">{formData.name.length}/100</span>
+              </div>
+            </div>
+
+            {/* Urdu Name (Optional) */}
+            <div className="mb-5">
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                <span>Name in Urdu</span>
+                <span className="text-gray-400 font-normal ml-2">(اختیاری - reaches more customers)</span>
+              </label>
+              <input
+                type="text"
+                value={formData.nameUrdu}
+                onChange={(e) => setFormData({ ...formData, nameUrdu: e.target.value })}
+                placeholder="مثال: چکن سموسہ (12 کا پیک)"
+                maxLength={100}
+                className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent text-right transition-all"
+                dir="rtl"
+              />
+              <p className="text-xs text-blue-600 mt-1 flex items-center gap-1">
+                <span>🌐</span>
+                <span>Urdu names help local customers find your products easily</span>
+              </p>
+            </div>
+
+            {/* STEP 1: Product Type Selection - This comes FIRST now */}
+            <div className="mb-6">
+              <label className="block text-sm font-medium text-gray-700 mb-3">
+                <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-blue-500 text-white text-xs font-bold mr-2">1</span>
+                Product Type <span className="text-red-500">*</span>
+              </label>
+              <div className="grid grid-cols-2 gap-3">
+                {productTypeOptions.map((type) => {
+                  const isSelected = formData.productType === type.value;
+                  const colorClasses = {
+                    blue: isSelected ? 'bg-blue-50 border-blue-500' : '',
+                    green: isSelected ? 'bg-green-50 border-green-500' : '',
+                    orange: isSelected ? 'bg-orange-50 border-orange-500' : '',
+                    purple: isSelected ? 'bg-purple-50 border-purple-500' : '',
+                  };
+                  return (
+                    <button
+                      key={type.value}
+                      type="button"
+                      onClick={() => {
+                        setFormData({ ...formData, productType: type.value as typeof formData.productType, categoryId: '' });
+                        setSelectedParentId(null);
+                      }}
+                      className={`p-4 rounded-xl text-left transition-all border-2 ${
+                        isSelected
+                          ? `${colorClasses[type.color as keyof typeof colorClasses]} shadow-md`
+                          : 'bg-gray-50 border-gray-200 hover:border-gray-300'
+                      }`}
+                    >
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className="text-xl">{type.icon}</span>
+                        <span className="font-semibold text-gray-900">{type.label}</span>
+                      </div>
+                      <p className="text-xs text-gray-500">{type.description}</p>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* STEP 2: Category Selection - Only show after product type is selected */}
+            {formData.productType && (
+              <div className="mb-6">
+                <label className="block text-sm font-medium text-gray-700 mb-3">
+                  <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-blue-500 text-white text-xs font-bold mr-2">2</span>
+                  Category <span className="text-red-500">*</span>
+                </label>
+                
+                {getCategoriesForSelectedType().length > 0 ? (
+                  <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-thin">
+                    {getCategoriesForSelectedType().map((cat) => (
+                      <button
+                        key={cat.id}
+                        type="button"
+                        onClick={() => {
+                          setSelectedParentId(cat.id);
+                          // If no children, select this category directly
+                          if (!cat.children || cat.children.length === 0) {
+                            setFormData({ ...formData, categoryId: cat.id });
+                          } else {
+                            // Clear category selection when switching parents
+                            setFormData({ ...formData, categoryId: '' });
+                          }
+                        }}
+                        className={`px-4 py-2.5 rounded-xl text-sm font-medium transition-all flex items-center gap-2 whitespace-nowrap flex-shrink-0 ${
+                          selectedParentId === cat.id
+                            ? 'bg-blue-500 text-white shadow-lg shadow-blue-200'
+                            : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                        }`}
+                      >
+                        <span>{cat.iconUrl || '📦'}</span>
+                        <span>{cat.name}</span>
+                        {cat.children && cat.children.length > 0 && (
+                          <span className="text-xs opacity-70 ml-1">({cat.children.length})</span>
+                        )}
+                      </button>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="bg-gray-50 rounded-xl p-4 text-center text-gray-500 text-sm">
+                    No categories available for {productTypeOptions.find(t => t.value === formData.productType)?.label}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* STEP 3: Subcategory Selection - Only show if parent has children */}
+            {selectedParentId && (() => {
+              const parentCat = getSelectedParentCategory();
+              if (parentCat?.children && parentCat.children.length > 0) {
+                return (
+                  <div className="mb-6">
+                    <label className="block text-sm font-medium text-gray-700 mb-3">
+                      <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-blue-500 text-white text-xs font-bold mr-2">3</span>
+                      Subcategory in <span className="font-semibold">{parentCat.name}</span>
+                    </label>
+                    <div className="bg-gray-50 rounded-xl p-4 border border-gray-200">
+                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                        {parentCat.children.map((subCat) => (
+                          <button
+                            key={subCat.id}
+                            type="button"
+                            onClick={() => setFormData({ ...formData, categoryId: subCat.id })}
+                            className={`px-3 py-2.5 rounded-lg text-sm font-medium transition-all flex items-center gap-2 ${
+                              formData.categoryId === subCat.id
+                                ? 'bg-emerald-500 text-white shadow-md'
+                                : 'bg-white text-gray-600 hover:bg-gray-100 border border-gray-200'
+                            }`}
+                          >
+                            <span>{subCat.iconUrl || '•'}</span>
+                            <span>{subCat.name}</span>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                );
+              }
+              return null;
+            })()}
+
+            {/* Can't find your category? Request New */}
+            {formData.productType && (
+              <div className="mb-6">
+                <button
+                  type="button"
+                  onClick={() => setShowCategoryRequestModal(true)}
+                  className="inline-flex items-center gap-2 text-sm text-blue-600 hover:text-blue-700 font-medium px-3 py-2 rounded-lg hover:bg-blue-50 transition-colors"
+                >
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+                  </svg>
+                  Can't find your category? Request a new one
+                </button>
+              </div>
+            )}
+
+            {/* Selected Category Display */}
+            {(() => {
+              const info = getSelectedCategoryInfo();
+              if (info) {
+                const typeOption = productTypeOptions.find(t => t.value === formData.productType);
+                return (
+                  <div className="flex items-center gap-2 text-sm text-green-600 bg-green-50 px-4 py-3 rounded-xl mb-6 border border-green-200">
+                    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                    </svg>
+                    <span className="font-medium">
+                      {typeOption?.icon} {typeOption?.label} → {info.parent ? `${info.parent.name} → ` : ''}{info.category.name}
+                    </span>
+                  </div>
+                );
+              }
+              return null;
+            })()}
+
+            {/* Shelf Life & Preparation Time - Show based on product type */}
+            {formData.productType && formData.productType !== 'frozen' && (
+              <div className="mb-5 p-4 bg-amber-50 border border-amber-200 rounded-xl">
+                <h3 className="text-sm font-semibold text-amber-800 mb-3 flex items-center gap-2">
+                  <span>⏰</span> Freshness & Timing
+                </h3>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-medium text-gray-700 mb-1">
+                      Shelf Life (hours)
+                    </label>
+                    <input
+                      type="number"
+                      value={formData.shelfLifeHours}
+                      onChange={(e) => setFormData({ ...formData, shelfLifeHours: e.target.value })}
+                      placeholder="e.g., 24"
+                      min="1"
+                      className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent text-sm"
+                    />
+                    <p className="text-xs text-gray-400 mt-1">How long stays fresh</p>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-700 mb-1">
+                      Prep Time (minutes)
+                    </label>
+                    <input
+                      type="number"
+                      value={formData.preparationTime}
+                      onChange={(e) => setFormData({ ...formData, preparationTime: e.target.value })}
+                      placeholder="e.g., 30"
+                      min="1"
+                      className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent text-sm"
+                    />
+                    <p className="text-xs text-gray-400 mt-1">Time to prepare order</p>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Description */}
+            <div className="mb-5">
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Description <span className="text-gray-400 font-normal">(Optional but recommended)</span>
+              </label>
+              <textarea
+                value={formData.description}
+                onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                placeholder="Tell customers what makes this special...&#10;• Key ingredients&#10;• Taste & texture&#10;• Perfect for which occasions"
+                rows={4}
+                maxLength={500}
+                className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none transition-all"
+              />
+              <div className="flex justify-between items-center mt-1">
+                <p className="text-xs text-emerald-600">✨ Products with descriptions sell 3x more</p>
+                <span className="text-xs text-gray-400">{formData.description.length}/500</span>
+              </div>
+            </div>
+
+            {/* Ingredients */}
+            <div className="mb-5">
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Ingredients <span className="text-gray-400 font-normal">(Optional but builds trust)</span>
+              </label>
+              <textarea
+                value={formData.ingredients}
+                onChange={(e) => setFormData({ ...formData, ingredients: e.target.value })}
+                placeholder="Example: Chicken mince, wheat flour, onions, spices (cumin, coriander, red chili), salt, oil"
+                rows={2}
+                maxLength={300}
+                className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none transition-all"
+              />
+              <div className="flex justify-between items-center mt-1">
+                <p className="text-xs text-blue-600">🛡️ Transparency increases customer confidence</p>
+                <span className="text-xs text-gray-400">{formData.ingredients.length}/300</span>
+              </div>
+            </div>
+
+            {/* Halal Badge */}
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={() => setFormData({ ...formData, isHalal: !formData.isHalal })}
+                className={`flex items-center gap-2 px-4 py-2.5 rounded-xl transition-all ${
+                  formData.isHalal
+                    ? 'bg-green-100 text-green-700 border-2 border-green-300'
+                    : 'bg-gray-100 text-gray-500 border-2 border-transparent'
+                }`}
+              >
+                {formData.isHalal ? (
+                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                  </svg>
+                ) : (
+                  <div className="w-5 h-5 rounded border-2 border-gray-300" />
+                )}
+                <span className="font-medium">Halal Certified</span>
+                <span className="text-lg">☪️</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Pricing */}
+          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 mb-6 hover:shadow-md transition-shadow">
+            <div className="flex items-center gap-3 mb-6">
+              <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-emerald-500 to-green-500 flex items-center justify-center shadow-lg">
+                <span className="text-2xl">💰</span>
+              </div>
+              <div>
+                <h2 className="text-xl font-bold text-gray-900">Pricing & Stock</h2>
+                <p className="text-sm text-gray-500">Set your prices and inventory</p>
+              </div>
+            </div>
+            
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+              {/* Selling Price */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Selling Price <span className="text-red-500">*</span>
+                </label>
+                <div className="relative group">
+                  <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500 font-semibold text-lg">Rs.</span>
+                  <input
+                    type="number"
+                    value={formData.price}
+                    onChange={(e) => setFormData({ ...formData, price: e.target.value })}
+                    placeholder="299"
+                    min="0"
+                    step="10"
+                    className="w-full pl-14 pr-4 py-3 text-xl font-bold border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 transition-all group-hover:border-gray-300"
+                  />
+                  {formData.price && parseFloat(formData.price) > 0 && (
+                    <div className="absolute -top-2 right-2 bg-emerald-500 text-white text-xs px-2 py-0.5 rounded-full font-medium">
+                      Customer pays this
+                    </div>
+                  )}
+                </div>
+                <p className="text-xs text-gray-500 mt-1">💡 Competitive pricing attracts more buyers</p>
+              </div>
+
+              {/* Original Price (for discount) */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Original Price <span className="text-gray-400 font-normal">(optional - for showing discount)</span>
+                </label>
+                <div className="relative">
+                  <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 text-lg">Rs.</span>
+                  <input
+                    type="number"
+                    value={formData.originalPrice}
+                    onChange={(e) => setFormData({ ...formData, originalPrice: e.target.value })}
+                    placeholder="350"
+                    min="0"
+                    step="10"
+                    className="w-full pl-14 pr-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                  />
+                </div>
+                {discount > 0 ? (
+                  <div className="mt-2 bg-gradient-to-r from-green-50 to-emerald-50 border border-green-200 rounded-lg p-2">
+                    <p className="text-green-700 text-sm font-bold flex items-center gap-2">
+                      <span className="text-lg">🎉</span>
+                      <span>{discount}% OFF badge will be shown to customers!</span>
+                    </p>
+                  </div>
+                ) : formData.price && parseFloat(formData.price) > 0 && (
+                  <p className="text-xs text-gray-400 mt-1">💡 Add original price to show discount percentage</p>
+                )}
+              </div>
+
+              {/* Cost Price - For seller's profit tracking */}
+              <div className="sm:col-span-2">
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  <div className="flex items-center gap-2">
+                    <span>Your Cost Price</span>
+                    <span className="text-xs bg-purple-100 text-purple-700 px-2 py-0.5 rounded-full font-medium">🔒 Private</span>
+                    <span className="text-gray-400 font-normal">(for profit tracking only)</span>
+                  </div>
+                </label>
+                <div className="relative">
+                  <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 text-lg">Rs.</span>
+                  <input
+                    type="number"
+                    value={formData.costPrice}
+                    onChange={(e) => setFormData({ ...formData, costPrice: e.target.value })}
+                    placeholder="180"
+                    min="0"
+                    step="10"
+                    className="w-full pl-14 pr-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all"
+                  />
+                </div>
+                <p className="text-xs text-gray-500 mt-1">💡 Include: ingredients + packaging + labor + overhead costs</p>
+              </div>
+
+              {/* Unit Type */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Price is for
+                </label>
+                <select
+                  value={formData.unit}
+                  onChange={(e) => {
+                    const value = e.target.value;
+                    setFormData({ ...formData, unit: value });
+                    if (value !== 'other') {
+                      setCustomUnit('');
+                    }
+                  }}
+                  className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white"
+                >
+                  {unitOptions.map((opt) => (
+                    <option key={opt.value} value={opt.value}>
+                      {opt.label} ({opt.example})
+                    </option>
+                  ))}
+                </select>
+                {formData.unit === 'other' && (
+                  <input
+                    type="text"
+                    value={customUnit}
+                    onChange={(e) => setCustomUnit(e.target.value)}
+                    placeholder="e.g., per dozen, per box, per tray"
+                    className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent mt-2"
+                  />
+                )}
+              </div>
+
+              {/* Stock Quantity */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Stock Quantity <span className="text-red-500">*</span>
+                </label>
+                <div className="relative">
+                  <input
+                    type="number"
+                    value={formData.stockQuantity}
+                    onChange={(e) => setFormData({ ...formData, stockQuantity: e.target.value })}
+                    placeholder="50"
+                    min="1"
+                    step="5"
+                    className="w-full px-4 py-3 text-lg font-semibold border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                  />
+                  {formData.stockQuantity && parseInt(formData.stockQuantity) > 0 && (
+                    <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                      <span className={`text-xs font-bold px-2 py-1 rounded-full ${
+                        parseInt(formData.stockQuantity) > 20 ? 'bg-emerald-100 text-emerald-700' :
+                        parseInt(formData.stockQuantity) > 10 ? 'bg-amber-100 text-amber-700' :
+                        'bg-red-100 text-red-700'
+                      }`}>
+                        {parseInt(formData.stockQuantity) > 20 ? '✓ Good stock' : 
+                         parseInt(formData.stockQuantity) > 10 ? '⚠ Low' : '⚠ Very low'}
+                      </span>
+                    </div>
+                  )}
+                </div>
+                <p className="text-xs text-gray-500 mt-1">📦 How many units you have available</p>
+              </div>
+            </div>
+
+            {/* Product Variants Section */}
+            <div className="bg-gradient-to-br from-purple-50 to-pink-50 rounded-2xl p-6 border-2 border-purple-200 mt-6">
+              <div className="flex items-center justify-between mb-4">
+                <div>
+                  <h3 className="text-lg font-bold text-gray-900 flex items-center gap-2">
+                    <span>📦</span> Product Variants
+                    <span className="bg-purple-500 text-white px-2 py-0.5 rounded-full text-xs">NEW</span>
+                  </h3>
+                  <p className="text-sm text-gray-600 mt-1">
+                    Offer different sizes, packs, or options (e.g., Small/Medium/Large)
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowVariants(!showVariants)}
+                  className="text-purple-600 hover:text-purple-700 font-medium text-sm"
+                >
+                  {showVariants ? '− Hide' : '+ Add Variants'}
+                </button>
+              </div>
+
+              {showVariants && (
+                <div className="space-y-4">
+                  {/* Example showcase */}
+                  <div className="bg-white rounded-lg p-4 border border-purple-100">
+                    <p className="text-sm font-medium text-gray-700 mb-2">💡 Example: Chicken Samosa</p>
+                    <div className="space-y-2 text-sm text-gray-600">
+                      <div className="flex justify-between">
+                        <span>→ Small Pack (6 pieces)</span>
+                        <span className="font-medium">Rs 300</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span>→ Medium Pack (12 pieces)</span>
+                        <span className="font-medium">Rs 550</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span>→ Large Pack (24 pieces)</span>
+                        <span className="font-medium">Rs 1000</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Variant list */}
+                  {variants.map((variant, index) => (
+                    <div key={index} className="bg-white rounded-xl p-4 border border-gray-200">
+                      <div className="flex items-center justify-between mb-3">
+                        <h4 className="font-semibold text-gray-900">
+                          Variant {index + 1}
+                          {variant.isDefault && (
+                            <span className="ml-2 bg-blue-100 text-blue-700 px-2 py-0.5 rounded text-xs">
+                              Default
+                            </span>
+                          )}
+                        </h4>
+                        <div className="flex gap-2">
+                          {!variant.isDefault && (
+                            <button
+                              type="button"
+                              onClick={() => setVariantAsDefault(index)}
+                              className="text-xs text-blue-600 hover:underline"
+                            >
+                              Set as Default
+                            </button>
+                          )}
+                          <button
+                            type="button"
+                            onClick={() => removeVariant(index)}
+                            className="text-red-500 hover:text-red-700"
+                          >
+                            ✕
+                          </button>
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-3">
+                        {/* Variant Name */}
+                        <div className="col-span-2">
+                          <label className="block text-xs font-medium text-gray-700 mb-1">
+                            Variant Name *
+                          </label>
+                          <input
+                            type="text"
+                            value={variant.name}
+                            onChange={(e) => updateVariant(index, 'name', e.target.value)}
+                            placeholder="e.g., Small Pack (6 pieces)"
+                            className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-purple-500"
+                          />
+                        </div>
+
+                        {/* Variant Name Urdu */}
+                        <div className="col-span-2">
+                          <label className="block text-xs font-medium text-gray-700 mb-1">
+                            Variant Name (Urdu)
+                          </label>
+                          <input
+                            type="text"
+                            value={variant.nameUrdu || ''}
+                            onChange={(e) => updateVariant(index, 'nameUrdu', e.target.value)}
+                            placeholder="چھوٹا پیک (6 عدد)"
+                            className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm text-right focus:ring-2 focus:ring-purple-500"
+                            dir="rtl"
+                          />
+                        </div>
+
+                        {/* Price */}
+                        <div>
+                          <label className="block text-xs font-medium text-gray-700 mb-1">
+                            Price *
+                          </label>
+                          <div className="relative">
+                            <span className="absolute left-2 top-1/2 -translate-y-1/2 text-gray-400 text-sm">
+                              Rs.
+                            </span>
+                            <input
+                              type="number"
+                              value={variant.price || ''}
+                              onChange={(e) => updateVariant(index, 'price', parseFloat(e.target.value) || 0)}
+                              placeholder="300"
+                              min="0"
+                              className="w-full pl-10 pr-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-purple-500"
+                            />
+                          </div>
+                        </div>
+
+                        {/* Original Price */}
+                        <div>
+                          <label className="block text-xs font-medium text-gray-700 mb-1">
+                            Original Price
+                          </label>
+                          <div className="relative">
+                            <span className="absolute left-2 top-1/2 -translate-y-1/2 text-gray-400 text-sm">
+                              Rs.
+                            </span>
+                            <input
+                              type="number"
+                              value={variant.originalPrice || ''}
+                              onChange={(e) => updateVariant(index, 'originalPrice', parseFloat(e.target.value) || undefined)}
+                              placeholder="350"
+                              min="0"
+                              className="w-full pl-10 pr-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-purple-500"
+                            />
+                          </div>
+                        </div>
+
+                        {/* Cost Price */}
+                        <div>
+                          <label className="block text-xs font-medium text-gray-700 mb-1">
+                            Your Cost
+                          </label>
+                          <div className="relative">
+                            <span className="absolute left-2 top-1/2 -translate-y-1/2 text-gray-400 text-sm">
+                              Rs.
+                            </span>
+                            <input
+                              type="number"
+                              value={variant.costPrice || ''}
+                              onChange={(e) => updateVariant(index, 'costPrice', parseFloat(e.target.value) || undefined)}
+                              placeholder="180"
+                              min="0"
+                              className="w-full pl-10 pr-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-purple-500"
+                            />
+                          </div>
+                        </div>
+
+                        {/* Stock Quantity */}
+                        <div>
+                          <label className="block text-xs font-medium text-gray-700 mb-1">
+                            Stock Quantity *
+                          </label>
+                          <input
+                            type="number"
+                            value={variant.stockQuantity || ''}
+                            onChange={(e) => updateVariant(index, 'stockQuantity', parseInt(e.target.value) || 0)}
+                            placeholder="50"
+                            min="0"
+                            className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-purple-500"
+                          />
+                        </div>
+
+                        {/* Low Stock Alert Threshold */}
+                        <div>
+                          <label className="block text-xs font-medium text-gray-700 mb-1">
+                            Low Stock Alert At
+                          </label>
+                          <input
+                            type="number"
+                            value={variant.stockThreshold || ''}
+                            onChange={(e) => updateVariant(index, 'stockThreshold', parseInt(e.target.value) || undefined)}
+                            placeholder="10"
+                            min="0"
+                            className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-purple-500"
+                          />
+                        </div>
+
+                        {/* SKU (Optional) */}
+                        <div className="col-span-2">
+                          <label className="block text-xs font-medium text-gray-700 mb-1">
+                            SKU / Barcode (Optional)
+                          </label>
+                          <input
+                            type="text"
+                            value={variant.sku || ''}
+                            onChange={(e) => updateVariant(index, 'sku', e.target.value)}
+                            placeholder="SM-SAMOSA-6PC"
+                            className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-purple-500"
+                          />
+                        </div>
+
+                        {/* Profit Preview */}
+                        {variant.price && variant.costPrice && (
+                          <div className="col-span-2 bg-emerald-50 rounded-lg p-3 border border-emerald-200">
+                            <div className="flex justify-between text-xs">
+                              <span className="text-gray-600">Profit per unit:</span>
+                              <span className="font-bold text-emerald-700">
+                                Rs {(variant.price - variant.costPrice - (variant.price * 0.15)).toFixed(0)}
+                                <span className="ml-1 text-gray-500">
+                                  ({(((variant.price - variant.costPrice - (variant.price * 0.15)) / variant.price) * 100).toFixed(1)}%)
+                                </span>
+                              </span>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+
+                  {/* Add Variant Button */}
+                  <button
+                    type="button"
+                    onClick={addVariant}
+                    disabled={variants.length >= 20}
+                    className="w-full py-3 border-2 border-dashed border-purple-300 rounded-xl text-purple-600 hover:bg-purple-50 font-medium flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    <span className="text-xl">+</span> Add Another Variant {variants.length > 0 && `(${variants.length}/20)`}
+                  </button>
+
+                  {/* Quick Tips */}
+                  <div className="bg-blue-50 rounded-lg p-3 border border-blue-100">
+                    <p className="text-xs font-medium text-blue-800 mb-1">💡 Pro Tips:</p>
+                    <ul className="text-xs text-blue-700 space-y-0.5">
+                      <li>• Set the most popular size as "Default"</li>
+                      <li>• Offer bulk discounts (e.g., Large pack = better Rs/piece)</li>
+                      <li>• Set low stock alerts to avoid running out</li>
+                      <li>• Maximum 20 variants per product</li>
+                    </ul>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Stock Type */}
+            <div className="bg-gradient-to-br from-purple-50 to-pink-50 rounded-2xl p-6 border-2 border-purple-200 mt-6">
+              <div className="flex items-center justify-between mb-4">
+                <div>
+                  <h3 className="text-lg font-bold text-gray-900 flex items-center gap-2">
+                    <span>📦</span> Product Variants
+                    <span className="bg-purple-500 text-white px-2 py-0.5 rounded-full text-xs">NEW</span>
+                  </h3>
+                  <p className="text-sm text-gray-600 mt-1">
+                    Offer different sizes, packs, or options (e.g., Small/Medium/Large)
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowVariants(!showVariants)}
+                  className="text-purple-600 hover:text-purple-700 font-medium text-sm"
+                >
+                  {showVariants ? '− Hide' : '+ Add Variants'}
+                </button>
+              </div>
+
+              {showVariants && (
+                <div className="space-y-4">
+                  {/* Example showcase */}
+                  <div className="bg-white rounded-lg p-4 border border-purple-100">
+                    <p className="text-sm font-medium text-gray-700 mb-2">💡 Example: Chicken Samosa</p>
+                    <div className="space-y-2 text-sm text-gray-600">
+                      <div className="flex justify-between">
+                        <span>→ Small Pack (6 pieces)</span>
+                        <span className="font-medium">Rs 300</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span>→ Medium Pack (12 pieces)</span>
+                        <span className="font-medium">Rs 550</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span>→ Large Pack (24 pieces)</span>
+                        <span className="font-medium">Rs 1000</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Variant list */}
+                  {variants.map((variant, index) => (
+                    <div key={index} className="bg-white rounded-xl p-4 border border-gray-200">
+                      <div className="flex items-center justify-between mb-3">
+                        <h4 className="font-semibold text-gray-900">
+                          Variant {index + 1}
+                          {variant.isDefault && (
+                            <span className="ml-2 bg-blue-100 text-blue-700 px-2 py-0.5 rounded text-xs">
+                              Default
+                            </span>
+                          )}
+                        </h4>
+                        <div className="flex gap-2">
+                          {!variant.isDefault && (
+                            <button
+                              type="button"
+                              onClick={() => setVariantAsDefault(index)}
+                              className="text-xs text-blue-600 hover:underline"
+                            >
+                              Set as Default
+                            </button>
+                          )}
+                          <button
+                            type="button"
+                            onClick={() => removeVariant(index)}
+                            className="text-red-500 hover:text-red-700"
+                          >
+                            ✕
+                          </button>
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-3">
+                        {/* Variant Name */}
+                        <div className="col-span-2">
+                          <label className="block text-xs font-medium text-gray-700 mb-1">
+                            Variant Name *
+                          </label>
+                          <input
+                            type="text"
+                            value={variant.name}
+                            onChange={(e) => updateVariant(index, 'name', e.target.value)}
+                            placeholder="e.g., Small Pack (6 pieces)"
+                            className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-purple-500"
+                          />
+                        </div>
+
+                        {/* Variant Name Urdu */}
+                        <div className="col-span-2">
+                          <label className="block text-xs font-medium text-gray-700 mb-1">
+                            Variant Name (Urdu)
+                          </label>
+                          <input
+                            type="text"
+                            value={variant.nameUrdu || ''}
+                            onChange={(e) => updateVariant(index, 'nameUrdu', e.target.value)}
+                            placeholder="چھوٹا پیک (6 عدد)"
+                            className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm text-right focus:ring-2 focus:ring-purple-500"
+                            dir="rtl"
+                          />
+                        </div>
+
+                        {/* Price */}
+                        <div>
+                          <label className="block text-xs font-medium text-gray-700 mb-1">
+                            Price *
+                          </label>
+                          <div className="relative">
+                            <span className="absolute left-2 top-1/2 -translate-y-1/2 text-gray-400 text-sm">
+                              Rs.
+                            </span>
+                            <input
+                              type="number"
+                              value={variant.price || ''}
+                              onChange={(e) => updateVariant(index, 'price', parseFloat(e.target.value) || 0)}
+                              placeholder="300"
+                              min="0"
+                              className="w-full pl-10 pr-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-purple-500"
+                            />
+                          </div>
+                        </div>
+
+                        {/* Original Price */}
+                        <div>
+                          <label className="block text-xs font-medium text-gray-700 mb-1">
+                            Original Price
+                          </label>
+                          <div className="relative">
+                            <span className="absolute left-2 top-1/2 -translate-y-1/2 text-gray-400 text-sm">
+                              Rs.
+                            </span>
+                            <input
+                              type="number"
+                              value={variant.originalPrice || ''}
+                              onChange={(e) => updateVariant(index, 'originalPrice', parseFloat(e.target.value) || undefined)}
+                              placeholder="350"
+                              min="0"
+                              className="w-full pl-10 pr-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-purple-500"
+                            />
+                          </div>
+                        </div>
+
+                        {/* Cost Price */}
+                        <div>
+                          <label className="block text-xs font-medium text-gray-700 mb-1">
+                            Your Cost
+                          </label>
+                          <div className="relative">
+                            <span className="absolute left-2 top-1/2 -translate-y-1/2 text-gray-400 text-sm">
+                              Rs.
+                            </span>
+                            <input
+                              type="number"
+                              value={variant.costPrice || ''}
+                              onChange={(e) => updateVariant(index, 'costPrice', parseFloat(e.target.value) || undefined)}
+                              placeholder="180"
+                              min="0"
+                              className="w-full pl-10 pr-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-purple-500"
+                            />
+                          </div>
+                        </div>
+
+                        {/* Stock Quantity */}
+                        <div>
+                          <label className="block text-xs font-medium text-gray-700 mb-1">
+                            Stock Quantity *
+                          </label>
+                          <input
+                            type="number"
+                            value={variant.stockQuantity || ''}
+                            onChange={(e) => updateVariant(index, 'stockQuantity', parseInt(e.target.value) || 0)}
+                            placeholder="50"
+                            min="0"
+                            className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-purple-500"
+                          />
+                        </div>
+
+                        {/* Low Stock Alert Threshold */}
+                        <div>
+                          <label className="block text-xs font-medium text-gray-700 mb-1">
+                            Low Stock Alert At
+                          </label>
+                          <input
+                            type="number"
+                            value={variant.stockThreshold || ''}
+                            onChange={(e) => updateVariant(index, 'stockThreshold', parseInt(e.target.value) || undefined)}
+                            placeholder="10"
+                            min="0"
+                            className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-purple-500"
+                          />
+                        </div>
+
+                        {/* SKU (Optional) */}
+                        <div className="col-span-2">
+                          <label className="block text-xs font-medium text-gray-700 mb-1">
+                            SKU / Barcode (Optional)
+                          </label>
+                          <input
+                            type="text"
+                            value={variant.sku || ''}
+                            onChange={(e) => updateVariant(index, 'sku', e.target.value)}
+                            placeholder="SM-SAMOSA-6PC"
+                            className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-purple-500"
+                          />
+                        </div>
+
+                        {/* Profit Preview */}
+                        {variant.price && variant.costPrice && (
+                          <div className="col-span-2 bg-emerald-50 rounded-lg p-3 border border-emerald-200">
+                            <div className="flex justify-between text-xs">
+                              <span className="text-gray-600">Profit per unit:</span>
+                              <span className="font-bold text-emerald-700">
+                                Rs {(variant.price - variant.costPrice - (variant.price * 0.15)).toFixed(0)}
+                                <span className="ml-1 text-gray-500">
+                                  ({(((variant.price - variant.costPrice - (variant.price * 0.15)) / variant.price) * 100).toFixed(1)}%)
+                                </span>
+                              </span>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+
+                  {/* Add Variant Button */}
+                  <button
+                    type="button"
+                    onClick={addVariant}
+                    disabled={variants.length >= 20}
+                    className="w-full py-3 border-2 border-dashed border-purple-300 rounded-xl text-purple-600 hover:bg-purple-50 font-medium flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    <span className="text-xl">+</span> Add Another Variant {variants.length > 0 && `(${variants.length}/20)`}
+                  </button>
+
+                  {/* Quick Tips */}
+                  <div className="bg-blue-50 rounded-lg p-3 border border-blue-100">
+                    <p className="text-xs font-medium text-blue-800 mb-1">💡 Pro Tips:</p>
+                    <ul className="text-xs text-blue-700 space-y-0.5">
+                      <li>• Set the most popular size as "Default"</li>
+                      <li>• Offer bulk discounts (e.g., Large pack = better Rs/piece)</li>
+                      <li>• Set low stock alerts to avoid running out</li>
+                      <li>• Maximum 20 variants per product</li>
+                    </ul>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Stock Type */}
+            <div className="mt-4">
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Fulfillment Method
+              </label>
+              <div className="grid grid-cols-3 gap-3">
+                {[
+                  { value: 'direct', label: 'Direct Delivery', icon: '🚗', desc: 'You deliver to customers' },
+                  { value: 'hub', label: 'Via Hub', icon: '🏪', desc: 'Hub handles delivery' },
+                  { value: 'both', label: 'Both', icon: '🔄', desc: 'Either method' },
+                ].map((option) => (
+                  <button
+                    key={option.value}
+                    type="button"
+                    onClick={() => setFormData({ ...formData, stockType: option.value as 'direct' | 'hub' | 'both' })}
+                    className={`p-3 rounded-xl border-2 text-left transition-all ${
+                      formData.stockType === option.value
+                        ? 'border-blue-500 bg-blue-50'
+                        : 'border-gray-200 hover:border-gray-300'
+                    }`}
+                  >
+                    <span className="text-xl">{option.icon}</span>
+                    <p className="font-medium text-sm text-gray-900 mt-1">{option.label}</p>
+                    <p className="text-xs text-gray-500">{option.desc}</p>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Price Preview */}
+            {formData.price && (
+              <div className="mt-5 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-xl p-4 border border-blue-100">
+                <p className="text-sm text-gray-500 mb-1">Customers will see:</p>
+                <div className="flex items-baseline gap-3">
+                  <span className="text-3xl font-bold text-gray-900">Rs. {formData.price}</span>
+                  {formData.originalPrice && parseFloat(formData.originalPrice) > parseFloat(formData.price) && (
+                    <>
+                      <span className="text-lg text-gray-400 line-through">Rs. {formData.originalPrice}</span>
+                      <span className="bg-green-500 text-white px-2 py-0.5 rounded-full text-sm font-bold">
+                        {discount}% OFF
+                      </span>
+                    </>
+                  )}
+                </div>
+                <p className="text-sm text-gray-500 mt-1">
+                  {unitOptions.find(u => u.value === formData.unit)?.label}
+                </p>
+              </div>
+            )}
+
+            {/* Profit Calculator - Only visible to seller */}
+            {formData.price && formData.costPrice && parseFloat(formData.costPrice) > 0 && (
+              <div className="mt-4 bg-gradient-to-r from-emerald-50 to-green-50 rounded-xl p-4 border border-emerald-200">
+                <div className="flex items-center gap-2 mb-3">
+                  <span className="text-lg">💰</span>
+                  <p className="text-sm font-semibold text-emerald-800">Your Profit Breakdown (Private)</p>
+                </div>
+                <div className="space-y-2">
+                  <div className="flex justify-between text-sm">
+                    <span className="text-gray-600">Selling Price</span>
+                    <span className="font-medium">Rs. {formData.price}</span>
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-gray-600">Your Cost</span>
+                    <span className="font-medium text-red-600">- Rs. {formData.costPrice}</span>
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-gray-600">Platform Fee (15%)</span>
+                    <span className="font-medium text-red-600">- Rs. {(parseFloat(formData.price) * 0.15).toFixed(0)}</span>
+                  </div>
+                  <div className="border-t border-emerald-200 pt-2 mt-2">
+                    <div className="flex justify-between">
+                      <span className="font-semibold text-emerald-800">Your Profit</span>
+                      <span className={`font-bold text-lg ${
+                        (parseFloat(formData.price) - parseFloat(formData.costPrice) - (parseFloat(formData.price) * 0.15)) > 0
+                          ? 'text-emerald-600' 
+                          : 'text-red-600'
+                      }`}>
+                        Rs. {(parseFloat(formData.price) - parseFloat(formData.costPrice) - (parseFloat(formData.price) * 0.15)).toFixed(0)}
+                      </span>
+                    </div>
+                    <div className="flex justify-between mt-1">
+                      <span className="text-xs text-gray-500">Profit Margin</span>
+                      <span className={`text-sm font-semibold ${
+                        ((parseFloat(formData.price) - parseFloat(formData.costPrice) - (parseFloat(formData.price) * 0.15)) / parseFloat(formData.price) * 100) > 20
+                          ? 'text-emerald-600' 
+                          : ((parseFloat(formData.price) - parseFloat(formData.costPrice) - (parseFloat(formData.price) * 0.15)) / parseFloat(formData.price) * 100) > 10
+                            ? 'text-amber-600'
+                            : 'text-red-600'
+                      }`}>
+                        {((parseFloat(formData.price) - parseFloat(formData.costPrice) - (parseFloat(formData.price) * 0.15)) / parseFloat(formData.price) * 100).toFixed(1)}%
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Submit Buttons - Sticky Footer */}
+          <div className="sticky bottom-0 bg-white border-t-2 border-gray-100 -mx-6 px-6 py-5 mt-8 rounded-t-3xl shadow-2xl">
+            <div className="max-w-4xl mx-auto flex flex-col sm:flex-row gap-3">
+              <Button
+                type="submit"
+                disabled={loading}
+                className="flex-1 bg-gradient-to-r from-blue-500 to-indigo-600 hover:from-blue-600 hover:to-indigo-700 text-white py-4 rounded-xl font-bold text-lg shadow-xl hover:shadow-2xl transform hover:-translate-y-0.5 transition-all"
+              >
+                {loading ? (
+                  <span className="flex items-center justify-center gap-2">
+                    <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                    </svg>
+                    <span>Creating Product...</span>
+                  </span>
+                ) : (
+                  <span className="flex items-center justify-center gap-2">
+                    <span className="text-xl">✨</span>
+                    <span>Create Product</span>
+                    <span className="text-xs opacity-75 ml-2 px-2 py-1 bg-white bg-opacity-20 rounded">Ctrl+S</span>
+                  </span>
+                )}
+              </Button>
+              
+              <Link href="/sellers/products" className="sm:w-auto">
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="w-full sm:w-40 py-4 rounded-xl border-2 font-semibold hover:bg-gray-50"
+                >
+                  Cancel
+                </Button>
+              </Link>
+            </div>
+          </div>
+
+          {/* Quick Tips */}
+          <div className="mt-6 bg-gradient-to-br from-amber-50 to-orange-50 rounded-2xl p-5 border-2 border-amber-200 shadow-sm">
+            <h3 className="font-bold text-amber-900 mb-3 flex items-center gap-2 text-lg">
+              <span className="text-2xl">💡</span> Pro Tips for Better Sales
+            </h3>
+            <ul className="text-sm text-amber-700 space-y-1">
+              <li>• Use clear, well-lit photos from multiple angles</li>
+              <li>• Include quantity in product name (e.g., "Pack of 12")</li>
+              <li>• Add a discount - products with discounts sell 3x more!</li>
+              <li>• List all ingredients for customer trust</li>
+            </ul>
+          </div>
+        </form>
+      </div>
+
+      {/* Category Request Modal */}
+      <CategoryRequestModal
+        isOpen={showCategoryRequestModal}
+        onClose={() => setShowCategoryRequestModal(false)}
+        preselectedProductType={formData.productType || undefined}
+      />
+    </DashboardLayout>
+  );
+}

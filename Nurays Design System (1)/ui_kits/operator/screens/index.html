@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Nurays — Operator Mobile Screens</title>
+<link rel="stylesheet" href="../../../colors_and_type.css">
+<link rel="icon" href="../../../assets/favicon.ico">
+<style>
+  html, body { margin: 0; padding: 0; height: 100%; }
+  body { background: #f0eee9; font-family: var(--font-sans); }
+  *[data-screen-label] { display: contents; }
+  .gradient-text { background: var(--gradient-text); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
+</style>
+</head>
+<body>
+<div id="root"></div>
+
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+
+<script type="text/babel" src="ios-frame.jsx"></script>
+<script type="text/babel" src="design-canvas.jsx"></script>
+<script type="text/babel" src="shared.jsx"></script>
+<script type="text/babel" src="screens-1.jsx"></script>
+<script type="text/babel" src="screens-2.jsx"></script>
+
+<script type="text/babel">
+  const W = 402, H = 874;
+
+  function App() {
+    return (
+      <DesignCanvas>
+        <DCSection id="auth" title="Auth" subtitle="Welcome flow & sign-in">
+          <DCArtboard id="login" label="01 · Login" width={W} height={H} bare>
+            <LoginScreen />
+          </DCArtboard>
+        </DCSection>
+
+        <DCSection id="dashboard" title="Dashboard" subtitle="Two layout directions">
+          <DCArtboard id="dash-overview" label="02 · Overview (KPI grid)" width={W} height={H} bare>
+            <IOSDevice width={W} height={H}><DashboardOverview /></IOSDevice>
+          </DCArtboard>
+          <DCArtboard id="dash-action" label="03 · Action-first" width={W} height={H} bare>
+            <IOSDevice width={W} height={H}><DashboardActionFirst /></IOSDevice>
+          </DCArtboard>
+        </DCSection>
+
+        <DCSection id="ops" title="Operations" subtitle="Inventory & order management">
+          <DCArtboard id="inventory" label="04 · Inventory" width={W} height={H} bare>
+            <IOSDevice width={W} height={H}><InventoryScreen /></IOSDevice>
+          </DCArtboard>
+          <DCArtboard id="orders" label="05 · Orders" width={W} height={H} bare>
+            <IOSDevice width={W} height={H}><OrdersScreen /></IOSDevice>
+          </DCArtboard>
+          <DCArtboard id="order-detail" label="06 · Order Detail" width={W} height={H} bare>
+            <IOSDevice width={W} height={H}><OrderDetailScreen /></IOSDevice>
+          </DCArtboard>
+        </DCSection>
+
+        <DCSection id="catalog" title="Catalog & Vendors" subtitle="Product & supplier management">
+          <DCArtboard id="products" label="07 · Products" width={W} height={H} bare>
+            <IOSDevice width={W} height={H}><ProductsScreen /></IOSDevice>
+          </DCArtboard>
+          <DCArtboard id="product-detail" label="08 · Product Detail" width={W} height={H} bare>
+            <IOSDevice width={W} height={H}><ProductDetailScreen /></IOSDevice>
+          </DCArtboard>
+          <DCArtboard id="vendors" label="09 · Vendors" width={W} height={H} bare>
+            <IOSDevice width={W} height={H}><VendorsScreen /></IOSDevice>
+          </DCArtboard>
+        </DCSection>
+
+        <DCSection id="insights" title="Insights & Customers" subtitle="Reports, loyalty, notifications">
+          <DCArtboard id="reports" label="10 · Reports" width={W} height={H} bare>
+            <IOSDevice width={W} height={H}><ReportsScreen /></IOSDevice>
+          </DCArtboard>
+          <DCArtboard id="customer" label="11 · Customer · Loyalty" width={W} height={H} bare>
+            <IOSDevice width={W} height={H}><CustomerScreen /></IOSDevice>
+          </DCArtboard>
+          <DCArtboard id="notifications" label="12 · Notifications" width={W} height={H} bare>
+            <IOSDevice width={W} height={H}><NotificationsScreen /></IOSDevice>
+          </DCArtboard>
+        </DCSection>
+
+        <DCSection id="account" title="Account & Storefront" subtitle="Settings + checkout flow">
+          <DCArtboard id="settings" label="13 · Settings" width={W} height={H} bare>
+            <IOSDevice width={W} height={H}><SettingsScreen /></IOSDevice>
+          </DCArtboard>
+          <DCArtboard id="checkout" label="14 · Checkout" width={W} height={H} bare>
+            <IOSDevice width={W} height={H}><CheckoutScreen /></IOSDevice>
+          </DCArtboard>
+        </DCSection>
+      </DesignCanvas>
+    );
+  }
+
+  ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+</script>
+</body>
+</html>

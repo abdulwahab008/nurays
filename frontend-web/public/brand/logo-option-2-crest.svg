@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 120" width="240" height="120">
+  
+  
+  <circle cx="60" cy="60" r="44" fill="#0a7a3a"></circle>
+  <circle cx="60" cy="60" r="38" fill="none" stroke="#fbf8f1" stroke-width="0.8" stroke-dasharray="1.5 3"></circle>
+  <text x="60" y="76" font-family="Fraunces, serif" font-size="52" font-weight="300" font-style="italic" text-anchor="middle" fill="#fbf8f1" letter-spacing="-0.04em">N</text>
+
+  <text x="120" y="56" font-family="Fraunces, serif" font-size="34" font-weight="400" fill="#1a1610" letter-spacing="-0.04em">nuray</text>
+  <text x="120" y="74" font-family="Geist, sans-serif" font-size="8" font-weight="500" fill="#4e4434" letter-spacing="2.5">EST · KARACHI · 2026</text>
+  <text x="120" y="92" font-family="Geist, sans-serif" font-size="9" font-weight="600" fill="#0a7a3a" letter-spacing="0">Homemade. Sealed. Delivered.</text>
+</svg>

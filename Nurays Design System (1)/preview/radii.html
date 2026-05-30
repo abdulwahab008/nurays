@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8">
+<link rel="stylesheet" href="../colors_and_type.css">
+<style>
+  html, body { margin: 0; padding: 0; background: var(--bg-primary); }
+  body { padding: 20px; }
+  .grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 12px; align-items: end; }
+  .col { display: flex; flex-direction: column; align-items: center; gap: 8px; }
+  .box { width: 56px; height: 56px; background: var(--primary-500); }
+  .val { font-size: 12px; font-weight: 600; color: var(--fg-primary); }
+  .lbl { font-family: var(--font-mono); font-size: 10px; color: var(--fg-tertiary); }
+</style></head>
+<body>
+  <div class="grid">
+    <div class="col"><div class="box" style="border-radius: var(--radius-sm);"></div><span class="val">sm</span><span class="lbl">4px</span></div>
+    <div class="col"><div class="box" style="border-radius: var(--radius-md);"></div><span class="val">md</span><span class="lbl">6px</span></div>
+    <div class="col"><div class="box" style="border-radius: var(--radius-lg);"></div><span class="val">lg</span><span class="lbl">8px</span></div>
+    <div class="col"><div class="box" style="border-radius: var(--radius-xl);"></div><span class="val">xl</span><span class="lbl">12px</span></div>
+    <div class="col"><div class="box" style="border-radius: var(--radius-2xl);"></div><span class="val">2xl</span><span class="lbl">16px</span></div>
+    <div class="col"><div class="box" style="border-radius: var(--radius-3xl);"></div><span class="val">3xl</span><span class="lbl">24px</span></div>
+    <div class="col"><div class="box" style="border-radius: var(--radius-full);"></div><span class="val">full</span><span class="lbl">9999</span></div>
+  </div>
+</body></html>
