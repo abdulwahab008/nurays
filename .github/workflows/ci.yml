@@ -104,9 +104,12 @@ jobs:
       REDIS_URL: redis://localhost:6379
       JWT_SECRET: ci-e2e-secret-key-at-least-32-characters-long
       NODE_ENV: development
-      PORT: "3001"
       API_VERSION: v1
       FRONTEND_URL: http://localhost:3000
+      # NOTE: PORT is intentionally NOT set job-wide. The backend needs 3001
+      # but `next dev` (started by Playwright's webServer) also honors PORT —
+      # a job-wide PORT=3001 makes the frontend collide with the backend.
+      # PORT is set only on the backend start step below.
     steps:
       - uses: actions/checkout@v4
 
@@ -141,6 +144,8 @@ jobs:
 
       - name: Build + start backend
         working-directory: backend
+        env:
+          PORT: "3001"
         run: |
           npm run build
           node dist/index.js &
