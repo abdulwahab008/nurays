@@ -1,0 +1,54 @@
+# docker-compose for local dev of the FrozenNuray app containers.
+# Postgres + Redis are expected to run on the host machine (the dev setup
+# you already use); the containers reach them via `host.docker.internal`.
+#
+# Usage:
+#   cp backend/.env.example backend/.env       # then fill in real values
+#   docker compose up --build                  # builds + runs both services
+#
+# To rebuild from scratch:
+#   docker compose down --volumes --remove-orphans
+#   docker compose build --no-cache
+
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: nuray-backend
+    restart: unless-stopped
+    ports:
+      - "3001:3001"
+    env_file:
+      - backend/.env
+    environment:
+      # Override DATABASE_URL / REDIS_URL inside the container so they
+      # point at the host's services rather than localhost-in-container.
+      DATABASE_URL: ${DATABASE_URL:-postgresql://apple@host.docker.internal:5432/frozennuray_dev}
+      REDIS_URL: ${REDIS_URL:-redis://host.docker.internal:6379}
+      FRONTEND_URL: http://frontend:3000
+    extra_hosts:
+      # Linux compatibility — Docker Desktop on macOS already maps this.
+      - "host.docker.internal:host-gateway"
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:3001/api/v1/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+
+  frontend:
+    build:
+      context: ./frontend-web
+      dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:3001/api/v1}
+        NEXT_PUBLIC_GOOGLE_CLIENT_ID: ${NEXT_PUBLIC_GOOGLE_CLIENT_ID:-}
+        NEXT_PUBLIC_SAFEPAY_SANDBOX: ${NEXT_PUBLIC_SAFEPAY_SANDBOX:-true}
+    container_name: nuray-frontend
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    depends_on:
+      backend:
+        condition: service_healthy

@@ -1,7 +1,7 @@
 # Dependencies
 node_modules/
-package-lock.json
 yarn.lock
+# package-lock.json IS committed — needed for `npm ci` in CI / Docker.
 
 # Environment variables
 .env

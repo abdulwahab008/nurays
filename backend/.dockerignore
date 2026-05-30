@@ -1,0 +1,36 @@
+# Things we don't want sent to the docker daemon as build context.
+# Keep this tight — fewer bytes means faster builds + smaller images.
+
+node_modules
+dist
+build
+
+# Local env / secrets — runtime configures these via env vars
+.env
+.env.*
+!.env.example
+
+# Tests + dev tooling
+tests
+coverage
+.nyc_output
+*.test.ts
+*.spec.ts
+jest.config.*
+nodemon.json
+
+# Logs and OS junk
+logs
+*.log
+.DS_Store
+
+# Uploads dir is dev-only (real uploads go to Cloudinary)
+uploads
+
+# Documentation / status files at this directory level
+*.md
+docs
+
+# Git
+.git
+.gitignore

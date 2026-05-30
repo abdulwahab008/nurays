@@ -275,16 +275,40 @@ flutter run -d ios
 
 ### Using Docker (Alternative)
 
+The repo ships Dockerfiles for both the backend and the frontend and a
+`docker-compose.yml` that runs them together. Postgres and Redis are
+expected on the host machine (where you already use them in dev).
+
 ```bash
-# Start all services (PostgreSQL, Redis, Backend)
-docker-compose up -d
+# 1. Make sure backend/.env exists (copy from .env.example and fill in)
+cp backend/.env.example backend/.env
 
-# View logs
-docker-compose logs -f
+# 2. Build + run both containers
+docker compose up --build
 
-# Stop services
-docker-compose down
+# Tail logs
+docker compose logs -f
+
+# Stop
+docker compose down
 ```
+
+After `up`, the frontend is on http://localhost:3000 and the backend on
+http://localhost:3001. The frontend container talks to the backend via
+the compose network; the backend talks to your host's Postgres/Redis via
+`host.docker.internal`.
+
+### CI/CD
+
+GitHub Actions:
+- **CI** (`.github/workflows/ci.yml`) — runs on every PR and push to
+  `main`: typechecks + builds both packages, then builds both Docker
+  images as a smoke test. No push to a registry on PRs.
+- **Publish** (`.github/workflows/docker-publish.yml`) — runs on push to
+  `main` and on `v*` tags: builds and pushes images to
+  `ghcr.io/<owner>/nuray-backend` and `ghcr.io/<owner>/nuray-frontend`.
+  Tags emitted: `main`, `sha-<short>`, plus `:v1.2.3` / `:latest` on
+  release tags.
 
 ---
 

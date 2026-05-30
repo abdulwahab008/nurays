@@ -1,0 +1,32 @@
+node_modules
+.next
+out
+build
+dist
+
+# Env / secrets — set at runtime
+.env
+.env.*
+!.env.example
+
+# Tests + dev artefacts
+tests
+playwright-report
+test-results
+.playwright-mcp
+*.spec.ts
+*.test.ts
+playwright.config.ts
+
+# Logs + OS
+*.log
+.DS_Store
+*.tsbuildinfo
+
+# Docs at project level
+*.md
+docs
+
+# Git
+.git
+.gitignore
