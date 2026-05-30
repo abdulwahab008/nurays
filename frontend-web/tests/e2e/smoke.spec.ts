@@ -62,8 +62,11 @@ test.describe('Nuray smoke', () => {
       if (msg.type() === 'error') errors.push(msg.text());
     });
     for (const path of ['/', '/products', '/login', '/register']) {
-      await page.goto(path);
-      await page.waitForLoadState('networkidle');
+      // Wait for `load`, not `networkidle` — the app holds an open socket.io
+      // connection, so the network never goes fully idle and `networkidle`
+      // would time out. Give the page a moment to flush any console errors.
+      await page.goto(path, { waitUntil: 'load' });
+      await page.waitForTimeout(1000);
     }
     expect(errors, `Console errors: ${errors.join('\n')}`).toEqual([]);
   });

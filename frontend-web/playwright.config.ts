@@ -15,4 +15,13 @@ export default defineConfig({
   projects: [
     { name: 'chromium', use: { ...devices['Desktop Chrome'] } },
   ],
+  // Auto-start the frontend for the tests. Locally this reuses a server you
+  // already have running; in CI it boots a fresh one. The backend (plus its
+  // DB/Redis) must be running separately — see the `e2e` CI job.
+  webServer: {
+    command: 'npm run dev',
+    url: 'http://localhost:3000',
+    reuseExistingServer: !process.env.CI,
+    timeout: 120_000,
+  },
 });
