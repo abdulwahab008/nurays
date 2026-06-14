@@ -5,7 +5,16 @@ import { AppError } from '../middleware/errorHandler';
 import bcrypt from 'bcrypt';
 import otpService from './otp.service';
 import emailService from './email.service';
+import walletService from './wallet.service';
 import { generateVerificationToken } from '../utils/email-verification';
+import { randomBytes } from 'crypto';
+
+// Configurable referral reward (marketing spend you control; set 0 to disable).
+const REFERRAL_CREDIT_PKR = Number(process.env.REFERRAL_CREDIT_PKR ?? 100);
+
+function generateReferralCode(): string {
+  return 'NRY' + randomBytes(4).toString('hex').toUpperCase().slice(0, 6);
+}
 
 export class AuthService {
   /**
@@ -20,7 +29,8 @@ export class AuthService {
     phone?: string,
     city?: string,
     area?: string,
-    businessName?: string // Required for sellers
+    businessName?: string, // Required for sellers
+    referredByCode?: string // Optional referral code entered at signup
   ) {
     // Normalize and validate email
     const normalizedEmail = email.toLowerCase().trim();
@@ -103,6 +113,14 @@ export class AuthService {
     const saltRounds = 10;
     const passwordHash = await bcrypt.hash(password, saltRounds);
 
+    // Unique referral code for this user (retry on the rare collision).
+    let referralCode = generateReferralCode();
+    for (let i = 0; i < 5; i++) {
+      const clash = await prisma.user.findUnique({ where: { referralCode } });
+      if (!clash) break;
+      referralCode = generateReferralCode();
+    }
+
     // Create user
     const user = await prisma.user.create({
       data: {
@@ -110,6 +128,7 @@ export class AuthService {
         passwordHash,
         phone: formattedPhone,
         userType,
+        referralCode,
         emailVerified: false, // Can be verified via email verification later
         phoneVerified: !!formattedPhone,
         status: 'active',
@@ -138,6 +157,26 @@ export class AuthService {
           verificationStatus: 'pending',
         },
       });
+    }
+
+    // Referral reward — credit both the new user and the referrer. Marketing
+    // spend you control via REFERRAL_CREDIT_PKR (0 disables it entirely).
+    if (referredByCode && REFERRAL_CREDIT_PKR > 0) {
+      const referrer = await prisma.user.findUnique({
+        where: { referralCode: referredByCode.trim().toUpperCase() },
+        select: { id: true },
+      });
+      if (referrer && referrer.id !== user.id) {
+        await prisma.user.update({ where: { id: user.id }, data: { referredBy: referrer.id } });
+        await walletService.credit(user.id, REFERRAL_CREDIT_PKR, {
+          transactionType: 'referral',
+          description: 'Referral signup bonus',
+        });
+        await walletService.credit(referrer.id, REFERRAL_CREDIT_PKR, {
+          transactionType: 'referral',
+          description: 'Referral reward — a friend joined with your code',
+        });
+      }
     }
 
     // Create email verification token and send confirmation email

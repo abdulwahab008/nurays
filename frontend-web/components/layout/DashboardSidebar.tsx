@@ -164,7 +164,7 @@ export function DashboardSidebar({ items, userType }: DashboardSidebarProps) {
 
   return (
     <aside
-      className="w-64 h-full overflow-y-auto"
+      className="w-64 shrink-0 h-full overflow-y-auto"
       style={{ background: 'var(--paper-0)', borderRight: '1px solid var(--ink-100)' }}
     >
       <div className="px-4 py-6">
@@ -242,12 +242,13 @@ export function DashboardSidebar({ items, userType }: DashboardSidebarProps) {
           <p className="text-xs mb-3" style={{ color: 'var(--ink-600)' }}>
             Share Nuray and earn Rs 100 in wallet credit.
           </p>
-          <button
-            className="w-full py-2 text-sm font-medium rounded-full transition-colors"
+          <Link
+            href="/referral"
+            className="block w-full py-2 text-center text-sm font-medium rounded-full transition-colors"
             style={{ background: 'var(--ink-900)', color: 'var(--cream-50)' }}
           >
             Invite now
-          </button>
+          </Link>
         </div>
       </div>
     </aside>

@@ -9,6 +9,7 @@ export interface RegisterRequest {
   city?: string;
   area?: string;
   business_name?: string; // Required for sellers
+  referral_code?: string;
 }
 
 export interface LoginSendOtpRequest {

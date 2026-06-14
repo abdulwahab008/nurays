@@ -10,6 +10,7 @@ import { useAuthStore } from '@/lib/store/auth-store';
 import { DashboardLayout } from '@/components/layout/DashboardShell';
 import { useSocket } from '@/lib/hooks/use-socket';
 import { useToast } from '@/components/ui/toast';
+import { Dot, ArrowRight, RotateCcw } from 'lucide-react';
 
 // SVG icons (no emojis)
 const Icons = {
@@ -78,7 +79,21 @@ export default function OrdersPage() {
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<string>('all');
+  const [reorderingId, setReorderingId] = useState<string | null>(null);
   const mountedRef = useRef(false);
+
+  const handleReorder = async (orderId: string) => {
+    setReorderingId(orderId);
+    try {
+      const res = await orderService.reorder(orderId);
+      showToast(res.message || 'Added to cart', 'success');
+      if (res.data?.added?.length) router.push('/cart');
+    } catch {
+      showToast('Could not reorder', 'error');
+    } finally {
+      setReorderingId(null);
+    }
+  };
 
   const sidebarItems = [
     { name: 'Dashboard', href: '/dashboard', icon: '' },
@@ -311,9 +326,9 @@ export default function OrdersPage() {
                           {Icons.calendar}
                           {formatDate(order.createdAt)}
                         </span>
-                        <span>•</span>
+                        <Dot className="w-4 h-4 text-gray-400" />
                         <span>{itemCount} item{itemCount !== 1 ? 's' : ''}</span>
-                        <span>•</span>
+                        <Dot className="w-4 h-4 text-gray-400" />
                         <span className={order.paymentStatus === 'paid' ? 'text-green-600' : 'text-amber-600'} title="Payment status">
                           {order.paymentStatus === 'paid' ? 'Payment: Paid' : `Payment: ${(order.paymentStatus ?? 'pending').replace(/_/g, ' ')}`}
                         </span>
@@ -352,9 +367,17 @@ export default function OrdersPage() {
                     <p className="text-lg md:text-2xl font-bold text-green-600 whitespace-nowrap">
                       {formatPrice(order.totalAmount)}
                     </p>
-                    <p className="text-xs md:text-sm text-gray-400 group-hover:text-green-600 transition-colors mt-1 whitespace-nowrap">
-                      View Details →
+                    <p className="text-xs md:text-sm text-gray-400 group-hover:text-green-600 transition-colors mt-1 whitespace-nowrap inline-flex items-center gap-1 justify-end">
+                      View Details <ArrowRight className="w-3.5 h-3.5" />
                     </p>
+                    <button
+                      type="button"
+                      onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleReorder(order.id); }}
+                      disabled={reorderingId === order.id}
+                      className="mt-2 inline-flex items-center gap-1.5 text-xs font-semibold text-forest-600 hover:text-forest-700 disabled:opacity-50"
+                    >
+                      <RotateCcw className="w-3.5 h-3.5" /> {reorderingId === order.id ? 'Adding…' : 'Reorder'}
+                    </button>
                   </div>
                 </div>
               </div>

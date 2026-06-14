@@ -4,6 +4,7 @@ import {
   getMyOrders,
   getOrderDetails,
   cancelOrder,
+  reorder,
 } from '../controllers/order.controller';
 import { validate, validateQuery } from '../middleware/validation.middleware';
 import {
@@ -29,6 +30,9 @@ router.get('/:id', getOrderDetails);
 
 // Cancel order
 router.post('/:id/cancel', validate(cancelOrderSchema), cancelOrder);
+
+// Reorder — re-add this order's items to the cart
+router.post('/:id/reorder', reorder);
 
 export default router;
 

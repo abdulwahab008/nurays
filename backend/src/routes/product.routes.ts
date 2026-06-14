@@ -2,6 +2,7 @@ import { Router } from 'express';
 import {
   getProducts,
   getProduct,
+  getRelatedProducts,
   createProduct,
   updateProduct,
   deleteProduct,
@@ -52,6 +53,9 @@ router.delete(
   authorize('seller'),
   deleteProduct
 );
+
+// Related / "you may also like" for a product (public)
+router.get('/:id/related', getRelatedProducts);
 
 // This route must come LAST because /:identifier matches anything
 router.get('/:identifier', getProduct);

@@ -2,6 +2,7 @@ import prisma from '../config/database';
 import { AppError } from '../middleware/errorHandler';
 import realtimeOrderService from './realtime-order.service';
 import { getDeliveryFeeForSeller } from '../utils/deliveryFee';
+import cartService from './cart.service';
 
 export class OrderService {
   /**
@@ -66,6 +67,7 @@ export class OrderService {
       paymentMethod: string;
       promotionCode?: string;
       deliveryInstructions?: string;
+      tipAmount?: number;
     }
   ) {
     // Verify customer exists
@@ -256,8 +258,17 @@ export class OrderService {
     // Calculate tax (5% GST for Pakistan)
     const taxAmount = (subtotal - discountAmount) * 0.05;
 
+    // Optional tip — paid entirely to sellers (no commission), split across
+    // items in proportion to their value.
+    const tipAmount = data.tipAmount && data.tipAmount > 0 ? data.tipAmount : 0;
+    if (tipAmount > 0 && subtotal > 0) {
+      for (const item of orderItems) {
+        item.sellerPayout += tipAmount * (item.totalPrice / subtotal);
+      }
+    }
+
     // Calculate total
-    const totalAmount = subtotal + deliveryFee - discountAmount + taxAmount;
+    const totalAmount = subtotal + deliveryFee - discountAmount + taxAmount + tipAmount;
 
     // Generate order number
     let orderNumber = this.generateOrderNumber();
@@ -284,6 +295,7 @@ export class OrderService {
           deliveryFee,
           discountAmount,
           taxAmount,
+          tipAmount,
           totalAmount,
           paymentMethod: data.paymentMethod,
           paymentStatus: 'pending',
@@ -663,6 +675,105 @@ export class OrderService {
       refundAmount: cancelledOrder.paymentStatus === 'paid' ? Number(cancelledOrder.totalAmount) : 0,
       refundStatus: cancelledOrder.paymentStatus === 'paid' ? 'processing' : 'not_required',
     };
+  }
+
+  /**
+   * Auto-cancel unpaid/unaccepted orders left in `pending` past the timeout,
+   * restoring stock. Run by the scheduler so abandoned carts-turned-orders
+   * don't hold inventory forever. COD orders are also released — a seller who
+   * never accepts shouldn't pin stock. Returns the number cancelled.
+   */
+  async autoCancelStalePendingOrders(olderThanHours = 24): Promise<number> {
+    const cutoff = new Date(Date.now() - olderThanHours * 60 * 60 * 1000);
+    const stale = await prisma.order.findMany({
+      where: { orderStatus: 'pending', createdAt: { lt: cutoff } },
+      include: { items: true },
+    });
+
+    let cancelled = 0;
+    for (const order of stale) {
+      await prisma.$transaction(async (tx) => {
+        await tx.order.update({
+          where: { id: order.id },
+          data: {
+            orderStatus: 'cancelled',
+            cancellationReason: `Auto-cancelled: not confirmed within ${olderThanHours}h`,
+            cancelledBy: 'system',
+          },
+        });
+        await tx.orderItem.updateMany({
+          where: { orderId: order.id, status: { notIn: ['cancelled', 'delivered'] } },
+          data: { status: 'cancelled' },
+        });
+        for (const item of order.items) {
+          if (!item.productId) continue;
+          await tx.product.update({
+            where: { id: item.productId },
+            data: {
+              stockQuantity: { increment: item.quantity },
+              totalOrders: { decrement: 1 },
+            },
+          });
+        }
+        await tx.inventoryReservation.deleteMany({
+          where: { reservationType: 'order', reservationId: order.id },
+        });
+        await tx.orderStatusHistory.create({
+          data: {
+            orderId: order.id,
+            status: 'cancelled',
+            notes: `Auto-cancelled by system after ${olderThanHours}h without confirmation`,
+            changedBy: order.customerId,
+          },
+        });
+      });
+
+      if (order.customerId) {
+        await realtimeOrderService.emitOrderStatusUpdate(order.id, 'cancelled', order.customerId);
+      }
+      cancelled++;
+    }
+
+    return cancelled;
+  }
+
+  /**
+   * Reorder: re-add a past order's items to the user's cart. Unavailable or
+   * out-of-stock items are skipped (not fatal) and reported back.
+   */
+  async reorder(orderId: string, userId: string) {
+    const order = await prisma.order.findFirst({
+      where: { id: orderId, customerId: userId },
+      include: { items: true },
+    });
+    if (!order) {
+      throw new AppError('Order not found', 404, 'ORDER_NOT_FOUND');
+    }
+
+    const added: string[] = [];
+    const skipped: Array<{ name: string; reason: string }> = [];
+    for (const item of order.items) {
+      if (!item.productId) {
+        skipped.push({ name: item.productName, reason: 'No longer available' });
+        continue;
+      }
+      try {
+        await cartService.addToCart(userId, {
+          productId: item.productId,
+          quantity: item.quantity,
+          stockType: item.fulfillmentType ?? undefined,
+          hubId: item.hubId ?? undefined,
+        });
+        added.push(item.productName);
+      } catch (err) {
+        skipped.push({
+          name: item.productName,
+          reason: err instanceof AppError ? err.message : 'Unavailable',
+        });
+      }
+    }
+
+    return { added, skipped };
   }
 }
 

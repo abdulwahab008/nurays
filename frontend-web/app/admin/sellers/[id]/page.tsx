@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import Link from 'next/link';
+import { ArrowLeft } from 'lucide-react';
 import { UserLayout } from '@/components/layout/UserLayout';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/toast';
@@ -130,9 +131,10 @@ export default function AdminSellerDetailPage() {
         <div className="mb-6">
           <Link
             href="/admin/sellers"
-            className="text-green-600 hover:text-green-700 text-sm font-medium mb-2 inline-block"
+            className="text-green-600 hover:text-green-700 text-sm font-medium mb-2 inline-flex items-center gap-1"
           >
-            ← Back to All Sellers
+            <ArrowLeft className="w-4 h-4" />
+            Back to All Sellers
           </Link>
         </div>
 

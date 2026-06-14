@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import { FolderOpen, CheckCircle2, UtensilsCrossed, BookOpen, Dot } from 'lucide-react';
 import { DashboardLayout } from '@/components/layout/DashboardShell';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/toast';
@@ -626,7 +627,7 @@ export default function AdminCategoriesPage() {
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8">
           <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
             <div className="flex items-center gap-3">
-              <div className="text-3xl">📁</div>
+              <FolderOpen className="w-8 h-8 text-ink-500" />
               <div>
                 <p className="text-sm text-gray-500">Total Categories</p>
                 <p className="text-2xl font-bold text-gray-900">{totalCategories}</p>
@@ -635,7 +636,7 @@ export default function AdminCategoriesPage() {
           </div>
           <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
             <div className="flex items-center gap-3">
-              <div className="text-3xl">✅</div>
+              <CheckCircle2 className="w-8 h-8 text-forest-500" />
               <div>
                 <p className="text-sm text-gray-500">Active Categories</p>
                 <p className="text-2xl font-bold text-green-600">{activeCategories}</p>
@@ -644,7 +645,7 @@ export default function AdminCategoriesPage() {
           </div>
           <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
             <div className="flex items-center gap-3">
-              <div className="text-3xl">🍽️</div>
+              <UtensilsCrossed className="w-8 h-8 text-ink-500" />
               <div>
                 <p className="text-sm text-gray-500">Total Products</p>
                 <p className="text-2xl font-bold text-blue-600">{totalProducts}</p>
@@ -705,13 +706,16 @@ export default function AdminCategoriesPage() {
 
         {/* Info Box */}
         <div className="mt-8 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-2xl p-6 border border-blue-100">
-          <h3 className="font-semibold text-gray-900 mb-3">📖 How Categories Work</h3>
+          <h3 className="font-semibold text-gray-900 mb-3 flex items-center gap-2">
+            <BookOpen className="w-5 h-5 text-ink-900" />
+            How Categories Work
+          </h3>
           <ul className="text-sm text-gray-600 space-y-2">
-            <li>• <strong>Parent Categories</strong> are top-level groupings (e.g., "Frozen Parathas")</li>
-            <li>• <strong>Subcategories</strong> are nested under parent categories (e.g., "Stuffed Parathas" under "Frozen Parathas")</li>
-            <li>• <strong>Sort Order</strong> determines display sequence (lower numbers appear first)</li>
-            <li>• <strong>Inactive categories</strong> won't show to customers but products remain linked</li>
-            <li>• <strong>Slugs</strong> are auto-generated from names for SEO-friendly URLs</li>
+            <li className="flex items-start"><Dot className="w-4 h-4 mt-0.5 shrink-0 text-ink-500" /><span><strong>Parent Categories</strong> are top-level groupings (e.g., "Frozen Parathas")</span></li>
+            <li className="flex items-start"><Dot className="w-4 h-4 mt-0.5 shrink-0 text-ink-500" /><span><strong>Subcategories</strong> are nested under parent categories (e.g., "Stuffed Parathas" under "Frozen Parathas")</span></li>
+            <li className="flex items-start"><Dot className="w-4 h-4 mt-0.5 shrink-0 text-ink-500" /><span><strong>Sort Order</strong> determines display sequence (lower numbers appear first)</span></li>
+            <li className="flex items-start"><Dot className="w-4 h-4 mt-0.5 shrink-0 text-ink-500" /><span><strong>Inactive categories</strong> won't show to customers but products remain linked</span></li>
+            <li className="flex items-start"><Dot className="w-4 h-4 mt-0.5 shrink-0 text-ink-500" /><span><strong>Slugs</strong> are auto-generated from names for SEO-friendly URLs</span></li>
           </ul>
         </div>
       </div>

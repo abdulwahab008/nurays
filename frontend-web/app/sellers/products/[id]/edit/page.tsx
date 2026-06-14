@@ -1,8 +1,30 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, type ReactNode } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import Link from 'next/link';
+import {
+  Snowflake,
+  Leaf,
+  UtensilsCrossed,
+  CookingPot,
+  Package,
+  Dot,
+  Circle,
+  ArrowRight,
+  CheckCircle2,
+  Clock,
+  BadgeCheck,
+  Sparkles,
+  Wallet,
+  Save,
+  Trash2,
+  Car,
+  Store,
+  Repeat,
+  Lightbulb,
+  X,
+} from 'lucide-react';
 import { DashboardLayout } from '@/components/layout/DashboardShell';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/toast';
@@ -130,11 +152,11 @@ export default function EditProductPage() {
   });
 
   // Product type options
-  const productTypeOptions = [
-    { value: 'frozen', label: 'Frozen', labelUrdu: 'منجمد', icon: '❄️', description: 'Stored frozen, long shelf life' },
-    { value: 'fresh', label: 'Fresh', labelUrdu: 'تازہ', icon: '🥬', description: 'Made fresh daily, same-day delivery' },
-    { value: 'ready_to_eat', label: 'Ready to Eat', labelUrdu: 'کھانے کے لیے تیار', icon: '🍽️', description: 'Ready to eat immediately' },
-    { value: 'ready_to_cook', label: 'Ready to Cook', labelUrdu: 'پکانے کے لیے تیار', icon: '🍳', description: 'Prepared, needs cooking' },
+  const productTypeOptions: Array<{ value: string; label: string; labelUrdu: string; icon: ReactNode; description: string }> = [
+    { value: 'frozen', label: 'Frozen', labelUrdu: 'منجمد', icon: <Snowflake className="w-5 h-5" />, description: 'Stored frozen, long shelf life' },
+    { value: 'fresh', label: 'Fresh', labelUrdu: 'تازہ', icon: <Leaf className="w-5 h-5" />, description: 'Made fresh daily, same-day delivery' },
+    { value: 'ready_to_eat', label: 'Ready to Eat', labelUrdu: 'کھانے کے لیے تیار', icon: <UtensilsCrossed className="w-5 h-5" />, description: 'Ready to eat immediately' },
+    { value: 'ready_to_cook', label: 'Ready to Cook', labelUrdu: 'پکانے کے لیے تیار', icon: <CookingPot className="w-5 h-5" />, description: 'Prepared, needs cooking' },
   ];
 
   // Unit options
@@ -661,11 +683,15 @@ export default function EditProductPage() {
               </button>
             </div>
             <div className={`mt-3 inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-sm font-medium ${
-              formData.isActive 
-                ? 'bg-emerald-100 text-emerald-700' 
+              formData.isActive
+                ? 'bg-emerald-100 text-emerald-700'
                 : 'bg-gray-100 text-gray-600'
             }`}>
-              {formData.isActive ? '● Live - Visible to customers' : '○ Hidden - Not visible to customers'}
+              {formData.isActive ? (
+                <><Circle className="w-2 h-2 fill-current" /> Live - Visible to customers</>
+              ) : (
+                <><Circle className="w-2 h-2" /> Hidden - Not visible to customers</>
+              )}
             </div>
           </div>
 
@@ -825,7 +851,7 @@ export default function EditProductPage() {
                             : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                         }`}
                       >
-                        <span>{cat.iconUrl || '📦'}</span>
+                        <span className="inline-flex items-center">{cat.iconUrl || <Package className="w-4 h-4" />}</span>
                         <span>{cat.name}</span>
                         {cat.children && cat.children.length > 0 && (
                           <span className="text-xs opacity-70 ml-1">({cat.children.length})</span>
@@ -861,7 +887,7 @@ export default function EditProductPage() {
                                 : 'bg-white text-gray-600 hover:bg-gray-100 border border-gray-200'
                             }`}
                           >
-                            <span>{subCat.iconUrl || '•'}</span>
+                            <span className="inline-flex items-center">{subCat.iconUrl || <Dot className="w-4 h-4" />}</span>
                             <span>{subCat.name}</span>
                           </button>
                         ))}
@@ -878,11 +904,11 @@ export default function EditProductPage() {
                   <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                     <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
                   </svg>
-                  <span>
-                    ✅ Selected: {productTypeOptions.find(t => t.value === formData.productType)?.icon}{' '}
+                  <span className="inline-flex items-center gap-1.5 flex-wrap">
+                    <CheckCircle2 className="w-4 h-4" /> Selected: {productTypeOptions.find(t => t.value === formData.productType)?.icon}{' '}
                     {productTypeOptions.find(t => t.value === formData.productType)?.label}
-                    {selectedCategoryInfo.parent ? ` → ${selectedCategoryInfo.parent.name}` : ''}
-                    {' → '}{selectedCategoryInfo.category.name}
+                    {selectedCategoryInfo.parent ? <><ArrowRight className="w-4 h-4" /> {selectedCategoryInfo.parent.name}</> : null}
+                    <ArrowRight className="w-4 h-4" /> {selectedCategoryInfo.category.name}
                   </span>
                 </div>
               )}
@@ -892,7 +918,7 @@ export default function EditProductPage() {
             {formData.productType && formData.productType !== 'frozen' && (
               <div className="mb-5 p-4 bg-amber-50 border border-amber-200 rounded-xl">
                 <h3 className="text-sm font-semibold text-amber-800 mb-3 flex items-center gap-2">
-                  <span>⏰</span> Freshness & Timing
+                  <Clock className="w-4 h-4" /> Freshness & Timing
                 </h3>
                 <div className="grid grid-cols-2 gap-4">
                   <div>
@@ -974,7 +1000,7 @@ export default function EditProductPage() {
                   <div className="w-5 h-5 rounded border-2 border-gray-300" />
                 )}
                 <span className="font-medium">Halal Certified</span>
-                <span className="text-lg">☪️</span>
+                <BadgeCheck className="w-5 h-5" />
               </button>
             </div>
           </div>
@@ -1019,8 +1045,8 @@ export default function EditProductPage() {
                   />
                 </div>
                 {discount > 0 && (
-                  <p className="text-green-600 text-sm mt-1 font-medium">
-                    🎉 {discount}% OFF
+                  <p className="text-green-600 text-sm mt-1 font-medium inline-flex items-center gap-1">
+                    <Sparkles className="w-4 h-4" /> {discount}% OFF
                   </p>
                 )}
               </div>
@@ -1098,7 +1124,7 @@ export default function EditProductPage() {
               <div className="flex items-center justify-between mb-4">
                 <div>
                   <h3 className="text-lg font-bold text-gray-900 flex items-center gap-2">
-                    <span>📦</span> Product Variants
+                    <Package className="w-5 h-5" /> Product Variants
                     {variants.length > 0 && (
                       <span className="bg-purple-500 text-white px-2 py-0.5 rounded-full text-xs">
                         {variants.length}
@@ -1146,8 +1172,9 @@ export default function EditProductPage() {
                             type="button"
                             onClick={() => removeVariant(index)}
                             className="text-red-500 hover:text-red-700"
+                            aria-label="Remove variant"
                           >
-                            ✕
+                            <X className="w-4 h-4" />
                           </button>
                         </div>
                       </div>
@@ -1305,7 +1332,7 @@ export default function EditProductPage() {
                   </button>
 
                   <div className="bg-blue-50 rounded-lg p-3 border border-blue-100">
-                    <p className="text-xs font-medium text-blue-800 mb-1">💡 Pro Tips:</p>
+                    <p className="text-xs font-medium text-blue-800 mb-1 inline-flex items-center gap-1"><Lightbulb className="w-3.5 h-3.5" /> Pro Tips:</p>
                     <ul className="text-xs text-blue-700 space-y-0.5">
                       <li>• Changes are saved when you click "Update Product"</li>
                       <li>• Deleted variants will be permanently removed</li>
@@ -1323,9 +1350,9 @@ export default function EditProductPage() {
               </label>
               <div className="grid grid-cols-3 gap-3">
                 {[
-                  { value: 'direct', label: 'Direct Delivery', icon: '🚗', desc: 'You deliver to customers' },
-                  { value: 'hub', label: 'Via Hub', icon: '🏪', desc: 'Hub handles delivery' },
-                  { value: 'both', label: 'Both', icon: '🔄', desc: 'Either method' },
+                  { value: 'direct', label: 'Direct Delivery', icon: <Car className="w-5 h-5" />, desc: 'You deliver to customers' },
+                  { value: 'hub', label: 'Via Hub', icon: <Store className="w-5 h-5" />, desc: 'Hub handles delivery' },
+                  { value: 'both', label: 'Both', icon: <Repeat className="w-5 h-5" />, desc: 'Either method' },
                 ].map((option) => (
                   <button
                     key={option.value}
@@ -1370,7 +1397,7 @@ export default function EditProductPage() {
             {formData.price && formData.costPrice && parseFloat(formData.costPrice) > 0 && (
               <div className="mt-4 bg-gradient-to-r from-emerald-50 to-green-50 rounded-xl p-4 border border-emerald-200">
                 <div className="flex items-center gap-2 mb-3">
-                  <span className="text-lg">💰</span>
+                  <Wallet className="w-5 h-5 text-emerald-700" />
                   <p className="text-sm font-semibold text-emerald-800">Your Profit Breakdown (Private)</p>
                 </div>
                 <div className="space-y-2">
@@ -1432,7 +1459,7 @@ export default function EditProductPage() {
                 </span>
               ) : (
                 <>
-                  <span className="mr-2">💾</span>
+                  <Save className="w-5 h-5 mr-2" />
                   Save Changes
                 </>
               )}
@@ -1460,9 +1487,9 @@ export default function EditProductPage() {
               variant="outline"
               onClick={handleDelete}
               disabled={saving}
-              className="border-red-300 text-red-600 hover:bg-red-100"
+              className="border-red-300 text-red-600 hover:bg-red-100 inline-flex items-center gap-2"
             >
-              🗑️ Delete Product
+              <Trash2 className="w-4 h-4" /> Delete Product
             </Button>
           </div>
         </form>

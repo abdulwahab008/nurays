@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import { Inbox, ChefHat, Check, X } from 'lucide-react';
 import { DashboardLayout } from '@/components/layout/DashboardShell';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/toast';
@@ -203,7 +204,7 @@ export default function CategoryRequestsPage() {
           </div>
         ) : requests.length === 0 ? (
           <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-12 text-center">
-            <div className="text-5xl mb-4">📭</div>
+            <Inbox className="w-14 h-14 text-ink-500 mx-auto mb-4" />
             <h3 className="text-lg font-semibold text-gray-900 mb-2">No requests found</h3>
             <p className="text-gray-500">
               {filter === 'pending'
@@ -275,7 +276,7 @@ export default function CategoryRequestsPage() {
 
                       {/* Seller Info */}
                       <div className="mt-3 flex items-center gap-2 text-sm text-gray-500">
-                        <span>👨‍🍳</span>
+                        <ChefHat className="w-4 h-4" />
                         <span>
                           Requested by{' '}
                           <span className="font-medium text-gray-700">
@@ -302,17 +303,19 @@ export default function CategoryRequestsPage() {
                         <Button
                           onClick={() => handleApprove(request)}
                           disabled={actionLoading}
-                          className="bg-green-600 hover:bg-green-700 text-white px-4 py-2"
+                          className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 inline-flex items-center gap-1.5"
                         >
-                          ✓ Approve
+                          <Check className="w-4 h-4" />
+                          Approve
                         </Button>
                         <Button
                           onClick={() => openRejectModal(request)}
                           disabled={actionLoading}
                           variant="outline"
-                          className="border-red-300 text-red-600 hover:bg-red-50 px-4 py-2"
+                          className="border-red-300 text-red-600 hover:bg-red-50 px-4 py-2 inline-flex items-center gap-1.5"
                         >
-                          ✕ Reject
+                          <X className="w-4 h-4" />
+                          Reject
                         </Button>
                       </div>
                     )}

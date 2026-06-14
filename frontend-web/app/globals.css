@@ -1,187 +1,265 @@
-@import url('https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600;700&family=Geist+Mono:wght@400;500&family=Fraunces:opsz,wght@9..144,300;9..144,400;9..144,500&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600;700;800&family=Geist+Mono:wght@400;500&family=Fraunces:opsz,wght@9..144,300;9..144,400;9..144,500&display=swap');
 @import "tailwindcss";
 @import "leaflet/dist/leaflet.css";
 
+/* Class-based dark mode: `dark:` utilities apply when a `.dark` ancestor exists. */
+@custom-variant dark (&:where(.dark, .dark *));
+
 /* ============================================================
-   Nuray Design System — v3 "Premium Marketplace"
-   Forest green · warm cream · Fraunces italic display.
+   Nuray Design System — v4 "Fresh Delivery"
+   Vibrant orange-red · clean neutrals · bold sans display.
+   Full light + dark theming via runtime CSS variables.
    ============================================================ */
 
 :root {
-  /* FOREST — primary */
-  --forest-50:  #ecf3ec;
-  --forest-100: #d2e3d2;
-  --forest-200: #a4c8a6;
-  --forest-300: #6fa873;
-  --forest-400: #438849;
-  --forest-500: #0a7a3a;
-  --forest-600: #086530;
-  --forest-700: #074f25;
-  --forest-800: #0a3d1d;
-  --forest-900: #082818;
+  color-scheme: light;
 
-  /* GOLD — premium accent */
-  --gold-50:  #fbf6e9;
-  --gold-100: #f4e7c2;
-  --gold-200: #e8cf85;
-  --gold-300: #d8b153;
-  --gold-400: #c19a3e;
-  --gold-500: #a17e28;
-  --gold-600: #7a5f1d;
-  --gold-700: #574214;
+  /* BRAND — orange-red (constant across themes; pops on light & dark) */
+  --brand-50:  #fff3ed;
+  --brand-100: #ffe3d4;
+  --brand-200: #ffc4a6;
+  --brand-300: #ff9d70;
+  --brand-400: #ff6f3c;
+  --brand-500: #f23e02;
+  --brand-600: #d83502;
+  --brand-700: #b32907;
+  --brand-800: #8f230c;
+  --brand-900: #74200e;
 
-  /* ANAR — error / sale */
-  --anar-50:  #fbeaea;
-  --anar-100: #f4cdcd;
-  --anar-200: #e69b9b;
-  --anar-500: #a8232c;
-  --anar-600: #871a22;
-  --anar-700: #631218;
+  /* GOLD — ratings */
+  --gold-400: #f7b733;
+  --gold-500: #f5a623;
+  --gold-600: #d4880f;
 
-  /* INK — warm charcoal */
-  --ink-50:  #f5ece0;
-  --ink-100: #ece1ce;
-  --ink-200: #d9cdb6;
-  --ink-300: #b8a98e;
-  --ink-400: #8c7d63;
-  --ink-500: #6a5d47;
-  --ink-600: #4e4434;
-  --ink-700: #3a3225;
-  --ink-800: #29231a;
-  --ink-900: #1a1610;
+  /* STATUS */
+  --success: #16a34a;
+  --success-soft: #e8f6ee;
+  --danger: #e5333b;
+  --danger-soft: #fdeaea;
 
-  /* CREAM — surfaces */
-  --cream-50:  #fbf8f1;
-  --cream-100: #f5efe1;
-  --cream-200: #ebe2cc;
-  --cream-300: #ddd0b1;
+  /* SURFACES (light) */
+  --surface-page:   #f6f6f7;
+  --surface-card:   #ffffff;
+  --surface-raised: #f1f1f3;
+  --surface-sunken: #ececef;
 
-  --paper-0: #ffffff;
+  /* TEXT (light) */
+  --text-strong:  #17171a;
+  --text-default: #2b2b30;
+  --text-muted:   #6a6a73;
+  --text-subtle:  #8a8a93;
+  --text-faint:   #ababb3;
+  --text-inverse: #ffffff;
 
-  /* Aliases */
-  --bg-page:    var(--cream-50);
-  --bg-card:    var(--paper-0);
-  --bg-raised:  var(--cream-100);
-  --bg-inverse: var(--ink-900);
+  /* LINES (light) */
+  --line-hair:   #ececef;
+  --line-rule:   #dededf;
+  --line-strong: #17171a;
 
-  --fg-default: var(--ink-900);
-  --fg-muted:   var(--ink-600);
-  --fg-subtle:  var(--ink-500);
-  --fg-faint:   var(--ink-400);
-  --fg-inverse: var(--cream-50);
+  /* ---- Legacy scale aliases → mapped onto the semantic vars above so every
+     existing utility (bg-forest-500, text-ink-900, bg-cream-50 …) and inline
+     var() adopts the new palette and flips with the theme automatically. ---- */
+  --forest-50:  var(--brand-50);
+  --forest-100: var(--brand-100);
+  --forest-200: var(--brand-200);
+  --forest-300: var(--brand-300);
+  --forest-400: var(--brand-400);
+  --forest-500: var(--brand-500);
+  --forest-600: var(--brand-600);
+  --forest-700: var(--brand-700);
+  --forest-800: var(--brand-800);
+  --forest-900: var(--brand-900);
 
-  --border-hair:   var(--ink-200);
-  --border-rule:   var(--ink-300);
-  --border-strong: var(--ink-900);
+  --cream-50:  var(--surface-page);
+  --cream-100: var(--surface-raised);
+  --cream-200: var(--surface-sunken);
+  --cream-300: var(--line-hair);
+  --paper-0:   var(--surface-card);
 
-  --accent:      var(--forest-500);
-  --accent-soft: var(--forest-50);
-  --accent-deep: var(--forest-700);
+  --ink-50:  var(--surface-sunken);
+  --ink-100: var(--surface-raised);
+  --ink-200: var(--line-hair);
+  --ink-300: var(--line-rule);
+  --ink-400: var(--text-faint);
+  --ink-500: var(--text-subtle);
+  --ink-600: var(--text-muted);
+  --ink-700: var(--text-default);
+  --ink-800: var(--text-strong);
+  --ink-900: var(--text-strong);
+
+  --anar-50:  var(--danger-soft);
+  --anar-100: var(--danger-soft);
+  --anar-200: #f3b4b4;
+  --anar-500: var(--danger);
+  --anar-600: #c81e25;
+  --anar-700: #a3161c;
+
+  /* Semantic aliases */
+  --bg-page:    var(--surface-page);
+  --bg-card:    var(--surface-card);
+  --bg-raised:  var(--surface-raised);
+  --bg-inverse: var(--text-strong);
+
+  --fg-default: var(--text-strong);
+  --fg-muted:   var(--text-muted);
+  --fg-subtle:  var(--text-subtle);
+  --fg-faint:   var(--text-faint);
+  --fg-inverse: var(--text-inverse);
+
+  --border-hair:   var(--line-hair);
+  --border-rule:   var(--line-rule);
+  --border-strong: var(--line-strong);
+
+  --accent:      var(--brand-500);
+  --accent-soft: var(--brand-50);
+  --accent-deep: var(--brand-700);
 
   /* Elevation */
-  --shadow-xs: 0 1px 0 0 rgba(26, 22, 16, 0.04);
-  --shadow-sm: 0 2px 8px -4px rgba(26, 22, 16, 0.08), 0 1px 2px -1px rgba(26, 22, 16, 0.04);
-  --shadow-md: 0 12px 24px -8px rgba(26, 22, 16, 0.10), 0 4px 8px -2px rgba(26, 22, 16, 0.05);
-  --shadow-lg: 0 28px 48px -16px rgba(26, 22, 16, 0.16), 0 8px 16px -4px rgba(26, 22, 16, 0.06);
+  --shadow-xs: 0 1px 2px 0 rgba(17, 17, 20, 0.04);
+  --shadow-sm: 0 2px 8px -4px rgba(17, 17, 20, 0.10), 0 1px 2px -1px rgba(17, 17, 20, 0.05);
+  --shadow-md: 0 12px 24px -8px rgba(17, 17, 20, 0.12), 0 4px 8px -2px rgba(17, 17, 20, 0.06);
+  --shadow-lg: 0 28px 48px -16px rgba(17, 17, 20, 0.18), 0 8px 16px -4px rgba(17, 17, 20, 0.08);
 
   /* Type */
-  --font-display: 'Fraunces', 'Times New Roman', Georgia, serif;
+  --font-display: 'Geist', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   --font-ui:      'Geist', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   --font-mono:    'Geist Mono', ui-monospace, Menlo, monospace;
+  --font-serif:   'Fraunces', 'Times New Roman', Georgia, serif;
 
   --ease-out:    cubic-bezier(0.2, 0.6, 0.2, 1);
   --ease-in-out: cubic-bezier(0.4, 0.0, 0.2, 1);
 }
 
+.dark {
+  color-scheme: dark;
+
+  /* Soft brand surfaces + accent text flip for legibility on dark */
+  --brand-50:  #2c160d;
+  --brand-100: #3a1d12;
+  --brand-600: #ff7a45;
+  --brand-700: #ff8d5e;
+
+  --success-soft: #122b1d;
+  --danger-soft:  #2c1416;
+
+  --surface-page:   #0f0f11;
+  --surface-card:   #1a1a1e;
+  --surface-raised: #232328;
+  --surface-sunken: #28282e;
+
+  --text-strong:  #f6f6f8;
+  --text-default: #e6e6ea;
+  --text-muted:   #a9a9b2;
+  --text-subtle:  #8b8b94;
+  --text-faint:   #6e6e77;
+  --text-inverse: #17171a;
+
+  --line-hair:   #2a2a30;
+  --line-rule:   #36363d;
+  --line-strong: #f6f6f8;
+
+  --shadow-xs: 0 1px 2px 0 rgba(0, 0, 0, 0.4);
+  --shadow-sm: 0 2px 8px -4px rgba(0, 0, 0, 0.5), 0 1px 2px -1px rgba(0, 0, 0, 0.4);
+  --shadow-md: 0 12px 24px -8px rgba(0, 0, 0, 0.55), 0 4px 8px -2px rgba(0, 0, 0, 0.4);
+  --shadow-lg: 0 28px 48px -16px rgba(0, 0, 0, 0.65), 0 8px 16px -4px rgba(0, 0, 0, 0.45);
+}
+
 /* ============================================================
-   Tailwind v4 theme — overrides default green/gray to forest/ink
-   so the existing class-heavy pages adopt the new palette
-   without rewriting every utility.
+   Tailwind v4 theme — color utilities resolve to the runtime vars
+   above (@theme inline) so background, text and border utilities
+   flip with light and dark.
    ============================================================ */
-@theme {
+@theme inline {
   --font-sans:  'Geist', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   --font-mono:  'Geist Mono', ui-monospace, Menlo, monospace;
   --font-serif: 'Fraunces', 'Times New Roman', Georgia, serif;
 
-  /* Map bg/foreground to cream/ink */
-  --color-background: #fbf8f1;
-  --color-foreground: #1a1610;
-  --color-border: #d9cdb6;
-  --color-input:  #d9cdb6;
-  --color-ring:   #0a7a3a;
+  --color-background: var(--surface-page);
+  --color-foreground: var(--text-strong);
+  --color-border: var(--line-hair);
+  --color-input:  var(--line-rule);
+  --color-ring:   var(--brand-500);
 
-  --color-primary: #0a7a3a;
-  --color-primary-foreground: #fbf8f1;
-  --color-secondary: #f5efe1;
-  --color-secondary-foreground: #1a1610;
-  --color-accent: #ecf3ec;
-  --color-accent-foreground: #074f25;
-  --color-destructive: #a8232c;
-  --color-destructive-foreground: #fbf8f1;
+  --color-primary: var(--brand-500);
+  --color-primary-foreground: #ffffff;
+  --color-secondary: var(--surface-raised);
+  --color-secondary-foreground: var(--text-strong);
+  --color-accent: var(--brand-50);
+  --color-accent-foreground: var(--brand-700);
+  --color-destructive: var(--danger);
+  --color-destructive-foreground: #ffffff;
 
-  /* Remap Tailwind greens → forest */
-  --color-green-50:  #ecf3ec;
-  --color-green-100: #d2e3d2;
-  --color-green-200: #a4c8a6;
-  --color-green-300: #6fa873;
-  --color-green-400: #438849;
-  --color-green-500: #0a7a3a;
-  --color-green-600: #086530;
-  --color-green-700: #074f25;
-  --color-green-800: #0a3d1d;
-  --color-green-900: #082818;
+  /* Card surface token (use bg-card for dark-mode-safe surfaces) */
+  --color-card: var(--surface-card);
+  --color-page: var(--surface-page);
 
-  /* Remap Tailwind grays → warm ink/cream */
-  --color-gray-50:  #fbf8f1;
-  --color-gray-100: #f5efe1;
-  --color-gray-200: #ebe2cc;
-  --color-gray-300: #d9cdb6;
-  --color-gray-400: #b8a98e;
-  --color-gray-500: #8c7d63;
-  --color-gray-600: #4e4434;
-  --color-gray-700: #3a3225;
-  --color-gray-800: #29231a;
-  --color-gray-900: #1a1610;
+  /* Greens now mean success/veg (brand moved to orange) */
+  --color-green-50:  var(--success-soft);
+  --color-green-100: var(--success-soft);
+  --color-green-500: var(--success);
+  --color-green-600: var(--success);
+  --color-green-700: #15803d;
 
-  /* Forest as a named scale */
-  --color-forest-50:  #ecf3ec;
-  --color-forest-100: #d2e3d2;
-  --color-forest-200: #a4c8a6;
-  --color-forest-300: #6fa873;
-  --color-forest-400: #438849;
-  --color-forest-500: #0a7a3a;
-  --color-forest-600: #086530;
-  --color-forest-700: #074f25;
-  --color-forest-800: #0a3d1d;
-  --color-forest-900: #082818;
+  /* Grays → neutral scale that flips */
+  --color-gray-50:  var(--surface-sunken);
+  --color-gray-100: var(--line-hair);
+  --color-gray-200: var(--line-rule);
+  --color-gray-300: var(--line-rule);
+  --color-gray-400: var(--text-faint);
+  --color-gray-500: var(--text-subtle);
+  --color-gray-600: var(--text-muted);
+  --color-gray-700: var(--text-default);
+  --color-gray-800: var(--text-strong);
+  --color-gray-900: var(--text-strong);
 
-  --color-cream-50:  #fbf8f1;
-  --color-cream-100: #f5efe1;
-  --color-cream-200: #ebe2cc;
-  --color-cream-300: #ddd0b1;
+  /* Brand as the forest-* scale */
+  --color-forest-50:  var(--forest-50);
+  --color-forest-100: var(--forest-100);
+  --color-forest-200: var(--forest-200);
+  --color-forest-300: var(--forest-300);
+  --color-forest-400: var(--forest-400);
+  --color-forest-500: var(--forest-500);
+  --color-forest-600: var(--forest-600);
+  --color-forest-700: var(--forest-700);
+  --color-forest-800: var(--forest-800);
+  --color-forest-900: var(--forest-900);
 
-  --color-ink-100: #ece1ce;
-  --color-ink-200: #d9cdb6;
-  --color-ink-300: #b8a98e;
-  --color-ink-400: #8c7d63;
-  --color-ink-500: #6a5d47;
-  --color-ink-600: #4e4434;
-  --color-ink-700: #3a3225;
-  --color-ink-800: #29231a;
-  --color-ink-900: #1a1610;
+  --color-brand-50:  var(--brand-50);
+  --color-brand-100: var(--brand-100);
+  --color-brand-200: var(--brand-200);
+  --color-brand-300: var(--brand-300);
+  --color-brand-400: var(--brand-400);
+  --color-brand-500: var(--brand-500);
+  --color-brand-600: var(--brand-600);
+  --color-brand-700: var(--brand-700);
 
-  --color-gold-400: #c19a3e;
-  --color-gold-500: #a17e28;
-  --color-gold-600: #7a5f1d;
+  --color-cream-50:  var(--cream-50);
+  --color-cream-100: var(--cream-100);
+  --color-cream-200: var(--cream-200);
+  --color-cream-300: var(--cream-300);
 
-  --color-anar-500: #a8232c;
-  --color-anar-600: #871a22;
+  --color-ink-100: var(--ink-100);
+  --color-ink-200: var(--ink-200);
+  --color-ink-300: var(--ink-300);
+  --color-ink-400: var(--ink-400);
+  --color-ink-500: var(--ink-500);
+  --color-ink-600: var(--ink-600);
+  --color-ink-700: var(--ink-700);
+  --color-ink-800: var(--ink-800);
+  --color-ink-900: var(--ink-900);
 
-  /* Tighter, more square radii — premium leans LESS round */
-  --radius-sm: 0.25rem;
-  --radius-md: 0.5rem;
-  --radius-lg: 0.875rem;
-  --radius-xl: 1.25rem;
+  --color-gold-400: var(--gold-400);
+  --color-gold-500: var(--gold-500);
+  --color-gold-600: var(--gold-600);
+
+  --color-anar-500: var(--anar-500);
+  --color-anar-600: var(--anar-600);
+
+  /* Friendlier, rounder radii — food-delivery leans soft */
+  --radius-sm: 0.375rem;
+  --radius-md: 0.625rem;
+  --radius-lg: 1rem;
+  --radius-xl: 1.5rem;
 }
 
 /* ============================================================
@@ -189,13 +267,23 @@
    ============================================================ */
 html, body {
   font-family: var(--font-ui);
-  font-size: 15px;
+  font-size: 16px;
   font-weight: 400;
   color: var(--fg-default);
   background: var(--bg-page);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   text-rendering: optimizeLegibility;
+}
+
+/* Respect users who prefer less motion (skill: reduced-motion). */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }
 
 * {
@@ -205,26 +293,25 @@ html, body {
 h1, h2, h3, h4, h5 {
   margin: 0;
   line-height: 1.2;
-  letter-spacing: -0.015em;
+  letter-spacing: -0.018em;
   color: var(--fg-default);
 }
 
-/* The signature serif display moment — italic Fraunces, optical 144 */
+/* Bold sans display — energetic, food-delivery vibe (was serif italic) */
 .display,
 .font-display {
   font-family: var(--font-display);
-  font-weight: 300;
-  font-style: italic;
-  font-variation-settings: "opsz" 144;
-  line-height: 1.05;
-  letter-spacing: -0.02em;
+  font-weight: 800;
+  font-style: normal;
+  line-height: 1.08;
+  letter-spacing: -0.03em;
 }
 
 .eyebrow {
-  font-size: 10px;
-  font-weight: 500;
+  font-size: 11px;
+  font-weight: 600;
   text-transform: uppercase;
-  letter-spacing: 0.18em;
+  letter-spacing: 0.14em;
   color: var(--fg-subtle);
 }
 
@@ -232,36 +319,36 @@ h1, h2, h3, h4, h5 {
 .font-mono {
   font-family: var(--font-mono);
   font-feature-settings: 'tnum' on;
-  font-weight: 500;
+  font-weight: 600;
   color: var(--fg-default);
 }
 
 ::selection {
-  background: var(--forest-200);
-  color: var(--ink-900);
+  background: var(--brand-200);
+  color: var(--brand-900);
 }
 
-/* Brand mark — green disc with italic N */
+/* Brand mark — orange disc with italic N wordmark */
 .brand-mark {
   display: inline-grid;
   place-items: center;
   position: relative;
   flex: 0 0 auto;
   border-radius: 9999px;
-  background: var(--forest-500);
-  color: var(--cream-50);
+  background: var(--brand-500);
+  color: #ffffff;
 }
 .brand-mark::before {
   content: '';
   position: absolute;
   inset: 2px;
-  border: 1px dashed rgba(251, 248, 241, 0.35);
+  border: 1px dashed rgba(255, 255, 255, 0.4);
   border-radius: 50%;
 }
 .brand-mark > span {
-  font-family: var(--font-display);
+  font-family: var(--font-serif);
   font-style: italic;
-  font-weight: 300;
+  font-weight: 400;
   line-height: 1;
   letter-spacing: -0.04em;
   position: relative;
@@ -270,15 +357,12 @@ h1, h2, h3, h4, h5 {
 /* Custom scrollbar for horizontal scroll containers */
 .scrollbar-thin {
   scrollbar-width: thin;
-  scrollbar-color: var(--ink-300) transparent;
+  scrollbar-color: var(--line-rule) transparent;
 }
 .scrollbar-thin::-webkit-scrollbar { height: 6px; }
 .scrollbar-thin::-webkit-scrollbar-track { background: transparent; }
 .scrollbar-thin::-webkit-scrollbar-thumb {
-  background-color: var(--ink-300);
+  background-color: var(--line-rule);
   border-radius: 3px;
 }
-.scrollbar-thin::-webkit-scrollbar-thumb:hover { background-color: var(--ink-500); }
-
-/* No emoji as decoration — design system rule */
-.no-emoji::before, .no-emoji::after { content: none !important; }
+.scrollbar-thin::-webkit-scrollbar-thumb:hover { background-color: var(--text-subtle); }

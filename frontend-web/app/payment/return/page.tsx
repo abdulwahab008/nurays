@@ -31,6 +31,35 @@ export default function PaymentReturnPage() {
       return;
     }
 
+    // Wallet top-up return flow
+    if (searchParams.get('topup') === '1') {
+      if (!tracker) {
+        setStatus('pending');
+        setMessage('Your top-up is being processed. Your balance will update shortly.');
+        return;
+      }
+      (async () => {
+        try {
+          const res = await apiClient.post<{ success: boolean; data?: { credited?: boolean; alreadyDone?: boolean } }>(
+            '/payments/wallet/topup/verify',
+            { paymentId: tracker }
+          );
+          if (res.data?.data?.credited || res.data?.data?.alreadyDone) {
+            setStatus('success');
+            setMessage('Top-up successful! Redirecting to your wallet...');
+            setTimeout(() => router.push('/wallet?topped_up=1'), 1500);
+          } else {
+            setStatus('pending');
+            setMessage('Your top-up is being processed. Your balance will update shortly.');
+          }
+        } catch {
+          setStatus('failed');
+          setMessage("We couldn't confirm your top-up. If money was deducted, it'll reflect shortly.");
+        }
+      })();
+      return;
+    }
+
     if (!orderId) {
       setStatus('failed');
       setMessage('Invalid return URL — order ID missing.');

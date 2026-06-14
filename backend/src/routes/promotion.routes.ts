@@ -11,6 +11,7 @@ import {
 } from '../controllers/promotion.controller';
 import { authenticate, authorize } from '../middleware/auth.middleware';
 import { validate } from '../middleware/validation.middleware';
+import { promoLimiter } from '../middleware/rateLimiter';
 import { validatePromotionCodeSchema, createPromotionSchema, updatePromotionSchema } from '../validators/promotion.validator';
 
 const router = Router();
@@ -22,7 +23,7 @@ router.get('/catalog', getCatalogPromotions);
 router.use(authenticate);
 
 // Validate promotion code (any authenticated user)
-router.post('/validate', validate(validatePromotionCodeSchema), validatePromotionCode);
+router.post('/validate', promoLimiter, validate(validatePromotionCodeSchema), validatePromotionCode);
 
 // Get available promotions (any authenticated user)
 router.get('/available', getAvailablePromotions);

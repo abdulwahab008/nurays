@@ -140,3 +140,20 @@ export const safepayWebhook = async (req: Request, res: Response) => {
   return res.status(200).json({ received: true });
 };
 
+
+export const initiateWalletTopUp = async (req: Request, res: Response) => {
+  if (!req.user) throw new AppError('Authentication required', 401, 'AUTH_REQUIRED');
+  const amount = Number(req.body?.amount);
+  const result = await paymentService.initiateTopUp(req.user.userId, amount);
+  res.status(200).json({ success: true, data: result });
+};
+
+export const confirmWalletTopUp = async (req: Request, res: Response) => {
+  if (!req.user) throw new AppError('Authentication required', 401, 'AUTH_REQUIRED');
+  const paymentId = req.body?.paymentId;
+  if (!paymentId || typeof paymentId !== 'string') {
+    throw new AppError('paymentId is required', 400, 'PAYMENT_ID_REQUIRED');
+  }
+  const result = await paymentService.confirmTopUp(req.user.userId, paymentId);
+  res.status(200).json({ success: true, data: result });
+};

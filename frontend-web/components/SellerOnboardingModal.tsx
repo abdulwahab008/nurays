@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/toast';
 import { apiClient } from '@/lib/api-client';
 import { useAuthStore } from '@/lib/store/auth-store';
+import { Lightbulb, Sparkles, ArrowLeft, ArrowRight } from 'lucide-react';
 
 interface SellerOnboardingModalProps {
   isOpen: boolean;
@@ -340,7 +341,7 @@ export function SellerOnboardingModal({ isOpen, onClose, onComplete }: SellerOnb
       const response = await apiClient.post('/sellers/register', sellerData);
 
       if (response.data.success) {
-        showToast('🎉 Seller application submitted successfully!', 'success');
+        showToast('Seller application submitted successfully!', 'success');
         onComplete();
       }
     } catch (error: any) {
@@ -672,8 +673,8 @@ export function SellerOnboardingModal({ isOpen, onClose, onComplete }: SellerOnb
         </div>
       </div>
 
-      <p className="text-xs text-gray-500 text-center">
-        💡 You can update payment information later from your seller dashboard
+      <p className="text-xs text-gray-500 text-center inline-flex items-center justify-center gap-1 w-full">
+        <Lightbulb className="w-4 h-4 shrink-0" /> You can update payment information later from your seller dashboard
       </p>
     </div>
   );
@@ -955,7 +956,7 @@ export function SellerOnboardingModal({ isOpen, onClose, onComplete }: SellerOnb
                 onClick={handleBack}
                 disabled={loading}
               >
-                ← Back
+                <ArrowLeft className="w-4 h-4 mr-2" /> Back
               </Button>
             )}
           </div>
@@ -979,7 +980,7 @@ export function SellerOnboardingModal({ isOpen, onClose, onComplete }: SellerOnb
                 disabled={loading}
                 className="bg-gray-700 hover:bg-gray-800 text-white px-6"
               >
-                Next →
+                Next <ArrowRight className="w-4 h-4 ml-2" />
               </Button>
             ) : (
               <Button
@@ -994,7 +995,9 @@ export function SellerOnboardingModal({ isOpen, onClose, onComplete }: SellerOnb
                     Submitting...
                   </span>
                 ) : (
-                  '🎉 Submit Application'
+                  <span className="flex items-center gap-2">
+                    <Sparkles className="w-4 h-4" /> Submit Application
+                  </span>
                 )}
               </Button>
             )}

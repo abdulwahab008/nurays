@@ -5,15 +5,22 @@ export const requestOTPSchema = z.object({
   purpose: z.enum(['registration', 'login', 'reset_password']),
 });
 
-export const registerSchema = z.object({
-  email: z.string().email('Invalid email format'),
-  password: z.string().min(6, 'Password must be at least 6 characters'),
-  user_type: z.enum(['customer', 'seller', 'admin', 'hub_manager', 'rider']),
-  full_name: z.string().min(2, 'Full name is required').max(255),
-  phone: z.string().min(10).max(15).optional(),
-  city: z.string().max(100).optional(),
-  area: z.string().max(100).optional(),
-});
+export const registerSchema = z
+  .object({
+    email: z.string().email('Invalid email format'),
+    password: z.string().min(6, 'Password must be at least 6 characters'),
+    user_type: z.enum(['customer', 'seller', 'admin', 'hub_manager', 'rider']),
+    full_name: z.string().min(2, 'Full name is required').max(255),
+    phone: z.string().min(10).max(15).optional(),
+    city: z.string().max(100).optional(),
+    area: z.string().max(100).optional(),
+    business_name: z.string().min(1).max(255).optional(),
+    referral_code: z.string().max(32).optional(),
+  })
+  .refine((data) => data.user_type !== 'seller' || !!data.business_name?.trim(), {
+    message: 'Business name is required for seller registration',
+    path: ['business_name'],
+  });
 
 export const loginSchema = z.object({
   phoneOrEmail: z.string().min(1, 'Phone or email is required'),

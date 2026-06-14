@@ -17,6 +17,7 @@ export const createOrderSchema = z.object({
   paymentMethod: z.enum(['jazzcash', 'easypaisa', 'stripe', 'cod', 'wallet', 'card', 'safepay']),
   promotionCode: z.string().optional(),
   deliveryInstructions: z.string().max(500).optional(),
+  tipAmount: z.number().min(0).max(100000).optional(),
 });
 
 export const cancelOrderSchema = z.object({

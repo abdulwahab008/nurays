@@ -5,6 +5,8 @@ import {
   verifyPayment,
   getWalletBalance,
   safepayWebhook,
+  initiateWalletTopUp,
+  confirmWalletTopUp,
 } from '../controllers/payment.controller';
 import { authenticate } from '../middleware/auth.middleware';
 import { validate } from '../middleware/validation.middleware';
@@ -31,6 +33,10 @@ router.post('/verify', validate(verifyPaymentSchema), verifyPayment);
 
 // Get wallet balance
 router.get('/wallet', getWalletBalance);
+
+// Wallet top-up (money-in via Safepay)
+router.post('/wallet/topup', initiateWalletTopUp);
+router.post('/wallet/topup/verify', confirmWalletTopUp);
 
 export default router;
 

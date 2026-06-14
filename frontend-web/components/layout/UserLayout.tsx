@@ -169,7 +169,7 @@ export function UserLayout({ children, showSidebar = true, showNavbar = true }: 
       {showNavbar && <DashboardNavbar title="Nuray" />}
       <div className="flex pt-16">
         {showSidebar && <DashboardSidebar items={getSidebarItems()} userType={userType as 'customer' | 'seller' | 'admin'} />}
-        <main className={`flex-1 ${showSidebar ? 'ml-64' : ''} p-6`}>
+        <main className="flex-1 min-w-0 p-6">
           {children}
         </main>
       </div>

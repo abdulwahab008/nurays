@@ -111,6 +111,7 @@ function RegisterForm() {
         city: formData.city ? formData.city.trim() : undefined,
         area: formData.area ? formData.area.trim() : undefined,
         business_name: formData.user_type === 'seller' ? formData.business_name.trim() : undefined,
+        referral_code: searchParams.get('ref')?.trim() || undefined,
       });
       
       // Check if response has data (successful registration)

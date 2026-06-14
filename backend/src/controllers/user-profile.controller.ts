@@ -71,3 +71,30 @@ export const addAddress = async (req: Request, res: Response) => {
   });
 };
 
+
+export const getReferralInfo = async (req: Request, res: Response) => {
+  if (!req.user) throw new AppError('Authentication required', 401, 'AUTH_REQUIRED');
+  const prisma = (await import('../config/database')).default;
+  const { randomBytes } = await import('crypto');
+  const userId = req.user.userId;
+
+  const user = await prisma.user.findUnique({ where: { id: userId }, select: { referralCode: true } });
+  let code = user?.referralCode ?? null;
+
+  // Backfill a code for users created before referral codes existed.
+  if (!code) {
+    for (let i = 0; i < 5; i++) {
+      const candidate = 'NRY' + randomBytes(4).toString('hex').toUpperCase().slice(0, 6);
+      const clash = await prisma.user.findUnique({ where: { referralCode: candidate } });
+      if (!clash) {
+        await prisma.user.update({ where: { id: userId }, data: { referralCode: candidate } });
+        code = candidate;
+        break;
+      }
+    }
+  }
+
+  const invited = await prisma.user.count({ where: { referredBy: userId } });
+  const rewardPkr = Number(process.env.REFERRAL_CREDIT_PKR ?? 100);
+  res.status(200).json({ success: true, data: { code, invited, rewardPkr } });
+};

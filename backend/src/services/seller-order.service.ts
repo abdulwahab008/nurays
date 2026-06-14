@@ -1,6 +1,8 @@
 import prisma from '../config/database';
 import { AppError } from '../middleware/errorHandler';
 import realtimeOrderService from './realtime-order.service';
+import { canTransitionItem, allowedItemNextSteps, deriveOrderStatus } from '../utils/orderStatus';
+import { estimateDeliveryAt } from '../utils/orderEta';
 
 export class SellerOrderService {
   /**
@@ -272,16 +274,25 @@ export class SellerOrderService {
       throw new AppError('Order item not found or access denied', 404, 'ORDER_ITEM_NOT_FOUND');
     }
 
-    // Validate status transition
-    const validStatuses = ['pending', 'confirmed', 'preparing', 'ready', 'dispatched', 'cancelled'];
-    if (!validStatuses.includes(status)) {
-      throw new AppError(`Invalid status: ${status}`, 400, 'INVALID_STATUS');
+    // No-op if unchanged.
+    if (orderItem.status === status) {
+      return orderItem;
+    }
+
+    // Enforce the order-item state machine — reject illegal/backward jumps.
+    if (!canTransitionItem(orderItem.status, status)) {
+      const allowed = allowedItemNextSteps(orderItem.status).join(', ') || 'none';
+      throw new AppError(
+        `Cannot move item from "${orderItem.status}" to "${status}". Allowed next: ${allowed}.`,
+        400,
+        'INVALID_STATUS_TRANSITION'
+      );
     }
 
     // All DB writes happen inside a single transaction so partial failures
     // can't split item.status and order.orderStatus.
     const result = await prisma.$transaction(async (tx) => {
-      const updatedItem = await tx.orderItem.update({
+      await tx.orderItem.update({
         where: { id: orderItemId },
         data: { status },
       });
@@ -289,40 +300,66 @@ export class SellerOrderService {
       const allItems = await tx.orderItem.findMany({
         where: { orderId: orderItem.orderId },
       });
+      const derivedOrderStatus = deriveOrderStatus(allItems.map((i) => i.status));
 
-      let derivedOrderStatus: string | null = null;
-      let historyNote = '';
+      let orderStatusChanged = false;
+      if (derivedOrderStatus && derivedOrderStatus !== orderItem.order.orderStatus) {
+        orderStatusChanged = true;
 
-      const allReady = allItems.every((i) => i.status === 'ready');
-      const allPreparing = allItems.every((i) => i.status === 'preparing');
+        // Compute the delivery ETA the first time the order is confirmed.
+        let estimatedDeliveryAt: Date | null = null;
+        if (derivedOrderStatus === 'confirmed' && !orderItem.order.estimatedDeliveryAt) {
+          const full = await tx.order.findUnique({
+            where: { id: orderItem.orderId },
+            include: {
+              items: {
+                include: {
+                  product: {
+                    select: {
+                      preparationTime: true,
+                      seller: { select: { latitude: true, longitude: true } },
+                    },
+                  },
+                },
+              },
+              deliveryAddress: { select: { latitude: true, longitude: true } },
+            },
+          });
+          if (full) {
+            estimatedDeliveryAt = estimateDeliveryAt({
+              prepMinutes: full.items.map((i) => i.product?.preparationTime ?? null),
+              origins: full.items.map((i) => ({
+                latitude: i.product?.seller?.latitude != null ? Number(i.product.seller.latitude) : null,
+                longitude: i.product?.seller?.longitude != null ? Number(i.product.seller.longitude) : null,
+              })),
+              destination: {
+                latitude: full.deliveryAddress?.latitude != null ? Number(full.deliveryAddress.latitude) : null,
+                longitude: full.deliveryAddress?.longitude != null ? Number(full.deliveryAddress.longitude) : null,
+              },
+            });
+          }
+        }
 
-      if (allReady && orderItem.order.orderStatus === 'confirmed') {
-        derivedOrderStatus = 'ready';
-        historyNote = 'All items ready for dispatch';
-      } else if (allPreparing && orderItem.order.orderStatus === 'pending') {
-        derivedOrderStatus = 'preparing';
-        historyNote = 'Order preparation started';
-      } else if (status === 'confirmed' && orderItem.order.orderStatus === 'pending') {
-        derivedOrderStatus = 'confirmed';
-        historyNote = 'Order confirmed by seller';
-      }
-
-      if (derivedOrderStatus) {
         await tx.order.update({
           where: { id: orderItem.orderId },
-          data: { orderStatus: derivedOrderStatus },
+          data: {
+            orderStatus: derivedOrderStatus,
+            ...(estimatedDeliveryAt ? { estimatedDeliveryAt } : {}),
+            ...(derivedOrderStatus === 'delivered' ? { deliveredAt: new Date() } : {}),
+          },
         });
         await tx.orderStatusHistory.create({
           data: {
             orderId: orderItem.orderId,
             status: derivedOrderStatus,
-            notes: historyNote,
+            notes: `Order ${derivedOrderStatus}`,
             changedBy: sellerId,
           },
         });
       }
 
-      return { updatedItem, derivedOrderStatus };
+      const updatedItem = await tx.orderItem.findUnique({ where: { id: orderItemId } });
+      return { updatedItem, derivedOrderStatus: orderStatusChanged ? derivedOrderStatus : null };
     });
 
     // Emit real-time events only after the transaction commits.

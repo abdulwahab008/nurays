@@ -168,7 +168,18 @@ export class PaymentService {
       };
     }
 
-    // Fallback: no gateway configured - return placeholder URL (dev only)
+    // No real gateway is configured for this method. In production this must
+    // be a hard failure — we will not hand back a placeholder URL that can't
+    // actually take money. In development we return a stub URL so the flow is
+    // testable end to end without live gateway credentials.
+    if (process.env.NODE_ENV === 'production') {
+      throw new AppError(
+        'No payment gateway is configured for this method. Please choose Cash on Delivery.',
+        503,
+        'NO_GATEWAY_CONFIGURED'
+      );
+    }
+
     const paymentId = `PAY-${Date.now()}-${orderId.substring(0, 8)}`;
     const redirectUrl = this.generatePaymentUrl(paymentMethod, orderId, paymentId);
 
@@ -468,6 +479,109 @@ export class PaymentService {
         createdAt: tx.createdAt,
       })),
     };
+  }
+
+  /**
+   * Initiate a wallet top-up via Safepay. Creates a PENDING ledger row keyed
+   * by the gateway token; the balance is only moved once the payment is
+   * verified in confirmTopUp(). Money-in always goes through the gateway.
+   */
+  async initiateTopUp(userId: string, amount: number) {
+    if (!Number.isFinite(amount) || amount < 100 || amount > 100000) {
+      throw new AppError('Top-up amount must be between Rs 100 and Rs 100,000', 400, 'INVALID_AMOUNT');
+    }
+    const gateway = getGateway('safepay');
+    if (!gateway?.isConfigured()) {
+      throw new AppError('Wallet top-up is currently unavailable', 503, 'TOPUP_UNAVAILABLE');
+    }
+
+    const wallet = await prisma.wallet.upsert({
+      where: { userId },
+      create: { userId, balance: 0, currency: 'PKR' },
+      update: {},
+    });
+    const customer = await prisma.user.findUnique({ where: { id: userId }, select: { email: true } });
+
+    const ref = `TOPUP-${userId.slice(0, 8)}-${Date.now()}`;
+    const result = await gateway.createPayment({
+      orderId: ref,
+      orderNumber: ref,
+      amountPkr: Math.round(amount),
+      customerEmail: customer?.email ?? undefined,
+      returnUrl: `${FRONTEND_URL}/payment/return?topup=1`,
+      cancelUrl: `${FRONTEND_URL}/wallet?cancel=1`,
+      description: 'Nuray wallet top-up',
+    });
+    if (!result.success) {
+      throw new AppError(result.message || 'Could not start top-up', 400, result.errorCode || 'GATEWAY_ERROR');
+    }
+
+    const before = Number(wallet.balance);
+    await prisma.walletTransaction.create({
+      data: {
+        walletId: wallet.id,
+        transactionType: 'topup',
+        amount,
+        balanceBefore: before,
+        balanceAfter: before, // unchanged until verified
+        description: 'Wallet top-up (pending)',
+        referenceId: result.paymentId,
+        status: 'pending',
+      },
+    });
+
+    return {
+      paymentId: result.paymentId,
+      token: result.paymentId,
+      redirectUrl: result.redirectUrl ?? undefined,
+    };
+  }
+
+  /**
+   * Confirm a top-up after the gateway redirect. Credits the wallet ONLY if the
+   * gateway reports the payment completed AND the amount matches. Idempotent:
+   * the pending→completed status guard prevents double-credit.
+   */
+  async confirmTopUp(userId: string, paymentId: string) {
+    const wallet = await prisma.wallet.findUnique({ where: { userId } });
+    if (!wallet) throw new AppError('Wallet not found', 404, 'WALLET_NOT_FOUND');
+
+    const pending = await prisma.walletTransaction.findFirst({
+      where: { walletId: wallet.id, referenceId: paymentId, transactionType: 'topup', status: 'pending' },
+    });
+    if (!pending) {
+      // Already credited (idempotent) or unknown reference.
+      const done = await prisma.walletTransaction.findFirst({
+        where: { walletId: wallet.id, referenceId: paymentId, transactionType: 'topup', status: 'completed' },
+      });
+      if (done) return { credited: false, alreadyDone: true, balance: Number(wallet.balance) };
+      throw new AppError('Top-up not found', 404, 'TOPUP_NOT_FOUND');
+    }
+
+    const gateway = getGateway('safepay');
+    if (!gateway?.isConfigured()) throw new AppError('Wallet top-up is unavailable', 503, 'TOPUP_UNAVAILABLE');
+
+    const verification = await gateway.verifyPayment({ paymentId });
+    if (verification.status !== 'completed') {
+      throw new AppError('Payment not completed yet', 400, 'PAYMENT_NOT_COMPLETED');
+    }
+    // Never credit more than the gateway confirms.
+    if (verification.amountPkr != null && Math.round(verification.amountPkr) !== Math.round(Number(pending.amount))) {
+      throw new AppError('Top-up amount mismatch', 400, 'AMOUNT_MISMATCH');
+    }
+
+    const amount = Number(pending.amount);
+    const updated = await prisma.$transaction(async (tx) => {
+      // Re-check status inside the tx to stay idempotent under concurrency.
+      const { count } = await tx.walletTransaction.updateMany({
+        where: { id: pending.id, status: 'pending' },
+        data: { status: 'completed', description: 'Wallet top-up', balanceAfter: Number(wallet.balance) + amount },
+      });
+      if (count === 0) return wallet; // someone else completed it
+      return tx.wallet.update({ where: { id: wallet.id }, data: { balance: { increment: amount } } });
+    });
+
+    return { credited: true, balance: Number(updated.balance) };
   }
 
   /**

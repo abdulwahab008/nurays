@@ -420,7 +420,7 @@ function SellerDashboardContent() {
                   <Link
                     key={index}
                     href={`/sellers/orders/${order.orderId}`}
-                    className="block border border-gray-100 rounded-xl p-4 hover:shadow-md hover:border-gray-200 transition-all duration-200 bg-gray-50/50 hover:bg-white"
+                    className="block border border-gray-100 rounded-xl p-4 hover:shadow-md hover:border-gray-200 transition-all duration-200 bg-cream-100 hover:bg-cream-200"
                   >
                     <div className="flex items-center justify-between">
                       <div className="flex-1">
@@ -431,7 +431,7 @@ function SellerDashboardContent() {
                           </span>
                         </div>
                         <p className="text-sm text-gray-600">{order.productName} × {order.quantity}</p>
-                        <p className="text-sm font-bold text-gray-900 mt-1">{formatPrice(order.totalAmount)}</p>
+                        <p className="text-sm font-bold text-gray-900 mt-1">{Number.isFinite(order.totalAmount) ? formatPrice(order.totalAmount) : '—'}</p>
                       </div>
                       <svg className="w-5 h-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
@@ -477,7 +477,7 @@ function SellerDashboardContent() {
                   <Link
                     key={product.id}
                     href={`/sellers/products/${product.id}`}
-                    className="flex items-center gap-4 border border-gray-100 rounded-xl p-4 hover:shadow-md hover:border-gray-200 transition-all duration-200 bg-gray-50/50 hover:bg-white"
+                    className="flex items-center gap-4 border border-gray-100 rounded-xl p-4 hover:shadow-md hover:border-gray-200 transition-all duration-200 bg-cream-100 hover:bg-cream-200"
                   >
                     <div className="w-14 h-14 bg-gray-100 rounded-xl flex items-center justify-center overflow-hidden flex-shrink-0">
                       {product.images && product.images[0] ? (

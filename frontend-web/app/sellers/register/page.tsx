@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import { ArrowLeft, CheckCircle2, Clock, XCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/toast';
 import { useAuthStore } from '@/lib/store/auth-store';
@@ -279,8 +280,9 @@ export default function SellerRegisterPage() {
       <div className="max-w-4xl mx-auto">
         {/* Header */}
         <div className="mb-8">
-          <Link href="/products" className="text-green-600 hover:text-green-700 mb-4 inline-block">
-            ← Back to Products
+          <Link href="/products" className="text-green-600 hover:text-green-700 mb-4 inline-flex items-center gap-1">
+            <ArrowLeft className="w-4 h-4" />
+            Back to Products
           </Link>
           <h1 className="text-3xl font-bold text-gray-900 mb-2">
             {isApprovedSeller ? 'Seller Profile' : isPendingSeller ? 'Seller Application Pending' : 'Become a Seller'}
@@ -299,19 +301,19 @@ export default function SellerRegisterPage() {
             <div className="mt-4">
               {isApprovedSeller && (
                 <div className="inline-flex items-center px-4 py-2 bg-green-100 text-green-800 rounded-lg">
-                  <span className="mr-2">✅</span>
+                  <CheckCircle2 className="w-5 h-5 mr-2" />
                   <span className="font-medium">Approved Seller</span>
                 </div>
               )}
               {isPendingSeller && (
                 <div className="inline-flex items-center px-4 py-2 bg-yellow-100 text-yellow-800 rounded-lg">
-                  <span className="mr-2">⏳</span>
+                  <Clock className="w-5 h-5 mr-2" />
                   <span className="font-medium">Application Pending Review</span>
                 </div>
               )}
               {isRejectedSeller && (
                 <div className="inline-flex items-center px-4 py-2 bg-red-100 text-red-800 rounded-lg">
-                  <span className="mr-2">❌</span>
+                  <XCircle className="w-5 h-5 mr-2" />
                   <span className="font-medium">Application Rejected</span>
                   {sellerInfo.rejectionReason && (
                     <span className="ml-2 text-sm">({sellerInfo.rejectionReason})</span>

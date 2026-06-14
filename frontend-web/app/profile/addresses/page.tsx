@@ -8,6 +8,25 @@ import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/toast';
 import { useAuthStore } from '@/lib/store/auth-store';
 import { DashboardLayout } from '@/components/layout/DashboardShell';
+import {
+  Home,
+  Briefcase,
+  MapPin,
+  Check,
+  Pencil,
+  X,
+  Map as MapIcon,
+  Tag,
+  Bike,
+  Plus,
+  Star,
+  Trash2,
+  Mailbox,
+  Lightbulb,
+  Bell,
+  ClipboardList,
+  type LucideIcon,
+} from 'lucide-react';
 
 // Dynamically import the map component (no SSR)
 const LocationMap = dynamic(() => import('@/components/ui/LocationMap'), {
@@ -23,10 +42,10 @@ const LocationMap = dynamic(() => import('@/components/ui/LocationMap'), {
 });
 
 // Address type labels with icons
-const addressTypes = [
-  { id: 'home', label: 'Home', icon: '🏠', color: 'from-blue-500 to-blue-600' },
-  { id: 'work', label: 'Work', icon: '💼', color: 'from-purple-500 to-purple-600' },
-  { id: 'other', label: 'Other', icon: '📍', color: 'from-gray-500 to-gray-600' },
+const addressTypes: { id: string; label: string; icon: LucideIcon; color: string }[] = [
+  { id: 'home', label: 'Home', icon: Home, color: 'from-blue-500 to-blue-600' },
+  { id: 'work', label: 'Work', icon: Briefcase, color: 'from-purple-500 to-purple-600' },
+  { id: 'other', label: 'Other', icon: MapPin, color: 'from-gray-500 to-gray-600' },
 ];
 
 // Popular areas by city for quick selection
@@ -203,7 +222,7 @@ export default function AddressesPage() {
     }
 
     setDetectingLocation(true);
-    showToast('📍 Detecting your location...', 'info');
+    showToast('Detecting your location...', 'info');
     
     navigator.geolocation.getCurrentPosition(
       async (position) => {
@@ -240,7 +259,7 @@ export default function AddressesPage() {
               postalCode: addr.postcode || prev.postalCode,
             }));
             
-            showToast(`📍 Location detected: ${matchedCity}!`, 'success');
+            showToast(`Location detected: ${matchedCity}!`, 'success');
           } else {
             // No address data, use coordinate-based city detection
             const coordCity = detectCityFromCoords(latitude, longitude);
@@ -250,7 +269,7 @@ export default function AddressesPage() {
               longitude: longitude.toString(),
               city: coordCity || prev.city,
             }));
-            showToast(`📍 Location detected${coordCity ? `: ${coordCity}` : ''}! Please fill in address details.`, 'success');
+            showToast(`Location detected${coordCity ? `: ${coordCity}` : ''}! Please fill in address details.`, 'success');
           }
         } catch (error) {
           console.error('Reverse geocoding error:', error);
@@ -262,7 +281,7 @@ export default function AddressesPage() {
             longitude: longitude.toString(),
             city: coordCity || prev.city,
           }));
-          showToast(`📍 Location detected${coordCity ? `: ${coordCity}` : ''}! Please fill in address details.`, 'success');
+          showToast(`Location detected${coordCity ? `: ${coordCity}` : ''}! Please fill in address details.`, 'success');
         }
         
         setDetectingLocation(false);
@@ -427,7 +446,7 @@ export default function AddressesPage() {
         <div className="bg-white rounded-2xl p-5 border border-gray-100 shadow-sm">
           <div className="flex items-center gap-4">
             <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-blue-600 rounded-xl flex items-center justify-center shadow-lg shadow-blue-500/30">
-              <span className="text-2xl">📍</span>
+              <MapPin className="w-6 h-6 text-white" />
             </div>
             <div>
               <p className="text-2xl font-bold text-gray-900">{addresses.length}</p>
@@ -439,7 +458,7 @@ export default function AddressesPage() {
         <div className="bg-white rounded-2xl p-5 border border-gray-100 shadow-sm">
           <div className="flex items-center gap-4">
             <div className="w-12 h-12 bg-gradient-to-br from-green-500 to-green-600 rounded-xl flex items-center justify-center shadow-lg shadow-green-500/30">
-              <span className="text-2xl">✓</span>
+              <Check className="w-6 h-6 text-white" />
             </div>
             <div>
               <p className="text-2xl font-bold text-gray-900">
@@ -459,8 +478,9 @@ export default function AddressesPage() {
             <button
               onClick={() => { resetForm(); setShowAddForm(true); }}
               className="w-12 h-12 bg-white/20 hover:bg-white/30 rounded-xl flex items-center justify-center transition-all hover:scale-105"
+              aria-label="Add new address"
             >
-              <span className="text-2xl text-white">+</span>
+              <Plus className="w-6 h-6 text-white" />
             </button>
           </div>
         </div>
@@ -474,7 +494,9 @@ export default function AddressesPage() {
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 bg-white/20 rounded-xl flex items-center justify-center">
-                  <span className="text-xl">{editingAddress ? '✏️' : '📍'}</span>
+                  {editingAddress
+                    ? <Pencil className="w-5 h-5 text-white" />
+                    : <MapPin className="w-5 h-5 text-white" />}
                 </div>
                 <div className="text-white">
                   <h2 className="font-bold text-lg">{editingAddress ? 'Edit Address' : 'Add New Address'}</h2>
@@ -484,8 +506,9 @@ export default function AddressesPage() {
               <button
                 onClick={resetForm}
                 className="w-10 h-10 bg-white/20 hover:bg-white/30 rounded-xl flex items-center justify-center transition-all"
+                aria-label="Close"
               >
-                <span className="text-white text-xl">✕</span>
+                <X className="w-5 h-5 text-white" />
               </button>
             </div>
           </div>
@@ -493,7 +516,7 @@ export default function AddressesPage() {
           <div className="p-6">
             {/* Quick Location Options */}
             <div className="mb-6">
-              <p className="text-sm font-semibold text-gray-700 mb-3">📌 Quick Location Options</p>
+              <p className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-1.5"><MapPin className="w-4 h-4" /> Quick Location Options</p>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <button
                   type="button"
@@ -505,7 +528,7 @@ export default function AddressesPage() {
                     {detectingLocation ? (
                       <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
                     ) : (
-                      <span className="text-white">📍</span>
+                      <MapPin className="w-5 h-5 text-white" />
                     )}
                   </div>
                   <div className="text-left">
@@ -520,7 +543,7 @@ export default function AddressesPage() {
                   className="flex items-center gap-3 p-4 bg-gradient-to-r from-green-50 to-green-100 border-2 border-green-200 rounded-xl hover:border-green-400 transition-all group"
                 >
                   <div className="w-10 h-10 bg-green-500 rounded-xl flex items-center justify-center group-hover:scale-110 transition-transform">
-                    <span className="text-white">🗺️</span>
+                    <MapIcon className="w-5 h-5 text-white" />
                   </div>
                   <div className="text-left">
                     <p className="font-semibold text-green-800">Pick from Map</p>
@@ -568,13 +591,13 @@ export default function AddressesPage() {
                           postalCode: addr.postcode || prev.postalCode,
                         }));
                         
-                        showToast(`📍 ${matchedCity} selected!`, 'success');
+                        showToast(`${matchedCity} selected!`, 'success');
                       } else {
                         // No address data, use coordinate-based detection
                         const coordCity = detectCityFromCoords(coords.lat, coords.lng);
                         if (coordCity) {
                           setFormData(prev => ({ ...prev, city: coordCity }));
-                          showToast(`📍 ${coordCity} selected!`, 'success');
+                          showToast(`${coordCity} selected!`, 'success');
                         }
                       }
                     } catch (error) {
@@ -583,7 +606,7 @@ export default function AddressesPage() {
                       const coordCity = detectCityFromCoords(coords.lat, coords.lng);
                       if (coordCity) {
                         setFormData(prev => ({ ...prev, city: coordCity }));
-                        showToast(`📍 ${coordCity} selected!`, 'success');
+                        showToast(`${coordCity} selected!`, 'success');
                       }
                     }
                   }}
@@ -592,7 +615,7 @@ export default function AddressesPage() {
                 />
                 <div className="mt-3 flex items-center justify-between bg-gray-50 rounded-xl p-3">
                   <div className="flex items-center gap-2 text-sm text-gray-600">
-                    <span>📍</span>
+                    <MapPin className="w-4 h-4" />
                     {formData.latitude ? (
                       <span>Selected: {parseFloat(formData.latitude).toFixed(4)}, {parseFloat(formData.longitude).toFixed(4)}</span>
                     ) : (
@@ -602,9 +625,9 @@ export default function AddressesPage() {
                   <button
                     type="button"
                     onClick={() => setShowMap(false)}
-                    className="text-sm text-orange-600 font-semibold hover:text-orange-700"
+                    className="text-sm text-orange-600 font-semibold hover:text-orange-700 inline-flex items-center gap-1"
                   >
-                    ✓ Confirm Location
+                    <Check className="w-4 h-4" /> Confirm Location
                   </button>
                 </div>
               </div>
@@ -612,7 +635,7 @@ export default function AddressesPage() {
 
             {/* Address Type Selection */}
             <div className="mb-6">
-              <p className="text-sm font-semibold text-gray-700 mb-3">🏷️ Address Type</p>
+              <p className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-1.5"><Tag className="w-4 h-4" /> Address Type</p>
               <div className="flex gap-3">
                 {addressTypes.map((type) => (
                   <button
@@ -626,7 +649,7 @@ export default function AddressesPage() {
                     }`}
                   >
                     <div className={`w-10 h-10 bg-gradient-to-br ${type.color} rounded-lg flex items-center justify-center mx-auto mb-2`}>
-                      <span className="text-xl">{type.icon}</span>
+                      <type.icon className="w-5 h-5 text-white" />
                     </div>
                     <p className={`font-semibold text-sm ${
                       formData.label === type.id ? 'text-orange-700' : 'text-gray-700'
@@ -678,7 +701,7 @@ export default function AddressesPage() {
                           onClick={() => selectArea(area)}
                           className="w-full px-4 py-3 text-left hover:bg-orange-50 transition-colors flex items-center gap-2"
                         >
-                          <span className="text-gray-400">📍</span>
+                          <MapPin className="w-4 h-4 text-gray-400" />
                           <span className="text-gray-700">{area}</span>
                         </button>
                       ))}
@@ -746,8 +769,8 @@ export default function AddressesPage() {
 
               {/* Delivery Instructions */}
               <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">
-                  🚴 Delivery Instructions (Optional)
+                <label className="block text-sm font-semibold text-gray-700 mb-2 flex items-center gap-1.5">
+                  <Bike className="w-4 h-4" /> Delivery Instructions (Optional)
                 </label>
                 <textarea
                   value={formData.deliveryInstructions}
@@ -786,7 +809,9 @@ export default function AddressesPage() {
                   type="submit" 
                   className="flex-1 bg-gradient-to-r from-orange-500 to-red-500 hover:from-orange-600 hover:to-red-600 text-white py-3 shadow-lg shadow-orange-500/30"
                 >
-                  <span className="mr-2">{editingAddress ? '✓' : '+'}</span> 
+                  {editingAddress
+                    ? <Check className="w-4 h-4 mr-2" />
+                    : <Plus className="w-4 h-4 mr-2" />}
                   {editingAddress ? 'Update Address' : 'Save Address'}
                 </Button>
               </div>
@@ -799,7 +824,7 @@ export default function AddressesPage() {
       {addresses.length === 0 ? (
         <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-12 text-center">
           <div className="w-24 h-24 bg-gradient-to-br from-orange-100 to-red-100 rounded-full flex items-center justify-center mx-auto mb-6">
-            <span className="text-5xl">📍</span>
+            <MapPin className="w-12 h-12 text-orange-500" />
           </div>
           <h2 className="text-2xl font-bold text-gray-900 mb-2">No addresses saved yet</h2>
           <p className="text-gray-500 mb-6 max-w-md mx-auto">
@@ -809,7 +834,7 @@ export default function AddressesPage() {
             onClick={() => setShowAddForm(true)} 
             className="bg-gradient-to-r from-orange-500 to-red-500 hover:from-orange-600 hover:to-red-600 shadow-lg shadow-orange-500/30"
           >
-            <span className="mr-2">+</span> Add Your First Address
+            <Plus className="w-4 h-4 mr-2" /> Add Your First Address
           </Button>
         </div>
       ) : (
@@ -834,13 +859,13 @@ export default function AddressesPage() {
                   }`}>
                     <div className="flex items-center gap-3">
                       <div className={`w-10 h-10 bg-gradient-to-br ${typeInfo.color} rounded-xl flex items-center justify-center shadow-sm`}>
-                        <span className="text-lg">{typeInfo.icon}</span>
+                        <typeInfo.icon className="w-5 h-5 text-white" />
                       </div>
                       <div>
                         <h4 className="font-bold text-gray-900">{address.label || 'Address'}</h4>
                         {address.isDefault && (
-                          <span className="text-xs bg-orange-100 text-orange-700 px-2 py-0.5 rounded-full font-medium">
-                            ✓ Default
+                          <span className="text-xs bg-orange-100 text-orange-700 px-2 py-0.5 rounded-full font-medium inline-flex items-center gap-1">
+                            <Check className="w-3 h-3" /> Default
                           </span>
                         )}
                       </div>
@@ -849,27 +874,30 @@ export default function AddressesPage() {
                     {/* Action Buttons */}
                     <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                       {!address.isDefault && (
-                        <button 
+                        <button
                           onClick={() => handleSetDefault(address.id)}
                           className="p-2 text-gray-400 hover:text-orange-600 hover:bg-orange-50 rounded-lg transition-colors"
                           title="Set as default"
+                          aria-label="Set as default"
                         >
-                          ⭐
+                          <Star className="w-4 h-4" />
                         </button>
                       )}
-                      <button 
+                      <button
                         onClick={() => handleEditAddress(address)}
                         className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
                         title="Edit"
+                        aria-label="Edit address"
                       >
-                        ✏️
+                        <Pencil className="w-4 h-4" />
                       </button>
-                      <button 
+                      <button
                         onClick={() => handleDeleteAddress(address.id)}
                         className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
                         title="Delete"
+                        aria-label="Delete address"
                       >
-                        🗑️
+                        <Trash2 className="w-4 h-4" />
                       </button>
                     </div>
                   </div>
@@ -886,12 +914,12 @@ export default function AddressesPage() {
                       <div className="mt-4 pt-4 border-t border-gray-100 flex flex-wrap gap-2">
                         {address.landmark && (
                           <span className="inline-flex items-center gap-1 text-xs bg-gray-100 text-gray-600 px-3 py-1.5 rounded-lg">
-                            <span>📌</span> {address.landmark}
+                            <MapPin className="w-3.5 h-3.5" /> {address.landmark}
                           </span>
                         )}
                         {address.postalCode && (
-                          <span className="text-xs bg-gray-100 text-gray-600 px-3 py-1.5 rounded-lg">
-                            📮 {address.postalCode}
+                          <span className="inline-flex items-center gap-1 text-xs bg-gray-100 text-gray-600 px-3 py-1.5 rounded-lg">
+                            <Mailbox className="w-3.5 h-3.5" /> {address.postalCode}
                           </span>
                         )}
                       </div>
@@ -907,12 +935,12 @@ export default function AddressesPage() {
       {/* Tips Section */}
       <div className="mt-8 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-2xl p-6 border border-blue-100">
         <h3 className="font-bold text-blue-900 mb-4 flex items-center gap-2">
-          <span>💡</span> Tips for Better Delivery
+          <Lightbulb className="w-5 h-5" /> Tips for Better Delivery
         </h3>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <div className="flex items-start gap-3">
             <div className="w-8 h-8 bg-blue-100 rounded-lg flex items-center justify-center flex-shrink-0">
-              <span>📍</span>
+              <MapPin className="w-4 h-4 text-blue-600" />
             </div>
             <div>
               <p className="font-medium text-blue-800 text-sm">Add Landmarks</p>
@@ -921,7 +949,7 @@ export default function AddressesPage() {
           </div>
           <div className="flex items-start gap-3">
             <div className="w-8 h-8 bg-blue-100 rounded-lg flex items-center justify-center flex-shrink-0">
-              <span>🔔</span>
+              <Bell className="w-4 h-4 text-blue-600" />
             </div>
             <div>
               <p className="font-medium text-blue-800 text-sm">Keep Phone On</p>
@@ -930,7 +958,7 @@ export default function AddressesPage() {
           </div>
           <div className="flex items-start gap-3">
             <div className="w-8 h-8 bg-blue-100 rounded-lg flex items-center justify-center flex-shrink-0">
-              <span>📝</span>
+              <ClipboardList className="w-4 h-4 text-blue-600" />
             </div>
             <div>
               <p className="font-medium text-blue-800 text-sm">Add Instructions</p>

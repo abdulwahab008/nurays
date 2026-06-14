@@ -4,6 +4,18 @@ import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/toast';
 import { apiClient } from '@/lib/api-client';
+import {
+  Snowflake,
+  Leaf,
+  UtensilsCrossed,
+  CookingPot,
+  FolderPlus,
+  FolderOpen,
+  Lightbulb,
+  Dot,
+  X,
+  type LucideIcon,
+} from 'lucide-react';
 
 interface Category {
   id: string;
@@ -25,11 +37,11 @@ interface CategoryRequestModalProps {
   onSuccess?: () => void;
 }
 
-const productTypeOptions = [
-  { value: 'frozen', label: 'Frozen', icon: '❄️', color: 'blue' },
-  { value: 'fresh', label: 'Fresh', icon: '🥬', color: 'green' },
-  { value: 'ready_to_eat', label: 'Ready to Eat', icon: '🍽️', color: 'orange' },
-  { value: 'ready_to_cook', label: 'Ready to Cook', icon: '🍳', color: 'purple' },
+const productTypeOptions: { value: string; label: string; icon: LucideIcon; color: string }[] = [
+  { value: 'frozen', label: 'Frozen', icon: Snowflake, color: 'blue' },
+  { value: 'fresh', label: 'Fresh', icon: Leaf, color: 'green' },
+  { value: 'ready_to_eat', label: 'Ready to Eat', icon: UtensilsCrossed, color: 'orange' },
+  { value: 'ready_to_cook', label: 'Ready to Cook', icon: CookingPot, color: 'purple' },
 ];
 
 export function CategoryRequestModal({
@@ -159,10 +171,9 @@ export function CategoryRequestModal({
             <button
               onClick={handleClose}
               className="p-2 hover:bg-gray-100 rounded-full transition-colors"
+              aria-label="Close"
             >
-              <svg className="w-5 h-5 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-              </svg>
+              <X className="w-5 h-5 text-gray-500" />
             </button>
           </div>
         </div>
@@ -198,7 +209,7 @@ export function CategoryRequestModal({
                   } : {}}
                 >
                   <div className="flex items-center justify-center gap-2">
-                    <span className="text-lg">{type.icon}</span>
+                    <type.icon className="w-5 h-5" />
                     <span>{type.label}</span>
                   </div>
                 </button>
@@ -226,7 +237,7 @@ export function CategoryRequestModal({
                   }`}
                 >
                   <div className="flex items-center justify-center gap-2">
-                    <span className="text-lg">📁</span>
+                    <FolderPlus className="w-5 h-5" />
                     <span>New Category</span>
                   </div>
                   <p className="text-xs mt-1 opacity-70">Main category</p>
@@ -241,7 +252,7 @@ export function CategoryRequestModal({
                   }`}
                 >
                   <div className="flex items-center justify-center gap-2">
-                    <span className="text-lg">📂</span>
+                    <FolderOpen className="w-5 h-5" />
                     <span>Subcategory</span>
                   </div>
                   <p className="text-xs mt-1 opacity-70">Under existing</p>
@@ -336,13 +347,13 @@ export function CategoryRequestModal({
           {/* Info Box */}
           <div className="bg-blue-50 rounded-xl p-4 border border-blue-100">
             <div className="flex gap-3">
-              <div className="text-blue-500 text-xl">💡</div>
+              <Lightbulb className="w-5 h-5 text-blue-500 shrink-0" />
               <div className="text-sm text-blue-700">
                 <p className="font-medium mb-1">What happens next?</p>
                 <ul className="space-y-1 text-blue-600">
-                  <li>• Admin will review your request</li>
-                  <li>• You'll be notified when approved</li>
-                  <li>• Category will appear in your product form</li>
+                  <li className="flex items-center gap-1"><Dot className="w-4 h-4 shrink-0" /> Admin will review your request</li>
+                  <li className="flex items-center gap-1"><Dot className="w-4 h-4 shrink-0" /> You'll be notified when approved</li>
+                  <li className="flex items-center gap-1"><Dot className="w-4 h-4 shrink-0" /> Category will appear in your product form</li>
                 </ul>
               </div>
             </div>

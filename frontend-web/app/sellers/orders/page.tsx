@@ -364,6 +364,18 @@ export default function SellerOrdersPage() {
                                     <span className="ml-1">Dispatch</span>
                                   </Button>
                                 )}
+                                {itemStatus === 'dispatched' && (
+                                  <Button
+                                    size="sm"
+                                    onClick={() => handleUpdateStatus(order.id, 'delivered')}
+                                    className="bg-emerald-500 hover:bg-emerald-600 text-white shadow-sm"
+                                  >
+                                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                      <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                                    </svg>
+                                    <span className="ml-1">Mark Delivered</span>
+                                  </Button>
+                                )}
                               </>
                             )}
                           </td>

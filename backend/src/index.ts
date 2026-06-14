@@ -11,6 +11,7 @@ import morgan from 'morgan';
 import socketManager from './config/socket';
 import { errorHandler } from './middleware/errorHandler';
 import { notFoundHandler } from './middleware/notFoundHandler';
+import { startScheduler } from './jobs/scheduler';
 import healthRoutes from './routes/health.routes';
 import authRoutes from './routes/auth.routes';
 import productRoutes from './routes/product.routes';
@@ -34,6 +35,8 @@ import notificationRoutes from './routes/notification.routes';
 import hubRoutes from './routes/hub.routes';
 import supportRoutes from './routes/support.routes';
 import uploadRoutes from './routes/upload.routes';
+import favoriteRoutes from './routes/favorite.routes';
+import riderRoutes from './routes/rider.routes';
 
 const app = express();
 const httpServer = createServer(app);
@@ -94,6 +97,8 @@ app.use(`/api/${API_VERSION}/promotions`, promotionRoutes);
 app.use(`/api/${API_VERSION}/notifications`, notificationRoutes);
 app.use(`/api/${API_VERSION}/hubs`, hubRoutes);
 app.use(`/api/${API_VERSION}/support`, supportRoutes);
+app.use(`/api/${API_VERSION}/favorites`, favoriteRoutes);
+app.use(`/api/${API_VERSION}/rider`, riderRoutes);
 
 // Root endpoint
 app.get('/', (_req, res) => {
@@ -115,6 +120,7 @@ httpServer.listen(PORT, () => {
   console.log(`📝 Environment: ${process.env.NODE_ENV || 'development'}`);
   console.log(`🔗 API Base URL: http://localhost:${PORT}/api/${API_VERSION}`);
   console.log(`🔌 WebSocket server initialized`);
+  startScheduler();
 });
 
 export default app;
