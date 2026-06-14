@@ -19,7 +19,7 @@ export interface MyDelivery {
   total: number;
   itemCount: number;
   seller: string;
-  deliveryAddress: { addressLine1?: string; area?: string; city?: string } | null;
+  deliveryAddress: string | null;
   dest: { lat: number | null; lng: number | null };
 }
 

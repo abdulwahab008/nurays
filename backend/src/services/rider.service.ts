@@ -91,7 +91,13 @@ export class RiderService {
       total: Number(d.order.totalAmount),
       itemCount: d.order.items.length,
       seller: d.order.items[0]?.seller?.businessName ?? 'Kitchen',
-      deliveryAddress: d.deliveryAddress,
+      deliveryAddress:
+        [d.order.deliveryAddress?.addressLine1, d.order.deliveryAddress?.area, d.order.deliveryAddress?.city]
+          .filter(Boolean)
+          .join(', ') ||
+        (d.order.deliveryAddressSnapshot as { address?: string } | null)?.address ||
+        d.deliveryAddress ||
+        'Address on file',
       dest: this.destCoords(d.order),
     }));
   }

@@ -154,7 +154,7 @@ export default function RiderPage() {
                           </p>
                           <p className="text-sm text-ink-600 flex items-start gap-1 mt-1">
                             <MapPin className="w-3.5 h-3.5 mt-0.5 shrink-0 text-forest-500" />
-                            {[d.deliveryAddress?.addressLine1, d.deliveryAddress?.area, d.deliveryAddress?.city].filter(Boolean).join(', ')}
+                            {d.deliveryAddress}
                           </p>
                         </div>
                         <span className="text-xs font-medium px-2 py-1 rounded-full bg-forest-50 text-forest-700 capitalize shrink-0">
