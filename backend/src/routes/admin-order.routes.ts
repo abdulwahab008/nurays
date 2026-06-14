@@ -7,6 +7,9 @@ import {
   processRefund,
   getPlatformAnalytics,
   getOrderStatistics,
+  listPayouts,
+  completePayout,
+  failPayout,
 } from '../controllers/admin-order.controller';
 import { validate, validateQuery } from '../middleware/validation.middleware';
 import {
@@ -44,6 +47,11 @@ router.post('/orders/:id/cancel', validate(cancelOrderSchema), cancelOrder);
 
 // Process refund
 router.post('/orders/:id/refund', validate(processRefundSchema), processRefund);
+
+// Seller payout management
+router.get('/payouts', listPayouts);
+router.post('/payouts/:id/complete', completePayout);
+router.post('/payouts/:id/fail', failPayout);
 
 export default router;
 

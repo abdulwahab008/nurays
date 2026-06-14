@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import { ArrowLeft } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/toast';
 import { authService } from '@/lib/services/auth.service';
@@ -137,8 +138,9 @@ export default function AdminLoginPage() {
           </form>
 
           <div className="mt-6 text-center">
-            <Link href="/login" className="text-sm text-gray-600 hover:text-green-600">
-              ← Back to regular login
+            <Link href="/login" className="text-sm text-gray-600 hover:text-green-600 inline-flex items-center gap-1">
+              <ArrowLeft className="w-4 h-4" />
+              Back to regular login
             </Link>
           </div>
         </div>

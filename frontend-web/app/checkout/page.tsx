@@ -22,13 +22,14 @@ import Link from 'next/link';
 import { cartService, CartResponse } from '@/lib/services/cart.service';
 import { addressService, Address } from '@/lib/services/address.service';
 import { orderService, CreateOrderRequest } from '@/lib/services/order.service';
-import { formatPrice } from '@/lib/utils';
+import { formatPrice, GST_RATE } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/toast';
 import { useAuthStore } from '@/lib/store/auth-store';
 import { useCartStore } from '@/lib/store/cart-store';
 import { DashboardLayout } from '@/components/layout/DashboardShell';
 import { apiClient } from '@/lib/api-client';
+import { Check } from 'lucide-react';
 
 interface CatalogPromotion {
   id: string;
@@ -91,6 +92,9 @@ export default function CheckoutPage() {
     reason: string | null;
   } | null>(null);
   const [promotionsByProductId, setPromotionsByProductId] = useState<Record<string, CatalogPromotion[]>>({});
+  const [availableMethods, setAvailableMethods] = useState<string[]>(['cod', 'wallet']);
+  const [tip, setTip] = useState(0);
+  const TIP_PRESETS = [30, 50, 100];
 
   const sidebarItems = [
     { name: 'Dashboard', href: '/dashboard', icon: '' },
@@ -130,6 +134,15 @@ export default function CheckoutPage() {
       const cartData = cartResponse.data;
       setCart(cartData);
       setAddresses(addressesResponse.data);
+      try {
+        const methodsRes = await apiClient.get<{ success: boolean; data: Array<{ id: string; isAvailable: boolean }> }>(
+          '/payments/methods'
+        );
+        const ids = (methodsRes.data?.data ?? []).filter((m) => m.isAvailable).map((m) => m.id);
+        if (ids.length) setAvailableMethods(ids);
+      } catch {
+        // Keep the safe default (COD + wallet) if the methods endpoint fails.
+      }
       const defaultAddress = addressesResponse.data.find((addr) => addr.isDefault);
       if (defaultAddress) {
         setSelectedAddress(defaultAddress.id);
@@ -181,6 +194,7 @@ export default function CheckoutPage() {
         // jazzcash / easypaisa / card all go through Safepay aggregator on the backend
         paymentMethod: paymentMethod as 'jazzcash' | 'easypaisa' | 'card' | 'cod' | 'wallet',
         promotionCode: appliedPromo?.code || promoCode?.trim() || undefined,
+        tipAmount: tip > 0 ? tip : undefined,
       };
 
       const response = await orderService.createOrder(orderData);
@@ -356,7 +370,7 @@ export default function CheckoutPage() {
                         </p>
                       </div>
                       {selectedAddress === address.id && (
-                        <span className="text-green-600">✓</span>
+                        <Check className="w-4 h-4 text-green-600" />
                       )}
                     </label>
                   ))}
@@ -418,7 +432,7 @@ export default function CheckoutPage() {
                   { value: 'easypaisa', label: 'EasyPaisa', icon: null, desc: 'Mobile wallet' },
                   { value: 'card', label: 'Credit/Debit Card', icon: null, desc: 'Visa, Mastercard' },
                   { value: 'wallet', label: 'Nuray Wallet', icon: null, desc: 'Use your balance' },
-                ].map((method) => (
+                ].filter((method) => availableMethods.includes(method.value)).map((method) => (
                   <label
                     key={method.value}
                     className={`flex items-center p-4 border-2 rounded-xl cursor-pointer transition-all ${
@@ -441,10 +455,43 @@ export default function CheckoutPage() {
                       <p className="text-sm text-gray-500">{method.desc}</p>
                     </div>
                     {paymentMethod === method.value && (
-                      <span className="text-green-600">✓</span>
+                      <Check className="w-4 h-4 text-green-600" />
                     )}
                   </label>
                 ))}
+              </div>
+            </div>
+
+            {/* Tip for the kitchen */}
+            <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
+              <h2 className="text-lg font-bold text-gray-900 mb-1">Add a tip for the kitchen</h2>
+              <p className="text-sm text-gray-500 mb-4">100% of your tip goes to the home chef.</p>
+              <div className="flex flex-wrap gap-2">
+                {TIP_PRESETS.map((amt) => (
+                  <button
+                    key={amt}
+                    type="button"
+                    onClick={() => setTip((t) => (t === amt ? 0 : amt))}
+                    className={`px-4 h-11 rounded-full font-semibold border transition-colors ${
+                      tip === amt
+                        ? 'bg-forest-500 text-cream-50 border-forest-500'
+                        : 'bg-card text-ink-700 border-ink-200 hover:border-forest-300'
+                    }`}
+                  >
+                    {formatPrice(amt)}
+                  </button>
+                ))}
+                <div className="flex items-center gap-2 ml-auto">
+                  <span className="text-sm text-ink-500">Custom</span>
+                  <input
+                    type="number"
+                    min={0}
+                    value={tip && !TIP_PRESETS.includes(tip) ? tip : ''}
+                    onChange={(e) => setTip(Math.max(0, Number(e.target.value) || 0))}
+                    placeholder="Rs"
+                    className="w-24 h-11 px-3 rounded-xl border border-ink-200 bg-card text-ink-900 focus:border-forest-500 focus:outline-none"
+                  />
+                </div>
               </div>
             </div>
 
@@ -618,18 +665,32 @@ Order Summary
                     <span>-{formatPrice(cart.summary.discount)}</span>
                   </div>
                 )}
-                <div className="border-t border-gray-100 pt-3">
-                  <div className="flex justify-between font-bold text-lg">
-                    <span>Total</span>
-                    <span className="text-green-600">
-                      {formatPrice(
-                        discountedSubtotal +
-                          (deliveryEstimate ? deliveryEstimate.deliveryFee : cart.summary.deliveryFee) -
-                          (appliedPromo?.discountAmount ?? cart.summary.discount)
+                {(() => {
+                  const promoDiscount = appliedPromo?.discountAmount ?? cart.summary.discount;
+                  const deliveryFee = deliveryEstimate ? deliveryEstimate.deliveryFee : cart.summary.deliveryFee;
+                  const taxAmount = Math.max(0, (discountedSubtotal - promoDiscount)) * GST_RATE;
+                  const total = discountedSubtotal + deliveryFee - promoDiscount + taxAmount + tip;
+                  return (
+                    <>
+                      <div className="flex justify-between text-gray-600">
+                        <span>GST (5%)</span>
+                        <span>{formatPrice(taxAmount)}</span>
+                      </div>
+                      {tip > 0 && (
+                        <div className="flex justify-between text-gray-600">
+                          <span>Tip for the kitchen</span>
+                          <span>{formatPrice(tip)}</span>
+                        </div>
                       )}
-                    </span>
-                  </div>
-                </div>
+                      <div className="border-t border-gray-100 pt-3">
+                        <div className="flex justify-between font-bold text-lg">
+                          <span>Total</span>
+                          <span className="text-green-600">{formatPrice(total)}</span>
+                        </div>
+                      </div>
+                    </>
+                  );
+                })()}
               </div>
                   </>
                 );

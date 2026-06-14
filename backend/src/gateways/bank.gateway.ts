@@ -21,61 +21,30 @@ import type {
   VerifyPaymentResult,
 } from './types';
 
-const BANK_API_URL = process.env.BANK_API_URL;
-const BANK_MERCHANT_ID = process.env.BANK_MERCHANT_ID;
-const BANK_API_KEY = process.env.BANK_API_KEY;
-const BANK_RETURN_URL = process.env.BANK_RETURN_URL;
-
 export const bankGateway: IPaymentGateway = {
   name: 'bank',
 
+  // Direct bank/IBFT integration is not implemented; stays unconfigured so it
+  // can never confirm a payment without real settlement.
   isConfigured(): boolean {
-    return !!(BANK_API_URL && BANK_MERCHANT_ID && BANK_API_KEY && BANK_RETURN_URL);
+    return false;
   },
 
-  async createPayment(req: CreatePaymentRequest): Promise<CreatePaymentResult> {
-    if (!this.isConfigured()) {
-      return {
-        success: false,
-        paymentId: `BANK-MOCK-${Date.now()}`,
-        message: 'Bank gateway is not configured. Set BANK_* env variables.',
-        errorCode: 'GATEWAY_NOT_CONFIGURED',
-      };
-    }
-
-    // TODO: Call your bank/aggregator "create payment" API.
-    // Typically: amount, order ref, return URL, merchant id, signature.
-    // They return redirectUrl or payment token for frontend.
-
-    const amountPkr = Math.round(req.amountPkr);
-    const txnRefNo = `BANK-${req.orderId.slice(0, 8)}-${Date.now()}`;
-
+  async createPayment(_req: CreatePaymentRequest): Promise<CreatePaymentResult> {
     return {
-      success: true,
-      paymentId: txnRefNo,
-      redirectUrl: `${BANK_API_URL}/pay?ref=${txnRefNo}&amount=${amountPkr}&return=${encodeURIComponent(req.returnUrl)}`,
-      transactionRef: txnRefNo,
-      expiresAt: new Date(Date.now() + 30 * 60 * 1000),
+      success: false,
+      paymentId: `BANK-UNAVAILABLE-${Date.now()}`,
+      message: 'Direct bank integration is not implemented.',
+      errorCode: 'GATEWAY_NOT_IMPLEMENTED',
     };
   },
 
-  async verifyPayment(req: VerifyPaymentRequest): Promise<VerifyPaymentResult> {
-    if (!this.isConfigured()) {
-      return {
-        success: false,
-        status: 'failed',
-        message: 'Bank gateway is not configured.',
-        errorCode: 'GATEWAY_NOT_CONFIGURED',
-      };
-    }
-
-    // TODO: Call bank/aggregator "transaction status" or verify webhook signature.
-
+  async verifyPayment(_req: VerifyPaymentRequest): Promise<VerifyPaymentResult> {
     return {
-      success: true,
-      status: 'completed',
-      transactionId: req.transactionId || req.paymentId,
-      paidAt: new Date(),
+      success: false,
+      status: 'failed',
+      message: 'Direct bank verification is not implemented; refusing to confirm payment.',
+      errorCode: 'GATEWAY_NOT_IMPLEMENTED',
     };
   },
 };

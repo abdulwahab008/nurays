@@ -15,7 +15,7 @@ export const requestOTP = async (req: Request, res: Response) => {
 };
 
 export const register = async (req: Request, res: Response) => {
-  const { email, password, user_type, full_name, phone, city, area, business_name } = req.body;
+  const { email, password, user_type, full_name, phone, city, area, business_name, referral_code } = req.body;
 
   // Validate business_name is provided for sellers
   if (user_type === 'seller' && !business_name?.trim()) {
@@ -31,7 +31,8 @@ export const register = async (req: Request, res: Response) => {
     phone,
     city,
     area,
-    business_name
+    business_name,
+    referral_code
   );
 
   const message = user_type === 'seller'

@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import { Package, Wallet, Clock, Truck, LayoutDashboard, ClipboardList, CheckCircle2, Users, TrendingUp, UtensilsCrossed } from 'lucide-react';
 import { DashboardLayout } from '@/components/layout/DashboardShell';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/toast';
@@ -160,7 +161,7 @@ export default function AdminDashboardPage() {
                 <p className="text-3xl font-bold text-gray-900">{stats.today.orders}</p>
               </div>
               <div className="w-12 h-12 bg-gray-100 rounded-lg flex items-center justify-center">
-                <span className="text-2xl">📦</span>
+                <Package className="w-6 h-6 text-ink-500" />
               </div>
             </div>
           </div>
@@ -172,7 +173,7 @@ export default function AdminDashboardPage() {
                 <p className="text-2xl font-bold text-gray-900">{formatPrice(stats.today.revenue)}</p>
               </div>
               <div className="w-12 h-12 bg-gray-100 rounded-lg flex items-center justify-center">
-                <span className="text-2xl">💰</span>
+                <Wallet className="w-6 h-6 text-ink-500" />
               </div>
             </div>
           </div>
@@ -184,7 +185,7 @@ export default function AdminDashboardPage() {
                 <p className="text-3xl font-bold text-gray-900">{stats.pendingOrders}</p>
               </div>
               <div className="w-12 h-12 bg-gray-100 rounded-lg flex items-center justify-center">
-                <span className="text-2xl">⏳</span>
+                <Clock className="w-6 h-6 text-ink-500" />
               </div>
             </div>
           </div>
@@ -196,7 +197,7 @@ export default function AdminDashboardPage() {
                 <p className="text-3xl font-bold text-gray-900">{stats.inTransitOrders}</p>
               </div>
               <div className="w-12 h-12 bg-gray-100 rounded-lg flex items-center justify-center">
-                <span className="text-2xl">🚚</span>
+                <Truck className="w-6 h-6 text-ink-500" />
               </div>
             </div>
           </div>
@@ -208,7 +209,7 @@ export default function AdminDashboardPage() {
                 <p className="text-2xl font-bold text-gray-900">{formatPrice(stats.averageOrderValue)}</p>
               </div>
               <div className="w-12 h-12 bg-gray-100 rounded-lg flex items-center justify-center">
-                <span className="text-2xl">📊</span>
+                <LayoutDashboard className="w-6 h-6 text-ink-500" />
               </div>
             </div>
           </div>
@@ -221,7 +222,7 @@ export default function AdminDashboardPage() {
                 <p className="text-xs text-gray-400 mt-1">pending review</p>
               </div>
               <div className="w-12 h-12 bg-gray-100 rounded-lg flex items-center justify-center">
-                <span className="text-2xl">📝</span>
+                <ClipboardList className="w-6 h-6 text-ink-500" />
               </div>
             </div>
           </Link>
@@ -259,7 +260,7 @@ export default function AdminDashboardPage() {
             </div>
           ) : pendingSellers.length === 0 ? (
             <div className="text-center py-12">
-              <div className="text-6xl mb-4">✅</div>
+              <CheckCircle2 className="w-16 h-16 text-forest-500 mx-auto mb-4" />
               <h3 className="text-lg font-semibold text-gray-900 mb-2">No Pending Applications</h3>
               <p className="text-gray-600">All seller applications have been reviewed.</p>
             </div>
@@ -356,25 +357,25 @@ export default function AdminDashboardPage() {
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
           <Link href="/admin/pending-sellers">
             <Button className="w-full justify-start" variant="outline">
-              <span className="mr-2">👥</span>
+              <Users className="w-4 h-4 mr-2" />
               Review Sellers
             </Button>
           </Link>
           <Link href="/admin/orders">
             <Button className="w-full justify-start" variant="outline">
-              <span className="mr-2">📋</span>
+              <ClipboardList className="w-4 h-4 mr-2" />
               Manage Orders
             </Button>
           </Link>
           <Link href="/admin/products">
             <Button className="w-full justify-start" variant="outline">
-              <span className="mr-2">🍽️</span>
+              <UtensilsCrossed className="w-4 h-4 mr-2" />
               Moderate Products
             </Button>
           </Link>
           <Link href="/admin/analytics">
             <Button className="w-full justify-start" variant="outline">
-              <span className="mr-2">📈</span>
+              <TrendingUp className="w-4 h-4 mr-2" />
               View Analytics
             </Button>
           </Link>

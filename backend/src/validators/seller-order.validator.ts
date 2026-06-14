@@ -20,7 +20,7 @@ export const getSellerOrdersQuerySchema = z.object({
 });
 
 export const updateOrderItemStatusSchema = z.object({
-  status: z.enum(['pending', 'confirmed', 'preparing', 'ready', 'dispatched', 'cancelled']),
+  status: z.enum(['pending', 'confirmed', 'preparing', 'ready', 'dispatched', 'delivered', 'cancelled', 'rejected']),
 });
 
 export const cancelOrderItemSchema = z.object({

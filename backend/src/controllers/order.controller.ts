@@ -86,3 +86,18 @@ export const cancelOrder = async (req: Request, res: Response) => {
   });
 };
 
+
+export const reorder = async (req: Request, res: Response) => {
+  if (!req.user) {
+    throw new AppError('Authentication required', 401, 'AUTH_REQUIRED');
+  }
+
+  const { id } = req.params;
+  const result = await orderService.reorder(id, req.user.userId);
+
+  const message = result.added.length
+    ? `${result.added.length} item${result.added.length > 1 ? 's' : ''} added to your cart`
+    : 'No items could be re-added';
+
+  res.status(200).json({ success: true, message, data: result });
+};

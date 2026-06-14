@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import { Users, Store, Package, Wallet, LayoutDashboard } from 'lucide-react';
 import { UserLayout } from '@/components/layout/UserLayout';
 import { useToast } from '@/components/ui/toast';
 import { useAuthStore } from '@/lib/store/auth-store';
@@ -106,7 +107,7 @@ export default function AdminAnalyticsPage() {
                     <p className="text-3xl font-bold text-gray-900">{analytics.overview.totalUsers}</p>
                   </div>
                   <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center">
-                    <span className="text-2xl">👥</span>
+                    <Users className="w-6 h-6 text-ink-900" />
                   </div>
                 </div>
               </div>
@@ -118,7 +119,7 @@ export default function AdminAnalyticsPage() {
                     <p className="text-3xl font-bold text-gray-900">{analytics.overview.totalSellers}</p>
                   </div>
                   <div className="w-12 h-12 bg-purple-100 rounded-lg flex items-center justify-center">
-                    <span className="text-2xl">🏪</span>
+                    <Store className="w-6 h-6 text-ink-900" />
                   </div>
                 </div>
               </div>
@@ -130,7 +131,7 @@ export default function AdminAnalyticsPage() {
                     <p className="text-3xl font-bold text-gray-900">{analytics.overview.totalOrders}</p>
                   </div>
                   <div className="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center">
-                    <span className="text-2xl">📦</span>
+                    <Package className="w-6 h-6 text-ink-900" />
                   </div>
                 </div>
               </div>
@@ -142,7 +143,7 @@ export default function AdminAnalyticsPage() {
                     <p className="text-2xl font-bold text-green-600">{formatPrice(analytics.overview.totalRevenue)}</p>
                   </div>
                   <div className="w-12 h-12 bg-yellow-100 rounded-lg flex items-center justify-center">
-                    <span className="text-2xl">💰</span>
+                    <Wallet className="w-6 h-6 text-gold-500" />
                   </div>
                 </div>
               </div>
@@ -197,7 +198,7 @@ export default function AdminAnalyticsPage() {
           </>
         ) : (
           <div className="bg-white rounded-lg shadow-sm p-12 text-center">
-            <div className="text-6xl mb-4">📊</div>
+            <LayoutDashboard className="w-16 h-16 text-ink-500 mx-auto mb-4" />
             <h2 className="text-2xl font-bold text-gray-900 mb-2">No analytics data</h2>
             <p className="text-gray-600">Analytics data will appear here once the platform has activity</p>
           </div>

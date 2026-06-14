@@ -38,6 +38,18 @@ export const getProduct = async (req: Request, res: Response) => {
   });
 };
 
+export const getRelatedProducts = async (req: Request, res: Response) => {
+  const { id } = req.params;
+  const limit = req.query.limit ? Math.min(Number(req.query.limit), 20) : 8;
+
+  const result = await productService.getRelatedProducts(id, limit);
+
+  res.status(200).json({
+    success: true,
+    data: result,
+  });
+};
+
 export const createProduct = async (req: Request, res: Response) => {
   if (!req.user) {
     throw new AppError('Authentication required', 401, 'AUTH_REQUIRED');

@@ -10,6 +10,9 @@ import { useToast } from '@/components/ui/toast';
 import { useAuthStore } from '@/lib/store/auth-store';
 import { DashboardLayout } from '@/components/layout/DashboardShell';
 import { apiClient } from '@/lib/api-client';
+import { ProductImage } from '@/components/ui/ProductImage';
+import { favoriteService } from '@/lib/services/favorite.service';
+import { Plus, Star, BadgeCheck, ChevronLeft, ChevronRight, Heart } from 'lucide-react';
 
 interface CatalogPromotion {
   id: string;
@@ -69,6 +72,35 @@ export default function ProductsPage() {
   const [categories, setCategories] = useState<Category[]>([]);
   const [categoriesLoading, setCategoriesLoading] = useState(true);
   const [promotionsByProductId, setPromotionsByProductId] = useState<Record<string, CatalogPromotion[]>>({});
+  const [favIds, setFavIds] = useState<Set<string>>(new Set());
+
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    favoriteService.ids().then((ids) => setFavIds(new Set(ids))).catch(() => {});
+  }, [isAuthenticated]);
+
+  const toggleFavorite = async (productId: string) => {
+    if (!isAuthenticated) {
+      router.push('/login');
+      return;
+    }
+    const isFav = favIds.has(productId);
+    setFavIds((prev) => {
+      const next = new Set(prev);
+      isFav ? next.delete(productId) : next.add(productId);
+      return next;
+    });
+    try {
+      isFav ? await favoriteService.remove(productId) : await favoriteService.add(productId);
+    } catch {
+      setFavIds((prev) => {
+        const next = new Set(prev);
+        isFav ? next.add(productId) : next.delete(productId);
+        return next;
+      });
+      showToast('Could not update favourites', 'error');
+    }
+  };
 
   const sidebarItems = [
     { name: 'Dashboard', href: '/dashboard', icon: '' },
@@ -282,72 +314,82 @@ export default function ProductsPage() {
 
     return (
       <>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-          {products.map((product) => (
+        <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 sm:gap-5">
+          {products.map((product) => {
+            const promos = promotionsByProductId[product.id];
+            const hasPromo = !!promos?.length;
+            const reviews = product.totalReviews ?? 0;
+            return (
             <Link
               key={product.id}
               href={`/products/${product.id}`}
-              className="bg-white rounded-2xl shadow-sm hover:shadow-lg transition-all duration-300 overflow-hidden border border-gray-100 hover:border-gray-200 group"
+              className="bg-white rounded-2xl shadow-sm hover:shadow-md transition-all duration-200 overflow-hidden border border-ink-100 hover:border-forest-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-forest-500 focus-visible:ring-offset-2 group flex flex-col"
             >
-              <div className="aspect-square bg-gray-100 relative overflow-hidden">
-                {product.primaryImage ? (
-                  <img
-                    src={product.primaryImage}
-                    alt={product.name}
-                    className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
-                  />
-                ) : (
-                  <div className="w-full h-full flex items-center justify-center text-gray-400 text-sm text-center px-2">
-                    No images attached
-                  </div>
-                )}
-                {/* Quick Add Button */}
-                <div className="absolute bottom-3 right-3 opacity-0 group-hover:opacity-100 transition-opacity">
-                  <button className="w-10 h-10 bg-gray-700 text-white rounded-full shadow-lg flex items-center justify-center hover:bg-gray-800 transition-colors">
-                    +
-                  </button>
-                </div>
-              </div>
-              <div className="p-4">
-                {promotionsByProductId[product.id]?.length ? (
-                  <span className="inline-block px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-800 mb-2">
-                    {promotionsByProductId[product.id].length === 1
-                      ? getPromotionLabel(promotionsByProductId[product.id][0])
-                      : promotionsByProductId[product.id].map(getPromotionLabel).join(' + ')}
+              <div className="aspect-square relative">
+                <ProductImage
+                  src={product.primaryImage}
+                  alt={product.name}
+                  className="w-full h-full"
+                  imgClassName="transition-transform duration-300 group-hover:scale-105"
+                />
+                {hasPromo && (
+                  <span className="absolute top-2 left-2 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-anar-500 text-cream-50 shadow-sm">
+                    {promos.length === 1 ? getPromotionLabel(promos[0]) : `${promos.length} deals`}
                   </span>
-                ) : null}
-                <h3 className="font-semibold text-gray-900 mb-1 line-clamp-1">{product.name}</h3>
-                <p className="text-sm text-gray-500 mb-3 flex items-center gap-1">
+                )}
+                <button
+                  type="button"
+                  onClick={(e) => { e.preventDefault(); e.stopPropagation(); toggleFavorite(product.id); }}
+                  aria-label={favIds.has(product.id) ? 'Remove from favourites' : 'Save to favourites'}
+                  className="absolute top-2 right-2 w-9 h-9 rounded-full bg-card flex items-center justify-center shadow-sm hover:scale-110 active:scale-95 transition-transform"
+                >
+                  <Heart className={`w-[18px] h-[18px] ${favIds.has(product.id) ? 'fill-anar-500 text-anar-500' : 'text-ink-500'}`} />
+                </button>
+                {/* Touch-friendly quick add — always visible on mobile (no hover reliance) */}
+                <span
+                  className="absolute bottom-2.5 right-2.5 w-11 h-11 bg-forest-500 text-cream-50 rounded-full shadow-md flex items-center justify-center transition-transform active:scale-95 group-hover:bg-forest-600"
+                  aria-hidden="true"
+                >
+                  <Plus className="w-5 h-5" strokeWidth={2.5} />
+                </span>
+              </div>
+              <div className="p-3 sm:p-4 flex flex-col flex-1">
+                <h3 className="font-semibold text-ink-900 line-clamp-2 leading-snug">{product.name}</h3>
+                <p className="text-sm text-ink-500 mt-1 mb-3 flex items-center gap-1 min-w-0">
                   <span className="truncate">{product.seller?.businessName ?? 'Seller'}</span>
                   {product.seller?.isVerified && (
-                    <span className="text-gray-700 text-xs">Verified</span>
+                    <BadgeCheck className="w-3.5 h-3.5 text-forest-500 shrink-0" aria-label="Verified seller" />
                   )}
                 </p>
-                <div className="flex items-center justify-between">
-                  <div>
-                    {promotionsByProductId[product.id]?.length ? (
+                <div className="mt-auto flex items-end justify-between gap-2">
+                  <div className="min-w-0">
+                    {hasPromo ? (
                       <>
-                        <p className="text-sm text-gray-400 line-through">{formatPrice(product.price)}</p>
-                        <p className="text-xl font-bold text-gray-700">
-                          {formatPrice(getStackedDiscountedPrice(product.price, promotionsByProductId[product.id]))}
+                        <p className="text-xs text-ink-400 line-through price">{formatPrice(product.price)}</p>
+                        <p className="text-lg font-bold text-forest-700 price">
+                          {formatPrice(getStackedDiscountedPrice(product.price, promos))}
                         </p>
                       </>
                     ) : (
-                      <p className="text-xl font-bold text-gray-700">
-                        {formatPrice(product.price)}
-                      </p>
+                      <p className="text-lg font-bold text-ink-900 price">{formatPrice(product.price)}</p>
                     )}
-                    <p className="text-xs text-gray-400">per {product.unit}</p>
+                    <p className="text-xs text-ink-400">per {product.unit}</p>
                   </div>
-                  <div className="flex items-center gap-1 bg-gray-50 px-2 py-1 rounded-lg">
-                    <span className="text-sm font-medium text-gray-700">
-                      {(product.ratingAverage ?? 0).toFixed(1)} rating
+                  {reviews > 0 ? (
+                    <span className="flex items-center gap-1 text-sm font-medium text-ink-700 shrink-0">
+                      <Star className="w-4 h-4 fill-gold-400 text-gold-400" />
+                      {(product.ratingAverage ?? 0).toFixed(1)}
                     </span>
-                  </div>
+                  ) : (
+                    <span className="text-[11px] font-medium text-forest-600 bg-forest-50 px-2 py-0.5 rounded-full shrink-0">
+                      New
+                    </span>
+                  )}
                 </div>
               </div>
             </Link>
-          ))}
+            );
+          })}
         </div>
 
         {/* Pagination */}
@@ -359,9 +401,9 @@ export default function ProductsPage() {
               disabled={page === 1}
               size="sm"
             >
-              ← Previous
+              <ChevronLeft className="w-4 h-4" /> Previous
             </Button>
-            <span className="px-4 py-2 text-sm text-gray-600">
+            <span className="px-4 py-2 text-sm text-ink-600 tabular-nums">
               Page {page} of {totalPages}
             </span>
             <Button
@@ -370,7 +412,7 @@ export default function ProductsPage() {
               disabled={page === totalPages}
               size="sm"
             >
-              Next →
+              Next <ChevronRight className="w-4 h-4" />
             </Button>
           </div>
         )}

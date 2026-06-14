@@ -24,10 +24,13 @@ model User {
   emailVerified Boolean   @default(false) @map("email_verified")
   phoneVerified Boolean   @default(true) @map("phone_verified")
   lastLoginAt   DateTime? @map("last_login_at")
+  referralCode  String?   @unique @map("referral_code")
+  referredBy    String?   @map("referred_by")
   createdAt     DateTime  @default(now()) @map("created_at")
   updatedAt     DateTime  @updatedAt @map("updated_at")
 
   profile       UserProfile?
+  favorites     Favorite[]
   addresses     UserAddress[]
   cart          Cart?
   orders        Order[]
@@ -312,6 +315,7 @@ model Product {
   hubInventory          HubInventory[]
   inventoryReservations InventoryReservation[]
   searchQueries         SearchQuery[]
+  favorites             Favorite[]
 
   @@map("products")
 }
@@ -465,6 +469,7 @@ model Order {
   deliveryFee         Decimal   @default(0) @map("delivery_fee") @db.Decimal(10, 2)
   discountAmount      Decimal   @default(0) @map("discount_amount") @db.Decimal(10, 2)
   taxAmount           Decimal   @default(0) @map("tax_amount") @db.Decimal(10, 2)
+  tipAmount           Decimal   @default(0) @map("tip_amount") @db.Decimal(10, 2)
   totalAmount         Decimal   @map("total_amount") @db.Decimal(10, 2)
   paymentMethod       String    @map("payment_method")
   paymentStatus       String    @default("pending") @map("payment_status") // pending, paid, failed, refunded
@@ -948,3 +953,17 @@ model AuditLog {
   @@map("audit_logs")
 }
 
+
+model Favorite {
+  id        String   @id @default(uuid())
+  userId    String   @map("user_id")
+  productId String   @map("product_id")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, productId])
+  @@index([userId])
+  @@map("favorites")
+}

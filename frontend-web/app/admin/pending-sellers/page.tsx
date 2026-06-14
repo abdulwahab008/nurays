@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import { CheckCircle2 } from 'lucide-react';
 import { UserLayout } from '@/components/layout/UserLayout';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/toast';
@@ -110,7 +111,7 @@ export default function AdminPendingSellersPage() {
           </div>
         ) : pendingSellers.length === 0 ? (
           <div className="bg-white rounded-lg shadow-sm p-12 text-center">
-            <div className="text-6xl mb-4">✅</div>
+            <CheckCircle2 className="w-16 h-16 text-forest-500 mx-auto mb-4" />
             <h3 className="text-lg font-semibold text-gray-900 mb-2">No Pending Applications</h3>
             <p className="text-gray-600">All seller applications have been reviewed.</p>
           </div>

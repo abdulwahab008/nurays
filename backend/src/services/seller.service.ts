@@ -511,22 +511,25 @@ export class SellerService {
       return sum + Number(item.sellerPayout);
     }, 0);
 
-    // Get already paid out amount
-    const completedPayouts = await prisma.sellerPayout.findMany({
+    // Subtract both completed AND pending payouts. Pending requests have not
+    // been paid yet, but the funds are already spoken for — counting only
+    // completed payouts would let a seller stack overlapping requests that
+    // together exceed their balance.
+    const reservedPayouts = await prisma.sellerPayout.findMany({
       where: {
         sellerId,
-        status: 'completed',
+        status: { in: ['completed', 'pending', 'processing'] },
       },
       select: {
-        netAmount: true,
+        amount: true,
       },
     });
 
-    const paidOut = completedPayouts.reduce((sum, payout) => {
-      return sum + Number(payout.netAmount);
+    const reserved = reservedPayouts.reduce((sum, payout) => {
+      return sum + Number(payout.amount);
     }, 0);
 
-    const availableBalance = totalEarnings - paidOut;
+    const availableBalance = totalEarnings - reserved;
 
     if (data.amount > availableBalance) {
       throw new AppError('Insufficient balance', 400, 'INSUFFICIENT_BALANCE');

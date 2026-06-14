@@ -9,6 +9,25 @@ import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/toast';
 import { useAuthStore } from '@/lib/store/auth-store';
 import { DashboardLayout } from '@/components/layout/DashboardShell';
+import {
+  Store,
+  ShoppingCart,
+  Check,
+  Camera,
+  Zap,
+  MapPin,
+  Package,
+  LayoutDashboard,
+  ArrowRight,
+  User,
+  Pencil,
+  Phone,
+  Mail,
+  Languages,
+  Lock,
+  KeyRound,
+  AlertTriangle,
+} from 'lucide-react';
 
 export default function ProfilePage() {
   const router = useRouter();
@@ -131,21 +150,23 @@ export default function ProfilePage() {
                 {profile?.email || profile?.phone || 'Customer'}
               </p>
               <div className="flex items-center justify-center gap-2 mb-4">
-                <span className={`px-3 py-1 rounded-full text-xs font-medium ${
-                  profile?.userType === 'seller' 
-                    ? 'bg-purple-100 text-purple-800' 
+                <span className={`px-3 py-1 rounded-full text-xs font-medium inline-flex items-center gap-1 ${
+                  profile?.userType === 'seller'
+                    ? 'bg-purple-100 text-purple-800'
                     : 'bg-green-100 text-green-800'
                 }`}>
-                  {profile?.userType === 'seller' ? '🏪 Seller' : '🛒 Customer'}
+                  {profile?.userType === 'seller'
+                    ? <><Store className="w-3.5 h-3.5" /> Seller</>
+                    : <><ShoppingCart className="w-3.5 h-3.5" /> Customer</>}
                 </span>
                 {profile?.isEmailVerified && (
-                  <span className="px-3 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
-                    ✓ Verified
+                  <span className="px-3 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800 inline-flex items-center gap-1">
+                    <Check className="w-3.5 h-3.5" /> Verified
                   </span>
                 )}
               </div>
               <Button variant="outline" className="w-full mb-3" size="sm">
-                <span className="mr-2">📷</span> Change Photo
+                <Camera className="w-4 h-4 mr-2" /> Change Photo
               </Button>
             </div>
           </div>
@@ -153,51 +174,51 @@ export default function ProfilePage() {
           {/* Quick Links */}
           <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 mt-6">
             <h3 className="font-semibold text-gray-900 mb-4 flex items-center gap-2">
-              <span>⚡</span> Quick Links
+              <Zap className="w-4 h-4" /> Quick Links
             </h3>
             <div className="space-y-2">
               <Link href="/profile/addresses" className="flex items-center gap-3 p-3 rounded-xl hover:bg-gray-50 transition-colors group">
                 <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
-                  <span>📍</span>
+                  <MapPin className="w-5 h-5 text-blue-600" />
                 </div>
                 <div className="flex-1">
                   <p className="font-medium text-gray-900">Addresses</p>
                   <p className="text-xs text-gray-500">Manage delivery locations</p>
                 </div>
-                <span className="text-gray-400 group-hover:translate-x-1 transition-transform">→</span>
+                <ArrowRight className="w-4 h-4 text-gray-400 group-hover:translate-x-1 transition-transform" />
               </Link>
               <Link href="/orders" className="flex items-center gap-3 p-3 rounded-xl hover:bg-gray-50 transition-colors group">
                 <div className="w-10 h-10 bg-orange-100 rounded-lg flex items-center justify-center">
-                  <span>📦</span>
+                  <Package className="w-5 h-5 text-orange-600" />
                 </div>
                 <div className="flex-1">
                   <p className="font-medium text-gray-900">Order History</p>
                   <p className="text-xs text-gray-500">View past orders</p>
                 </div>
-                <span className="text-gray-400 group-hover:translate-x-1 transition-transform">→</span>
+                <ArrowRight className="w-4 h-4 text-gray-400 group-hover:translate-x-1 transition-transform" />
               </Link>
               {profile?.userType !== 'seller' && (
                 <Link href="/sellers/register" className="flex items-center gap-3 p-3 rounded-xl hover:bg-gray-50 transition-colors group">
                   <div className="w-10 h-10 bg-purple-100 rounded-lg flex items-center justify-center">
-                    <span>🏪</span>
+                    <Store className="w-5 h-5 text-purple-600" />
                   </div>
                   <div className="flex-1">
                     <p className="font-medium text-gray-900">Become a Seller</p>
                     <p className="text-xs text-gray-500">Start your business</p>
                   </div>
-                  <span className="text-gray-400 group-hover:translate-x-1 transition-transform">→</span>
+                  <ArrowRight className="w-4 h-4 text-gray-400 group-hover:translate-x-1 transition-transform" />
                 </Link>
               )}
               {profile?.userType === 'seller' && (
                 <Link href="/sellers/dashboard" className="flex items-center gap-3 p-3 rounded-xl hover:bg-gray-50 transition-colors group">
                   <div className="w-10 h-10 bg-purple-100 rounded-lg flex items-center justify-center">
-                    <span>📊</span>
+                    <LayoutDashboard className="w-5 h-5 text-purple-600" />
                   </div>
                   <div className="flex-1">
                     <p className="font-medium text-gray-900">Seller Dashboard</p>
                     <p className="text-xs text-gray-500">Manage your store</p>
                   </div>
-                  <span className="text-gray-400 group-hover:translate-x-1 transition-transform">→</span>
+                  <ArrowRight className="w-4 h-4 text-gray-400 group-hover:translate-x-1 transition-transform" />
                 </Link>
               )}
             </div>
@@ -211,13 +232,13 @@ export default function ProfilePage() {
             <div className="flex items-center justify-between mb-6">
               <div>
                 <h2 className="text-lg font-bold text-gray-900 flex items-center gap-2">
-                  <span>👤</span> Personal Information
+                  <User className="w-5 h-5" /> Personal Information
                 </h2>
                 <p className="text-sm text-gray-500">Update your personal details</p>
               </div>
               {!editing && (
                 <Button variant="outline" onClick={() => setEditing(true)} size="sm">
-                  <span className="mr-2">✏️</span> Edit
+                  <Pencil className="w-4 h-4 mr-2" /> Edit
                 </Button>
               )}
             </div>
@@ -279,14 +300,14 @@ export default function ProfilePage() {
                       }
                       className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-green-500 transition-all"
                     >
-                      <option value="en">🇺🇸 English</option>
-                      <option value="ur">🇵🇰 Urdu</option>
+                      <option value="en">English</option>
+                      <option value="ur">Urdu</option>
                     </select>
                   </div>
                 </div>
                 <div className="flex gap-3 mt-6">
                   <Button type="submit" className="bg-green-600 hover:bg-green-700">
-                    <span className="mr-2">✓</span> Save Changes
+                    <Check className="w-4 h-4 mr-2" /> Save Changes
                   </Button>
                   <Button
                     type="button"
@@ -305,28 +326,28 @@ export default function ProfilePage() {
                 <div className="p-4 bg-gray-50 rounded-xl">
                   <p className="text-xs text-gray-500 uppercase tracking-wide mb-1">Phone Number</p>
                   <p className="font-semibold text-gray-900 flex items-center gap-2">
-                    <span>📱</span>
+                    <Phone className="w-4 h-4 text-gray-500" />
                     {profile?.phone ? formatPhoneNumber(profile.phone) : 'Not provided'}
                   </p>
                 </div>
                 <div className="p-4 bg-gray-50 rounded-xl">
                   <p className="text-xs text-gray-500 uppercase tracking-wide mb-1">Email Address</p>
                   <p className="font-semibold text-gray-900 flex items-center gap-2">
-                    <span>✉️</span>
+                    <Mail className="w-4 h-4 text-gray-500" />
                     {profile?.email || 'Not provided'}
                   </p>
                 </div>
                 <div className="p-4 bg-gray-50 rounded-xl">
                   <p className="text-xs text-gray-500 uppercase tracking-wide mb-1">Full Name</p>
                   <p className="font-semibold text-gray-900 flex items-center gap-2">
-                    <span>👤</span>
+                    <User className="w-4 h-4 text-gray-500" />
                     {profile?.profile?.fullName || 'Not set'}
                   </p>
                 </div>
                 <div className="p-4 bg-gray-50 rounded-xl">
                   <p className="text-xs text-gray-500 uppercase tracking-wide mb-1">Location</p>
                   <p className="font-semibold text-gray-900 flex items-center gap-2">
-                    <span>📍</span>
+                    <MapPin className="w-4 h-4 text-gray-500" />
                     {profile?.profile?.area && profile?.profile?.city
                       ? `${profile.profile.area}, ${profile.profile.city}`
                       : 'Not set'}
@@ -335,14 +356,16 @@ export default function ProfilePage() {
                 <div className="p-4 bg-gray-50 rounded-xl">
                   <p className="text-xs text-gray-500 uppercase tracking-wide mb-1">Account Type</p>
                   <p className="font-semibold text-gray-900 flex items-center gap-2">
-                    <span>{profile?.userType === 'seller' ? '🏪' : '🛒'}</span>
+                    {profile?.userType === 'seller'
+                      ? <Store className="w-4 h-4 text-gray-500" />
+                      : <ShoppingCart className="w-4 h-4 text-gray-500" />}
                     <span className="capitalize">{profile?.userType || 'Customer'}</span>
                   </p>
                 </div>
                 <div className="p-4 bg-gray-50 rounded-xl">
                   <p className="text-xs text-gray-500 uppercase tracking-wide mb-1">Language</p>
                   <p className="font-semibold text-gray-900 flex items-center gap-2">
-                    <span>{profile?.profile?.languagePreference === 'ur' ? '🇵🇰' : '🇺🇸'}</span>
+                    <Languages className="w-4 h-4 text-gray-500" />
                     {profile?.profile?.languagePreference === 'ur' ? 'Urdu' : 'English'}
                   </p>
                 </div>
@@ -353,13 +376,13 @@ export default function ProfilePage() {
           {/* Security & Account */}
           <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
             <h2 className="text-lg font-bold text-gray-900 mb-4 flex items-center gap-2">
-              <span>🔒</span> Account Security
+              <Lock className="w-5 h-5" /> Account Security
             </h2>
             <div className="space-y-3">
               <div className="flex items-center justify-between p-4 bg-gray-50 rounded-xl">
                 <div className="flex items-center gap-3">
                   <div className="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center">
-                    <span>🔑</span>
+                    <KeyRound className="w-5 h-5 text-green-600" />
                   </div>
                   <div>
                     <p className="font-medium text-gray-900">Password</p>
@@ -371,7 +394,7 @@ export default function ProfilePage() {
               <div className="flex items-center justify-between p-4 bg-gray-50 rounded-xl">
                 <div className="flex items-center gap-3">
                   <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
-                    <span>📧</span>
+                    <Mail className="w-5 h-5 text-blue-600" />
                   </div>
                   <div>
                     <p className="font-medium text-gray-900">Email Verification</p>
@@ -384,7 +407,7 @@ export default function ProfilePage() {
                   <Button variant="outline" size="sm">Verify</Button>
                 )}
                 {profile?.isEmailVerified && (
-                  <span className="text-green-600 font-medium text-sm">✓ Verified</span>
+                  <span className="text-green-600 font-medium text-sm inline-flex items-center gap-1"><Check className="w-4 h-4" /> Verified</span>
                 )}
               </div>
             </div>
@@ -393,7 +416,7 @@ export default function ProfilePage() {
           {/* Danger Zone */}
           <div className="bg-white rounded-2xl shadow-sm border border-red-100 p-6">
             <h2 className="text-lg font-bold text-red-600 mb-4 flex items-center gap-2">
-              <span>⚠️</span> Danger Zone
+              <AlertTriangle className="w-5 h-5" /> Danger Zone
             </h2>
             <div className="flex items-center justify-between p-4 bg-red-50 rounded-xl">
               <div>

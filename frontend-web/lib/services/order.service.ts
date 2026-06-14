@@ -15,6 +15,7 @@ export interface CreateOrderRequest {
   paymentMethod: 'jazzcash' | 'easypaisa' | 'card' | 'safepay' | 'stripe' | 'cod' | 'wallet';
   promotionCode?: string;
   deliveryInstructions?: string;
+  tipAmount?: number;
 }
 
 export interface Order {
@@ -67,6 +68,13 @@ export const orderService = {
     const response = await apiClient.post<ApiResponse<any>>(`/orders/${orderId}/cancel`, {
       reason,
     });
+    return response.data;
+  },
+  reorder: async (orderId: string) => {
+    const response = await apiClient.post<ApiResponse<{ added: string[]; skipped: { name: string; reason: string }[] }>>(
+      `/orders/${orderId}/reorder`,
+      {}
+    );
     return response.data;
   },
 };

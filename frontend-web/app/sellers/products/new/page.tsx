@@ -1,8 +1,34 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, type ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import {
+  Snowflake,
+  Leaf,
+  UtensilsCrossed,
+  CookingPot,
+  Keyboard,
+  Lightbulb,
+  Camera,
+  Pencil,
+  Globe,
+  Package,
+  Dot,
+  Clock,
+  Sparkles,
+  ShieldCheck,
+  BadgeCheck,
+  Wallet,
+  Lock,
+  Check,
+  AlertTriangle,
+  ArrowRight,
+  Car,
+  Store,
+  Repeat,
+  X,
+} from 'lucide-react';
 import { DashboardLayout } from '@/components/layout/DashboardShell';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/toast';
@@ -60,6 +86,7 @@ export default function AddProductPage() {
   });
   const [images, setImages] = useState<ProductImage[]>([]);
   const [selectedParentId, setSelectedParentId] = useState<string | null>(null);
+  const [showSubcategoryError, setShowSubcategoryError] = useState(false);
   const [showCategoryRequestModal, setShowCategoryRequestModal] = useState(false);
   const [customUnit, setCustomUnit] = useState('');
   const [showKeyboardHelp, setShowKeyboardHelp] = useState(false);
@@ -101,11 +128,11 @@ export default function AddProductPage() {
   });
 
   // Product type options
-  const productTypeOptions = [
-    { value: 'frozen', label: 'Frozen', labelUrdu: 'منجمد', icon: '❄️', description: 'Stored frozen, long shelf life', color: 'blue' },
-    { value: 'fresh', label: 'Fresh', labelUrdu: 'تازہ', icon: '🥬', description: 'Made fresh daily, same-day delivery', color: 'green' },
-    { value: 'ready_to_eat', label: 'Ready to Eat', labelUrdu: 'کھانے کے لیے تیار', icon: '🍽️', description: 'Ready to eat immediately', color: 'orange' },
-    { value: 'ready_to_cook', label: 'Ready to Cook', labelUrdu: 'پکانے کے لیے تیار', icon: '🍳', description: 'Prepared, needs cooking', color: 'purple' },
+  const productTypeOptions: Array<{ value: string; label: string; labelUrdu: string; icon: ReactNode; description: string; color: string }> = [
+    { value: 'frozen', label: 'Frozen', labelUrdu: 'منجمد', icon: <Snowflake className="w-5 h-5" />, description: 'Stored frozen, long shelf life', color: 'blue' },
+    { value: 'fresh', label: 'Fresh', labelUrdu: 'تازہ', icon: <Leaf className="w-5 h-5" />, description: 'Made fresh daily, same-day delivery', color: 'green' },
+    { value: 'ready_to_eat', label: 'Ready to Eat', labelUrdu: 'کھانے کے لیے تیار', icon: <UtensilsCrossed className="w-5 h-5" />, description: 'Ready to eat immediately', color: 'orange' },
+    { value: 'ready_to_cook', label: 'Ready to Cook', labelUrdu: 'پکانے کے لیے تیار', icon: <CookingPot className="w-5 h-5" />, description: 'Prepared, needs cooking', color: 'purple' },
   ];
 
   // Unit options
@@ -361,7 +388,15 @@ export default function AddProductPage() {
       return;
     }
     if (!formData.categoryId) {
-      showToast('Please select a category', 'error');
+      const parentCat = getSelectedParentCategory();
+      const needsSubcategory = !!parentCat?.children && parentCat.children.length > 0;
+      showToast(
+        needsSubcategory
+          ? `Please pick a subcategory in ${parentCat!.name}`
+          : 'Please select a category',
+        'error'
+      );
+      setShowSubcategoryError(needsSubcategory);
       return;
     }
     if (!formData.price || parseFloat(formData.price) <= 0) {
@@ -518,7 +553,7 @@ export default function AddProductPage() {
             onClick={() => setShowKeyboardHelp(!showKeyboardHelp)}
             className="flex items-center gap-2 px-3 py-2 text-xs font-medium text-gray-600 hover:text-blue-600 bg-white hover:bg-blue-50 rounded-lg border border-gray-200 hover:border-blue-300 transition-all"
           >
-            <span>⌨️</span>
+            <Keyboard className="w-4 h-4" />
             <span>Keyboard Shortcuts</span>
             <kbd className="px-1.5 py-0.5 text-xs bg-gray-100 border border-gray-300 rounded">Ctrl+K</kbd>
           </button>
@@ -529,7 +564,7 @@ export default function AddProductPage() {
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" onClick={() => setShowKeyboardHelp(false)}>
             <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full mx-4 p-6" onClick={(e) => e.stopPropagation()}>
               <div className="flex items-center justify-between mb-4">
-                <h3 className="text-xl font-bold text-gray-900">⌨️ Keyboard Shortcuts</h3>
+                <h3 className="text-xl font-bold text-gray-900 inline-flex items-center gap-2"><Keyboard className="w-5 h-5" /> Keyboard Shortcuts</h3>
                 <button
                   onClick={() => setShowKeyboardHelp(false)}
                   className="text-gray-400 hover:text-gray-600 text-2xl leading-none"
@@ -583,7 +618,7 @@ export default function AddProductPage() {
               
               <div className="mt-4 p-3 bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-lg">
                 <p className="text-xs text-blue-800">
-                  <span className="font-bold">💡 Pro Tip:</span> Press Enter in input fields to jump to the next one. Tab works too! Your changes are auto-saved in browser until you submit!
+                  <span className="font-bold inline-flex items-center gap-1"><Lightbulb className="w-3.5 h-3.5" /> Pro Tip:</span> Press Enter in input fields to jump to the next one. Tab works too! Your changes are auto-saved in browser until you submit!
                 </p>
               </div>
             </div>
@@ -595,7 +630,7 @@ export default function AddProductPage() {
           <div className="flex items-center justify-between max-w-3xl mx-auto">
             <div className="flex items-center gap-2">
               <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold ${images.length > 0 ? 'bg-emerald-500 text-white' : 'bg-white text-gray-400 border-2 border-gray-300'}`}>
-                {images.length > 0 ? '✓' : '1'}
+                {images.length > 0 ? <Check className="w-5 h-5" /> : '1'}
               </div>
               <span className={`text-sm font-medium ${images.length > 0 ? 'text-emerald-700' : 'text-gray-500'}`}>Photos</span>
             </div>
@@ -605,7 +640,7 @@ export default function AddProductPage() {
             
             <div className="flex items-center gap-2">
               <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold ${formData.name && formData.categoryId ? 'bg-emerald-500 text-white' : 'bg-white text-gray-400 border-2 border-gray-300'}`}>
-                {formData.name && formData.categoryId ? '✓' : '2'}
+                {formData.name && formData.categoryId ? <Check className="w-5 h-5" /> : '2'}
               </div>
               <span className={`text-sm font-medium ${formData.name && formData.categoryId ? 'text-emerald-700' : 'text-gray-500'}`}>Details</span>
             </div>
@@ -615,7 +650,7 @@ export default function AddProductPage() {
             
             <div className="flex items-center gap-2">
               <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold ${formData.price ? 'bg-emerald-500 text-white' : 'bg-white text-gray-400 border-2 border-gray-300'}`}>
-                {formData.price ? '✓' : '3'}
+                {formData.price ? <Check className="w-5 h-5" /> : '3'}
               </div>
               <span className={`text-sm font-medium ${formData.price ? 'text-emerald-700' : 'text-gray-500'}`}>Pricing</span>
             </div>
@@ -626,8 +661,8 @@ export default function AddProductPage() {
           {/* Product Images - Most Important First */}
           <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 mb-6 hover:shadow-md transition-shadow">
             <div className="flex items-center gap-3 mb-4">
-              <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center shadow-lg">
-                <span className="text-2xl">📸</span>
+              <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center shadow-lg text-white">
+                <Camera className="w-6 h-6" />
               </div>
               <div>
                 <h2 className="text-xl font-bold text-gray-900">Product Photos</h2>
@@ -687,7 +722,7 @@ export default function AddProductPage() {
             {/* Photo Tips */}
             <div className="bg-gradient-to-r from-purple-50 to-pink-50 border-2 border-purple-200 rounded-xl p-4">
               <div className="flex items-start gap-3">
-                <span className="text-2xl">💡</span>
+                <Lightbulb className="w-6 h-6 text-purple-500 flex-shrink-0" />
                 <div>
                   <p className="text-sm font-bold text-purple-900 mb-2">Photo Tips for Better Sales:</p>
                   <ul className="text-xs text-purple-800 space-y-1">
@@ -705,8 +740,8 @@ export default function AddProductPage() {
           {/* Basic Info */}
           <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 mb-6 hover:shadow-md transition-shadow">
             <div className="flex items-center gap-3 mb-6">
-              <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-blue-500 to-indigo-500 flex items-center justify-center shadow-lg">
-                <span className="text-2xl">✏️</span>
+              <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-blue-500 to-indigo-500 flex items-center justify-center shadow-lg text-white">
+                <Pencil className="w-6 h-6" />
               </div>
               <div>
                 <h2 className="text-xl font-bold text-gray-900">Product Details</h2>
@@ -728,7 +763,7 @@ export default function AddProductPage() {
                 className="w-full px-4 py-3 text-lg border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
               />
               <div className="flex justify-between items-center mt-1">
-                <p className="text-xs text-gray-400">💡 Be specific and include quantity/size</p>
+                <p className="text-xs text-gray-400 inline-flex items-center gap-1"><Lightbulb className="w-3.5 h-3.5" /> Be specific and include quantity/size</p>
                 <span className="text-xs text-gray-400">{formData.name.length}/100</span>
               </div>
             </div>
@@ -749,7 +784,7 @@ export default function AddProductPage() {
                 dir="rtl"
               />
               <p className="text-xs text-blue-600 mt-1 flex items-center gap-1">
-                <span>🌐</span>
+                <Globe className="w-3.5 h-3.5" />
                 <span>Urdu names help local customers find your products easily</span>
               </p>
             </div>
@@ -824,7 +859,7 @@ export default function AddProductPage() {
                             : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                         }`}
                       >
-                        <span>{cat.iconUrl || '📦'}</span>
+                        <span className="inline-flex items-center">{cat.iconUrl || <Package className="w-4 h-4" />}</span>
                         <span>{cat.name}</span>
                         {cat.children && cat.children.length > 0 && (
                           <span className="text-xs opacity-70 ml-1">({cat.children.length})</span>
@@ -849,21 +884,28 @@ export default function AddProductPage() {
                     <label className="block text-sm font-medium text-gray-700 mb-3">
                       <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-blue-500 text-white text-xs font-bold mr-2">3</span>
                       Subcategory in <span className="font-semibold">{parentCat.name}</span>
+                      <span className="text-red-500"> *</span>
                     </label>
-                    <div className="bg-gray-50 rounded-xl p-4 border border-gray-200">
+                    {showSubcategoryError && (
+                      <p className="text-sm text-red-600 mb-2">Pick a subcategory to continue.</p>
+                    )}
+                    <div className={`bg-gray-50 rounded-xl p-4 border ${showSubcategoryError ? 'border-red-300 ring-1 ring-red-200' : 'border-gray-200'}`}>
                       <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                         {parentCat.children.map((subCat) => (
                           <button
                             key={subCat.id}
                             type="button"
-                            onClick={() => setFormData({ ...formData, categoryId: subCat.id })}
+                            onClick={() => {
+                              setFormData({ ...formData, categoryId: subCat.id });
+                              setShowSubcategoryError(false);
+                            }}
                             className={`px-3 py-2.5 rounded-lg text-sm font-medium transition-all flex items-center gap-2 ${
                               formData.categoryId === subCat.id
                                 ? 'bg-emerald-500 text-white shadow-md'
                                 : 'bg-white text-gray-600 hover:bg-gray-100 border border-gray-200'
                             }`}
                           >
-                            <span>{subCat.iconUrl || '•'}</span>
+                            <span className="inline-flex items-center">{subCat.iconUrl || <Dot className="w-4 h-4" />}</span>
                             <span>{subCat.name}</span>
                           </button>
                         ))}
@@ -901,8 +943,8 @@ export default function AddProductPage() {
                     <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                       <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
                     </svg>
-                    <span className="font-medium">
-                      {typeOption?.icon} {typeOption?.label} → {info.parent ? `${info.parent.name} → ` : ''}{info.category.name}
+                    <span className="font-medium inline-flex items-center gap-1.5">
+                      {typeOption?.icon} {typeOption?.label} <ArrowRight className="w-4 h-4" /> {info.parent ? <>{info.parent.name} <ArrowRight className="w-4 h-4" /> </> : ''}{info.category.name}
                     </span>
                   </div>
                 );
@@ -914,7 +956,7 @@ export default function AddProductPage() {
             {formData.productType && formData.productType !== 'frozen' && (
               <div className="mb-5 p-4 bg-amber-50 border border-amber-200 rounded-xl">
                 <h3 className="text-sm font-semibold text-amber-800 mb-3 flex items-center gap-2">
-                  <span>⏰</span> Freshness & Timing
+                  <Clock className="w-4 h-4" /> Freshness & Timing
                 </h3>
                 <div className="grid grid-cols-2 gap-4">
                   <div>
@@ -963,7 +1005,7 @@ export default function AddProductPage() {
                 className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none transition-all"
               />
               <div className="flex justify-between items-center mt-1">
-                <p className="text-xs text-emerald-600">✨ Products with descriptions sell 3x more</p>
+                <p className="text-xs text-emerald-600 inline-flex items-center gap-1"><Sparkles className="w-3.5 h-3.5" /> Products with descriptions sell 3x more</p>
                 <span className="text-xs text-gray-400">{formData.description.length}/500</span>
               </div>
             </div>
@@ -982,7 +1024,7 @@ export default function AddProductPage() {
                 className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none transition-all"
               />
               <div className="flex justify-between items-center mt-1">
-                <p className="text-xs text-blue-600">🛡️ Transparency increases customer confidence</p>
+                <p className="text-xs text-blue-600 inline-flex items-center gap-1"><ShieldCheck className="w-3.5 h-3.5" /> Transparency increases customer confidence</p>
                 <span className="text-xs text-gray-400">{formData.ingredients.length}/300</span>
               </div>
             </div>
@@ -1006,7 +1048,7 @@ export default function AddProductPage() {
                   <div className="w-5 h-5 rounded border-2 border-gray-300" />
                 )}
                 <span className="font-medium">Halal Certified</span>
-                <span className="text-lg">☪️</span>
+                <BadgeCheck className="w-5 h-5" />
               </button>
             </div>
           </div>
@@ -1014,8 +1056,8 @@ export default function AddProductPage() {
           {/* Pricing */}
           <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 mb-6 hover:shadow-md transition-shadow">
             <div className="flex items-center gap-3 mb-6">
-              <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-emerald-500 to-green-500 flex items-center justify-center shadow-lg">
-                <span className="text-2xl">💰</span>
+              <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-emerald-500 to-green-500 flex items-center justify-center shadow-lg text-white">
+                <Wallet className="w-6 h-6" />
               </div>
               <div>
                 <h2 className="text-xl font-bold text-gray-900">Pricing & Stock</h2>
@@ -1046,7 +1088,7 @@ export default function AddProductPage() {
                     </div>
                   )}
                 </div>
-                <p className="text-xs text-gray-500 mt-1">💡 Competitive pricing attracts more buyers</p>
+                <p className="text-xs text-gray-500 mt-1 inline-flex items-center gap-1"><Lightbulb className="w-3.5 h-3.5" /> Competitive pricing attracts more buyers</p>
               </div>
 
               {/* Original Price (for discount) */}
@@ -1069,12 +1111,12 @@ export default function AddProductPage() {
                 {discount > 0 ? (
                   <div className="mt-2 bg-gradient-to-r from-green-50 to-emerald-50 border border-green-200 rounded-lg p-2">
                     <p className="text-green-700 text-sm font-bold flex items-center gap-2">
-                      <span className="text-lg">🎉</span>
+                      <Sparkles className="w-5 h-5" />
                       <span>{discount}% OFF badge will be shown to customers!</span>
                     </p>
                   </div>
                 ) : formData.price && parseFloat(formData.price) > 0 && (
-                  <p className="text-xs text-gray-400 mt-1">💡 Add original price to show discount percentage</p>
+                  <p className="text-xs text-gray-400 mt-1 inline-flex items-center gap-1"><Lightbulb className="w-3.5 h-3.5" /> Add original price to show discount percentage</p>
                 )}
               </div>
 
@@ -1083,7 +1125,7 @@ export default function AddProductPage() {
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   <div className="flex items-center gap-2">
                     <span>Your Cost Price</span>
-                    <span className="text-xs bg-purple-100 text-purple-700 px-2 py-0.5 rounded-full font-medium">🔒 Private</span>
+                    <span className="text-xs bg-purple-100 text-purple-700 px-2 py-0.5 rounded-full font-medium inline-flex items-center gap-1"><Lock className="w-3 h-3" /> Private</span>
                     <span className="text-gray-400 font-normal">(for profit tracking only)</span>
                   </div>
                 </label>
@@ -1099,7 +1141,7 @@ export default function AddProductPage() {
                     className="w-full pl-14 pr-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all"
                   />
                 </div>
-                <p className="text-xs text-gray-500 mt-1">💡 Include: ingredients + packaging + labor + overhead costs</p>
+                <p className="text-xs text-gray-500 mt-1 inline-flex items-center gap-1"><Lightbulb className="w-3.5 h-3.5" /> Include: ingredients + packaging + labor + overhead costs</p>
               </div>
 
               {/* Unit Type */}
@@ -1147,23 +1189,23 @@ export default function AddProductPage() {
                     onChange={(e) => setFormData({ ...formData, stockQuantity: e.target.value })}
                     placeholder="50"
                     min="1"
-                    step="5"
+                    step="1"
                     className="w-full px-4 py-3 text-lg font-semibold border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
                   />
                   {formData.stockQuantity && parseInt(formData.stockQuantity) > 0 && (
                     <div className="absolute right-3 top-1/2 -translate-y-1/2">
-                      <span className={`text-xs font-bold px-2 py-1 rounded-full ${
+                      <span className={`text-xs font-bold px-2 py-1 rounded-full inline-flex items-center gap-1 ${
                         parseInt(formData.stockQuantity) > 20 ? 'bg-emerald-100 text-emerald-700' :
                         parseInt(formData.stockQuantity) > 10 ? 'bg-amber-100 text-amber-700' :
                         'bg-red-100 text-red-700'
                       }`}>
-                        {parseInt(formData.stockQuantity) > 20 ? '✓ Good stock' : 
-                         parseInt(formData.stockQuantity) > 10 ? '⚠ Low' : '⚠ Very low'}
+                        {parseInt(formData.stockQuantity) > 20 ? <><Check className="w-3 h-3" /> Good stock</> :
+                         parseInt(formData.stockQuantity) > 10 ? <><AlertTriangle className="w-3 h-3" /> Low</> : <><AlertTriangle className="w-3 h-3" /> Very low</>}
                       </span>
                     </div>
                   )}
                 </div>
-                <p className="text-xs text-gray-500 mt-1">📦 How many units you have available</p>
+                <p className="text-xs text-gray-500 mt-1 inline-flex items-center gap-1"><Package className="w-3.5 h-3.5" /> How many units you have available</p>
               </div>
             </div>
 
@@ -1172,7 +1214,7 @@ export default function AddProductPage() {
               <div className="flex items-center justify-between mb-4">
                 <div>
                   <h3 className="text-lg font-bold text-gray-900 flex items-center gap-2">
-                    <span>📦</span> Product Variants
+                    <Package className="w-5 h-5" /> Product Variants
                     <span className="bg-purple-500 text-white px-2 py-0.5 rounded-full text-xs">NEW</span>
                   </h3>
                   <p className="text-sm text-gray-600 mt-1">
@@ -1192,18 +1234,18 @@ export default function AddProductPage() {
                 <div className="space-y-4">
                   {/* Example showcase */}
                   <div className="bg-white rounded-lg p-4 border border-purple-100">
-                    <p className="text-sm font-medium text-gray-700 mb-2">💡 Example: Chicken Samosa</p>
+                    <p className="text-sm font-medium text-gray-700 mb-2 inline-flex items-center gap-1"><Lightbulb className="w-4 h-4" /> Example: Chicken Samosa</p>
                     <div className="space-y-2 text-sm text-gray-600">
                       <div className="flex justify-between">
-                        <span>→ Small Pack (6 pieces)</span>
+                        <span className="inline-flex items-center gap-1"><ArrowRight className="w-4 h-4" /> Small Pack (6 pieces)</span>
                         <span className="font-medium">Rs 300</span>
                       </div>
                       <div className="flex justify-between">
-                        <span>→ Medium Pack (12 pieces)</span>
+                        <span className="inline-flex items-center gap-1"><ArrowRight className="w-4 h-4" /> Medium Pack (12 pieces)</span>
                         <span className="font-medium">Rs 550</span>
                       </div>
                       <div className="flex justify-between">
-                        <span>→ Large Pack (24 pieces)</span>
+                        <span className="inline-flex items-center gap-1"><ArrowRight className="w-4 h-4" /> Large Pack (24 pieces)</span>
                         <span className="font-medium">Rs 1000</span>
                       </div>
                     </div>
@@ -1235,8 +1277,9 @@ export default function AddProductPage() {
                             type="button"
                             onClick={() => removeVariant(index)}
                             className="text-red-500 hover:text-red-700"
+                            aria-label="Remove variant"
                           >
-                            ✕
+                            <X className="w-4 h-4" />
                           </button>
                         </div>
                       </div>
@@ -1405,7 +1448,7 @@ export default function AddProductPage() {
 
                   {/* Quick Tips */}
                   <div className="bg-blue-50 rounded-lg p-3 border border-blue-100">
-                    <p className="text-xs font-medium text-blue-800 mb-1">💡 Pro Tips:</p>
+                    <p className="text-xs font-medium text-blue-800 mb-1 inline-flex items-center gap-1"><Lightbulb className="w-3.5 h-3.5" /> Pro Tips:</p>
                     <ul className="text-xs text-blue-700 space-y-0.5">
                       <li>• Set the most popular size as "Default"</li>
                       <li>• Offer bulk discounts (e.g., Large pack = better Rs/piece)</li>
@@ -1424,9 +1467,9 @@ export default function AddProductPage() {
               </label>
               <div className="grid grid-cols-3 gap-3">
                 {[
-                  { value: 'direct', label: 'Direct Delivery', icon: '🚗', desc: 'You deliver to customers' },
-                  { value: 'hub', label: 'Via Hub', icon: '🏪', desc: 'Hub handles delivery' },
-                  { value: 'both', label: 'Both', icon: '🔄', desc: 'Either method' },
+                  { value: 'direct', label: 'Direct Delivery', icon: <Car className="w-5 h-5" />, desc: 'You deliver to customers' },
+                  { value: 'hub', label: 'Via Hub', icon: <Store className="w-5 h-5" />, desc: 'Hub handles delivery' },
+                  { value: 'both', label: 'Both', icon: <Repeat className="w-5 h-5" />, desc: 'Either method' },
                 ].map((option) => (
                   <button
                     key={option.value}
@@ -1471,7 +1514,7 @@ export default function AddProductPage() {
             {formData.price && formData.costPrice && parseFloat(formData.costPrice) > 0 && (
               <div className="mt-4 bg-gradient-to-r from-emerald-50 to-green-50 rounded-xl p-4 border border-emerald-200">
                 <div className="flex items-center gap-2 mb-3">
-                  <span className="text-lg">💰</span>
+                  <Wallet className="w-5 h-5 text-emerald-700" />
                   <p className="text-sm font-semibold text-emerald-800">Your Profit Breakdown (Private)</p>
                 </div>
                 <div className="space-y-2">
@@ -1534,7 +1577,7 @@ export default function AddProductPage() {
                   </span>
                 ) : (
                   <span className="flex items-center justify-center gap-2">
-                    <span className="text-xl">✨</span>
+                    <Sparkles className="w-5 h-5" />
                     <span>Create Product</span>
                     <span className="text-xs opacity-75 ml-2 px-2 py-1 bg-white bg-opacity-20 rounded">Ctrl+S</span>
                   </span>
@@ -1556,7 +1599,7 @@ export default function AddProductPage() {
           {/* Quick Tips */}
           <div className="mt-6 bg-gradient-to-br from-amber-50 to-orange-50 rounded-2xl p-5 border-2 border-amber-200 shadow-sm">
             <h3 className="font-bold text-amber-900 mb-3 flex items-center gap-2 text-lg">
-              <span className="text-2xl">💡</span> Pro Tips for Better Sales
+              <Lightbulb className="w-6 h-6" /> Pro Tips for Better Sales
             </h3>
             <ul className="text-sm text-amber-700 space-y-1">
               <li>• Use clear, well-lit photos from multiple angles</li>

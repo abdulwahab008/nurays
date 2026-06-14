@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import { Package } from 'lucide-react';
 import { UserLayout } from '@/components/layout/UserLayout';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/toast';
@@ -121,7 +122,7 @@ export default function AdminOrdersPage() {
           </div>
         ) : orders.length === 0 ? (
           <div className="bg-white rounded-lg shadow-sm p-12 text-center">
-            <div className="text-6xl mb-4">📦</div>
+            <Package className="w-16 h-16 text-ink-500 mx-auto mb-4" />
             <h2 className="text-2xl font-bold text-gray-900 mb-2">No orders found</h2>
             <p className="text-gray-600">No orders match your current filter</p>
           </div>

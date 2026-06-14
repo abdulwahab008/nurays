@@ -7,6 +7,19 @@ import { DashboardLayout } from '@/components/layout/DashboardShell';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/toast';
 import { useAuthStore } from '@/lib/store/auth-store';
+import {
+  Package,
+  CreditCard,
+  Truck,
+  Snowflake,
+  Phone,
+  MessageCircle,
+  Mail,
+  HelpCircle,
+  ClipboardList,
+  ChevronDown,
+  Send,
+} from 'lucide-react';
 
 export default function SupportPage() {
   const router = useRouter();
@@ -33,7 +46,7 @@ export default function SupportPage() {
   const faqs = [
     {
       category: 'Orders',
-      icon: '📦',
+      icon: Package,
       questions: [
         {
           q: 'How do I track my order?',
@@ -51,7 +64,7 @@ export default function SupportPage() {
     },
     {
       category: 'Payment',
-      icon: '💳',
+      icon: CreditCard,
       questions: [
         {
           q: 'What payment methods are accepted?',
@@ -69,7 +82,7 @@ export default function SupportPage() {
     },
     {
       category: 'Delivery',
-      icon: '🚚',
+      icon: Truck,
       questions: [
         {
           q: 'What are the delivery hours?',
@@ -87,7 +100,7 @@ export default function SupportPage() {
     },
     {
       category: 'Food Quality',
-      icon: '❄️',
+      icon: Snowflake,
       questions: [
         {
           q: 'How is the food kept fresh during delivery?',
@@ -130,35 +143,35 @@ export default function SupportPage() {
     >
       {/* Quick Contact Cards */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
-        <div className="bg-gradient-to-br from-green-50 to-white rounded-2xl p-6 border border-green-100">
-          <div className="w-12 h-12 bg-green-500 rounded-xl flex items-center justify-center mb-4">
-            <span className="text-2xl">📞</span>
+        <div className="bg-card rounded-2xl p-6 border border-ink-100 shadow-sm">
+          <div className="w-12 h-12 rounded-xl flex items-center justify-center mb-4" style={{ background: 'var(--brand-500)' }}>
+            <Phone className="w-6 h-6 text-white" />
           </div>
-          <h3 className="font-semibold text-gray-900 mb-1">Phone Support</h3>
-          <p className="text-sm text-gray-500 mb-3">Mon-Sat, 9 AM - 9 PM</p>
-          <a href="tel:+923001234567" className="text-green-600 font-medium hover:underline">
+          <h3 className="font-semibold text-ink-900 mb-1">Phone Support</h3>
+          <p className="text-sm text-ink-500 mb-3">Mon-Sat, 9 AM - 9 PM</p>
+          <a href="tel:+923001234567" className="text-forest-600 font-semibold hover:underline">
             +92 300 123 4567
           </a>
         </div>
 
-        <div className="bg-gradient-to-br from-blue-50 to-white rounded-2xl p-6 border border-blue-100">
-          <div className="w-12 h-12 bg-blue-500 rounded-xl flex items-center justify-center mb-4">
-            <span className="text-2xl">💬</span>
+        <div className="bg-card rounded-2xl p-6 border border-ink-100 shadow-sm">
+          <div className="w-12 h-12 rounded-xl flex items-center justify-center mb-4" style={{ background: 'var(--success)' }}>
+            <MessageCircle className="w-6 h-6 text-white" />
           </div>
-          <h3 className="font-semibold text-gray-900 mb-1">WhatsApp</h3>
-          <p className="text-sm text-gray-500 mb-3">Quick responses</p>
-          <a href="https://wa.me/923001234567" target="_blank" className="text-blue-600 font-medium hover:underline">
+          <h3 className="font-semibold text-ink-900 mb-1">WhatsApp</h3>
+          <p className="text-sm text-ink-500 mb-3">Quick responses</p>
+          <a href="https://wa.me/923001234567" target="_blank" className="font-semibold hover:underline" style={{ color: 'var(--success)' }}>
             Chat on WhatsApp
           </a>
         </div>
 
-        <div className="bg-gradient-to-br from-purple-50 to-white rounded-2xl p-6 border border-purple-100">
-          <div className="w-12 h-12 bg-purple-500 rounded-xl flex items-center justify-center mb-4">
-            <span className="text-2xl">✉️</span>
+        <div className="bg-card rounded-2xl p-6 border border-ink-100 shadow-sm">
+          <div className="w-12 h-12 rounded-xl flex items-center justify-center mb-4" style={{ background: 'var(--gold-500)' }}>
+            <Mail className="w-6 h-6 text-white" />
           </div>
-          <h3 className="font-semibold text-gray-900 mb-1">Email</h3>
-          <p className="text-sm text-gray-500 mb-3">Response in 24 hours</p>
-          <a href="mailto:support@nuray.pk" className="text-purple-600 font-medium hover:underline">
+          <h3 className="font-semibold text-ink-900 mb-1">Email</h3>
+          <p className="text-sm text-ink-500 mb-3">Response in 24 hours</p>
+          <a href="mailto:support@nuray.pk" className="text-forest-600 font-semibold hover:underline">
             support@nuray.pk
           </a>
         </div>
@@ -174,7 +187,7 @@ export default function SupportPage() {
               : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
           }`}
         >
-          <span className="mr-2">❓</span> FAQs
+          <HelpCircle className="w-4 h-4 mr-2 inline-block align-text-bottom" /> FAQs
         </button>
         <button
           onClick={() => setActiveTab('contact')}
@@ -184,7 +197,7 @@ export default function SupportPage() {
               : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
           }`}
         >
-          <span className="mr-2">📝</span> Contact Us
+          <ClipboardList className="w-4 h-4 mr-2 inline-block align-text-bottom" /> Contact Us
         </button>
       </div>
 
@@ -195,7 +208,7 @@ export default function SupportPage() {
             <div key={catIndex} className="bg-white rounded-2xl border border-gray-100 overflow-hidden">
               <div className="bg-gray-50 px-6 py-4 border-b border-gray-100">
                 <h3 className="font-semibold text-gray-900 flex items-center gap-2">
-                  <span>{category.icon}</span>
+                  <category.icon className="w-5 h-5 text-gray-600" />
                   {category.category}
                 </h3>
               </div>
@@ -210,9 +223,7 @@ export default function SupportPage() {
                         className="w-full px-6 py-4 flex items-center justify-between text-left hover:bg-gray-50 transition-colors"
                       >
                         <span className="font-medium text-gray-900">{faq.q}</span>
-                        <span className={`text-gray-400 transition-transform ${isExpanded ? 'rotate-180' : ''}`}>
-                          ▼
-                        </span>
+                        <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
                       </button>
                       {isExpanded && (
                         <div className="px-6 pb-4 text-gray-600 bg-green-50/50">
@@ -273,7 +284,7 @@ export default function SupportPage() {
 
             <div className="flex gap-3 pt-2">
               <Button type="submit" className="bg-green-600 hover:bg-green-700">
-                <span className="mr-2">📤</span> Send Message
+                <Send className="w-4 h-4 mr-2" /> Send Message
               </Button>
               <Button type="button" variant="outline" onClick={() => setFormData({ subject: '', message: '', category: 'general' })}>
                 Clear
@@ -288,11 +299,11 @@ export default function SupportPage() {
         <div className="flex items-center justify-between flex-wrap gap-4">
           <div>
             <h3 className="text-xl font-bold mb-1">Still need help?</h3>
-            <p className="text-green-100">Our team is ready to assist you</p>
+            <p className="text-white/85">Our team is ready to assist you</p>
           </div>
           <a href="https://wa.me/923001234567" target="_blank">
             <Button variant="outline" className="border-white text-white hover:bg-white hover:text-green-600">
-              <span className="mr-2">💬</span> Chat with us now
+              <MessageCircle className="w-4 h-4 mr-2" /> Chat with us now
             </Button>
           </a>
         </div>

@@ -1,8 +1,9 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, type ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import { Percent, Banknote, Gift, Package, Tag, Flame, Calendar, BarChart3, Timer } from 'lucide-react';
 import { DashboardLayout } from '@/components/layout/DashboardShell';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/toast';
@@ -260,10 +261,10 @@ function CreatePromotionModal({ isOpen, onClose, onSubmit, onUpdate, onError, in
             </label>
             <div className="grid grid-cols-2 gap-3">
               {[
-                { value: 'percentage', label: 'Percentage Off', desc: 'e.g., 20% off', icon: '💯' },
-                { value: 'fixed', label: 'Fixed Amount', desc: 'e.g., Rs. 100 off', icon: '💵' },
-                { value: 'buy_x_get_y', label: 'Buy X Get Y', desc: 'e.g., Buy 2 Get 1', icon: '🎁' },
-                { value: 'bundle', label: 'Bundle Deal', desc: 'Combo offers', icon: '📦' },
+                { value: 'percentage', label: 'Percentage Off', desc: 'e.g., 20% off', icon: <Percent className="w-7 h-7" /> },
+                { value: 'fixed', label: 'Fixed Amount', desc: 'e.g., Rs. 100 off', icon: <Banknote className="w-7 h-7" /> },
+                { value: 'buy_x_get_y', label: 'Buy X Get Y', desc: 'e.g., Buy 2 Get 1', icon: <Gift className="w-7 h-7" /> },
+                { value: 'bundle', label: 'Bundle Deal', desc: 'Combo offers', icon: <Package className="w-7 h-7" /> },
               ].map((type) => (
                 <button
                   key={type.value}
@@ -687,14 +688,14 @@ export default function SellerPromotionsPage() {
     return styles[status as keyof typeof styles] || styles.draft;
   };
 
-  const getTypeIcon = (type: string) => {
-    const icons = {
-      percentage: '💯',
-      fixed: '💵',
-      buy_x_get_y: '🎁',
-      bundle: '📦',
+  const getTypeIcon = (type: string): ReactNode => {
+    const icons: Record<string, ReactNode> = {
+      percentage: <Percent className="w-6 h-6" />,
+      fixed: <Banknote className="w-6 h-6" />,
+      buy_x_get_y: <Gift className="w-6 h-6" />,
+      bundle: <Package className="w-6 h-6" />,
     };
-    return icons[type as keyof typeof icons] || '🏷️';
+    return icons[type] || <Tag className="w-6 h-6" />;
   };
 
   if (!isAuthenticated) {
@@ -712,14 +713,14 @@ export default function SellerPromotionsPage() {
         {/* Stats Cards */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
           {[
-            { label: 'Active Deals', value: promotions.filter(p => p.status === 'active').length, color: 'green', icon: '🔥' },
-            { label: 'Scheduled', value: promotions.filter(p => p.status === 'scheduled').length, color: 'blue', icon: '📅' },
-            { label: 'Total Usage', value: promotions.reduce((acc, p) => acc + p.usageCount, 0), color: 'purple', icon: '📊' },
-            { label: 'Expired', value: promotions.filter(p => p.status === 'expired').length, color: 'gray', icon: '⏱️' },
+            { label: 'Active Deals', value: promotions.filter(p => p.status === 'active').length, color: 'green', icon: <Flame className="w-6 h-6 text-gray-700" /> },
+            { label: 'Scheduled', value: promotions.filter(p => p.status === 'scheduled').length, color: 'blue', icon: <Calendar className="w-6 h-6 text-gray-700" /> },
+            { label: 'Total Usage', value: promotions.reduce((acc, p) => acc + p.usageCount, 0), color: 'purple', icon: <BarChart3 className="w-6 h-6 text-gray-700" /> },
+            { label: 'Expired', value: promotions.filter(p => p.status === 'expired').length, color: 'gray', icon: <Timer className="w-6 h-6 text-gray-700" /> },
           ].map((stat, idx) => (
             <div key={idx} className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
               <div className="flex items-center gap-3">
-                <div className="text-2xl">{stat.icon}</div>
+                <div>{stat.icon}</div>
                 <div>
                   <p className="text-sm text-gray-500">{stat.label}</p>
                   <p className="text-2xl font-bold text-gray-900">{stat.value}</p>

@@ -7,6 +7,7 @@ import { useAuthStore } from '@/lib/store/auth-store';
 import { useCartStore } from '@/lib/store/cart-store';
 import { apiClient } from '@/lib/api-client';
 import { Mark, Wordmark } from '@/components/ui/Mark';
+import { ThemeToggle } from '@/components/ui/ThemeToggle';
 
 interface DashboardNavbarProps {
   title: string;
@@ -155,7 +156,7 @@ export function DashboardNavbar({ title, subtitle, userType = 'customer', onMenu
   return (
     <nav
       className="fixed top-0 left-0 right-0 z-50 h-16 backdrop-blur-md"
-      style={{ background: 'rgba(251,248,241,0.94)', borderBottom: '1px solid var(--ink-100)' }}
+      style={{ background: 'color-mix(in srgb, var(--bg-page) 88%, transparent)', borderBottom: '1px solid var(--border-hair)' }}
     >
       <div className="flex items-center justify-between h-full px-3 sm:px-6 gap-2">
         {/* Logo Section */}
@@ -310,8 +311,11 @@ export function DashboardNavbar({ title, subtitle, userType = 'customer', onMenu
             </>
           )}
 
+          {/* Theme toggle */}
+          <ThemeToggle />
+
           {/* Notifications */}
-          <Link href={isSeller ? "/sellers/notifications" : isAdmin ? "/admin/notifications" : "/notifications"} className="relative">
+          <Link href={isSeller ? "/sellers/notifications" : "/notifications"} className="relative">
             <button className="w-10 h-10 rounded-lg hover:bg-gray-50 flex items-center justify-center transition-colors">
               <svg className="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M14.857 17.082a23.848 23.848 0 005.454-1.31A8.967 8.967 0 0118 9.75v-.7V9A6 6 0 006 9v.75a8.967 8.967 0 01-2.312 6.022c1.733.64 3.56 1.085 5.455 1.31m5.714 0a24.255 24.255 0 01-5.714 0m5.714 0a3 3 0 11-5.714 0" />

@@ -12,6 +12,8 @@ import { useCartStore } from '@/lib/store/cart-store';
 import { useAuthStore } from '@/lib/store/auth-store';
 import { DashboardLayout } from '@/components/layout/DashboardShell';
 import { apiClient } from '@/lib/api-client';
+import { ProductImage } from '@/components/ui/ProductImage';
+import { Search, ShoppingBag } from 'lucide-react';
 
 interface CatalogPromotion {
   id: string;
@@ -68,6 +70,7 @@ export default function ProductDetailPage() {
   const { showToast } = useToast();
   const { addItem } = useCartStore();
   const [product, setProduct] = useState<ProductDetail | null>(null);
+  const [related, setRelated] = useState<Array<{ id: string; name: string; price: number; primaryImage: string | null; unit: string }>>([]);
   const [catalogPromotions, setCatalogPromotions] = useState<CatalogPromotion[]>([]);
   const [loading, setLoading] = useState(true);
   const [quantity, setQuantity] = useState(1);
@@ -89,8 +92,20 @@ export default function ProductDetailPage() {
   useEffect(() => {
     if (params.id) {
       loadProduct();
+      loadRelated();
     }
   }, [params.id]);
+
+  const loadRelated = async () => {
+    try {
+      const res = await apiClient.get<{ success: boolean; data: { products: Array<{ id: string; name: string; price: number; primaryImage: string | null; unit: string }> } }>(
+        `/products/${params.id}/related?limit=6`
+      );
+      if (res.data?.success) setRelated(res.data.data.products ?? []);
+    } catch {
+      setRelated([]);
+    }
+  };
 
   const loadProduct = async () => {
     setLoading(true);
@@ -234,13 +249,13 @@ export default function ProductDetailPage() {
         >
           <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-12 text-center">
             <div className="w-20 h-20 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-6">
-              <span className="text-4xl">🔍</span>
+              <Search className="w-10 h-10 text-gray-400" />
             </div>
             <h2 className="text-2xl font-bold text-gray-900 mb-3">Product Not Found</h2>
             <p className="text-gray-500 mb-6">The product you're looking for doesn't exist or has been removed.</p>
             <Link href="/products">
               <Button className="bg-gray-700 hover:bg-gray-800">
-                <span className="mr-2">🛍️</span> Browse Products
+                <ShoppingBag className="w-4 h-4 mr-2" /> Browse Products
               </Button>
             </Link>
           </div>
@@ -266,23 +281,17 @@ export default function ProductDetailPage() {
   const maxQty = stockType === 'direct' ? product.stock.direct : product.stock.hub;
 
   const productContent = (
+    <>
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 lg:gap-12">
       {/* Product Images - left column */}
       <div className="lg:sticky lg:top-24 self-start">
         <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
-          <div className="aspect-square max-h-[480px] bg-gray-50 flex items-center justify-center overflow-hidden">
-            {product.images[selectedImage]?.url ? (
-              <img
-                src={product.images[selectedImage].url}
-                alt={product.name}
-                className="w-full h-full object-contain"
-              />
-            ) : (
-              <div className="text-gray-400 text-sm text-center px-4 py-8">
-                No images attached
-              </div>
-            )}
-          </div>
+          <ProductImage
+            src={product.images[selectedImage]?.url}
+            alt={product.name}
+            className="aspect-square max-h-[480px]"
+            imgClassName="object-contain"
+          />
           {product.images.length > 1 && (
             <div className="p-4 pt-0 flex gap-2 overflow-x-auto">
               {product.images.slice(0, 6).map((image, index) => (
@@ -493,6 +502,30 @@ export default function ProductDetailPage() {
         </div>
       </div>
     </div>
+
+    {related.length > 0 && (
+      <div className="mt-12">
+        <h2 className="text-lg font-semibold text-gray-900 mb-4">You may also like</h2>
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
+          {related.map((r) => (
+            <Link
+              key={r.id}
+              href={`/products/${r.id}`}
+              className="group bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden hover:shadow-md transition-shadow"
+            >
+              <ProductImage src={r.primaryImage} alt={r.name} className="aspect-square" imgClassName="object-contain" />
+              <div className="p-3">
+                <p className="text-sm font-medium text-gray-900 line-clamp-2 group-hover:underline">{r.name}</p>
+                <p className="text-sm text-gray-600 mt-1">
+                  {formatPrice(r.price)} <span className="text-gray-400">/ {r.unit}</span>
+                </p>
+              </div>
+            </Link>
+          ))}
+        </div>
+      </div>
+    )}
+    </>
   );
 
   // For authenticated users, wrap in DashboardLayout

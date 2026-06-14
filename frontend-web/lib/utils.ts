@@ -5,6 +5,9 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
 
+// GST rate applied on (subtotal - discount); must match backend order.service.ts.
+export const GST_RATE = 0.05;
+
 export function formatPrice(price: number): string {
   return new Intl.NumberFormat('en-PK', {
     style: 'currency',

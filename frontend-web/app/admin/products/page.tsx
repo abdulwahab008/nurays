@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import { UtensilsCrossed } from 'lucide-react';
 import { UserLayout } from '@/components/layout/UserLayout';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/toast';
@@ -123,7 +124,7 @@ export default function AdminProductsPage() {
           </div>
         ) : products.length === 0 ? (
           <div className="bg-white rounded-lg shadow-sm p-12 text-center">
-            <div className="text-6xl mb-4">🍽️</div>
+            <UtensilsCrossed className="w-16 h-16 text-ink-500 mx-auto mb-4" />
             <h2 className="text-2xl font-bold text-gray-900 mb-2">No products found</h2>
             <p className="text-gray-600">No products match your current filter</p>
           </div>
@@ -140,7 +141,7 @@ export default function AdminProductsPage() {
                     />
                   ) : (
                     <div className="w-full h-full flex items-center justify-center text-gray-400">
-                      <span className="text-4xl">🍽️</span>
+                      <UtensilsCrossed className="w-10 h-10" />
                     </div>
                   )}
                 </div>

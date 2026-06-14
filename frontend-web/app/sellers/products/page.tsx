@@ -1,8 +1,9 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, type ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import { Snowflake, Leaf, UtensilsCrossed, CookingPot, Circle } from 'lucide-react';
 import { DashboardLayout } from '@/components/layout/DashboardShell';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/toast';
@@ -57,11 +58,11 @@ interface Product {
 }
 
 // Product type display info
-const productTypeInfo: Record<string, { label: string; icon: string; color: string }> = {
-  frozen: { label: 'Frozen', icon: '❄️', color: 'bg-blue-100 text-blue-700' },
-  fresh: { label: 'Fresh', icon: '🥬', color: 'bg-green-100 text-green-700' },
-  ready_to_eat: { label: 'Ready to Eat', icon: '🍽️', color: 'bg-orange-100 text-orange-700' },
-  ready_to_cook: { label: 'Ready to Cook', icon: '🍳', color: 'bg-purple-100 text-purple-700' },
+const productTypeInfo: Record<string, { label: string; icon: ReactNode; color: string }> = {
+  frozen: { label: 'Frozen', icon: <Snowflake className="w-3.5 h-3.5" />, color: 'bg-blue-100 text-blue-700' },
+  fresh: { label: 'Fresh', icon: <Leaf className="w-3.5 h-3.5" />, color: 'bg-green-100 text-green-700' },
+  ready_to_eat: { label: 'Ready to Eat', icon: <UtensilsCrossed className="w-3.5 h-3.5" />, color: 'bg-orange-100 text-orange-700' },
+  ready_to_cook: { label: 'Ready to Cook', icon: <CookingPot className="w-3.5 h-3.5" />, color: 'bg-purple-100 text-purple-700' },
 };
 
 // Format unit for display
@@ -301,17 +302,21 @@ export default function SellerProductsPage() {
                   )}
                   {/* Live/Hidden Status Badge */}
                   <div className="absolute top-3 right-3">
-                    <span className={`px-3 py-1 rounded-full text-xs font-semibold shadow-sm ${
-                      product.isActive 
-                        ? 'bg-emerald-500 text-white' 
+                    <span className={`px-3 py-1 rounded-full text-xs font-semibold shadow-sm inline-flex items-center gap-1 ${
+                      product.isActive
+                        ? 'bg-emerald-500 text-white'
                         : 'bg-gray-400 text-white'
                     }`}>
-                      {product.isActive ? '● Live' : '○ Hidden'}
+                      {product.isActive ? (
+                        <><Circle className="w-2 h-2 fill-current" /> Live</>
+                      ) : (
+                        <><Circle className="w-2 h-2" /> Hidden</>
+                      )}
                     </span>
                   </div>
                   {/* Product Type Badge */}
                   <div className="absolute top-3 left-3">
-                    <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                    <span className={`px-2 py-1 rounded-full text-xs font-medium inline-flex items-center gap-1 ${
                       productTypeInfo[product.productType || 'frozen']?.color || 'bg-blue-100 text-blue-700'
                     }`}>
                       {productTypeInfo[product.productType || 'frozen']?.icon} {productTypeInfo[product.productType || 'frozen']?.label}

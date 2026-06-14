@@ -10,6 +10,16 @@ import { useToast } from '@/components/ui/toast';
 import { useAuthStore } from '@/lib/store/auth-store';
 import { useSocket } from '@/lib/hooks/use-socket';
 import { DashboardLayout } from '@/components/layout/DashboardShell';
+import { Clock, Check } from 'lucide-react';
+import LocationMap from '@/components/ui/LocationMap';
+
+const TRACK_STEPS = [
+  { key: 'confirmed', label: 'Confirmed' },
+  { key: 'preparing', label: 'Preparing' },
+  { key: 'ready', label: 'Ready' },
+  { key: 'dispatched', label: 'On the way' },
+  { key: 'delivered', label: 'Delivered' },
+];
 
 function playCancelSound() {
   if (typeof window === 'undefined') return;
@@ -56,6 +66,7 @@ interface OrderDetail {
     subtotal: number;
     deliveryFee: number;
     discount: number;
+    tax: number;
     total: number;
   };
   delivery: {
@@ -104,6 +115,7 @@ function mapOrderToDetail(raw: any): OrderDetail {
       subtotal: Number(raw.subtotal ?? 0),
       deliveryFee: Number(raw.deliveryFee ?? 0),
       discount: Number(raw.discountAmount ?? 0),
+      tax: Number(raw.taxAmount ?? 0),
       total: Number(raw.totalAmount ?? 0),
     },
     delivery: {
@@ -140,6 +152,12 @@ export default function OrderDetailPage() {
   const [showCancelModal, setShowCancelModal] = useState(false);
   const [cancelReason, setCancelReason] = useState('');
   const [cancelling, setCancelling] = useState(false);
+  const [now, setNow] = useState(() => Date.now());
+
+  useEffect(() => {
+    const t = setInterval(() => setNow(Date.now()), 30000);
+    return () => clearInterval(t);
+  }, []);
 
   useEffect(() => {
     if (!isAuthenticated) {
@@ -333,6 +351,82 @@ export default function OrderDetailPage() {
           </div>
         </div>
 
+        {/* Live tracking — progress + ETA */}
+        {effectiveStatus !== 'cancelled' && (() => {
+          const stepIndex = TRACK_STEPS.findIndex((s) => s.key === effectiveStatus);
+          const isDone = effectiveStatus === 'delivered' || effectiveStatus === 'completed';
+          const etaTs = order.delivery?.estimatedAt ? new Date(order.delivery.estimatedAt).getTime() : null;
+          const etaMin = etaTs != null ? Math.round((etaTs - now) / 60000) : null;
+          const etaTime = etaTs != null
+            ? new Date(etaTs).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
+            : null;
+          return (
+            <div className="bg-card rounded-2xl border border-ink-100 shadow-sm p-5 sm:p-6 mb-8">
+              <div className="flex items-center gap-2.5 mb-5">
+                {isDone ? (
+                  <>
+                    <span className="w-9 h-9 rounded-full bg-forest-50 text-forest-600 flex items-center justify-center">
+                      <Check className="w-5 h-5" />
+                    </span>
+                    <span className="font-semibold text-ink-900">Delivered — enjoy your meal!</span>
+                  </>
+                ) : effectiveStatus === 'pending' ? (
+                  <>
+                    <span className="w-9 h-9 rounded-full bg-cream-200 text-ink-500 flex items-center justify-center">
+                      <Clock className="w-5 h-5" />
+                    </span>
+                    <span className="text-ink-700">Waiting for the kitchen to accept your order…</span>
+                  </>
+                ) : (
+                  <>
+                    <span className="w-9 h-9 rounded-full bg-forest-50 text-forest-600 flex items-center justify-center">
+                      <Clock className="w-5 h-5" />
+                    </span>
+                    <span className="font-semibold text-ink-900">
+                      {etaMin != null
+                        ? etaMin > 1
+                          ? `Arriving in ~${etaMin} min`
+                          : 'Arriving any moment'
+                        : 'Your order is on its way'}
+                    </span>
+                    {etaTime && etaMin != null && etaMin > 1 && (
+                      <span className="text-sm text-ink-500">· by {etaTime}</span>
+                    )}
+                  </>
+                )}
+              </div>
+              {stepIndex >= 0 && (
+                <ol className="flex items-start">
+                  {TRACK_STEPS.map((s, i) => {
+                    const reached = i <= stepIndex;
+                    const done = i < stepIndex;
+                    return (
+                      <li key={s.key} className="flex-1 flex flex-col items-center relative min-w-0">
+                        {i > 0 && (
+                          <span
+                            className={`absolute top-3.5 right-1/2 w-full h-0.5 ${reached ? 'bg-forest-500' : 'bg-ink-200'}`}
+                            aria-hidden
+                          />
+                        )}
+                        <span
+                          className={`relative z-10 w-7 h-7 rounded-full flex items-center justify-center text-xs font-semibold ${
+                            reached ? 'bg-forest-500 text-white' : 'bg-cream-200 text-ink-400'
+                          }`}
+                        >
+                          {done ? <Check className="w-4 h-4" /> : i + 1}
+                        </span>
+                        <span className={`mt-2 text-[11px] sm:text-xs text-center leading-tight ${reached ? 'text-ink-900 font-medium' : 'text-ink-400'}`}>
+                          {s.label}
+                        </span>
+                      </li>
+                    );
+                  })}
+                </ol>
+              )}
+            </div>
+          );
+        })()}
+
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           {/* Order Items */}
           <div className="lg:col-span-2 space-y-4">
@@ -403,24 +497,28 @@ export default function OrderDetailPage() {
               </div>
             </div>
 
-            {/* Real-time Tracking */}
-            {trackingData && (
-              <div className="bg-white rounded-lg shadow-sm p-6">
-                <h2 className="text-xl font-bold text-gray-900 mb-4">Live Tracking</h2>
-                {trackingData.location && (
-                  <div className="space-y-2">
-                    <p>
-                      <span className="font-semibold">Distance:</span>{' '}
-                      {trackingData.distanceKm?.toFixed(1)} km
-                    </p>
-                    {trackingData.estimatedArrival && (
-                      <p>
-                        <span className="font-semibold">ETA:</span>{' '}
-                        {formatDateTime(trackingData.estimatedArrival)}
-                      </p>
-                    )}
-                  </div>
-                )}
+            {/* Real-time rider tracking (OpenStreetMap — no paid maps API) */}
+            {trackingData?.location && (
+              <div className="bg-card rounded-2xl border border-ink-100 shadow-sm p-6">
+                <div className="flex items-center gap-2 mb-1">
+                  <span className="w-2.5 h-2.5 rounded-full bg-anar-500 animate-pulse" />
+                  <h2 className="text-xl font-bold text-ink-900">Your rider is on the way</h2>
+                </div>
+                <p className="text-ink-500 text-sm mb-4">
+                  {trackingData.distanceKm != null && <>{trackingData.distanceKm.toFixed(1)} km away</>}
+                  {trackingData.estimatedArrival && (
+                    <> · ETA {new Date(trackingData.estimatedArrival).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}</>
+                  )}
+                </p>
+                <div className="rounded-xl overflow-hidden border border-ink-100">
+                  <LocationMap
+                    center={{ lat: trackingData.location.latitude, lng: trackingData.location.longitude }}
+                    markerPosition={{ lat: trackingData.location.latitude, lng: trackingData.location.longitude }}
+                    draggable={false}
+                    zoom={15}
+                    height="280px"
+                  />
+                </div>
               </div>
             )}
 
@@ -458,6 +556,12 @@ export default function OrderDetailPage() {
                   <div className="flex justify-between text-green-600">
                     <span>Discount</span>
                     <span>-{formatPrice(order.pricing?.discount ?? 0)}</span>
+                  </div>
+                )}
+                {(order.pricing?.tax ?? 0) > 0 && (
+                  <div className="flex justify-between text-gray-600">
+                    <span>GST (5%)</span>
+                    <span>{formatPrice(order.pricing?.tax ?? 0)}</span>
                   </div>
                 )}
                 <div className="border-t pt-2 mt-2">

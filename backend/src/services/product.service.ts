@@ -1,5 +1,56 @@
+import { Prisma } from '@prisma/client';
 import prisma from '../config/database';
 import { AppError } from '../middleware/errorHandler';
+
+// Roman-Urdu / spelling variants so "kabab" finds "kebab", "samosa" finds
+// "samosay", etc. Each key maps to the set of forms treated as equivalent.
+const SEARCH_SYNONYMS: Record<string, string[]> = {
+  kabab: ['kabab', 'kebab', 'kabob', 'kbab'],
+  samosa: ['samosa', 'samosay', 'samose', 'samosas'],
+  paratha: ['paratha', 'parantha', 'parata', 'prata'],
+  biryani: ['biryani', 'biriyani', 'biryani', 'birani'],
+  tikka: ['tikka', 'tika'],
+  naan: ['naan', 'nan'],
+  seekh: ['seekh', 'sikh', 'seek'],
+  roti: ['roti', 'rotti'],
+  nihari: ['nihari', 'nehari'],
+  karahi: ['karahi', 'karhai', 'kadai', 'kadhai'],
+};
+
+// Bayesian-average tuning for the "top rated" sort: pull low-review products
+// toward the global mean so a single 5★ rating can't outrank a well-reviewed 4.7★.
+const BAYESIAN_PRIOR_MEAN = 4.0;
+const BAYESIAN_CONFIDENCE = 8;
+
+function expandSearchTerms(query: string): string[] {
+  const lower = query.toLowerCase().trim();
+  const terms = new Set<string>([lower]);
+  for (const forms of Object.values(SEARCH_SYNONYMS)) {
+    if (forms.some((f) => lower.includes(f))) {
+      forms.forEach((f) => terms.add(f));
+    }
+  }
+  return Array.from(terms);
+}
+
+// Shared include + derived row type for the compact product list card, used
+// by both the catalog listing and the related-products section.
+const LIST_INCLUDE = {
+  category: { select: { id: true, name: true, nameUrdu: true, slug: true } },
+  seller: {
+    select: {
+      id: true,
+      businessName: true,
+      businessNameUrdu: true,
+      ratingAverage: true,
+      isVerified: true,
+    },
+  },
+  images: { where: { isPrimary: true }, take: 1, select: { imageUrl: true } },
+  _count: { select: { reviews: true } },
+} satisfies Prisma.ProductInclude;
+
+type ProductListRow = Prisma.ProductGetPayload<{ include: typeof LIST_INCLUDE }>;
 
 export class ProductService {
   /**
@@ -25,153 +76,172 @@ export class ProductService {
     const limit = Math.min(filters.limit || 20, 100);
     const skip = (page - 1) * limit;
 
-    // Build where clause
-    const where: any = {};
+    // Rank + filter in SQL so we can use trigram relevance and a Bayesian
+    // rating sort, then hydrate the page with Prisma for the rich includes.
+    const { ids, total } = await this.rankProductIds(filters, limit, skip);
 
-    if (filters.categoryId) {
-      where.categoryId = filters.categoryId;
-    }
-
-    if (filters.sellerId) {
-      where.sellerId = filters.sellerId;
-    }
-
-    if (filters.minPrice || filters.maxPrice) {
-      where.price = {};
-      if (filters.minPrice) where.price.gte = filters.minPrice;
-      if (filters.maxPrice) where.price.lte = filters.maxPrice;
-    }
-
-    if (filters.dietary && filters.dietary.length > 0) {
-      where.dietaryInfo = {
-        hasSome: filters.dietary,
-      };
-    }
-
-    if (filters.stockType) {
-      where.stockType = filters.stockType;
-    }
-
-    if (filters.productType) {
-      where.productType = filters.productType;
-    }
-
-    if (filters.isActive !== undefined) {
-      where.isActive = filters.isActive;
-    } else {
-      where.isActive = true;
-    }
-
-    if (filters.search) {
-      where.OR = [
-        { name: { contains: filters.search, mode: 'insensitive' } },
-        { nameUrdu: { contains: filters.search, mode: 'insensitive' } },
-        { description: { contains: filters.search, mode: 'insensitive' } },
-      ];
-    }
-
-    // Build orderBy
-    let orderBy: any = { createdAt: 'desc' };
-    if (filters.sort) {
-      switch (filters.sort) {
-        case 'popular':
-          orderBy = { totalOrders: 'desc' };
-          break;
-        case 'newest':
-          orderBy = { createdAt: 'desc' };
-          break;
-        case 'price_low':
-          orderBy = { price: 'asc' };
-          break;
-        case 'price_high':
-          orderBy = { price: 'desc' };
-          break;
-        case 'rating':
-          orderBy = { ratingAverage: 'desc' };
-          break;
-        default:
-          orderBy = { createdAt: 'desc' };
-      }
-    }
-
-    // Get products
-    const [products, total] = await Promise.all([
-      prisma.product.findMany({
-        where,
-        skip,
-        take: limit,
-        orderBy,
-        include: {
-          category: {
-            select: {
-              id: true,
-              name: true,
-              nameUrdu: true,
-              slug: true,
-            },
-          },
-          seller: {
-            select: {
-              id: true,
-              businessName: true,
-              businessNameUrdu: true,
-              ratingAverage: true,
-              isVerified: true,
-            },
-          },
-          images: {
-            where: { isPrimary: true },
-            take: 1,
-            select: {
-              imageUrl: true,
-            },
-          },
-          _count: {
-            select: {
-              reviews: true,
-            },
-          },
-        },
-      }),
-      prisma.product.count({ where }),
-    ]);
-
-    // Format products
-    const baseUrl = process.env.BASE_URL || 'http://localhost:3001';
-    const formattedProducts = products.map((product) => {
-      const imageUrl = product.images[0]?.imageUrl || null;
+    if (ids.length === 0) {
       return {
-        id: product.id,
-        name: product.name,
-        nameUrdu: product.nameUrdu,
-        slug: product.slug,
-        price: Number(product.price),
-        originalPrice: product.originalPrice ? Number(product.originalPrice) : null,
-        unit: product.unit,
-        unitUrdu: product.unitUrdu,
-        ratingAverage: Number(product.ratingAverage),
-        totalReviews: product.totalReviews,
-        primaryImage: imageUrl ? (imageUrl.startsWith('http') ? imageUrl : `${baseUrl}${imageUrl}`) : null,
-        category: product.category,
-        seller: product.seller,
-        stockQuantity: product.stockQuantity,
-        stockType: product.stockType,
-        productType: product.productType,
-        shelfLifeHours: product.shelfLifeHours,
-        preparationTime: product.preparationTime,
-        isActive: product.isActive,
-        createdAt: product.createdAt,
+        products: [],
+        pagination: { page, limit, total, totalPages: Math.ceil(total / limit) },
       };
+    }
+
+    const hydrated = await prisma.product.findMany({
+      where: { id: { in: ids } },
+      include: LIST_INCLUDE,
     });
 
+    // Preserve the SQL ranking order (findMany with `in` does not guarantee it).
+    const byId = new Map(hydrated.map((p) => [p.id, p]));
+    const products = ids.map((id) => byId.get(id)).filter((p): p is NonNullable<typeof p> => !!p);
+
     return {
-      products: formattedProducts,
+      products: products.map((p) => this.formatListItem(p)),
       pagination: {
         page,
         limit,
         total,
         totalPages: Math.ceil(total / limit),
       },
+    };
+  }
+
+  /** Shape a hydrated product into the compact list-card payload. */
+  private formatListItem(product: ProductListRow) {
+    const baseUrl = process.env.BASE_URL || 'http://localhost:3001';
+    const imageUrl = product.images?.[0]?.imageUrl || null;
+    return {
+      id: product.id,
+      name: product.name,
+      nameUrdu: product.nameUrdu,
+      slug: product.slug,
+      price: Number(product.price),
+      originalPrice: product.originalPrice ? Number(product.originalPrice) : null,
+      unit: product.unit,
+      unitUrdu: product.unitUrdu,
+      ratingAverage: Number(product.ratingAverage),
+      totalReviews: product.totalReviews,
+      primaryImage: imageUrl ? (imageUrl.startsWith('http') ? imageUrl : `${baseUrl}${imageUrl}`) : null,
+      category: product.category,
+      seller: product.seller,
+      stockQuantity: product.stockQuantity,
+      stockType: product.stockType,
+      productType: product.productType,
+      shelfLifeHours: product.shelfLifeHours,
+      preparationTime: product.preparationTime,
+      isActive: product.isActive,
+      createdAt: product.createdAt,
+    };
+  }
+
+  /**
+   * Rank and filter products in SQL. Returns the page of product ids in the
+   * intended order plus the total match count. Used by getProducts so search
+   * relevance (trigram) and Bayesian rating sorting can be expressed in SQL.
+   */
+  private async rankProductIds(
+    filters: {
+      categoryId?: string;
+      sellerId?: string;
+      minPrice?: number;
+      maxPrice?: number;
+      dietary?: string[];
+      stockType?: string;
+      productType?: string;
+      search?: string;
+      sort?: string;
+      isActive?: boolean;
+    },
+    limit: number,
+    offset: number
+  ): Promise<{ ids: string[]; total: number }> {
+    const conditions: Prisma.Sql[] = [];
+
+    // Public catalog: only active, approved products unless an explicit
+    // isActive override is passed (e.g. an admin/seller-scoped listing).
+    conditions.push(
+      filters.isActive === false
+        ? Prisma.sql`is_active = false`
+        : Prisma.sql`is_active = true`
+    );
+    conditions.push(Prisma.sql`approval_status = 'approved'`);
+
+    if (filters.categoryId) conditions.push(Prisma.sql`category_id = ${filters.categoryId}`);
+    if (filters.sellerId) conditions.push(Prisma.sql`seller_id = ${filters.sellerId}`);
+    if (filters.minPrice != null) conditions.push(Prisma.sql`price >= ${filters.minPrice}`);
+    if (filters.maxPrice != null) conditions.push(Prisma.sql`price <= ${filters.maxPrice}`);
+    if (filters.stockType) conditions.push(Prisma.sql`stock_type = ${filters.stockType}`);
+    if (filters.productType) conditions.push(Prisma.sql`product_type = ${filters.productType}`);
+    if (filters.dietary && filters.dietary.length > 0) {
+      conditions.push(Prisma.sql`dietary_info && ${filters.dietary}::text[]`);
+    }
+
+    // Relevance expression for search; 0 when not searching.
+    let relevance: Prisma.Sql = Prisma.sql`0`;
+    const search = filters.search?.trim();
+    if (search) {
+      const terms = expandSearchTerms(search);
+      // Substring hits score highest; trigram similarity catches typos.
+      const likeBonuses = terms.map(
+        (t) => Prisma.sql`CASE
+          WHEN name ILIKE ${'%' + t + '%'} THEN 0.9
+          WHEN COALESCE(name_urdu, '') ILIKE ${'%' + t + '%'} THEN 0.8
+          WHEN COALESCE(description, '') ILIKE ${'%' + t + '%'} THEN 0.4
+          ELSE 0 END`
+      );
+      relevance = Prisma.sql`GREATEST(
+        similarity(name, ${search}),
+        word_similarity(${search}, name),
+        similarity(COALESCE(name_urdu, ''), ${search}),
+        ${Prisma.join(likeBonuses, ', ')}
+      )`;
+      conditions.push(Prisma.sql`(${relevance}) > 0.15`);
+    }
+
+    // Bayesian average rating keeps thinly-reviewed items from topping the list.
+    const bayesian = Prisma.sql`((${BAYESIAN_CONFIDENCE} * ${BAYESIAN_PRIOR_MEAN}) + (rating_average * total_reviews))
+      / (${BAYESIAN_CONFIDENCE} + total_reviews)`;
+
+    let orderBy: Prisma.Sql;
+    switch (filters.sort) {
+      case 'price_low':
+        orderBy = Prisma.sql`price ASC, created_at DESC`;
+        break;
+      case 'price_high':
+        orderBy = Prisma.sql`price DESC, created_at DESC`;
+        break;
+      case 'popular':
+        orderBy = Prisma.sql`total_orders DESC, ${bayesian} DESC`;
+        break;
+      case 'rating':
+      case 'top_rated':
+        orderBy = Prisma.sql`${bayesian} DESC, total_reviews DESC`;
+        break;
+      case 'newest':
+        orderBy = Prisma.sql`created_at DESC`;
+        break;
+      default:
+        // When searching, relevance leads; otherwise newest first.
+        orderBy = search
+          ? Prisma.sql`(${relevance}) DESC, total_orders DESC`
+          : Prisma.sql`created_at DESC`;
+    }
+
+    const whereSql = Prisma.join(conditions, ' AND ');
+    const rows = await prisma.$queryRaw<Array<{ id: string; total_count: bigint }>>(
+      Prisma.sql`
+        SELECT id, COUNT(*) OVER() AS total_count
+        FROM products
+        WHERE ${whereSql}
+        ORDER BY ${orderBy}
+        LIMIT ${limit} OFFSET ${offset}
+      `
+    );
+
+    return {
+      ids: rows.map((r) => r.id),
+      total: rows.length > 0 ? Number(rows[0].total_count) : 0,
     };
   }
 
@@ -233,6 +303,65 @@ export class ProductService {
         imageUrl: img.imageUrl.startsWith('http') ? img.imageUrl : `${baseUrl}${img.imageUrl}`,
       })),
     };
+  }
+
+  /**
+   * "Frequently bought together / you may also like" for a product.
+   *
+   * Primary signal is order co-occurrence (products that appear in the same
+   * orders), which captures real buying patterns. When there isn't enough
+   * order history yet, it backfills with popular products from the same
+   * category so the section is never empty.
+   */
+  async getRelatedProducts(productId: string, limit = 8) {
+    const cooccur = await prisma.$queryRaw<Array<{ product_id: string }>>(
+      Prisma.sql`
+        SELECT oi2.product_id, COUNT(*) AS freq
+        FROM order_items oi1
+        JOIN order_items oi2
+          ON oi2.order_id = oi1.order_id AND oi2.product_id <> oi1.product_id
+        JOIN products p ON p.id = oi2.product_id
+        WHERE oi1.product_id = ${productId}
+          AND p.is_active = true AND p.approval_status = 'approved'
+        GROUP BY oi2.product_id
+        ORDER BY freq DESC
+        LIMIT ${limit}
+      `
+    );
+    let ids = cooccur.map((r) => r.product_id);
+
+    // Backfill from the same category by popularity when co-occurrence is thin.
+    if (ids.length < limit) {
+      const base = await prisma.product.findUnique({
+        where: { id: productId },
+        select: { categoryId: true },
+      });
+      if (base?.categoryId) {
+        const fill = await prisma.product.findMany({
+          where: {
+            categoryId: base.categoryId,
+            isActive: true,
+            approvalStatus: 'approved',
+            id: { notIn: [productId, ...ids] },
+          },
+          orderBy: [{ totalOrders: 'desc' }, { ratingAverage: 'desc' }],
+          take: limit - ids.length,
+          select: { id: true },
+        });
+        ids = [...ids, ...fill.map((f) => f.id)];
+      }
+    }
+
+    if (ids.length === 0) return { products: [] };
+
+    const hydrated = await prisma.product.findMany({
+      where: { id: { in: ids } },
+      include: LIST_INCLUDE,
+    });
+    const byId = new Map(hydrated.map((p) => [p.id, p]));
+    const ordered = ids.map((id) => byId.get(id)).filter((p): p is NonNullable<typeof p> => !!p);
+
+    return { products: ordered.map((p) => this.formatListItem(p)) };
   }
 
   /**

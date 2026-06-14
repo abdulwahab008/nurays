@@ -50,8 +50,10 @@ const PROMOS = [
 const SIDEBAR_ITEMS = [
   { name: 'Dashboard', href: '/dashboard', icon: '📊' },
   { name: 'Browse', href: '/products', icon: '🛍️' },
+  { name: 'Favorites', href: '/favorites', icon: '' },
   { name: 'Orders', href: '/orders', icon: '📦' },
   { name: 'Cart', href: '/cart', icon: '🛒' },
+  { name: 'Wallet', href: '/wallet', icon: '💰' },
   { name: 'Profile', href: '/profile', icon: '👤' },
   { name: 'Addresses', href: '/profile/addresses', icon: '📍' },
   { name: 'Support', href: '/support', icon: '💬' },
@@ -157,7 +159,7 @@ export default function CustomerDashboardPage() {
     <DashboardLayout title="" subtitle="" sidebarItems={SIDEBAR_ITEMS} userType="customer">
       {/* HERO */}
       <section
-        className="relative overflow-hidden rounded-3xl p-6 sm:p-10 lg:p-12 mb-8"
+        className="relative overflow-hidden rounded-3xl px-6 py-8 sm:p-10 lg:p-12 mb-8"
         style={{ background: 'var(--ink-900)', color: 'var(--cream-50)' }}
       >
         <div
@@ -169,12 +171,12 @@ export default function CustomerDashboardPage() {
           <div className="eyebrow" style={{ color: 'var(--forest-300)' }}>
             {greetingText} · Karachi
           </div>
-          <h1 className="font-display italic mt-3 text-[44px] sm:text-[56px] lg:text-[64px] leading-[1.02]">
+          <h1 className="font-display italic mt-3 text-[32px] sm:text-[52px] lg:text-[64px] leading-[1.2] sm:leading-[1.05] pb-1">
             Hey, {firstName}.
             <br />
             <span style={{ color: 'var(--forest-300)' }}>What's for dinner?</span>
           </h1>
-          <p className="mt-5 text-[15px] sm:text-base max-w-md" style={{ color: 'var(--cream-200)', opacity: 0.9 }}>
+          <p className="mt-5 text-base max-w-md" style={{ color: 'var(--cream-200)', opacity: 0.9 }}>
             Sealed, frozen, and delivered cold from verified home kitchens across the city.
           </p>
           <div className="mt-7 flex flex-wrap gap-3">

@@ -9,6 +9,7 @@ import { useAuthStore } from '@/lib/store/auth-store';
 import { formatDate } from '@/lib/utils';
 import { apiClient } from '@/lib/api-client';
 import { useToast } from '@/components/ui/toast';
+import { Package, Tag, Bell, Truck, Check, X, ArrowRight, type LucideIcon } from 'lucide-react';
 
 interface Notification {
   id: string;
@@ -77,14 +78,14 @@ export default function NotificationsPage() {
     }
   };
 
-  const getNotificationIcon = (type: string) => {
-    const icons: Record<string, string> = {
-      order: '📦',
-      promo: '🏷️',
-      system: '🔔',
-      delivery: '🚚',
+  const getNotificationIcon = (type: string): LucideIcon => {
+    const icons: Record<string, LucideIcon> = {
+      order: Package,
+      promo: Tag,
+      system: Bell,
+      delivery: Truck,
     };
-    return icons[type] || '🔔';
+    return icons[type] || Bell;
   };
 
   const getNotificationColor = (type: string) => {
@@ -168,7 +169,7 @@ export default function NotificationsPage() {
         </div>
         {unreadCount > 0 && (
           <Button variant="outline" onClick={markAllAsRead} className="text-sm">
-            <span className="mr-2">✓</span> Mark all as read
+            <Check className="w-4 h-4 mr-2" /> Mark all as read
           </Button>
         )}
       </div>
@@ -190,7 +191,7 @@ export default function NotificationsPage() {
       ) : filteredNotifications.length === 0 ? (
         <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-12 text-center">
           <div className="w-20 h-20 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-6">
-            <span className="text-4xl">🔔</span>
+            <Bell className="w-10 h-10 text-gray-400" />
           </div>
           <h2 className="text-xl font-bold text-gray-900 mb-2">
             {filter === 'unread' ? 'All caught up!' : 'No notifications yet'}
@@ -212,7 +213,10 @@ export default function NotificationsPage() {
             >
               <div className="flex items-start gap-4">
                 <div className={`w-12 h-12 rounded-xl flex items-center justify-center shrink-0 ${getNotificationColor(notification.type)}`}>
-                  <span className="text-xl">{getNotificationIcon(notification.type)}</span>
+                  {(() => {
+                    const Icon = getNotificationIcon(notification.type);
+                    return <Icon className="w-5 h-5 text-gray-700" />;
+                  })()}
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-start justify-between gap-4">
@@ -238,8 +242,9 @@ export default function NotificationsPage() {
                         onClick={() => deleteNotificationLocal(notification.id)}
                         className="text-gray-400 hover:text-red-500 transition-colors"
                         title="Delete"
+                        aria-label="Delete notification"
                       >
-                        ✕
+                        <X className="w-4 h-4" />
                       </button>
                     </div>
                   </div>
@@ -248,7 +253,7 @@ export default function NotificationsPage() {
                       href={notification.link}
                       className="inline-flex items-center gap-1 mt-3 text-sm text-green-600 hover:text-green-700 font-medium"
                     >
-                      View details →
+                      View details <ArrowRight className="w-3.5 h-3.5" />
                     </Link>
                   )}
                 </div>
@@ -263,13 +268,13 @@ export default function NotificationsPage() {
         <h3 className="font-semibold text-gray-900 mb-4">Notification Preferences</h3>
         <div className="space-y-4">
           {[
-            { id: 'orders', label: 'Order updates', desc: 'Get notified about order status changes', icon: '📦' },
-            { id: 'promos', label: 'Promotions & offers', desc: 'Receive special deals and discounts', icon: '🏷️' },
-            { id: 'delivery', label: 'Delivery updates', desc: 'Real-time delivery tracking alerts', icon: '🚚' },
+            { id: 'orders', label: 'Order updates', desc: 'Get notified about order status changes', icon: Package },
+            { id: 'promos', label: 'Promotions & offers', desc: 'Receive special deals and discounts', icon: Tag },
+            { id: 'delivery', label: 'Delivery updates', desc: 'Real-time delivery tracking alerts', icon: Truck },
           ].map((pref) => (
             <div key={pref.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-xl">
               <div className="flex items-center gap-3">
-                <span className="text-xl">{pref.icon}</span>
+                <pref.icon className="w-5 h-5 text-gray-600" />
                 <div>
                   <p className="font-medium text-gray-900">{pref.label}</p>
                   <p className="text-sm text-gray-500">{pref.desc}</p>

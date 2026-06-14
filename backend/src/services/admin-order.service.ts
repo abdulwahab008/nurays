@@ -773,6 +773,98 @@ export class AdminOrderService {
       averageOrderValue: Number(averageOrderValue._avg.totalAmount || 0),
     };
   }
+
+  /**
+   * List seller payout requests for admin review, newest first.
+   */
+  async listPayouts(filters: { status?: string; page?: number; limit?: number }) {
+    const page = filters.page && filters.page > 0 ? filters.page : 1;
+    const limit = Math.min(filters.limit && filters.limit > 0 ? filters.limit : 20, 100);
+    const where = filters.status ? { status: filters.status } : {};
+
+    const [payouts, total] = await Promise.all([
+      prisma.sellerPayout.findMany({
+        where,
+        orderBy: { createdAt: 'desc' },
+        skip: (page - 1) * limit,
+        take: limit,
+        include: {
+          seller: { select: { id: true, businessName: true, businessNameUrdu: true } },
+        },
+      }),
+      prisma.sellerPayout.count({ where }),
+    ]);
+
+    return {
+      payouts: payouts.map((p) => ({
+        id: p.id,
+        seller: p.seller,
+        amount: Number(p.amount),
+        commissionDeducted: Number(p.commissionDeducted),
+        netAmount: Number(p.netAmount),
+        payoutMethod: p.payoutMethod,
+        accountDetails: p.accountDetails,
+        status: p.status,
+        transactionId: p.transactionId,
+        failedReason: p.failedReason,
+        processedAt: p.processedAt,
+        createdAt: p.createdAt,
+      })),
+      pagination: { page, limit, total, totalPages: Math.ceil(total / limit) },
+    };
+  }
+
+  /**
+   * Mark a payout completed (money actually sent via the payout method) and
+   * record the bank/wallet transaction reference. Only pending payouts can be
+   * completed, so an admin can't double-pay.
+   */
+  async completePayout(payoutId: string, transactionId: string) {
+    const payout = await prisma.sellerPayout.findUnique({ where: { id: payoutId } });
+    if (!payout) {
+      throw new AppError('Payout not found', 404, 'PAYOUT_NOT_FOUND');
+    }
+    if (payout.status !== 'pending') {
+      throw new AppError(
+        `Payout is already ${payout.status} and cannot be completed`,
+        400,
+        'PAYOUT_NOT_PENDING'
+      );
+    }
+
+    const updated = await prisma.sellerPayout.update({
+      where: { id: payoutId },
+      data: { status: 'completed', transactionId, processedAt: new Date() },
+    });
+
+    return { id: updated.id, status: updated.status, transactionId: updated.transactionId };
+  }
+
+  /**
+   * Mark a payout failed with a reason. The seller's available balance is
+   * derived from completed payouts only, so a failed payout simply frees the
+   * amount to be requested again — no balance mutation needed here.
+   */
+  async failPayout(payoutId: string, reason: string) {
+    const payout = await prisma.sellerPayout.findUnique({ where: { id: payoutId } });
+    if (!payout) {
+      throw new AppError('Payout not found', 404, 'PAYOUT_NOT_FOUND');
+    }
+    if (payout.status !== 'pending') {
+      throw new AppError(
+        `Payout is already ${payout.status} and cannot be failed`,
+        400,
+        'PAYOUT_NOT_PENDING'
+      );
+    }
+
+    const updated = await prisma.sellerPayout.update({
+      where: { id: payoutId },
+      data: { status: 'failed', failedReason: reason, processedAt: new Date() },
+    });
+
+    return { id: updated.id, status: updated.status, failedReason: updated.failedReason };
+  }
 }
 
 export default new AdminOrderService();

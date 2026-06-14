@@ -52,6 +52,8 @@ export default function LoginPage() {
             router.push('/admin/dashboard');
           } else if (userType === 'seller') {
             router.push('/sellers/dashboard');
+          } else if (userType === 'rider') {
+            router.push('/rider');
           } else {
             router.push('/dashboard');
           }
@@ -103,6 +105,8 @@ export default function LoginPage() {
         router.push('/admin/dashboard');
       } else if (userType === 'seller') {
         router.push('/sellers/dashboard');
+      } else if (userType === 'rider') {
+        router.push('/rider');
       } else {
         router.push('/dashboard');
       }
@@ -142,6 +146,8 @@ export default function LoginPage() {
           router.push('/admin/dashboard');
         } else if (userType === 'seller') {
           router.push('/sellers/dashboard');
+        } else if (userType === 'rider') {
+          router.push('/rider');
         } else {
           router.push('/dashboard');
         }

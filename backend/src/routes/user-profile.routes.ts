@@ -5,6 +5,7 @@ import {
   updateAvatar,
   getUserAddresses,
   addAddress,
+  getReferralInfo,
 } from '../controllers/user-profile.controller';
 import { authenticate } from '../middleware/auth.middleware';
 import { validate } from '../middleware/validation.middleware';
@@ -21,6 +22,9 @@ router.use(authenticate);
 
 // Get current user profile
 router.get('/me', getCurrentUserProfile);
+
+// Referral info (code + invited count + reward)
+router.get('/me/referral', getReferralInfo);
 
 // Update profile
 router.patch('/me', validate(updateProfileSchema), updateProfile);

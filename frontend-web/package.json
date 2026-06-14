@@ -8,9 +8,16 @@
     "start": "next start",
     "lint": "eslint",
     "test:e2e": "playwright test",
-    "test:e2e:ui": "playwright test --ui"
+    "test:e2e:ui": "playwright test --ui",
+    "cap:sync": "cap sync",
+    "cap:android": "CAP_SERVER_URL=${CAP_SERVER_URL:-http://10.0.2.2:3000} cap sync android && cap open android",
+    "cap:ios": "CAP_SERVER_URL=${CAP_SERVER_URL:-http://localhost:3000} cap sync ios && cap open ios"
   },
   "dependencies": {
+    "@capacitor/android": "^8.4.0",
+    "@capacitor/cli": "^8.4.0",
+    "@capacitor/core": "^8.4.0",
+    "@capacitor/ios": "^8.4.0",
     "@hookform/resolvers": "^5.2.2",
     "@react-oauth/google": "^0.12.2",
     "@types/leaflet": "^1.9.21",

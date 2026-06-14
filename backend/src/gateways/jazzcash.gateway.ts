@@ -20,75 +20,36 @@ import type {
   VerifyPaymentResult,
 } from './types';
 
-const MERCHANT_ID = process.env.JAZZCASH_MERCHANT_ID;
-const PASSWORD = process.env.JAZZCASH_PASSWORD;
-const RETURN_URL = process.env.JAZZCASH_RETURN_URL;
-const CANCEL_URL = process.env.JAZZCASH_CANCEL_URL;
-const SANDBOX = process.env.JAZZCASH_SANDBOX === 'true';
-const BASE_URL = SANDBOX
-  ? 'https://sandbox.jazzcash.com.pk/CustomerPortal/transactionmanagement/merchantform/'
-  : 'https://payments.jazzcash.com.pk/CustomerPortal/transactionmanagement/merchantform/';
-
 export const jazzcashGateway: IPaymentGateway = {
   name: 'jazzcash',
 
+  // The direct JazzCash integration is not implemented, so this gateway is
+  // never "configured". Checkout routes JazzCash through the Safepay
+  // aggregator instead. To enable direct JazzCash, implement create/verify
+  // below and gate this on the JAZZCASH_* env vars.
   isConfigured(): boolean {
-    return !!(MERCHANT_ID && PASSWORD && RETURN_URL && CANCEL_URL);
+    return false;
   },
 
-  async createPayment(req: CreatePaymentRequest): Promise<CreatePaymentResult> {
-    if (!this.isConfigured()) {
-      return {
-        success: false,
-        paymentId: `JC-MOCK-${Date.now()}`,
-        message: 'JazzCash is not configured. Set JAZZCASH_* env variables.',
-        errorCode: 'GATEWAY_NOT_CONFIGURED',
-      };
-    }
-
-    // TODO: Replace with real JazzCash API call.
-    // JazzCash typically uses:
-    // - POST to their endpoint with MerchantId, Password, Amount (in paisa or whole PKR), TxnRefNo, TxnDateTime,
-    //   ReturnURL, SecureHash (HMAC of required fields per their spec).
-    // - Response contains payment token or redirect URL.
-    // See: JazzCash Sandbox Documentation > API References > Payment Request / Mobile Account.
-
-    const amountPkr = Math.round(req.amountPkr);
-    const txnRefNo = `JC-${req.orderId.slice(0, 8)}-${Date.now()}`;
-    const paymentId = txnRefNo;
-
-    // Placeholder: build redirect URL (real implementation uses API response URL)
-    const redirectUrl = `${BASE_URL}?pp_MerchantID=${MERCHANT_ID}&pp_Amount=${amountPkr * 100}&pp_TxnRefNo=${txnRefNo}&pp_ReturnURL=${encodeURIComponent(req.returnUrl)}&pp_TxnDateTime=${new Date().toISOString().replace(/[-:]/g, '').slice(0, 14)}`;
-    // In production: compute SecureHash per JazzCash docs and use the URL they return.
-
+  // The direct JazzCash API integration (SecureHash, Payment Inquiry) is not
+  // implemented. Until it is, this adapter MUST fail closed so a payment can
+  // never be marked paid without real settlement. In production the checkout
+  // routes JazzCash through the Safepay aggregator, which is fully implemented.
+  async createPayment(_req: CreatePaymentRequest): Promise<CreatePaymentResult> {
     return {
-      success: true,
-      paymentId,
-      redirectUrl,
-      transactionRef: txnRefNo,
-      expiresAt: new Date(Date.now() + 15 * 60 * 1000),
+      success: false,
+      paymentId: `JC-UNAVAILABLE-${Date.now()}`,
+      message: 'Direct JazzCash integration is not implemented. Use the Safepay aggregator.',
+      errorCode: 'GATEWAY_NOT_IMPLEMENTED',
     };
   },
 
-  async verifyPayment(req: VerifyPaymentRequest): Promise<VerifyPaymentResult> {
-    if (!this.isConfigured()) {
-      return {
-        success: false,
-        status: 'failed',
-        message: 'JazzCash is not configured.',
-        errorCode: 'GATEWAY_NOT_CONFIGURED',
-      };
-    }
-
-    // TODO: Call JazzCash "Payment Inquiry" or "Transaction Status" API with req.paymentId / req.transactionId.
-    // Verify SecureHash on callback/webhook if using redirect callback.
-    // Return status: completed | pending | failed | cancelled.
-
+  async verifyPayment(_req: VerifyPaymentRequest): Promise<VerifyPaymentResult> {
     return {
-      success: true,
-      status: 'completed',
-      transactionId: req.transactionId || req.paymentId,
-      paidAt: new Date(),
+      success: false,
+      status: 'failed',
+      message: 'Direct JazzCash verification is not implemented; refusing to confirm payment.',
+      errorCode: 'GATEWAY_NOT_IMPLEMENTED',
     };
   },
 };
