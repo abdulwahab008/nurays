@@ -42,6 +42,12 @@ const httpServer = createServer(app);
 const PORT = process.env.PORT || 3000;
 const API_VERSION = process.env.API_VERSION || 'v1';
 
+// Trust exactly one hop (the reverse proxy/load balancer in front of this
+// service in any real deployment) so req.ip and express-rate-limit's
+// X-Forwarded-For handling are accurate instead of throwing
+// ERR_ERL_UNEXPECTED_X_FORWARDED_FOR.
+app.set('trust proxy', 1);
+
 // Initialize Socket.io
 socketManager.initialize(httpServer);
 

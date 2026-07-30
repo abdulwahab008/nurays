@@ -160,6 +160,26 @@ export default function AdminOrderDetailPage() {
     return null;
   }
 
+  // Mirrors the backend's isValidOrderStatusTransition — admin can only move
+  // an order exactly one step forward at a time (or to Cancelled, handled by
+  // the dedicated cancel flow below), so only ever offer that single next step.
+  const ORDER_FORWARD_SEQUENCE = ['pending', 'confirmed', 'preparing', 'ready', 'dispatched', 'in_transit', 'delivered', 'completed'];
+  const NEXT_STATUS_META: Record<string, { label: string; color: string }> = {
+    confirmed: { label: 'Confirmed', color: 'bg-blue-500 hover:bg-blue-600' },
+    preparing: { label: 'Preparing', color: 'bg-purple-500 hover:bg-purple-600' },
+    ready: { label: 'Ready', color: 'bg-indigo-500 hover:bg-indigo-600' },
+    dispatched: { label: 'Dispatched', color: 'bg-pink-500 hover:bg-pink-600' },
+    in_transit: { label: 'In Transit', color: 'bg-orange-500 hover:bg-orange-600' },
+    delivered: { label: 'Delivered', color: 'bg-green-500 hover:bg-green-600' },
+  };
+  const currentIndex = order ? ORDER_FORWARD_SEQUENCE.indexOf(order.orderStatus) : -1;
+  const nextStatus = currentIndex >= 0 && currentIndex < ORDER_FORWARD_SEQUENCE.length - 1
+    ? ORDER_FORWARD_SEQUENCE[currentIndex + 1]
+    : null;
+  const nextStatusOptions = nextStatus && NEXT_STATUS_META[nextStatus]
+    ? [{ value: nextStatus, ...NEXT_STATUS_META[nextStatus] }]
+    : [];
+
   return (
     <UserLayout showSidebar={true} showNavbar={true}>
       <div className="max-w-4xl mx-auto">
@@ -286,16 +306,7 @@ export default function AdminOrderDetailPage() {
                   <div>
                     <h2 className="text-sm font-medium text-gray-500 uppercase mb-3">Update Status</h2>
                     <div className="flex gap-3 flex-wrap">
-                      {[
-                        { value: 'confirmed', label: 'Confirmed', color: 'bg-blue-500 hover:bg-blue-600' },
-                        { value: 'preparing', label: 'Preparing', color: 'bg-purple-500 hover:bg-purple-600' },
-                        { value: 'ready', label: 'Ready', color: 'bg-indigo-500 hover:bg-indigo-600' },
-                        { value: 'dispatched', label: 'Dispatched', color: 'bg-pink-500 hover:bg-pink-600' },
-                        { value: 'in_transit', label: 'In Transit', color: 'bg-orange-500 hover:bg-orange-600' },
-                        { value: 'delivered', label: 'Delivered', color: 'bg-green-500 hover:bg-green-600' },
-                      ]
-                        .filter((s) => s.value !== order.orderStatus)
-                        .map((s) => (
+                      {nextStatusOptions.map((s) => (
                           <button
                             key={s.value}
                             onClick={() => setSelectedStatus((prev) => (prev === s.value ? '' : s.value))}

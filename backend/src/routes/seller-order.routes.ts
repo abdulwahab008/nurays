@@ -12,13 +12,14 @@ import {
   updateOrderItemStatusSchema,
   cancelOrderItemSchema,
 } from '../validators/seller-order.validator';
-import { authenticate, authorize } from '../middleware/auth.middleware';
+import { authenticate, authorize, blockSuspendedSeller } from '../middleware/auth.middleware';
 
 const router = Router();
 
 // All seller order routes require authentication and seller role
 router.use(authenticate);
 router.use(authorize('seller'));
+router.use(blockSuspendedSeller);
 
 // Get seller dashboard
 router.get('/dashboard', getSellerDashboard);

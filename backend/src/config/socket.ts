@@ -43,10 +43,13 @@ class SocketManager {
           return next(new Error('Authentication error: User not found or inactive'));
         }
 
-        // Attach user info to socket
+        // Attach user info to socket — use the freshly-queried userType, not
+        // the JWT payload's stale snapshot (mirrors the HTTP authenticate()
+        // fix; otherwise a role change doesn't take effect for socket room
+        // membership until the client reconnects with a new token).
         (socket as any).user = {
           userId: payload.userId,
-          userType: payload.userType,
+          userType: user.userType,
         };
 
         next();

@@ -1,5 +1,6 @@
 import prisma from '../config/database';
 import { AppError } from '../middleware/errorHandler';
+import adminService from './admin.service';
 
 export class SellerService {
   /**
@@ -36,7 +37,9 @@ export class SellerService {
       throw new AppError('User not found', 404, 'USER_NOT_FOUND');
     }
 
-    // Create seller account
+    // Create seller account — commissionRate comes from the platform setting
+    // at signup time; each seller's own rate can still be adjusted later.
+    const commissionRate = await adminService.getSettingValue<number>('commissionRate');
     const seller = await prisma.seller.create({
       data: {
         userId,
@@ -45,10 +48,12 @@ export class SellerService {
         description: data.description,
         kitchenVideoUrl: data.kitchenVideoUrl,
         coverImageUrl: data.coverImageUrl,
+        commissionRate,
         // CNIC and kitchen photos should be stored via SellerDocument model
         // For now, we'll skip these fields
+        // status tracks active/inactive/suspended account standing (defaults
+        // to 'active') — approval state lives in verificationStatus alone.
         verificationStatus: 'pending',
-        status: 'pending',
       },
     });
 
@@ -556,18 +561,21 @@ export class SellerService {
       return sum + Number(item.sellerPayout);
     }, 0);
 
-    // Get already paid out amount
-    const completedPayouts = await prisma.sellerPayout.findMany({
+    // Get already paid out AND already-requested-but-not-yet-processed amounts —
+    // a pending payout must reserve its amount too, or a seller could submit
+    // several requests back-to-back before any of them are processed and
+    // collectively withdraw more than they've actually earned.
+    const outstandingPayouts = await prisma.sellerPayout.findMany({
       where: {
         sellerId,
-        status: 'completed',
+        status: { in: ['completed', 'pending'] },
       },
       select: {
         netAmount: true,
       },
     });
 
-    const paidOut = completedPayouts.reduce((sum, payout) => {
+    const paidOut = outstandingPayouts.reduce((sum, payout) => {
       return sum + Number(payout.netAmount);
     }, 0);
 
@@ -584,7 +592,7 @@ export class SellerService {
 
     const minimumAmount = schedule?.minimumPayoutAmount
       ? Number(schedule.minimumPayoutAmount)
-      : 1000;
+      : await adminService.getSettingValue<number>('minPayoutAmount');
 
     if (data.amount < minimumAmount) {
       throw new AppError(

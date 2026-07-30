@@ -274,7 +274,7 @@ export class SellerOrderService {
     }
 
     // Validate status transition
-    const validStatuses = ['pending', 'confirmed', 'preparing', 'ready', 'dispatched', 'cancelled'];
+    const validStatuses = ['pending', 'confirmed', 'preparing', 'ready', 'dispatched', 'in_transit', 'delivered', 'cancelled'];
     if (!validStatuses.includes(status)) {
       throw new AppError(`Invalid status: ${status}`, 400, 'INVALID_STATUS');
     }
@@ -286,7 +286,12 @@ export class SellerOrderService {
       confirmed: ['preparing', 'cancelled'],
       preparing: ['ready', 'cancelled'],
       ready: ['dispatched', 'cancelled'],
-      dispatched: [],
+      // A rider (rider.service.ts) normally drives dispatched -> in_transit ->
+      // delivered directly, but a seller must still be able to do this by hand
+      // for orders with no rider assigned (e.g. self-delivery).
+      dispatched: ['in_transit', 'delivered'],
+      in_transit: ['delivered'],
+      delivered: [],
       cancelled: [],
     };
     if (!ALLOWED_TRANSITIONS[orderItem.status]?.includes(status)) {
@@ -309,36 +314,53 @@ export class SellerOrderService {
         where: { orderId: orderItem.orderId },
       });
 
+      // Re-read the order's status inside the transaction — the copy fetched
+      // before the transaction started can be stale if another concurrent
+      // update on a sibling item already changed it.
+      const currentOrder = await tx.order.findUnique({
+        where: { id: orderItem.orderId },
+        select: { orderStatus: true },
+      });
+      const currentOrderStatus = currentOrder?.orderStatus;
+
       let derivedOrderStatus: string | null = null;
       let historyNote = '';
 
       const allReady = allItems.every((i) => i.status === 'ready');
       const allPreparing = allItems.every((i) => i.status === 'preparing');
 
-      if (allReady && orderItem.order.orderStatus === 'confirmed') {
+      if (allReady && currentOrderStatus === 'confirmed') {
         derivedOrderStatus = 'ready';
         historyNote = 'All items ready for dispatch';
-      } else if (allPreparing && orderItem.order.orderStatus === 'pending') {
+      } else if (allPreparing && currentOrderStatus === 'pending') {
         derivedOrderStatus = 'preparing';
         historyNote = 'Order preparation started';
-      } else if (status === 'confirmed' && orderItem.order.orderStatus === 'pending') {
+      } else if (status === 'confirmed' && currentOrderStatus === 'pending') {
         derivedOrderStatus = 'confirmed';
         historyNote = 'Order confirmed by seller';
       }
 
       if (derivedOrderStatus) {
-        await tx.order.update({
-          where: { id: orderItem.orderId },
+        // Guard the write on the order still being in the exact state we
+        // derived from — if a concurrent transaction on another item already
+        // moved it, this becomes a no-op instead of re-applying/duplicating
+        // the same transition.
+        const applied = await tx.order.updateMany({
+          where: { id: orderItem.orderId, orderStatus: currentOrderStatus },
           data: { orderStatus: derivedOrderStatus },
         });
-        await tx.orderStatusHistory.create({
-          data: {
-            orderId: orderItem.orderId,
-            status: derivedOrderStatus,
-            notes: historyNote,
-            changedBy: sellerId,
-          },
-        });
+        if (applied.count > 0) {
+          await tx.orderStatusHistory.create({
+            data: {
+              orderId: orderItem.orderId,
+              status: derivedOrderStatus,
+              notes: historyNote,
+              changedBy: sellerId,
+            },
+          });
+        } else {
+          derivedOrderStatus = null;
+        }
       }
 
       return { updatedItem, derivedOrderStatus };
@@ -558,11 +580,20 @@ export class SellerOrderService {
         data: { status: 'cancelled' },
       });
 
+      // A variant item drew from its own stock pool at order time (see
+      // order.service.ts createOrder), so restore it there, not on the
+      // shared product-level stock it never touched.
+      if (orderItem.variantId) {
+        await tx.productVariant.update({
+          where: { id: orderItem.variantId },
+          data: { stockQuantity: { increment: orderItem.quantity } },
+        });
+      }
       if (orderItem.productId) {
         await tx.product.update({
           where: { id: orderItem.productId },
           data: {
-            stockQuantity: { increment: orderItem.quantity },
+            ...(orderItem.variantId ? {} : { stockQuantity: { increment: orderItem.quantity } }),
             totalOrders: { decrement: 1 },
           },
         });

@@ -1,3 +1,4 @@
+import { Prisma } from '@prisma/client';
 import prisma from '../config/database';
 import { AppError } from '../middleware/errorHandler';
 
@@ -69,7 +70,7 @@ export class SupportService {
     const limit = Math.min(filters.limit || 20, 100);
     const skip = (page - 1) * limit;
 
-    const where: any = {
+    const where: Prisma.SupportTicketWhereInput = {
       userId,
     };
 
@@ -208,7 +209,7 @@ export class SupportService {
     const limit = Math.min(filters.limit || 20, 100);
     const skip = (page - 1) * limit;
 
-    const where: any = {};
+    const where: Prisma.SupportTicketWhereInput = {};
     if (filters.status) where.status = filters.status;
 
     const [tickets, total] = await Promise.all([

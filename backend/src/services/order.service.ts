@@ -363,24 +363,46 @@ export class OrderService {
       );
 
       // Update stock: variant stock when the item is a specific variant, else the base product.
-      const updatedProducts: Array<{ id: string; sellerId: string; stockQuantity: number }> = [];
+      const updatedProducts: Array<{
+        id: string;
+        sellerId: string;
+        variantId: string | null;
+        stockQuantity: number;
+        stockThreshold: number | null;
+      }> = [];
       for (const item of orderItems) {
         if (item.variantId) {
-          await tx.productVariant.update({
+          const updatedVariant = await tx.productVariant.update({
             where: { id: item.variantId },
             data: { stockQuantity: { decrement: item.quantity } },
           });
+          const updated = await tx.product.update({
+            where: { id: item.productId },
+            data: { totalOrders: { increment: 1 } },
+          });
+          updatedProducts.push({
+            id: updated.id,
+            sellerId: updated.sellerId,
+            variantId: item.variantId,
+            stockQuantity: updatedVariant.stockQuantity,
+            stockThreshold: updatedVariant.stockThreshold,
+          });
+        } else {
+          const updated = await tx.product.update({
+            where: { id: item.productId },
+            data: {
+              stockQuantity: { decrement: item.quantity },
+              totalOrders: { increment: 1 },
+            },
+          });
+          updatedProducts.push({
+            id: updated.id,
+            sellerId: updated.sellerId,
+            variantId: null,
+            stockQuantity: updated.stockQuantity,
+            stockThreshold: null,
+          });
         }
-        const updated = await tx.product.update({
-          where: { id: item.productId },
-          data: {
-            // Only deplete the shared product-level stock when this item didn't
-            // draw from its own separate variant stock pool.
-            ...(item.variantId ? {} : { stockQuantity: { decrement: item.quantity } }),
-            totalOrders: { increment: 1 },
-          },
-        });
-        updatedProducts.push({ id: updated.id, sellerId: updated.sellerId, stockQuantity: updated.stockQuantity });
       }
 
       // Create inventory reservations
@@ -433,15 +455,19 @@ export class OrderService {
     // Fire low-stock / out-of-stock alerts for any product this order just depleted.
     // Done outside the transaction since it's not order-critical and sends email.
     for (const p of order.updatedProducts) {
-      const seller = await prisma.seller.findUnique({
-        where: { id: p.sellerId },
-        select: { lowStockThreshold: true },
-      });
-      const threshold = seller?.lowStockThreshold ?? 10;
+      let threshold = p.stockThreshold ?? 10;
+      if (p.stockThreshold == null) {
+        const seller = await prisma.seller.findUnique({
+          where: { id: p.sellerId },
+          select: { lowStockThreshold: true },
+        });
+        threshold = seller?.lowStockThreshold ?? 10;
+      }
       if (p.stockQuantity <= 0) {
         await createStockAlert({
           sellerId: p.sellerId,
           productId: p.id,
+          variantId: p.variantId,
           alertType: 'out_of_stock',
           currentStock: p.stockQuantity,
           threshold,
@@ -450,6 +476,7 @@ export class OrderService {
         await createStockAlert({
           sellerId: p.sellerId,
           productId: p.id,
+          variantId: p.variantId,
           alertType: 'low_stock',
           currentStock: p.stockQuantity,
           threshold,

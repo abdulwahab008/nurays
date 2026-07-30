@@ -30,7 +30,7 @@ export const getProducts = async (req: Request, res: Response) => {
 export const getProduct = async (req: Request, res: Response) => {
   const { identifier } = req.params;
 
-  const product = await productService.getProductByIdentifier(identifier);
+  const product = await productService.getProductByIdentifier(identifier, req.user?.id);
 
   res.status(200).json({
     success: true,

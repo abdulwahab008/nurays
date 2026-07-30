@@ -227,14 +227,15 @@ export class ProductService {
   }
 
   /**
-   * Get product by ID or slug
+   * Get product by ID or slug. Public visitors only ever see approved
+   * products from active sellers; the product's own seller can always see
+   * it regardless of moderation state (so they can view/edit a pending or
+   * rejected listing on their own dashboard).
    */
-  async getProductByIdentifier(identifier: string) {
+  async getProductByIdentifier(identifier: string, requestingUserId?: string) {
     const product = await prisma.product.findFirst({
       where: {
         OR: [{ id: identifier }, { slug: identifier }],
-        approvalStatus: 'approved',
-        seller: { status: 'active' },
       },
       include: {
         category: true,
@@ -266,7 +267,10 @@ export class ProductService {
       },
     });
 
-    if (!product) {
+    const isOwner = requestingUserId != null && product?.seller.userId === requestingUserId;
+    const isPubliclyVisible = product?.approvalStatus === 'approved' && product?.seller.status === 'active';
+
+    if (!product || (!isPubliclyVisible && !isOwner)) {
       throw new AppError('Product not found', 404, 'PRODUCT_NOT_FOUND');
     }
 

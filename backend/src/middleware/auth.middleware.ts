@@ -170,3 +170,38 @@ export const requireSeller = async (
   }
 };
 
+/**
+ * Blocks a suspended/inactive seller from seller self-service routes
+ * (products, orders, payouts, dashboard). Deliberately does NOT require
+ * verificationStatus === 'approved' like requireSeller does — a seller still
+ * awaiting approval must keep using their own dashboard/profile while pending.
+ */
+export const blockSuspendedSeller = async (
+  req: Request,
+  _res: Response,
+  next: NextFunction
+) => {
+  try {
+    if (!req.user) {
+      throw new AppError('Authentication required', 401, 'AUTH_REQUIRED');
+    }
+
+    const seller = await prisma.seller.findUnique({
+      where: { userId: req.user.id },
+      select: { id: true, status: true },
+    });
+
+    if (seller && seller.status !== 'active') {
+      throw new AppError(`Seller account is ${seller.status}`, 403, 'SELLER_ACCOUNT_INACTIVE');
+    }
+
+    next();
+  } catch (error) {
+    if (error instanceof AppError) {
+      next(error);
+    } else {
+      next(new AppError('Seller status check failed', 403, 'SELLER_STATUS_CHECK_FAILED'));
+    }
+  }
+};
+

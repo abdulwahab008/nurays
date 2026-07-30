@@ -1,3 +1,4 @@
+import { Prisma } from '@prisma/client';
 import prisma from '../config/database';
 import { AppError } from '../middleware/errorHandler';
 
@@ -170,7 +171,7 @@ export class AdminService {
     const limit = Math.min(filters.limit || 20, 100);
     const skip = (page - 1) * limit;
 
-    const where: any = {};
+    const where: Prisma.SellerWhereInput = {};
 
     if (filters.status) {
       where.status = filters.status;
@@ -299,7 +300,7 @@ export class AdminService {
     const limit = Math.min(filters.limit || 20, 100);
     const skip = (page - 1) * limit;
 
-    const where: any = {};
+    const where: Prisma.ProductWhereInput = {};
     if (filters.status) {
       where.approvalStatus = filters.status;
     }
@@ -345,7 +346,7 @@ export class AdminService {
     const limit = Math.min(filters.limit || 20, 100);
     const skip = (page - 1) * limit;
 
-    const where: any = {};
+    const where: Prisma.SellerPayoutWhereInput = {};
     if (filters.status) {
       where.status = filters.status;
     }
@@ -453,14 +454,20 @@ export class AdminService {
     return { ...AdminService.SETTINGS_DEFAULTS, ...saved };
   }
 
+  /** A single platform setting (falls back to its default if never saved). */
+  async getSettingValue<T>(key: keyof typeof AdminService.SETTINGS_DEFAULTS): Promise<T> {
+    const settings = await this.getSettings();
+    return settings[key] as T;
+  }
+
   async updateSettings(data: Record<string, unknown>, adminId: string) {
     const keys = Object.keys(data).filter((k) => k in AdminService.SETTINGS_DEFAULTS);
     await Promise.all(
       keys.map((key) =>
         prisma.systemSetting.upsert({
           where: { key },
-          create: { key, value: data[key] as any, updatedBy: adminId },
-          update: { value: data[key] as any, updatedBy: adminId },
+          create: { key, value: data[key] as Prisma.InputJsonValue, updatedBy: adminId },
+          update: { value: data[key] as Prisma.InputJsonValue, updatedBy: adminId },
         })
       )
     );

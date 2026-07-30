@@ -5,6 +5,7 @@ import { AppError } from '../middleware/errorHandler';
 import bcrypt from 'bcrypt';
 import otpService from './otp.service';
 import emailService from './email.service';
+import adminService from './admin.service';
 import { generateVerificationToken } from '../utils/email-verification';
 
 export class AuthService {
@@ -130,11 +131,17 @@ export class AuthService {
     let seller = null;
     if (userType === 'seller') {
       const sellerBusinessName = businessName?.trim() || fullName.trim() + "'s Kitchen";
+      const commissionRate = await adminService.getSettingValue<number>('commissionRate');
       seller = await prisma.seller.create({
         data: {
           userId: user.id,
           businessName: sellerBusinessName,
-          status: 'pending',
+          commissionRate,
+          // status tracks active/inactive/suspended account standing and
+          // defaults to 'active' — approval state lives in verificationStatus
+          // alone. Setting status:'pending' here was blocking every new
+          // seller from any status-gated route before they'd done anything
+          // wrong.
           verificationStatus: 'pending',
         },
       });

@@ -232,8 +232,6 @@ export class CartService {
     }
 
     const productId = product.id;
-    const effectiveStockType = data.stockType || product.stockType;
-    const effectiveHubId = data.hubId || null;
 
     // Resolve the variant, if one was requested — it drives price + stock instead of the base product.
     let variant = null;
@@ -245,6 +243,13 @@ export class CartService {
         throw new AppError('Product variant not found', 404, 'VARIANT_NOT_FOUND');
       }
     }
+
+    // HubInventory only tracks stock per product, not per variant — a variant
+    // has no hub-scoped stock to validate against, so force direct fulfillment
+    // rather than silently checking the variant's total stock as if it were
+    // this hub's stock.
+    const effectiveStockType = variant ? 'direct' : (data.stockType || product.stockType);
+    const effectiveHubId = variant ? null : (data.hubId || null);
 
     // Resolve available stock: variant stock takes priority, then hub inventory, else product stock
     let availableStock = variant ? variant.stockQuantity : product.stockQuantity;

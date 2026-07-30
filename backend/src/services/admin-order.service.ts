@@ -3,6 +3,29 @@ import { AppError } from '../middleware/errorHandler';
 import realtimeOrderService from './realtime-order.service';
 import riderService from './rider.service';
 
+// The main happy-path order pipeline — admin can only move an order exactly
+// one step forward at a time (no skipping straight to 'dispatched'/'delivered',
+// which would leave the rider layer never dispatched for that order).
+const ORDER_FORWARD_SEQUENCE = [
+  'pending',
+  'confirmed',
+  'preparing',
+  'ready',
+  'dispatched',
+  'in_transit',
+  'delivered',
+  'completed',
+];
+
+function isValidOrderStatusTransition(from: string, to: string): boolean {
+  if (to === 'refunded') return from !== 'refunded';
+  if (to === 'cancelled') return !['delivered', 'completed', 'cancelled', 'refunded'].includes(from);
+  const fromIndex = ORDER_FORWARD_SEQUENCE.indexOf(from);
+  const toIndex = ORDER_FORWARD_SEQUENCE.indexOf(to);
+  if (fromIndex === -1 || toIndex === -1) return false;
+  return toIndex === fromIndex + 1;
+}
+
 export class AdminOrderService {
   /**
    * Get all orders (admin)
@@ -273,6 +296,14 @@ export class AdminOrderService {
       throw new AppError(`Invalid status: ${status}`, 400, 'INVALID_STATUS');
     }
 
+    if (!isValidOrderStatusTransition(order.orderStatus, status)) {
+      throw new AppError(
+        `Cannot move an order from "${order.orderStatus}" to "${status}"`,
+        400,
+        'INVALID_STATUS_TRANSITION'
+      );
+    }
+
     // Update order status
     const updatedOrder = await prisma.order.update({
       where: { id: orderId },
@@ -342,13 +373,21 @@ export class AdminOrderService {
         data: { status: 'cancelled' },
       });
 
-      // Restore product stock
+      // Restore stock — a variant item drew from its own stock pool at order
+      // time (see order.service.ts createOrder), so it must be restored there,
+      // not on the shared product-level stock it never touched.
       for (const item of order.items) {
+        if (item.variantId) {
+          await tx.productVariant.update({
+            where: { id: item.variantId },
+            data: { stockQuantity: { increment: item.quantity } },
+          });
+        }
         if (item.productId) {
           await tx.product.update({
             where: { id: item.productId },
             data: {
-              stockQuantity: { increment: item.quantity },
+              ...(item.variantId ? {} : { stockQuantity: { increment: item.quantity } }),
               totalOrders: { decrement: 1 },
             },
           });
