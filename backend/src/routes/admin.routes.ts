@@ -4,11 +4,27 @@ import {
   getAllSellers,
   getSellerById,
   approveRejectSeller,
+  updateSellerStatus,
+  getProductsForModeration,
   moderateProduct,
+  getPayouts,
+  completePayout,
+  failPayout,
+  getSettings,
+  updateSettings,
 } from '../controllers/admin.controller';
+import { adminGetTickets, adminGetTicketDetail, adminReplyToTicket } from '../controllers/support.controller';
 import { authenticate, authorize } from '../middleware/auth.middleware';
 import { validate } from '../middleware/validation.middleware';
-import { approveRejectSellerSchema, moderateProductSchema } from '../validators/admin.validator';
+import {
+  approveRejectSellerSchema,
+  moderateProductSchema,
+  updateSellerStatusSchema,
+  completePayoutSchema,
+  failPayoutSchema,
+  updateSettingsSchema,
+} from '../validators/admin.validator';
+import { adminReplySchema } from '../validators/support.validator';
 
 const router = Router();
 
@@ -28,8 +44,28 @@ router.get('/sellers/:id', getSellerById);
 router.post('/sellers/:id/approve', validate(approveRejectSellerSchema), approveRejectSeller);
 router.post('/sellers/:id/reject', validate(approveRejectSellerSchema), approveRejectSeller);
 
+// Suspend/reactivate an already-approved seller
+router.post('/sellers/:id/status', validate(updateSellerStatusSchema), updateSellerStatus);
+
+// List products for moderation
+router.get('/products', getProductsForModeration);
+
 // Moderate product
 router.post('/products/:id/moderate', validate(moderateProductSchema), moderateProduct);
+
+// List / complete / fail seller payout requests
+router.get('/payouts', getPayouts);
+router.post('/payouts/:id/complete', validate(completePayoutSchema), completePayout);
+router.post('/payouts/:id/fail', validate(failPayoutSchema), failPayout);
+
+// Platform settings
+router.get('/settings', getSettings);
+router.patch('/settings', validate(updateSettingsSchema), updateSettings);
+
+// Support tickets
+router.get('/support/tickets', adminGetTickets);
+router.get('/support/tickets/:id', adminGetTicketDetail);
+router.post('/support/tickets/:id/reply', validate(adminReplySchema), adminReplyToTicket);
 
 export default router;
 

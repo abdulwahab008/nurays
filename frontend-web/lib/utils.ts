@@ -5,6 +5,13 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
 
+// Must match the tax calculation in backend/src/services/order.service.ts (createOrder)
+export const GST_RATE = 0.05;
+
+export function calculateGst(subtotalAfterDiscount: number): number {
+  return Math.round(subtotalAfterDiscount * GST_RATE * 100) / 100;
+}
+
 export function formatPrice(price: number): string {
   return new Intl.NumberFormat('en-PK', {
     style: 'currency',

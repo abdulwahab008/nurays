@@ -206,8 +206,12 @@ export class UserProfileService {
     longitude?: number;
     isDefault?: boolean;
   }) {
+    // A user's very first address is always their default, regardless of what was passed.
+    const existingCount = await prisma.userAddress.count({ where: { userId } });
+    const isDefault = data.isDefault || existingCount === 0;
+
     // If this is set as default, unset other defaults
-    if (data.isDefault) {
+    if (isDefault) {
       await prisma.userAddress.updateMany({
         where: { userId, isDefault: true },
         data: { isDefault: false },
@@ -226,7 +230,7 @@ export class UserProfileService {
         landmark: data.landmark,
         latitude: data.latitude,
         longitude: data.longitude,
-        isDefault: data.isDefault ?? false,
+        isDefault,
       },
     });
 

@@ -132,11 +132,13 @@ export default function ProfilePage() {
               </p>
               <div className="flex items-center justify-center gap-2 mb-4">
                 <span className={`px-3 py-1 rounded-full text-xs font-medium ${
-                  profile?.userType === 'seller' 
-                    ? 'bg-purple-100 text-purple-800' 
+                  profile?.userType === 'seller'
+                    ? 'bg-purple-100 text-purple-800'
+                    : profile?.userType === 'rider'
+                    ? 'bg-orange-100 text-orange-800'
                     : 'bg-green-100 text-green-800'
                 }`}>
-                  {profile?.userType === 'seller' ? '🏪 Seller' : '🛒 Customer'}
+                  {profile?.userType === 'seller' ? '🏪 Seller' : profile?.userType === 'rider' ? '🛵 Rider' : '🛒 Customer'}
                 </span>
                 {profile?.isEmailVerified && (
                   <span className="px-3 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
@@ -335,7 +337,7 @@ export default function ProfilePage() {
                 <div className="p-4 bg-gray-50 rounded-xl">
                   <p className="text-xs text-gray-500 uppercase tracking-wide mb-1">Account Type</p>
                   <p className="font-semibold text-gray-900 flex items-center gap-2">
-                    <span>{profile?.userType === 'seller' ? '🏪' : '🛒'}</span>
+                    <span>{profile?.userType === 'seller' ? '🏪' : profile?.userType === 'rider' ? '🛵' : '🛒'}</span>
                     <span className="capitalize">{profile?.userType || 'Customer'}</span>
                   </p>
                 </div>

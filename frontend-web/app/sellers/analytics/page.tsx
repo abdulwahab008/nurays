@@ -69,15 +69,13 @@ interface AnalyticsData {
     total: number;
   };
   orders: {
-    today: number;
-    thisWeek: number;
-    thisMonth: number;
     total: number;
+    completed: number;
+    cancelled: number;
   };
   topProducts: Array<{
-    id: string;
     name: string;
-    sales: number;
+    quantity: number;
     revenue: number;
   }>;
 }
@@ -117,7 +115,7 @@ export default function SellerAnalyticsPage() {
       setAnalytics({
         sales: { today: 0, thisWeek: 0, thisMonth: 0, total: 0 },
         revenue: { today: 0, thisWeek: 0, thisMonth: 0, total: 0 },
-        orders: { today: 0, thisWeek: 0, thisMonth: 0, total: 0 },
+        orders: { total: 0, completed: 0, cancelled: 0 },
         topProducts: [],
       });
     } finally {
@@ -233,7 +231,7 @@ export default function SellerAnalyticsPage() {
                   <div className="space-y-3">
                     {analytics.topProducts.map((product, index) => (
                       <div
-                        key={product.id}
+                        key={`${product.name}-${index}`}
                         className="flex items-center justify-between p-4 bg-gray-50 rounded-xl hover:bg-gray-100 transition-colors"
                       >
                         <div className="flex items-center gap-4">
@@ -247,7 +245,7 @@ export default function SellerAnalyticsPage() {
                           </div>
                           <div>
                             <p className="font-semibold text-gray-900">{product.name}</p>
-                            <p className="text-sm text-gray-500">{product.sales} units sold</p>
+                            <p className="text-sm text-gray-500">{product.quantity} units sold</p>
                           </div>
                         </div>
                         <div className="text-right">

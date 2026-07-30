@@ -14,7 +14,7 @@ import {
   updateProductSchema,
   getSellerProductsQuerySchema,
 } from '../validators/product.validator';
-import { authenticate, authorize } from '../middleware/auth.middleware';
+import { authenticate, authorize, blockSuspendedSeller, optionalAuthenticate } from '../middleware/auth.middleware';
 
 const router = Router();
 
@@ -26,6 +26,7 @@ router.get(
   '/seller/my-products',
   authenticate,
   authorize('seller'),
+  blockSuspendedSeller,
   validateQuery(getSellerProductsQuerySchema),
   getSellerProducts
 );
@@ -34,6 +35,7 @@ router.post(
   '/',
   authenticate,
   authorize('seller'),
+  blockSuspendedSeller,
   validate(createProductSchema),
   createProduct
 );
@@ -42,6 +44,7 @@ router.patch(
   '/:id',
   authenticate,
   authorize('seller'),
+  blockSuspendedSeller,
   validate(updateProductSchema),
   updateProduct
 );
@@ -50,11 +53,12 @@ router.delete(
   '/:id',
   authenticate,
   authorize('seller'),
+  blockSuspendedSeller,
   deleteProduct
 );
 
 // This route must come LAST because /:identifier matches anything
-router.get('/:identifier', getProduct);
+router.get('/:identifier', optionalAuthenticate, getProduct);
 
 export default router;
 

@@ -65,6 +65,7 @@ interface EarningsData {
     amount: number;
     netAmount: number;
     status: string;
+    payoutMethod: string;
     requestedAt: string;
     processedAt?: string;
   }>;
@@ -77,6 +78,9 @@ export default function SellerEarningsPage() {
   const [loading, setLoading] = useState(true);
   const [earnings, setEarnings] = useState<EarningsData | null>(null);
   const [requestingPayout, setRequestingPayout] = useState(false);
+  const [showPayoutForm, setShowPayoutForm] = useState(false);
+  const [payoutMethod, setPayoutMethod] = useState<'bank_transfer' | 'jazzcash' | 'easypaisa'>('jazzcash');
+  const [accountNumber, setAccountNumber] = useState('');
 
   useEffect(() => {
     if (!isAuthenticated) {
@@ -96,15 +100,17 @@ export default function SellerEarningsPage() {
   const loadEarnings = async () => {
     try {
       setLoading(true);
-      // Get dashboard data which includes earnings
-      const response = await apiClient.get('/sellers/me/dashboard');
-      if (response.data.success) {
-        const dashboard = response.data.data;
+      const [dashboardRes, payoutsRes] = await Promise.all([
+        apiClient.get('/sellers/me/dashboard'),
+        apiClient.get('/sellers/me/payouts'),
+      ]);
+      if (dashboardRes.data.success) {
+        const dashboard = dashboardRes.data.data;
         setEarnings({
           totalEarnings: dashboard.overview?.totalEarnings || 0,
           pendingPayout: dashboard.overview?.pendingPayout || 0,
           availableBalance: (dashboard.overview?.totalEarnings || 0) - (dashboard.overview?.pendingPayout || 0),
-          payouts: [], // This would come from a separate endpoint
+          payouts: payoutsRes.data.success ? payoutsRes.data.data : [],
         });
       }
     } catch (error: any) {
@@ -120,14 +126,22 @@ export default function SellerEarningsPage() {
       showToast('No available balance to withdraw', 'warning');
       return;
     }
+    if (!accountNumber.trim()) {
+      showToast('Please enter the account number to receive the payout', 'warning');
+      return;
+    }
 
     try {
       setRequestingPayout(true);
       const response = await apiClient.post('/sellers/me/payouts', {
         amount: earnings.availableBalance,
+        payoutMethod,
+        accountNumber: accountNumber.trim(),
       });
       if (response.data.success) {
         showToast('Payout request submitted successfully', 'success');
+        setShowPayoutForm(false);
+        setAccountNumber('');
         loadEarnings();
       }
     } catch (error: any) {
@@ -222,25 +236,69 @@ export default function SellerEarningsPage() {
                     </p>
                     <p className="text-sm text-gray-400 mt-1">Payouts are processed within 3-5 business days via JazzCash/EasyPaisa</p>
                   </div>
-                  <Button
-                    onClick={handleRequestPayout}
-                    disabled={requestingPayout || earnings.availableBalance <= 0}
-                    className="bg-emerald-500 hover:bg-emerald-600 text-white shadow-lg shadow-emerald-200 flex items-center gap-2 px-6"
-                    size="lg"
-                  >
-                    {requestingPayout ? (
-                      <>
-                        <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                        Processing...
-                      </>
-                    ) : (
-                      <>
-                        {Icons.withdraw}
-                        Request Payout
-                      </>
-                    )}
-                  </Button>
+                  {!showPayoutForm && (
+                    <Button
+                      onClick={() => setShowPayoutForm(true)}
+                      className="bg-emerald-500 hover:bg-emerald-600 text-white shadow-lg shadow-emerald-200 flex items-center gap-2 px-6"
+                      size="lg"
+                    >
+                      {Icons.withdraw}
+                      Request Payout
+                    </Button>
+                  )}
                 </div>
+
+                {showPayoutForm && (
+                  <div className="mt-5 pt-5 border-t border-gray-100 space-y-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">Receive via</label>
+                      <select
+                        value={payoutMethod}
+                        onChange={(e) => setPayoutMethod(e.target.value as typeof payoutMethod)}
+                        className="w-full md:w-64 px-4 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                      >
+                        <option value="jazzcash">JazzCash</option>
+                        <option value="easypaisa">EasyPaisa</option>
+                        <option value="bank_transfer">Bank Transfer</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        {payoutMethod === 'bank_transfer' ? 'Bank account number' : 'Mobile wallet number'}
+                      </label>
+                      <input
+                        type="text"
+                        value={accountNumber}
+                        onChange={(e) => setAccountNumber(e.target.value)}
+                        placeholder={payoutMethod === 'bank_transfer' ? 'e.g., PK00HABB0000000000000000' : 'e.g., 03001234567'}
+                        className="w-full md:w-80 px-4 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                      />
+                    </div>
+                    <div className="flex gap-3">
+                      <Button
+                        onClick={handleRequestPayout}
+                        disabled={requestingPayout || !accountNumber.trim()}
+                        className="bg-emerald-500 hover:bg-emerald-600 text-white flex items-center gap-2 px-6"
+                      >
+                        {requestingPayout ? (
+                          <>
+                            <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                            Submitting...
+                          </>
+                        ) : (
+                          'Confirm Request'
+                        )}
+                      </Button>
+                      <Button
+                        variant="outline"
+                        onClick={() => { setShowPayoutForm(false); setAccountNumber(''); }}
+                        disabled={requestingPayout}
+                      >
+                        Cancel
+                      </Button>
+                    </div>
+                  </div>
+                )}
               </div>
             )}
 

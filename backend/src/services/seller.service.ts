@@ -1,5 +1,6 @@
 import prisma from '../config/database';
 import { AppError } from '../middleware/errorHandler';
+import adminService from './admin.service';
 
 export class SellerService {
   /**
@@ -36,7 +37,9 @@ export class SellerService {
       throw new AppError('User not found', 404, 'USER_NOT_FOUND');
     }
 
-    // Create seller account
+    // Create seller account — commissionRate comes from the platform setting
+    // at signup time; each seller's own rate can still be adjusted later.
+    const commissionRate = await adminService.getSettingValue<number>('commissionRate');
     const seller = await prisma.seller.create({
       data: {
         userId,
@@ -45,10 +48,12 @@ export class SellerService {
         description: data.description,
         kitchenVideoUrl: data.kitchenVideoUrl,
         coverImageUrl: data.coverImageUrl,
+        commissionRate,
         // CNIC and kitchen photos should be stored via SellerDocument model
         // For now, we'll skip these fields
+        // status tracks active/inactive/suspended account standing (defaults
+        // to 'active') — approval state lives in verificationStatus alone.
         verificationStatus: 'pending',
-        status: 'pending',
       },
     });
 
@@ -88,6 +93,11 @@ export class SellerService {
       coverImageUrl: seller.coverImageUrl,
       jazzcashNumber: seller.jazzcashNumber,
       easypaisaNumber: seller.easypaisaNumber,
+      bankAccountName: seller.bankAccountName,
+      bankAccountNumber: seller.bankAccountNumber,
+      bankName: seller.bankName,
+      lowStockThreshold: seller.lowStockThreshold,
+      enableStockAlerts: seller.enableStockAlerts,
       freeDeliveryAreas: (seller.freeDeliveryAreas as string[] | null) ?? [],
       freeDeliveryRadiusKm: seller.freeDeliveryRadiusKm != null ? Number(seller.freeDeliveryRadiusKm) : null,
       latitude: seller.latitude != null ? Number(seller.latitude) : null,
@@ -117,6 +127,11 @@ export class SellerService {
       coverImageUrl?: string;
       jazzcashNumber?: string;
       easypaisaNumber?: string;
+      bankAccountName?: string;
+      bankAccountNumber?: string;
+      bankName?: string;
+      lowStockThreshold?: number;
+      enableStockAlerts?: boolean;
       freeDeliveryAreas?: string[];
       freeDeliveryRadiusKm?: number | null;
       latitude?: number | null;
@@ -143,6 +158,11 @@ export class SellerService {
     if (data.coverImageUrl !== undefined) updateData.coverImageUrl = data.coverImageUrl || null;
     if (data.jazzcashNumber !== undefined) updateData.jazzcashNumber = data.jazzcashNumber || null;
     if (data.easypaisaNumber !== undefined) updateData.easypaisaNumber = data.easypaisaNumber || null;
+    if (data.bankAccountName !== undefined) updateData.bankAccountName = data.bankAccountName || null;
+    if (data.bankAccountNumber !== undefined) updateData.bankAccountNumber = data.bankAccountNumber || null;
+    if (data.bankName !== undefined) updateData.bankName = data.bankName || null;
+    if (data.lowStockThreshold !== undefined) updateData.lowStockThreshold = data.lowStockThreshold;
+    if (data.enableStockAlerts !== undefined) updateData.enableStockAlerts = data.enableStockAlerts;
     if (data.freeDeliveryAreas !== undefined) updateData.freeDeliveryAreas = data.freeDeliveryAreas;
     if (data.freeDeliveryRadiusKm !== undefined) updateData.freeDeliveryRadiusKm = data.freeDeliveryRadiusKm;
     if (data.latitude !== undefined) updateData.latitude = data.latitude;
@@ -166,7 +186,12 @@ export class SellerService {
       coverImageUrl: updated.coverImageUrl,
       jazzcashNumber: updated.jazzcashNumber,
       easypaisaNumber: updated.easypaisaNumber,
-      freeDeliveryAreas: updated.freeDeliveryAreas as string[] | null,
+      bankAccountName: updated.bankAccountName,
+      bankAccountNumber: updated.bankAccountNumber,
+      bankName: updated.bankName,
+      lowStockThreshold: updated.lowStockThreshold,
+      enableStockAlerts: updated.enableStockAlerts,
+      freeDeliveryAreas: (updated.freeDeliveryAreas as string[] | null) ?? [],
       freeDeliveryRadiusKm: updated.freeDeliveryRadiusKm != null ? Number(updated.freeDeliveryRadiusKm) : null,
       latitude: updated.latitude != null ? Number(updated.latitude) : null,
       longitude: updated.longitude != null ? Number(updated.longitude) : null,
@@ -424,6 +449,22 @@ export class SellerService {
       return sum + Number(item.sellerPayout);
     }, 0);
 
+    // Period breakdowns for the dashboard's Today / This Week / This Month cards
+    const dayStart = new Date(now);
+    dayStart.setHours(0, 0, 0, 0);
+    const weekStart = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+    const monthStart = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+
+    const sumSince = (since: Date) =>
+      completedItems
+        .filter((item) => item.order?.createdAt && item.order.createdAt >= since)
+        .reduce((sum, item) => sum + Number(item.sellerPayout), 0);
+
+    const countSince = (since: Date) =>
+      completedItems
+        .filter((item) => item.order?.createdAt && item.order.createdAt >= since)
+        .reduce((sum, item) => sum + item.quantity, 0);
+
     // Calculate daily revenue
     const dailyRevenue: Record<string, number> = {};
     completedItems.forEach((item) => {
@@ -465,7 +506,16 @@ export class SellerService {
       .slice(0, 10);
 
     return {
+      sales: {
+        today: countSince(dayStart),
+        thisWeek: countSince(weekStart),
+        thisMonth: countSince(monthStart),
+        total: completedItems.reduce((sum, item) => sum + item.quantity, 0),
+      },
       revenue: {
+        today: sumSince(dayStart),
+        thisWeek: sumSince(weekStart),
+        thisMonth: sumSince(monthStart),
         total: totalRevenue,
         graph: revenueGraph,
       },
@@ -511,18 +561,21 @@ export class SellerService {
       return sum + Number(item.sellerPayout);
     }, 0);
 
-    // Get already paid out amount
-    const completedPayouts = await prisma.sellerPayout.findMany({
+    // Get already paid out AND already-requested-but-not-yet-processed amounts —
+    // a pending payout must reserve its amount too, or a seller could submit
+    // several requests back-to-back before any of them are processed and
+    // collectively withdraw more than they've actually earned.
+    const outstandingPayouts = await prisma.sellerPayout.findMany({
       where: {
         sellerId,
-        status: 'completed',
+        status: { in: ['completed', 'pending'] },
       },
       select: {
         netAmount: true,
       },
     });
 
-    const paidOut = completedPayouts.reduce((sum, payout) => {
+    const paidOut = outstandingPayouts.reduce((sum, payout) => {
       return sum + Number(payout.netAmount);
     }, 0);
 
@@ -539,7 +592,7 @@ export class SellerService {
 
     const minimumAmount = schedule?.minimumPayoutAmount
       ? Number(schedule.minimumPayoutAmount)
-      : 1000;
+      : await adminService.getSettingValue<number>('minPayoutAmount');
 
     if (data.amount < minimumAmount) {
       throw new AppError(
@@ -549,10 +602,11 @@ export class SellerService {
       );
     }
 
-    // Calculate commission (platform commission rate)
-    const commissionRate = 0.15; // 15% platform commission
-    const commissionDeducted = data.amount * commissionRate;
-    const netAmount = data.amount - commissionDeducted;
+    // No further commission here: order_items.seller_payout is already net of the
+    // seller's commission_rate at order time (see order.service.ts createOrder),
+    // so the requested amount is what the seller actually receives.
+    const commissionDeducted = 0;
+    const netAmount = data.amount;
 
     // Create payout request
     const payout = await prisma.sellerPayout.create({
@@ -576,6 +630,27 @@ export class SellerService {
       status: payout.status,
       estimatedProcessing: '2-3 business days',
     };
+  }
+
+  /**
+   * Get a seller's own payout request history
+   */
+  async getPayoutHistory(sellerId: string) {
+    const payouts = await prisma.sellerPayout.findMany({
+      where: { sellerId },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    return payouts.map((p) => ({
+      id: p.id,
+      amount: Number(p.amount),
+      netAmount: Number(p.netAmount),
+      status: p.status,
+      payoutMethod: p.payoutMethod,
+      requestedAt: p.createdAt,
+      processedAt: p.processedAt,
+      failedReason: p.failedReason,
+    }));
   }
 }
 

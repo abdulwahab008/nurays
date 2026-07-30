@@ -22,7 +22,7 @@ import Link from 'next/link';
 import { cartService, CartResponse } from '@/lib/services/cart.service';
 import { addressService, Address } from '@/lib/services/address.service';
 import { orderService, CreateOrderRequest } from '@/lib/services/order.service';
-import { formatPrice } from '@/lib/utils';
+import { formatPrice, calculateGst } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/toast';
 import { useAuthStore } from '@/lib/store/auth-store';
@@ -167,6 +167,7 @@ export default function CheckoutPage() {
       // Convert cart items to order items (backend expects camelCase)
       const orderItems = cart!.items.map((item) => ({
         productId: item.product.id,
+        variantId: item.variant?.id,
         quantity: item.quantity,
         stockType: item.stockType || 'direct',
         hubId: item.hubId ?? undefined,
@@ -488,8 +489,9 @@ export default function CheckoutPage() {
                       setPromoValidating(true);
                       try {
                         const discountedSub = cart.items.reduce((s, it) => {
+                          const base = it.variant?.price ?? it.product.price;
                           const promos = promotionsByProductId[it.product.id] || [];
-                          const unit = promos.length ? getStackedDiscountedPrice(it.product.price, promos) : it.product.price;
+                          const unit = promos.length ? getStackedDiscountedPrice(base, promos) : base;
                           return s + unit * it.quantity;
                         }, 0);
                         const res = await apiClient.post<{ success: boolean; data: { code: string; discountAmount: number } }>(
@@ -528,8 +530,9 @@ Order Summary
               {/* Items Preview with catalog deal prices */}
               {(() => {
                 const discountedSubtotal = cart.items.reduce((sum, item) => {
+                  const base = item.variant?.price ?? item.product.price;
                   const promos = promotionsByProductId[item.product.id] || [];
-                  const unitPrice = promos.length > 0 ? getStackedDiscountedPrice(item.product.price, promos) : item.product.price;
+                  const unitPrice = promos.length > 0 ? getStackedDiscountedPrice(base, promos) : base;
                   return sum + unitPrice * item.quantity;
                 }, 0);
                 const promotionSavings = Math.max(0, cart.summary.subtotal - discountedSubtotal);
@@ -537,8 +540,9 @@ Order Summary
                   <>
                     <div className="space-y-3 mb-4 max-h-48 overflow-y-auto">
                       {cart.items.slice(0, 5).map((item) => {
+                        const base = item.variant?.price ?? item.product.price;
                         const promos = promotionsByProductId[item.product.id] || [];
-                        const unitPrice = promos.length > 0 ? getStackedDiscountedPrice(item.product.price, promos) : item.product.price;
+                        const unitPrice = promos.length > 0 ? getStackedDiscountedPrice(base, promos) : base;
                         const lineTotal = unitPrice * item.quantity;
                         const label = promos.length > 0 ? promos.map(getPromotionLabel).join(' + ') : null;
                         return (
@@ -548,11 +552,12 @@ Order Summary
                             </div>
                             <div className="flex-1 min-w-0">
                               <p className="text-sm font-medium text-gray-900 truncate">{item.product.name}</p>
+                              {item.variant && <p className="text-xs text-gray-500 truncate">{item.variant.name}</p>}
                               <p className="text-xs text-gray-500">x{item.quantity}</p>
                               {label && <p className="text-xs text-green-600 font-medium">{label}</p>}
                             </div>
                             <div className="text-right flex-shrink-0">
-                              {promos.length > 0 && item.product.price > unitPrice && (
+                              {promos.length > 0 && base > unitPrice && (
                                 <p className="text-xs text-gray-400 line-through">{formatPrice(item.subtotal)}</p>
                               )}
                               <p className="text-sm font-medium">{formatPrice(lineTotal)}</p>
@@ -618,18 +623,26 @@ Order Summary
                     <span>-{formatPrice(cart.summary.discount)}</span>
                   </div>
                 )}
-                <div className="border-t border-gray-100 pt-3">
-                  <div className="flex justify-between font-bold text-lg">
-                    <span>Total</span>
-                    <span className="text-green-600">
-                      {formatPrice(
-                        discountedSubtotal +
-                          (deliveryEstimate ? deliveryEstimate.deliveryFee : cart.summary.deliveryFee) -
-                          (appliedPromo?.discountAmount ?? cart.summary.discount)
-                      )}
-                    </span>
-                  </div>
-                </div>
+                {(() => {
+                  const discount = appliedPromo?.discountAmount ?? cart.summary.discount;
+                  const deliveryFee = deliveryEstimate ? deliveryEstimate.deliveryFee : cart.summary.deliveryFee;
+                  const gst = calculateGst(Math.max(0, discountedSubtotal - discount));
+                  const total = discountedSubtotal + deliveryFee - discount + gst;
+                  return (
+                    <>
+                      <div className="flex justify-between text-gray-600">
+                        <span>GST (5%)</span>
+                        <span>{formatPrice(gst)}</span>
+                      </div>
+                      <div className="border-t border-gray-100 pt-3">
+                        <div className="flex justify-between font-bold text-lg">
+                          <span>Total</span>
+                          <span className="text-green-600">{formatPrice(total)}</span>
+                        </div>
+                      </div>
+                    </>
+                  );
+                })()}
               </div>
                   </>
                 );

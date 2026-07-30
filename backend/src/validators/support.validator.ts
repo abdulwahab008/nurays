@@ -14,3 +14,12 @@ export const getUserTicketsQuerySchema = z.object({
   limit: z.coerce.number().int().min(1).max(100).optional(),
 });
 
+export const addMessageSchema = z.object({
+  message: z.string().min(1, 'Message cannot be empty'),
+});
+
+export const adminReplySchema = z.object({
+  message: z.string().min(1, 'Message cannot be empty'),
+  status: z.enum(['open', 'in_progress', 'resolved', 'closed']).optional(),
+});
+

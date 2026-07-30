@@ -125,3 +125,25 @@ export const requestPayout = async (req: Request, res: Response) => {
   });
 };
 
+export const getPayoutHistory = async (req: Request, res: Response) => {
+  if (!req.user) {
+    throw new AppError('Authentication required', 401, 'AUTH_REQUIRED');
+  }
+
+  const seller = await prisma.seller.findUnique({
+    where: { userId: req.user.userId },
+    select: { id: true },
+  });
+
+  if (!seller) {
+    throw new AppError('Seller account not found', 404, 'SELLER_NOT_FOUND');
+  }
+
+  const payouts = await sellerService.getPayoutHistory(seller.id);
+
+  res.status(200).json({
+    success: true,
+    data: payouts,
+  });
+};
+

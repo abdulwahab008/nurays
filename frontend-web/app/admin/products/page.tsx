@@ -48,8 +48,7 @@ export default function AdminProductsPage() {
   const loadProducts = async () => {
     try {
       setLoading(true);
-      // Note: This endpoint might need to be created in the backend
-      const response = await apiClient.get(`/products?moderationStatus=${filter !== 'all' ? filter : ''}`);
+      const response = await apiClient.get(`/admin/products${filter !== 'all' ? `?moderationStatus=${filter}` : ''}`);
       if (response.data.success) {
         setProducts(response.data.data.products || []);
       } else {

@@ -188,8 +188,8 @@ export default function AdminAnalyticsPage() {
                     <span className="font-semibold text-gray-900">{analytics.orders?.thisMonth ?? 0}</span>
                   </div>
                   <div className="flex justify-between border-t pt-3">
-                    <span className="font-medium text-gray-900">Total</span>
-                    <span className="font-bold text-green-600">{analytics.orders?.total ?? analytics.overview?.totalOrders ?? 0}</span>
+                    <span className="font-medium text-gray-900">Total (all time)</span>
+                    <span className="font-bold text-green-600">{analytics.overview?.totalOrders ?? 0}</span>
                   </div>
                 </div>
               </div>

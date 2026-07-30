@@ -460,7 +460,7 @@ export default function AddProductPage() {
             await apiClient.post('/product-variants/bulk', variantData);
             
             showToast(
-              `Product created with ${variants.length} variant${variants.length > 1 ? 's' : ''}! It's now live.`,
+              `Product created with ${variants.length} variant${variants.length > 1 ? 's' : ''}! It'll go live once approved by an admin.`,
               'success'
             );
           } catch (variantError: any) {
@@ -471,7 +471,7 @@ export default function AddProductPage() {
             );
           }
         } else {
-          showToast('Product added successfully! It\'s now live.', 'success');
+          showToast('Product submitted for review! It\'ll go live once approved by an admin.', 'success');
         }
         
         router.push('/sellers/products');

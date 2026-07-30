@@ -299,15 +299,25 @@ export default function SellerProductsPage() {
                       <span className="text-xs text-gray-400">No image</span>
                     </div>
                   )}
-                  {/* Live/Hidden Status Badge */}
+                  {/* Moderation / Live-Hidden Status Badge */}
                   <div className="absolute top-3 right-3">
-                    <span className={`px-3 py-1 rounded-full text-xs font-semibold shadow-sm ${
-                      product.isActive 
-                        ? 'bg-emerald-500 text-white' 
-                        : 'bg-gray-400 text-white'
-                    }`}>
-                      {product.isActive ? '● Live' : '○ Hidden'}
-                    </span>
+                    {product.approvalStatus === 'pending' ? (
+                      <span className="px-3 py-1 rounded-full text-xs font-semibold shadow-sm bg-amber-500 text-white">
+                        ⏳ Pending review
+                      </span>
+                    ) : product.approvalStatus === 'rejected' ? (
+                      <span className="px-3 py-1 rounded-full text-xs font-semibold shadow-sm bg-red-500 text-white">
+                        ✕ Rejected
+                      </span>
+                    ) : (
+                      <span className={`px-3 py-1 rounded-full text-xs font-semibold shadow-sm ${
+                        product.isActive
+                          ? 'bg-emerald-500 text-white'
+                          : 'bg-gray-400 text-white'
+                      }`}>
+                        {product.isActive ? '● Live' : '○ Hidden'}
+                      </span>
+                    )}
                   </div>
                   {/* Product Type Badge */}
                   <div className="absolute top-3 left-3">

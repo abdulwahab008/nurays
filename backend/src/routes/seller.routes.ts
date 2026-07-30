@@ -6,8 +6,9 @@ import {
   getSellerDashboard,
   getSellerAnalytics,
   requestPayout,
+  getPayoutHistory,
 } from '../controllers/seller.controller';
-import { authenticate, authorize } from '../middleware/auth.middleware';
+import { authenticate, authorize, blockSuspendedSeller } from '../middleware/auth.middleware';
 import { validate } from '../middleware/validation.middleware';
 import { registerSellerSchema, updateSellerSchema, requestPayoutSchema } from '../validators/seller.validator';
 
@@ -19,6 +20,7 @@ router.post('/register', authenticate, validate(registerSellerSchema), registerA
 // All other routes require seller role
 router.use(authenticate);
 router.use(authorize('seller'));
+router.use(blockSuspendedSeller);
 
 // Get / update current seller profile (must be before /me/dashboard so /me matches first)
 router.get('/me', getCurrentSeller);
@@ -30,8 +32,9 @@ router.get('/me/dashboard', getSellerDashboard);
 // Get seller analytics
 router.get('/me/analytics', getSellerAnalytics);
 
-// Request payout
+// Request payout / list own payout history
 router.post('/me/payouts', validate(requestPayoutSchema), requestPayout);
+router.get('/me/payouts', getPayoutHistory);
 
 export default router;
 

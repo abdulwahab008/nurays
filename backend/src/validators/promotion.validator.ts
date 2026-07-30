@@ -25,6 +25,9 @@ export const createPromotionSchema = z.object({
 }).refine((data) => data.applyTo !== 'selected' || (data.productIds && data.productIds.length > 0), {
   message: 'When applying to selected products, at least one product must be chosen',
   path: ['productIds'],
+}).refine((data) => data.discountType !== 'percentage' || data.discountValue <= 100, {
+  message: 'Percentage discount cannot exceed 100',
+  path: ['discountValue'],
 });
 
 export const updatePromotionSchema = z.object({
@@ -41,8 +44,12 @@ export const updatePromotionSchema = z.object({
   validUntil: z.coerce.date().optional(),
   applyTo: z.enum(['all', 'selected']).optional(),
   productIds: z.array(z.string().uuid()).optional(),
+  isActive: z.boolean().optional(),
 }).refine((data) => {
   if (data.validFrom != null && data.validUntil != null) return data.validUntil > data.validFrom;
   return true;
-}, { message: 'End date must be after start date', path: ['validUntil'] });
+}, { message: 'End date must be after start date', path: ['validUntil'] }).refine((data) => {
+  if (data.discountType === 'percentage' && data.discountValue != null) return data.discountValue <= 100;
+  return true;
+}, { message: 'Percentage discount cannot exceed 100', path: ['discountValue'] });
 

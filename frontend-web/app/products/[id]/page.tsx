@@ -12,6 +12,7 @@ import { useCartStore } from '@/lib/store/cart-store';
 import { useAuthStore } from '@/lib/store/auth-store';
 import { DashboardLayout } from '@/components/layout/DashboardShell';
 import { apiClient } from '@/lib/api-client';
+import ProductReviews from '@/components/products/ProductReviews';
 
 interface CatalogPromotion {
   id: string;
@@ -59,6 +60,14 @@ interface ProductDetail {
     hub: number;
   };
   stockQuantity?: number;
+  variants: Array<{
+    id: string;
+    name: string;
+    price: number;
+    originalPrice?: number | null;
+    stockQuantity: number;
+    isDefault: boolean;
+  }>;
 }
 
 export default function ProductDetailPage() {
@@ -76,6 +85,7 @@ export default function ProductDetailPage() {
   const [selectedImage, setSelectedImage] = useState(0);
   const [addToCartLoading, setAddToCartLoading] = useState(false);
   const [justAddedToCart, setJustAddedToCart] = useState(false);
+  const [selectedVariantId, setSelectedVariantId] = useState<string | null>(null);
 
   const sidebarItems = [
     { name: 'Dashboard', href: '/dashboard', icon: '' },
@@ -118,12 +128,17 @@ export default function ProductDetailPage() {
           }))
         : [];
 
+      const variants = Array.isArray(data.variants) ? data.variants : [];
+
       setProduct({
         ...data,
         images,
         stock: { hub: Number(stockHub), direct: Number(stockDirect) },
         seller,
+        variants,
       });
+      const defaultVariant = variants.find((v: { isDefault?: boolean }) => v.isDefault) ?? variants[0];
+      setSelectedVariantId(defaultVariant?.id ?? null);
       // Fetch catalog promotions for this product (same as listing – stacked 30% + 5% etc.)
       try {
         const promRes = await apiClient.get<{ success: boolean; data: Record<string, CatalogPromotion[]> }>(
@@ -152,14 +167,18 @@ export default function ProductDetailPage() {
 
     if (!product) return;
 
-    const availableStock = stockType === 'direct' ? product.stock.direct : product.stock.hub;
+    const selectedVariant = product.variants.find((v) => v.id === selectedVariantId) ?? null;
+    const availableStock = selectedVariant
+      ? selectedVariant.stockQuantity
+      : stockType === 'direct' ? product.stock.direct : product.stock.hub;
     if (availableStock < quantity) {
       showToast('Insufficient stock', 'error');
       return;
     }
 
-    const unitPrice =
-      catalogPromotions.length > 0
+    const unitPrice = selectedVariant
+      ? selectedVariant.price
+      : catalogPromotions.length > 0
         ? getStackedDiscountedPrice(product.price, catalogPromotions)
         : product.price;
 
@@ -168,14 +187,15 @@ export default function ProductDetailPage() {
     try {
       await cartService.addToCart({
         productId: product.id,
+        variantId: selectedVariant?.id,
         quantity,
         stockType,
         hubId: stockType === 'hub' && selectedHub ? selectedHub : undefined,
       });
       addItem({
-        id: `${product.id}-${stockType}-${Date.now()}`,
+        id: `${product.id}-${selectedVariant?.id ?? stockType}-${Date.now()}`,
         productId: product.id,
-        productName: product.name,
+        productName: selectedVariant ? `${product.name} — ${selectedVariant.name}` : product.name,
         productImage: product.images[0]?.url,
         sellerId: product.seller.id,
         sellerName: product.seller.businessName,
@@ -259,13 +279,18 @@ export default function ProductDetailPage() {
     );
   }
 
-  const unitPrice =
-    catalogPromotions.length > 0
+  const selectedVariant = product.variants.find((v) => v.id === selectedVariantId) ?? null;
+  const unitPrice = selectedVariant
+    ? selectedVariant.price
+    : catalogPromotions.length > 0
       ? getStackedDiscountedPrice(product.price, catalogPromotions)
       : product.price;
-  const maxQty = stockType === 'direct' ? product.stock.direct : product.stock.hub;
+  const maxQty = selectedVariant
+    ? selectedVariant.stockQuantity
+    : stockType === 'direct' ? product.stock.direct : product.stock.hub;
 
   const productContent = (
+    <>
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 lg:gap-12">
       {/* Product Images - left column */}
       <div className="lg:sticky lg:top-24 self-start">
@@ -403,6 +428,43 @@ export default function ProductDetailPage() {
 
         {/* Purchase card - sticky on large screens */}
         <div className="lg:sticky lg:top-24 bg-white rounded-2xl shadow-sm border border-gray-100 p-6 space-y-6">
+          {product.variants.length > 0 && (
+            <div>
+              <p className="text-sm font-medium text-gray-700 mb-3">Options</p>
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={() => setSelectedVariantId(null)}
+                  disabled={product.stockQuantity !== undefined && product.stockQuantity <= 0}
+                  className={`px-4 py-2 rounded-xl border-2 text-sm font-medium transition-all disabled:opacity-40 disabled:cursor-not-allowed ${
+                    selectedVariantId === null
+                      ? 'border-gray-900 bg-gray-900 text-white'
+                      : 'border-gray-200 text-gray-700 hover:border-gray-400'
+                  }`}
+                >
+                  {product.name} ({product.unit}) · {formatPrice(product.price)}
+                  {product.stockQuantity !== undefined && product.stockQuantity <= 0 && ' (out of stock)'}
+                </button>
+                {product.variants.map((v) => (
+                  <button
+                    key={v.id}
+                    type="button"
+                    onClick={() => setSelectedVariantId(v.id)}
+                    disabled={v.stockQuantity <= 0}
+                    className={`px-4 py-2 rounded-xl border-2 text-sm font-medium transition-all disabled:opacity-40 disabled:cursor-not-allowed ${
+                      selectedVariantId === v.id
+                        ? 'border-gray-900 bg-gray-900 text-white'
+                        : 'border-gray-200 text-gray-700 hover:border-gray-400'
+                    }`}
+                  >
+                    {v.name} · {formatPrice(v.price)}
+                    {v.stockQuantity <= 0 && ' (out of stock)'}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
           <h2 className="text-lg font-semibold text-gray-900">Delivery & quantity</h2>
 
           {/* Delivery type */}
@@ -493,6 +555,12 @@ export default function ProductDetailPage() {
         </div>
       </div>
     </div>
+
+    <div className="mt-10">
+      <h2 className="text-xl font-bold text-gray-900 mb-4">Reviews</h2>
+      <ProductReviews productId={product.id} />
+    </div>
+    </>
   );
 
   // For authenticated users, wrap in DashboardLayout

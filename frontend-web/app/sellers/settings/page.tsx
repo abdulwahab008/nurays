@@ -44,6 +44,11 @@ export default function SellerSettingsPage() {
     coverImageUrl: '',
     jazzcashNumber: '',
     easypaisaNumber: '',
+    bankAccountName: '',
+    bankAccountNumber: '',
+    bankName: '',
+    lowStockThreshold: 10,
+    enableStockAlerts: true,
     freeDeliveryAreas: [] as string[],
     freeDeliveryRadiusKm: null as number | null,
     latitude: null as number | null,
@@ -95,6 +100,11 @@ export default function SellerSettingsPage() {
           coverImageUrl: seller.coverImageUrl || '',
           jazzcashNumber: seller.jazzcashNumber || '',
           easypaisaNumber: seller.easypaisaNumber || '',
+          bankAccountName: seller.bankAccountName || '',
+          bankAccountNumber: seller.bankAccountNumber || '',
+          bankName: seller.bankName || '',
+          lowStockThreshold: seller.lowStockThreshold ?? 10,
+          enableStockAlerts: seller.enableStockAlerts ?? true,
           freeDeliveryAreas: Array.isArray(seller.freeDeliveryAreas) ? seller.freeDeliveryAreas : [],
           freeDeliveryRadiusKm: seller.freeDeliveryRadiusKm ?? null,
           latitude: seller.latitude ?? null,
@@ -300,6 +310,77 @@ export default function SellerSettingsPage() {
                   onChange={(e) => setFormData({ ...formData, easypaisaNumber: e.target.value })}
                   className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500"
                   placeholder="03001234567"
+                />
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Bank Name
+                  </label>
+                  <input
+                    type="text"
+                    value={formData.bankName}
+                    onChange={(e) => setFormData({ ...formData, bankName: e.target.value })}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500"
+                    placeholder="e.g., HBL"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Bank Account Title
+                  </label>
+                  <input
+                    type="text"
+                    value={formData.bankAccountName}
+                    onChange={(e) => setFormData({ ...formData, bankAccountName: e.target.value })}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500"
+                    placeholder="Account holder name"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Bank Account Number / IBAN
+                  </label>
+                  <input
+                    type="text"
+                    value={formData.bankAccountNumber}
+                    onChange={(e) => setFormData({ ...formData, bankAccountNumber: e.target.value })}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500"
+                    placeholder="PK00XXXX0000000000000000"
+                  />
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Stock Alerts */}
+          <div>
+            <h2 className="text-xl font-bold text-gray-900 mb-4">Stock Alerts</h2>
+            <div className="space-y-4">
+              <div className="flex items-center gap-3">
+                <input
+                  type="checkbox"
+                  id="enableStockAlerts"
+                  checked={formData.enableStockAlerts}
+                  onChange={(e) => setFormData({ ...formData, enableStockAlerts: e.target.checked })}
+                  className="w-5 h-5 text-green-600 rounded focus:ring-green-500"
+                />
+                <label htmlFor="enableStockAlerts" className="text-sm font-medium text-gray-700">
+                  Notify me when a product's stock runs low
+                </label>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Low stock threshold
+                </label>
+                <p className="text-xs text-gray-500 mb-2">You'll be alerted when a product's remaining stock falls at or below this number.</p>
+                <input
+                  type="number"
+                  min={0}
+                  value={formData.lowStockThreshold}
+                  onChange={(e) => setFormData({ ...formData, lowStockThreshold: parseInt(e.target.value, 10) || 0 })}
+                  className="w-full md:w-40 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500"
+                  disabled={!formData.enableStockAlerts}
                 />
               </div>
             </div>

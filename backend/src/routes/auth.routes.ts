@@ -19,13 +19,14 @@ import {
   refreshTokenSchema,
 } from '../validators/auth.validator';
 import { authenticate } from '../middleware/auth.middleware';
+import { loginLimiter, otpLimiter, registerLimiter } from '../middleware/rateLimiter';
 
 const router = Router();
 
 // Public routes
-router.post('/otp/request', validate(requestOTPSchema), requestOTP);
-router.post('/register', validate(registerSchema), register);
-router.post('/login', validate(loginSchema), login);
+router.post('/otp/request', otpLimiter, validate(requestOTPSchema), requestOTP);
+router.post('/register', registerLimiter, validate(registerSchema), register);
+router.post('/login', loginLimiter, validate(loginSchema), login);
 router.post('/google', loginWithGoogle); // Google OAuth - no validation needed, handled in service
 router.post('/verify-email', validate(verifyEmailSchema), verifyEmail);
 router.post('/refresh', validate(refreshTokenSchema), refreshToken);

@@ -1,6 +1,52 @@
 import prisma from '../config/database';
 import { AppError } from '../middleware/errorHandler';
 
+// Common Roman-Urdu food terms mapped to their English equivalents / spelling variants,
+// so a search for "murgh" also matches products named "chicken", etc.
+const SEARCH_SYNONYMS: Record<string, string[]> = {
+  murgh: ['chicken'],
+  morgh: ['chicken'],
+  moorg: ['chicken'],
+  gosht: ['mutton', 'beef', 'meat'],
+  bakra: ['mutton', 'goat'],
+  machli: ['fish'],
+  machhli: ['fish'],
+  sabzi: ['vegetable'],
+  subzi: ['vegetable'],
+  kabab: ['kebab'],
+  kebab: ['kabab'],
+  shami: ['shaami'],
+  shaami: ['shami'],
+  handi: ['karahi'],
+  karahi: ['handi', 'kadai'],
+  keema: ['qeema', 'mince'],
+  qeema: ['keema', 'mince'],
+  aloo: ['potato'],
+  daal: ['dal', 'lentil'],
+  dal: ['daal', 'lentil'],
+  paratha: ['parantha'],
+  parantha: ['paratha'],
+  biryani: ['biriyani', 'briyani'],
+  biriyani: ['biryani'],
+  roti: ['bread', 'chapati'],
+  chapati: ['roti'],
+  anda: ['egg'],
+  dahi: ['yogurt', 'yoghurt'],
+  doodh: ['milk'],
+};
+
+/** Expand a search string into itself plus any Roman-Urdu/English synonym terms for its words. */
+function expandSearchTerms(search: string): string[] {
+  const words = search.toLowerCase().split(/\s+/).filter(Boolean);
+  const terms = new Set<string>([search]);
+  for (const word of words) {
+    for (const synonym of SEARCH_SYNONYMS[word] ?? []) {
+      terms.add(synonym);
+    }
+  }
+  return Array.from(terms);
+}
+
 export class ProductService {
   /**
    * Get all products with filters and pagination
@@ -61,13 +107,18 @@ export class ProductService {
     } else {
       where.isActive = true;
     }
+    // Public catalog: never show a product that hasn't cleared admin moderation,
+    // regardless of its isActive flag. Admin-only listing lives in admin.service.ts.
+    where.approvalStatus = 'approved';
+    // ...nor a product from a suspended/inactive seller.
+    where.seller = { status: 'active' };
 
     if (filters.search) {
-      where.OR = [
-        { name: { contains: filters.search, mode: 'insensitive' } },
-        { nameUrdu: { contains: filters.search, mode: 'insensitive' } },
-        { description: { contains: filters.search, mode: 'insensitive' } },
-      ];
+      where.OR = expandSearchTerms(filters.search).flatMap((term) => [
+        { name: { contains: term, mode: 'insensitive' } },
+        { nameUrdu: { contains: term, mode: 'insensitive' } },
+        { description: { contains: term, mode: 'insensitive' } },
+      ]);
     }
 
     // Build orderBy
@@ -176,9 +227,12 @@ export class ProductService {
   }
 
   /**
-   * Get product by ID or slug
+   * Get product by ID or slug. Public visitors only ever see approved
+   * products from active sellers; the product's own seller can always see
+   * it regardless of moderation state (so they can view/edit a pending or
+   * rejected listing on their own dashboard).
    */
-  async getProductByIdentifier(identifier: string) {
+  async getProductByIdentifier(identifier: string, requestingUserId?: string) {
     const product = await prisma.product.findFirst({
       where: {
         OR: [{ id: identifier }, { slug: identifier }],
@@ -200,6 +254,10 @@ export class ProductService {
           },
         },
         tags: true,
+        variants: {
+          where: { isActive: true },
+          orderBy: { sortOrder: 'asc' },
+        },
         _count: {
           select: {
             reviews: true,
@@ -209,7 +267,10 @@ export class ProductService {
       },
     });
 
-    if (!product) {
+    const isOwner = requestingUserId != null && product?.seller.userId === requestingUserId;
+    const isPubliclyVisible = product?.approvalStatus === 'approved' && product?.seller.status === 'active';
+
+    if (!product || (!isPubliclyVisible && !isOwner)) {
       throw new AppError('Product not found', 404, 'PRODUCT_NOT_FOUND');
     }
 
@@ -231,6 +292,15 @@ export class ProductService {
       images: product.images.map((img) => ({
         ...img,
         imageUrl: img.imageUrl.startsWith('http') ? img.imageUrl : `${baseUrl}${img.imageUrl}`,
+      })),
+      variants: product.variants.map((v) => ({
+        id: v.id,
+        name: v.name,
+        nameUrdu: v.nameUrdu,
+        price: Number(v.price),
+        originalPrice: v.originalPrice ? Number(v.originalPrice) : null,
+        stockQuantity: v.stockQuantity,
+        isDefault: v.isDefault,
       })),
     };
   }
@@ -287,7 +357,7 @@ export class ProductService {
       throw new AppError('Product with this name already exists', 409, 'PRODUCT_EXISTS');
     }
 
-    // Create product - Products go live immediately, no admin approval needed
+    // Create product - awaits admin moderation before it appears on the public catalog
     const product = await prisma.product.create({
       data: {
         sellerId: seller.id,
@@ -316,8 +386,8 @@ export class ProductService {
         productType: data.productType || 'frozen',  // Default to frozen for backward compatibility
         shelfLifeHours: data.shelfLifeHours,  // For fresh items
         preparationTime: data.preparationTime,  // For made-to-order items
-        approvalStatus: 'approved', // Auto-approved - sellers can add products immediately
-        isActive: true, // Active immediately - visible to customers
+        approvalStatus: 'pending', // Awaits admin moderation
+        isActive: false, // Not visible to customers until approved
         images: data.images
           ? {
               create: data.images.map((url, index) => ({

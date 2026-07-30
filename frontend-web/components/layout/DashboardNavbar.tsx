@@ -11,7 +11,7 @@ import { Mark, Wordmark } from '@/components/ui/Mark';
 interface DashboardNavbarProps {
   title: string;
   subtitle?: string;
-  userType?: 'customer' | 'seller' | 'admin';
+  userType?: 'customer' | 'seller' | 'admin' | 'rider';
   onMenuToggle?: () => void;
   drawerOpen?: boolean;
 }
@@ -52,12 +52,14 @@ export function DashboardNavbar({ title, subtitle, userType = 'customer', onMenu
   // Determine if this is a seller/admin context
   const isSeller = userType === 'seller';
   const isAdmin = userType === 'admin';
+  const isRider = userType === 'rider';
   const isCustomer = userType === 'customer';
 
   // Get the correct dashboard link based on user type
   const getDashboardLink = () => {
     if (isSeller) return '/sellers/dashboard';
     if (isAdmin) return '/admin/dashboard';
+    if (isRider) return '/riders/dashboard';
     return '/dashboard';
   };
 

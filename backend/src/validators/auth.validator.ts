@@ -13,6 +13,7 @@ export const registerSchema = z.object({
   phone: z.string().min(10).max(15).optional(),
   city: z.string().max(100).optional(),
   area: z.string().max(100).optional(),
+  business_name: z.string().min(1).max(255).optional(),
 });
 
 export const loginSchema = z.object({

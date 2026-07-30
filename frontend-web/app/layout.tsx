@@ -140,7 +140,10 @@ export default function RootLayout({
 [class*="from-purple-"],[class*="from-violet-"]{background-color:var(--ink-800)!important;color:var(--cream-50)!important}
 [class*="from-orange-"],[class*="from-yellow-"]{background-color:var(--gold-500)!important;color:var(--cream-50)!important}
 [class*="from-red-"],[class*="from-pink-"],[class*="from-rose-"]{background-color:var(--anar-500)!important;color:var(--cream-50)!important}
-[class*="from-blue-"],[class*="from-indigo-"]{background-color:var(--forest-600)!important;color:var(--cream-50)!important}`,
+[class*="from-blue-"],[class*="from-indigo-"]{background-color:var(--forest-600)!important;color:var(--cream-50)!important}
+[class*="from-emerald-"],[class*="from-teal-"],[class*="from-cyan-"]{background-color:var(--forest-500)!important;color:var(--cream-50)!important}
+[class*="from-amber-"]{background-color:var(--gold-500)!important;color:var(--cream-50)!important}
+[class*="from-gray-"],[class*="from-slate-"],[class*="from-zinc-"],[class*="from-neutral-"]{background-color:var(--ink-700)!important;color:var(--cream-50)!important}`,
           }}
         />
       </head>

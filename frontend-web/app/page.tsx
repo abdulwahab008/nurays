@@ -314,6 +314,7 @@ export default function Home() {
       const userType = user.userType || user.user_type;
       if (userType === 'admin') router.push('/admin/dashboard');
       else if (userType === 'seller') router.push('/sellers/dashboard');
+      else if (userType === 'rider') router.push('/riders/dashboard');
       else router.push('/dashboard');
     }
   }, [isAuthenticated, user, router]);
@@ -353,8 +354,8 @@ export default function Home() {
             <Link href="/products?productType=fresh" className="text-[13px] font-medium tracking-tight" style={{ color: 'var(--ink-800)' }}>
               Fresh
             </Link>
-            <Link href="/sellers" className="text-[13px] font-medium tracking-tight" style={{ color: 'var(--ink-800)' }}>
-              Our hubs
+            <Link href="/sellers/register" className="text-[13px] font-medium tracking-tight" style={{ color: 'var(--ink-800)' }}>
+              Sell with us
             </Link>
           </nav>
           <div className="flex items-center gap-2">
