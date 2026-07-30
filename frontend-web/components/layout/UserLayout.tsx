@@ -54,12 +54,18 @@ export function UserLayout({ children, showSidebar = true, showNavbar = true }: 
     { name: 'Settings', href: '/sellers/settings', icon: '⚙️' },
   ];
 
+  const riderSidebarItems: SidebarItem[] = [
+    { name: 'Dashboard', href: '/riders/dashboard', icon: '📊' },
+  ];
+
   const adminSidebarItems: SidebarItem[] = [
     { name: 'Dashboard', href: '/admin/dashboard', icon: '📊' },
     { name: 'Pending Sellers', href: '/admin/pending-sellers', icon: '👥' },
     { name: 'All Sellers', href: '/admin/sellers', icon: '🏪' },
     { name: 'Orders', href: '/admin/orders', icon: '📦' },
     { name: 'Products', href: '/admin/products', icon: '🍽️' },
+    { name: 'Payouts', href: '/admin/payouts', icon: '💸' },
+    { name: 'Support', href: '/admin/support', icon: '🎫' },
     { name: 'Analytics', href: '/admin/analytics', icon: '📈' },
     { name: 'Settings', href: '/admin/settings', icon: '⚙️' },
   ];
@@ -68,6 +74,7 @@ export function UserLayout({ children, showSidebar = true, showNavbar = true }: 
   const getSidebarItems = (): SidebarItem[] => {
     if (userType === 'admin') return adminSidebarItems;
     if (userType === 'seller') return sellerSidebarItems;
+    if (userType === 'rider') return riderSidebarItems;
     return customerSidebarItems;
   };
 
@@ -168,7 +175,7 @@ export function UserLayout({ children, showSidebar = true, showNavbar = true }: 
     <div className="min-h-screen" style={{ background: 'var(--cream-50)' }}>
       {showNavbar && <DashboardNavbar title="Nuray" />}
       <div className="flex pt-16">
-        {showSidebar && <DashboardSidebar items={getSidebarItems()} userType={userType as 'customer' | 'seller' | 'admin'} />}
+        {showSidebar && <DashboardSidebar items={getSidebarItems()} userType={userType as 'customer' | 'seller' | 'admin' | 'rider'} />}
         <main className={`flex-1 ${showSidebar ? 'ml-64' : ''} p-6`}>
           {children}
         </main>

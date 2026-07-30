@@ -2,6 +2,7 @@ import prisma from '../config/database';
 import { AppError } from '../middleware/errorHandler';
 import realtimeOrderService from './realtime-order.service';
 import { getDeliveryFeeForSeller } from '../utils/deliveryFee';
+import { createStockAlert } from './stock-alert.service';
 
 export class OrderService {
   /**
@@ -54,6 +55,7 @@ export class OrderService {
     data: {
       items: Array<{
         productId: string;
+        variantId?: string;
         quantity: number;
         stockType?: string;
         hubId?: string;
@@ -95,6 +97,8 @@ export class OrderService {
     // Process items and calculate totals
     const orderItems: Array<{
       productId: string;
+      variantId: string | null;
+      variantName: string | null;
       sellerId: string;
       productName: string;
       productImage: string | null;
@@ -126,17 +130,29 @@ export class OrderService {
         throw new AppError(`Product ${product.name} is not available`, 400, 'PRODUCT_UNAVAILABLE');
       }
 
+      // Resolve the variant, if one was requested — it drives price + stock instead of the base product.
+      let variant = null;
+      if (item.variantId) {
+        variant = await prisma.productVariant.findFirst({
+          where: { id: item.variantId, productId: product.id, isActive: true },
+        });
+        if (!variant) {
+          throw new AppError(`Variant not found for ${product.name}`, 404, 'VARIANT_NOT_FOUND');
+        }
+      }
+
       // Check stock
-      if (product.stockQuantity < item.quantity) {
+      const availableStock = variant ? variant.stockQuantity : product.stockQuantity;
+      if (availableStock < item.quantity) {
         throw new AppError(
-          `Insufficient stock for ${product.name}. Available: ${product.stockQuantity}`,
+          `Insufficient stock for ${product.name}${variant ? ` (${variant.name})` : ''}. Available: ${availableStock}`,
           400,
           'INSUFFICIENT_STOCK'
         );
       }
 
       // Calculate item total
-      const unitPrice = Number(product.price);
+      const unitPrice = variant ? Number(variant.price) : Number(product.price);
       const itemTotal = unitPrice * item.quantity;
       subtotal += itemTotal;
 
@@ -158,6 +174,8 @@ export class OrderService {
 
       orderItems.push({
         productId: product.id,
+        variantId: variant?.id ?? null,
+        variantName: variant?.name ?? null,
         sellerId: product.seller.id,
         productName: product.name,
         productImage: productImage?.imageUrl || null,
@@ -237,7 +255,17 @@ export class OrderService {
 
       if (promotion && promotion.isActive) {
         const now = new Date();
-        if (now >= promotion.validFrom && now <= promotion.validUntil) {
+        const withinLimits =
+          (!promotion.usageLimitTotal || promotion.usedCount < promotion.usageLimitTotal) &&
+          (await prisma.promotionUsage.count({
+            where: { promotionId: promotion.id, userId: customerId },
+          })) < promotion.usageLimitPerUser;
+
+        if (
+          now >= promotion.validFrom &&
+          now <= promotion.validUntil &&
+          withinLimits
+        ) {
           if (subtotal >= Number(promotion.minOrderAmount)) {
             if (promotion.discountType === 'percentage') {
               discountAmount = subtotal * (Number(promotion.discountValue) / 100);
@@ -247,6 +275,8 @@ export class OrderService {
             } else {
               discountAmount = Number(promotion.discountValue);
             }
+            // Never let a discount exceed the order subtotal it applies to.
+            discountAmount = Math.min(discountAmount, subtotal);
             promotionId = promotion.id;
           }
         }
@@ -313,6 +343,8 @@ export class OrderService {
             data: {
               orderId: newOrder.id,
               productId: item.productId,
+              variantId: item.variantId,
+              variantName: item.variantName,
               sellerId: item.sellerId,
               productName: item.productName,
               productImage: item.productImage,
@@ -330,15 +362,25 @@ export class OrderService {
         )
       );
 
-      // Update product stock
+      // Update stock: variant stock when the item is a specific variant, else the base product.
+      const updatedProducts: Array<{ id: string; sellerId: string; stockQuantity: number }> = [];
       for (const item of orderItems) {
-        await tx.product.update({
+        if (item.variantId) {
+          await tx.productVariant.update({
+            where: { id: item.variantId },
+            data: { stockQuantity: { decrement: item.quantity } },
+          });
+        }
+        const updated = await tx.product.update({
           where: { id: item.productId },
           data: {
-            stockQuantity: { decrement: item.quantity },
+            // Only deplete the shared product-level stock when this item didn't
+            // draw from its own separate variant stock pool.
+            ...(item.variantId ? {} : { stockQuantity: { decrement: item.quantity } }),
             totalOrders: { increment: 1 },
           },
         });
+        updatedProducts.push({ id: updated.id, sellerId: updated.sellerId, stockQuantity: updated.stockQuantity });
       }
 
       // Create inventory reservations
@@ -382,11 +424,38 @@ export class OrderService {
         });
       }
 
-      return { order: newOrder, items: createdItems };
+      return { order: newOrder, items: createdItems, updatedProducts };
     });
 
     // Emit new order notification
     await realtimeOrderService.emitNewOrderNotification(order.order.id);
+
+    // Fire low-stock / out-of-stock alerts for any product this order just depleted.
+    // Done outside the transaction since it's not order-critical and sends email.
+    for (const p of order.updatedProducts) {
+      const seller = await prisma.seller.findUnique({
+        where: { id: p.sellerId },
+        select: { lowStockThreshold: true },
+      });
+      const threshold = seller?.lowStockThreshold ?? 10;
+      if (p.stockQuantity <= 0) {
+        await createStockAlert({
+          sellerId: p.sellerId,
+          productId: p.id,
+          alertType: 'out_of_stock',
+          currentStock: p.stockQuantity,
+          threshold,
+        });
+      } else if (p.stockQuantity <= threshold) {
+        await createStockAlert({
+          sellerId: p.sellerId,
+          productId: p.id,
+          alertType: 'low_stock',
+          currentStock: p.stockQuantity,
+          threshold,
+        });
+      }
+    }
 
     // Get full order with relations
     const fullOrder = await prisma.order.findUnique({

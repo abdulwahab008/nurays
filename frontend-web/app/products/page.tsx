@@ -62,7 +62,8 @@ export default function ProductsPage() {
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [error, setError] = useState('');
-  const [searchQuery, setSearchQuery] = useState('');
+  const [searchQuery, setSearchQuery] = useState(searchParams.get('search') || '');
+  const [searchInput, setSearchInput] = useState(searchParams.get('search') || '');
   const [selectedCategory, setSelectedCategory] = useState('all');
   const [selectedProductType, setSelectedProductType] = useState(searchParams.get('productType') || 'all');
   const [sortBy, setSortBy] = useState('newest');
@@ -107,7 +108,16 @@ export default function ProductsPage() {
 
   useEffect(() => {
     loadProducts();
-  }, [page, selectedCategory, selectedProductType, sortBy]);
+  }, [page, selectedCategory, selectedProductType, sortBy, searchQuery]);
+
+  // Sync search term whenever the URL's ?search= changes (e.g. a new navbar search)
+  useEffect(() => {
+    const paramSearch = searchParams.get('search') || '';
+    setSearchQuery(paramSearch);
+    setSearchInput(paramSearch);
+    setPage(1);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams.toString()]);
 
   const loadProducts = async () => {
     setLoading(true);
@@ -155,7 +165,7 @@ export default function ProductsPage() {
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
     setPage(1);
-    loadProducts();
+    setSearchQuery(searchInput);
   };
 
   // If not authenticated, show public layout
@@ -229,6 +239,31 @@ export default function ProductsPage() {
     }
 
     if (products.length === 0) {
+      const hasActiveFilters = Boolean(searchQuery) || selectedCategory !== 'all' || selectedProductType !== 'all';
+      if (hasActiveFilters) {
+        return (
+          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-12 text-center">
+            <h2 className="text-2xl font-bold text-gray-900 mb-3">
+              {searchQuery ? `No results for "${searchQuery}"` : 'No products match these filters'}
+            </h2>
+            <p className="text-gray-500 mb-6 max-w-md mx-auto">
+              Try a different search term or clear your filters to see everything we have.
+            </p>
+            <Button
+              onClick={() => {
+                setSearchInput('');
+                setSearchQuery('');
+                setSelectedCategory('all');
+                setSelectedProductType('all');
+                setPage(1);
+              }}
+              className="bg-gray-700 hover:bg-gray-800"
+            >
+              Clear search & filters
+            </Button>
+          </div>
+        );
+      }
       // Different empty state for logged-in customers vs public visitors
       if (isAuthenticated) {
         return (
@@ -393,8 +428,8 @@ export default function ProductsPage() {
             <input
               type="text"
               placeholder="Search for biryani, kebabs, parathas..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
+              value={searchInput}
+              onChange={(e) => setSearchInput(e.target.value)}
               className="w-full pl-4 pr-4 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-gray-500 focus:border-transparent"
             />
           </div>

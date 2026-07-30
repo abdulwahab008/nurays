@@ -58,6 +58,8 @@ export class PromotionService {
     } else {
       discountAmount = Number(promotion.discountValue);
     }
+    // Never let a discount exceed the cart it applies to, regardless of the promo's configured value.
+    discountAmount = Math.min(discountAmount, cartTotal);
 
     const finalAmount = cartTotal - discountAmount;
 
@@ -363,6 +365,7 @@ export class PromotionService {
       validUntil?: Date;
       applyTo?: 'all' | 'selected';
       productIds?: string[];
+      isActive?: boolean;
     }
   ) {
     const promotion = await prisma.promotion.findUnique({
@@ -383,14 +386,21 @@ export class PromotionService {
         throw new AppError('This promo code is already in use. Please choose another.', 400, 'CODE_TAKEN');
       }
     }
+    // Only touch applicableProductIds when the caller actually intends to change scope
+    // (i.e. applyTo was explicitly provided). Omitting applyTo on a partial edit must
+    // leave the existing product association alone.
     let applicableProductIds: string[] | undefined;
-    if (data.applyTo === 'selected' && data.productIds?.length) {
-      const sellerProducts = await prisma.product.findMany({
-        where: { sellerId, id: { in: data.productIds } },
-        select: { id: true },
-      });
-      applicableProductIds = sellerProducts.map((p) => p.id);
-    } else if (data.applyTo === 'all' || !data.applyTo) {
+    if (data.applyTo === 'selected') {
+      if (data.productIds?.length) {
+        const sellerProducts = await prisma.product.findMany({
+          where: { sellerId, id: { in: data.productIds } },
+          select: { id: true },
+        });
+        applicableProductIds = sellerProducts.map((p) => p.id);
+      } else {
+        applicableProductIds = [];
+      }
+    } else if (data.applyTo === 'all') {
       applicableProductIds = [];
     }
     const updated = await prisma.promotion.update({
@@ -409,6 +419,7 @@ export class PromotionService {
         ...(data.validUntil != null && { validUntil: data.validUntil }),
         ...(data.applyTo != null && { applicableTo: data.applyTo }),
         ...(applicableProductIds !== undefined && { applicableProductIds }),
+        ...(data.isActive != null && { isActive: data.isActive }),
       },
     });
     return this.getOneForSeller(sellerId, updated.id);

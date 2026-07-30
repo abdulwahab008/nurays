@@ -48,6 +48,10 @@ export default function AdminOrderDetailPage() {
   const [order, setOrder] = useState<OrderDetail | null>(null);
   const [updating, setUpdating] = useState(false);
   const [selectedStatus, setSelectedStatus] = useState<string>('');
+  const [showCancelForm, setShowCancelForm] = useState(false);
+  const [cancelReason, setCancelReason] = useState('');
+  const [showRefundForm, setShowRefundForm] = useState(false);
+  const [refundAmount, setRefundAmount] = useState('');
 
   const updateStatus = async () => {
     if (!order || !selectedStatus || selectedStatus === order.orderStatus) return;
@@ -59,6 +63,46 @@ export default function AdminOrderDetailPage() {
       setSelectedStatus('');
     } catch (error: any) {
       showToast(error.response?.data?.error?.message || 'Failed to update status', 'error');
+    } finally {
+      setUpdating(false);
+    }
+  };
+
+  const handleCancelOrder = async () => {
+    if (!order || cancelReason.trim().length < 5) {
+      showToast('Please enter a reason (at least 5 characters)', 'warning');
+      return;
+    }
+    try {
+      setUpdating(true);
+      await apiClient.post(`/admin/orders/${order.id}/cancel`, { reason: cancelReason.trim() });
+      showToast('Order cancelled and stock restored', 'success');
+      setShowCancelForm(false);
+      setCancelReason('');
+      loadOrder();
+    } catch (error: any) {
+      showToast(error.response?.data?.error?.message || 'Failed to cancel order', 'error');
+    } finally {
+      setUpdating(false);
+    }
+  };
+
+  const handleProcessRefund = async () => {
+    if (!order) return;
+    const amount = refundAmount.trim() ? parseFloat(refundAmount.trim()) : undefined;
+    if (refundAmount.trim() && (Number.isNaN(amount) || (amount ?? 0) <= 0)) {
+      showToast('Enter a valid refund amount, or leave blank for a full refund', 'warning');
+      return;
+    }
+    try {
+      setUpdating(true);
+      await apiClient.post(`/admin/orders/${order.id}/refund`, amount != null ? { refundAmount: amount } : {});
+      showToast('Refund processed successfully', 'success');
+      setShowRefundForm(false);
+      setRefundAmount('');
+      loadOrder();
+    } catch (error: any) {
+      showToast(error.response?.data?.error?.message || 'Failed to process refund', 'error');
     } finally {
       setUpdating(false);
     }
@@ -249,7 +293,6 @@ export default function AdminOrderDetailPage() {
                         { value: 'dispatched', label: 'Dispatched', color: 'bg-pink-500 hover:bg-pink-600' },
                         { value: 'in_transit', label: 'In Transit', color: 'bg-orange-500 hover:bg-orange-600' },
                         { value: 'delivered', label: 'Delivered', color: 'bg-green-500 hover:bg-green-600' },
-                        { value: 'cancelled', label: 'Cancel', color: 'bg-red-500 hover:bg-red-600' },
                       ]
                         .filter((s) => s.value !== order.orderStatus)
                         .map((s) => (
@@ -284,6 +327,92 @@ export default function AdminOrderDetailPage() {
                         >
                           Cancel
                         </button>
+                      </div>
+                    )}
+
+                    {/* Cancel Order — separate from the generic status list: this restores
+                        stock, cascades to order items, and records who/why. */}
+                    <div className="mt-5 pt-5 border-t border-gray-100">
+                      {!showCancelForm ? (
+                        <button
+                          onClick={() => setShowCancelForm(true)}
+                          className="px-4 py-2 rounded-lg text-sm font-medium text-white bg-red-500 hover:bg-red-600 transition-all"
+                        >
+                          Cancel Order
+                        </button>
+                      ) : (
+                        <div className="space-y-2">
+                          <label className="block text-sm font-medium text-gray-700">
+                            Reason for cancellation
+                          </label>
+                          <textarea
+                            value={cancelReason}
+                            onChange={(e) => setCancelReason(e.target.value)}
+                            rows={2}
+                            placeholder="e.g., Customer requested cancellation, out of stock..."
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-red-500"
+                          />
+                          <div className="flex items-center gap-3">
+                            <button
+                              onClick={handleCancelOrder}
+                              disabled={updating || cancelReason.trim().length < 5}
+                              className="px-4 py-1.5 bg-red-600 text-white text-sm rounded-lg hover:bg-red-700 disabled:opacity-50"
+                            >
+                              {updating ? 'Cancelling...' : 'Confirm Cancellation'}
+                            </button>
+                            <button
+                              onClick={() => { setShowCancelForm(false); setCancelReason(''); }}
+                              className="text-sm text-gray-500 hover:text-gray-700"
+                            >
+                              Dismiss
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* Refund */}
+                {order.paymentStatus === 'paid' && (
+                  <div className="pt-5 border-t border-gray-100">
+                    <h2 className="text-sm font-medium text-gray-500 uppercase mb-3">Refund</h2>
+                    {!showRefundForm ? (
+                      <button
+                        onClick={() => setShowRefundForm(true)}
+                        className="px-4 py-2 rounded-lg text-sm font-medium text-white bg-amber-500 hover:bg-amber-600 transition-all"
+                      >
+                        Process Refund
+                      </button>
+                    ) : (
+                      <div className="space-y-2">
+                        <label className="block text-sm font-medium text-gray-700">
+                          Refund amount (leave blank for full refund of {formatPrice(order.totalAmount)})
+                        </label>
+                        <input
+                          type="number"
+                          min={0}
+                          max={order.totalAmount}
+                          value={refundAmount}
+                          onChange={(e) => setRefundAmount(e.target.value)}
+                          placeholder={String(order.totalAmount)}
+                          className="w-48 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-amber-500"
+                        />
+                        <div className="flex items-center gap-3">
+                          <button
+                            onClick={handleProcessRefund}
+                            disabled={updating}
+                            className="px-4 py-1.5 bg-amber-600 text-white text-sm rounded-lg hover:bg-amber-700 disabled:opacity-50"
+                          >
+                            {updating ? 'Processing...' : 'Confirm Refund'}
+                          </button>
+                          <button
+                            onClick={() => { setShowRefundForm(false); setRefundAmount(''); }}
+                            className="text-sm text-gray-500 hover:text-gray-700"
+                          >
+                            Dismiss
+                          </button>
+                        </div>
                       </div>
                     )}
                   </div>

@@ -4,6 +4,7 @@ export const createOrderSchema = z.object({
   items: z.array(
     z.object({
       productId: z.string().uuid(),
+      variantId: z.string().uuid().optional(),
       quantity: z.number().int().positive(),
       stockType: z.enum(['direct', 'hub', 'both']).optional(),
       hubId: z.string().uuid().optional(),
@@ -14,7 +15,7 @@ export const createOrderSchema = z.object({
   hubId: z.string().uuid().optional(),
   deliverySlotDate: z.string().optional(),
   deliverySlotTime: z.string().optional(),
-  paymentMethod: z.enum(['jazzcash', 'easypaisa', 'stripe', 'cod', 'wallet', 'card', 'safepay']),
+  paymentMethod: z.enum(['jazzcash', 'easypaisa', 'bank', 'cod', 'wallet', 'card', 'safepay']),
   promotionCode: z.string().optional(),
   deliveryInstructions: z.string().max(500).optional(),
 });

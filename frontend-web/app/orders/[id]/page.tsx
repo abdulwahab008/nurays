@@ -10,6 +10,7 @@ import { useToast } from '@/components/ui/toast';
 import { useAuthStore } from '@/lib/store/auth-store';
 import { useSocket } from '@/lib/hooks/use-socket';
 import { DashboardLayout } from '@/components/layout/DashboardShell';
+import WriteReviewForm from '@/components/products/WriteReviewForm';
 
 function playCancelSound() {
   if (typeof window === 'undefined') return;
@@ -44,7 +45,9 @@ interface OrderDetail {
   paymentStatus?: string;
   items: Array<{
     id: string;
+    productId?: string;
     productName: string;
+    variantName?: string;
     productImage?: string;
     sellerName: string;
     quantity: number;
@@ -56,6 +59,7 @@ interface OrderDetail {
     subtotal: number;
     deliveryFee: number;
     discount: number;
+    tax: number;
     total: number;
   };
   delivery: {
@@ -92,7 +96,9 @@ function mapOrderToDetail(raw: any): OrderDetail {
     paymentStatus: raw.paymentStatus ?? 'pending',
     items: (raw.items ?? []).map((i: any) => ({
       id: i.id,
+      productId: i.productId ?? i.product?.id,
       productName: i.productName ?? i.product?.name ?? '—',
+      variantName: i.variantName ?? undefined,
       productImage: i.productImage ?? i.product?.images?.[0]?.url,
       sellerName: i.seller?.businessName ?? i.seller?.businessNameUrdu ?? '—',
       quantity: i.quantity ?? 0,
@@ -104,6 +110,7 @@ function mapOrderToDetail(raw: any): OrderDetail {
       subtotal: Number(raw.subtotal ?? 0),
       deliveryFee: Number(raw.deliveryFee ?? 0),
       discount: Number(raw.discountAmount ?? 0),
+      tax: Number(raw.taxAmount ?? 0),
       total: Number(raw.totalAmount ?? 0),
     },
     delivery: {
@@ -356,6 +363,9 @@ export default function OrderDetailPage() {
                     </div>
                     <div className="flex-1">
                       <h3 className="font-semibold text-gray-900">{item.productName}</h3>
+                      {item.variantName && (
+                        <p className="text-sm text-gray-600">{item.variantName}</p>
+                      )}
                       <p className="text-sm text-gray-600">{item.sellerName}</p>
                       <div className="flex items-center justify-between mt-2">
                         <div>
@@ -368,6 +378,9 @@ export default function OrderDetailPage() {
                         </div>
                         <span className="text-sm text-gray-600 capitalize">{item.status}</span>
                       </div>
+                      {(effectiveStatus === 'delivered' || effectiveStatus === 'completed') && item.productId && (
+                        <WriteReviewForm orderId={order.id} orderItemId={item.id} productName={item.productName} />
+                      )}
                     </div>
                   </div>
                 ))}
@@ -460,6 +473,10 @@ export default function OrderDetailPage() {
                     <span>-{formatPrice(order.pricing?.discount ?? 0)}</span>
                   </div>
                 )}
+                <div className="flex justify-between text-gray-600">
+                  <span>GST (5%)</span>
+                  <span>{formatPrice(order.pricing?.tax ?? 0)}</span>
+                </div>
                 <div className="border-t pt-2 mt-2">
                   <div className="flex justify-between font-bold text-lg">
                     <span>Total</span>

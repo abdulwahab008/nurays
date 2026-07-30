@@ -30,11 +30,11 @@ function RegisterForm() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
-  // Check URL params for user_type (e.g., ?user_type=seller)
+  // Check URL params for user_type (e.g., ?user_type=seller, ?user_type=rider)
   useEffect(() => {
     const userTypeParam = searchParams.get('user_type');
-    if (userTypeParam === 'seller') {
-      setFormData(prev => ({ ...prev, user_type: 'seller' }));
+    if (userTypeParam === 'seller' || userTypeParam === 'rider') {
+      setFormData(prev => ({ ...prev, user_type: userTypeParam }));
     }
   }, [searchParams]);
 
@@ -133,17 +133,20 @@ function RegisterForm() {
         } else {
           showToast('Registration successful! Welcome to Nuray!', 'success');
         }
-        
+
         // Redirect based on user type
+        const dashboardByType: Record<string, string> = {
+          seller: '/sellers/dashboard?onboarding=true',
+          rider: '/riders/dashboard',
+        };
         if (response.data.requiresEmailVerification) {
           // Email verification required - redirect to pending page
-          const redirectUrl = formData.user_type === 'seller' 
-            ? '/verify-email-pending?next=/sellers/dashboard?onboarding=true'
+          const redirectUrl = dashboardByType[formData.user_type]
+            ? `/verify-email-pending?next=${encodeURIComponent(dashboardByType[formData.user_type])}`
             : '/verify-email-pending';
           router.push(redirectUrl);
-        } else if (formData.user_type === 'seller') {
-          // Seller - go to dashboard with onboarding modal
-          router.push('/sellers/dashboard?onboarding=true');
+        } else if (dashboardByType[formData.user_type]) {
+          router.push(dashboardByType[formData.user_type]);
         } else {
           // Customer - go to browse products
           router.push('/products');

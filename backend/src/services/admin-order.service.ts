@@ -1,6 +1,7 @@
 import prisma from '../config/database';
 import { AppError } from '../middleware/errorHandler';
 import realtimeOrderService from './realtime-order.service';
+import riderService from './rider.service';
 
 export class AdminOrderService {
   /**
@@ -149,7 +150,14 @@ export class AdminOrderService {
       where: { id: orderId },
       include: {
         customer: {
-          include: {
+          select: {
+            id: true,
+            email: true,
+            phone: true,
+            status: true,
+            emailVerified: true,
+            phoneVerified: true,
+            createdAt: true,
             profile: true,
           },
         },
@@ -283,6 +291,9 @@ export class AdminOrderService {
 
     // Emit order status update
     await realtimeOrderService.emitOrderStatusUpdate(orderId, status, adminId);
+    if (status === 'ready') {
+      await riderService.ensureDeliveryForOrder(orderId);
+    }
 
     return updatedOrder;
   }
@@ -516,6 +527,8 @@ export class AdminOrderService {
       revenueThisWeek,
       ordersThisMonth,
       revenueThisMonth,
+      allTimeOrders,
+      allTimeRevenue,
     ] = await Promise.all([
       // Total orders (in period)
       prisma.order.count({
@@ -654,13 +667,23 @@ export class AdminOrderService {
         },
         _sum: { totalAmount: true },
       }),
+      // All-time order count, independent of the dateFrom/dateTo window
+      prisma.order.count(),
+      // All-time revenue (paid only), independent of the dateFrom/dateTo window
+      prisma.order.aggregate({
+        where: { paymentStatus: 'paid' },
+        _sum: { totalAmount: true },
+      }),
     ]);
 
     const totalRevenueNum = Number(totalRevenue._sum.totalAmount || 0);
     return {
+      period: { from: dateFrom.toISOString(), to: dateTo.toISOString() },
       overview: {
-        totalOrders,
-        totalRevenue: totalRevenueNum,
+        periodOrders: totalOrders,
+        totalOrders: allTimeOrders,
+        totalRevenue: Number(allTimeRevenue._sum.totalAmount || 0),
+        periodRevenue: totalRevenueNum,
         totalUsers,
         totalSellers,
         activeUsers: activeUsers.filter((u) => u.customerId).length,

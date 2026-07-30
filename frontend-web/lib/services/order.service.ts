@@ -12,7 +12,7 @@ export interface CreateOrderRequest {
   hubId?: string;
   deliverySlotDate?: string;
   deliverySlotTime?: 'morning' | 'afternoon' | 'evening';
-  paymentMethod: 'jazzcash' | 'easypaisa' | 'card' | 'safepay' | 'stripe' | 'cod' | 'wallet';
+  paymentMethod: 'jazzcash' | 'easypaisa' | 'card' | 'safepay' | 'bank' | 'cod' | 'wallet';
   promotionCode?: string;
   deliveryInstructions?: string;
 }

@@ -49,9 +49,13 @@ export const authenticate = async (
       throw new AppError(`Account is ${user.status}`, 403, 'ACCOUNT_SUSPENDED');
     }
 
-    // Attach user to request
+    // Attach user to request — use the freshly-fetched userType, not the JWT's
+    // payload.userType, which is a snapshot from whenever the token was issued
+    // and goes stale the moment a role changes (e.g. a seller application
+    // getting approved) until the token is reissued.
     req.user = {
       ...payload,
+      userType: user.userType,
       id: payload.userId,
     };
 
@@ -88,6 +92,7 @@ export const optionalAuthenticate = async (
       if (user && user.status === 'active') {
         req.user = {
           ...payload,
+          userType: user.userType,
           id: payload.userId,
         };
       }
@@ -137,15 +142,19 @@ export const requireSeller = async (
     // Load seller data
     const seller = await prisma.seller.findUnique({
       where: { userId: req.user.id },
-      select: { id: true, businessName: true, status: true },
+      select: { id: true, businessName: true, status: true, verificationStatus: true },
     });
 
     if (!seller) {
       throw new AppError('Seller profile not found', 404, 'SELLER_NOT_FOUND');
     }
 
-    if (seller.status !== 'approved') {
+    if (seller.verificationStatus !== 'approved') {
       throw new AppError('Seller account is not approved', 403, 'SELLER_NOT_APPROVED');
+    }
+
+    if (seller.status !== 'active') {
+      throw new AppError(`Seller account is ${seller.status}`, 403, 'SELLER_ACCOUNT_INACTIVE');
     }
 
     // Attach seller to request

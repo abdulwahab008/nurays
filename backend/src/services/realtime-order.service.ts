@@ -3,6 +3,18 @@ import socketManager from '../config/socket';
 import notificationService from './notification.service';
 import { AppError } from '../middleware/errorHandler';
 
+const ORDER_STATUS_MESSAGES: Record<string, { title: string; message: (orderNumber: string) => string }> = {
+  confirmed: { title: 'Order confirmed', message: (n) => `Your order #${n} has been confirmed by the seller.` },
+  preparing: { title: 'Order being prepared', message: (n) => `Your order #${n} is being prepared.` },
+  ready: { title: 'Order ready', message: (n) => `Your order #${n} is ready for dispatch.` },
+  dispatched: { title: 'Order dispatched', message: (n) => `Your order #${n} has been dispatched.` },
+  in_transit: { title: 'Order on the way', message: (n) => `Your order #${n} is on its way!` },
+  delivered: { title: 'Order delivered', message: (n) => `Your order #${n} has been delivered. Enjoy!` },
+  completed: { title: 'Order completed', message: (n) => `Your order #${n} is complete. Thanks for ordering!` },
+  cancelled: { title: 'Order cancelled', message: (n) => `Your order #${n} has been cancelled.` },
+  refunded: { title: 'Order refunded', message: (n) => `Your order #${n} has been refunded.` },
+};
+
 export class RealtimeOrderService {
   /**
    * Emit order status update to relevant parties
@@ -46,6 +58,19 @@ export class RealtimeOrderService {
     // Emit to customer
     if (order.customerId) {
       socketManager.emitToUser(order.customerId, 'order:status:update', orderData);
+
+      const statusMessage = ORDER_STATUS_MESSAGES[status];
+      if (statusMessage) {
+        notificationService
+          .createNotification(order.customerId, {
+            type: 'order',
+            title: statusMessage.title,
+            message: statusMessage.message(order.orderNumber),
+            actionUrl: `/orders/${order.id}`,
+            data: { orderId: order.id, orderNumber: order.orderNumber, status },
+          })
+          .catch((err) => console.error('Failed to create customer notification:', err));
+      }
     }
 
     // Emit to all sellers in this order
@@ -155,6 +180,19 @@ export class RealtimeOrderService {
     });
 
     const totalAmountFormatted = `Rs ${Number(order.totalAmount).toLocaleString()}`;
+
+    // Confirm to the customer that their order was placed
+    if (order.customerId) {
+      notificationService
+        .createNotification(order.customerId, {
+          type: 'order',
+          title: 'Order placed',
+          message: `Your order #${order.orderNumber} (${totalAmountFormatted}) has been placed.`,
+          actionUrl: `/orders/${order.id}`,
+          data: { orderId: order.id, orderNumber: order.orderNumber },
+        })
+        .catch((err) => console.error('Failed to create customer order-placed notification:', err));
+    }
 
     // Emit to each seller and create a persistent notification for the Notifications page
     sellerOrders.forEach((items, sellerUserId) => {

@@ -6,6 +6,7 @@ import {
   getSellerDashboard,
   getSellerAnalytics,
   requestPayout,
+  getPayoutHistory,
 } from '../controllers/seller.controller';
 import { authenticate, authorize } from '../middleware/auth.middleware';
 import { validate } from '../middleware/validation.middleware';
@@ -30,8 +31,9 @@ router.get('/me/dashboard', getSellerDashboard);
 // Get seller analytics
 router.get('/me/analytics', getSellerAnalytics);
 
-// Request payout
+// Request payout / list own payout history
 router.post('/me/payouts', validate(requestPayoutSchema), requestPayout);
+router.get('/me/payouts', getPayoutHistory);
 
 export default router;
 

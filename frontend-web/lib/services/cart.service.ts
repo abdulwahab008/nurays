@@ -8,6 +8,7 @@ export interface CartItem {
     price: number;
     image?: string;
   };
+  variant?: { id: string; name: string; price: number } | null;
   seller: {
     id: string;
     businessName: string;
@@ -38,6 +39,7 @@ export const cartService = {
 
   addToCart: async (data: {
     productId: string;
+    variantId?: string;
     quantity: number;
     stockType?: 'direct' | 'hub' | 'both';
     hubId?: string;

@@ -7,6 +7,7 @@ const optionalHubId = z
 
 export const addToCartSchema = z.object({
   productId: z.string().min(1, 'Product ID is required'), // UUID or slug; service resolves by id or slug
+  variantId: z.string().uuid().optional(),
   quantity: z.coerce.number().int().positive('Quantity must be at least 1'),
   stockType: z.enum(['direct', 'hub', 'both']).optional(),
   hubId: optionalHubId,

@@ -7,12 +7,15 @@ import { DashboardLayout } from '@/components/layout/DashboardShell';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/toast';
 import { useAuthStore } from '@/lib/store/auth-store';
+import { apiClient } from '@/lib/api-client';
+import MyTickets from '@/components/support/MyTickets';
 
 export default function SupportPage() {
   const router = useRouter();
   const { isAuthenticated, user } = useAuthStore();
   const { showToast } = useToast();
-  const [activeTab, setActiveTab] = useState<'faq' | 'contact'>('faq');
+  const [activeTab, setActiveTab] = useState<'faq' | 'contact' | 'tickets'>('faq');
+  const [submitting, setSubmitting] = useState(false);
   const [expandedFaq, setExpandedFaq] = useState<number | null>(null);
   const [formData, setFormData] = useState({
     subject: '',
@@ -105,15 +108,31 @@ export default function SupportPage() {
     },
   ];
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!formData.subject || !formData.message) {
-      showToast('Please fill in all fields', 'warning');
+    if (formData.subject.trim().length < 5) {
+      showToast('Subject must be at least 5 characters', 'warning');
       return;
     }
-    // In a real app, this would send to backend
-    showToast('Your message has been sent! We will respond within 24 hours.', 'success');
-    setFormData({ subject: '', message: '', category: 'general' });
+    if (formData.message.trim().length < 10) {
+      showToast('Please describe your issue in at least 10 characters', 'warning');
+      return;
+    }
+    try {
+      setSubmitting(true);
+      await apiClient.post('/support/tickets', {
+        category: formData.category,
+        subject: formData.subject.trim(),
+        description: formData.message.trim(),
+      });
+      showToast('Your message has been sent! We will respond within 24 hours.', 'success');
+      setFormData({ subject: '', message: '', category: 'general' });
+      setActiveTab('tickets');
+    } catch (error: any) {
+      showToast(error.response?.data?.error?.message || 'Failed to send your message', 'error');
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   if (!isAuthenticated) {
@@ -186,7 +205,20 @@ export default function SupportPage() {
         >
           <span className="mr-2">📝</span> Contact Us
         </button>
+        <button
+          onClick={() => setActiveTab('tickets')}
+          className={`px-6 py-2.5 rounded-xl font-medium transition-all ${
+            activeTab === 'tickets'
+              ? 'bg-green-600 text-white'
+              : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+          }`}
+        >
+          <span className="mr-2">🎫</span> My Tickets
+        </button>
       </div>
+
+      {/* My Tickets */}
+      {activeTab === 'tickets' && <MyTickets />}
 
       {/* FAQ Section */}
       {activeTab === 'faq' && (
@@ -272,8 +304,8 @@ export default function SupportPage() {
             </div>
 
             <div className="flex gap-3 pt-2">
-              <Button type="submit" className="bg-green-600 hover:bg-green-700">
-                <span className="mr-2">📤</span> Send Message
+              <Button type="submit" className="bg-green-600 hover:bg-green-700" disabled={submitting}>
+                <span className="mr-2">📤</span> {submitting ? 'Sending...' : 'Send Message'}
               </Button>
               <Button type="button" variant="outline" onClick={() => setFormData({ subject: '', message: '', category: 'general' })}>
                 Clear

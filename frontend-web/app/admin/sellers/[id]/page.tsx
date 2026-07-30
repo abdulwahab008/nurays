@@ -99,11 +99,29 @@ export default function AdminSellerDetailPage() {
     if (reason === null) return; // user cancelled
     try {
       setActionLoading(true);
-      await apiClient.post(`/admin/sellers/${id}/reject`, { notes: reason || undefined });
+      await apiClient.post(`/admin/sellers/${id}/reject`, { approved: false, notes: reason || undefined });
       showToast('Seller rejected', 'success');
       loadSeller();
     } catch (error: any) {
       showToast(error.response?.data?.error?.message || 'Failed to reject', 'error');
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleToggleSuspend = async () => {
+    if (!seller) return;
+    const nextStatus = seller.status === 'suspended' ? 'active' : 'suspended';
+    if (nextStatus === 'suspended' && !window.confirm('Suspend this seller? Their storefront will be hidden from customers.')) {
+      return;
+    }
+    try {
+      setActionLoading(true);
+      await apiClient.post(`/admin/sellers/${id}/status`, { status: nextStatus });
+      showToast(nextStatus === 'suspended' ? 'Seller suspended' : 'Seller reactivated', 'success');
+      loadSeller();
+    } catch (error: any) {
+      showToast(error.response?.data?.error?.message || 'Failed to update seller status', 'error');
     } finally {
       setActionLoading(false);
     }
@@ -184,6 +202,18 @@ export default function AdminSellerDetailPage() {
                       Reject
                     </Button>
                   </div>
+                )}
+                {seller.verificationStatus === 'approved' && (
+                  <Button
+                    variant="outline"
+                    onClick={handleToggleSuspend}
+                    disabled={actionLoading}
+                    className={seller.status === 'suspended'
+                      ? 'border-green-300 text-green-700 hover:bg-green-50'
+                      : 'border-red-300 text-red-700 hover:bg-red-50'}
+                  >
+                    {seller.status === 'suspended' ? 'Reactivate Seller' : 'Suspend Seller'}
+                  </Button>
                 )}
               </div>
             </div>

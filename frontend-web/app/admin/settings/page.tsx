@@ -6,6 +6,7 @@ import { UserLayout } from '@/components/layout/UserLayout';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/toast';
 import { useAuthStore } from '@/lib/store/auth-store';
+import { apiClient } from '@/lib/api-client';
 
 export default function AdminSettingsPage() {
   const router = useRouter();
@@ -31,16 +32,42 @@ export default function AdminSettingsPage() {
       showToast('Access denied. Admin privileges required.', 'error');
       return;
     }
+
+    loadSettings();
   }, [isAuthenticated, user, router]);
+
+  const loadSettings = async () => {
+    try {
+      const response = await apiClient.get('/admin/settings');
+      if (response.data.success) {
+        const s = response.data.data;
+        setFormData({
+          platformName: s.platformName ?? 'Nuray',
+          supportEmail: s.supportEmail ?? '',
+          supportPhone: s.supportPhone ?? '',
+          commissionRate: String(s.commissionRate ?? 15),
+          minPayoutAmount: String(s.minPayoutAmount ?? 1000),
+        });
+      }
+    } catch (error: any) {
+      showToast(error.response?.data?.error?.message || 'Failed to load settings', 'error');
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
       setLoading(true);
-      // Note: This endpoint might need to be created in the backend
+      await apiClient.patch('/admin/settings', {
+        platformName: formData.platformName,
+        supportEmail: formData.supportEmail,
+        supportPhone: formData.supportPhone,
+        commissionRate: parseFloat(formData.commissionRate) || 0,
+        minPayoutAmount: parseFloat(formData.minPayoutAmount) || 0,
+      });
       showToast('Settings updated successfully', 'success');
     } catch (error: any) {
-      showToast('Failed to update settings', 'error');
+      showToast(error.response?.data?.error?.message || 'Failed to update settings', 'error');
     } finally {
       setLoading(false);
     }

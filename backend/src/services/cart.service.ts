@@ -48,6 +48,7 @@ export class CartService {
             },
           },
         },
+        variant: true,
         seller: {
           select: {
             id: true,
@@ -102,6 +103,9 @@ export class CartService {
           price: Number(item.product.price),
           image,
         },
+        variant: item.variant
+          ? { id: item.variant.id, name: item.variant.name, price: Number(item.variant.price) }
+          : null,
         seller: {
           id: item.seller.id,
           businessName: item.seller.businessName,
@@ -200,6 +204,7 @@ export class CartService {
     userId: string,
     data: {
       productId: string;
+      variantId?: string;
       quantity: number;
       stockType?: string;
       hubId?: string;
@@ -230,9 +235,20 @@ export class CartService {
     const effectiveStockType = data.stockType || product.stockType;
     const effectiveHubId = data.hubId || null;
 
-    // Resolve available stock: for hub orders use hub inventory if present, else product.stockQuantity
-    let availableStock = product.stockQuantity;
-    if (effectiveStockType === 'hub' && effectiveHubId) {
+    // Resolve the variant, if one was requested — it drives price + stock instead of the base product.
+    let variant = null;
+    if (data.variantId) {
+      variant = await prisma.productVariant.findFirst({
+        where: { id: data.variantId, productId, isActive: true },
+      });
+      if (!variant) {
+        throw new AppError('Product variant not found', 404, 'VARIANT_NOT_FOUND');
+      }
+    }
+
+    // Resolve available stock: variant stock takes priority, then hub inventory, else product stock
+    let availableStock = variant ? variant.stockQuantity : product.stockQuantity;
+    if (!variant && effectiveStockType === 'hub' && effectiveHubId) {
       const hubStock = await prisma.hubInventory.aggregate({
         where: {
           productId,
@@ -254,11 +270,15 @@ export class CartService {
       );
     }
 
-    // Find existing cart line by resolved product id (so slug vs uuid doesn't create duplicates)
+    const priceSnapshot = variant ? variant.price : product.price;
+
+    // Find existing cart line by resolved product id + variant (so slug vs uuid doesn't create
+    // duplicates, and different variants of the same product stay separate lines)
     const existingItem = await prisma.cartItem.findFirst({
       where: {
         cartId: cart.id,
         productId,
+        variantId: variant?.id ?? null,
         stockType: effectiveStockType,
         hubId: effectiveHubId,
       },
@@ -279,7 +299,7 @@ export class CartService {
         where: { id: existingItem.id },
         data: {
           quantity: newQuantity,
-          priceSnapshot: product.price, // Update price snapshot
+          priceSnapshot, // Update price snapshot
         },
         include: {
           product: {
@@ -301,11 +321,12 @@ export class CartService {
       data: {
         cartId: cart.id,
         productId,
+        variantId: variant?.id,
         sellerId: product.seller.id,
         quantity: data.quantity,
         stockType: effectiveStockType,
         hubId: effectiveHubId,
-        priceSnapshot: product.price,
+        priceSnapshot,
       },
       include: {
         product: {
@@ -366,21 +387,35 @@ export class CartService {
         return null;
       }
 
-      // Check stock
-      const product = await prisma.product.findUnique({
-        where: { id: cartItem.productId },
-      });
+      // Check stock — variant stock takes priority over the base product's
+      if (cartItem.variantId) {
+        const variant = await prisma.productVariant.findUnique({ where: { id: cartItem.variantId } });
+        if (!variant) {
+          throw new AppError('Product variant not found', 404, 'VARIANT_NOT_FOUND');
+        }
+        if (variant.stockQuantity < data.quantity) {
+          throw new AppError(
+            `Insufficient stock. Available: ${variant.stockQuantity}`,
+            400,
+            'INSUFFICIENT_STOCK'
+          );
+        }
+      } else {
+        const product = await prisma.product.findUnique({
+          where: { id: cartItem.productId },
+        });
 
-      if (!product) {
-        throw new AppError('Product not found', 404, 'PRODUCT_NOT_FOUND');
-      }
+        if (!product) {
+          throw new AppError('Product not found', 404, 'PRODUCT_NOT_FOUND');
+        }
 
-      if (product.stockQuantity < data.quantity) {
-        throw new AppError(
-          `Insufficient stock. Available: ${product.stockQuantity}`,
-          400,
-          'INSUFFICIENT_STOCK'
-        );
+        if (product.stockQuantity < data.quantity) {
+          throw new AppError(
+            `Insufficient stock. Available: ${product.stockQuantity}`,
+            400,
+            'INSUFFICIENT_STOCK'
+          );
+        }
       }
     }
 
@@ -454,6 +489,7 @@ export class CartService {
       where: { cartId: cart.id },
       include: {
         product: true,
+        variant: true,
       },
     });
 
@@ -467,6 +503,23 @@ export class CartService {
       // Check if product still exists and is active
       if (!item.product.isActive || item.product.approvalStatus !== 'approved') {
         errors.push(`${item.product.name} is no longer available`);
+        continue;
+      }
+
+      if (item.variant) {
+        if (!item.variant.isActive) {
+          errors.push(`${item.product.name} (${item.variant.name}) is no longer available`);
+          continue;
+        }
+        if (item.variant.stockQuantity < item.quantity) {
+          errors.push(
+            `Insufficient stock for ${item.product.name} (${item.variant.name}). Available: ${item.variant.stockQuantity}`
+          );
+          continue;
+        }
+        if (Number(item.variant.price) !== Number(item.priceSnapshot)) {
+          errors.push(`Price changed for ${item.product.name} (${item.variant.name})`);
+        }
         continue;
       }
 

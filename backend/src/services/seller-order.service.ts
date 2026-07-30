@@ -1,6 +1,7 @@
 import prisma from '../config/database';
 import { AppError } from '../middleware/errorHandler';
 import realtimeOrderService from './realtime-order.service';
+import riderService from './rider.service';
 
 export class SellerOrderService {
   /**
@@ -278,6 +279,24 @@ export class SellerOrderService {
       throw new AppError(`Invalid status: ${status}`, 400, 'INVALID_STATUS');
     }
 
+    // Order items move forward through this pipeline only (or cancel before dispatch) —
+    // no skipping stages, no moving backward.
+    const ALLOWED_TRANSITIONS: Record<string, string[]> = {
+      pending: ['confirmed', 'cancelled'],
+      confirmed: ['preparing', 'cancelled'],
+      preparing: ['ready', 'cancelled'],
+      ready: ['dispatched', 'cancelled'],
+      dispatched: [],
+      cancelled: [],
+    };
+    if (!ALLOWED_TRANSITIONS[orderItem.status]?.includes(status)) {
+      throw new AppError(
+        `Cannot move an item from "${orderItem.status}" to "${status}"`,
+        400,
+        'INVALID_STATUS_TRANSITION'
+      );
+    }
+
     // All DB writes happen inside a single transaction so partial failures
     // can't split item.status and order.orderStatus.
     const result = await prisma.$transaction(async (tx) => {
@@ -332,6 +351,9 @@ export class SellerOrderService {
         result.derivedOrderStatus,
         sellerId,
       );
+      if (result.derivedOrderStatus === 'ready') {
+        await riderService.ensureDeliveryForOrder(orderItem.orderId);
+      }
     }
     await realtimeOrderService.emitOrderItemStatusUpdate(orderItemId, status, seller.id);
 

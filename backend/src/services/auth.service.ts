@@ -140,6 +140,18 @@ export class AuthService {
       });
     }
 
+    // If registering as a rider, create the rider record too (active immediately —
+    // no approval workflow exists for riders yet, unlike sellers).
+    if (userType === 'rider') {
+      await prisma.rider.create({
+        data: {
+          userId: user.id,
+          city: city?.trim() || 'Unspecified',
+          status: 'active',
+        },
+      });
+    }
+
     // Create email verification token and send confirmation email
     const verificationToken = generateVerificationToken();
     const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours

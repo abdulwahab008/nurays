@@ -9,6 +9,7 @@ import cors from 'cors';
 import helmet from 'helmet';
 import morgan from 'morgan';
 import socketManager from './config/socket';
+import { checkAndCreateStockAlerts } from './services/stock-alert.service';
 import { errorHandler } from './middleware/errorHandler';
 import { notFoundHandler } from './middleware/notFoundHandler';
 import healthRoutes from './routes/health.routes';
@@ -32,6 +33,7 @@ import reviewRoutes from './routes/review.routes';
 import promotionRoutes from './routes/promotion.routes';
 import notificationRoutes from './routes/notification.routes';
 import hubRoutes from './routes/hub.routes';
+import riderRoutes from './routes/rider.routes';
 import supportRoutes from './routes/support.routes';
 import uploadRoutes from './routes/upload.routes';
 
@@ -93,6 +95,7 @@ app.use(`/api/${API_VERSION}/reviews`, reviewRoutes);
 app.use(`/api/${API_VERSION}/promotions`, promotionRoutes);
 app.use(`/api/${API_VERSION}/notifications`, notificationRoutes);
 app.use(`/api/${API_VERSION}/hubs`, hubRoutes);
+app.use(`/api/${API_VERSION}/riders`, riderRoutes);
 app.use(`/api/${API_VERSION}/support`, supportRoutes);
 
 // Root endpoint
@@ -115,6 +118,16 @@ httpServer.listen(PORT, () => {
   console.log(`📝 Environment: ${process.env.NODE_ENV || 'development'}`);
   console.log(`🔗 API Base URL: http://localhost:${PORT}/api/${API_VERSION}`);
   console.log(`🔌 WebSocket server initialized`);
+
+  // Safety-net sweep for stock alerts an order-time check might have missed
+  // (e.g. a threshold lowered after the fact). Real-time alerting on order
+  // creation (order.service.ts) is the primary path; this just catches up.
+  // ponytail: setInterval is the whole scheduler — swap for a real job queue
+  // if more background jobs show up.
+  checkAndCreateStockAlerts().catch((err) => console.error('Stock alert sweep failed:', err));
+  setInterval(() => {
+    checkAndCreateStockAlerts().catch((err) => console.error('Stock alert sweep failed:', err));
+  }, 6 * 60 * 60 * 1000);
 });
 
 export default app;

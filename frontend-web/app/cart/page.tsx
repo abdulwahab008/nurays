@@ -20,7 +20,7 @@ import {
   X,
 } from 'lucide-react';
 import { cartService, CartResponse } from '@/lib/services/cart.service';
-import { formatPrice } from '@/lib/utils';
+import { formatPrice, calculateGst } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { useAuthStore } from '@/lib/store/auth-store';
 import { useCartStore } from '@/lib/store/cart-store';
@@ -129,7 +129,7 @@ export default function CartPage() {
             sellerId: i.seller.id,
             sellerName: i.seller.businessName,
             quantity: i.quantity,
-            unitPrice: i.product.price,
+            unitPrice: i.variant?.price ?? i.product.price,
             stockType: i.stockType,
             hubId: i.hubId,
             subtotal: i.subtotal,
@@ -245,13 +245,15 @@ export default function CartPage() {
 
   // Apply catalog promotions to summary (backend returns full-price subtotal)
   const discountedSubtotal = cart.items.reduce((sum, item) => {
+    const basePrice = item.variant?.price ?? item.product.price;
     const promos = promotionsByProductId[item.product.id] || [];
-    const unitPrice = promos.length > 0 ? getStackedDiscountedPrice(item.product.price, promos) : item.product.price;
+    const unitPrice = promos.length > 0 ? getStackedDiscountedPrice(basePrice, promos) : basePrice;
     return sum + unitPrice * item.quantity;
   }, 0);
   const promotionSavings = Math.max(0, cart.summary.subtotal - discountedSubtotal);
   const deliveryFee = deliveryEstimate ? deliveryEstimate.deliveryFee : 0;
-  const displayTotal = discountedSubtotal + deliveryFee - cart.summary.discount;
+  const gst = calculateGst(Math.max(0, discountedSubtotal - cart.summary.discount));
+  const displayTotal = discountedSubtotal + deliveryFee - cart.summary.discount + gst;
 
   return (
     <DashboardLayout
@@ -285,7 +287,7 @@ export default function CartPage() {
           {/* Items */}
           {cart.items.map((item) => {
             const promos = promotionsByProductId[item.product.id] || [];
-            const originalPrice = item.product.price;
+            const originalPrice = item.variant?.price ?? item.product.price;
             const unitPrice = promos.length > 0 ? getStackedDiscountedPrice(originalPrice, promos) : originalPrice;
             const lineTotal = unitPrice * item.quantity;
             const promotionLabel = promos.length > 0 ? promos.map(getPromotionLabel).join(' + ') : null;
@@ -314,6 +316,9 @@ export default function CartPage() {
                       <Link href={`/products/${item.product.id}`}>
                         <h3 className="font-semibold text-gray-900 text-lg hover:underline">{item.product.name}</h3>
                       </Link>
+                      {item.variant && (
+                        <p className="text-sm text-gray-600">{item.variant.name}</p>
+                      )}
                       <p className="text-sm text-gray-500 flex items-center gap-1.5 mt-1">
                         <Store className="w-3.5 h-3.5 text-gray-400" /> {item.seller.businessName}
                       </p>
@@ -447,8 +452,12 @@ export default function CartPage() {
                   <span className="font-medium">-{formatPrice(cart.summary.discount)}</span>
                 </div>
               )}
+              <div className="flex justify-between text-gray-600">
+                <span>GST (5%)</span>
+                <span className="font-medium">{formatPrice(gst)}</span>
+              </div>
             </div>
-            
+
             {/* Total */}
             <div className="border-t border-gray-200 pt-4 mb-6">
               <div className="flex justify-between items-center">

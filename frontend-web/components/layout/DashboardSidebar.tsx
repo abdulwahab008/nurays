@@ -14,7 +14,7 @@ interface SidebarItem {
 
 interface DashboardSidebarProps {
   items: SidebarItem[];
-  userType: 'customer' | 'seller' | 'admin';
+  userType: 'customer' | 'seller' | 'admin' | 'rider';
 }
 
 // Clean SVG icons for each menu item
@@ -148,6 +148,7 @@ export function DashboardSidebar({ items, userType }: DashboardSidebarProps) {
     switch (userType) {
       case 'admin': return 'Administrator';
       case 'seller': return 'Seller';
+      case 'rider': return 'Rider';
       default: return 'Customer';
     }
   };
