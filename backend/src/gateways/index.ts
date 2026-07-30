@@ -26,5 +26,13 @@ export function getConfiguredGateways(): string[] {
     .map(([key]) => key);
 }
 
+export function getGatewayStatuses(): Record<string, 'configured' | 'not_configured'> {
+  const statuses: Record<string, 'configured' | 'not_configured'> = {};
+  for (const [key, gateway] of Object.entries(gateways)) {
+    statuses[key] = gateway.isConfigured() ? 'configured' : 'not_configured';
+  }
+  return statuses;
+}
+
 export type { IPaymentGateway, CreatePaymentRequest, CreatePaymentResult, VerifyPaymentRequest, VerifyPaymentResult } from './types';
 export { jazzcashGateway, easypaisaGateway, bankGateway, safepayGateway };
