@@ -6,11 +6,13 @@
  * - Bank-specific merchant APIs (HBL, UBL, etc.)
  * - Or a payment aggregator (PayPro, etc.) that supports multiple banks
  *
- * How to integrate:
- * 1. Contact your bank or an aggregator for "e-commerce / IBFT merchant" API.
- * 2. Set BANK_API_URL, BANK_MERCHANT_ID, BANK_API_KEY (or similar) in .env.
- * 3. Implement createPayment: redirect user to bank page or return payment token.
- * 4. Implement verifyPayment: on return or webhook, verify with bank API and mark order paid.
+ * The endpoint paths and request/response field names below (`/payments`,
+ * `/payments/:ref/status`, `reference`, `status`, ...) are a placeholder REST
+ * contract — adjust them to match whichever bank or aggregator BANK_API_URL
+ * actually points at once one is chosen. What must NOT change: verifyPayment
+ * only ever returns status 'completed' after an authenticated server-to-server
+ * call to that API explicitly reports the payment as paid. Anything else —
+ * an error, an unrecognized status, a network failure — must fail closed.
  */
 
 import type {
@@ -25,6 +27,10 @@ const BANK_API_URL = process.env.BANK_API_URL;
 const BANK_MERCHANT_ID = process.env.BANK_MERCHANT_ID;
 const BANK_API_KEY = process.env.BANK_API_KEY;
 const BANK_RETURN_URL = process.env.BANK_RETURN_URL;
+
+const PAID_STATES = new Set(['paid', 'completed', 'success', 'successful']);
+const CANCELLED_STATES = new Set(['cancelled', 'canceled', 'void']);
+const FAILED_STATES = new Set(['failed', 'declined', 'error', 'rejected']);
 
 export const bankGateway: IPaymentGateway = {
   name: 'bank',
@@ -43,20 +49,49 @@ export const bankGateway: IPaymentGateway = {
       };
     }
 
-    // TODO: Call your bank/aggregator "create payment" API.
-    // Typically: amount, order ref, return URL, merchant id, signature.
-    // They return redirectUrl or payment token for frontend.
+    try {
+      const res = await fetch(`${BANK_API_URL}/payments`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${BANK_API_KEY}`,
+        },
+        body: JSON.stringify({
+          merchant_id: BANK_MERCHANT_ID,
+          amount: Math.round(req.amountPkr),
+          currency: 'PKR',
+          order_id: req.orderId,
+          order_number: req.orderNumber,
+          return_url: BANK_RETURN_URL || req.returnUrl,
+          cancel_url: req.cancelUrl,
+        }),
+      });
 
-    const amountPkr = Math.round(req.amountPkr);
-    const txnRefNo = `BANK-${req.orderId.slice(0, 8)}-${Date.now()}`;
+      const json = (await res.json().catch(() => null)) as any;
+      if (!res.ok || !json?.reference) {
+        return {
+          success: false,
+          paymentId: `BANK-ERROR-${Date.now()}`,
+          message: json?.message || `Bank gateway create-payment failed (${res.status})`,
+          errorCode: 'BANK_INIT_FAILED',
+        };
+      }
 
-    return {
-      success: true,
-      paymentId: txnRefNo,
-      redirectUrl: `${BANK_API_URL}/pay?ref=${txnRefNo}&amount=${amountPkr}&return=${encodeURIComponent(req.returnUrl)}`,
-      transactionRef: txnRefNo,
-      expiresAt: new Date(Date.now() + 30 * 60 * 1000),
-    };
+      return {
+        success: true,
+        paymentId: json.reference,
+        redirectUrl: json.redirectUrl ?? json.redirect_url,
+        transactionRef: json.reference,
+        expiresAt: new Date(Date.now() + 30 * 60 * 1000),
+      };
+    } catch (err: any) {
+      return {
+        success: false,
+        paymentId: `BANK-ERROR-${Date.now()}`,
+        message: err?.message ?? 'Bank gateway is unreachable',
+        errorCode: 'BANK_INIT_FAILED',
+      };
+    }
   },
 
   async verifyPayment(req: VerifyPaymentRequest): Promise<VerifyPaymentResult> {
@@ -69,13 +104,48 @@ export const bankGateway: IPaymentGateway = {
       };
     }
 
-    // TODO: Call bank/aggregator "transaction status" or verify webhook signature.
+    try {
+      // Real server-to-server status inquiry — never trust a client-supplied
+      // "it's paid" claim. This is the check that was previously faked.
+      const res = await fetch(
+        `${BANK_API_URL}/payments/${encodeURIComponent(req.paymentId)}/status`,
+        { headers: { Authorization: `Bearer ${BANK_API_KEY}` } }
+      );
+      const json = (await res.json().catch(() => null)) as any;
+      if (!res.ok || !json) {
+        return {
+          success: false,
+          status: 'failed',
+          message: json?.message || `Bank gateway status check failed (${res.status})`,
+          errorCode: 'BANK_VERIFY_FAILED',
+        };
+      }
 
-    return {
-      success: true,
-      status: 'completed',
-      transactionId: req.transactionId || req.paymentId,
-      paidAt: new Date(),
-    };
+      const remoteStatus = String(json.status ?? '').toLowerCase();
+      if (PAID_STATES.has(remoteStatus)) {
+        return {
+          success: true,
+          status: 'completed',
+          transactionId: json.transaction_id ?? json.reference ?? req.paymentId,
+          paidAt: json.paid_at ? new Date(json.paid_at) : new Date(),
+          amountPkr: json.amount != null ? Number(json.amount) : undefined,
+        };
+      }
+      if (CANCELLED_STATES.has(remoteStatus)) {
+        return { success: false, status: 'cancelled', message: 'Payment was cancelled' };
+      }
+      if (FAILED_STATES.has(remoteStatus)) {
+        return { success: false, status: 'failed', message: `Bank reported status: ${remoteStatus}` };
+      }
+      // Any unrecognized or in-progress state is treated as pending — never assume paid.
+      return { success: false, status: 'pending', message: `Payment status: ${remoteStatus || 'unknown'}` };
+    } catch (err: any) {
+      return {
+        success: false,
+        status: 'failed',
+        message: err?.message ?? 'Bank gateway verification failed',
+        errorCode: 'BANK_VERIFY_FAILED',
+      };
+    }
   },
 };
