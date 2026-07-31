@@ -12,6 +12,8 @@ import {
   failPayout,
   getSettings,
   updateSettings,
+  getPendingRiders,
+  approveRejectRider,
 } from '../controllers/admin.controller';
 import { adminGetTickets, adminGetTicketDetail, adminReplyToTicket } from '../controllers/support.controller';
 import { authenticate, authorize } from '../middleware/auth.middleware';
@@ -23,6 +25,7 @@ import {
   completePayoutSchema,
   failPayoutSchema,
   updateSettingsSchema,
+  approveRejectRiderSchema,
 } from '../validators/admin.validator';
 import { adminReplySchema } from '../validators/support.validator';
 
@@ -46,6 +49,13 @@ router.post('/sellers/:id/reject', validate(approveRejectSellerSchema), approveR
 
 // Suspend/reactivate an already-approved seller
 router.post('/sellers/:id/status', validate(updateSellerStatusSchema), updateSellerStatus);
+
+// Get pending riders
+router.get('/pending-riders', getPendingRiders);
+
+// Approve/reject rider
+router.post('/riders/:id/approve', validate(approveRejectRiderSchema), approveRejectRider);
+router.post('/riders/:id/reject', validate(approveRejectRiderSchema), approveRejectRider);
 
 // List products for moderation
 router.get('/products', getProductsForModeration);

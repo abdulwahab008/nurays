@@ -62,6 +62,7 @@ export function UserLayout({ children, showSidebar = true, showNavbar = true }: 
     { name: 'Dashboard', href: '/admin/dashboard', icon: '📊' },
     { name: 'Pending Sellers', href: '/admin/pending-sellers', icon: '👥' },
     { name: 'All Sellers', href: '/admin/sellers', icon: '🏪' },
+    { name: 'Pending Riders', href: '/admin/riders', icon: '🛵' },
     { name: 'Orders', href: '/admin/orders', icon: '📦' },
     { name: 'Products', href: '/admin/products', icon: '🍽️' },
     { name: 'Payouts', href: '/admin/payouts', icon: '💸' },

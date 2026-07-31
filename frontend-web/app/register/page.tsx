@@ -130,6 +130,8 @@ function RegisterForm() {
         
         if (formData.user_type === 'seller') {
           showToast('Seller account created! Your account is pending admin approval.', 'success');
+        } else if (formData.user_type === 'rider') {
+          showToast('Rider application submitted! It\'s pending admin approval.', 'success');
         } else {
           showToast('Registration successful! Welcome to Nuray!', 'success');
         }
@@ -227,6 +229,18 @@ function RegisterForm() {
             >
               Sell food
             </button>
+            <button
+              type="button"
+              onClick={() => setFormData({ ...formData, user_type: 'rider' })}
+              className="flex-1 h-11 rounded-full font-medium transition-colors"
+              style={
+                formData.user_type === 'rider'
+                  ? { background: 'var(--ink-900)', color: 'var(--cream-50)', fontSize: 13 }
+                  : { background: 'transparent', color: 'var(--ink-700)', fontSize: 13 }
+              }
+            >
+              Ride & deliver
+            </button>
           </div>
           {formData.user_type === 'seller' && (
             <div className="mt-3 p-4 rounded-lg" style={{ background: 'var(--gold-50)', border: '1px solid var(--gold-200)' }}>
@@ -237,6 +251,18 @@ function RegisterForm() {
                 <li>Enter your kitchen name below</li>
                 <li>We'll visit, taste, and verify</li>
                 <li>Once approved, you can start listing dishes</li>
+              </ul>
+            </div>
+          )}
+          {formData.user_type === 'rider' && (
+            <div className="mt-3 p-4 rounded-lg" style={{ background: 'var(--gold-50)', border: '1px solid var(--gold-200)' }}>
+              <p className="text-sm" style={{ color: 'var(--ink-800)' }}>
+                <strong className="font-semibold">Rider application:</strong> your account is reviewed before you can accept deliveries.
+              </p>
+              <ul className="text-sm mt-2 ml-4 list-disc" style={{ color: 'var(--ink-700)' }}>
+                <li>Submit your application below</li>
+                <li>Our team verifies your details</li>
+                <li>Once approved, you can start claiming deliveries</li>
               </ul>
             </div>
           )}

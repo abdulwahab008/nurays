@@ -267,6 +267,77 @@ export class AdminService {
   }
 
   /**
+   * Get riders awaiting admin approval before they can see or claim deliveries.
+   */
+  async getPendingRiders() {
+    const riders = await prisma.rider.findMany({
+      where: { verificationStatus: 'pending' },
+      orderBy: { createdAt: 'asc' },
+    });
+
+    // Rider has no `user` relation in the schema (only a scalar userId), so
+    // author info is resolved with a separate batch lookup.
+    const userIds = riders.map((r) => r.userId);
+    const users = await prisma.user.findMany({
+      where: { id: { in: userIds } },
+      include: { profile: { select: { fullName: true, city: true } } },
+    });
+    const userById = new Map(users.map((u) => [u.id, u]));
+
+    return riders.map((rider) => {
+      const user = userById.get(rider.userId);
+      return {
+        id: rider.id,
+        city: rider.city,
+        vehicleType: rider.vehicleType,
+        vehicleNumber: rider.vehicleNumber,
+        licenseNumber: rider.licenseNumber,
+        user: user
+          ? {
+              id: user.id,
+              phone: user.phone,
+              email: user.email,
+              profile: user.profile
+                ? { fullName: user.profile.fullName, city: user.profile.city }
+                : null,
+            }
+          : null,
+        createdAt: rider.createdAt,
+      };
+    });
+  }
+
+  /**
+   * Approve or reject a rider application. A rejected rider cannot see or
+   * claim any delivery (enforced in rider.service.ts's requireRider).
+   */
+  async approveRejectRider(riderId: string, approved: boolean, reason?: string) {
+    const rider = await prisma.rider.findUnique({ where: { id: riderId } });
+    if (!rider) {
+      throw new AppError('Rider not found', 404, 'RIDER_NOT_FOUND');
+    }
+    if (rider.verificationStatus !== 'pending') {
+      throw new AppError(`Rider already ${rider.verificationStatus}`, 400, 'RIDER_ALREADY_PROCESSED');
+    }
+
+    const updated = await prisma.rider.update({
+      where: { id: riderId },
+      data: {
+        verificationStatus: approved ? 'approved' : 'rejected',
+        status: approved ? 'active' : 'suspended',
+        rejectionReason: approved ? null : reason || 'Application rejected',
+      },
+    });
+
+    return {
+      riderId: updated.id,
+      verificationStatus: updated.verificationStatus,
+      status: updated.status,
+      message: approved ? 'Rider approved successfully' : 'Rider rejected',
+    };
+  }
+
+  /**
    * Suspend or reactivate an already-approved seller (trust & safety action,
    * distinct from the pending-application approve/reject flow).
    */
