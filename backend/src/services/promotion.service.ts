@@ -1,7 +1,144 @@
 import prisma from '../config/database';
 import { AppError } from '../middleware/errorHandler';
 
+/**
+ * Stack multiple catalog discounts onto a base price, percentage discounts
+ * first then fixed amounts — must stay byte-for-byte identical to the
+ * frontend's getStackedDiscountedPrice (checkout/cart/product pages) so the
+ * price a customer sees always matches what they're actually charged.
+ */
+export function applyStackedDiscount(
+  basePrice: number,
+  promos: Array<{ discountType: string; discountValue: number }>
+): number {
+  if (!promos?.length) return basePrice;
+  const sorted = [...promos].sort((a, b) =>
+    a.discountType === 'percentage' && b.discountType === 'fixed'
+      ? -1
+      : a.discountType === 'fixed' && b.discountType === 'percentage'
+        ? 1
+        : 0
+  );
+  const result = sorted.reduce((price, p) => {
+    if (p.discountType === 'percentage' && p.discountValue > 0) return price * (1 - p.discountValue / 100);
+    if (p.discountType === 'fixed' && p.discountValue > 0) return Math.max(0, price - p.discountValue);
+    return price;
+  }, basePrice);
+  return Math.round(result);
+}
+
+type CatalogEligiblePromotion = {
+  id: string;
+  sellerId: string | null;
+  discountType: string;
+  discountValue: unknown;
+  applicableTo: string;
+  applicableProductIds: string[];
+  usageLimitTotal: number | null;
+  usedCount: number;
+  usageLimitPerUser: number;
+};
+
 export class PromotionService {
+  /** Is this promotion in scope for the product at all (seller + product-scope match)? */
+  private isInPromotionScope(
+    promotion: { sellerId: string | null; applicableTo: string; applicableProductIds: string[] },
+    productId: string,
+    sellerId: string
+  ): boolean {
+    if (promotion.sellerId !== sellerId) return false;
+    const appliesToAll = promotion.applicableTo == null || String(promotion.applicableTo).toLowerCase() === 'all';
+    const ids = promotion.applicableProductIds ?? [];
+    return appliesToAll || ids.includes(productId);
+  }
+
+  /**
+   * Is this promotion actually usable right now for a real charge — in scope
+   * AND under both its total and per-user usage caps? (The public catalog
+   * preview below deliberately skips usage caps since it has no per-user
+   * context; charging must not.)
+   */
+  private isCatalogEligibleForCharge(
+    promotion: CatalogEligiblePromotion,
+    productId: string,
+    sellerId: string,
+    userUsageCount: Map<string, number>
+  ): boolean {
+    if (!this.isInPromotionScope(promotion, productId, sellerId)) return false;
+    if (promotion.usageLimitTotal != null && promotion.usedCount >= promotion.usageLimitTotal) return false;
+    if ((userUsageCount.get(promotion.id) ?? 0) >= promotion.usageLimitPerUser) return false;
+    return true;
+  }
+
+  /**
+   * Compute the real, charge-time catalog/deal discount for each order item —
+   * the server-side twin of the frontend's catalog-promotion preview. Must be
+   * called (and its unitPrices used) for every order so the amount charged
+   * always matches what the customer saw on the product/cart/checkout pages.
+   */
+  async computeOrderCatalogDiscounts(
+    customerId: string,
+    items: Array<{ productId: string; sellerId: string; unitPrice: number; quantity: number }>
+  ): Promise<{
+    discountedUnitPrices: number[];
+    usagesToRecord: Array<{ promotionId: string; discountApplied: number }>;
+  }> {
+    if (!items.length) return { discountedUnitPrices: [], usagesToRecord: [] };
+
+    const now = new Date();
+    const sellerIds = [...new Set(items.map((i) => i.sellerId))];
+    const promotions = await prisma.promotion.findMany({
+      where: { sellerId: { in: sellerIds }, isActive: true, validFrom: { lte: now }, validUntil: { gte: now } },
+    });
+    if (!promotions.length) {
+      return { discountedUnitPrices: items.map((i) => i.unitPrice), usagesToRecord: [] };
+    }
+
+    const promotionIds = promotions.map((p) => p.id);
+    const userUsageRows = await prisma.promotionUsage.groupBy({
+      by: ['promotionId'],
+      where: { promotionId: { in: promotionIds }, userId: customerId },
+      _count: { _all: true },
+    });
+    const userUsageCount = new Map(userUsageRows.map((r) => [r.promotionId, r._count._all]));
+
+    const discountByPromotion = new Map<string, number>();
+    const discountedUnitPrices: number[] = [];
+
+    for (const item of items) {
+      const eligible = promotions.filter((p) =>
+        this.isCatalogEligibleForCharge(p, item.productId, item.sellerId, userUsageCount)
+      );
+      if (!eligible.length) {
+        discountedUnitPrices.push(item.unitPrice);
+        continue;
+      }
+      const finalUnitPrice = applyStackedDiscount(
+        item.unitPrice,
+        eligible.map((p) => ({ discountType: p.discountType, discountValue: Number(p.discountValue) }))
+      );
+      discountedUnitPrices.push(finalUnitPrice);
+
+      const itemDiscountTotal = (item.unitPrice - finalUnitPrice) * item.quantity;
+      if (itemDiscountTotal > 0) {
+        // Two simultaneous seller-wide promos stacking on the same product is a rare
+        // edge case; attribute the full item discount to each touching promotion rather
+        // than splitting it exactly. What the customer is charged is unaffected either
+        // way — this only shades the per-promotion "discountApplied" ledger value.
+        for (const p of eligible) {
+          discountByPromotion.set(p.id, (discountByPromotion.get(p.id) ?? 0) + itemDiscountTotal);
+        }
+      }
+    }
+
+    const usagesToRecord = [...discountByPromotion.entries()].map(([promotionId, discountApplied]) => ({
+      promotionId,
+      discountApplied,
+    }));
+
+    return { discountedUnitPrices, usagesToRecord };
+  }
+
   /**
    * Validate promotion code
    */
@@ -227,7 +364,7 @@ export class PromotionService {
     });
     const sellerIds = [...new Set(products.map((p) => p.sellerId))];
 
-    const promotions = await prisma.promotion.findMany({
+    const promotionsRaw = await prisma.promotion.findMany({
       where: {
         sellerId: { in: sellerIds },
         isActive: true,
@@ -240,19 +377,25 @@ export class PromotionService {
         discountType: true,
         discountValue: true,
         applicableTo: true,
+        usageLimitTotal: true,
+        usedCount: true,
         applicableProductIds: true,
         sellerId: true,
       },
     });
 
+    // A promo with no total-usage headroom left can't actually be charged to anyone
+    // anymore — don't advertise a deal price that charge-time would reject. (Per-user
+    // limits still can't be checked here: this endpoint is unauthenticated.)
+    const promotions = promotionsRaw.filter(
+      (p) => p.usageLimitTotal == null || p.usedCount < p.usageLimitTotal
+    );
+
     const result: Record<string, Array<{ id: string; name: string; type: string; discountValue: number }>> = {};
     for (const product of products) {
-      const applicable = promotions.filter((p) => {
-        if (p.sellerId !== product.sellerId) return false;
-        const appliesToAll = p.applicableTo == null || String(p.applicableTo).toLowerCase() === 'all';
-        const ids = (p.applicableProductIds ?? []) as string[];
-        return appliesToAll || ids.includes(product.id);
-      });
+      const applicable = promotions.filter((p) =>
+        this.isInPromotionScope(p, product.id, product.sellerId)
+      );
       if (applicable.length) {
         result[product.id] = applicable.map((p) => ({
           id: p.id,

@@ -3,6 +3,7 @@ import { AppError } from '../middleware/errorHandler';
 import realtimeOrderService from './realtime-order.service';
 import { getDeliveryFeeForSeller } from '../utils/deliveryFee';
 import { createStockAlert } from './stock-alert.service';
+import promotionService from './promotion.service';
 
 export class OrderService {
   /**
@@ -151,15 +152,8 @@ export class OrderService {
         );
       }
 
-      // Calculate item total
-      const unitPrice = variant ? Number(variant.price) : Number(product.price);
-      const itemTotal = unitPrice * item.quantity;
-      subtotal += itemTotal;
-
-      // Get commission rate
-      const commissionRate = Number(product.seller.commissionRate) / 100;
-      const commissionAmount = itemTotal * commissionRate;
-      const sellerPayout = itemTotal - commissionAmount;
+      // List/catalog price — the seller-wide "deal" discount below is applied on top of this.
+      const listPrice = variant ? Number(variant.price) : Number(product.price);
 
       // Get product primary image
       const productImage = await prisma.productImage.findFirst({
@@ -180,15 +174,38 @@ export class OrderService {
         productName: product.name,
         productImage: productImage?.imageUrl || null,
         quantity: item.quantity,
-        unitPrice,
-        totalPrice: itemTotal,
+        unitPrice: listPrice,
+        totalPrice: listPrice * item.quantity,
         commissionRate: product.seller.commissionRate,
-        commissionAmount,
-        sellerPayout,
+        commissionAmount: 0,
+        sellerPayout: 0,
         fulfillmentType: item.stockType || product.stockType,
         hubId: item.hubId || null,
       });
     }
+
+    // Apply seller-wide catalog/deal promotions to the actual charged unit price —
+    // the same discount the product/cart/checkout pages already show, so what's
+    // charged always matches what the customer saw (see promotion.service.ts).
+    const { discountedUnitPrices, usagesToRecord: catalogUsagesToRecord } =
+      await promotionService.computeOrderCatalogDiscounts(
+        customerId,
+        orderItems.map((i) => ({
+          productId: i.productId,
+          sellerId: i.sellerId,
+          unitPrice: i.unitPrice,
+          quantity: i.quantity,
+        }))
+      );
+    orderItems.forEach((item, i) => {
+      const discountedUnitPrice = discountedUnitPrices[i];
+      item.unitPrice = discountedUnitPrice;
+      item.totalPrice = discountedUnitPrice * item.quantity;
+      const commissionRate = Number(item.commissionRate) / 100;
+      item.commissionAmount = item.totalPrice * commissionRate;
+      item.sellerPayout = item.totalPrice - item.commissionAmount;
+      subtotal += item.totalPrice;
+    });
 
     // Calculate delivery fee: per-seller (free in their areas, fixed or distance-based outside), then sum
     let deliveryFee: number;
@@ -252,6 +269,17 @@ export class OrderService {
       const promotion = await prisma.promotion.findUnique({
         where: { code: data.promotionCode },
       });
+
+      // This exact promotion is already auto-applied as a catalog deal on one or more
+      // items above — reject the code instead of silently stacking a second discount
+      // for the same promotion on top of itself.
+      if (promotion && catalogUsagesToRecord.some((u) => u.promotionId === promotion.id)) {
+        throw new AppError(
+          'This promotion is already applied to your order automatically',
+          400,
+          'PROMO_ALREADY_APPLIED'
+        );
+      }
 
       if (promotion && promotion.isActive) {
         const now = new Date();
@@ -429,19 +457,24 @@ export class OrderService {
         },
       });
 
-      // Record promotion usage if applicable
+      // Record usage for every promotion actually applied — the manually-entered
+      // code (if any) plus every seller-wide catalog deal baked into an item's price.
+      const allUsagesToRecord = [...catalogUsagesToRecord];
       if (promotionId) {
+        allUsagesToRecord.push({ promotionId, discountApplied: discountAmount });
+      }
+      for (const usage of allUsagesToRecord) {
         await tx.promotionUsage.create({
           data: {
-            promotionId,
+            promotionId: usage.promotionId,
             userId: customerId,
             orderId: newOrder.id,
-            discountApplied: discountAmount,
+            discountApplied: usage.discountApplied,
           },
         });
 
         await tx.promotion.update({
-          where: { id: promotionId },
+          where: { id: usage.promotionId },
           data: { usedCount: { increment: 1 } },
         });
       }
