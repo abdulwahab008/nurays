@@ -349,7 +349,23 @@ export default function CartPage() {
                       {item.stockType === 'hub' ? 'Hub Stock (2-4 hrs)' : 'Seller Stock (24 hrs)'}
                     </span>
                   </div>
-                  
+
+                  {/* Allergens / dietary info */}
+                  {(item.product.allergens || (item.product.dietaryInfo && item.product.dietaryInfo.length > 0)) && (
+                    <div className="flex flex-wrap items-center gap-1.5 mb-3">
+                      {item.product.allergens && (
+                        <span className="px-2 py-0.5 rounded text-xs font-medium bg-amber-100 text-amber-800">
+                          ⚠️ {item.product.allergens}
+                        </span>
+                      )}
+                      {item.product.dietaryInfo?.map((tag) => (
+                        <span key={tag} className="px-2 py-0.5 rounded text-xs font-medium bg-green-100 text-green-800">
+                          {tag}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+
                   {/* Price & Quantity */}
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-1 bg-gray-100 rounded-xl p-1">

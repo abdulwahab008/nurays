@@ -68,6 +68,11 @@ interface ProductDetail {
     stockQuantity: number;
     isDefault: boolean;
   }>;
+  ingredients?: string | null;
+  allergens?: string | null;
+  dietaryInfo?: string[];
+  heatingInstructions?: string | null;
+  heatingInstructionsUrdu?: string | null;
 }
 
 export default function ProductDetailPage() {
@@ -402,6 +407,55 @@ export default function ProductDetailPage() {
               Description
             </h2>
             <p className="text-gray-700 leading-relaxed">{product.description}</p>
+          </div>
+        )}
+
+        {/* Allergens, dietary info, ingredients & heating instructions —
+            purchasing-decision info a customer needs before buying food. */}
+        {(product.allergens ||
+          (product.dietaryInfo && product.dietaryInfo.length > 0) ||
+          product.ingredients ||
+          product.heatingInstructions) && (
+          <div className="space-y-3 rounded-xl border border-amber-200 bg-amber-50 p-4">
+            {product.allergens && (
+              <div>
+                <h3 className="text-xs font-semibold text-amber-900 uppercase tracking-wider mb-1">
+                  ⚠️ Allergens
+                </h3>
+                <p className="text-sm text-amber-900">{product.allergens}</p>
+              </div>
+            )}
+            {product.dietaryInfo && product.dietaryInfo.length > 0 && (
+              <div className="flex flex-wrap gap-2">
+                {product.dietaryInfo.map((tag) => (
+                  <span
+                    key={tag}
+                    className="px-2.5 py-1 text-xs font-medium rounded-full bg-green-100 text-green-800"
+                  >
+                    {tag}
+                  </span>
+                ))}
+              </div>
+            )}
+            {product.ingredients && (
+              <div>
+                <h3 className="text-xs font-semibold text-gray-700 uppercase tracking-wider mb-1">
+                  Ingredients
+                </h3>
+                <p className="text-sm text-gray-700">{product.ingredients}</p>
+              </div>
+            )}
+            {product.heatingInstructions && (
+              <div>
+                <h3 className="text-xs font-semibold text-gray-700 uppercase tracking-wider mb-1">
+                  Heating Instructions
+                </h3>
+                <p className="text-sm text-gray-700">{product.heatingInstructions}</p>
+                {product.heatingInstructionsUrdu && (
+                  <p className="text-sm text-gray-600 mt-1">{product.heatingInstructionsUrdu}</p>
+                )}
+              </div>
+            )}
           </div>
         )}
 

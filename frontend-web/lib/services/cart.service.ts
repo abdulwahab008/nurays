@@ -7,6 +7,8 @@ export interface CartItem {
     name: string;
     price: number;
     image?: string;
+    allergens?: string | null;
+    dietaryInfo?: string[];
   };
   variant?: { id: string; name: string; price: number } | null;
   seller: {
