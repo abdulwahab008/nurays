@@ -1,169 +1,176 @@
-# FrozenNuray – Account credentials (Admin, Seller, Customer)
+# FrozenNuray – Account credentials & how to get access
 
-This doc describes the **three main account types** and how to get or create credentials for each.
+This doc covers all **four account types** (customer, seller, rider, admin): how to register one from
+scratch on a fresh database, and — if you're working against *this* local dev database — the accounts
+that already exist and are known to work.
 
----
+Local URLs used throughout this doc:
 
-## 1. Admin account
-
-**Role:** Platform administrator (manage sellers, orders, categories, analytics).
-
-| Field      | Value                      |
-|-----------|----------------------------|
-| **Login URL** | http://localhost:3000/admin/login |
-| **Email**     | `admin@frozennuray.com`    |
-| **Password**  | `Admin123!` (default; change after first login) |
-
-**Notes:**
-
-- The admin user must exist in the database with `user_type = 'admin'` and this email. The app does **not** seed it automatically.
-- If the admin does not exist, create one via API (see “Creating the admin user” below).
-- To **reset** the admin password (e.g. after you’ve forgotten it), from the `backend` folder run:
-  ```bash
-  node scripts/reset-admin-password.js "YourNewPassword"
-  ```
-  If you omit the password, it is set to `Admin123!`.
-
-**List existing admins:**
-
-```bash
-cd backend && node scripts/list-admin-users.js
-```
+| | URL |
+|---|---|
+| Frontend | http://localhost:3000 |
+| Backend API | http://localhost:3001/api/v1 |
 
 ---
 
-## 2. Seller account (owner / homemade food seller)
+## Quick summary
 
-**Role:** Home-based seller – add products, manage orders, earnings, payouts. Account is created as **pending** until an admin approves it.
+| Role | Frontend login | Self-registration? | Needs admin approval before full access? |
+|---|---|---|---|
+| **Customer** | `/login` | Yes, open | No — works immediately |
+| **Seller** | `/login` (or `/sellers/register`) | Yes, open | **Yes** — pending until an admin approves at `/admin/pending-sellers` |
+| **Rider** | `/login` (redirects to `/riders/dashboard`) | Yes, open | **Yes** — pending until an admin approves at `/admin/riders` |
+| **Admin** | `/admin/login` | **No** — cannot self-register | N/A — created via a backend script (below) |
 
-| Field        | Value |
-|-------------|--------|
-| **Login URL** | http://localhost:3000/login (then redirects to seller dashboard if seller) |
-| **Email**     | No default – create via registration |
-| **Password**  | No default – you choose when registering |
-
-**Notes:**
-
-- There are **no built-in seller credentials**. Every seller is created by registering (web or API) with `user_type: 'seller'` and a `business_name`.
-- After registration, the seller can log in at `/login` with **email + password** (login method: email). Until an admin approves the seller, some features may be limited.
-- To have a test seller, register once (see “Creating a seller” below) and use that email/password.
-
-**Example test seller (create via registration, then use to log in):**
-
-- Email: `seller@example.com`
-- Password: `Seller123!`
-- Full name: e.g. `Test Seller`
-- Business name: e.g. `Homemade Bites`
-- Phone (optional): e.g. `923001234567`
+The frontend detects the account's role automatically after login and routes it to the right dashboard —
+there's no separate "log in as seller" vs "log in as customer" toggle, it's the same `/login` form for all
+three self-registerable roles.
 
 ---
 
-## 3. Customer account
+## 1. Customer account
 
-**Role:** Shopper – browse products, place orders, manage profile and addresses.
+Anyone can self-register and use it immediately, no approval step.
 
-| Field        | Value |
-|-------------|--------|
-| **Login URL** | http://localhost:3000/login |
-| **Email**     | No default – create via registration |
-| **Password**  | No default – you choose when registering |
+**Register via the UI:** go to http://localhost:3000/register and fill the form.
 
-**Notes:**
-
-- There are **no built-in customer credentials**. Every customer is created by registering with `user_type: 'customer'`.
-- Customers log in at `/login` with **email + password** (or OTP if you use phone login).
-
-**Example test customer (create via registration, then use to log in):**
-
-- Email: `customer@example.com`
-- Password: `Customer123!`
-- Full name: e.g. `Test Customer`
-- Phone (optional): e.g. `923009876543`
-
----
-
-## Summary table
-
-| Account type | Login URL              | Default email              | Default password | How to get credentials |
-|-------------|------------------------|----------------------------|------------------|-------------------------|
-| **Admin**   | /admin/login           | `admin@frozennuray.com`     | `Admin123!`      | Create once via API or DB; reset with `reset-admin-password.js` |
-| **Seller**  | /login                 | *(none)*                   | *(none)*         | Register (web or API) with `user_type: 'seller'` + `business_name` |
-| **Customer**| /login                 | *(none)*                   | *(none)*         | Register (web or API) with `user_type: 'customer'` |
-
----
-
-## Creating users via API (for testing)
-
-Base URL (local): `http://localhost:3001/api/v1` (or your backend `PORT` from `.env`).
-
-### Creating the admin user
-
-If no admin exists yet, create one with a single registration call:
-
-```bash
-curl -X POST http://localhost:3001/api/v1/auth/register \
-  -H "Content-Type: application/json" \
-  -d '{
-    "email": "admin@frozennuray.com",
-    "password": "Admin123!",
-    "user_type": "admin",
-    "full_name": "Platform Admin"
-  }'
-```
-
-Then log in at **http://localhost:3000/admin/login** with that email and password. Change the password after first login (e.g. using `reset-admin-password.js`).
-
-### Creating a seller (owner / homemade)
-
-```bash
-curl -X POST http://localhost:3001/api/v1/auth/register \
-  -H "Content-Type: application/json" \
-  -d '{
-    "email": "seller@example.com",
-    "password": "Seller123!",
-    "user_type": "seller",
-    "full_name": "Test Seller",
-    "business_name": "Homemade Bites",
-    "phone": "923001234567"
-  }'
-```
-
-Then log in at **http://localhost:3000/login** with email `seller@example.com` and password `Seller123!`. An admin must approve the seller in **Admin → Sellers** before full access.
-
-### Creating a customer
-
+**Register via API:**
 ```bash
 curl -X POST http://localhost:3001/api/v1/auth/register \
   -H "Content-Type: application/json" \
   -d '{
     "email": "customer@example.com",
     "password": "Customer123!",
-    "user_type": "customer",
     "full_name": "Test Customer",
-    "phone": "923009876543"
+    "phone": "03001234567",
+    "user_type": "customer"
   }'
 ```
-
-Then log in at **http://localhost:3000/login** with that email and password.
+Then log in at http://localhost:3000/login with that email/password.
 
 ---
 
-## Login (email + password)
+## 2. Seller account (home kitchen / restaurant)
 
-All three roles can use **email + password** login:
+Self-register, but the account sits in `verificationStatus: 'pending'` until an admin approves it — see
+**§5 Admin** below to approve one. Before approval, a seller can still log in and see their own dashboard,
+but core seller-only actions may be gated.
+
+**Register via the UI:** http://localhost:3000/sellers/register
+
+**Register via API** (`business_name` is optional — omitting it defaults to `"<full_name>'s Kitchen"`):
+```bash
+curl -X POST http://localhost:3001/api/v1/auth/register \
+  -H "Content-Type: application/json" \
+  -d '{
+    "email": "seller@example.com",
+    "password": "Seller123!",
+    "full_name": "Test Seller",
+    "business_name": "Homemade Bites",
+    "phone": "03001234567",
+    "user_type": "seller"
+  }'
+```
+Log in at http://localhost:3000/login, then approve the seller as an admin at http://localhost:3000/admin/pending-sellers.
+
+---
+
+## 3. Rider account (delivery)
+
+Self-register the same way, gated the same way — pending until an admin approves at
+http://localhost:3000/admin/riders. Before approval, every rider API call (available deliveries, claim, etc.)
+returns `403 RIDER_NOT_APPROVED`, and the rider dashboard shows a blocked-state screen instead of delivery
+lists.
+
+**Register via API:**
+```bash
+curl -X POST http://localhost:3001/api/v1/auth/register \
+  -H "Content-Type: application/json" \
+  -d '{
+    "email": "rider@example.com",
+    "password": "Rider123!",
+    "full_name": "Test Rider",
+    "phone": "03001234567",
+    "city": "Karachi",
+    "user_type": "rider"
+  }'
+```
+Log in at http://localhost:3000/login (it redirects to `/riders/dashboard`), then approve the rider as an
+admin at http://localhost:3000/admin/riders.
+
+---
+
+## 4. Admin account
+
+**Admin accounts cannot be created through the public registration form or API** — `user_type` there only
+accepts `customer`, `seller`, or `rider` by design (checked in `backend/src/validators/auth.validator.ts`).
+There is also no seeded default admin — you must create one yourself, from the `backend/` folder:
+
+```bash
+cd backend
+node scripts/create-admin.js admin@example.com "YourPassword123!" "Admin User"
+```
+
+This script also works on an **existing** user — if that email is already registered as a customer/seller,
+running it again promotes that same account to `user_type: 'admin'` instead of erroring.
+
+Other useful admin scripts (run from `backend/`):
+```bash
+node scripts/list-admin-users.js                    # list every admin account
+node scripts/reset-admin-password.js "NewPassword!"  # reset the first admin's password (defaults to Admin123! if omitted)
+```
+
+Log in at http://localhost:3000/admin/login (a separate login page from the customer/seller/rider one).
+
+---
+
+## 5. Approving a pending seller or rider (as admin)
+
+1. Log in as admin at `/admin/login`.
+2. Sellers: go to **Pending Sellers** (`/admin/pending-sellers`) → Approve or Reject.
+3. Riders: go to **Pending Riders** (`/admin/riders`) → Approve or Reject.
+
+Both are one-shot decisions — approving or rejecting an already-decided application is blocked
+(`RIDER_ALREADY_PROCESSED` / equivalent for sellers); there's no "undo" path back to pending.
+
+---
+
+## Already-registered accounts in *this* local dev database
+
+These accounts already exist in the `frozennuray_dev` database this project has been developed against and
+are known-working as of 2026-08-07. **They will NOT exist on a fresh clone with a fresh database** — use the
+registration steps above in that case. If you're working against this same local DB, these work immediately:
+
+| Role | Email | Password | Notes |
+|---|---|---|---|
+| Seller | `claude-seller@nuray.test` | `SellerCheck123!` | "Claude Test Kitchen" — already approved, has products & order history |
+| Rider | `claude-rider@nuray.test` | `RiderCheck123!` | Already approved |
+| Admin | `claude-admin@nuray.test` | `AdminCheck123!` | |
+
+There's no long-lived seeded customer account (they're cheap to create — see §1), but if you're picking up
+this exact session's DB state, `test-customer-1785579514@nuray.test` / `TestCustomer123!` was created and
+verified working during this session.
+
+---
+
+## Login (email + password) — API
+
+All four roles use the same login endpoint:
 
 ```bash
 curl -X POST http://localhost:3001/api/v1/auth/login \
   -H "Content-Type: application/json" \
   -d '{
-    "phoneOrEmail": "admin@frozennuray.com",
-    "otpCodeOrPassword": "Admin123!",
+    "phoneOrEmail": "admin@example.com",
+    "otpCodeOrPassword": "YourPassword123!",
     "loginMethod": "email"
   }'
 ```
 
-Replace `phoneOrEmail` and `otpCodeOrPassword` with the user’s email and password. Use the same for seller and customer with their respective credentials.
+Response includes `data.tokens.access_token` (JWT) — pass it as `Authorization: Bearer <token>` on subsequent
+API calls, or (for testing the frontend) set it as `localStorage.access_token` in the browser.
 
 ---
 
-*Keep this file out of production deployments or restrict access; it contains example passwords for development only.*
+*This file describes development credentials only. Never reuse these passwords or account patterns in a
+production deployment.*

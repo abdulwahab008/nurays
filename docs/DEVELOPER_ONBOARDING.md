@@ -1,588 +1,225 @@
 # FrozenNuray Platform - Developer Onboarding Guide
 
 ## Document Information
-- **Version**: 1.0
-- **Last Updated**: November 2025
-- **Document Owner**: Tech Lead
-- **Target Audience**: New Developers
+- **Last Updated**: 2026-08-07
+- **Target Audience**: Anyone setting this project up for the first time (new contributor, tester, reviewer)
+
+> This version replaces an earlier draft that described a fictional `mobile-app/` Flutter client and had the
+> backend/frontend port numbers swapped — both are fixed below. If something here stops matching reality again,
+> trust the actual `package.json` scripts and `.env.example` files over this doc.
 
 ---
 
-## 1. Welcome to FrozenNuray!
+## 1. What is FrozenNuray?
 
-Welcome to the FrozenNuray development team! This guide will help you get set up and productive quickly.
+FrozenNuray is a homemade-food marketplace connecting home-based food sellers (and small restaurants) with
+customers, with its own rider/delivery layer and an admin moderation/ops panel.
 
-### 1.1 What is FrozenNuray?
+### Tech stack
 
-FrozenNuray is Pakistan's first dedicated marketplace platform for frozen homemade food, connecting home-based food entrepreneurs with customers seeking authentic, convenient, and high-quality frozen meals.
+**Backend** (`backend/`): Node.js + Express + TypeScript, PostgreSQL via Prisma ORM, Redis, Socket.io for
+realtime order updates.
 
-### 1.2 Tech Stack Overview
+**Frontend** (`frontend-web/`): Next.js (App Router) + React + TypeScript + Tailwind CSS.
 
-**Backend:**
-- Node.js 20.x LTS
-- Express.js
-- TypeScript
-- PostgreSQL 15.x
-- Redis 7.x
-- Prisma ORM
-
-**Frontend (Web):**
-- Next.js 14 (App Router)
-- React 18
-- TypeScript
-- Tailwind CSS
-
-**Mobile:**
-- Flutter 3.x
-- Dart
+There is no mobile app in this repo.
 
 ---
 
 ## 2. Prerequisites
 
-### 2.1 Required Software
+- Node.js 20.x or higher
+- PostgreSQL 15.x
+- Redis 7.x
+- Git
 
-**Development Tools:**
-- Node.js 20.x or higher ([Download](https://nodejs.org/))
-- PostgreSQL 15.x ([Download](https://www.postgresql.org/download/))
-- Redis 7.x ([Download](https://redis.io/download))
-- Git ([Download](https://git-scm.com/downloads))
-- VS Code (recommended) or your preferred IDE
-
-**Optional:**
-- Docker & Docker Compose (for containerized development)
-- Flutter SDK (for mobile development)
-- Postman (for API testing)
-
-### 2.2 Required Accounts
-
-- GitHub account (for code repository)
-- Slack account (for team communication)
-- Email account (for notifications)
-
-### 2.3 System Requirements
-
-**Minimum:**
-- OS: macOS, Linux, or Windows (WSL2)
-- RAM: 8GB
-- Storage: 20GB free space
-- Internet: Stable connection
-
-**Recommended:**
-- OS: macOS or Linux
-- RAM: 16GB
-- Storage: 50GB free space
-- Internet: High-speed connection
+Optional: Docker & Docker Compose (see §3.5), Postman/Insomnia for manual API testing.
 
 ---
 
 ## 3. Getting Started
 
-### 3.1 Repository Setup
+### 3.1 Repository structure
 
-**Clone Repository:**
-```bash
-git clone https://github.com/yourusername/frozen-nuray.git
-cd frozen-nuray
-```
-
-**Repository Structure:**
 ```
 frozen-nuray/
-├── backend/          # Node.js backend API
-├── frontend-web/     # Next.js web application
-├── mobile-app/       # Flutter mobile app
-├── docs/             # Documentation
-└── scripts/          # Utility scripts
+├── backend/          # Express/TypeScript API
+│   ├── src/
+│   │   ├── config/
+│   │   ├── controllers/
+│   │   ├── gateways/     # payment gateway integrations
+│   │   ├── middleware/
+│   │   ├── models/
+│   │   ├── routes/
+│   │   ├── services/
+│   │   ├── utils/
+│   │   └── validators/
+│   ├── prisma/           # schema.prisma + migrations
+│   ├── scripts/          # one-off admin/seed/debug scripts (node scripts/*.js)
+│   └── tests/            # Jest tests
+├── frontend-web/     # Next.js app
+│   ├── app/              # App Router pages
+│   ├── components/
+│   ├── lib/               # API client, services, utils
+│   └── tests/             # Playwright E2E tests
+└── docs/             # This documentation
 ```
 
-### 3.2 Backend Setup
+### 3.2 Backend setup
 
-**Install Dependencies:**
 ```bash
 cd backend
 npm install
-```
-
-**Environment Variables:**
-```bash
 cp .env.example .env
-# Edit .env with your configuration
 ```
 
-**.env File:**
+Edit `.env` — at minimum set:
 ```bash
-# Database
-DATABASE_URL=postgresql://user:password@localhost:5432/frozennuray_dev
-
-# Redis
-REDIS_URL=redis://localhost:6379
-
-# JWT
-JWT_SECRET=your-local-secret-key
-JWT_EXPIRES_IN=24h
-
-# Development
-NODE_ENV=development
-PORT=3000
+DATABASE_URL=postgresql://<user>@localhost:5432/frozennuray_dev
+JWT_SECRET=some-local-dev-secret
+PORT=3001
 ```
+Everything else in `.env.example` (email, SMS/OTP, payment gateways) is optional for local dev — omitted
+email config falls back to Ethereal (a fake SMTP inbox, URL printed to the console); omitted SMS/OTP config
+just logs the OTP to the console instead of sending it.
 
-**Database Setup:**
+> **Port 5432 conflict:** if another project's Postgres/Docker container is already bound to 5432, either stop
+> it or run Postgres on an alternate port and update `DATABASE_URL` accordingly — don't assume 5432 is free.
+
 ```bash
-# Create database
-createdb frozennuray_dev
-
-# Run migrations
-npx prisma migrate dev
-
-# Seed database
-npm run seed
+npx prisma generate
+npx prisma migrate dev     # creates the DB schema
+npm run dev                 # http://localhost:3001, API base http://localhost:3001/api/v1
 ```
 
-**Start Development Server:**
-```bash
-npm run dev
-# Server runs on http://localhost:3000
-```
+There's no automatic seed on install. To load sample e2e data: `npm run seed:e2e`. To create your first admin
+account (there is no default admin and none can self-register), see `docs/ACCOUNT_CREDENTIALS.md`.
 
-### 3.3 Frontend Setup (Web)
+### 3.3 Frontend setup
 
-**Install Dependencies:**
 ```bash
 cd frontend-web
 npm install
 ```
 
-**Environment Variables:**
+There's no `.env.example` for the frontend — create `.env.local` yourself with at least:
 ```bash
-cp .env.example .env.local
-# Edit .env.local
+NEXT_PUBLIC_API_URL=http://localhost:3001/api/v1
 ```
+`NEXT_PUBLIC_GOOGLE_CLIENT_ID` (Google sign-in) and `NEXT_PUBLIC_SAFEPAY_SANDBOX` are optional — the app
+degrades gracefully without them (e.g. the Google sign-in button just doesn't render).
 
-**.env.local File:**
-```bash
-NEXT_PUBLIC_API_URL=http://localhost:3000/api/v1
-NEXT_PUBLIC_GOOGLE_MAPS_KEY=your-key
-```
-
-**Start Development Server:**
 ```bash
 npm run dev
-# App runs on http://localhost:3001
+# http://localhost:3000
 ```
 
-### 3.4 Mobile App Setup
+### 3.4 Docker (alternative)
 
-**Install Flutter:**
 ```bash
-# Follow Flutter installation guide
-# https://flutter.dev/docs/get-started/install
-```
-
-**Install Dependencies:**
-```bash
-cd mobile-app
-flutter pub get
-```
-
-**Run App:**
-```bash
-# Android
-flutter run
-
-# iOS (macOS only)
-flutter run -d ios
-```
-
-### 3.5 Docker Setup (Alternative)
-
-**Start All Services:**
-```bash
-# From project root
-docker-compose up -d
-
-# View logs
+docker-compose up -d      # from the repo root
 docker-compose logs -f
-
-# Stop services
 docker-compose down
 ```
+`docker-compose.yml` defines `backend` and `frontend` services with the same ports as above. This hasn't been
+exercised as part of this doc's latest revision — if it doesn't match `.env` expectations, prefer the manual
+setup in §3.2/3.3, which is the path actually used and verified during development.
 
 ---
 
-## 4. Development Workflow
+## 4. Development workflow
 
-### 4.1 Git Workflow
+### 4.1 Git
 
-**Branch Naming:**
-- Feature: `feature/feature-name`
-- Bug fix: `fix/bug-description`
-- Hotfix: `hotfix/issue-description`
-- Documentation: `docs/documentation-update`
+Branch naming: `feature/...`, `fix/...`, `refactor/...`, `docs/...`.
 
-**Workflow:**
-1. Create feature branch from `main`
-2. Make changes and commit
-3. Push to remote
-4. Create Pull Request
-5. Code review (2 approvals required)
-6. Merge to `main`
-
-**Commit Messages:**
+Commit messages, conventional-commits style:
 ```
-feat: Add product search functionality
-fix: Resolve cart calculation bug
-docs: Update API documentation
-refactor: Improve order processing logic
-test: Add unit tests for payment service
+feat: add product search functionality
+fix: resolve cart calculation bug
+docs: update API documentation
+refactor: improve order processing logic
+test: add unit tests for payment service
 ```
 
-### 4.2 Code Standards
+Adjust branch-protection/review requirements to whatever your actual team size and process calls for — there's
+no fixed reviewer-count policy baked into this repo.
 
-**TypeScript/JavaScript:**
-- Follow Airbnb style guide
-- Use ESLint and Prettier
-- Maximum line length: 100 characters
-- Use meaningful variable names
-- Add JSDoc comments for functions
+### 4.2 Code standards
 
-**Example:**
-```typescript
-/**
- * Calculates the total order amount including delivery fee and discount
- * @param items - Array of order items
- * @param deliveryFee - Delivery fee amount
- * @param discount - Discount amount (optional)
- * @returns Total order amount
- */
-function calculateOrderTotal(
-  items: OrderItem[],
-  deliveryFee: number,
-  discount?: number
-): number {
-  const subtotal = items.reduce((sum, item) => sum + item.total, 0);
-  const total = subtotal + deliveryFee - (discount || 0);
-  return Math.max(0, total);
-}
-```
-
-**Dart/Flutter:**
-- Follow official Dart style guide
-- Use `dart format` for formatting
-- Maximum line length: 80 characters
+- TypeScript throughout both backend and frontend; run `npm run lint` in either directory before committing.
+- Prefer existing helpers/patterns already in the codebase over inventing new ones for the same job.
+- Comment the *why*, not the *what* — code should be legible without a narration comment on every line.
 
 ### 4.3 Testing
 
-**Write Tests:**
-- Unit tests for business logic
-- Integration tests for API endpoints
-- E2E tests for critical flows
-
-**Run Tests:**
 ```bash
-# Backend
+# Backend — Jest
 cd backend
 npm test
 npm run test:coverage
 
-# Frontend
+# Frontend — Playwright E2E (no separate unit-test script currently)
 cd frontend-web
-npm test
-
-# Mobile
-cd mobile-app
-flutter test
+npm run test:e2e
+npm run test:e2e:ui   # interactive UI mode
 ```
 
 ---
 
-## 5. Project Structure
+## 5. Key concepts
 
-### 5.1 Backend Structure
+### 5.1 Authentication
 
-```
-backend/
-├── src/
-│   ├── controllers/    # Route controllers
-│   ├── services/       # Business logic
-│   ├── models/         # Database models (Prisma)
-│   ├── middleware/     # Auth, validation, etc.
-│   ├── routes/         # API routes
-│   ├── utils/          # Helper functions
-│   └── config/         # Configuration files
-├── prisma/
-│   └── schema.prisma   # Database schema
-├── tests/              # Test files
-├── package.json
-└── tsconfig.json
-```
+Login supports **both** email+password and phone+OTP (`loginMethod: 'email' | 'otp'` on `POST
+/auth/login`). In dev without SMS credentials configured, OTPs are logged to the backend console instead of
+sent. See `docs/ACCOUNT_CREDENTIALS.md` for exact request shapes and how each of the four roles
+(customer/seller/rider/admin) gets access.
 
-### 5.2 Frontend Structure
+### 5.2 Order lifecycle
 
-```
-frontend-web/
-├── src/
-│   ├── app/            # Next.js app directory
-│   ├── components/     # React components
-│   ├── lib/            # Utilities, API client
-│   ├── styles/         # Global styles
-│   └── types/          # TypeScript types
-├── public/             # Static assets
-├── package.json
-└── next.config.js
-```
+Customer builds a cart → checkout creates an `Order` (`pending`) → seller works it through
+`confirmed → preparing → ready` → (for `home_delivery` orders) a `Delivery` job is created and a rider claims
+and delivers it → `dispatched → in_transit → delivered`. Cash-on-delivery orders get `paymentStatus` flipped to
+`paid` automatically at the `delivered` step. See `docs/API_DOCUMENTATION.md` for the full state machine and
+`docs/ACCOUNT_CREDENTIALS.md` §5 for how an admin gets involved (seller/rider approval).
 
-### 5.3 Mobile App Structure
+### 5.3 Hub vs. direct fulfillment
 
-```
-mobile-app/
-├── lib/
-│   ├── core/           # Core utilities
-│   ├── features/       # Feature modules
-│   └── shared/         # Shared widgets
-├── assets/             # Images, fonts
-├── test/               # Tests
-└── pubspec.yaml
-```
+Products can be fulfilled from a regional **hub** (faster) or **direct** from the seller (slower) —
+independent of the rider/delivery-address system, which handles the "last mile" to the customer regardless of
+which stock path was used.
 
 ---
 
-## 6. Key Concepts
+## 6. Common tasks
 
-### 6.1 Authentication Flow
+**New API endpoint:** route in `routes/` → controller in `controllers/` → business logic in `services/` →
+validation schema in `validators/` → test in `tests/` → note it in `docs/API_DOCUMENTATION.md`.
 
-1. User requests OTP
-2. OTP sent via SMS
-3. User verifies OTP
-4. JWT tokens generated
-5. Tokens used for authenticated requests
-
-### 6.2 Order Flow
-
-1. Customer adds items to cart
-2. Customer proceeds to checkout
-3. Payment processed (escrow)
-4. Order created
-5. Seller notified
-6. Order fulfilled
-7. Payment released to seller
-
-### 6.3 Hub System
-
-- Sellers drop off products at hub
-- Hub stores products in freezers
-- Orders from hub inventory: 2-4 hour delivery
-- Orders from direct sellers: 24 hour delivery
+**New DB table/column:** edit `backend/prisma/schema.prisma` → `npx prisma migrate dev --name <description>` →
+update the services/types that touch it.
 
 ---
 
-## 7. Common Tasks
+## 7. Debugging
 
-### 7.1 Adding a New API Endpoint
+**Backend logs:** `npm run dev` runs via `nodemon`, so most errors surface directly in that terminal.
 
-1. Define route in `routes/`
-2. Create controller in `controllers/`
-3. Add business logic in `services/`
-4. Add validation middleware
-5. Write tests
-6. Update API documentation
+**Database:** `npx prisma studio` from `backend/` opens a DB GUI at http://localhost:5555.
 
-### 7.2 Adding a New Database Table
-
-1. Update Prisma schema
-2. Create migration: `npx prisma migrate dev`
-3. Update models/services
-4. Write tests
-
-### 7.3 Adding a New Feature
-
-1. Create feature branch
-2. Implement backend API
-3. Implement frontend UI
-4. Write tests
-5. Update documentation
-6. Create PR
+**Frontend:** React DevTools browser extension; Next.js shows a dev-mode error overlay with source maps for
+uncaught render errors.
 
 ---
 
-## 8. Debugging
+## 8. Further reading
 
-### 8.1 Backend Debugging
+- [`docs/ACCOUNT_CREDENTIALS.md`](./ACCOUNT_CREDENTIALS.md) — every account type, how to register/approve one, and known test accounts
+- [`docs/E2E_TESTING_GUIDE.md`](./E2E_TESTING_GUIDE.md) — every URL and use case to click through, by role
+- [`docs/ARCHITECTURE.md`](./ARCHITECTURE.md) — system architecture
+- [`docs/API_DOCUMENTATION.md`](./API_DOCUMENTATION.md) — full API reference
+- [`docs/DEPLOYMENT_GUIDE.md`](./DEPLOYMENT_GUIDE.md) — deploying beyond local dev
+- [`docs/TESTING_STRATEGY.md`](./TESTING_STRATEGY.md) — testing process/policy (not a click-through guide — see ACCOUNT_CREDENTIALS.md for that)
 
-**VS Code Debug Configuration:**
-```json
-{
-  "type": "node",
-  "request": "launch",
-  "name": "Debug Backend",
-  "runtimeExecutable": "npm",
-  "runtimeArgs": ["run", "dev"],
-  "console": "integratedTerminal"
-}
-```
-
-**Logging:**
-```typescript
-import logger from './utils/logger';
-
-logger.info('Order created', { orderId: order.id });
-logger.error('Payment failed', { error, orderId });
-```
-
-### 8.2 Frontend Debugging
-
-**Browser DevTools:**
-- React DevTools extension
-- Network tab for API calls
-- Console for errors
-
-**Next.js Debugging:**
-- Error overlay in development
-- Source maps enabled
-- Hot reload for changes
-
-### 8.3 Database Debugging
-
-**Prisma Studio:**
-```bash
-npx prisma studio
-# Opens database GUI at http://localhost:5555
-```
-
-**Query Logging:**
-```typescript
-// Enable in Prisma schema
-datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
-  log      = ["query", "info", "warn", "error"]
-}
-```
-
----
-
-## 9. Resources
-
-### 9.1 Documentation
-
-- [Architecture Document](../ARCHITECTURE.md)
-- [API Documentation](../API_DOCUMENTATION.md)
-- [Database Schema](../DATABASE_SCHEMA.sql)
-- [Product Requirements](../PRODUCT_REQUIREMENTS.md)
-
-### 9.2 External Resources
-
-- [Node.js Documentation](https://nodejs.org/docs/)
-- [Express.js Guide](https://expressjs.com/en/guide/routing.html)
-- [Next.js Documentation](https://nextjs.org/docs)
-- [Flutter Documentation](https://flutter.dev/docs)
-- [Prisma Documentation](https://www.prisma.io/docs)
-
-### 9.3 Team Resources
-
-- **Slack**: #engineering, #backend, #frontend, #mobile
-- **GitHub**: Issues, Pull Requests, Discussions
-- **Wiki**: Internal documentation
-
----
-
-## 10. Getting Help
-
-### 10.1 Questions?
-
-- **Technical Questions**: Ask in Slack #engineering
-- **Code Review**: Request in PR comments
-- **Blockers**: Tag Tech Lead in Slack
-- **Bugs**: Create GitHub issue
-
-### 10.2 Code Review Process
-
-1. Create PR with clear description
-2. Request review from 2 team members
-3. Address review comments
-4. Get approval
-5. Merge to main
-
-### 10.3 Pair Programming
-
-- Available for complex features
-- Schedule via Slack
-- Great for learning and knowledge sharing
-
----
-
-## 11. Best Practices
-
-### 11.1 Code Quality
-
-- Write clean, readable code
-- Follow DRY (Don't Repeat Yourself)
-- Use meaningful names
-- Add comments for complex logic
-- Keep functions small and focused
-
-### 11.2 Security
-
-- Never commit secrets
-- Validate all inputs
-- Use parameterized queries
-- Follow OWASP guidelines
-- Review security checklist
-
-### 11.3 Performance
-
-- Optimize database queries
-- Use caching where appropriate
-- Minimize API calls
-- Optimize images
-- Use pagination for large datasets
-
----
-
-## 12. Checklist
-
-**First Day:**
-- [ ] Repository cloned
-- [ ] Development environment set up
-- [ ] Backend running locally
-- [ ] Frontend running locally
-- [ ] Database seeded
-- [ ] First commit made
-
-**First Week:**
-- [ ] Code reviewed
-- [ ] First feature implemented
-- [ ] Tests written
-- [ ] Documentation updated
-- [ ] Team members met
-
-**First Month:**
-- [ ] Multiple features shipped
-- [ ] Code review process understood
-- [ ] Architecture understood
-- [ ] Contributing to discussions
-- [ ] Comfortable with codebase
-
----
-
-## 13. Contact Information
-
-**Tech Lead:**
-- Email: tech@frozennuray.com
-- Slack: @tech-lead
-
-**Backend Team:**
-- Slack: #backend
-
-**Frontend Team:**
-- Slack: #frontend
-
-**Mobile Team:**
-- Slack: #mobile
-
----
-
-**Welcome to the team! 🚀**
-
-**End of Document**
-
+**End of document**
