@@ -555,6 +555,9 @@ Order Summary
                               {item.variant && <p className="text-xs text-gray-500 truncate">{item.variant.name}</p>}
                               <p className="text-xs text-gray-500">x{item.quantity}</p>
                               {label && <p className="text-xs text-green-600 font-medium">{label}</p>}
+                              {item.product.allergens && (
+                                <p className="text-xs text-amber-700 font-medium truncate">⚠️ {item.product.allergens}</p>
+                              )}
                             </div>
                             <div className="text-right flex-shrink-0">
                               {promos.length > 0 && base > unitPrice && (

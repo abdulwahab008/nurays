@@ -16,7 +16,7 @@ export class AuthService {
   async register(
     email: string,
     password: string,
-    userType: 'customer' | 'seller' | 'admin' | 'hub_manager' | 'rider',
+    userType: 'customer' | 'seller' | 'rider',
     fullName: string,
     phone?: string,
     city?: string,
@@ -147,14 +147,16 @@ export class AuthService {
       });
     }
 
-    // If registering as a rider, create the rider record too (active immediately —
-    // no approval workflow exists for riders yet, unlike sellers).
+    // If registering as a rider, create the rider record too — pending admin
+    // approval (verificationStatus), same as sellers. requireRider blocks all
+    // delivery access until an admin approves it (see rider.service.ts).
     if (userType === 'rider') {
       await prisma.rider.create({
         data: {
           userId: user.id,
           city: city?.trim() || 'Unspecified',
           status: 'active',
+          verificationStatus: 'pending',
         },
       });
     }

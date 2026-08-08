@@ -71,6 +71,30 @@ export const updateSellerStatus = async (req: Request, res: Response) => {
   });
 };
 
+export const getPendingRiders = async (_req: Request, res: Response) => {
+  const riders = await adminService.getPendingRiders();
+
+  res.status(200).json({
+    success: true,
+    data: riders,
+  });
+};
+
+export const approveRejectRider = async (req: Request, res: Response) => {
+  const { id } = req.params;
+  const action = req.path.includes('/reject') ? false : true;
+  const { approved, reason } = req.body;
+  const isApproved = approved !== undefined ? approved : action;
+
+  const result = await adminService.approveRejectRider(id, isApproved, reason);
+
+  res.status(200).json({
+    success: true,
+    data: result,
+    message: result.message,
+  });
+};
+
 export const getPayouts = async (req: Request, res: Response) => {
   const filters = {
     status: req.query.status as string | undefined,

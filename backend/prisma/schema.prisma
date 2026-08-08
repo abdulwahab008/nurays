@@ -549,19 +549,23 @@ model OrderStatusHistory {
 // ============================================
 
 model Rider {
-  id              String    @id @default(uuid())
-  userId          String    @unique @map("user_id")
-  vehicleType     String?   @map("vehicle_type")
-  vehicleNumber   String?   @map("vehicle_number")
-  licenseNumber   String?   @map("license_number")
-  city            String
-  hubId           String?   @map("hub_id")
-  ratingAverage   Decimal   @default(0) @map("rating_average") @db.Decimal(3, 2)
-  totalDeliveries Int       @default(0) @map("total_deliveries")
-  isAvailable     Boolean   @default(true) @map("is_available")
-  status          String    @default("active")
-  createdAt       DateTime  @default(now()) @map("created_at")
-  updatedAt       DateTime  @updatedAt @map("updated_at")
+  id                 String    @id @default(uuid())
+  userId             String    @unique @map("user_id")
+  vehicleType        String?   @map("vehicle_type")
+  vehicleNumber      String?   @map("vehicle_number")
+  licenseNumber      String?   @map("license_number")
+  city               String
+  hubId              String?   @map("hub_id")
+  ratingAverage      Decimal   @default(0) @map("rating_average") @db.Decimal(3, 2)
+  totalDeliveries    Int       @default(0) @map("total_deliveries")
+  isAvailable        Boolean   @default(true) @map("is_available")
+  status             String    @default("active")
+  // Admin vetting state, separate from `status` (account standing) — a rider
+  // cannot see or claim any delivery until an admin sets this to "approved".
+  verificationStatus String    @default("pending") @map("verification_status")
+  rejectionReason    String?   @map("rejection_reason")
+  createdAt          DateTime  @default(now()) @map("created_at")
+  updatedAt          DateTime  @updatedAt @map("updated_at")
 
   hub             HubCenter? @relation(fields: [hubId], references: [id], onDelete: SetNull)
   deliveries      Delivery[]

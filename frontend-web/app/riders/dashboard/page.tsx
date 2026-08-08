@@ -30,6 +30,7 @@ export default function RiderDashboardPage() {
   const [available, setAvailable] = useState<Delivery[]>([]);
   const [mine, setMine] = useState<Delivery[]>([]);
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [blockedReason, setBlockedReason] = useState<{ title: string; message: string } | null>(null);
 
   useEffect(() => {
     if (!isAuthenticated) {
@@ -44,9 +45,25 @@ export default function RiderDashboardPage() {
     loadAll();
   }, [isAuthenticated, user, router]);
 
+  const BLOCKED_REASONS: Record<string, { title: string; message: string }> = {
+    RIDER_NOT_APPROVED: {
+      title: 'Application under review',
+      message: "Your rider account is pending admin approval. You'll be able to see and claim deliveries once it's approved.",
+    },
+    RIDER_REJECTED: {
+      title: 'Application not approved',
+      message: 'Your rider application was not approved. Contact support if you think this is a mistake.',
+    },
+    RIDER_SUSPENDED: {
+      title: 'Account suspended',
+      message: 'Your rider account has been suspended. Contact support for more information.',
+    },
+  };
+
   const loadAll = async () => {
     try {
       setLoading(true);
+      setBlockedReason(null);
       const [availableRes, mineRes] = await Promise.all([
         riderService.getAvailableDeliveries(),
         riderService.getMyDeliveries(),
@@ -54,7 +71,12 @@ export default function RiderDashboardPage() {
       setAvailable(availableRes.data || []);
       setMine(mineRes.data || []);
     } catch (error: any) {
-      showToast(error.response?.data?.error?.message || 'Failed to load deliveries', 'error');
+      const code = error.response?.data?.error?.code;
+      if (code && BLOCKED_REASONS[code]) {
+        setBlockedReason(BLOCKED_REASONS[code]);
+      } else {
+        showToast(error.response?.data?.error?.message || 'Failed to load deliveries', 'error');
+      }
     } finally {
       setLoading(false);
     }
@@ -112,6 +134,12 @@ export default function RiderDashboardPage() {
           <div className="text-center py-12">
             <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-green-600 mx-auto mb-4"></div>
             <p className="text-gray-600">Loading deliveries...</p>
+          </div>
+        ) : blockedReason ? (
+          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-12 text-center">
+            <div className="w-16 h-16 bg-yellow-100 rounded-full flex items-center justify-center mx-auto mb-4 text-2xl">⏳</div>
+            <h2 className="text-xl font-bold text-gray-900 mb-2">{blockedReason.title}</h2>
+            <p className="text-gray-600 max-w-md mx-auto">{blockedReason.message}</p>
           </div>
         ) : (
           <div className="space-y-8">

@@ -1,5 +1,10 @@
 # Email Verification Implementation
 
+> **Archived, partially stale (2026-08-07):** the schema/service/endpoints described below still exist, but
+> login no longer blocks on verification — both password and OTP login paths in `auth.service.ts` now hard-code
+> `requiresEmailVerification: false`. Registration still sets `requiresEmailVerification: true` on the response.
+> Kept for historical context on why the model/endpoints exist, not as a guide to current login behavior.
+
 ## ✅ What's Been Implemented
 
 ### 1. **Backend Email Verification System**

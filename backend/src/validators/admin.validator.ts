@@ -14,6 +14,11 @@ export const updateSellerStatusSchema = z.object({
   status: z.enum(['active', 'suspended']),
 });
 
+export const approveRejectRiderSchema = z.object({
+  approved: z.boolean(),
+  reason: z.string().optional(),
+});
+
 export const completePayoutSchema = z.object({
   transactionId: z.string().optional(),
 });

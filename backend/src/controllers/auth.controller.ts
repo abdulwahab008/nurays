@@ -26,7 +26,7 @@ export const register = async (req: Request, res: Response) => {
   const result = await authService.register(
     email,
     password,
-    user_type as 'customer' | 'seller' | 'admin' | 'hub_manager' | 'rider',
+    user_type as 'customer' | 'seller' | 'rider',
     full_name,
     phone,
     city,
@@ -34,9 +34,12 @@ export const register = async (req: Request, res: Response) => {
     business_name
   );
 
-  const message = user_type === 'seller'
-    ? 'Seller account created successfully. Your account is pending approval.'
-    : 'User registered successfully.';
+  const message =
+    user_type === 'seller'
+      ? 'Seller account created successfully. Your account is pending approval.'
+      : user_type === 'rider'
+        ? 'Rider application submitted. Your account is pending admin approval.'
+        : 'User registered successfully.';
 
   res.status(201).json({
     success: true,

@@ -133,58 +133,24 @@ frozen-nuray/
 │   ├── package.json
 │   └── tsconfig.json
 │
-├── frontend-web/               # Next.js web application
-│   ├── src/
-│   │   ├── app/               # Next.js app directory
-│   │   ├── components/        # React components
-│   │   ├── lib/               # Utilities, API client
-│   │   ├── styles/            # Global styles
-│   │   └── types/             # TypeScript types
-│   ├── public/                # Static assets
+├── frontend-web/               # Next.js web application (App Router — no src/ wrapper)
+│   ├── app/                   # Pages & routes
+│   ├── components/            # React components
+│   ├── lib/                   # Utilities, API client, services
+│   ├── tests/                 # Playwright E2E tests
 │   ├── package.json
 │   └── next.config.js
 │
-├── mobile-app/                 # Flutter mobile app
-│   ├── lib/
-│   │   ├── main.dart
-│   │   ├── core/              # Core utilities
-│   │   ├── features/          # Feature modules
-│   │   │   ├── auth/
-│   │   │   ├── home/
-│   │   │   ├── products/
-│   │   │   ├── cart/
-│   │   │   ├── orders/
-│   │   │   └── profile/
-│   │   └── shared/            # Shared widgets
-│   ├── assets/                # Images, fonts
-│   ├── test/                  # Tests
-│   ├── pubspec.yaml
-│   └── README.md
+├── docs/                       # Documentation (see the full list further down)
 │
-├── docs/                       # Documentation
-│   ├── ARCHITECTURE.md        # System architecture
-│   ├── API_DOCUMENTATION.md   # API reference
-│   ├── DATABASE_SCHEMA.sql    # Database schema
-│   ├── PRODUCT_REQUIREMENTS.md # PRD
-│   └── DEPLOYMENT.md          # Deployment guide
-│
-├── scripts/                    # Utility scripts
-│   ├── seed-db.js             # Database seeding
-│   ├── migrate.js             # Database migrations
-│   └── deploy.sh              # Deployment script
-│
-├── .github/
-│   └── workflows/             # CI/CD workflows
-│       ├── backend.yml
-│       ├── frontend.yml
-│       └── mobile.yml
-│
-├── docker-compose.yml          # Local development
-├── .env.example               # Environment variables template
+├── docker-compose.yml          # Local development (backend + frontend containers)
 ├── .gitignore
 ├── LICENSE
 └── README.md                  # This file
 ```
+
+There is no mobile app and no root-level `scripts/` directory in this repo — one-off admin/seed/debug scripts
+live in `backend/scripts/` (run as `node scripts/<name>.js` from inside `backend/`).
 
 ---
 
@@ -196,7 +162,6 @@ frozen-nuray/
 - Node.js 20.x or higher
 - PostgreSQL 15.x
 - Redis 7.x
-- Flutter 3.x (for mobile development)
 - Git
 
 **Optional:**
@@ -229,14 +194,18 @@ cp .env.example .env
 # Run database migrations
 npx prisma migrate dev
 
-# Seed database with initial data
-npm run seed
+# (Optional) load sample e2e data
+npm run seed:e2e
 
 # Start development server
 npm run dev
 ```
 
-Backend will run on `http://localhost:3000`
+Backend will run on `http://localhost:3001` (API base `http://localhost:3001/api/v1`).
+
+There is no default admin account and none can be created via public registration — see
+[`docs/ACCOUNT_CREDENTIALS.md`](docs/ACCOUNT_CREDENTIALS.md) for how to bootstrap one (`node
+scripts/create-admin.js <email> <password> <name>`) and how every other role gets access.
 
 #### 3. Web Frontend Setup
 
@@ -246,32 +215,14 @@ cd frontend-web
 # Install dependencies
 npm install
 
-# Copy environment variables
-cp .env.example .env.local
-
-# Edit .env.local with API URL
-# NEXT_PUBLIC_API_URL=http://localhost:3000/api/v1
+# There's no .env.example here — create .env.local yourself:
+echo "NEXT_PUBLIC_API_URL=http://localhost:3001/api/v1" > .env.local
 
 # Start development server
 npm run dev
 ```
 
-Web app will run on `http://localhost:3001`
-
-#### 4. Mobile App Setup
-
-```bash
-cd mobile-app
-
-# Install dependencies
-flutter pub get
-
-# Run on Android emulator/device
-flutter run
-
-# Or run on iOS simulator (macOS only)
-flutter run -d ios
-```
+Web app will run on `http://localhost:3000`.
 
 ### Using Docker (Alternative)
 
@@ -319,6 +270,8 @@ GitHub Actions:
 - **[API Documentation](docs/API_DOCUMENTATION.md)**: Full API reference with request/response examples
 - **[Database Schema](docs/DATABASE_SCHEMA.sql)**: PostgreSQL database schema with tables, indexes, and relationships
 - **[Product Requirements](docs/PRODUCT_REQUIREMENTS.md)**: Detailed product requirements, user stories, and feature specifications
+- **[Account Credentials](docs/ACCOUNT_CREDENTIALS.md)**: Every account type (customer/seller/rider/admin), how to register or bootstrap one, and known local test accounts
+- **[End-to-End Testing Guide](docs/E2E_TESTING_GUIDE.md)**: Every URL and use case to click through, organized by role
 
 **Additional Documentation:**
 - **[Security & Compliance](docs/SECURITY_AND_COMPLIANCE.md)**: Security architecture and compliance requirements
@@ -353,23 +306,9 @@ npm test -- auth.test.ts
 ```bash
 cd frontend-web
 
-# Run unit tests
-npm test
-
-# Run E2E tests
+# Run E2E tests (Playwright) — there's no separate unit-test script currently
 npm run test:e2e
-```
-
-### Mobile App Tests
-
-```bash
-cd mobile-app
-
-# Run unit tests
-flutter test
-
-# Run integration tests
-flutter test integration_test/
+npm run test:e2e:ui   # interactive UI mode
 ```
 
 ---
@@ -413,19 +352,11 @@ SENDGRID_API_KEY=your-sendgrid-key
 GOOGLE_MAPS_API_KEY=your-google-maps-key
 ```
 
-**Frontend (.env.local):**
+**Frontend (.env.local — you create this file, there's no `.env.example` to copy):**
 ```bash
-NEXT_PUBLIC_API_URL=http://localhost:3000/api/v1
-NEXT_PUBLIC_GOOGLE_MAPS_KEY=your-google-maps-key
-NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME=your-cloud-name
-```
-
-**Mobile App (lib/core/config.dart):**
-```dart
-class AppConfig {
-  static const String apiBaseUrl = 'http://localhost:3000/api/v1';
-  static const String googleMapsApiKey = 'your-google-maps-key';
-}
+NEXT_PUBLIC_API_URL=http://localhost:3001/api/v1
+NEXT_PUBLIC_GOOGLE_CLIENT_ID=your-google-oauth-client-id   # optional — Google sign-in
+NEXT_PUBLIC_SAFEPAY_SANDBOX=true                           # optional — payment gateway sandbox mode
 ```
 
 ---
@@ -451,20 +382,7 @@ npm run start:prod
 vercel --prod
 ```
 
-**Mobile Apps:**
-
-```bash
-# Build Android APK
-flutter build apk --release
-
-# Build Android App Bundle (for Play Store)
-flutter build appbundle --release
-
-# Build iOS (macOS only)
-flutter build ios --release
-```
-
-See [DEPLOYMENT.md](docs/DEPLOYMENT.md) for detailed deployment instructions.
+See [`docs/DEPLOYMENT_GUIDE.md`](docs/DEPLOYMENT_GUIDE.md) for detailed deployment instructions.
 
 ---
 

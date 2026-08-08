@@ -86,6 +86,15 @@ export class RiderService {
     if (!rider) {
       throw new AppError('Rider profile not found', 404, 'RIDER_NOT_FOUND');
     }
+    if (rider.verificationStatus === 'rejected') {
+      throw new AppError('Your rider application was not approved', 403, 'RIDER_REJECTED');
+    }
+    if (rider.verificationStatus !== 'approved') {
+      throw new AppError('Your rider account is pending admin approval', 403, 'RIDER_NOT_APPROVED');
+    }
+    if (rider.status !== 'active') {
+      throw new AppError('Your rider account is suspended', 403, 'RIDER_SUSPENDED');
+    }
     return rider;
   }
 

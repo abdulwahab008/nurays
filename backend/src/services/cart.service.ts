@@ -102,6 +102,8 @@ export class CartService {
           slug: item.product.slug,
           price: Number(item.product.price),
           image,
+          allergens: item.product.allergens,
+          dietaryInfo: item.product.dietaryInfo,
         },
         variant: item.variant
           ? { id: item.variant.id, name: item.variant.name, price: Number(item.variant.price) }
