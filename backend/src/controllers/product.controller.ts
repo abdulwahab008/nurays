@@ -17,6 +17,21 @@ export const getProducts = async (req: Request, res: Response) => {
     search: req.query.search as string | undefined,
     sort: req.query.sort as string | undefined,
     isActive: req.query.isActive as boolean | undefined,
+    mealCategory: req.query.mealCategory as string | undefined,
+    openNow: req.query.openNow as boolean | undefined,
+    open247: req.query.open247 as boolean | undefined,
+    deliveryAvailable: req.query.deliveryAvailable as boolean | undefined,
+    pickupAvailable: req.query.pickupAvailable as boolean | undefined,
+    offersAvailable: req.query.offersAvailable as boolean | undefined,
+    freeDelivery: req.query.freeDelivery as boolean | undefined,
+    businessType: req.query.businessType as string | undefined,
+    preOrderOnly: req.query.preOrderOnly as boolean | undefined,
+    currentlyBusy: req.query.currentlyBusy as boolean | undefined,
+    newKitchens: req.query.newKitchens as boolean | undefined,
+    fastDelivery: req.query.fastDelivery as boolean | undefined,
+    customerLat: req.query.customerLat as number | undefined,
+    customerLng: req.query.customerLng as number | undefined,
+    maxDistanceKm: req.query.maxDistanceKm as number | undefined,
   };
 
   const result = await productService.getProducts(filters);
@@ -30,7 +45,12 @@ export const getProducts = async (req: Request, res: Response) => {
 export const getProduct = async (req: Request, res: Response) => {
   const { identifier } = req.params;
 
-  const product = await productService.getProductByIdentifier(identifier, req.user?.id);
+  const product = await productService.getProductByIdentifier(
+    identifier,
+    req.user?.id,
+    req.query.customerLat as number | undefined,
+    req.query.customerLng as number | undefined
+  );
 
   res.status(200).json({
     success: true,

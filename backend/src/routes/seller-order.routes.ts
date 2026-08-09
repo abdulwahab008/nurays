@@ -3,7 +3,6 @@ import {
   getSellerOrders,
   getSellerOrderDetails,
   updateOrderItemStatus,
-  getSellerDashboard,
   cancelOrderItem,
 } from '../controllers/seller-order.controller';
 import { validate, validateQuery } from '../middleware/validation.middleware';
@@ -20,9 +19,6 @@ const router = Router();
 router.use(authenticate);
 router.use(authorize('seller'));
 router.use(blockSuspendedSeller);
-
-// Get seller dashboard
-router.get('/dashboard', getSellerDashboard);
 
 // Get seller orders
 router.get('/orders', validateQuery(getSellerOrdersQuerySchema), getSellerOrders);

@@ -458,7 +458,7 @@ export default function AddressesPage() {
             </div>
             <button
               onClick={() => { resetForm(); setShowAddForm(true); }}
-              className="w-12 h-12 bg-white/20 hover:bg-white/30 rounded-xl flex items-center justify-center transition-all hover:scale-105"
+              className="w-12 h-12 bg-white/10 hover:bg-white/20 rounded-xl flex items-center justify-center transition-all hover:scale-105"
             >
               <span className="text-2xl text-white">+</span>
             </button>
@@ -483,7 +483,7 @@ export default function AddressesPage() {
               </div>
               <button
                 onClick={resetForm}
-                className="w-10 h-10 bg-white/20 hover:bg-white/30 rounded-xl flex items-center justify-center transition-all"
+                className="w-10 h-10 bg-white/10 hover:bg-white/20 rounded-xl flex items-center justify-center transition-all"
               >
                 <span className="text-white text-xl">✕</span>
               </button>

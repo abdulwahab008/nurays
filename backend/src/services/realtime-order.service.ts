@@ -10,6 +10,7 @@ const ORDER_STATUS_MESSAGES: Record<string, { title: string; message: (orderNumb
   dispatched: { title: 'Order dispatched', message: (n) => `Your order #${n} has been dispatched.` },
   in_transit: { title: 'Order on the way', message: (n) => `Your order #${n} is on its way!` },
   delivered: { title: 'Order delivered', message: (n) => `Your order #${n} has been delivered. Enjoy!` },
+  delivery_failed: { title: 'Delivery unsuccessful', message: (n) => `We couldn't deliver order #${n}. Our team will reach out shortly.` },
   completed: { title: 'Order completed', message: (n) => `Your order #${n} is complete. Thanks for ordering!` },
   cancelled: { title: 'Order cancelled', message: (n) => `Your order #${n} has been cancelled.` },
   refunded: { title: 'Order refunded', message: (n) => `Your order #${n} has been refunded.` },

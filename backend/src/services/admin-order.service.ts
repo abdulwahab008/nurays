@@ -20,6 +20,10 @@ const ORDER_FORWARD_SEQUENCE = [
 function isValidOrderStatusTransition(from: string, to: string): boolean {
   if (to === 'refunded') return from !== 'refunded';
   if (to === 'cancelled') return !['delivered', 'completed', 'cancelled', 'refunded'].includes(from);
+  // A rider or self-delivering seller can report a failed delivery once the
+  // order is actually out for delivery — resolved from there via cancelOrder
+  // (refund) or retryDelivery (send it back out).
+  if (to === 'delivery_failed') return ['dispatched', 'in_transit'].includes(from);
   const fromIndex = ORDER_FORWARD_SEQUENCE.indexOf(from);
   const toIndex = ORDER_FORWARD_SEQUENCE.indexOf(to);
   if (fromIndex === -1 || toIndex === -1) return false;
@@ -287,6 +291,7 @@ export class AdminOrderService {
       'dispatched',
       'in_transit',
       'delivered',
+      'delivery_failed',
       'completed',
       'cancelled',
       'refunded',
@@ -344,8 +349,9 @@ export class AdminOrderService {
       throw new AppError('Order not found', 404, 'ORDER_NOT_FOUND');
     }
 
-    // Check if order can be cancelled
-    const cancellableStatuses = ['pending', 'confirmed', 'preparing'];
+    // Check if order can be cancelled — a failed delivery is included since
+    // the alternative to cancelling+refunding it is retryDelivery below.
+    const cancellableStatuses = ['pending', 'confirmed', 'preparing', 'delivery_failed'];
     if (!cancellableStatuses.includes(order.orderStatus)) {
       throw new AppError(
         `Order cannot be cancelled. Current status: ${order.orderStatus}`,
@@ -424,6 +430,49 @@ export class AdminOrderService {
       refundAmount: cancelledOrder.paymentStatus === 'paid' ? Number(cancelledOrder.totalAmount) : 0,
       refundStatus: cancelledOrder.paymentStatus === 'paid' ? 'processing' : 'not_required',
     };
+  }
+
+  /**
+   * Retry a failed delivery (admin) — sends the order back out for dispatch
+   * instead of cancelling/refunding it. Resets the existing Delivery row
+   * (Delivery.orderId is unique, so we reopen it rather than creating a new
+   * one) back to unclaimed so any rider can pick it up again.
+   */
+  async retryDelivery(orderId: string, adminId: string) {
+    const order = await prisma.order.findUnique({ where: { id: orderId } });
+    if (!order) {
+      throw new AppError('Order not found', 404, 'ORDER_NOT_FOUND');
+    }
+    if (order.orderStatus !== 'delivery_failed') {
+      throw new AppError(
+        `Only a failed delivery can be retried. Current status: ${order.orderStatus}`,
+        400,
+        'ORDER_NOT_RETRYABLE'
+      );
+    }
+
+    await prisma.$transaction(async (tx) => {
+      await tx.delivery.updateMany({
+        where: { orderId },
+        data: { riderId: null, status: 'pending', pickupTime: null, deliveryNotes: null },
+      });
+      await tx.order.update({ where: { id: orderId }, data: { orderStatus: 'ready' } });
+      await tx.orderItem.updateMany({
+        where: { orderId, status: { not: 'cancelled' } },
+        data: { status: 'ready' },
+      });
+      await tx.orderStatusHistory.create({
+        data: {
+          orderId,
+          status: 'ready',
+          notes: 'Delivery retry initiated by admin — back in the rider queue',
+          changedBy: adminId,
+        },
+      });
+    });
+
+    await realtimeOrderService.emitOrderStatusUpdate(orderId, 'ready', adminId);
+    return { orderId, status: 'ready' };
   }
 
   /**

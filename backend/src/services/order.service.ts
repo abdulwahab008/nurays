@@ -4,6 +4,7 @@ import realtimeOrderService from './realtime-order.service';
 import { getDeliveryFeeForSeller } from '../utils/deliveryFee';
 import { createStockAlert } from './stock-alert.service';
 import promotionService from './promotion.service';
+import { isAcceptingOrders, validateOrderTiming } from './availability.service';
 
 export class OrderService {
   /**
@@ -113,6 +114,7 @@ export class OrderService {
       hubId: string | null;
     }> = [];
     let subtotal = 0;
+    const sellersInOrder = new Map<string, any>();
 
     for (const item of data.items) {
       // Get product
@@ -129,6 +131,19 @@ export class OrderService {
 
       if (!product.isActive || product.approvalStatus !== 'approved') {
         throw new AppError(`Product ${product.name} is not available`, 400, 'PRODUCT_UNAVAILABLE');
+      }
+
+      sellersInOrder.set(product.seller.id, product.seller);
+
+      // Delivery-mode gate: a seller can restrict which modes they actually offer.
+      const wantsMode = data.deliveryType === 'self_pickup' || data.deliveryType === 'hub_pickup' ? 'pickup' : 'delivery';
+      const offeredModes: string[] = product.seller.deliveryModes ?? ['delivery'];
+      if (!offeredModes.includes(wantsMode)) {
+        throw new AppError(
+          `${product.seller.businessName} does not offer ${wantsMode === 'pickup' ? 'pickup' : 'delivery'}`,
+          400,
+          'DELIVERY_MODE_UNAVAILABLE'
+        );
       }
 
       // Resolve the variant, if one was requested — it drives price + stock instead of the base product.
@@ -184,6 +199,20 @@ export class OrderService {
       });
     }
 
+    // Every seller in the order must currently be accepting orders — schedule,
+    // manual override, order cutoff, daily cap, and pre-order-only are all
+    // enforced here rather than trusting whatever the browsing page displayed.
+    for (const seller of sellersInOrder.values()) {
+      const timing = validateOrderTiming(seller, data.deliverySlotDate);
+      if (!timing.valid) {
+        throw new AppError(`${seller.businessName}: ${timing.reason}`, 400, 'ORDER_TIMING_INVALID');
+      }
+      const accepting = await isAcceptingOrders(seller, new Date(), data.deliverySlotDate);
+      if (!accepting.accepting) {
+        throw new AppError(`${seller.businessName}: ${accepting.reason}`, 400, 'SELLER_NOT_ACCEPTING_ORDERS');
+      }
+    }
+
     // Apply seller-wide catalog/deal promotions to the actual charged unit price —
     // the same discount the product/cart/checkout pages already show, so what's
     // charged always matches what the customer saw (see promotion.service.ts).
@@ -221,6 +250,7 @@ export class OrderService {
         where: { id: { in: uniqueSellerIds } },
         select: {
           id: true,
+          businessName: true,
           freeDeliveryAreas: true,
           freeDeliveryRadiusKm: true,
           latitude: true,
@@ -229,6 +259,12 @@ export class OrderService {
           deliveryFeeFixed: true,
           deliveryFeeBase: true,
           deliveryFeePerKm: true,
+          distancePricingTiers: true,
+          maxDeliveryDistanceKm: true,
+          minOrderAmountForDelivery: true,
+          freeDeliveryThreshold: true,
+          allowedPostalCodes: true,
+          deliveryZones: true,
         },
       });
       const hubIds = [...sellerToHubId.values()].filter((id): id is string => id != null);
@@ -242,6 +278,7 @@ export class OrderService {
       const addr = {
         area: deliveryAddress.area,
         city: deliveryAddress.city,
+        postalCode: deliveryAddress.postalCode,
         latitude: deliveryAddress.latitude != null ? Number(deliveryAddress.latitude) : null,
         longitude: deliveryAddress.longitude != null ? Number(deliveryAddress.longitude) : null,
       };
@@ -251,7 +288,14 @@ export class OrderService {
         const hub = hubId ? hubById.get(hubId) : null;
         const originLat = hub?.latitude != null ? Number(hub.latitude) : (seller.latitude != null ? Number(seller.latitude) : null);
         const originLng = hub?.longitude != null ? Number(hub.longitude) : (seller.longitude != null ? Number(seller.longitude) : null);
-        total += getDeliveryFeeForSeller(seller, addr, originLat, originLng);
+        const sellerSubtotal = orderItems
+          .filter((i) => i.sellerId === seller.id)
+          .reduce((sum, i) => sum + i.totalPrice, 0);
+        const result = getDeliveryFeeForSeller(seller, addr, originLat, originLng, sellerSubtotal);
+        if (!result.deliverable) {
+          throw new AppError(`${seller.businessName}: ${result.reason}`, 400, 'ADDRESS_NOT_DELIVERABLE');
+        }
+        total += result.fee;
       }
       deliveryFee = total;
     } else {

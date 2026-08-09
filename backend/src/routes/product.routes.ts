@@ -10,6 +10,7 @@ import {
 import { validate, validateQuery } from '../middleware/validation.middleware';
 import {
   getProductsQuerySchema,
+  getProductQuerySchema,
   createProductSchema,
   updateProductSchema,
   getSellerProductsQuerySchema,
@@ -58,7 +59,7 @@ router.delete(
 );
 
 // This route must come LAST because /:identifier matches anything
-router.get('/:identifier', optionalAuthenticate, getProduct);
+router.get('/:identifier', optionalAuthenticate, validateQuery(getProductQuerySchema), getProduct);
 
 export default router;
 

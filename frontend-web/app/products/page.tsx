@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { productService, Product } from '@/lib/services/product.service';
+import { addressService } from '@/lib/services/address.service';
 import { formatPrice } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/toast';
@@ -52,6 +53,42 @@ const productTypeOptions = [
   { value: 'ready_to_cook', label: 'Ready to Cook' },
 ];
 
+const mealCategoryOptions = [
+  { value: '', label: 'Any Meal' },
+  { value: 'breakfast', label: 'Breakfast' },
+  { value: 'brunch', label: 'Brunch' },
+  { value: 'lunch', label: 'Lunch' },
+  { value: 'evening_snacks', label: 'Evening Snacks' },
+  { value: 'dinner', label: 'Dinner' },
+  { value: 'late_night', label: 'Late Night' },
+  { value: 'desserts', label: 'Desserts' },
+  { value: 'beverages', label: 'Beverages' },
+];
+
+const dietaryOptions = ['Halal', 'Vegetarian', 'Vegan'];
+
+const businessTypeOptions = [
+  { value: '', label: 'Any Kitchen Type' },
+  { value: 'home_kitchen', label: 'Home-Based Kitchens' },
+  { value: 'restaurant', label: 'Restaurants' },
+  { value: 'bakery', label: 'Bakery' },
+  { value: 'cafe', label: 'Cafe' },
+  { value: 'cloud_kitchen', label: 'Cloud Kitchen' },
+];
+
+const maxDistanceOptions = [
+  { value: '', label: 'Any Distance' },
+  { value: '2', label: 'Within 2 km' },
+  { value: '5', label: 'Within 5 km' },
+  { value: '10', label: 'Within 10 km' },
+  { value: '20', label: 'Within 20 km' },
+];
+
+function formatTimeLabel(iso: string | null): string {
+  if (!iso) return '';
+  return new Date(iso).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
+}
+
 export default function ProductsPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -67,6 +104,21 @@ export default function ProductsPage() {
   const [selectedCategory, setSelectedCategory] = useState('all');
   const [selectedProductType, setSelectedProductType] = useState(searchParams.get('productType') || 'all');
   const [sortBy, setSortBy] = useState('newest');
+  const [openNow, setOpenNow] = useState(false);
+  const [mealCategory, setMealCategory] = useState('');
+  const [deliveryAvailable, setDeliveryAvailable] = useState(false);
+  const [pickupAvailable, setPickupAvailable] = useState(false);
+  const [freeDelivery, setFreeDelivery] = useState(false);
+  const [offersAvailable, setOffersAvailable] = useState(false);
+  const [selectedDietary, setSelectedDietary] = useState<string[]>([]);
+  const [businessType, setBusinessType] = useState('');
+  const [preOrderOnly, setPreOrderOnly] = useState(false);
+  const [currentlyBusy, setCurrentlyBusy] = useState(false);
+  const [newKitchens, setNewKitchens] = useState(false);
+  const [open247, setOpen247] = useState(false);
+  const [maxDistanceKm, setMaxDistanceKm] = useState('');
+  const [fastDeliveryOnly, setFastDeliveryOnly] = useState(false);
+  const [customerLocation, setCustomerLocation] = useState<{ lat: number; lng: number } | null>(null);
   const [categories, setCategories] = useState<Category[]>([]);
   const [categoriesLoading, setCategoriesLoading] = useState(true);
   const [promotionsByProductId, setPromotionsByProductId] = useState<Record<string, CatalogPromotion[]>>({});
@@ -106,9 +158,29 @@ export default function ProductsPage() {
     loadCategories();
   }, []);
 
+  // A logged-in customer's default address lets us show real per-seller
+  // delivery fee/distance/ETA while browsing, not just at checkout.
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    addressService
+      .getAddresses()
+      .then((res) => {
+        const addresses = res.data || [];
+        const withCoords = addresses.find((a) => a.isDefault && a.coordinates) || addresses.find((a) => a.coordinates);
+        if (withCoords?.coordinates) {
+          setCustomerLocation({ lat: withCoords.coordinates.latitude, lng: withCoords.coordinates.longitude });
+        }
+      })
+      .catch(() => setCustomerLocation(null));
+  }, [isAuthenticated]);
+
   useEffect(() => {
     loadProducts();
-  }, [page, selectedCategory, selectedProductType, sortBy, searchQuery]);
+  }, [
+    page, selectedCategory, selectedProductType, sortBy, searchQuery, openNow, mealCategory,
+    deliveryAvailable, pickupAvailable, freeDelivery, offersAvailable, selectedDietary,
+    businessType, preOrderOnly, currentlyBusy, newKitchens, open247, maxDistanceKm, fastDeliveryOnly, customerLocation,
+  ]);
 
   // Sync search term whenever the URL's ?search= changes (e.g. a new navbar search)
   useEffect(() => {
@@ -124,13 +196,29 @@ export default function ProductsPage() {
     setError('');
     try {
       const productTypeValue = selectedProductType !== 'all' ? selectedProductType as 'frozen' | 'fresh' | 'ready_to_eat' | 'ready_to_cook' : undefined;
-      const response = await productService.getProducts({ 
-        page, 
+      const response = await productService.getProducts({
+        page,
         limit: 20,
         categoryId: selectedCategory !== 'all' ? selectedCategory : undefined,
         productType: productTypeValue,
         sort: sortBy as any,
         search: searchQuery || undefined,
+        openNow: openNow || undefined,
+        mealCategory: mealCategory || undefined,
+        deliveryAvailable: deliveryAvailable || undefined,
+        pickupAvailable: pickupAvailable || undefined,
+        freeDelivery: freeDelivery || undefined,
+        offersAvailable: offersAvailable || undefined,
+        dietary: selectedDietary.length > 0 ? selectedDietary.join(',') : undefined,
+        businessType: businessType || undefined,
+        preOrderOnly: preOrderOnly || undefined,
+        currentlyBusy: currentlyBusy || undefined,
+        newKitchens: newKitchens || undefined,
+        open247: open247 || undefined,
+        maxDistanceKm: maxDistanceKm ? parseFloat(maxDistanceKm) : undefined,
+        fastDelivery: fastDeliveryOnly || undefined,
+        customerLat: customerLocation?.lat,
+        customerLng: customerLocation?.lng,
       });
       if (response && response.data) {
         const list = response.data.products || [];
@@ -239,7 +327,24 @@ export default function ProductsPage() {
     }
 
     if (products.length === 0) {
-      const hasActiveFilters = Boolean(searchQuery) || selectedCategory !== 'all' || selectedProductType !== 'all';
+      const hasActiveFilters =
+        Boolean(searchQuery) ||
+        selectedCategory !== 'all' ||
+        selectedProductType !== 'all' ||
+        openNow ||
+        Boolean(mealCategory) ||
+        deliveryAvailable ||
+        pickupAvailable ||
+        freeDelivery ||
+        offersAvailable ||
+        selectedDietary.length > 0 ||
+        Boolean(businessType) ||
+        preOrderOnly ||
+        currentlyBusy ||
+        newKitchens ||
+        open247 ||
+        Boolean(maxDistanceKm) ||
+        fastDeliveryOnly;
       if (hasActiveFilters) {
         return (
           <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-12 text-center">
@@ -255,6 +360,20 @@ export default function ProductsPage() {
                 setSearchQuery('');
                 setSelectedCategory('all');
                 setSelectedProductType('all');
+                setOpenNow(false);
+                setMealCategory('');
+                setDeliveryAvailable(false);
+                setPickupAvailable(false);
+                setFreeDelivery(false);
+                setOffersAvailable(false);
+                setSelectedDietary([]);
+                setBusinessType('');
+                setPreOrderOnly(false);
+                setCurrentlyBusy(false);
+                setNewKitchens(false);
+                setOpen247(false);
+                setMaxDistanceKm('');
+                setFastDeliveryOnly(false);
                 setPage(1);
               }}
               className="bg-gray-700 hover:bg-gray-800"
@@ -352,12 +471,52 @@ export default function ProductsPage() {
                   </span>
                 ) : null}
                 <h3 className="font-semibold text-gray-900 mb-1 line-clamp-1">{product.name}</h3>
-                <p className="text-sm text-gray-500 mb-3 flex items-center gap-1">
+                <p className="text-sm text-gray-500 mb-1 flex items-center gap-1">
                   <span className="truncate">{product.seller?.businessName ?? 'Seller'}</span>
                   {product.seller?.isVerified && (
                     <span className="text-gray-700 text-xs">Verified</span>
                   )}
                 </p>
+                {product.seller?.availability && (
+                  <p className={`text-xs mb-1 ${product.seller.availability.isOpen ? 'text-green-700' : 'text-gray-400'}`}>
+                    {product.seller.availability.isOpen
+                      ? product.seller.availability.closesAt
+                        ? `Open now · closes ${formatTimeLabel(product.seller.availability.closesAt)}`
+                        : 'Open now'
+                      : product.seller.availability.opensAt
+                        ? `Closed · opens ${formatTimeLabel(product.seller.availability.opensAt)}`
+                        : 'Closed'}
+                  </p>
+                )}
+                {product.seller && (
+                  <p className={`text-xs mb-2 ${product.seller.isAcceptingOrders ? 'text-gray-500' : 'text-red-500'}`}>
+                    {product.seller.isAcceptingOrders
+                      ? product.seller.preOrderOnly ? 'Accepting pre-orders' : 'Accepting orders'
+                      : product.seller.acceptingOrdersReason || 'Not accepting orders right now'}
+                  </p>
+                )}
+                {(product.seller?.mealCategories?.length || product.seller?.businessType) && (
+                  <div className="flex gap-1 flex-wrap mb-2">
+                    {product.seller.businessType && (
+                      <span className="px-2 py-0.5 rounded text-[11px] font-medium bg-gray-100 text-gray-600">
+                        {businessTypeOptions.find((b) => b.value === product.seller!.businessType)?.label || product.seller.businessType}
+                      </span>
+                    )}
+                    {product.seller.mealCategories?.map((mc) => (
+                      <span key={mc} className="px-2 py-0.5 rounded text-[11px] font-medium bg-gray-100 text-gray-600">
+                        {mc.replace('_', ' ')}
+                      </span>
+                    ))}
+                  </div>
+                )}
+                {product.delivery && (
+                  <p className="text-xs text-gray-500 mb-2">
+                    {product.delivery.deliverable
+                      ? `${product.delivery.fee === 0 ? 'Free delivery' : formatPrice(product.delivery.fee) + ' delivery'} · ${product.estimatedDeliveryMinMinutes}-${product.estimatedDeliveryMaxMinutes} min${product.delivery.distanceKm != null ? ` · ${product.delivery.distanceKm} km` : ''}`
+                      : product.delivery.reason || 'Not deliverable to your address'}
+                    {product.minOrderAmountForDelivery ? ` · Min order ${formatPrice(product.minOrderAmountForDelivery)}` : ''}
+                  </p>
+                )}
                 <div className="flex items-center justify-between">
                   <div>
                     {promotionsByProductId[product.id]?.length ? (
@@ -453,6 +612,137 @@ export default function ProductsPage() {
               <span>{type.label}</span>
             </button>
           ))}
+        </div>
+
+        {/* Hours / delivery / dietary filters */}
+        <div className="flex gap-2 flex-wrap mb-4 items-center">
+          <button
+            onClick={() => { setOpenNow(!openNow); setPage(1); }}
+            className={`px-3 py-1.5 rounded-full text-sm font-medium transition-all ${
+              openNow ? 'bg-gray-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+            }`}
+          >
+            Open Now
+          </button>
+          <button
+            onClick={() => { setDeliveryAvailable(!deliveryAvailable); setPage(1); }}
+            className={`px-3 py-1.5 rounded-full text-sm font-medium transition-all ${
+              deliveryAvailable ? 'bg-gray-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+            }`}
+          >
+            Delivery Available
+          </button>
+          <button
+            onClick={() => { setPickupAvailable(!pickupAvailable); setPage(1); }}
+            className={`px-3 py-1.5 rounded-full text-sm font-medium transition-all ${
+              pickupAvailable ? 'bg-gray-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+            }`}
+          >
+            Pickup Available
+          </button>
+          <button
+            onClick={() => { setFreeDelivery(!freeDelivery); setPage(1); }}
+            className={`px-3 py-1.5 rounded-full text-sm font-medium transition-all ${
+              freeDelivery ? 'bg-gray-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+            }`}
+          >
+            Free Delivery
+          </button>
+          <button
+            onClick={() => { setOffersAvailable(!offersAvailable); setPage(1); }}
+            className={`px-3 py-1.5 rounded-full text-sm font-medium transition-all ${
+              offersAvailable ? 'bg-gray-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+            }`}
+          >
+            Offers Available
+          </button>
+          <select
+            value={mealCategory}
+            onChange={(e) => { setMealCategory(e.target.value); setPage(1); }}
+            className="border border-gray-200 rounded-full px-3 py-1.5 text-sm text-gray-700 focus:ring-2 focus:ring-gray-500"
+          >
+            {mealCategoryOptions.map((m) => (
+              <option key={m.value} value={m.value}>{m.label}</option>
+            ))}
+          </select>
+          {dietaryOptions.map((d) => (
+            <button
+              key={d}
+              onClick={() => {
+                setSelectedDietary((prev) => (prev.includes(d) ? prev.filter((x) => x !== d) : [...prev, d]));
+                setPage(1);
+              }}
+              className={`px-3 py-1.5 rounded-full text-sm font-medium transition-all ${
+                selectedDietary.includes(d) ? 'bg-green-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+              }`}
+            >
+              {d}
+            </button>
+          ))}
+        </div>
+
+        {/* Kitchen type / availability / distance filters */}
+        <div className="flex gap-2 flex-wrap mb-4 items-center">
+          <select
+            value={businessType}
+            onChange={(e) => { setBusinessType(e.target.value); setPage(1); }}
+            className="border border-gray-200 rounded-full px-3 py-1.5 text-sm text-gray-700 focus:ring-2 focus:ring-gray-500"
+          >
+            {businessTypeOptions.map((b) => (
+              <option key={b.value} value={b.value}>{b.label}</option>
+            ))}
+          </select>
+          <button
+            onClick={() => { setOpen247(!open247); setPage(1); }}
+            className={`px-3 py-1.5 rounded-full text-sm font-medium transition-all ${
+              open247 ? 'bg-gray-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+            }`}
+          >
+            Open 24/7
+          </button>
+          <button
+            onClick={() => { setPreOrderOnly(!preOrderOnly); setPage(1); }}
+            className={`px-3 py-1.5 rounded-full text-sm font-medium transition-all ${
+              preOrderOnly ? 'bg-gray-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+            }`}
+          >
+            Accepting Pre-orders
+          </button>
+          <button
+            onClick={() => { setCurrentlyBusy(!currentlyBusy); setPage(1); }}
+            className={`px-3 py-1.5 rounded-full text-sm font-medium transition-all ${
+              currentlyBusy ? 'bg-gray-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+            }`}
+          >
+            Currently Busy
+          </button>
+          <button
+            onClick={() => { setNewKitchens(!newKitchens); setPage(1); }}
+            className={`px-3 py-1.5 rounded-full text-sm font-medium transition-all ${
+              newKitchens ? 'bg-gray-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+            }`}
+          >
+            New Kitchens
+          </button>
+          <button
+            onClick={() => { setFastDeliveryOnly(!fastDeliveryOnly); setPage(1); }}
+            className={`px-3 py-1.5 rounded-full text-sm font-medium transition-all ${
+              fastDeliveryOnly ? 'bg-gray-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+            }`}
+          >
+            Fast Delivery
+          </button>
+          <select
+            value={maxDistanceKm}
+            onChange={(e) => { setMaxDistanceKm(e.target.value); setPage(1); }}
+            disabled={!customerLocation}
+            title={customerLocation ? undefined : 'Add an address with coordinates to filter by distance'}
+            className="border border-gray-200 rounded-full px-3 py-1.5 text-sm text-gray-700 focus:ring-2 focus:ring-gray-500 disabled:opacity-50"
+          >
+            {maxDistanceOptions.map((o) => (
+              <option key={o.value} value={o.value}>{o.label}</option>
+            ))}
+          </select>
         </div>
 
         {/* Categories */}

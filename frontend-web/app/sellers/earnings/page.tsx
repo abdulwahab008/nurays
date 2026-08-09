@@ -60,6 +60,7 @@ interface EarningsData {
   totalEarnings: number;
   pendingPayout: number;
   availableBalance: number;
+  codCommissionOwed: number;
   payouts: Array<{
     id: string;
     amount: number;
@@ -109,7 +110,11 @@ export default function SellerEarningsPage() {
         setEarnings({
           totalEarnings: dashboard.overview?.totalEarnings || 0,
           pendingPayout: dashboard.overview?.pendingPayout || 0,
-          availableBalance: (dashboard.overview?.totalEarnings || 0) - (dashboard.overview?.pendingPayout || 0),
+          // Cash-on-delivery money is already in your hands and isn't payable
+          // again here — only what we collected online can be withdrawn, net
+          // of the commission you owe us on COD sales (see codCommissionOwed).
+          availableBalance: dashboard.overview?.availableForPayout || 0,
+          codCommissionOwed: dashboard.overview?.codCommissionOwed || 0,
           payouts: payoutsRes.data.success ? payoutsRes.data.data : [],
         });
       }
@@ -188,7 +193,7 @@ export default function SellerEarningsPage() {
                   <div>
                     <p className="text-sm font-medium text-emerald-600 mb-2">Total Earnings</p>
                     <p className="text-3xl font-bold text-gray-900">{formatPrice(earnings.totalEarnings)}</p>
-                    <p className="text-xs text-emerald-600 mt-2">Lifetime earnings</p>
+                    <p className="text-xs text-emerald-600 mt-2">Lifetime, cash + online orders</p>
                   </div>
                   <div className="w-16 h-16 bg-emerald-500 rounded-2xl flex items-center justify-center text-white shadow-lg shadow-emerald-200 group-hover:scale-110 transition-transform">
                     {Icons.earnings}
@@ -216,7 +221,7 @@ export default function SellerEarningsPage() {
                   <div>
                     <p className="text-sm font-medium text-blue-600 mb-2">Available Balance</p>
                     <p className="text-3xl font-bold text-blue-700">{formatPrice(earnings.availableBalance)}</p>
-                    <p className="text-xs text-blue-600 mt-2">Ready to withdraw</p>
+                    <p className="text-xs text-blue-600 mt-2">From online orders only</p>
                   </div>
                   <div className="w-16 h-16 bg-blue-500 rounded-2xl flex items-center justify-center text-white shadow-lg shadow-blue-200 group-hover:scale-110 transition-transform">
                     {Icons.wallet}
@@ -224,6 +229,17 @@ export default function SellerEarningsPage() {
                 </div>
               </div>
             </div>
+
+            {/* Cash-on-delivery note */}
+            {earnings.codCommissionOwed > 0 && (
+              <div className="bg-gray-50 border border-gray-200 rounded-2xl p-5 mb-8 flex items-start gap-3">
+                <div className="w-9 h-9 rounded-full bg-gray-200 flex items-center justify-center flex-shrink-0 text-gray-600 font-bold">i</div>
+                <p className="text-sm text-gray-600">
+                  Customers who paid cash on delivery paid <span className="font-semibold text-gray-900">you</span> directly — that money isn't part of your withdrawable balance.
+                  You owe <span className="font-semibold text-gray-900">{formatPrice(earnings.codCommissionOwed)}</span> in platform commission on those cash orders, which we deduct from your next online-order payout automatically.
+                </p>
+              </div>
+            )}
 
             {/* Request Payout Card - Enhanced */}
             {earnings.availableBalance > 0 && (

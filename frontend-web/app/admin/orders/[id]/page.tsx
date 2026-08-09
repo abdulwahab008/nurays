@@ -87,6 +87,20 @@ export default function AdminOrderDetailPage() {
     }
   };
 
+  const handleRetryDelivery = async () => {
+    if (!order) return;
+    try {
+      setUpdating(true);
+      await apiClient.post(`/admin/orders/${order.id}/retry-delivery`, {});
+      showToast('Delivery sent back out for dispatch', 'success');
+      loadOrder();
+    } catch (error: any) {
+      showToast(error.response?.data?.error?.message || 'Failed to retry delivery', 'error');
+    } finally {
+      setUpdating(false);
+    }
+  };
+
   const handleProcessRefund = async () => {
     if (!order) return;
     const amount = refundAmount.trim() ? parseFloat(refundAmount.trim()) : undefined;
@@ -300,6 +314,23 @@ export default function AdminOrderDetailPage() {
                     <span>{formatPrice(order.totalAmount)}</span>
                   </div>
                 </div>
+
+                {/* Failed delivery — the primary action here, not just another status option */}
+                {order.orderStatus === 'delivery_failed' && (
+                  <div className="rounded-lg border border-amber-200 bg-amber-50 p-4">
+                    <h2 className="text-sm font-semibold text-amber-900 mb-1">Delivery failed</h2>
+                    <p className="text-sm text-amber-800 mb-3">
+                      The rider or seller couldn't complete this delivery. Send it back out for another attempt, or cancel and refund below.
+                    </p>
+                    <button
+                      onClick={handleRetryDelivery}
+                      disabled={updating}
+                      className="px-4 py-2 rounded-lg text-sm font-medium text-white bg-amber-600 hover:bg-amber-700 disabled:opacity-50 transition-all"
+                    >
+                      {updating ? 'Retrying...' : 'Retry Delivery'}
+                    </button>
+                  </div>
+                )}
 
                 {/* Status Update */}
                 {!['delivered', 'completed', 'cancelled', 'refunded'].includes(order.orderStatus) && (

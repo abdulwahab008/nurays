@@ -11,6 +11,7 @@ import { useAuthStore } from '@/lib/store/auth-store';
 import { useSocket } from '@/lib/hooks/use-socket';
 import { DashboardLayout } from '@/components/layout/DashboardShell';
 import WriteReviewForm from '@/components/products/WriteReviewForm';
+import { apiClient } from '@/lib/api-client';
 
 function playCancelSound() {
   if (typeof window === 'undefined') return;
@@ -147,6 +148,10 @@ export default function OrderDetailPage() {
   const [showCancelModal, setShowCancelModal] = useState(false);
   const [cancelReason, setCancelReason] = useState('');
   const [cancelling, setCancelling] = useState(false);
+  const [showReportModal, setShowReportModal] = useState(false);
+  const [reportDetails, setReportDetails] = useState('');
+  const [reporting, setReporting] = useState(false);
+  const [reported, setReported] = useState(false);
 
   useEffect(() => {
     if (!isAuthenticated) {
@@ -213,6 +218,28 @@ export default function OrderDetailPage() {
       showToast(error.response?.data?.error?.message || 'Failed to cancel order', 'error');
     } finally {
       setCancelling(false);
+    }
+  };
+
+  const handleReportNonReceipt = async () => {
+    if (!order || !reportDetails.trim()) return;
+    try {
+      setReporting(true);
+      await apiClient.post('/support/tickets', {
+        orderId: order.id,
+        category: 'delivery_dispute',
+        subject: `Didn't receive order #${order.orderNumber}`,
+        description: reportDetails.trim(),
+        priority: 'high',
+      });
+      setShowReportModal(false);
+      setReportDetails('');
+      setReported(true);
+      showToast("Report submitted — our support team will look into it.", 'success');
+    } catch (error: any) {
+      showToast(error.response?.data?.error?.message || 'Failed to submit report', 'error');
+    } finally {
+      setReporting(false);
     }
   };
 
@@ -290,7 +317,7 @@ export default function OrderDetailPage() {
               </span>
               <div>
                 <p className="font-semibold text-lg">Order confirmed!</p>
-                <p className="text-green-100 text-sm">Thank you for your order. We&apos;ve sent the details to the seller.</p>
+                <p className="text-white/90 text-sm">Thank you for your order. We&apos;ve sent the details to the seller.</p>
               </div>
             </div>
             <button
@@ -493,11 +520,64 @@ export default function OrderDetailPage() {
                   Cancel Order
                 </Button>
               )}
+              {(effectiveStatus === 'delivered' || effectiveStatus === 'completed') && (
+                reported ? (
+                  <p className="text-sm text-gray-500 text-center mt-2">
+                    Report submitted — our support team is on it.
+                  </p>
+                ) : (
+                  <Button
+                    variant="outline"
+                    className="w-full mt-2 border-red-200 text-red-600 hover:bg-red-50"
+                    onClick={() => setShowReportModal(true)}
+                  >
+                    I didn't receive this order
+                  </Button>
+                )
+              )}
             </div>
           </div>
         </div>
       </div>
     </div>
+
+      {/* Report Non-Receipt Modal */}
+      {showReportModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden">
+            <div className="bg-red-500 px-6 py-4">
+              <h2 className="text-white font-bold text-lg">Report a problem</h2>
+            </div>
+            <div className="p-6 space-y-4">
+              <p className="text-sm text-gray-600">
+                This order is marked delivered, but if you never actually received it, tell us what happened and our support team will follow up.
+              </p>
+              <textarea
+                value={reportDetails}
+                onChange={(e) => setReportDetails(e.target.value)}
+                rows={4}
+                placeholder="e.g., I never received this order, or it was left at the wrong address..."
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-red-500"
+              />
+              <div className="flex items-center gap-3">
+                <Button
+                  variant="destructive"
+                  onClick={handleReportNonReceipt}
+                  disabled={reporting || !reportDetails.trim()}
+                >
+                  {reporting ? 'Submitting...' : 'Submit Report'}
+                </Button>
+                <button
+                  onClick={() => { setShowReportModal(false); setReportDetails(''); }}
+                  className="text-sm text-gray-500 hover:text-gray-700"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Cancel Order Modal */}
       {showCancelModal && (

@@ -320,7 +320,7 @@ export default function SupportPage() {
         <div className="flex items-center justify-between flex-wrap gap-4">
           <div>
             <h3 className="text-xl font-bold mb-1">Still need help?</h3>
-            <p className="text-green-100">Our team is ready to assist you</p>
+            <p className="text-white/90">Our team is ready to assist you</p>
           </div>
           <a href="https://wa.me/923001234567" target="_blank">
             <Button variant="outline" className="border-white text-white hover:bg-white hover:text-green-600">

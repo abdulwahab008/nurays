@@ -15,6 +15,26 @@ export const getProductsQuerySchema = z.object({
   search: z.string().optional(),
   sort: z.enum(['popular', 'newest', 'price_low', 'price_high', 'rating']).optional(),
   isActive: z.string().optional().transform((val) => (val === 'true' ? true : val === 'false' ? false : undefined)),
+  mealCategory: z.string().optional(),
+  openNow: z.string().optional().transform((val) => val === 'true'),
+  open247: z.string().optional().transform((val) => val === 'true'),
+  deliveryAvailable: z.string().optional().transform((val) => val === 'true'),
+  pickupAvailable: z.string().optional().transform((val) => val === 'true'),
+  offersAvailable: z.string().optional().transform((val) => val === 'true'),
+  freeDelivery: z.string().optional().transform((val) => val === 'true'),
+  businessType: z.enum(['restaurant', 'home_kitchen', 'bakery', 'cafe', 'cloud_kitchen']).optional(),
+  preOrderOnly: z.string().optional().transform((val) => val === 'true'),
+  currentlyBusy: z.string().optional().transform((val) => val === 'true'),
+  newKitchens: z.string().optional().transform((val) => val === 'true'),
+  fastDelivery: z.string().optional().transform((val) => val === 'true'),
+  customerLat: z.string().optional().transform((val) => (val ? parseFloat(val) : undefined)),
+  customerLng: z.string().optional().transform((val) => (val ? parseFloat(val) : undefined)),
+  maxDistanceKm: z.string().optional().transform((val) => (val ? parseFloat(val) : undefined)),
+});
+
+export const getProductQuerySchema = z.object({
+  customerLat: z.string().optional().transform((val) => (val ? parseFloat(val) : undefined)),
+  customerLng: z.string().optional().transform((val) => (val ? parseFloat(val) : undefined)),
 });
 
 export const createProductSchema = z.object({

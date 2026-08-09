@@ -3,11 +3,14 @@ import prisma from '../config/database';
 import { AppError } from '../middleware/errorHandler';
 import realtimeOrderService from './realtime-order.service';
 
-// Delivery.status lifecycle: pending (unclaimed) -> assigned (claimed) -> picked_up -> in_transit -> delivered
+// Delivery.status lifecycle: pending (unclaimed) -> assigned (claimed) -> picked_up -> in_transit -> delivered.
+// A rider holding the goods can also report delivery_failed instead of completing
+// (customer unreachable, wrong address, refused delivery, etc.) — admin resolves
+// it from there (refund or retry).
 const VALID_TRANSITIONS: Record<string, string[]> = {
   assigned: ['picked_up'],
-  picked_up: ['in_transit'],
-  in_transit: ['delivered'],
+  picked_up: ['in_transit', 'delivery_failed'],
+  in_transit: ['delivered', 'delivery_failed'],
 };
 
 // Delivery status -> order-level status it should push the order to.
@@ -15,6 +18,7 @@ const ORDER_STATUS_FOR_DELIVERY_STATUS: Record<string, string> = {
   picked_up: 'dispatched',
   in_transit: 'in_transit',
   delivered: 'delivered',
+  delivery_failed: 'delivery_failed',
 };
 
 type DeliveryWithOrder = Prisma.DeliveryGetPayload<{
@@ -143,7 +147,7 @@ export class RiderService {
     return formatDelivery(updated);
   }
 
-  async updateDeliveryStatus(userId: string, deliveryId: string, status: string) {
+  async updateDeliveryStatus(userId: string, deliveryId: string, status: string, reason?: string) {
     const rider = await this.requireRider(userId);
     const delivery = await prisma.delivery.findUnique({ where: { id: deliveryId } });
     if (!delivery) {
@@ -163,7 +167,7 @@ export class RiderService {
     // not orderStatus, so both fields need checking here.
     const order = await prisma.order.findUnique({
       where: { id: delivery.orderId },
-      select: { orderStatus: true, paymentStatus: true },
+      select: { orderStatus: true, paymentStatus: true, paymentMethod: true },
     });
     if (order && ['cancelled', 'refunded', 'completed'].includes(order.orderStatus)) {
       throw new AppError(
@@ -183,6 +187,7 @@ export class RiderService {
     const updateData: Record<string, unknown> = { status };
     if (status === 'picked_up') updateData.pickupTime = new Date();
     if (status === 'delivered') updateData.deliveryTime = new Date();
+    if (status === 'delivery_failed') updateData.deliveryNotes = reason;
 
     const updated = await prisma.delivery.update({
       where: { id: deliveryId },
@@ -192,11 +197,17 @@ export class RiderService {
 
     const newOrderStatus = ORDER_STATUS_FOR_DELIVERY_STATUS[status];
     if (newOrderStatus) {
+      // COD payment is collected by the rider at the door — delivered IS the
+      // payment confirmation for COD. Online payments are already 'paid' well
+      // before delivery via the gateway verification flow, so this only ever
+      // affects COD orders that were still sitting at 'pending'.
+      const isCodPayment = order?.paymentMethod === 'cod' && order.paymentStatus !== 'paid';
       await prisma.order.update({
         where: { id: delivery.orderId },
         data: {
           orderStatus: newOrderStatus,
           ...(status === 'delivered' ? { deliveredAt: new Date() } : {}),
+          ...(status === 'delivered' && isCodPayment ? { paymentStatus: 'paid', paidAt: new Date() } : {}),
         },
       });
       // Keep each order item's own status (what the seller's order list
@@ -210,7 +221,10 @@ export class RiderService {
         data: {
           orderId: delivery.orderId,
           status: newOrderStatus,
-          notes: `Rider marked delivery as ${status.replace('_', ' ')}`,
+          notes:
+            status === 'delivery_failed'
+              ? `Rider reported failed delivery: ${reason}`
+              : `Rider marked delivery as ${status.replace('_', ' ')}`,
           changedBy: userId,
         },
       });

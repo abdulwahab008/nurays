@@ -4,6 +4,7 @@ import {
   getOrderDetails,
   updateOrderStatus,
   cancelOrder,
+  retryDelivery,
   processRefund,
   getPlatformAnalytics,
   getOrderStatistics,
@@ -41,6 +42,9 @@ router.patch('/orders/:id/status', validate(updateOrderStatusSchema), updateOrde
 
 // Cancel order
 router.post('/orders/:id/cancel', validate(cancelOrderSchema), cancelOrder);
+
+// Retry a failed delivery — send it back out instead of cancelling
+router.post('/orders/:id/retry-delivery', retryDelivery);
 
 // Process refund
 router.post('/orders/:id/refund', validate(processRefundSchema), processRefund);

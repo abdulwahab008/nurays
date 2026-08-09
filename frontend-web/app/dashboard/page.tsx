@@ -59,7 +59,7 @@ const SIDEBAR_ITEMS = [
 
 function PromoTile({ promo }: { promo: typeof PROMOS[0] }) {
   const palette = {
-    forest: { bg: 'var(--forest-500)', fg: 'var(--cream-50)', chip: 'rgba(251,248,241,0.18)' },
+    forest: { bg: 'var(--forest-500)', fg: 'var(--cream-50)', chip: 'rgba(26,22,16,0.22)' },
     gold:   { bg: 'var(--gold-500)',   fg: 'var(--cream-50)', chip: 'rgba(26,22,16,0.18)' },
     ink:    { bg: 'var(--ink-900)',    fg: 'var(--cream-50)', chip: 'rgba(251,248,241,0.18)' },
   }[promo.tone];
@@ -71,7 +71,7 @@ function PromoTile({ promo }: { promo: typeof PROMOS[0] }) {
       </div>
       <div
         className="font-mono text-[11px] tracking-wider uppercase mt-4 inline-block px-2.5 py-1 rounded-full"
-        style={{ background: palette.chip }}
+        style={{ background: palette.chip, color: palette.fg }}
       >
         {promo.code}
       </div>
