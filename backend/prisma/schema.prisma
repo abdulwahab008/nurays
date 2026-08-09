@@ -149,6 +149,43 @@ model Seller {
   deliveryFeeFixed  Int?      @map("delivery_fee_fixed") // PKR when outside free areas (e.g. 200-300)
   deliveryFeeBase   Int?      @map("delivery_fee_base") // PKR base fee when distance-based
   deliveryFeePerKm  Decimal?  @map("delivery_fee_per_km") @db.Decimal(6, 2) // PKR per km when distance-based
+  distancePricingTiers Json?  @map("distance_pricing_tiers") // optional bracket override: [{maxKm, fee}, ...] sorted ascending; falls back to deliveryFeeBase/PerKm when null
+  maxDeliveryDistanceKm Float? @map("max_delivery_distance_km") // beyond this, delivery is refused outright (null = unbounded)
+  minOrderAmountForDelivery Decimal? @map("min_order_amount_for_delivery") @db.Decimal(10, 2) // order must reach this subtotal for delivery to be offered
+  freeDeliveryThreshold Decimal? @map("free_delivery_threshold") @db.Decimal(10, 2) // seller-configurable "free delivery above Rs X" (replaces old hardcoded 2000 default)
+  allowedPostalCodes  String[] @default([]) @map("allowed_postal_codes") // if non-empty, delivery restricted to these postal codes
+  deliveryZones       Json?    @map("delivery_zones") // named zones for zone-based pricing: [{name, cities:[], areas:[], fee}]
+  // Defaults to both — self_pickup/hub_pickup and home_delivery were both
+  // freely choosable by the customer with no seller-side restriction before
+  // this field existed; a narrower default would newly block pre-existing orders.
+  deliveryModes       String[] @default(["delivery", "pickup"]) @map("delivery_modes") // delivery, pickup, dine_in
+
+  businessType        String   @default("restaurant") @map("business_type") // restaurant, home_kitchen, bakery, cafe, cloud_kitchen
+  mealCategories      String[] @default([]) @map("meal_categories") // breakfast, brunch, lunch, evening_snacks, dinner, late_night, desserts, beverages
+  storeNotice         String?  @map("store_notice")
+
+  // Operating schedule — see availability.service.ts for how this is interpreted.
+  // Defaults to always-open so a seller who never touches these settings sees
+  // no change in behavior — only an explicit fixed_daily/per_day choice (which
+  // the settings page always pairs with a real operatingHours payload) restricts it.
+  scheduleMode        String   @default("24_7") @map("schedule_mode") // '24_7' | 'fixed_daily' | 'per_day'
+  operatingHours      Json?    @map("operating_hours")
+  // { fixedDaily?: {open:"HH:MM", close:"HH:MM"},
+  //   weekly?: { monday: {closed:false, sessions:[{name,open,close}]}, ..., sunday: {...} } }
+
+  // Manual override always wins over the computed schedule while active.
+  availabilityOverride      String?   @map("availability_override") // null | open | closed | busy | vacation | holiday | preorder_only
+  availabilityOverrideUntil DateTime? @map("availability_override_until")
+  availabilityNote          String?   @map("availability_note")
+
+  // Home-kitchen order controls
+  orderCutoffTime       String?  @map("order_cutoff_time") // "HH:MM" — today's orders stop being accepted at this time; null = no cutoff
+  maxDailyOrders        Int?     @map("max_daily_orders")
+  minPrepTimeMinutes    Int?     @map("min_prep_time_minutes")
+  preOrderOnly          Boolean  @default(false) @map("pre_order_only")
+  advanceBookingMinDays Int?     @map("advance_booking_min_days")
+  advanceBookingMaxDays Int?     @map("advance_booking_max_days")
+
   createdAt         DateTime  @default(now()) @map("created_at")
   updatedAt         DateTime  @updatedAt @map("updated_at")
 

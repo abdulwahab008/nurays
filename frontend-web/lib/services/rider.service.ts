@@ -6,7 +6,7 @@ export interface Delivery {
   orderNumber?: string;
   pickupAddress: string;
   deliveryAddress: string;
-  status: 'pending' | 'assigned' | 'picked_up' | 'in_transit' | 'delivered';
+  status: 'pending' | 'assigned' | 'picked_up' | 'in_transit' | 'delivered' | 'delivery_failed';
   pickupTime?: string | null;
   deliveryTime?: string | null;
   createdAt: string;
@@ -28,8 +28,12 @@ export const riderService = {
     return response.data;
   },
 
-  updateDeliveryStatus: async (deliveryId: string, status: 'picked_up' | 'in_transit' | 'delivered') => {
-    const response = await apiClient.patch<ApiResponse<Delivery>>(`/riders/deliveries/${deliveryId}/status`, { status });
+  updateDeliveryStatus: async (
+    deliveryId: string,
+    status: 'picked_up' | 'in_transit' | 'delivered' | 'delivery_failed',
+    reason?: string
+  ) => {
+    const response = await apiClient.patch<ApiResponse<Delivery>>(`/riders/deliveries/${deliveryId}/status`, { status, reason });
     return response.data;
   },
 };

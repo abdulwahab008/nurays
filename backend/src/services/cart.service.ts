@@ -151,6 +151,7 @@ export class CartService {
         seller: {
           select: {
             id: true,
+            businessName: true,
             freeDeliveryAreas: true,
             freeDeliveryRadiusKm: true,
             latitude: true,
@@ -159,13 +160,19 @@ export class CartService {
             deliveryFeeFixed: true,
             deliveryFeeBase: true,
             deliveryFeePerKm: true,
+            distancePricingTiers: true,
+            maxDeliveryDistanceKm: true,
+            minOrderAmountForDelivery: true,
+            freeDeliveryThreshold: true,
+            allowedPostalCodes: true,
+            deliveryZones: true,
           },
         },
         hub: { select: { id: true, latitude: true, longitude: true } },
       },
     });
     if (items.length === 0) {
-      return { deliveryFee: 0, isFree: true, reason: null };
+      return { deliveryFee: 0, isFree: true, isDeliverable: true, reason: null };
     }
     const address = await prisma.userAddress.findFirst({
       where: { id: addressId, userId },
@@ -176,27 +183,41 @@ export class CartService {
     const addr = {
       area: address.area,
       city: address.city,
+      postalCode: address.postalCode,
       latitude: address.latitude != null ? Number(address.latitude) : null,
       longitude: address.longitude != null ? Number(address.longitude) : null,
     };
-    const sellerFeeMap = new Map<string, number>();
+    const sellerSubtotals = new Map<string, number>();
     for (const item of items) {
-      if (sellerFeeMap.has(item.sellerId)) continue;
+      sellerSubtotals.set(
+        item.sellerId,
+        (sellerSubtotals.get(item.sellerId) ?? 0) + Number(item.priceSnapshot) * item.quantity
+      );
+    }
+    const sellerResults = new Map<string, ReturnType<typeof getDeliveryFeeForSeller>>();
+    const undeliverable: string[] = [];
+    for (const item of items) {
+      if (sellerResults.has(item.sellerId)) continue;
       const originLat = item.hub?.latitude != null ? Number(item.hub.latitude) : (item.seller.latitude != null ? Number(item.seller.latitude) : null);
       const originLng = item.hub?.longitude != null ? Number(item.hub.longitude) : (item.seller.longitude != null ? Number(item.seller.longitude) : null);
-      const fee = getDeliveryFeeForSeller(
+      const result = getDeliveryFeeForSeller(
         item.seller as Parameters<typeof getDeliveryFeeForSeller>[0],
         addr,
         originLat,
-        originLng
+        originLng,
+        sellerSubtotals.get(item.sellerId)
       );
-      sellerFeeMap.set(item.sellerId, fee);
+      sellerResults.set(item.sellerId, result);
+      if (!result.deliverable) undeliverable.push(`${item.seller.businessName}: ${result.reason}`);
     }
-    const deliveryFee = [...sellerFeeMap.values()].reduce((a, b) => a + b, 0);
+    if (undeliverable.length > 0) {
+      return { deliveryFee: 0, isFree: false, isDeliverable: false, reason: undeliverable.join('; ') };
+    }
+    const deliveryFee = [...sellerResults.values()].reduce((a, b) => a + b.fee, 0);
     const isFree = deliveryFee === 0;
     let reason: string | null = null;
-    if (isFree && sellerFeeMap.size > 0) reason = 'Free delivery to your area';
-    return { deliveryFee, isFree, reason };
+    if (isFree && sellerResults.size > 0) reason = 'Free delivery to your area';
+    return { deliveryFee, isFree, isDeliverable: true, reason };
   }
 
   /**

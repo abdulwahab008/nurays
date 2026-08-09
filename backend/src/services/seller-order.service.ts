@@ -247,7 +247,8 @@ export class SellerOrderService {
   async updateOrderItemStatus(
     orderItemId: string,
     sellerId: string,
-    status: string
+    status: string,
+    reason?: string
   ) {
     // Get seller by userId
     const seller = await prisma.seller.findUnique({
@@ -274,7 +275,7 @@ export class SellerOrderService {
     }
 
     // Validate status transition
-    const validStatuses = ['pending', 'confirmed', 'preparing', 'ready', 'dispatched', 'in_transit', 'delivered', 'cancelled'];
+    const validStatuses = ['pending', 'confirmed', 'preparing', 'ready', 'dispatched', 'in_transit', 'delivered', 'delivery_failed', 'cancelled'];
     if (!validStatuses.includes(status)) {
       throw new AppError(`Invalid status: ${status}`, 400, 'INVALID_STATUS');
     }
@@ -288,10 +289,13 @@ export class SellerOrderService {
       ready: ['dispatched', 'cancelled'],
       // A rider (rider.service.ts) normally drives dispatched -> in_transit ->
       // delivered directly, but a seller must still be able to do this by hand
-      // for orders with no rider assigned (e.g. self-delivery).
-      dispatched: ['in_transit', 'delivered'],
-      in_transit: ['delivered'],
+      // for orders with no rider assigned (e.g. self-delivery). A seller who
+      // can't complete the delivery reports delivery_failed the same way a
+      // rider does; admin resolves it (refund or retry) from there.
+      dispatched: ['in_transit', 'delivered', 'delivery_failed'],
+      in_transit: ['delivered', 'delivery_failed'],
       delivered: [],
+      delivery_failed: [],
       cancelled: [],
     };
     if (!ALLOWED_TRANSITIONS[orderItem.status]?.includes(status)) {
@@ -329,6 +333,9 @@ export class SellerOrderService {
       const allReady = allItems.every((i) => i.status === 'ready');
       const allPreparing = allItems.every((i) => i.status === 'preparing');
 
+      const allDelivered = allItems.every((i) => i.status === 'delivered' || i.status === 'cancelled');
+      const anyFailed = allItems.some((i) => i.status === 'delivery_failed');
+
       if (allReady && currentOrderStatus === 'confirmed') {
         derivedOrderStatus = 'ready';
         historyNote = 'All items ready for dispatch';
@@ -338,16 +345,34 @@ export class SellerOrderService {
       } else if (status === 'confirmed' && currentOrderStatus === 'pending') {
         derivedOrderStatus = 'confirmed';
         historyNote = 'Order confirmed by seller';
+      } else if (status === 'delivery_failed' && anyFailed && currentOrderStatus !== 'delivery_failed') {
+        derivedOrderStatus = 'delivery_failed';
+        historyNote = `Seller reported a failed self-delivery: ${reason}`;
+      } else if (status === 'delivered' && allDelivered && currentOrderStatus !== 'delivered') {
+        derivedOrderStatus = 'delivered';
+        historyNote = 'Self-delivered by seller';
       }
 
       if (derivedOrderStatus) {
+        // COD payment is collected at the door — delivered IS the payment
+        // confirmation for COD (online payments are already 'paid' via the
+        // gateway verification flow well before delivery).
+        const isCodPayment =
+          derivedOrderStatus === 'delivered' &&
+          orderItem.order.paymentMethod === 'cod' &&
+          orderItem.order.paymentStatus !== 'paid';
+
         // Guard the write on the order still being in the exact state we
         // derived from — if a concurrent transaction on another item already
         // moved it, this becomes a no-op instead of re-applying/duplicating
         // the same transition.
         const applied = await tx.order.updateMany({
           where: { id: orderItem.orderId, orderStatus: currentOrderStatus },
-          data: { orderStatus: derivedOrderStatus },
+          data: {
+            orderStatus: derivedOrderStatus,
+            ...(derivedOrderStatus === 'delivered' ? { deliveredAt: new Date() } : {}),
+            ...(isCodPayment ? { paymentStatus: 'paid', paidAt: new Date() } : {}),
+          },
         });
         if (applied.count > 0) {
           await tx.orderStatusHistory.create({
@@ -380,156 +405,6 @@ export class SellerOrderService {
     await realtimeOrderService.emitOrderItemStatusUpdate(orderItemId, status, seller.id);
 
     return result.updatedItem;
-  }
-
-  /**
-   * Get seller dashboard stats
-   */
-  async getSellerDashboard(sellerId: string) {
-    // Get seller by userId
-    const seller = await prisma.seller.findUnique({
-      where: { userId: sellerId },
-    });
-
-    if (!seller) {
-      throw new AppError('Seller not found', 404, 'SELLER_NOT_FOUND');
-    }
-
-    // Get stats
-    const [
-      totalProducts,
-      activeOrders,
-      pendingOrders,
-      totalEarnings,
-      pendingPayout,
-      recentOrders,
-      lowStockProducts,
-    ] = await Promise.all([
-      // Total products
-      prisma.product.count({
-        where: { sellerId: seller.id, isActive: true },
-      }),
-
-      // Active orders (confirmed, preparing, ready, dispatched, in_transit)
-      prisma.orderItem.count({
-        where: {
-          sellerId: seller.id,
-          order: {
-            orderStatus: {
-              in: ['confirmed', 'preparing', 'ready', 'dispatched', 'in_transit'],
-            },
-          },
-        },
-      }),
-
-      // Pending orders
-      prisma.orderItem.count({
-        where: {
-          sellerId: seller.id,
-          order: {
-            orderStatus: 'pending',
-          },
-        },
-      }),
-
-      // Total earnings (sum of sellerPayout from completed orders)
-      prisma.orderItem.aggregate({
-        where: {
-          sellerId: seller.id,
-          order: {
-            orderStatus: 'completed',
-            paymentStatus: 'paid',
-          },
-        },
-        _sum: {
-          sellerPayout: true,
-        },
-      }),
-
-      // Pending payout (sum of sellerPayout from paid but not completed orders)
-      prisma.orderItem.aggregate({
-        where: {
-          sellerId: seller.id,
-          order: {
-            orderStatus: {
-              in: ['confirmed', 'preparing', 'ready', 'dispatched', 'in_transit', 'delivered'],
-            },
-            paymentStatus: 'paid',
-          },
-        },
-        _sum: {
-          sellerPayout: true,
-        },
-      }),
-
-      // Recent orders (last 10)
-      prisma.orderItem.findMany({
-        where: { sellerId: seller.id },
-        take: 10,
-        orderBy: { createdAt: 'desc' },
-        include: {
-          order: {
-            select: {
-              id: true,
-              orderNumber: true,
-              orderStatus: true,
-              totalAmount: true,
-              createdAt: true,
-            },
-          },
-          product: {
-            select: {
-              id: true,
-              name: true,
-            },
-          },
-        },
-      }),
-
-      // Low stock products (stock < 10)
-      prisma.product.findMany({
-        where: {
-          sellerId: seller.id,
-          isActive: true,
-          stockQuantity: {
-            lt: 10,
-          },
-        },
-        take: 5,
-        orderBy: { stockQuantity: 'asc' },
-        select: {
-          id: true,
-          name: true,
-          stockQuantity: true,
-        },
-      }),
-    ]);
-
-    return {
-      overview: {
-        totalProducts,
-        activeOrders,
-        pendingOrders,
-        totalEarnings: Number(totalEarnings._sum.sellerPayout || 0),
-        pendingPayout: Number(pendingPayout._sum.sellerPayout || 0),
-        rating: Number(seller.ratingAverage),
-        totalReviews: seller.totalReviews,
-      },
-      recentOrders: recentOrders.map((item) => ({
-        id: item.order.id,
-        orderNumber: item.order.orderNumber,
-        orderStatus: item.order.orderStatus,
-        productName: item.product?.name,
-        quantity: item.quantity,
-        totalPrice: Number(item.totalPrice),
-        createdAt: item.order.createdAt,
-      })),
-      lowStockProducts: lowStockProducts.map((product) => ({
-        id: product.id,
-        name: product.name,
-        stockQuantity: product.stockQuantity,
-      })),
-    };
   }
 
   /**

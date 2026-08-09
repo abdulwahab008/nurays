@@ -44,27 +44,14 @@ export const updateOrderItemStatus = async (req: Request, res: Response) => {
   }
 
   const { id } = req.params;
-  const { status } = req.body;
+  const { status, reason } = req.body;
 
-  const item = await sellerOrderService.updateOrderItemStatus(id, req.user.userId, status);
+  const item = await sellerOrderService.updateOrderItemStatus(id, req.user.userId, status, reason);
 
   res.status(200).json({
     success: true,
     message: 'Order item status updated',
     data: item,
-  });
-};
-
-export const getSellerDashboard = async (req: Request, res: Response) => {
-  if (!req.user) {
-    throw new AppError('Authentication required', 401, 'AUTH_REQUIRED');
-  }
-
-  const dashboard = await sellerOrderService.getSellerDashboard(req.user.userId);
-
-  res.status(200).json({
-    success: true,
-    data: dashboard,
   });
 };
 

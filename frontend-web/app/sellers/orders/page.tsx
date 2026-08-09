@@ -171,14 +171,20 @@ export default function SellerOrdersPage() {
     };
   }, [onNewOrder, loadOrders]);
 
-  const handleUpdateStatus = async (orderItemId: string, status: string) => {
+  const handleUpdateStatus = async (orderItemId: string, status: string, reason?: string) => {
     try {
-      await apiClient.patch(`/seller/orders/items/${orderItemId}/status`, { status });
+      await apiClient.patch(`/seller/orders/items/${orderItemId}/status`, { status, reason });
       showToast('Order status updated successfully', 'success');
       loadOrders(true);
     } catch (error: any) {
       showToast(error.response?.data?.error?.message || 'Failed to update status', 'error');
     }
+  };
+
+  const handleReportFailure = async (orderItemId: string) => {
+    const reason = window.prompt('What went wrong? (e.g. customer unreachable, wrong address, refused delivery)');
+    if (!reason || !reason.trim()) return;
+    await handleUpdateStatus(orderItemId, 'delivery_failed', reason.trim());
   };
 
   const getStatusConfig = (status: string) => {
@@ -188,7 +194,9 @@ export default function SellerOrdersPage() {
       preparing: { bg: 'bg-purple-50', text: 'text-purple-700', dot: 'bg-purple-500' },
       ready: { bg: 'bg-indigo-50', text: 'text-indigo-700', dot: 'bg-indigo-500' },
       dispatched: { bg: 'bg-pink-50', text: 'text-pink-700', dot: 'bg-pink-500' },
+      in_transit: { bg: 'bg-orange-50', text: 'text-orange-700', dot: 'bg-orange-500' },
       delivered: { bg: 'bg-emerald-50', text: 'text-emerald-700', dot: 'bg-emerald-500' },
+      delivery_failed: { bg: 'bg-red-50', text: 'text-red-700', dot: 'bg-red-500' },
       cancelled: { bg: 'bg-red-50', text: 'text-red-700', dot: 'bg-red-500' },
     };
     return statusMap[status] || { bg: 'bg-gray-50', text: 'text-gray-700', dot: 'bg-gray-500' };
@@ -272,7 +280,9 @@ export default function SellerOrdersPage() {
                   </thead>
                   <tbody className="divide-y divide-gray-100">
                     {orders.map((order) => {
-                      const TERMINAL_ORDER_STATUSES = ['cancelled', 'delivered', 'completed', 'refunded', 'in_transit'];
+                      // Note: in_transit is NOT terminal — a self-delivering seller still
+                      // needs to mark it delivered (or report a failure) from there.
+                      const TERMINAL_ORDER_STATUSES = ['cancelled', 'delivered', 'completed', 'refunded', 'delivery_failed'];
                       const parentStatus = order.orderStatus ?? 'pending';
                       const itemStatus = order.status ?? parentStatus;
                       const isTerminal = TERMINAL_ORDER_STATUSES.includes(parentStatus);
@@ -363,6 +373,48 @@ export default function SellerOrdersPage() {
                                     </svg>
                                     <span className="ml-1">Dispatch</span>
                                   </Button>
+                                )}
+                                {/* Once a rider claims the delivery, the rider dashboard drives these
+                                    transitions instead — these buttons are for self-delivery only, and
+                                    are harmless no-ops (rejected by the backend) once a rider has taken over. */}
+                                {itemStatus === 'dispatched' && (
+                                  <div className="flex gap-2">
+                                    <Button
+                                      size="sm"
+                                      onClick={() => handleUpdateStatus(order.id, 'in_transit')}
+                                      className="bg-orange-500 hover:bg-orange-600 text-white shadow-sm"
+                                    >
+                                      In Transit
+                                    </Button>
+                                    <Button
+                                      size="sm"
+                                      variant="outline"
+                                      onClick={() => handleReportFailure(order.id)}
+                                      className="border-red-200 text-red-600 hover:bg-red-50"
+                                    >
+                                      Report Failed
+                                    </Button>
+                                  </div>
+                                )}
+                                {itemStatus === 'in_transit' && (
+                                  <div className="flex gap-2">
+                                    <Button
+                                      size="sm"
+                                      onClick={() => handleUpdateStatus(order.id, 'delivered')}
+                                      className="bg-emerald-500 hover:bg-emerald-600 text-white shadow-sm"
+                                    >
+                                      {Icons.check}
+                                      <span className="ml-1">Delivered</span>
+                                    </Button>
+                                    <Button
+                                      size="sm"
+                                      variant="outline"
+                                      onClick={() => handleReportFailure(order.id)}
+                                      className="border-red-200 text-red-600 hover:bg-red-50"
+                                    >
+                                      Report Failed
+                                    </Button>
+                                  </div>
                                 )}
                               </>
                             )}

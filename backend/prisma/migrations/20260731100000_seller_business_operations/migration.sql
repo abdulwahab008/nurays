@@ -1,0 +1,23 @@
+-- AlterTable
+ALTER TABLE "sellers"
+  ADD COLUMN     "distance_pricing_tiers" JSONB,
+  ADD COLUMN     "max_delivery_distance_km" DOUBLE PRECISION,
+  ADD COLUMN     "min_order_amount_for_delivery" DECIMAL(10,2),
+  ADD COLUMN     "free_delivery_threshold" DECIMAL(10,2),
+  ADD COLUMN     "allowed_postal_codes" TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[],
+  ADD COLUMN     "delivery_zones" JSONB,
+  ADD COLUMN     "delivery_modes" TEXT[] NOT NULL DEFAULT ARRAY['delivery']::TEXT[],
+  ADD COLUMN     "business_type" TEXT NOT NULL DEFAULT 'restaurant',
+  ADD COLUMN     "meal_categories" TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[],
+  ADD COLUMN     "store_notice" TEXT,
+  ADD COLUMN     "schedule_mode" TEXT NOT NULL DEFAULT 'fixed_daily',
+  ADD COLUMN     "operating_hours" JSONB,
+  ADD COLUMN     "availability_override" TEXT,
+  ADD COLUMN     "availability_override_until" TIMESTAMP(3),
+  ADD COLUMN     "availability_note" TEXT,
+  ADD COLUMN     "order_cutoff_time" TEXT,
+  ADD COLUMN     "max_daily_orders" INTEGER,
+  ADD COLUMN     "min_prep_time_minutes" INTEGER,
+  ADD COLUMN     "pre_order_only" BOOLEAN NOT NULL DEFAULT false,
+  ADD COLUMN     "advance_booking_min_days" INTEGER,
+  ADD COLUMN     "advance_booking_max_days" INTEGER;

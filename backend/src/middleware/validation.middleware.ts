@@ -30,7 +30,19 @@ export const validate = (schema: ZodSchema) => {
 export const validateQuery = (schema: ZodSchema) => {
   return (req: Request, _res: Response, next: NextFunction) => {
     try {
-      schema.parse(req.query);
+      // The parsed result (with .transform()s applied — e.g. "2" -> 2, "a,b" -> ["a","b"])
+      // must be written back; schema.parse() does not mutate req.query in place.
+      // Express 5's req.query is a getter-only accessor (no setter) — a plain
+      // assignment throws "Cannot set property query of #<IncomingMessage>
+      // which has only a getter". Overriding it as an own property on this
+      // request instance shadows the prototype getter instead.
+      const parsedQuery = schema.parse(req.query);
+      Object.defineProperty(req, 'query', {
+        value: parsedQuery,
+        writable: true,
+        configurable: true,
+        enumerable: true,
+      });
       next();
     } catch (error) {
       if (error instanceof ZodError) {

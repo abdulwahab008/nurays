@@ -20,7 +20,12 @@ const STATUS_LABEL: Record<string, string> = {
   picked_up: 'Picked Up',
   in_transit: 'In Transit',
   delivered: 'Delivered',
+  delivery_failed: 'Delivery Failed',
 };
+
+// A rider holding the goods (picked_up/in_transit) can report a failed
+// delivery instead of completing it — admin resolves it from there.
+const CAN_REPORT_FAILURE = new Set(['picked_up', 'in_transit']);
 
 export default function RiderDashboardPage() {
   const router = useRouter();
@@ -110,12 +115,28 @@ export default function RiderDashboardPage() {
     }
   };
 
+  const handleReportFailure = async (delivery: Delivery) => {
+    const reason = window.prompt("What went wrong? (e.g. customer unreachable, wrong address, refused delivery)");
+    if (!reason || !reason.trim()) return;
+    try {
+      setBusyId(delivery.id);
+      await riderService.updateDeliveryStatus(delivery.id, 'delivery_failed', reason.trim());
+      showToast('Delivery reported as failed', 'success');
+      loadAll();
+    } catch (error: any) {
+      showToast(error.response?.data?.error?.message || 'Failed to report delivery', 'error');
+    } finally {
+      setBusyId(null);
+    }
+  };
+
   if (!isAuthenticated || (user?.user_type !== 'rider' && user?.userType !== 'rider')) {
     return null;
   }
 
-  const activeDeliveries = mine.filter((d) => d.status !== 'delivered');
+  const activeDeliveries = mine.filter((d) => d.status !== 'delivered' && d.status !== 'delivery_failed');
   const completedDeliveries = mine.filter((d) => d.status === 'delivered');
+  const failedDeliveries = mine.filter((d) => d.status === 'delivery_failed');
 
   return (
     <UserLayout showSidebar={true} showNavbar={true}>
@@ -163,20 +184,46 @@ export default function RiderDashboardPage() {
                         <p className="text-sm text-gray-600">Pickup: {d.pickupAddress}</p>
                         <p className="text-sm text-gray-600">Deliver to: {d.deliveryAddress}</p>
                       </div>
-                      {NEXT_STATUS[d.status] && (
-                        <Button
-                          onClick={() => handleAdvance(d)}
-                          disabled={busyId === d.id}
-                          className="bg-green-600 hover:bg-green-700 text-white"
-                        >
-                          {busyId === d.id ? 'Updating...' : NEXT_STATUS[d.status].label}
-                        </Button>
-                      )}
+                      <div className="flex items-center gap-2">
+                        {CAN_REPORT_FAILURE.has(d.status) && (
+                          <Button
+                            variant="outline"
+                            onClick={() => handleReportFailure(d)}
+                            disabled={busyId === d.id}
+                            className="border-red-200 text-red-600 hover:bg-red-50"
+                          >
+                            Report Failed
+                          </Button>
+                        )}
+                        {NEXT_STATUS[d.status] && (
+                          <Button
+                            onClick={() => handleAdvance(d)}
+                            disabled={busyId === d.id}
+                            className="bg-green-600 hover:bg-green-700 text-white"
+                          >
+                            {busyId === d.id ? 'Updating...' : NEXT_STATUS[d.status].label}
+                          </Button>
+                        )}
+                      </div>
                     </div>
                   ))}
                 </div>
               )}
             </section>
+
+            {failedDeliveries.length > 0 && (
+              <section>
+                <h2 className="text-lg font-semibold text-gray-900 mb-3">Failed Deliveries</h2>
+                <div className="space-y-2">
+                  {failedDeliveries.map((d) => (
+                    <div key={d.id} className="bg-red-50 border border-red-200 rounded-lg p-4 flex items-center justify-between text-sm">
+                      <span>Order #{d.orderNumber} — {d.deliveryAddress}</span>
+                      <span className="text-red-700 font-medium">Awaiting admin review</span>
+                    </div>
+                  ))}
+                </div>
+              </section>
+            )}
 
             <section>
               <h2 className="text-lg font-semibold text-gray-900 mb-3">Available Deliveries</h2>

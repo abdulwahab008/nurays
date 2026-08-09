@@ -5,6 +5,7 @@ import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { productService } from '@/lib/services/product.service';
 import { cartService } from '@/lib/services/cart.service';
+import { addressService } from '@/lib/services/address.service';
 import { formatPrice } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/toast';
@@ -19,6 +20,10 @@ interface CatalogPromotion {
   name: string;
   type: string;
   discountValue: number;
+}
+
+function formatClock(iso: string): string {
+  return new Date(iso).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
 }
 
 function getPromotionLabel(p: CatalogPromotion): string {
@@ -54,7 +59,29 @@ interface ProductDetail {
     businessName: string;
     rating: number;
     isVerified: boolean;
+    mealCategories?: string[];
+    businessType?: string;
+    preOrderOnly?: boolean;
+    isAcceptingOrders?: boolean;
+    acceptingOrdersReason?: string | null;
+    availability?: {
+      status: string;
+      isOpen: boolean;
+      opensAt: string | null;
+      closesAt: string | null;
+      nextOpenAt: string | null;
+      reason: string | null;
+    };
   };
+  delivery?: {
+    deliverable: boolean;
+    fee: number;
+    distanceKm: number | null;
+    reason: string | null;
+  } | null;
+  estimatedDeliveryMinMinutes?: number | null;
+  estimatedDeliveryMaxMinutes?: number | null;
+  minOrderAmountForDelivery?: number | null;
   stock: {
     direct: number;
     hub: number;
@@ -102,15 +129,31 @@ export default function ProductDetailPage() {
   ];
 
   useEffect(() => {
-    if (params.id) {
-      loadProduct();
-    }
-  }, [params.id]);
+    if (!params.id) return;
+    (async () => {
+      let lat: number | undefined;
+      let lng: number | undefined;
+      if (isAuthenticated) {
+        try {
+          const res = await addressService.getAddresses();
+          const addresses = res.data || [];
+          const withCoords = addresses.find((a) => a.isDefault && a.coordinates) || addresses.find((a) => a.coordinates);
+          if (withCoords?.coordinates) {
+            lat = withCoords.coordinates.latitude;
+            lng = withCoords.coordinates.longitude;
+          }
+        } catch {
+          // No address on file — proceed without a location-based delivery estimate.
+        }
+      }
+      loadProduct(lat, lng);
+    })();
+  }, [params.id, isAuthenticated]);
 
-  const loadProduct = async () => {
+  const loadProduct = async (customerLat?: number, customerLng?: number) => {
     setLoading(true);
     try {
-      const response = await productService.getProduct(params.id as string);
+      const response = await productService.getProduct(params.id as string, customerLat, customerLng);
       const data = response.data as any;
       if (!data) return;
       // Ensure stock shape (API may return stockQuantity only or stock: { hub, direct })
@@ -123,8 +166,14 @@ export default function ProductDetailPage() {
             businessName: data.seller.businessName ?? data.seller.business_name ?? 'Seller',
             rating: Number(data.seller.rating ?? data.seller.ratingAverage ?? 0),
             isVerified: Boolean(data.seller.isVerified ?? data.seller.is_verified),
+            mealCategories: Array.isArray(data.seller.mealCategories) ? data.seller.mealCategories : [],
+            businessType: data.seller.businessType,
+            preOrderOnly: Boolean(data.seller.preOrderOnly),
+            isAcceptingOrders: Boolean(data.seller.isAcceptingOrders),
+            acceptingOrdersReason: data.seller.acceptingOrdersReason ?? null,
+            availability: data.seller.availability,
           }
-        : { id: '', businessName: 'Seller', rating: 0, isVerified: false };
+        : { id: '', businessName: 'Seller', rating: 0, isVerified: false, mealCategories: [], preOrderOnly: false, isAcceptingOrders: false, acceptingOrdersReason: null, availability: undefined };
       // Normalize images: API may return imageUrl, frontend uses url
       const images = Array.isArray(data.images)
         ? data.images.map((img: { url?: string; imageUrl?: string; isPrimary?: boolean }) => ({
@@ -480,6 +529,84 @@ export default function ProductDetailPage() {
           </div>
         </div>
 
+        {/* Availability */}
+        {product.seller?.availability && (
+          <div className={`flex items-center justify-between py-3 px-4 rounded-xl ${
+            product.seller.availability.isOpen ? 'bg-green-50' : 'bg-gray-50'
+          }`}>
+            <div>
+              <p className={`text-sm font-semibold ${product.seller.availability.isOpen ? 'text-green-700' : 'text-gray-600'}`}>
+                {product.seller.availability.isOpen ? 'Open now' : `Closed${product.seller.availability.status !== 'closed' ? ` — ${product.seller.availability.status.replace('_', ' ')}` : ''}`}
+              </p>
+              {product.seller.availability.isOpen && product.seller.availability.closesAt && (
+                <p className="text-xs text-gray-500">Closes at {formatClock(product.seller.availability.closesAt)}</p>
+              )}
+              {!product.seller.availability.isOpen && product.seller.availability.opensAt && (
+                <p className="text-xs text-gray-500">Opens at {formatClock(product.seller.availability.opensAt)}</p>
+              )}
+              {!product.seller.availability.isOpen && product.seller.availability.reason && (
+                <p className="text-xs text-gray-500">{product.seller.availability.reason}</p>
+              )}
+            </div>
+            {product.seller.preOrderOnly && (
+              <span className="text-xs font-medium bg-amber-100 text-amber-800 px-2.5 py-1 rounded-full">
+                Pre-orders only
+              </span>
+            )}
+          </div>
+        )}
+        {product.seller && (
+          <p className={`text-sm font-medium -mt-2 ${product.seller.isAcceptingOrders ? 'text-green-700' : 'text-red-600'}`}>
+            {product.seller.isAcceptingOrders
+              ? product.seller.preOrderOnly ? 'Accepting pre-orders' : 'Accepting orders'
+              : product.seller.acceptingOrdersReason || 'Not accepting orders right now'}
+          </p>
+        )}
+        {product.seller?.mealCategories && product.seller.mealCategories.length > 0 && (
+          <div className="flex flex-wrap gap-2 -mt-2">
+            {product.seller.mealCategories.map((c) => (
+              <span key={c} className="text-xs font-medium bg-gray-100 text-gray-700 px-2.5 py-1 rounded-full capitalize">
+                {c.replace('_', ' ')}
+              </span>
+            ))}
+          </div>
+        )}
+
+        {/* Delivery to you — real fee/distance/ETA once we know an address; an
+            honest prompt instead of a guess when we don't. */}
+        <div className="rounded-xl border border-gray-100 bg-gray-50 px-4 py-3">
+          <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">
+            Delivery to you
+          </h3>
+          {product.delivery ? (
+            <>
+              <p className="text-sm text-gray-800">
+                {product.delivery.deliverable
+                  ? `${product.delivery.fee === 0 ? 'Free delivery' : formatPrice(product.delivery.fee) + ' delivery fee'}${
+                      product.estimatedDeliveryMinMinutes != null
+                        ? ` · ${product.estimatedDeliveryMinMinutes}-${product.estimatedDeliveryMaxMinutes} min`
+                        : ''
+                    }${product.delivery.distanceKm != null ? ` · ${product.delivery.distanceKm} km away` : ''}`
+                  : product.delivery.reason || 'Not deliverable to your saved address'}
+              </p>
+              {product.minOrderAmountForDelivery ? (
+                <p className="text-xs text-gray-500 mt-0.5">Minimum order {formatPrice(product.minOrderAmountForDelivery)}</p>
+              ) : null}
+            </>
+          ) : (
+            <p className="text-sm text-gray-500">
+              {isAuthenticated ? (
+                <>
+                  <Link href="/profile/addresses" className="underline hover:no-underline">Add an address</Link>
+                  {' to see the delivery fee, distance, and estimated delivery time.'}
+                </>
+              ) : (
+                'Sign in and add an address to see the delivery fee, distance, and estimated delivery time.'
+              )}
+            </p>
+          )}
+        </div>
+
         {/* Purchase card - sticky on large screens */}
         <div className="lg:sticky lg:top-24 bg-white rounded-2xl shadow-sm border border-gray-100 p-6 space-y-6">
           {product.variants.length > 0 && (
@@ -535,7 +662,11 @@ export default function ProductDetailPage() {
                 }`}
               >
                 <p className="font-semibold text-gray-900">Hub delivery</p>
-                <p className="text-sm text-gray-500 mt-0.5">2–4 hours</p>
+                <p className="text-sm text-gray-500 mt-0.5">
+                  {product.estimatedDeliveryMinMinutes != null
+                    ? `${product.estimatedDeliveryMinMinutes}-${product.estimatedDeliveryMaxMinutes} min`
+                    : 'Add an address to see ETA'}
+                </p>
                 <p className="text-xs text-gray-600 mt-1">{product.stock.hub} available</p>
               </button>
               <button

@@ -22,6 +22,6 @@ export const claimDelivery = async (req: Request, res: Response) => {
 
 export const updateDeliveryStatus = async (req: Request, res: Response) => {
   if (!req.user) throw new AppError('Authentication required', 401, 'AUTH_REQUIRED');
-  const delivery = await riderService.updateDeliveryStatus(req.user.userId, req.params.id, req.body.status);
+  const delivery = await riderService.updateDeliveryStatus(req.user.userId, req.params.id, req.body.status, req.body.reason);
   res.status(200).json({ success: true, data: delivery });
 };

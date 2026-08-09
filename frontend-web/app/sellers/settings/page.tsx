@@ -18,6 +18,68 @@ const LocationMap = dynamic(() => import('@/components/ui/LocationMap').then((m)
   ),
 });
 
+const MEAL_CATEGORIES = [
+  { value: 'breakfast', label: 'Breakfast' },
+  { value: 'brunch', label: 'Brunch' },
+  { value: 'lunch', label: 'Lunch' },
+  { value: 'evening_snacks', label: 'Evening Snacks' },
+  { value: 'dinner', label: 'Dinner' },
+  { value: 'late_night', label: 'Late Night' },
+  { value: 'desserts', label: 'Desserts' },
+  { value: 'beverages', label: 'Beverages' },
+];
+
+const BUSINESS_TYPES = [
+  { value: 'restaurant', label: 'Restaurant' },
+  { value: 'home_kitchen', label: 'Home Kitchen' },
+  { value: 'bakery', label: 'Bakery' },
+  { value: 'cafe', label: 'Café' },
+  { value: 'cloud_kitchen', label: 'Cloud Kitchen' },
+];
+
+const DELIVERY_MODES = [
+  { value: 'delivery', label: 'Delivery' },
+  { value: 'pickup', label: 'Pickup' },
+  { value: 'dine_in', label: 'Dine-in' },
+];
+
+const AVAILABILITY_OVERRIDES = [
+  { value: '', label: 'Automatic (follow my schedule below)' },
+  { value: 'open', label: 'Force Open' },
+  { value: 'busy', label: 'Busy — not accepting orders' },
+  { value: 'vacation', label: 'On Vacation' },
+  { value: 'holiday', label: 'Holiday Mode' },
+  { value: 'preorder_only', label: 'Pre-orders only' },
+  { value: 'closed', label: 'Force Closed' },
+];
+
+const DAYS: Array<{ key: string; label: string }> = [
+  { key: 'monday', label: 'Monday' },
+  { key: 'tuesday', label: 'Tuesday' },
+  { key: 'wednesday', label: 'Wednesday' },
+  { key: 'thursday', label: 'Thursday' },
+  { key: 'friday', label: 'Friday' },
+  { key: 'saturday', label: 'Saturday' },
+  { key: 'sunday', label: 'Sunday' },
+];
+
+interface OperatingSession {
+  name: string;
+  open: string;
+  close: string;
+}
+interface DaySchedule {
+  closed: boolean;
+  sessions: OperatingSession[];
+}
+type WeeklySchedule = Record<string, DaySchedule>;
+
+function emptyWeeklySchedule(): WeeklySchedule {
+  const week: WeeklySchedule = {};
+  for (const { key } of DAYS) week[key] = { closed: false, sessions: [{ name: 'Open', open: '09:00', close: '21:00' }] };
+  return week;
+}
+
 const sidebarItems = [
   { name: 'Dashboard', href: '/sellers/dashboard', icon: '' },
   { name: 'Orders', href: '/sellers/orders', icon: '' },
@@ -57,6 +119,30 @@ export default function SellerSettingsPage() {
     deliveryFeeFixed: null as number | null,
     deliveryFeeBase: null as number | null,
     deliveryFeePerKm: null as number | null,
+    maxDeliveryDistanceKm: null as number | null,
+    minOrderAmountForDelivery: null as number | null,
+    freeDeliveryThreshold: null as number | null,
+    deliveryModes: ['delivery'] as string[],
+
+    businessType: 'restaurant',
+    mealCategories: [] as string[],
+    storeNotice: '',
+
+    scheduleMode: 'fixed_daily' as '24_7' | 'fixed_daily' | 'per_day',
+    fixedDailyOpen: '09:00',
+    fixedDailyClose: '22:00',
+    weeklySchedule: emptyWeeklySchedule(),
+
+    availabilityOverride: '' as string,
+    availabilityOverrideUntil: '' as string,
+    availabilityNote: '',
+
+    orderCutoffTime: '' as string,
+    maxDailyOrders: null as number | null,
+    minPrepTimeMinutes: null as number | null,
+    preOrderOnly: false,
+    advanceBookingMinDays: null as number | null,
+    advanceBookingMaxDays: null as number | null,
   });
   const [newAreaInput, setNewAreaInput] = useState('');
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -113,6 +199,34 @@ export default function SellerSettingsPage() {
           deliveryFeeFixed: seller.deliveryFeeFixed ?? null,
           deliveryFeeBase: seller.deliveryFeeBase ?? null,
           deliveryFeePerKm: seller.deliveryFeePerKm ?? null,
+          maxDeliveryDistanceKm: seller.maxDeliveryDistanceKm ?? null,
+          minOrderAmountForDelivery: seller.minOrderAmountForDelivery ?? null,
+          freeDeliveryThreshold: seller.freeDeliveryThreshold ?? null,
+          deliveryModes: Array.isArray(seller.deliveryModes) && seller.deliveryModes.length ? seller.deliveryModes : ['delivery'],
+
+          businessType: seller.businessType || 'restaurant',
+          mealCategories: Array.isArray(seller.mealCategories) ? seller.mealCategories : [],
+          storeNotice: seller.storeNotice || '',
+
+          scheduleMode: (seller.scheduleMode as '24_7' | 'fixed_daily' | 'per_day') || 'fixed_daily',
+          fixedDailyOpen: seller.operatingHours?.fixedDaily?.open || '09:00',
+          fixedDailyClose: seller.operatingHours?.fixedDaily?.close || '22:00',
+          weeklySchedule: seller.operatingHours?.weekly
+            ? { ...emptyWeeklySchedule(), ...seller.operatingHours.weekly }
+            : emptyWeeklySchedule(),
+
+          availabilityOverride: seller.availabilityOverride || '',
+          availabilityOverrideUntil: seller.availabilityOverrideUntil
+            ? new Date(seller.availabilityOverrideUntil).toISOString().slice(0, 10)
+            : '',
+          availabilityNote: seller.availabilityNote || '',
+
+          orderCutoffTime: seller.orderCutoffTime || '',
+          maxDailyOrders: seller.maxDailyOrders ?? null,
+          minPrepTimeMinutes: seller.minPrepTimeMinutes ?? null,
+          preOrderOnly: seller.preOrderOnly ?? false,
+          advanceBookingMinDays: seller.advanceBookingMinDays ?? null,
+          advanceBookingMaxDays: seller.advanceBookingMaxDays ?? null,
         });
       }
     } catch (error: any) {
@@ -133,7 +247,24 @@ export default function SellerSettingsPage() {
     e.preventDefault();
     try {
       setLoading(true);
-      const { freeDeliveryAreas, freeDeliveryRadiusKm, latitude, longitude, deliveryFeeType, deliveryFeeFixed, deliveryFeeBase, deliveryFeePerKm, ...rest } = formData;
+      const {
+        freeDeliveryAreas, freeDeliveryRadiusKm, latitude, longitude,
+        deliveryFeeType, deliveryFeeFixed, deliveryFeeBase, deliveryFeePerKm,
+        maxDeliveryDistanceKm, minOrderAmountForDelivery, freeDeliveryThreshold, deliveryModes,
+        businessType, mealCategories, storeNotice,
+        scheduleMode, fixedDailyOpen, fixedDailyClose, weeklySchedule,
+        availabilityOverride, availabilityOverrideUntil, availabilityNote,
+        orderCutoffTime, maxDailyOrders, minPrepTimeMinutes, preOrderOnly, advanceBookingMinDays, advanceBookingMaxDays,
+        ...rest
+      } = formData;
+
+      const operatingHours =
+        scheduleMode === 'fixed_daily'
+          ? { fixedDaily: { open: fixedDailyOpen, close: fixedDailyClose } }
+          : scheduleMode === 'per_day'
+            ? { weekly: weeklySchedule }
+            : null;
+
       await apiClient.patch('/sellers/me', {
         ...rest,
         freeDeliveryAreas,
@@ -144,6 +275,26 @@ export default function SellerSettingsPage() {
         deliveryFeeFixed: deliveryFeeFixed ?? undefined,
         deliveryFeeBase: deliveryFeeBase ?? undefined,
         deliveryFeePerKm: deliveryFeePerKm ?? undefined,
+        maxDeliveryDistanceKm: maxDeliveryDistanceKm ?? undefined,
+        minOrderAmountForDelivery: minOrderAmountForDelivery ?? undefined,
+        freeDeliveryThreshold: freeDeliveryThreshold ?? undefined,
+        deliveryModes,
+        businessType,
+        mealCategories,
+        storeNotice: storeNotice || undefined,
+        scheduleMode,
+        operatingHours,
+        availabilityOverride: availabilityOverride || null,
+        availabilityOverrideUntil: availabilityOverride && availabilityOverrideUntil
+          ? new Date(availabilityOverrideUntil).toISOString()
+          : undefined,
+        availabilityNote: availabilityNote || undefined,
+        orderCutoffTime: orderCutoffTime || undefined,
+        maxDailyOrders: maxDailyOrders ?? undefined,
+        minPrepTimeMinutes: minPrepTimeMinutes ?? undefined,
+        preOrderOnly,
+        advanceBookingMinDays: advanceBookingMinDays ?? undefined,
+        advanceBookingMaxDays: advanceBookingMaxDays ?? undefined,
       });
       showToast('Settings updated successfully', 'success');
     } catch (error: any) {
@@ -151,6 +302,46 @@ export default function SellerSettingsPage() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const toggleMealCategory = (value: string) => {
+    setFormData((prev) => ({
+      ...prev,
+      mealCategories: prev.mealCategories.includes(value)
+        ? prev.mealCategories.filter((c) => c !== value)
+        : [...prev.mealCategories, value],
+    }));
+  };
+
+  const toggleDeliveryMode = (value: string) => {
+    setFormData((prev) => {
+      const has = prev.deliveryModes.includes(value);
+      const next = has ? prev.deliveryModes.filter((m) => m !== value) : [...prev.deliveryModes, value];
+      return { ...prev, deliveryModes: next.length ? next : prev.deliveryModes };
+    });
+  };
+
+  const updateDaySchedule = (day: string, patch: Partial<DaySchedule>) => {
+    setFormData((prev) => ({
+      ...prev,
+      weeklySchedule: { ...prev.weeklySchedule, [day]: { ...prev.weeklySchedule[day], ...patch } },
+    }));
+  };
+
+  const addSession = (day: string) => {
+    updateDaySchedule(day, {
+      sessions: [...formData.weeklySchedule[day].sessions, { name: 'Session', open: '12:00', close: '15:00' }],
+    });
+  };
+
+  const updateSession = (day: string, index: number, patch: Partial<OperatingSession>) => {
+    const sessions = formData.weeklySchedule[day].sessions.map((s, i) => (i === index ? { ...s, ...patch } : s));
+    updateDaySchedule(day, { sessions });
+  };
+
+  const removeSession = (day: string, index: number) => {
+    const sessions = formData.weeklySchedule[day].sessions.filter((_, i) => i !== index);
+    updateDaySchedule(day, { sessions });
   };
 
   const addFreeDeliveryArea = () => {
@@ -284,6 +475,200 @@ export default function SellerSettingsPage() {
             </div>
           </div>
 
+          {/* Business Type & Meal Categories */}
+          <div>
+            <h2 className="text-xl font-bold text-gray-900 mb-4">Business Type & Meal Categories</h2>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Business Type</label>
+                <select
+                  value={formData.businessType}
+                  onChange={(e) => setFormData({ ...formData, businessType: e.target.value })}
+                  className="w-full md:w-64 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500"
+                >
+                  {BUSINESS_TYPES.map((t) => (
+                    <option key={t.value} value={t.value}>{t.label}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Meal categories you serve</label>
+                <p className="text-xs text-gray-500 mb-2">Customers can filter for "Open for Breakfast", "Desserts only", etc. based on these.</p>
+                <div className="flex flex-wrap gap-2">
+                  {MEAL_CATEGORIES.map((c) => (
+                    <button
+                      key={c.value}
+                      type="button"
+                      onClick={() => toggleMealCategory(c.value)}
+                      className={`px-3 py-1.5 rounded-lg text-sm border transition-colors ${
+                        formData.mealCategories.includes(c.value)
+                          ? 'bg-green-600 text-white border-green-600'
+                          : 'bg-white text-gray-700 border-gray-300 hover:border-gray-400'
+                      }`}
+                    >
+                      {c.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Store notice / announcement</label>
+                <p className="text-xs text-gray-500 mb-2">Shown to customers on your storefront, e.g. "Closed for Eid, back on the 15th".</p>
+                <textarea
+                  value={formData.storeNotice}
+                  onChange={(e) => setFormData({ ...formData, storeNotice: e.target.value })}
+                  rows={2}
+                  maxLength={500}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500"
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Operating Hours & Availability */}
+          <div>
+            <h2 className="text-xl font-bold text-gray-900 mb-4">Operating Hours & Availability</h2>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Manual availability override</label>
+                <p className="text-xs text-gray-500 mb-2">Overrides your schedule below until the date you pick (or indefinitely if left blank).</p>
+                <div className="flex flex-wrap items-center gap-3">
+                  <select
+                    value={formData.availabilityOverride}
+                    onChange={(e) => setFormData({ ...formData, availabilityOverride: e.target.value })}
+                    className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500"
+                  >
+                    {AVAILABILITY_OVERRIDES.map((o) => (
+                      <option key={o.value} value={o.value}>{o.label}</option>
+                    ))}
+                  </select>
+                  {formData.availabilityOverride && (
+                    <input
+                      type="date"
+                      value={formData.availabilityOverrideUntil}
+                      onChange={(e) => setFormData({ ...formData, availabilityOverrideUntil: e.target.value })}
+                      className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500"
+                      placeholder="Until (optional)"
+                    />
+                  )}
+                </div>
+                {formData.availabilityOverride && (
+                  <input
+                    type="text"
+                    value={formData.availabilityNote}
+                    onChange={(e) => setFormData({ ...formData, availabilityNote: e.target.value })}
+                    placeholder="Optional note shown to customers"
+                    maxLength={300}
+                    className="w-full mt-2 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500"
+                  />
+                )}
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Schedule</label>
+                <div className="flex gap-4 mb-3">
+                  {(['24_7', 'fixed_daily', 'per_day'] as const).map((mode) => (
+                    <label key={mode} className="inline-flex items-center gap-2">
+                      <input
+                        type="radio"
+                        name="scheduleMode"
+                        checked={formData.scheduleMode === mode}
+                        onChange={() => setFormData({ ...formData, scheduleMode: mode })}
+                        className="rounded border-gray-300"
+                      />
+                      {mode === '24_7' ? 'Open 24/7' : mode === 'fixed_daily' ? 'Same hours every day' : 'Different hours per day'}
+                    </label>
+                  ))}
+                </div>
+
+                {formData.scheduleMode === 'fixed_daily' && (
+                  <div className="flex items-center gap-3">
+                    <input
+                      type="time"
+                      value={formData.fixedDailyOpen}
+                      onChange={(e) => setFormData({ ...formData, fixedDailyOpen: e.target.value })}
+                      className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-500"
+                    />
+                    <span className="text-gray-500 text-sm">to</span>
+                    <input
+                      type="time"
+                      value={formData.fixedDailyClose}
+                      onChange={(e) => setFormData({ ...formData, fixedDailyClose: e.target.value })}
+                      className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-500"
+                    />
+                  </div>
+                )}
+
+                {formData.scheduleMode === 'per_day' && (
+                  <div className="space-y-3">
+                    {DAYS.map(({ key, label }) => {
+                      const day = formData.weeklySchedule[key];
+                      return (
+                        <div key={key} className="border border-gray-200 rounded-lg p-3">
+                          <div className="flex items-center justify-between mb-2">
+                            <span className="font-medium text-gray-900 text-sm">{label}</span>
+                            <label className="inline-flex items-center gap-2 text-sm text-gray-600">
+                              <input
+                                type="checkbox"
+                                checked={day.closed}
+                                onChange={(e) => updateDaySchedule(key, { closed: e.target.checked })}
+                                className="rounded border-gray-300"
+                              />
+                              Closed
+                            </label>
+                          </div>
+                          {!day.closed && (
+                            <div className="space-y-2">
+                              {day.sessions.map((session, i) => (
+                                <div key={i} className="flex items-center gap-2 flex-wrap">
+                                  <input
+                                    type="text"
+                                    value={session.name}
+                                    onChange={(e) => updateSession(key, i, { name: e.target.value })}
+                                    placeholder="e.g. Lunch"
+                                    className="w-28 px-2 py-1.5 text-sm border border-gray-300 rounded-lg"
+                                  />
+                                  <input
+                                    type="time"
+                                    value={session.open}
+                                    onChange={(e) => updateSession(key, i, { open: e.target.value })}
+                                    className="px-2 py-1.5 text-sm border border-gray-300 rounded-lg"
+                                  />
+                                  <span className="text-gray-400 text-sm">to</span>
+                                  <input
+                                    type="time"
+                                    value={session.close}
+                                    onChange={(e) => updateSession(key, i, { close: e.target.value })}
+                                    className="px-2 py-1.5 text-sm border border-gray-300 rounded-lg"
+                                  />
+                                  <button
+                                    type="button"
+                                    onClick={() => removeSession(key, i)}
+                                    className="text-gray-400 hover:text-red-600 text-sm"
+                                    aria-label="Remove session"
+                                  >
+                                    ×
+                                  </button>
+                                </div>
+                              ))}
+                              <button
+                                type="button"
+                                onClick={() => addSession(key)}
+                                className="text-sm text-green-700 hover:text-green-800 underline"
+                              >
+                                + Add session
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+
           {/* Payment Information */}
           <div>
             <h2 className="text-xl font-bold text-gray-900 mb-4">Payment Information</h2>
@@ -394,6 +779,63 @@ export default function SellerSettingsPage() {
             </p>
 
             <div className="space-y-4 mb-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">How customers can get your food</label>
+                <div className="flex flex-wrap gap-2">
+                  {DELIVERY_MODES.map((m) => (
+                    <button
+                      key={m.value}
+                      type="button"
+                      onClick={() => toggleDeliveryMode(m.value)}
+                      className={`px-3 py-1.5 rounded-lg text-sm border transition-colors ${
+                        formData.deliveryModes.includes(m.value)
+                          ? 'bg-gray-900 text-white border-gray-900'
+                          : 'bg-white text-gray-700 border-gray-300 hover:border-gray-400'
+                      }`}
+                    >
+                      {m.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Min order for delivery (Rs)</label>
+                  <input
+                    type="number"
+                    min={0}
+                    placeholder="No minimum"
+                    value={formData.minOrderAmountForDelivery ?? ''}
+                    onChange={(e) => setFormData({ ...formData, minOrderAmountForDelivery: e.target.value === '' ? null : parseFloat(e.target.value) })}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Free delivery above (Rs)</label>
+                  <input
+                    type="number"
+                    min={0}
+                    placeholder="No threshold"
+                    value={formData.freeDeliveryThreshold ?? ''}
+                    onChange={(e) => setFormData({ ...formData, freeDeliveryThreshold: e.target.value === '' ? null : parseFloat(e.target.value) })}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Max delivery distance (km)</label>
+                  <input
+                    type="number"
+                    min={0}
+                    step={0.5}
+                    placeholder="Unlimited"
+                    value={formData.maxDeliveryDistanceKm ?? ''}
+                    onChange={(e) => setFormData({ ...formData, maxDeliveryDistanceKm: e.target.value === '' ? null : parseFloat(e.target.value) })}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-500"
+                  />
+                </div>
+              </div>
+
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">Free delivery within (km)</label>
                 <p className="text-xs text-gray-500 mb-2">Everyone within this distance from your business location gets free delivery (e.g. 4 = free within 4 km).</p>
@@ -563,6 +1005,88 @@ export default function SellerSettingsPage() {
                   </div>
                 )}
               </div>
+            </div>
+          </div>
+
+          {/* Home Kitchen / Order Controls */}
+          <div>
+            <h2 className="text-xl font-bold text-gray-900 mb-4">Home Kitchen & Order Controls</h2>
+            <p className="text-sm text-gray-600 mb-4">Useful if you cook to order or have limited daily capacity.</p>
+            <div className="space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Order cut-off time</label>
+                  <p className="text-xs text-gray-500 mb-2">Today's orders stop after this time.</p>
+                  <input
+                    type="time"
+                    value={formData.orderCutoffTime}
+                    onChange={(e) => setFormData({ ...formData, orderCutoffTime: e.target.value })}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Max orders per day</label>
+                  <input
+                    type="number"
+                    min={1}
+                    placeholder="No limit"
+                    value={formData.maxDailyOrders ?? ''}
+                    onChange={(e) => setFormData({ ...formData, maxDailyOrders: e.target.value === '' ? null : parseInt(e.target.value, 10) })}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Min prep time (minutes)</label>
+                  <input
+                    type="number"
+                    min={0}
+                    placeholder="None"
+                    value={formData.minPrepTimeMinutes ?? ''}
+                    onChange={(e) => setFormData({ ...formData, minPrepTimeMinutes: e.target.value === '' ? null : parseInt(e.target.value, 10) })}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-500"
+                  />
+                </div>
+              </div>
+
+              <div className="flex items-center gap-3">
+                <input
+                  type="checkbox"
+                  id="preOrderOnly"
+                  checked={formData.preOrderOnly}
+                  onChange={(e) => setFormData({ ...formData, preOrderOnly: e.target.checked })}
+                  className="w-5 h-5 text-green-600 rounded focus:ring-green-500"
+                />
+                <label htmlFor="preOrderOnly" className="text-sm font-medium text-gray-700">
+                  Pre-orders only (no same-day orders)
+                </label>
+              </div>
+
+              {(formData.preOrderOnly || formData.advanceBookingMinDays != null || formData.advanceBookingMaxDays != null) && (
+                <div className="flex items-center gap-4">
+                  <div>
+                    <label className="block text-sm text-gray-600 mb-1">Min days in advance</label>
+                    <input
+                      type="number"
+                      min={0}
+                      placeholder="1"
+                      value={formData.advanceBookingMinDays ?? ''}
+                      onChange={(e) => setFormData({ ...formData, advanceBookingMinDays: e.target.value === '' ? null : parseInt(e.target.value, 10) })}
+                      className="w-28 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm text-gray-600 mb-1">Max days in advance</label>
+                    <input
+                      type="number"
+                      min={0}
+                      placeholder="7"
+                      value={formData.advanceBookingMaxDays ?? ''}
+                      onChange={(e) => setFormData({ ...formData, advanceBookingMaxDays: e.target.value === '' ? null : parseInt(e.target.value, 10) })}
+                      className="w-28 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-500"
+                    />
+                  </div>
+                </div>
+              )}
             </div>
           </div>
 

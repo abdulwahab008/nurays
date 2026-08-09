@@ -75,6 +75,21 @@ export const cancelOrder = async (req: Request, res: Response) => {
   });
 };
 
+export const retryDelivery = async (req: Request, res: Response) => {
+  if (!req.user) {
+    throw new AppError('Authentication required', 401, 'AUTH_REQUIRED');
+  }
+
+  const { id } = req.params;
+  const result = await adminOrderService.retryDelivery(id, req.user.userId);
+
+  res.status(200).json({
+    success: true,
+    message: 'Delivery sent back out for dispatch',
+    data: result,
+  });
+};
+
 export const processRefund = async (req: Request, res: Response) => {
   if (!req.user) {
     throw new AppError('Authentication required', 401, 'AUTH_REQUIRED');

@@ -1,5 +1,118 @@
 import prisma from '../config/database';
 import { AppError } from '../middleware/errorHandler';
+import { computeSellerAvailability, isAcceptingOrders } from './availability.service';
+import { getDeliveryFeeForSeller, haversineKm } from '../utils/deliveryFee';
+
+const SELLER_AVAILABILITY_SELECT = {
+  status: true,
+  scheduleMode: true,
+  operatingHours: true,
+  availabilityOverride: true,
+  availabilityOverrideUntil: true,
+  availabilityNote: true,
+} as const;
+
+// Everything isAcceptingOrders/getDeliveryFeeForSeller need, on top of
+// SELLER_AVAILABILITY_SELECT — selected once here so the customer-facing
+// listing/detail endpoints can show real "Accepting Orders", delivery fee,
+// distance, and ETA instead of guessing or hardcoding them.
+const SELLER_ORDERING_SELECT = {
+  id: true,
+  orderCutoffTime: true,
+  maxDailyOrders: true,
+  preOrderOnly: true,
+  minPrepTimeMinutes: true,
+  latitude: true,
+  longitude: true,
+  freeDeliveryAreas: true,
+  freeDeliveryRadiusKm: true,
+  deliveryFeeType: true,
+  deliveryFeeFixed: true,
+  deliveryFeeBase: true,
+  deliveryFeePerKm: true,
+  distancePricingTiers: true,
+  maxDeliveryDistanceKm: true,
+  minOrderAmountForDelivery: true,
+  freeDeliveryThreshold: true,
+  allowedPostalCodes: true,
+  deliveryZones: true,
+  deliveryModes: true,
+} as const;
+
+function attachAvailability<T extends Record<string, unknown>>(seller: T) {
+  const availability = computeSellerAvailability(seller as any);
+  return {
+    ...seller,
+    availability: {
+      status: availability.status,
+      isOpen: availability.isOpen,
+      opensAt: availability.opensAt,
+      closesAt: availability.closesAt,
+      nextOpenAt: availability.nextOpenAt,
+      reason: availability.reason,
+    },
+  };
+}
+
+/**
+ * A simple, honest delivery-time estimate — prep time plus travel time at an
+ * assumed ~20km/h average urban delivery speed. Not a routing engine; this is
+ * a customer-facing range, not a logistics guarantee.
+ */
+const FAST_DELIVERY_MAX_MINUTES = 45;
+
+function estimateDeliveryMinutes(
+  minPrepTimeMinutes: number | null | undefined,
+  distanceKm: number | null
+): { minMinutes: number; maxMinutes: number } {
+  const prep = minPrepTimeMinutes ?? 20;
+  if (distanceKm == null) {
+    return { minMinutes: prep + 20, maxMinutes: prep + 45 };
+  }
+  const travel = Math.max(10, Math.round((distanceKm / 20) * 60));
+  return { minMinutes: prep + travel, maxMinutes: prep + travel + 15 };
+}
+
+/**
+ * Per-seller "what should the customer see" bundle: whether new orders are
+ * actually being accepted right now (distinct from just isOpen — folds in
+ * cutoff time and daily cap), and — only when we know where the customer is —
+ * delivery fee, distance, eligibility, and an ETA.
+ */
+async function computeCustomerFacingSellerInfo(
+  seller: Record<string, unknown> & {
+    id: string;
+    latitude: unknown;
+    longitude: unknown;
+    minPrepTimeMinutes: number | null;
+  },
+  customerLat?: number | null,
+  customerLng?: number | null
+) {
+  const accepting = await isAcceptingOrders(seller as any);
+  if (customerLat == null || customerLng == null) {
+    return { isAcceptingOrders: accepting.accepting, acceptingReason: accepting.reason, delivery: null };
+  }
+  const feeResult = getDeliveryFeeForSeller(
+    seller as any,
+    { latitude: customerLat, longitude: customerLng },
+    seller.latitude != null ? Number(seller.latitude) : null,
+    seller.longitude != null ? Number(seller.longitude) : null
+  );
+  const eta = estimateDeliveryMinutes(seller.minPrepTimeMinutes, feeResult.distanceKm);
+  return {
+    isAcceptingOrders: accepting.accepting,
+    acceptingReason: accepting.reason,
+    delivery: {
+      deliverable: feeResult.deliverable,
+      fee: feeResult.fee,
+      distanceKm: feeResult.distanceKm != null ? Math.round(feeResult.distanceKm * 10) / 10 : null,
+      reason: feeResult.reason,
+      estimatedMinMinutes: eta.minMinutes,
+      estimatedMaxMinutes: eta.maxMinutes,
+    },
+  };
+}
 
 // Common Roman-Urdu food terms mapped to their English equivalents / spelling variants,
 // so a search for "murgh" also matches products named "chicken", etc.
@@ -66,6 +179,23 @@ export class ProductService {
     search?: string;
     sort?: string;
     isActive?: boolean;
+    mealCategory?: string;
+    openNow?: boolean;
+    open247?: boolean;
+    deliveryAvailable?: boolean;
+    pickupAvailable?: boolean;
+    offersAvailable?: boolean;
+    freeDelivery?: boolean;
+    businessType?: string; // restaurant, home_kitchen, bakery, cafe, cloud_kitchen
+    preOrderOnly?: boolean;
+    currentlyBusy?: boolean;
+    newKitchens?: boolean; // seller registered within the last 30 days
+    fastDelivery?: boolean; // estimated max delivery time under FAST_DELIVERY_MAX_MINUTES
+    // When present, distance/fee/ETA are computed and attached per product;
+    // combined with maxDistanceKm, also filters out sellers beyond that range.
+    customerLat?: number;
+    customerLng?: number;
+    maxDistanceKm?: number;
   }) {
     const page = filters.page || 1;
     const limit = Math.min(filters.limit || 20, 100);
@@ -113,6 +243,43 @@ export class ProductService {
     // ...nor a product from a suspended/inactive seller.
     where.seller = { status: 'active' };
 
+    if (filters.mealCategory) {
+      where.seller.mealCategories = { has: filters.mealCategory };
+    }
+    const requiredDeliveryModes: string[] = [];
+    if (filters.deliveryAvailable) requiredDeliveryModes.push('delivery');
+    if (filters.pickupAvailable) requiredDeliveryModes.push('pickup');
+    if (requiredDeliveryModes.length > 0) {
+      // hasEvery (not two separate assignments) so requesting both
+      // deliveryAvailable and pickupAvailable together actually requires
+      // both, instead of the second filter silently overwriting the first.
+      where.seller.deliveryModes = { hasEvery: requiredDeliveryModes };
+    }
+    if (filters.offersAvailable) {
+      const now = new Date();
+      where.seller.promotions = { some: { isActive: true, validFrom: { lte: now }, validUntil: { gte: now } } };
+    }
+    if (filters.freeDelivery) {
+      // Coarse "offers free delivery to somewhere" signal — a specific address's
+      // eligibility still needs the real per-address check in deliveryFee.ts.
+      where.seller.freeDeliveryRadiusKm = { not: null };
+    }
+    if (filters.open247) {
+      where.seller.scheduleMode = '24_7';
+    }
+    if (filters.businessType) {
+      where.seller.businessType = filters.businessType;
+    }
+    if (filters.preOrderOnly) {
+      where.seller.preOrderOnly = true;
+    }
+    if (filters.currentlyBusy) {
+      where.seller.availabilityOverride = 'busy';
+    }
+    if (filters.newKitchens) {
+      where.seller.createdAt = { gte: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000) };
+    }
+
     if (filters.search) {
       where.OR = expandSearchTerms(filters.search).flatMap((term) => [
         { name: { contains: term, mode: 'insensitive' } },
@@ -145,52 +312,119 @@ export class ProductService {
       }
     }
 
-    // Get products
-    const [products, total] = await Promise.all([
-      prisma.product.findMany({
-        where,
-        skip,
-        take: limit,
-        orderBy,
-        include: {
-          category: {
-            select: {
-              id: true,
-              name: true,
-              nameUrdu: true,
-              slug: true,
-            },
-          },
-          seller: {
-            select: {
-              id: true,
-              businessName: true,
-              businessNameUrdu: true,
-              ratingAverage: true,
-              isVerified: true,
-            },
-          },
-          images: {
-            where: { isPrimary: true },
-            take: 1,
-            select: {
-              imageUrl: true,
-            },
-          },
-          _count: {
-            select: {
-              reviews: true,
-            },
-          },
+    const productInclude = {
+      category: {
+        select: {
+          id: true,
+          name: true,
+          nameUrdu: true,
+          slug: true,
         },
-      }),
-      prisma.product.count({ where }),
-    ]);
+      },
+      seller: {
+        select: {
+          businessName: true,
+          businessNameUrdu: true,
+          businessType: true,
+          ratingAverage: true,
+          isVerified: true,
+          mealCategories: true,
+          createdAt: true,
+          ...SELLER_AVAILABILITY_SELECT,
+          ...SELLER_ORDERING_SELECT,
+        },
+      },
+      images: {
+        where: { isPrimary: true },
+        take: 1,
+        select: {
+          imageUrl: true,
+        },
+      },
+      _count: {
+        select: {
+          reviews: true,
+        },
+      },
+    } as const;
+
+    const hasCustomerLocation = filters.customerLat != null && filters.customerLng != null;
+    const needsInMemoryFilter =
+      !!filters.openNow || !!filters.fastDelivery || (filters.maxDistanceKm != null && hasCustomerLocation);
+
+    // "Open now" and "within X km" can't be expressed as DB predicates (per-day
+    // sessions and haversine distance both need real computation), so when
+    // requested we pull a larger candidate window, filter in JS, then paginate
+    // the filtered set ourselves. Fine at this app's data volume; would need a
+    // materialized "is_open" column / PostGIS to scale further.
+    let products: Array<Awaited<ReturnType<typeof prisma.product.findMany<{ where: typeof where; include: typeof productInclude; orderBy: typeof orderBy }>>>[number]>;
+    let total: number;
+
+    if (needsInMemoryFilter) {
+      const candidates = await prisma.product.findMany({
+        where,
+        orderBy,
+        include: productInclude,
+        take: 500,
+      });
+      const filtered = candidates.filter((p) => {
+        if (filters.openNow && !computeSellerAvailability(p.seller as any).isOpen) return false;
+        if (filters.maxDistanceKm != null && hasCustomerLocation) {
+          const seller = p.seller as any;
+          if (seller.latitude == null || seller.longitude == null) return false;
+          const distanceKm = haversineKm(
+            filters.customerLat!,
+            filters.customerLng!,
+            Number(seller.latitude),
+            Number(seller.longitude)
+          );
+          if (distanceKm > filters.maxDistanceKm) return false;
+        }
+        if (filters.fastDelivery) {
+          const seller = p.seller as any;
+          const distanceKm =
+            hasCustomerLocation && seller.latitude != null && seller.longitude != null
+              ? haversineKm(filters.customerLat!, filters.customerLng!, Number(seller.latitude), Number(seller.longitude))
+              : null;
+          const eta = estimateDeliveryMinutes(seller.minPrepTimeMinutes, distanceKm);
+          if (eta.maxMinutes > FAST_DELIVERY_MAX_MINUTES) return false;
+        }
+        return true;
+      });
+      total = filtered.length;
+      products = filtered.slice(skip, skip + limit);
+    } else {
+      [products, total] = await Promise.all([
+        prisma.product.findMany({
+          where,
+          skip,
+          take: limit,
+          orderBy,
+          include: productInclude,
+        }),
+        prisma.product.count({ where }),
+      ]);
+    }
+
+    // Compute accepting-orders/delivery-fee/distance/ETA once per UNIQUE seller
+    // in this page of results, not once per product, to avoid redundant work
+    // (and the DB query isAcceptingOrders makes) when several products share a seller.
+    const sellerInfoById = new Map<string, Awaited<ReturnType<typeof computeCustomerFacingSellerInfo>>>();
+    for (const product of products) {
+      const seller = product.seller as any;
+      if (!sellerInfoById.has(seller.id)) {
+        sellerInfoById.set(
+          seller.id,
+          await computeCustomerFacingSellerInfo(seller, filters.customerLat, filters.customerLng)
+        );
+      }
+    }
 
     // Format products
     const baseUrl = process.env.BASE_URL || 'http://localhost:3001';
     const formattedProducts = products.map((product) => {
       const imageUrl = product.images[0]?.imageUrl || null;
+      const sellerInfo = sellerInfoById.get((product.seller as any).id)!;
       return {
         id: product.id,
         name: product.name,
@@ -204,7 +438,17 @@ export class ProductService {
         totalReviews: product.totalReviews,
         primaryImage: imageUrl ? (imageUrl.startsWith('http') ? imageUrl : `${baseUrl}${imageUrl}`) : null,
         category: product.category,
-        seller: product.seller,
+        seller: {
+          ...attachAvailability(product.seller),
+          isAcceptingOrders: sellerInfo.isAcceptingOrders,
+          acceptingOrdersReason: sellerInfo.acceptingReason,
+        },
+        delivery: sellerInfo.delivery,
+        estimatedDeliveryMinMinutes: sellerInfo.delivery?.estimatedMinMinutes ?? null,
+        estimatedDeliveryMaxMinutes: sellerInfo.delivery?.estimatedMaxMinutes ?? null,
+        minOrderAmountForDelivery: (product.seller as any).minOrderAmountForDelivery != null
+          ? Number((product.seller as any).minOrderAmountForDelivery)
+          : null,
         stockQuantity: product.stockQuantity,
         stockType: product.stockType,
         productType: product.productType,
@@ -232,7 +476,12 @@ export class ProductService {
    * it regardless of moderation state (so they can view/edit a pending or
    * rejected listing on their own dashboard).
    */
-  async getProductByIdentifier(identifier: string, requestingUserId?: string) {
+  async getProductByIdentifier(
+    identifier: string,
+    requestingUserId?: string,
+    customerLat?: number,
+    customerLng?: number
+  ) {
     const product = await prisma.product.findFirst({
       where: {
         OR: [{ id: identifier }, { slug: identifier }],
@@ -282,13 +531,25 @@ export class ProductService {
 
     // Format images with full URLs
     const baseUrl = process.env.BASE_URL || 'http://localhost:3001';
-    
+    const sellerInfo = await computeCustomerFacingSellerInfo(product.seller as any, customerLat, customerLng);
+
     return {
       ...product,
       price: Number(product.price),
       originalPrice: product.originalPrice ? Number(product.originalPrice) : null,
       costPrice: product.costPrice ? Number(product.costPrice) : null,
       ratingAverage: Number(product.ratingAverage),
+      seller: {
+        ...attachAvailability(product.seller),
+        isAcceptingOrders: sellerInfo.isAcceptingOrders,
+        acceptingOrdersReason: sellerInfo.acceptingReason,
+      },
+      delivery: sellerInfo.delivery,
+      estimatedDeliveryMinMinutes: sellerInfo.delivery?.estimatedMinMinutes ?? null,
+      estimatedDeliveryMaxMinutes: sellerInfo.delivery?.estimatedMaxMinutes ?? null,
+      minOrderAmountForDelivery: product.seller.minOrderAmountForDelivery != null
+        ? Number(product.seller.minOrderAmountForDelivery)
+        : null,
       images: product.images.map((img) => ({
         ...img,
         imageUrl: img.imageUrl.startsWith('http') ? img.imageUrl : `${baseUrl}${img.imageUrl}`,

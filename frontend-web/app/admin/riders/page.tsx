@@ -72,7 +72,14 @@ export default function AdminRidersPage() {
   };
 
   const handleReject = async (riderId: string) => {
-    const reason = window.prompt('Reason for rejecting this rider application (optional):') || undefined;
+    let reason: string | undefined;
+    try {
+      reason = window.prompt('Reason for rejecting this rider application (optional):') || undefined;
+    } catch {
+      // Some embedded/automated browser contexts block native prompt() entirely —
+      // fall back to no reason rather than letting the whole action die silently.
+      reason = undefined;
+    }
     try {
       setBusyId(riderId);
       await apiClient.post(`/admin/riders/${riderId}/reject`, { approved: false, reason });
