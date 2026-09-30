@@ -21,7 +21,7 @@ export default defineConfig({
   webServer: {
     // Pin to 3000 explicitly — `next dev` honors a stray PORT env var, and the
     // backend uses 3001, so we don't want them to collide.
-    command: 'npm run dev -- -p 3000',
+    command: process.env.CI ? 'npm run start -- -p 3000' : 'npm run dev -- -p 3000',
     url: 'http://localhost:3000',
     reuseExistingServer: !process.env.CI,
     timeout: 120_000,

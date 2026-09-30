@@ -154,10 +154,12 @@ jobs:
             sleep 2
           done
 
-      # ---- frontend: install, playwright (webServer boots `next dev`) ----
-      - name: Frontend install
+      # ---- frontend: install, build, playwright (webServer boots `next start` on pre-built app) ----
+      - name: Frontend install & build
         working-directory: frontend-web
-        run: npm ci
+        run: |
+          npm ci
+          npm run build
 
       - name: Install Playwright browsers
         working-directory: frontend-web
