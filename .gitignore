@@ -49,6 +49,10 @@ Thumbs.db
 /*.jpg
 /*.jpeg
 /*.gif
+screenshots/
+scratch/
+.claude/
 
 # Vercel / deploy
 .vercel/
+

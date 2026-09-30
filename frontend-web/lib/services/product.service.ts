@@ -11,6 +11,7 @@ export interface Product {
   ratingAverage: number;
   totalReviews: number;
   primaryImage?: string;
+  productType?: 'frozen' | 'fresh' | 'ready_to_eat' | 'ready_to_cook';
   seller: {
     id: string;
     businessName: string;
@@ -47,6 +48,10 @@ export interface Product {
   estimatedDeliveryMinMinutes?: number | null;
   estimatedDeliveryMaxMinutes?: number | null;
   minOrderAmountForDelivery?: number | null;
+  community?: { id?: string; name: string; slug?: string; deliveryBaseFee?: number } | null;
+  communityBadge?: string;
+  isSameCommunity?: boolean;
+  isCrossCommunity?: boolean;
 }
 
 export interface ProductFilters {
@@ -54,6 +59,7 @@ export interface ProductFilters {
   limit?: number;
   categoryId?: string;
   sellerId?: string;
+  communityId?: string;
   city?: string;
   area?: string;
   minPrice?: number;

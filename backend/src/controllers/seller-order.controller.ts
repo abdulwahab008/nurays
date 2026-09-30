@@ -72,3 +72,50 @@ export const cancelOrderItem = async (req: Request, res: Response) => {
   });
 };
 
+export const acceptOrder = async (req: Request, res: Response) => {
+  if (!req.user) {
+    throw new AppError('Authentication required', 401, 'AUTH_REQUIRED');
+  }
+
+  const { id } = req.params;
+  const result = await sellerOrderService.acceptOrder(id, req.user.userId);
+
+  res.status(200).json({
+    success: true,
+    message: result.message,
+    data: result,
+  });
+};
+
+export const rejectOrder = async (req: Request, res: Response) => {
+  if (!req.user) {
+    throw new AppError('Authentication required', 401, 'AUTH_REQUIRED');
+  }
+
+  const { id } = req.params;
+  const { reason } = req.body;
+
+  const result = await sellerOrderService.rejectOrder(id, req.user.userId, reason);
+
+  res.status(200).json({
+    success: true,
+    message: result.message,
+    data: result,
+  });
+};
+
+export const markOrderReady = async (req: Request, res: Response) => {
+  if (!req.user) {
+    throw new AppError('Authentication required', 401, 'AUTH_REQUIRED');
+  }
+
+  const { id } = req.params;
+  const result = await sellerOrderService.markOrderReady(id, req.user.userId);
+
+  res.status(200).json({
+    success: true,
+    message: result.message,
+    data: result,
+  });
+};
+

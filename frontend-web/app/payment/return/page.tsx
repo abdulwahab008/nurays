@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { Suspense, useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { apiClient } from '@/lib/api-client';
 
@@ -12,6 +12,20 @@ import { apiClient } from '@/lib/api-client';
 type Status = 'verifying' | 'success' | 'pending' | 'failed' | 'cancelled';
 
 export default function PaymentReturnPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
+          <div className="w-16 h-16 rounded-full border-4 border-green-200 border-t-green-600 animate-spin mx-auto mb-4" />
+        </div>
+      }
+    >
+      <PaymentReturnContent />
+    </Suspense>
+  );
+}
+
+function PaymentReturnContent() {
   const router        = useRouter();
   const searchParams  = useSearchParams();
   const [status, setStatus] = useState<Status>('verifying');

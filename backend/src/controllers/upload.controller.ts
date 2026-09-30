@@ -64,3 +64,30 @@ export const deleteProductImage = async (req: Request, res: Response) => {
     message: 'Image deleted successfully',
   });
 };
+
+/**
+ * Upload payment proof receipt / screenshot
+ * POST /api/v1/upload/payment-proof
+ */
+export const uploadPaymentProof = async (req: Request, res: Response) => {
+  if (!req.user) {
+    throw new AppError('Authentication required', 401, 'AUTH_REQUIRED');
+  }
+
+  const file = req.file as Express.Multer.File;
+  if (!file) {
+    throw new AppError('No payment proof image uploaded', 400, 'NO_FILE');
+  }
+
+  res.status(200).json({
+    success: true,
+    message: 'Payment proof uploaded successfully',
+    data: {
+      filename: file.filename,
+      url: getImageUrl(file.filename),
+      originalName: file.originalname,
+      size: file.size,
+      mimetype: file.mimetype,
+    },
+  });
+};

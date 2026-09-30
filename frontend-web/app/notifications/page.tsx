@@ -3,12 +3,22 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { DashboardLayout } from '@/components/layout/DashboardShell';
+import { DashboardLayout, CUSTOMER_SIDEBAR_ITEMS } from '@/components/layout/DashboardShell';
 import { Button } from '@/components/ui/button';
 import { useAuthStore } from '@/lib/store/auth-store';
 import { formatDate } from '@/lib/utils';
 import { apiClient } from '@/lib/api-client';
 import { useToast } from '@/components/ui/toast';
+import {
+  Package,
+  Tag,
+  Bell,
+  Truck,
+  BellOff,
+  X,
+  ArrowRight,
+  CheckCheck,
+} from 'lucide-react';
 
 interface Notification {
   id: string;
@@ -29,18 +39,11 @@ export default function NotificationsPage() {
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
 
-  const sidebarItems = [
-    { name: 'Dashboard', href: '/dashboard', icon: '🏠' },
-    { name: 'Browse Products', href: '/products', icon: '🛍️' },
-    { name: 'My Orders', href: '/orders', icon: '📦' },
-    { name: 'My Cart', href: '/cart', icon: '🛒' },
-    { name: 'My Profile', href: '/profile', icon: '👤' },
-    { name: 'Addresses', href: '/profile/addresses', icon: '📍' },
-    { name: 'Help & Support', href: '/support', icon: '💬' },
-  ];
+  const sidebarItems = CUSTOMER_SIDEBAR_ITEMS;
 
   useEffect(() => {
-    if (!isAuthenticated) {
+    const token = typeof window !== 'undefined' ? (sessionStorage.getItem('access_token') || localStorage.getItem('access_token')) : null;
+    if (!token && !isAuthenticated) {
       router.push('/login');
       return;
     }
@@ -77,24 +80,28 @@ export default function NotificationsPage() {
     }
   };
 
-  const getNotificationIcon = (type: string) => {
-    const icons: Record<string, string> = {
-      order: '📦',
-      promo: '🏷️',
-      system: '🔔',
-      delivery: '🚚',
-    };
-    return icons[type] || '🔔';
+  const renderNotificationIcon = (type: string) => {
+    switch (type) {
+      case 'order':
+        return <Package className="w-5 h-5 text-blue-600" />;
+      case 'promo':
+        return <Tag className="w-5 h-5 text-amber-600" />;
+      case 'delivery':
+        return <Truck className="w-5 h-5 text-green-600" />;
+      case 'system':
+      default:
+        return <Bell className="w-5 h-5 text-gray-600" />;
+    }
   };
 
   const getNotificationColor = (type: string) => {
     const colors: Record<string, string> = {
-      order: 'bg-blue-100 border-blue-200',
-      promo: 'bg-orange-100 border-orange-200',
-      system: 'bg-gray-100 border-gray-200',
-      delivery: 'bg-green-100 border-green-200',
+      order: 'bg-blue-50 border-blue-200',
+      promo: 'bg-amber-50 border-amber-200',
+      system: 'bg-gray-50 border-gray-200',
+      delivery: 'bg-green-50 border-green-200',
     };
-    return colors[type] || 'bg-gray-100 border-gray-200';
+    return colors[type] || 'bg-gray-50 border-gray-200';
   };
 
   const markAsRead = async (id: string) => {
@@ -168,7 +175,7 @@ export default function NotificationsPage() {
         </div>
         {unreadCount > 0 && (
           <Button variant="outline" onClick={markAllAsRead} className="text-sm">
-            <span className="mr-2">✓</span> Mark all as read
+            <CheckCheck className="w-4 h-4 mr-2" /> Mark all as read
           </Button>
         )}
       </div>
@@ -189,8 +196,8 @@ export default function NotificationsPage() {
         </div>
       ) : filteredNotifications.length === 0 ? (
         <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-12 text-center">
-          <div className="w-20 h-20 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-6">
-            <span className="text-4xl">🔔</span>
+          <div className="w-20 h-20 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-6 text-gray-400">
+            <BellOff className="w-10 h-10" />
           </div>
           <h2 className="text-xl font-bold text-gray-900 mb-2">
             {filter === 'unread' ? 'All caught up!' : 'No notifications yet'}
@@ -211,8 +218,8 @@ export default function NotificationsPage() {
               }`}
             >
               <div className="flex items-start gap-4">
-                <div className={`w-12 h-12 rounded-xl flex items-center justify-center shrink-0 ${getNotificationColor(notification.type)}`}>
-                  <span className="text-xl">{getNotificationIcon(notification.type)}</span>
+                <div className={`w-12 h-12 rounded-xl flex items-center justify-center shrink-0 border ${getNotificationColor(notification.type)}`}>
+                  {renderNotificationIcon(notification.type)}
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-start justify-between gap-4">
@@ -236,10 +243,10 @@ export default function NotificationsPage() {
                       )}
                       <button
                         onClick={() => deleteNotificationLocal(notification.id)}
-                        className="text-gray-400 hover:text-red-500 transition-colors"
+                        className="p-1 rounded-lg text-gray-400 hover:text-red-500 hover:bg-gray-50 transition-colors"
                         title="Delete"
                       >
-                        ✕
+                        <X className="w-4 h-4" />
                       </button>
                     </div>
                   </div>
@@ -248,7 +255,8 @@ export default function NotificationsPage() {
                       href={notification.link}
                       className="inline-flex items-center gap-1 mt-3 text-sm text-green-600 hover:text-green-700 font-medium"
                     >
-                      View details →
+                      <span>View details</span>
+                      <ArrowRight className="w-4 h-4" />
                     </Link>
                   )}
                 </div>
@@ -263,24 +271,29 @@ export default function NotificationsPage() {
         <h3 className="font-semibold text-gray-900 mb-4">Notification Preferences</h3>
         <div className="space-y-4">
           {[
-            { id: 'orders', label: 'Order updates', desc: 'Get notified about order status changes', icon: '📦' },
-            { id: 'promos', label: 'Promotions & offers', desc: 'Receive special deals and discounts', icon: '🏷️' },
-            { id: 'delivery', label: 'Delivery updates', desc: 'Real-time delivery tracking alerts', icon: '🚚' },
-          ].map((pref) => (
-            <div key={pref.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-xl">
-              <div className="flex items-center gap-3">
-                <span className="text-xl">{pref.icon}</span>
-                <div>
-                  <p className="font-medium text-gray-900">{pref.label}</p>
-                  <p className="text-sm text-gray-500">{pref.desc}</p>
+            { id: 'orders', label: 'Order updates', desc: 'Get notified about order status changes', icon: Package, color: 'text-blue-600 bg-blue-50' },
+            { id: 'promos', label: 'Promotions & offers', desc: 'Receive special deals and discounts', icon: Tag, color: 'text-amber-600 bg-amber-50' },
+            { id: 'delivery', label: 'Delivery updates', desc: 'Real-time delivery tracking alerts', icon: Truck, color: 'text-green-600 bg-green-50' },
+          ].map((pref) => {
+            const Icon = pref.icon;
+            return (
+              <div key={pref.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-xl">
+                <div className="flex items-center gap-3">
+                  <div className={`w-10 h-10 rounded-lg flex items-center justify-center shrink-0 ${pref.color}`}>
+                    <Icon className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <p className="font-medium text-gray-900">{pref.label}</p>
+                    <p className="text-sm text-gray-500">{pref.desc}</p>
+                  </div>
                 </div>
+                <label className="relative inline-flex items-center cursor-pointer">
+                  <input type="checkbox" defaultChecked className="sr-only peer" />
+                  <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-green-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-green-600"></div>
+                </label>
               </div>
-              <label className="relative inline-flex items-center cursor-pointer">
-                <input type="checkbox" defaultChecked className="sr-only peer" />
-                <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-green-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-green-600"></div>
-              </label>
-            </div>
-          ))}
+            );
+          })}
         </div>
       </div>
     </DashboardLayout>

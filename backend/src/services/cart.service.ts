@@ -55,6 +55,22 @@ export class CartService {
             businessName: true,
             businessNameUrdu: true,
             isVerified: true,
+            communityId: true,
+            primaryCommunityName: true,
+            bankAccountName: true,
+            bankAccountNumber: true,
+            bankName: true,
+            jazzcashNumber: true,
+            jazzcashAccountTitle: true,
+            easypaisaNumber: true,
+            easypaisaAccountTitle: true,
+            community: {
+              select: {
+                id: true,
+                name: true,
+                slug: true,
+              },
+            },
           },
         },
         hub: {
@@ -113,6 +129,13 @@ export class CartService {
           businessName: item.seller.businessName,
           businessNameUrdu: item.seller.businessNameUrdu,
           isVerified: item.seller.isVerified,
+          bankAccountName: item.seller.bankAccountName,
+          bankAccountNumber: item.seller.bankAccountNumber,
+          bankName: item.seller.bankName,
+          jazzcashNumber: item.seller.jazzcashNumber,
+          jazzcashAccountTitle: item.seller.jazzcashAccountTitle,
+          easypaisaNumber: item.seller.easypaisaNumber,
+          easypaisaAccountTitle: item.seller.easypaisaAccountTitle,
         },
         quantity: item.quantity,
         stockType: item.stockType,
@@ -135,6 +158,21 @@ export class CartService {
         totalItems,
         totalSellers: sellers.size,
       },
+      activeSeller: items[0]
+        ? {
+            id: items[0].seller.id,
+            businessName: items[0].seller.businessName,
+            businessNameUrdu: items[0].seller.businessNameUrdu,
+            bankAccountName: items[0].seller.bankAccountName,
+            bankAccountNumber: items[0].seller.bankAccountNumber,
+            bankName: items[0].seller.bankName,
+            jazzcashNumber: items[0].seller.jazzcashNumber,
+            jazzcashAccountTitle: items[0].seller.jazzcashAccountTitle,
+            easypaisaNumber: items[0].seller.easypaisaNumber,
+            easypaisaAccountTitle: items[0].seller.easypaisaAccountTitle,
+            community: items[0].seller.community || (items[0].seller.primaryCommunityName ? { name: items[0].seller.primaryCommunityName } : null),
+          }
+        : null,
     };
   }
 
@@ -231,6 +269,7 @@ export class CartService {
       quantity: number;
       stockType?: string;
       hubId?: string;
+      clearAndAdd?: boolean;
     }
   ) {
     // Get or create cart
@@ -252,6 +291,32 @@ export class CartService {
 
     if (!product.isActive || product.approvalStatus !== 'approved') {
       throw new AppError('Product is not available', 400, 'PRODUCT_UNAVAILABLE');
+    }
+
+    // Rule 8: A cart belongs to one seller at a time.
+    const existingItems = await prisma.cartItem.findMany({
+      where: { cartId: cart.id },
+      include: {
+        seller: { select: { id: true, businessName: true } },
+      },
+    });
+
+    if (existingItems.length > 0) {
+      const currentSeller = existingItems[0].seller;
+      if (currentSeller.id !== product.sellerId) {
+        if (!data.clearAndAdd) {
+          throw new AppError(
+            `Your cart contains items from "${currentSeller.businessName}". You can only order from one seller at a time.`,
+            409,
+            'CART_SELLER_MISMATCH'
+          );
+        } else {
+          // User confirmed clearing the cart to order from new seller
+          await prisma.cartItem.deleteMany({
+            where: { cartId: cart.id },
+          });
+        }
+      }
     }
 
     const productId = product.id;

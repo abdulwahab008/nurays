@@ -14,6 +14,14 @@ export interface CartItem {
   seller: {
     id: string;
     businessName: string;
+    businessNameUrdu?: string | null;
+    bankAccountName?: string | null;
+    bankAccountNumber?: string | null;
+    bankName?: string | null;
+    jazzcashNumber?: string | null;
+    jazzcashAccountTitle?: string | null;
+    easypaisaNumber?: string | null;
+    easypaisaAccountTitle?: string | null;
   };
   quantity: number;
   stockType: 'direct' | 'hub';
@@ -31,6 +39,19 @@ export interface CartResponse {
     totalItems: number;
     totalSellers: number;
   };
+  activeSeller?: {
+    id: string;
+    businessName: string;
+    businessNameUrdu?: string | null;
+    bankAccountName?: string | null;
+    bankAccountNumber?: string | null;
+    bankName?: string | null;
+    jazzcashNumber?: string | null;
+    jazzcashAccountTitle?: string | null;
+    easypaisaNumber?: string | null;
+    easypaisaAccountTitle?: string | null;
+    community?: { id?: string; name: string; slug?: string } | null;
+  } | null;
 }
 
 export const cartService = {
@@ -45,6 +66,7 @@ export const cartService = {
     quantity: number;
     stockType?: 'direct' | 'hub' | 'both';
     hubId?: string;
+    clearAndAdd?: boolean;
   }) => {
     const response = await apiClient.post<ApiResponse<CartItem>>('/cart/items', data);
     return response.data;

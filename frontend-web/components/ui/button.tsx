@@ -8,28 +8,28 @@ export interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElemen
 
 const variantStyles: Record<NonNullable<ButtonProps['variant']>, React.CSSProperties> = {
   default: {
-    background: 'var(--forest-500)',
-    color: 'var(--cream-50)',
+    background: '#FF5500',
+    color: '#FFFFFF',
     border: '0',
   },
   dark: {
-    background: 'var(--ink-900)',
-    color: 'var(--cream-50)',
+    background: '#0C1016',
+    color: '#FFFFFF',
     border: '0',
   },
   outline: {
     background: 'transparent',
-    color: 'var(--ink-900)',
-    border: '1px solid var(--ink-300)',
+    color: '#0C1016',
+    border: '1px solid #E2E8F0',
   },
   ghost: {
     background: 'transparent',
-    color: 'var(--forest-700)',
+    color: '#FF5500',
     border: '0',
   },
   destructive: {
-    background: 'var(--anar-500)',
-    color: 'var(--cream-50)',
+    background: '#DC2626',
+    color: '#FFFFFF',
     border: '0',
   },
 };
@@ -42,19 +42,27 @@ const sizeClass: Record<NonNullable<ButtonProps['size']>, string> = {
 
 const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
   ({ className, variant = 'default', size = 'default', style, ...props }, ref) => {
+    const hasCustomBg = className?.includes('bg-') || className?.includes('flame-btn');
+    const baseStyle = variantStyles[variant];
+    const finalStyle: React.CSSProperties = {
+      ...baseStyle,
+      ...(hasCustomBg ? { background: undefined, backgroundColor: undefined } : {}),
+      ...style,
+    };
+
     return (
       <button
         ref={ref}
         data-nuray-btn="v3"
         {...props}
         className={cn(
-          'inline-flex items-center justify-center gap-2 rounded-full font-medium tracking-tight transition-all duration-200',
+          'inline-flex items-center justify-center gap-2 rounded-full font-semibold tracking-tight transition-all duration-200 shadow-xs cursor-pointer',
           'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2',
           'disabled:pointer-events-none disabled:opacity-50',
           sizeClass[size],
           className,
         )}
-        style={{ ...variantStyles[variant], ...style }}
+        style={finalStyle}
       />
     );
   },

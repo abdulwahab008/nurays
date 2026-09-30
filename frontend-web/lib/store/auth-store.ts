@@ -49,7 +49,7 @@ export const useAuthStore = create<AuthState>()(
               }
             : undefined,
         };
-        const hasToken = typeof window !== 'undefined' && !!localStorage.getItem('access_token');
+        const hasToken = typeof window !== 'undefined' && !!(sessionStorage.getItem('access_token') || localStorage.getItem('access_token'));
         set({ user: normalizedUser, isAuthenticated: hasToken });
       },
       logout: () => {
@@ -60,6 +60,9 @@ export const useAuthStore = create<AuthState>()(
           // Ignore — logout is best-effort.
         });
         if (typeof window !== 'undefined') {
+          sessionStorage.removeItem('access_token');
+          sessionStorage.removeItem('refresh_token');
+          sessionStorage.removeItem('tab_isolated');
           localStorage.removeItem('access_token');
           localStorage.removeItem('refresh_token');
         }
@@ -68,13 +71,35 @@ export const useAuthStore = create<AuthState>()(
     }),
     {
       name: 'auth-storage',
-      storage: createJSONStorage(() => localStorage),
+      storage: createJSONStorage(() => ({
+        getItem: (name: string) => {
+          if (typeof window === 'undefined') return null;
+          const sessionVal = sessionStorage.getItem(name);
+          if (sessionVal) return sessionVal;
+          return localStorage.getItem(name);
+        },
+        setItem: (name: string, value: string) => {
+          if (typeof window === 'undefined') return;
+          if (sessionStorage.getItem('tab_isolated') === 'true') {
+            sessionStorage.setItem(name, value);
+          } else {
+            localStorage.setItem(name, value);
+          }
+        },
+        removeItem: (name: string) => {
+          if (typeof window === 'undefined') return;
+          sessionStorage.removeItem(name);
+          localStorage.removeItem(name);
+        },
+      })),
       // On rehydrate, ensure tokens are valid and set isAuthenticated
       onRehydrateStorage: () => (state) => {
         if (state && typeof window !== 'undefined') {
-          const hasToken = !!localStorage.getItem('access_token');
+          const hasToken = !!(sessionStorage.getItem('access_token') || localStorage.getItem('access_token'));
           // If we have a token but no user, clear the token (invalid state)
           if (hasToken && !state.user) {
+            sessionStorage.removeItem('access_token');
+            sessionStorage.removeItem('refresh_token');
             localStorage.removeItem('access_token');
             localStorage.removeItem('refresh_token');
             state.isAuthenticated = false;

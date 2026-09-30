@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { uploadProductImages, deleteProductImage } from '../controllers/upload.controller';
+import { uploadProductImages, deleteProductImage, uploadPaymentProof } from '../controllers/upload.controller';
 import { uploadProductImages as multerUpload } from '../services/upload.service';
 import { authenticate, authorize } from '../middleware/auth.middleware';
 
@@ -20,6 +20,14 @@ router.delete(
   authenticate,
   authorize('seller'),
   deleteProductImage
+);
+
+// Upload payment proof receipt / screenshot (accessible to buyers and sellers)
+router.post(
+  '/payment-proof',
+  authenticate,
+  multerUpload.single('proof'),
+  uploadPaymentProof
 );
 
 export default router;

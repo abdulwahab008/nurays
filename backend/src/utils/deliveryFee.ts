@@ -195,3 +195,40 @@ export function getDeliveryFeeForSeller(
 
   return { deliverable: true, fee: platformDefaultFee(address.city), reason: null, distanceKm };
 }
+
+export interface DeliveryFeeCorridor {
+  standardFee: number;
+  minFloor: number;
+  maxCeiling: number;
+  distanceKm: number;
+}
+
+/**
+ * Calculates inDrive-style bounded delivery fee corridor with floor and ceiling caps.
+ */
+export function calculateDeliveryFeeCorridor(
+  pickupLat: number,
+  pickupLng: number,
+  deliveryLat: number,
+  deliveryLng: number,
+  city?: string | null
+): DeliveryFeeCorridor {
+  const distKm = Math.round(haversineKm(pickupLat, pickupLng, deliveryLat, deliveryLng) * 10) / 10;
+  const baseRate = platformDefaultFee(city);
+  const distanceSurcharge = Math.round(distKm * 20); // Rs 20 per km
+  const standardFee = Math.max(120, baseRate + distanceSurcharge);
+
+  // InDrive-style bounded price corridor:
+  // Floor (85% or Rs 100 min) - protects rider
+  const minFloor = Math.max(100, Math.round(standardFee * 0.85));
+  // Ceiling (+Rs 120 or 140% max) - protects customer from price gouging
+  const maxCeiling = Math.min(standardFee + 120, Math.round(standardFee * 1.4));
+
+  return {
+    standardFee,
+    minFloor,
+    maxCeiling,
+    distanceKm: distKm,
+  };
+}
+

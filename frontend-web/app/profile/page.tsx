@@ -8,7 +8,28 @@ import { formatPhoneNumber } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/toast';
 import { useAuthStore } from '@/lib/store/auth-store';
-import { DashboardLayout } from '@/components/layout/DashboardShell';
+import { DashboardLayout, CUSTOMER_SIDEBAR_ITEMS } from '@/components/layout/DashboardShell';
+import {
+  Store,
+  Bike,
+  ShoppingCart,
+  Camera,
+  Zap,
+  MapPin,
+  Package,
+  BarChart3,
+  User,
+  Pencil,
+  Phone,
+  Mail,
+  Lock,
+  Key,
+  AlertTriangle,
+  Check,
+  ArrowRight,
+  Globe,
+  ShieldCheck,
+} from 'lucide-react';
 
 export default function ProfilePage() {
   const router = useRouter();
@@ -25,18 +46,11 @@ export default function ProfilePage() {
     languagePreference: 'en',
   });
 
-  const sidebarItems = [
-    { name: 'Dashboard', href: '/dashboard', icon: '🏠' },
-    { name: 'Browse Products', href: '/products', icon: '🛍️' },
-    { name: 'My Orders', href: '/orders', icon: '📦' },
-    { name: 'My Cart', href: '/cart', icon: '🛒' },
-    { name: 'My Profile', href: '/profile', icon: '👤' },
-    { name: 'Addresses', href: '/profile/addresses', icon: '📍' },
-    { name: 'Help & Support', href: '/support', icon: '💬' },
-  ];
+  const sidebarItems = CUSTOMER_SIDEBAR_ITEMS;
 
   useEffect(() => {
-    if (!isAuthenticated) {
+    const token = typeof window !== 'undefined' ? (sessionStorage.getItem('access_token') || localStorage.getItem('access_token')) : null;
+    if (!token && !isAuthenticated) {
       router.push('/login');
       return;
     }
@@ -131,23 +145,24 @@ export default function ProfilePage() {
                 {profile?.email || profile?.phone || 'Customer'}
               </p>
               <div className="flex items-center justify-center gap-2 mb-4">
-                <span className={`px-3 py-1 rounded-full text-xs font-medium ${
+                <span className={`px-3 py-1 rounded-full text-xs font-medium flex items-center gap-1.5 ${
                   profile?.userType === 'seller'
                     ? 'bg-purple-100 text-purple-800'
                     : profile?.userType === 'rider'
                     ? 'bg-orange-100 text-orange-800'
                     : 'bg-green-100 text-green-800'
                 }`}>
-                  {profile?.userType === 'seller' ? '🏪 Seller' : profile?.userType === 'rider' ? '🛵 Rider' : '🛒 Customer'}
+                  {profile?.userType === 'seller' ? <Store className="w-3.5 h-3.5" /> : profile?.userType === 'rider' ? <Bike className="w-3.5 h-3.5" /> : <ShoppingCart className="w-3.5 h-3.5" />}
+                  <span className="capitalize">{profile?.userType || 'Customer'}</span>
                 </span>
                 {profile?.isEmailVerified && (
-                  <span className="px-3 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
-                    ✓ Verified
+                  <span className="px-3 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800 flex items-center gap-1">
+                    <Check className="w-3 h-3" /> Verified
                   </span>
                 )}
               </div>
-              <Button variant="outline" className="w-full mb-3" size="sm">
-                <span className="mr-2">📷</span> Change Photo
+              <Button variant="outline" className="w-full mb-3 flex items-center justify-center gap-2" size="sm">
+                <Camera className="w-4 h-4" /> Change Photo
               </Button>
             </div>
           </div>
@@ -155,51 +170,51 @@ export default function ProfilePage() {
           {/* Quick Links */}
           <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 mt-6">
             <h3 className="font-semibold text-gray-900 mb-4 flex items-center gap-2">
-              <span>⚡</span> Quick Links
+              <Zap className="w-4 h-4 text-amber-500" /> Quick Links
             </h3>
             <div className="space-y-2">
               <Link href="/profile/addresses" className="flex items-center gap-3 p-3 rounded-xl hover:bg-gray-50 transition-colors group">
-                <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
-                  <span>📍</span>
+                <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center text-blue-600">
+                  <MapPin className="w-5 h-5" />
                 </div>
                 <div className="flex-1">
                   <p className="font-medium text-gray-900">Addresses</p>
                   <p className="text-xs text-gray-500">Manage delivery locations</p>
                 </div>
-                <span className="text-gray-400 group-hover:translate-x-1 transition-transform">→</span>
+                <ArrowRight className="w-4 h-4 text-gray-400 group-hover:translate-x-1 transition-transform" />
               </Link>
               <Link href="/orders" className="flex items-center gap-3 p-3 rounded-xl hover:bg-gray-50 transition-colors group">
-                <div className="w-10 h-10 bg-orange-100 rounded-lg flex items-center justify-center">
-                  <span>📦</span>
+                <div className="w-10 h-10 bg-orange-100 rounded-lg flex items-center justify-center text-orange-600">
+                  <Package className="w-5 h-5" />
                 </div>
                 <div className="flex-1">
                   <p className="font-medium text-gray-900">Order History</p>
                   <p className="text-xs text-gray-500">View past orders</p>
                 </div>
-                <span className="text-gray-400 group-hover:translate-x-1 transition-transform">→</span>
+                <ArrowRight className="w-4 h-4 text-gray-400 group-hover:translate-x-1 transition-transform" />
               </Link>
               {profile?.userType !== 'seller' && (
                 <Link href="/sellers/register" className="flex items-center gap-3 p-3 rounded-xl hover:bg-gray-50 transition-colors group">
-                  <div className="w-10 h-10 bg-purple-100 rounded-lg flex items-center justify-center">
-                    <span>🏪</span>
+                  <div className="w-10 h-10 bg-purple-100 rounded-lg flex items-center justify-center text-purple-600">
+                    <Store className="w-5 h-5" />
                   </div>
                   <div className="flex-1">
                     <p className="font-medium text-gray-900">Become a Seller</p>
                     <p className="text-xs text-gray-500">Start your business</p>
                   </div>
-                  <span className="text-gray-400 group-hover:translate-x-1 transition-transform">→</span>
+                  <ArrowRight className="w-4 h-4 text-gray-400 group-hover:translate-x-1 transition-transform" />
                 </Link>
               )}
               {profile?.userType === 'seller' && (
                 <Link href="/sellers/dashboard" className="flex items-center gap-3 p-3 rounded-xl hover:bg-gray-50 transition-colors group">
-                  <div className="w-10 h-10 bg-purple-100 rounded-lg flex items-center justify-center">
-                    <span>📊</span>
+                  <div className="w-10 h-10 bg-purple-100 rounded-lg flex items-center justify-center text-purple-600">
+                    <BarChart3 className="w-5 h-5" />
                   </div>
                   <div className="flex-1">
                     <p className="font-medium text-gray-900">Seller Dashboard</p>
                     <p className="text-xs text-gray-500">Manage your store</p>
                   </div>
-                  <span className="text-gray-400 group-hover:translate-x-1 transition-transform">→</span>
+                  <ArrowRight className="w-4 h-4 text-gray-400 group-hover:translate-x-1 transition-transform" />
                 </Link>
               )}
             </div>
@@ -213,13 +228,13 @@ export default function ProfilePage() {
             <div className="flex items-center justify-between mb-6">
               <div>
                 <h2 className="text-lg font-bold text-gray-900 flex items-center gap-2">
-                  <span>👤</span> Personal Information
+                  <User className="w-5 h-5 text-[#FF5500]" /> Personal Information
                 </h2>
                 <p className="text-sm text-gray-500">Update your personal details</p>
               </div>
               {!editing && (
-                <Button variant="outline" onClick={() => setEditing(true)} size="sm">
-                  <span className="mr-2">✏️</span> Edit
+                <Button variant="outline" onClick={() => setEditing(true)} size="sm" className="flex items-center gap-1.5">
+                  <Pencil className="w-4 h-4" /> Edit
                 </Button>
               )}
             </div>
@@ -281,14 +296,14 @@ export default function ProfilePage() {
                       }
                       className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-green-500 transition-all"
                     >
-                      <option value="en">🇺🇸 English</option>
-                      <option value="ur">🇵🇰 Urdu</option>
+                      <option value="en">English</option>
+                      <option value="ur">Urdu</option>
                     </select>
                   </div>
                 </div>
                 <div className="flex gap-3 mt-6">
-                  <Button type="submit" className="bg-green-600 hover:bg-green-700">
-                    <span className="mr-2">✓</span> Save Changes
+                  <Button type="submit" className="bg-green-600 hover:bg-green-700 flex items-center gap-1.5">
+                    <Check className="w-4 h-4" /> Save Changes
                   </Button>
                   <Button
                     type="button"
@@ -307,28 +322,28 @@ export default function ProfilePage() {
                 <div className="p-4 bg-gray-50 rounded-xl">
                   <p className="text-xs text-gray-500 uppercase tracking-wide mb-1">Phone Number</p>
                   <p className="font-semibold text-gray-900 flex items-center gap-2">
-                    <span>📱</span>
+                    <Phone className="w-4 h-4 text-slate-500" />
                     {profile?.phone ? formatPhoneNumber(profile.phone) : 'Not provided'}
                   </p>
                 </div>
                 <div className="p-4 bg-gray-50 rounded-xl">
                   <p className="text-xs text-gray-500 uppercase tracking-wide mb-1">Email Address</p>
                   <p className="font-semibold text-gray-900 flex items-center gap-2">
-                    <span>✉️</span>
+                    <Mail className="w-4 h-4 text-slate-500" />
                     {profile?.email || 'Not provided'}
                   </p>
                 </div>
                 <div className="p-4 bg-gray-50 rounded-xl">
                   <p className="text-xs text-gray-500 uppercase tracking-wide mb-1">Full Name</p>
                   <p className="font-semibold text-gray-900 flex items-center gap-2">
-                    <span>👤</span>
+                    <User className="w-4 h-4 text-slate-500" />
                     {profile?.profile?.fullName || 'Not set'}
                   </p>
                 </div>
                 <div className="p-4 bg-gray-50 rounded-xl">
                   <p className="text-xs text-gray-500 uppercase tracking-wide mb-1">Location</p>
                   <p className="font-semibold text-gray-900 flex items-center gap-2">
-                    <span>📍</span>
+                    <MapPin className="w-4 h-4 text-slate-500" />
                     {profile?.profile?.area && profile?.profile?.city
                       ? `${profile.profile.area}, ${profile.profile.city}`
                       : 'Not set'}
@@ -337,14 +352,14 @@ export default function ProfilePage() {
                 <div className="p-4 bg-gray-50 rounded-xl">
                   <p className="text-xs text-gray-500 uppercase tracking-wide mb-1">Account Type</p>
                   <p className="font-semibold text-gray-900 flex items-center gap-2">
-                    <span>{profile?.userType === 'seller' ? '🏪' : profile?.userType === 'rider' ? '🛵' : '🛒'}</span>
+                    {profile?.userType === 'seller' ? <Store className="w-4 h-4 text-purple-600" /> : profile?.userType === 'rider' ? <Bike className="w-4 h-4 text-orange-600" /> : <ShoppingCart className="w-4 h-4 text-green-600" />}
                     <span className="capitalize">{profile?.userType || 'Customer'}</span>
                   </p>
                 </div>
                 <div className="p-4 bg-gray-50 rounded-xl">
                   <p className="text-xs text-gray-500 uppercase tracking-wide mb-1">Language</p>
                   <p className="font-semibold text-gray-900 flex items-center gap-2">
-                    <span>{profile?.profile?.languagePreference === 'ur' ? '🇵🇰' : '🇺🇸'}</span>
+                    <Globe className="w-4 h-4 text-blue-600" />
                     {profile?.profile?.languagePreference === 'ur' ? 'Urdu' : 'English'}
                   </p>
                 </div>
@@ -355,13 +370,13 @@ export default function ProfilePage() {
           {/* Security & Account */}
           <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
             <h2 className="text-lg font-bold text-gray-900 mb-4 flex items-center gap-2">
-              <span>🔒</span> Account Security
+              <Lock className="w-5 h-5 text-slate-700" /> Account Security
             </h2>
             <div className="space-y-3">
               <div className="flex items-center justify-between p-4 bg-gray-50 rounded-xl">
                 <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center">
-                    <span>🔑</span>
+                  <div className="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center text-green-600">
+                    <Key className="w-5 h-5" />
                   </div>
                   <div>
                     <p className="font-medium text-gray-900">Password</p>
@@ -372,8 +387,8 @@ export default function ProfilePage() {
               </div>
               <div className="flex items-center justify-between p-4 bg-gray-50 rounded-xl">
                 <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
-                    <span>📧</span>
+                  <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center text-blue-600">
+                    <Mail className="w-5 h-5" />
                   </div>
                   <div>
                     <p className="font-medium text-gray-900">Email Verification</p>
@@ -386,7 +401,9 @@ export default function ProfilePage() {
                   <Button variant="outline" size="sm">Verify</Button>
                 )}
                 {profile?.isEmailVerified && (
-                  <span className="text-green-600 font-medium text-sm">✓ Verified</span>
+                  <span className="text-green-600 font-medium text-sm flex items-center gap-1">
+                    <Check className="w-4 h-4" /> Verified
+                  </span>
                 )}
               </div>
             </div>
@@ -395,7 +412,7 @@ export default function ProfilePage() {
           {/* Danger Zone */}
           <div className="bg-white rounded-2xl shadow-sm border border-red-100 p-6">
             <h2 className="text-lg font-bold text-red-600 mb-4 flex items-center gap-2">
-              <span>⚠️</span> Danger Zone
+              <AlertTriangle className="w-5 h-5 text-red-600" /> Danger Zone
             </h2>
             <div className="flex items-center justify-between p-4 bg-red-50 rounded-xl">
               <div>

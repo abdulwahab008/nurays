@@ -3,23 +3,13 @@
 import { useState, useEffect, useRef } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import Link from 'next/link';
-import { DashboardLayout } from '@/components/layout/DashboardShell';
+import { DashboardLayout, SELLER_SIDEBAR_ITEMS } from '@/components/layout/DashboardShell';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/toast';
 import { useAuthStore } from '@/lib/store/auth-store';
 import { apiClient } from '@/lib/api-client';
 
-const sidebarItems = [
-  { name: 'Dashboard', href: '/sellers/dashboard', icon: '' },
-  { name: 'Orders', href: '/sellers/orders', icon: '' },
-  { name: 'Products', href: '/sellers/products', icon: '' },
-  { name: 'Inventory', href: '/sellers/products?view=inventory', icon: '' },
-  { name: 'Promotions', href: '/sellers/promotions', icon: '' },
-  { name: 'Earnings', href: '/sellers/earnings', icon: '' },
-  { name: 'Analytics', href: '/sellers/analytics', icon: '' },
-  { name: 'Notifications', href: '/sellers/notifications', icon: '' },
-  { name: 'Settings', href: '/sellers/settings', icon: '' },
-];
+const sidebarItems = SELLER_SIDEBAR_ITEMS;
 
 interface Category {
   id: string;

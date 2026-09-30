@@ -17,6 +17,7 @@ export interface CartItem {
 
 interface CartState {
   items: CartItem[];
+  appliedPromoCode: string | null;
   setItems: (items: CartItem[]) => void;
   addItem: (item: CartItem) => void;
   updateItem: (id: string, quantity: number) => void;
@@ -24,12 +25,15 @@ interface CartState {
   clearCart: () => void;
   getTotal: () => number;
   getItemCount: () => number;
+  setAppliedPromoCode: (code: string | null) => void;
 }
 
 export const useCartStore = create<CartState>()(
   persist(
     (set, get) => ({
       items: [],
+      appliedPromoCode: null,
+      setAppliedPromoCode: (code) => set({ appliedPromoCode: code }),
       setItems: (items) => set({ items }),
       addItem: (item) => {
         const existingItem = get().items.find(
@@ -54,12 +58,14 @@ export const useCartStore = create<CartState>()(
         }
         set({
           items: get().items.map((item) =>
-            item.id === id ? { ...item, quantity, subtotal: quantity * item.unitPrice } : item
+            item.id === id || item.productId === id
+              ? { ...item, quantity, subtotal: quantity * item.unitPrice }
+              : item
           ),
         });
       },
       removeItem: (id) => {
-        set({ items: get().items.filter((item) => item.id !== id) });
+        set({ items: get().items.filter((item) => item.id !== id && item.productId !== id) });
       },
       clearCart: () => {
         set({ items: [] });

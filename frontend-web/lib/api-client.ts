@@ -113,6 +113,7 @@ class ApiClient {
       path.startsWith('/login') ||
       path.startsWith('/register') ||
       path.startsWith('/products') ||
+      path.startsWith('/kitchens') ||
       path.startsWith('/sellers/register') ||
       path.startsWith('/admin/login');
     if (!onPublic) {
@@ -120,31 +121,45 @@ class ApiClient {
     }
   }
 
-  private getAccessToken(): string | null {
+  getAccessToken(): string | null {
     if (typeof window === 'undefined') return null;
-    return localStorage.getItem('access_token');
+    return sessionStorage.getItem('access_token') || localStorage.getItem('access_token');
   }
 
-  private getRefreshToken(): string | null {
+  getRefreshToken(): string | null {
     if (typeof window === 'undefined') return null;
-    return localStorage.getItem('refresh_token');
+    return sessionStorage.getItem('refresh_token') || localStorage.getItem('refresh_token');
   }
 
-  private clearTokens(): void {
+  clearTokens(): void {
     if (typeof window === 'undefined') return;
+    sessionStorage.removeItem('access_token');
+    sessionStorage.removeItem('refresh_token');
+    sessionStorage.removeItem('tab_isolated');
     localStorage.removeItem('access_token');
     localStorage.removeItem('refresh_token');
   }
 
-  setToken(token: string): void {
+  setToken(token: string, isolated = false): void {
     if (typeof window === 'undefined') return;
-    localStorage.setItem('access_token', token);
+    if (isolated || sessionStorage.getItem('tab_isolated') === 'true') {
+      sessionStorage.setItem('tab_isolated', 'true');
+      sessionStorage.setItem('access_token', token);
+    } else {
+      localStorage.setItem('access_token', token);
+    }
   }
 
-  setTokens(accessToken: string, refreshToken: string): void {
+  setTokens(accessToken: string, refreshToken: string, isolated = false): void {
     if (typeof window === 'undefined') return;
-    localStorage.setItem('access_token', accessToken);
-    localStorage.setItem('refresh_token', refreshToken);
+    if (isolated || sessionStorage.getItem('tab_isolated') === 'true') {
+      sessionStorage.setItem('tab_isolated', 'true');
+      sessionStorage.setItem('access_token', accessToken);
+      sessionStorage.setItem('refresh_token', refreshToken);
+    } else {
+      localStorage.setItem('access_token', accessToken);
+      localStorage.setItem('refresh_token', refreshToken);
+    }
     // Signal to long-lived consumers (sockets) that the access token has
     // changed — they should reconnect with the new token.
     window.dispatchEvent(new CustomEvent('auth:tokens-changed'));

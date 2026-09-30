@@ -15,6 +15,8 @@ import {
   updateProductSchema,
   getSellerProductsQuerySchema,
 } from '../validators/product.validator';
+import { getProductReviewsQuerySchema } from '../validators/review.validator';
+import { getProductReviews } from '../controllers/review.controller';
 import { authenticate, authorize, blockSuspendedSeller, optionalAuthenticate } from '../middleware/auth.middleware';
 
 const router = Router();
@@ -57,6 +59,9 @@ router.delete(
   blockSuspendedSeller,
   deleteProduct
 );
+
+// Product reviews (public)
+router.get('/:id/reviews', validateQuery(getProductReviewsQuerySchema), getProductReviews);
 
 // This route must come LAST because /:identifier matches anything
 router.get('/:identifier', optionalAuthenticate, validateQuery(getProductQuerySchema), getProduct);

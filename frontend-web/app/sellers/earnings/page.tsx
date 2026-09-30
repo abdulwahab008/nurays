@@ -2,25 +2,14 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { DashboardLayout } from '@/components/layout/DashboardShell';
+import { DashboardLayout, SELLER_SIDEBAR_ITEMS } from '@/components/layout/DashboardShell';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/toast';
 import { useAuthStore } from '@/lib/store/auth-store';
 import { apiClient } from '@/lib/api-client';
 import { formatPrice, formatDate } from '@/lib/utils';
 
-const sidebarItems = [
-  { name: 'Dashboard', href: '/sellers/dashboard', icon: '' },
-  { name: 'Orders', href: '/sellers/orders', icon: '' },
-  { name: 'Products', href: '/sellers/products', icon: '' },
-  { name: 'Inventory', href: '/sellers/products?view=inventory', icon: '' },
-  { name: 'Promotions', href: '/sellers/promotions', icon: '' },
-  { name: 'Delivery', href: '/sellers/settings#delivery', icon: '' },
-  { name: 'Earnings', href: '/sellers/earnings', icon: '' },
-  { name: 'Analytics', href: '/sellers/analytics', icon: '' },
-  { name: 'Notifications', href: '/sellers/notifications', icon: '' },
-  { name: 'Settings', href: '/sellers/settings', icon: '' },
-];
+const sidebarItems = SELLER_SIDEBAR_ITEMS;
 
 // Icons
 const Icons = {
@@ -57,6 +46,13 @@ const Icons = {
 };
 
 interface EarningsData {
+  todaySales: number;
+  todayOrders: number;
+  grossSales: number;
+  platformFees: number;
+  netEarnings: number;
+  pendingSettlement: number;
+  paidSettlement: number;
   totalEarnings: number;
   pendingPayout: number;
   availableBalance: number;
@@ -107,14 +103,19 @@ export default function SellerEarningsPage() {
       ]);
       if (dashboardRes.data.success) {
         const dashboard = dashboardRes.data.data;
+        const ov = dashboard.overview || {};
         setEarnings({
-          totalEarnings: dashboard.overview?.totalEarnings || 0,
-          pendingPayout: dashboard.overview?.pendingPayout || 0,
-          // Cash-on-delivery money is already in your hands and isn't payable
-          // again here — only what we collected online can be withdrawn, net
-          // of the commission you owe us on COD sales (see codCommissionOwed).
-          availableBalance: dashboard.overview?.availableForPayout || 0,
-          codCommissionOwed: dashboard.overview?.codCommissionOwed || 0,
+          todaySales: ov.todaySales ?? 0,
+          todayOrders: ov.todayOrders ?? 0,
+          grossSales: ov.grossSales ?? (ov.totalEarnings ?? 0),
+          platformFees: ov.platformFees ?? 0,
+          netEarnings: ov.netEarnings ?? (ov.totalEarnings ?? 0),
+          pendingSettlement: ov.pendingSettlement ?? (ov.pendingPayout ?? 0),
+          paidSettlement: ov.paidSettlement ?? 0,
+          totalEarnings: ov.totalEarnings ?? 0,
+          pendingPayout: ov.pendingPayout ?? 0,
+          availableBalance: ov.availableForPayout ?? 0,
+          codCommissionOwed: ov.codCommissionOwed ?? 0,
           payouts: payoutsRes.data.success ? payoutsRes.data.data : [],
         });
       }
@@ -185,47 +186,70 @@ export default function SellerEarningsPage() {
           </div>
         ) : earnings ? (
           <>
-            {/* Earnings Summary Cards - Enhanced */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-5 mb-8">
-              {/* Total Earnings */}
-              <div className="bg-gradient-to-br from-emerald-50 to-emerald-100 rounded-2xl p-6 border border-emerald-200 hover:shadow-lg transition-all duration-300 group">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm font-medium text-emerald-600 mb-2">Total Earnings</p>
-                    <p className="text-3xl font-bold text-gray-900">{formatPrice(earnings.totalEarnings)}</p>
-                    <p className="text-xs text-emerald-600 mt-2">Lifetime, cash + online orders</p>
-                  </div>
-                  <div className="w-16 h-16 bg-emerald-500 rounded-2xl flex items-center justify-center text-white shadow-lg shadow-emerald-200 group-hover:scale-110 transition-transform">
-                    {Icons.earnings}
-                  </div>
+            {/* Section 13 Operational Earnings Breakdown */}
+            {/* Top Balance & Payout Cards */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+              {/* Available Balance */}
+              <div className="bg-white rounded-2xl p-5 border border-blue-100 shadow-xs flex items-center justify-between">
+                <div>
+                  <span className="text-xs font-semibold text-blue-600 block">Available to Withdraw</span>
+                  <span className="text-2xl font-black text-gray-900 mt-1 block">{formatPrice(earnings.availableBalance)}</span>
+                  <span className="text-[11px] text-gray-500 mt-1 block">Ready for immediate transfer</span>
+                </div>
+                <div className="w-12 h-12 bg-blue-50 text-blue-600 rounded-xl flex items-center justify-center">
+                  {Icons.wallet}
                 </div>
               </div>
 
               {/* Pending Payout */}
-              <div className="bg-gradient-to-br from-amber-50 to-amber-100 rounded-2xl p-6 border border-amber-200 hover:shadow-lg transition-all duration-300 group">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm font-medium text-amber-600 mb-2">Pending Payout</p>
-                    <p className="text-3xl font-bold text-amber-700">{formatPrice(earnings.pendingPayout)}</p>
-                    <p className="text-xs text-amber-600 mt-2">Processing</p>
-                  </div>
-                  <div className="w-16 h-16 bg-amber-500 rounded-2xl flex items-center justify-center text-white shadow-lg shadow-amber-200 group-hover:scale-110 transition-transform">
-                    {Icons.pending}
-                  </div>
+              <div className="bg-white rounded-2xl p-5 border border-amber-100 shadow-xs flex items-center justify-between">
+                <div>
+                  <span className="text-xs font-semibold text-amber-600 block">Pending Settlement</span>
+                  <span className="text-2xl font-black text-gray-900 mt-1 block">{formatPrice(earnings.pendingPayout || earnings.pendingSettlement)}</span>
+                  <span className="text-[11px] text-gray-500 mt-1 block">In processing window</span>
+                </div>
+                <div className="w-12 h-12 bg-amber-50 text-amber-600 rounded-xl flex items-center justify-center">
+                  {Icons.pending}
                 </div>
               </div>
 
-              {/* Available Balance */}
-              <div className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-2xl p-6 border border-blue-200 hover:shadow-lg transition-all duration-300 group">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm font-medium text-blue-600 mb-2">Available Balance</p>
-                    <p className="text-3xl font-bold text-blue-700">{formatPrice(earnings.availableBalance)}</p>
-                    <p className="text-xs text-blue-600 mt-2">From online orders only</p>
-                  </div>
-                  <div className="w-16 h-16 bg-blue-500 rounded-2xl flex items-center justify-center text-white shadow-lg shadow-blue-200 group-hover:scale-110 transition-transform">
-                    {Icons.wallet}
-                  </div>
+              {/* Total Earnings */}
+              <div className="bg-white rounded-2xl p-5 border border-emerald-100 shadow-xs flex items-center justify-between">
+                <div>
+                  <span className="text-xs font-semibold text-emerald-600 block">Lifetime Earnings</span>
+                  <span className="text-2xl font-black text-gray-900 mt-1 block">{formatPrice(earnings.totalEarnings)}</span>
+                  <span className="text-[11px] text-gray-500 mt-1 block">Completed orders net sum</span>
+                </div>
+                <div className="w-12 h-12 bg-emerald-50 text-emerald-600 rounded-xl flex items-center justify-center">
+                  {Icons.earnings}
+                </div>
+              </div>
+            </div>
+
+            {/* Performance Overview */}
+            <div className="mb-6">
+              <h2 className="text-sm font-bold text-gray-900 mb-3">
+                Sales & Fee Breakdown
+              </h2>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                <div className="bg-white p-4 rounded-xl border border-gray-100 shadow-xs">
+                  <span className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider block">Today's Sales</span>
+                  <span className="text-lg font-bold text-gray-900 mt-1 block">{formatPrice(earnings.todaySales)}</span>
+                </div>
+
+                <div className="bg-white p-4 rounded-xl border border-gray-100 shadow-xs">
+                  <span className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider block">Today's Orders</span>
+                  <span className="text-lg font-bold text-gray-900 mt-1 block">{earnings.todayOrders}</span>
+                </div>
+
+                <div className="bg-white p-4 rounded-xl border border-gray-100 shadow-xs">
+                  <span className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider block">Gross Volume</span>
+                  <span className="text-lg font-bold text-gray-900 mt-1 block">{formatPrice(earnings.grossSales)}</span>
+                </div>
+
+                <div className="bg-white p-4 rounded-xl border border-red-100 bg-red-50/20 shadow-xs">
+                  <span className="text-[11px] font-semibold text-red-600 uppercase tracking-wider block">Platform Fees</span>
+                  <span className="text-lg font-bold text-red-600 mt-1 block">-{formatPrice(earnings.platformFees)}</span>
                 </div>
               </div>
             </div>

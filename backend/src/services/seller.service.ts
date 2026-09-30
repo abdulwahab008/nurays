@@ -63,12 +63,26 @@ export class SellerService {
     data: {
       businessName: string;
       businessNameUrdu?: string;
+      businessType?: string;
       description?: string;
       kitchenVideoUrl?: string;
       coverImageUrl?: string;
       cnicFrontUrl?: string;
       cnicBackUrl?: string;
       kitchenPhotoUrls?: string[];
+      communityId?: string;
+      primaryCommunityName?: string;
+      latitude?: number;
+      longitude?: number;
+      address?: string;
+      mealCategories?: string[];
+      deliveryModes?: string[];
+      bankAccountName?: string;
+      bankAccountNumber?: string;
+      bankName?: string;
+      jazzcashNumber?: string;
+      easypaisaNumber?: string;
+      agreeToTerms?: boolean;
     }
   ) {
     // Check if user already has a seller account
@@ -77,10 +91,63 @@ export class SellerService {
     });
 
     if (existingSeller) {
+      // If previously rejected, permit re-submitting application with fixed details
+      if (existingSeller.verificationStatus === 'rejected') {
+        const updated = await prisma.seller.update({
+          where: { id: existingSeller.id },
+          data: {
+            businessName: data.businessName,
+            businessNameUrdu: data.businessNameUrdu,
+            businessType: data.businessType || existingSeller.businessType || 'home_kitchen',
+            description: data.description,
+            kitchenVideoUrl: data.kitchenVideoUrl,
+            coverImageUrl: data.coverImageUrl,
+            communityId: data.communityId,
+            primaryCommunityName: data.primaryCommunityName,
+            latitude: data.latitude !== undefined ? data.latitude : existingSeller.latitude,
+            longitude: data.longitude !== undefined ? data.longitude : existingSeller.longitude,
+            mealCategories: data.mealCategories || existingSeller.mealCategories,
+            deliveryModes: data.deliveryModes || existingSeller.deliveryModes,
+            bankAccountName: data.bankAccountName,
+            bankAccountNumber: data.bankAccountNumber,
+            bankName: data.bankName,
+            jazzcashNumber: data.jazzcashNumber,
+            easypaisaNumber: data.easypaisaNumber,
+            verificationStatus: 'pending',
+            rejectionReason: null,
+          },
+        });
+
+        // Add documents if provided
+        if (data.cnicFrontUrl) {
+          await prisma.sellerDocument.create({
+            data: { sellerId: updated.id, documentType: 'cnic_front', documentUrl: data.cnicFrontUrl },
+          });
+        }
+        if (data.cnicBackUrl) {
+          await prisma.sellerDocument.create({
+            data: { sellerId: updated.id, documentType: 'cnic_back', documentUrl: data.cnicBackUrl },
+          });
+        }
+        if (data.kitchenPhotoUrls && data.kitchenPhotoUrls.length > 0) {
+          for (const url of data.kitchenPhotoUrls) {
+            await prisma.sellerDocument.create({
+              data: { sellerId: updated.id, documentType: 'kitchen_photo', documentUrl: url },
+            });
+          }
+        }
+
+        return {
+          sellerId: updated.id,
+          verificationStatus: updated.verificationStatus,
+          message: 'Application resubmitted for review',
+        };
+      }
+
       throw new AppError('Seller account already exists', 400, 'SELLER_ALREADY_EXISTS');
     }
 
-    // Check if user is already a seller type
+    // Check if user exists
     const user = await prisma.user.findUnique({
       where: { id: userId },
     });
@@ -89,25 +156,50 @@ export class SellerService {
       throw new AppError('User not found', 404, 'USER_NOT_FOUND');
     }
 
-    // Create seller account — commissionRate comes from the platform setting
-    // at signup time; each seller's own rate can still be adjusted later.
     const commissionRate = await adminService.getSettingValue<number>('commissionRate');
     const seller = await prisma.seller.create({
       data: {
         userId,
         businessName: data.businessName,
         businessNameUrdu: data.businessNameUrdu,
+        businessType: data.businessType || 'home_kitchen',
         description: data.description,
         kitchenVideoUrl: data.kitchenVideoUrl,
         coverImageUrl: data.coverImageUrl,
+        communityId: data.communityId,
+        primaryCommunityName: data.primaryCommunityName,
+        latitude: data.latitude,
+        longitude: data.longitude,
+        mealCategories: data.mealCategories || [],
+        deliveryModes: data.deliveryModes || ['delivery', 'pickup'],
+        bankAccountName: data.bankAccountName,
+        bankAccountNumber: data.bankAccountNumber,
+        bankName: data.bankName,
+        jazzcashNumber: data.jazzcashNumber,
+        easypaisaNumber: data.easypaisaNumber,
         commissionRate,
-        // CNIC and kitchen photos should be stored via SellerDocument model
-        // For now, we'll skip these fields
-        // status tracks active/inactive/suspended account standing (defaults
-        // to 'active') — approval state lives in verificationStatus alone.
         verificationStatus: 'pending',
       },
     });
+
+    // Store uploaded documents
+    if (data.cnicFrontUrl) {
+      await prisma.sellerDocument.create({
+        data: { sellerId: seller.id, documentType: 'cnic_front', documentUrl: data.cnicFrontUrl },
+      });
+    }
+    if (data.cnicBackUrl) {
+      await prisma.sellerDocument.create({
+        data: { sellerId: seller.id, documentType: 'cnic_back', documentUrl: data.cnicBackUrl },
+      });
+    }
+    if (data.kitchenPhotoUrls && data.kitchenPhotoUrls.length > 0) {
+      for (const url of data.kitchenPhotoUrls) {
+        await prisma.sellerDocument.create({
+          data: { sellerId: seller.id, documentType: 'kitchen_photo', documentUrl: url },
+        });
+      }
+    }
 
     // Update user type to seller (if not already)
     if (user.userType !== 'seller') {
@@ -144,7 +236,9 @@ export class SellerService {
       kitchenVideoUrl: seller.kitchenVideoUrl,
       coverImageUrl: seller.coverImageUrl,
       jazzcashNumber: seller.jazzcashNumber,
+      jazzcashAccountTitle: seller.jazzcashAccountTitle,
       easypaisaNumber: seller.easypaisaNumber,
+      easypaisaAccountTitle: seller.easypaisaAccountTitle,
       bankAccountName: seller.bankAccountName,
       bankAccountNumber: seller.bankAccountNumber,
       bankName: seller.bankName,
@@ -179,7 +273,9 @@ export class SellerService {
       kitchenVideoUrl?: string;
       coverImageUrl?: string;
       jazzcashNumber?: string;
+      jazzcashAccountTitle?: string;
       easypaisaNumber?: string;
+      easypaisaAccountTitle?: string;
       bankAccountName?: string;
       bankAccountNumber?: string;
       bankName?: string;
@@ -231,7 +327,9 @@ export class SellerService {
     if (data.kitchenVideoUrl !== undefined) updateData.kitchenVideoUrl = data.kitchenVideoUrl || null;
     if (data.coverImageUrl !== undefined) updateData.coverImageUrl = data.coverImageUrl || null;
     if (data.jazzcashNumber !== undefined) updateData.jazzcashNumber = data.jazzcashNumber || null;
+    if (data.jazzcashAccountTitle !== undefined) updateData.jazzcashAccountTitle = data.jazzcashAccountTitle || null;
     if (data.easypaisaNumber !== undefined) updateData.easypaisaNumber = data.easypaisaNumber || null;
+    if (data.easypaisaAccountTitle !== undefined) updateData.easypaisaAccountTitle = data.easypaisaAccountTitle || null;
     if (data.bankAccountName !== undefined) updateData.bankAccountName = data.bankAccountName || null;
     if (data.bankAccountNumber !== undefined) updateData.bankAccountNumber = data.bankAccountNumber || null;
     if (data.bankName !== undefined) updateData.bankName = data.bankName || null;
@@ -241,7 +339,7 @@ export class SellerService {
     if (data.freeDeliveryRadiusKm !== undefined) updateData.freeDeliveryRadiusKm = data.freeDeliveryRadiusKm;
     if (data.latitude !== undefined) updateData.latitude = data.latitude;
     if (data.longitude !== undefined) updateData.longitude = data.longitude;
-    if (data.deliveryFeeType !== undefined) updateData.deliveryFeeType = data.deliveryFeeType;
+    if (data.deliveryFeeType !== undefined) updateData.deliveryFeeType = data.deliveryFeeType === '' ? null : data.deliveryFeeType;
     if (data.deliveryFeeFixed !== undefined) updateData.deliveryFeeFixed = data.deliveryFeeFixed;
     if (data.deliveryFeeBase !== undefined) updateData.deliveryFeeBase = data.deliveryFeeBase;
     if (data.deliveryFeePerKm !== undefined) updateData.deliveryFeePerKm = data.deliveryFeePerKm;
@@ -325,9 +423,11 @@ export class SellerService {
       include: {
         order: {
           select: {
+            id: true,
             orderStatus: true,
             paymentStatus: true,
             paymentMethod: true,
+            createdAt: true,
           },
         },
       },
@@ -465,17 +565,45 @@ export class SellerService {
       take: 5,
     });
 
+    // Today's stats
+    const startOfToday = new Date();
+    startOfToday.setHours(0, 0, 0, 0);
+
+    const todayItems = orderItems.filter(
+      (item) => new Date(item.order.createdAt) >= startOfToday
+    );
+    const todayOrders = new Set(todayItems.map((i) => i.order.id)).size;
+    const todaySales = todayItems.reduce((sum, item) => sum + Number(item.totalPrice), 0);
+
+    // Lifetime Gross & Commission
+    const grossSales = completedItems.reduce((sum, item) => sum + Number(item.totalPrice), 0);
+    const platformFees = completedItems.reduce((sum, item) => sum + Number(item.commissionAmount), 0);
+
+    // Settled payouts
+    const completedPayouts = await prisma.sellerPayout.findMany({
+      where: { sellerId, status: 'completed' },
+      select: { netAmount: true },
+    });
+    const paidSettlement = completedPayouts.reduce((sum, p) => sum + Number(p.netAmount), 0);
+
+    const availability = computeSellerAvailability(seller);
+
     return {
       // Seller profile information
       id: seller.id,
       businessName: seller.businessName,
       businessNameUrdu: seller.businessNameUrdu,
+      businessType: seller.businessType,
+      primaryCommunityName: seller.primaryCommunityName,
       description: seller.description,
       kitchenVideoUrl: seller.kitchenVideoUrl,
       coverImageUrl: seller.coverImageUrl,
       verificationStatus: seller.verificationStatus,
+      rejectionReason: seller.rejectionReason,
       status: seller.status,
       isVerified: seller.isVerified,
+      availabilityOverride: seller.availabilityOverride,
+      isStoreOpen: availability.isOpen,
       createdAt: seller.createdAt,
       updatedAt: seller.updatedAt,
       // Dashboard analytics
@@ -485,13 +613,17 @@ export class SellerService {
         pendingOrders,
         totalEarnings,
         pendingPayout,
-        // Facilitator-model breakdown: COD money is already in the seller's
-        // hands; only online-collected money is actually withdrawable, net
-        // of commission owed on COD sales.
         codCommissionOwed,
         availableForPayout: Math.max(0, availableForPayout),
         rating: Number(seller.ratingAverage),
         totalReviews: seller.totalReviews,
+        todaySales,
+        todayOrders,
+        grossSales,
+        platformFees,
+        netEarnings: totalEarnings,
+        pendingSettlement: pendingPayout,
+        paidSettlement,
       },
       recentOrders: recentOrderItems.map((item) => ({
         orderId: item.order.id,
@@ -799,6 +931,38 @@ export class SellerService {
       processedAt: p.processedAt,
       failedReason: p.failedReason,
     }));
+  }
+
+  /**
+   * 1-Click Toggle Store Open / Closed Status
+   */
+  async toggleStoreStatus(sellerId: string) {
+    const seller = await prisma.seller.findUnique({
+      where: { id: sellerId },
+    });
+
+    if (!seller) {
+      throw new AppError('Seller not found', 404, 'SELLER_NOT_FOUND');
+    }
+
+    const currentAvailability = computeSellerAvailability(seller);
+    const nextOverride = currentAvailability.isOpen ? 'closed' : 'open';
+
+    const updated = await prisma.seller.update({
+      where: { id: sellerId },
+      data: {
+        availabilityOverride: nextOverride,
+        availabilityOverrideUntil: null,
+      },
+    });
+
+    const newAvailability = computeSellerAvailability(updated);
+
+    return {
+      availabilityOverride: updated.availabilityOverride,
+      isOpen: newAvailability.isOpen,
+      message: newAvailability.isOpen ? 'Store is now OPEN and accepting orders' : 'Store is now CLOSED',
+    };
   }
 }
 

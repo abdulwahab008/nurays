@@ -36,6 +36,8 @@ import hubRoutes from './routes/hub.routes';
 import riderRoutes from './routes/rider.routes';
 import supportRoutes from './routes/support.routes';
 import uploadRoutes from './routes/upload.routes';
+import communityRoutes from './routes/community.routes';
+import favoriteRoutes from './routes/favorite.routes';
 
 const app = express();
 const httpServer = createServer(app);
@@ -103,6 +105,8 @@ app.use(`/api/${API_VERSION}/notifications`, notificationRoutes);
 app.use(`/api/${API_VERSION}/hubs`, hubRoutes);
 app.use(`/api/${API_VERSION}/riders`, riderRoutes);
 app.use(`/api/${API_VERSION}/support`, supportRoutes);
+app.use(`/api/${API_VERSION}/communities`, communityRoutes);
+app.use(`/api/${API_VERSION}/favorites`, favoriteRoutes);
 
 // Root endpoint
 app.get('/', (_req, res) => {

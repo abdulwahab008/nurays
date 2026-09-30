@@ -37,6 +37,17 @@ const SELLER_ORDERING_SELECT = {
   allowedPostalCodes: true,
   deliveryZones: true,
   deliveryModes: true,
+  communityId: true,
+  primaryCommunityName: true,
+  allowCrossCommunity: true,
+  community: {
+    select: {
+      id: true,
+      name: true,
+      slug: true,
+      deliveryBaseFee: true,
+    },
+  },
 } as const;
 
 function attachAvailability<T extends Record<string, unknown>>(seller: T) {
@@ -196,6 +207,7 @@ export class ProductService {
     customerLat?: number;
     customerLng?: number;
     maxDistanceKm?: number;
+    communityId?: string;
   }) {
     const page = filters.page || 1;
     const limit = Math.min(filters.limit || 20, 100);
@@ -349,14 +361,17 @@ export class ProductService {
     } as const;
 
     const hasCustomerLocation = filters.customerLat != null && filters.customerLng != null;
-    const needsInMemoryFilter =
-      !!filters.openNow || !!filters.fastDelivery || (filters.maxDistanceKm != null && hasCustomerLocation);
+    const targetCommunity = filters.communityId
+      ? await prisma.community.findFirst({
+          where: { OR: [{ id: filters.communityId }, { slug: filters.communityId }] },
+        })
+      : null;
 
-    // "Open now" and "within X km" can't be expressed as DB predicates (per-day
-    // sessions and haversine distance both need real computation), so when
-    // requested we pull a larger candidate window, filter in JS, then paginate
-    // the filtered set ourselves. Fine at this app's data volume; would need a
-    // materialized "is_open" column / PostGIS to scale further.
+    const needsInMemoryFilter =
+      !!filters.openNow || !!filters.fastDelivery || !!targetCommunity || (filters.maxDistanceKm != null && hasCustomerLocation);
+
+    // "Open now", "within X km", and community-priority can't be expressed as simple DB predicates,
+    // so when requested we pull a candidate window, filter/sort in JS, then paginate.
     let products: Array<Awaited<ReturnType<typeof prisma.product.findMany<{ where: typeof where; include: typeof productInclude; orderBy: typeof orderBy }>>>[number]>;
     let total: number;
 
@@ -367,7 +382,7 @@ export class ProductService {
         include: productInclude,
         take: 500,
       });
-      const filtered = candidates.filter((p) => {
+      let filtered = candidates.filter((p) => {
         if (filters.openNow && !computeSellerAvailability(p.seller as any).isOpen) return false;
         if (filters.maxDistanceKm != null && hasCustomerLocation) {
           const seller = p.seller as any;
@@ -391,6 +406,32 @@ export class ProductService {
         }
         return true;
       });
+
+      // Priority sort by Community:
+      // Tier 1: Same community (Score 100)
+      // Tier 2: Neighbor communities (Score 50)
+      // Tier 3: Other serviceable communities (Score 10)
+      if (targetCommunity && (!filters.sort || filters.sort === 'popular')) {
+        filtered = filtered.sort((a, b) => {
+          const sellerA = a.seller as any;
+          const sellerB = b.seller as any;
+          const scoreA =
+            sellerA.communityId === targetCommunity.id
+              ? 100
+              : targetCommunity.neighborCommunityIds.includes(sellerA.communityId)
+              ? 50
+              : 10;
+          const scoreB =
+            sellerB.communityId === targetCommunity.id
+              ? 100
+              : targetCommunity.neighborCommunityIds.includes(sellerB.communityId)
+              ? 50
+              : 10;
+          if (scoreB !== scoreA) return scoreB - scoreA;
+          return Number(b.ratingAverage) - Number(a.ratingAverage);
+        });
+      }
+
       total = filtered.length;
       products = filtered.slice(skip, skip + limit);
     } else {
@@ -410,21 +451,41 @@ export class ProductService {
     // in this page of results, not once per product, to avoid redundant work
     // (and the DB query isAcceptingOrders makes) when several products share a seller.
     const sellerInfoById = new Map<string, Awaited<ReturnType<typeof computeCustomerFacingSellerInfo>>>();
-    for (const product of products) {
-      const seller = product.seller as any;
-      if (!sellerInfoById.has(seller.id)) {
-        sellerInfoById.set(
-          seller.id,
-          await computeCustomerFacingSellerInfo(seller, filters.customerLat, filters.customerLng)
-        );
-      }
-    }
+    const uniqueSellers = Array.from(
+      new Map(products.map((p) => [(p.seller as any).id, p.seller as any])).values()
+    );
+    await Promise.all(
+      uniqueSellers.map(async (seller) => {
+        const info = await computeCustomerFacingSellerInfo(seller, filters.customerLat, filters.customerLng);
+        sellerInfoById.set(seller.id, info);
+      })
+    );
 
     // Format products
     const baseUrl = process.env.BASE_URL || 'http://localhost:3001';
     const formattedProducts = products.map((product) => {
       const imageUrl = product.images[0]?.imageUrl || null;
-      const sellerInfo = sellerInfoById.get((product.seller as any).id)!;
+      const seller = product.seller as any;
+      const sellerInfo = sellerInfoById.get(seller.id)!;
+      const sellerCommunity = seller.community || (seller.primaryCommunityName ? { name: seller.primaryCommunityName } : null);
+
+      let communityBadge = 'Community Seller';
+      let isSameCommunity = false;
+      let isCrossCommunity = false;
+
+      if (targetCommunity) {
+        if (seller.communityId === targetCommunity.id) {
+          communityBadge = 'Same Community';
+          isSameCommunity = true;
+        } else if (targetCommunity.neighborCommunityIds.includes(seller.communityId)) {
+          communityBadge = 'Nearby Community';
+          isCrossCommunity = true;
+        } else {
+          communityBadge = 'Cross-Community';
+          isCrossCommunity = true;
+        }
+      }
+
       return {
         id: product.id,
         name: product.name,
@@ -438,8 +499,13 @@ export class ProductService {
         totalReviews: product.totalReviews,
         primaryImage: imageUrl ? (imageUrl.startsWith('http') ? imageUrl : `${baseUrl}${imageUrl}`) : null,
         category: product.category,
+        community: sellerCommunity,
+        communityBadge,
+        isSameCommunity,
+        isCrossCommunity,
         seller: {
           ...attachAvailability(product.seller),
+          community: sellerCommunity,
           isAcceptingOrders: sellerInfo.isAcceptingOrders,
           acceptingOrdersReason: sellerInfo.acceptingReason,
         },

@@ -1,12 +1,38 @@
 'use client';
 
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
-import { useState, useEffect } from 'react';
+import { useRouter, usePathname } from 'next/navigation';
+import { useState, useEffect, useRef } from 'react';
 import { useAuthStore } from '@/lib/store/auth-store';
 import { useCartStore } from '@/lib/store/cart-store';
 import { apiClient } from '@/lib/api-client';
 import { Mark, Wordmark } from '@/components/ui/Mark';
+import { CommunitySelector } from '@/components/community/CommunitySelector';
+import {
+  Bell,
+  CheckCheck,
+  Package,
+  Tag,
+  Truck,
+  AlertCircle,
+  Info,
+  ChevronRight,
+  Bike,
+  Radio,
+  Coins,
+  MessageCircle,
+} from 'lucide-react';
+
+
+interface NavbarNotification {
+  id: string;
+  type?: string;
+  title: string;
+  message: string;
+  isRead: boolean;
+  createdAt: string;
+  actionUrl?: string | null;
+}
 
 interface DashboardNavbarProps {
   title: string;
@@ -16,113 +42,61 @@ interface DashboardNavbarProps {
   drawerOpen?: boolean;
 }
 
-// City detection from coordinates
-const detectCityFromCoords = (lat: number, lng: number): string => {
-  if (lat >= 31.3 && lat <= 31.7 && lng >= 74.1 && lng <= 74.5) return 'Lahore';
-  if (lat >= 24.7 && lat <= 25.1 && lng >= 66.8 && lng <= 67.3) return 'Karachi';
-  if (lat >= 33.5 && lat <= 33.8 && lng >= 72.8 && lng <= 73.3) return 'Islamabad';
-  if (lat >= 33.4 && lat <= 33.7 && lng >= 73.0 && lng <= 73.2) return 'Rawalpindi';
-  if (lat >= 31.3 && lat <= 31.6 && lng >= 72.9 && lng <= 73.2) return 'Faisalabad';
-  if (lat >= 29.9 && lat <= 30.3 && lng >= 71.3 && lng <= 71.6) return 'Multan';
-  if (lat >= 33.9 && lat <= 34.1 && lng >= 71.4 && lng <= 71.7) return 'Peshawar';
-  if (lat >= 30.1 && lat <= 30.3 && lng >= 66.9 && lng <= 67.1) return 'Quetta';
-  return 'Pakistan';
-};
-
-// City name mappings (Urdu to English)
-const cityMappings: Record<string, string> = {
-  'لاہور': 'Lahore', 'ضلع لاہور': 'Lahore',
-  'کراچی': 'Karachi', 'اسلام آباد': 'Islamabad',
-  'راولپنڈی': 'Rawalpindi', 'فیصل آباد': 'Faisalabad',
-  'ملتان': 'Multan', 'پشاور': 'Peshawar', 'کوئٹہ': 'Quetta',
-};
-
-const supportedCities = ['Lahore', 'Karachi', 'Islamabad', 'Rawalpindi', 'Faisalabad', 'Multan', 'Peshawar', 'Quetta'];
-
 export function DashboardNavbar({ title, subtitle, userType = 'customer', onMenuToggle, drawerOpen }: DashboardNavbarProps) {
   const router = useRouter();
-  const { logout, user } = useAuthStore();
+  const pathname = usePathname() || '';
+  const { logout, user, isAuthenticated } = useAuthStore();
   const { items } = useCartStore();
   const [searchQuery, setSearchQuery] = useState('');
   const [showDropdown, setShowDropdown] = useState(false);
-  const [userLocation, setUserLocation] = useState<string>('Detecting...');
-  const [locationArea, setLocationArea] = useState<string>('');
   const [notificationUnreadCount, setNotificationUnreadCount] = useState<number>(0);
+  const [showNotificationsPanel, setShowNotificationsPanel] = useState<boolean>(false);
+  const [recentNotifications, setRecentNotifications] = useState<NavbarNotification[]>([]);
+  const [loadingNotifications, setLoadingNotifications] = useState<boolean>(false);
+  const notificationRef = useRef<HTMLDivElement>(null);
+  const dropdownRef = useRef<HTMLDivElement>(null);
 
-  // Determine if this is a seller/admin context
-  const isSeller = userType === 'seller';
-  const isAdmin = userType === 'admin';
-  const isRider = userType === 'rider';
-  const isCustomer = userType === 'customer';
+  // Click outside listener for user dropdown menu
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setShowDropdown(false);
+      }
+    };
+    if (showDropdown) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [showDropdown]);
+
+
+  // Determine UI context strictly based on active route and layout userType:
+  const isRider = pathname.startsWith('/riders') || (userType === 'rider' && !pathname.startsWith('/sellers') && !pathname.startsWith('/admin'));
+  const isSeller = pathname.startsWith('/sellers') || (userType === 'seller' && !pathname.startsWith('/riders') && !pathname.startsWith('/admin'));
+  const isAdmin = pathname.startsWith('/admin') || (userType === 'admin' && !pathname.startsWith('/sellers') && !pathname.startsWith('/riders'));
+  const isCustomer = !isRider && !isSeller && !isAdmin;
+
+  // Actual user account role (for quick studio switch links)
+  const userRole = user?.userType || user?.user_type;
+  const isUserSeller = userRole === 'seller';
+  const isUserRider = userRole === 'rider';
+  const isUserAdmin = userRole === 'admin';
 
   // Get the correct dashboard link based on user type
   const getDashboardLink = () => {
+    if (isRider) return '/riders/dashboard';
     if (isSeller) return '/sellers/dashboard';
     if (isAdmin) return '/admin/dashboard';
-    if (isRider) return '/riders/dashboard';
+    if (isUserSeller) return '/sellers/dashboard';
+    if (isUserRider) return '/riders/dashboard';
+    if (isUserAdmin) return '/admin/dashboard';
     return '/dashboard';
   };
 
-  // Theme accents — forest for customer/admin, ink for seller (premium-marketplace direction)
-  const accentBg = isSeller ? 'var(--ink-900)' : 'var(--forest-500)';
-  // Detect user's location on mount
-  useEffect(() => {
-    const detectLocation = async () => {
-      if (!navigator.geolocation) {
-        setUserLocation('Pakistan');
-        return;
-      }
-
-      navigator.geolocation.getCurrentPosition(
-        async (position) => {
-          const { latitude, longitude } = position.coords;
-
-          try {
-            // Use our API proxy to avoid CORS (Nominatim blocks direct browser requests)
-            const response = await fetch(
-              `/api/geocode/reverse?lat=${encodeURIComponent(latitude)}&lon=${encodeURIComponent(longitude)}`
-            );
-            if (!response.ok) throw new Error('Geocode failed');
-            const data = await response.json();
-
-            if (data && data.address) {
-              const addr = data.address;
-              const possibleCity = addr.city || addr.town || addr.village || addr.district || addr.county || '';
-              
-              // Check Urdu mappings first
-              let detectedCity = cityMappings[possibleCity] || '';
-              
-              // Try English matching
-              if (!detectedCity) {
-                detectedCity = supportedCities.find(city => 
-                  possibleCity.toLowerCase().includes(city.toLowerCase()) ||
-                  city.toLowerCase().includes(possibleCity.toLowerCase())
-                ) || '';
-              }
-              
-              // Fallback to coordinate detection
-              if (!detectedCity) {
-                detectedCity = detectCityFromCoords(latitude, longitude);
-              }
-              
-              setUserLocation(detectedCity || 'Pakistan');
-              setLocationArea(addr.suburb || addr.neighbourhood || addr.road || '');
-            } else {
-              setUserLocation(detectCityFromCoords(latitude, longitude));
-            }
-          } catch {
-            setUserLocation(detectCityFromCoords(latitude, longitude));
-          }
-        },
-        () => {
-          setUserLocation('Pakistan');
-        },
-        { enableHighAccuracy: false, timeout: 5000, maximumAge: 300000 }
-      );
-    };
-
-    detectLocation();
-  }, []);
+  // Theme accents — ink for seller, emerald for rider, forest for customer/admin
+  const accentBg = isRider ? '#059669' : isSeller ? 'var(--ink-900)' : 'var(--forest-500)';
 
   // Fetch notification unread count so we only show the red dot when there are unread
   useEffect(() => {
@@ -140,6 +114,131 @@ export function DashboardNavbar({ title, subtitle, userType = 'customer', onMenu
     return () => { cancelled = true; };
   }, [user?.id]);
 
+  // Click outside listener for notification panel
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (notificationRef.current && !notificationRef.current.contains(event.target as Node)) {
+        setShowNotificationsPanel(false);
+      }
+    };
+    if (showNotificationsPanel) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [showNotificationsPanel]);
+
+  const fetchRecentNotifications = async () => {
+    if (!user?.id) return;
+    setLoadingNotifications(true);
+    try {
+      const res = await apiClient.get('/notifications', { params: { limit: 5 } });
+      if (res.data?.success && res.data?.data) {
+        const list = res.data.data.notifications || [];
+        setRecentNotifications(
+          list.map((n: any) => ({
+            id: n.id,
+            type: n.type || 'system',
+            title: n.title,
+            message: n.message,
+            isRead: Boolean(n.isRead),
+            createdAt: n.createdAt,
+            actionUrl: n.actionUrl || n.link || null,
+          }))
+        );
+        setNotificationUnreadCount(res.data.data.unreadCount ?? 0);
+      }
+    } catch (error) {
+      console.error('Failed to fetch recent notifications:', error);
+    } finally {
+      setLoadingNotifications(false);
+    }
+  };
+
+  const handleToggleNotifications = () => {
+    if (!showNotificationsPanel) {
+      fetchRecentNotifications();
+    }
+    setShowNotificationsPanel(prev => !prev);
+  };
+
+  const handleMarkNotificationRead = async (id: string, actionUrl?: string | null) => {
+    try {
+      await apiClient.patch(`/notifications/${id}/read`);
+      setRecentNotifications(prev =>
+        prev.map(n => (n.id === id ? { ...n, isRead: true } : n))
+      );
+      setNotificationUnreadCount(prev => Math.max(0, prev - 1));
+    } catch (err) {
+      console.error('Failed to mark notification read:', err);
+    }
+    if (actionUrl) {
+      setShowNotificationsPanel(false);
+      router.push(actionUrl);
+    }
+  };
+
+  const handleMarkAllNotificationsRead = async () => {
+    try {
+      await apiClient.patch('/notifications/read-all');
+      setRecentNotifications(prev => prev.map(n => ({ ...n, isRead: true })));
+      setNotificationUnreadCount(0);
+    } catch (err) {
+      console.error('Failed to mark all notifications read:', err);
+    }
+  };
+
+  const getNotificationIcon = (type?: string) => {
+    switch (type) {
+      case 'order':
+        return <Package className="w-4 h-4 text-blue-600" />;
+      case 'promo':
+        return <Tag className="w-4 h-4 text-amber-600" />;
+      case 'delivery':
+        return <Truck className="w-4 h-4 text-emerald-600" />;
+      case 'warning':
+        return <AlertCircle className="w-4 h-4 text-rose-600" />;
+      default:
+        return <Info className="w-4 h-4 text-slate-600" />;
+    }
+  };
+
+  const getNotificationIconBg = (type?: string) => {
+    switch (type) {
+      case 'order':
+        return 'bg-blue-50 border-blue-100';
+      case 'promo':
+        return 'bg-amber-50 border-amber-100';
+      case 'delivery':
+        return 'bg-emerald-50 border-emerald-100';
+      case 'warning':
+        return 'bg-rose-50 border-rose-100';
+      default:
+        return 'bg-slate-50 border-slate-100';
+    }
+  };
+
+  const formatRelativeTime = (dateStr: string) => {
+    try {
+      const date = new Date(dateStr);
+      const now = new Date();
+      const diffMs = now.getTime() - date.getTime();
+      const diffMinutes = Math.floor(diffMs / (1000 * 60));
+      const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
+      const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+
+      if (diffMinutes < 1) return 'Just now';
+      if (diffMinutes < 60) return `${diffMinutes}m ago`;
+      if (diffHours < 24) return `${diffHours}h ago`;
+      if (diffDays === 1) return 'Yesterday';
+      if (diffDays < 7) return `${diffDays}d ago`;
+      return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+    } catch {
+      return '';
+    }
+  };
+
   const handleLogout = () => {
     logout();
     router.push('/login');
@@ -156,8 +255,7 @@ export function DashboardNavbar({ title, subtitle, userType = 'customer', onMenu
 
   return (
     <nav
-      className="fixed top-0 left-0 right-0 z-50 h-16 backdrop-blur-md"
-      style={{ background: 'rgba(251,248,241,0.94)', borderBottom: '1px solid var(--ink-100)' }}
+      className="fixed top-0 left-0 right-0 z-50 h-16 bg-white/95 backdrop-blur-md border-b border-slate-200/80 shadow-xs"
     >
       <div className="flex items-center justify-between h-full px-3 sm:px-6 gap-2">
         {/* Logo Section */}
@@ -191,7 +289,7 @@ export function DashboardNavbar({ title, subtitle, userType = 'customer', onMenu
             <div className="hidden sm:block leading-tight">
               <Wordmark size={22} />
               <p className="eyebrow mt-0.5">
-                {isSeller ? 'Seller studio' : isAdmin ? 'Admin console' : 'Customer'}
+                {isSeller ? 'Seller studio' : isAdmin ? 'Admin console' : isRider ? 'Rider fleet' : 'Customer'}
               </p>
             </div>
           </Link>
@@ -229,8 +327,8 @@ export function DashboardNavbar({ title, subtitle, userType = 'customer', onMenu
           </div>
         )}
 
-        {/* Center - Seller/Admin Title */}
-        {(isSeller || isAdmin) && (
+        {/* Center - Seller/Admin/Rider Title */}
+        {(isSeller || isAdmin || isRider) && (
           <div className="hidden md:flex flex-1 justify-center">
             <div className="text-center">
               <h2 className="font-display italic text-[22px]" style={{ color: 'var(--ink-900)' }}>
@@ -242,31 +340,24 @@ export function DashboardNavbar({ title, subtitle, userType = 'customer', onMenu
         )}
         
         {/* Right Side - Actions */}
-        <div className="flex items-center gap-1">
-          {/* Location/Delivery - Only for customers, hidden until xl */}
+        <div className="flex items-center gap-1.5 sm:gap-2">
+
+          {/* Community Selector - Only for customers */}
           {isCustomer && (
-            <Link href="/profile/addresses" className="hidden xl:flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-gray-50 transition-colors">
-              <svg className="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 10.5a3 3 0 11-6 0 3 3 0 016 0z" />
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M19.5 10.5c0 7.142-7.5 11.25-7.5 11.25S4.5 17.642 4.5 10.5a7.5 7.5 0 1115 0z" />
-              </svg>
+            <div className="flex items-center">
+              <CommunitySelector variant="navbar" />
+            </div>
+          )}
+
+          {/* Rider Location Badge - Dedicated to fleet hub, NEVER links to customer addresses! */}
+          {isRider && (
+            <div className="hidden xl:flex items-center gap-2 px-3 py-1.5 rounded-xl bg-slate-100 border border-slate-200">
+              <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse" />
               <div className="text-left">
-                <p className="text-[10px] text-gray-400 font-medium">Deliver to</p>
-                <p className="text-sm text-gray-900 font-semibold truncate max-w-[100px]">
-                  {userLocation === 'Detecting...' ? (
-                    <span className="flex items-center gap-1">
-                      <span className="w-2 h-2 bg-gray-500 rounded-full animate-pulse"></span>
-                      Detecting...
-                    </span>
-                  ) : (
-                    locationArea ? `${locationArea}, ${userLocation}` : userLocation
-                  )}
-                </p>
+                <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block">Assigned Zone</span>
+                <span className="text-xs text-slate-800 font-black">Karachi Central Hub</span>
               </div>
-              <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-              </svg>
-            </Link>
+            </div>
           )}
 
           {/* Cart - Only for customers */}
@@ -312,58 +403,193 @@ export function DashboardNavbar({ title, subtitle, userType = 'customer', onMenu
             </>
           )}
 
-          {/* Notifications */}
-          <Link href={isSeller ? "/sellers/notifications" : isAdmin ? "/admin/notifications" : "/notifications"} className="relative">
-            <button className="w-10 h-10 rounded-lg hover:bg-gray-50 flex items-center justify-center transition-colors">
-              <svg className="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M14.857 17.082a23.848 23.848 0 005.454-1.31A8.967 8.967 0 0118 9.75v-.7V9A6 6 0 006 9v.75a8.967 8.967 0 01-2.312 6.022c1.733.64 3.56 1.085 5.455 1.31m5.714 0a24.255 24.255 0 01-5.714 0m5.714 0a3 3 0 11-5.714 0" />
-              </svg>
-            </button>
-            {notificationUnreadCount > 0 && (
-              <span className="absolute top-2 right-2 w-2 h-2 bg-red-500 rounded-full" aria-hidden="true"></span>
-            )}
-          </Link>
-          
-          {/* User Dropdown */}
-          <div className="relative ml-2">
-            <button 
-              onClick={() => setShowDropdown(!showDropdown)}
-              onBlur={() => setTimeout(() => setShowDropdown(false), 150)}
-              className="flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-gray-50 transition-colors"
+          {/* Notifications Panel */}
+          <div className="relative" ref={notificationRef}>
+            <button
+              type="button"
+              onClick={handleToggleNotifications}
+              aria-label="Notifications"
+              aria-expanded={showNotificationsPanel}
+              className={`relative w-10 h-10 rounded-lg flex items-center justify-center transition-colors ${
+                showNotificationsPanel 
+                  ? 'bg-amber-50 text-amber-600' 
+                  : 'text-gray-600 hover:bg-gray-50'
+              }`}
+              title="Notifications"
             >
-              <div
-                className="w-9 h-9 rounded-full flex items-center justify-center"
-                style={{ background: accentBg, color: 'var(--cream-50)' }}
-              >
-                <span className="font-semibold text-sm">
-                  {user?.profile?.fullName?.charAt(0).toUpperCase() || user?.email?.charAt(0).toUpperCase() || 'U'}
-                </span>
-              </div>
-              <span className="hidden sm:block text-gray-700 text-sm font-medium">
-                {user?.profile?.fullName?.split(' ')[0] || 'User'}
-              </span>
-              <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-              </svg>
+              <Bell className="w-5 h-5" />
+              {notificationUnreadCount > 0 && (
+                <span className="absolute top-2 right-2 w-2 h-2 bg-red-500 rounded-full" aria-hidden="true" />
+              )}
             </button>
+
+            {/* Notification Dropdown Panel */}
+            {showNotificationsPanel && (
+              <div className="absolute right-0 top-full mt-2 w-80 sm:w-96 bg-white rounded-2xl shadow-xl border border-gray-100 z-50 overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+                {/* Panel Header */}
+                <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100 bg-gray-50/70">
+                  <div className="flex items-center gap-2">
+                    <span className="font-semibold text-sm text-gray-900">Notifications</span>
+                    {notificationUnreadCount > 0 && (
+                      <span className="px-2 py-0.5 text-[11px] font-bold rounded-full bg-amber-100 text-amber-800">
+                        {notificationUnreadCount} new
+                      </span>
+                    )}
+                  </div>
+                  {notificationUnreadCount > 0 && (
+                    <button
+                      type="button"
+                      onClick={handleMarkAllNotificationsRead}
+                      className="text-xs font-medium text-amber-600 hover:text-amber-700 flex items-center gap-1 transition-colors"
+                    >
+                      <CheckCheck className="w-3.5 h-3.5" />
+                      <span>Mark all read</span>
+                    </button>
+                  )}
+                </div>
+
+                {/* Panel Body */}
+                <div className="max-h-80 overflow-y-auto divide-y divide-gray-50">
+                  {loadingNotifications ? (
+                    <div className="py-8 flex flex-col items-center justify-center gap-2 text-gray-400">
+                      <div className="w-5 h-5 border-2 border-amber-500 border-t-transparent rounded-full animate-spin" />
+                      <span className="text-xs">Loading updates...</span>
+                    </div>
+                  ) : recentNotifications.length === 0 ? (
+                    <div className="py-10 px-4 text-center">
+                      <div className="w-10 h-10 rounded-full bg-gray-100 flex items-center justify-center mx-auto mb-2 text-gray-400">
+                        <Bell className="w-5 h-5" />
+                      </div>
+                      <p className="text-sm font-semibold text-gray-900">All caught up!</p>
+                      <p className="text-xs text-gray-500 mt-0.5">No notifications at the moment.</p>
+                    </div>
+                  ) : (
+                    recentNotifications.map((notif) => (
+                      <div
+                        key={notif.id}
+                        onClick={() => handleMarkNotificationRead(notif.id, notif.actionUrl)}
+                        className={`p-3.5 flex items-start gap-3 hover:bg-gray-50 cursor-pointer transition-colors ${
+                          !notif.isRead ? 'bg-amber-50/30' : ''
+                        }`}
+                      >
+                        <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 border ${getNotificationIconBg(notif.type)}`}>
+                          {getNotificationIcon(notif.type)}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center justify-between gap-1 mb-0.5">
+                            <p className={`text-xs font-semibold truncate ${!notif.isRead ? 'text-gray-900' : 'text-gray-700'}`}>
+                              {notif.title}
+                            </p>
+                            <span className="text-[10px] text-gray-400 shrink-0">
+                              {formatRelativeTime(notif.createdAt)}
+                            </span>
+                          </div>
+                          <p className="text-xs text-gray-600 line-clamp-2 leading-relaxed">
+                            {notif.message}
+                          </p>
+                        </div>
+                        {!notif.isRead && (
+                          <span className="w-1.5 h-1.5 rounded-full bg-amber-500 shrink-0 mt-1.5" />
+                        )}
+                      </div>
+                    ))
+                  )}
+                </div>
+
+                {/* Panel Footer */}
+                <div className="p-2 border-t border-gray-100 bg-gray-50/50">
+                  <Link
+                    href={isSeller ? "/sellers/notifications" : isAdmin ? "/admin/notifications" : isRider ? "/riders/dashboard" : "/notifications"}
+                    onClick={() => setShowNotificationsPanel(false)}
+                    className="w-full py-2 px-3 text-center text-xs font-medium text-gray-700 hover:text-amber-600 hover:bg-white rounded-lg transition-colors flex items-center justify-center gap-1 border border-transparent hover:border-gray-200"
+                  >
+                    <span>View all notifications</span>
+                    <ChevronRight className="w-3.5 h-3.5" />
+                  </Link>
+                </div>
+              </div>
+            )}
+          </div>
+          
+          {/* User Dropdown or Sign In */}
+          {!user && !isAuthenticated ? (
+            <div className="flex items-center gap-2 ml-2">
+              <Link
+                href="/login"
+                className="px-4 py-2 rounded-xl text-xs font-bold text-white shadow-xs transition-transform active:scale-95 bg-[#FF5500] hover:bg-[#e04400]"
+              >
+                Sign In
+              </Link>
+            </div>
+          ) : (
+            <div className="relative ml-2" ref={dropdownRef}>
+              <button 
+                type="button"
+                onClick={() => setShowDropdown(!showDropdown)}
+                className="flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-gray-50 transition-colors cursor-pointer"
+              >
+                <div
+                  className="w-9 h-9 rounded-full flex items-center justify-center shadow-2xs"
+                  style={{ background: accentBg, color: 'var(--cream-50)' }}
+                >
+                  <span className="font-semibold text-sm">
+                    {user?.profile?.fullName?.charAt(0).toUpperCase() || user?.email?.charAt(0).toUpperCase() || 'U'}
+                  </span>
+                </div>
+                <span className="hidden sm:block text-gray-700 text-sm font-bold">
+                  {user?.profile?.fullName?.split(' ')[0] || 'User'}
+                </span>
+                <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                </svg>
+              </button>
             
             {/* Dropdown Menu */}
             {showDropdown && (
-              <div className="absolute right-0 top-full mt-2 w-56 bg-white rounded-xl shadow-lg border border-gray-100 py-1 z-50">
-                <div className="px-4 py-3 border-b border-gray-100">
-                  <p className="text-gray-900 font-semibold truncate">{user?.profile?.fullName || 'User'}</p>
-                  <p className="text-xs text-gray-500 truncate">{user?.email}</p>
-                  <span
-                    className="inline-block mt-1 px-2.5 py-0.5 text-[10px] font-semibold rounded-full uppercase tracking-[0.14em]"
-                    style={{
-                      background: isSeller ? 'var(--ink-100)' : isAdmin ? 'var(--gold-50)' : 'var(--forest-50)',
-                      color: isSeller ? 'var(--ink-700)' : isAdmin ? 'var(--gold-700)' : 'var(--forest-700)',
-                    }}
-                  >
-                    {isSeller ? 'Seller' : isAdmin ? 'Admin' : 'Customer'}
-                  </span>
+              <div className="absolute right-0 top-full mt-2 w-72 bg-white rounded-2xl shadow-xl border border-gray-100 py-1 z-50 overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+                <div className="px-4 py-3 border-b border-gray-100 bg-gray-50/70">
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="text-gray-900 font-bold truncate text-sm">{user?.profile?.fullName || 'User'}</p>
+                    <span
+                      className="px-2 py-0.5 text-[10px] font-black rounded-full uppercase tracking-wider shrink-0"
+                      style={{
+                        background: isSeller ? 'var(--ink-100)' : isAdmin ? 'var(--gold-50)' : isRider ? '#ECFDF5' : 'var(--forest-50)',
+                        color: isSeller ? 'var(--ink-700)' : isAdmin ? 'var(--gold-700)' : isRider ? '#065F46' : 'var(--forest-700)',
+                      }}
+                    >
+                      {isSeller ? 'Seller' : isAdmin ? 'Admin' : isRider ? 'Rider Fleet' : 'Customer'}
+                    </span>
+                  </div>
+                  <p className="text-xs text-gray-500 truncate mt-0.5">{user?.email}</p>
                 </div>
+
+
                 <div className="py-1">
+                  {/* Rider-specific menu items */}
+                  {isRider && (
+                    <>
+                      <Link href="/riders/dashboard" className="flex items-center gap-3 px-4 py-2 text-gray-700 hover:bg-gray-50 transition-colors">
+                        <Bike className="w-4 h-4 text-emerald-600" />
+                        <span className="text-sm font-medium">Fleet Command</span>
+                      </Link>
+                      <Link href="/riders/dashboard#active" className="flex items-center gap-3 px-4 py-2 text-gray-700 hover:bg-gray-50 transition-colors">
+                        <Package className="w-4 h-4 text-emerald-600" />
+                        <span className="text-sm font-medium">Active Deliveries</span>
+                      </Link>
+                      <Link href="/riders/dashboard#available" className="flex items-center gap-3 px-4 py-2 text-gray-700 hover:bg-gray-50 transition-colors">
+                        <Radio className="w-4 h-4 text-emerald-600" />
+                        <span className="text-sm font-medium">Available Pool</span>
+                      </Link>
+                      <Link href="/riders/dashboard#cash" className="flex items-center gap-3 px-4 py-2 text-gray-700 hover:bg-gray-50 transition-colors">
+                        <Coins className="w-4 h-4 text-emerald-600" />
+                        <span className="text-sm font-medium">COD Cash Settlement</span>
+                      </Link>
+                      <Link href="/support" className="flex items-center gap-3 px-4 py-2 text-gray-700 hover:bg-gray-50 transition-colors">
+                        <MessageCircle className="w-4 h-4 text-emerald-600" />
+                        <span className="text-sm font-medium">Fleet Support</span>
+                      </Link>
+                    </>
+                  )}
                   {/* Seller-specific menu items */}
                   {isSeller && (
                     <>
@@ -414,7 +640,19 @@ export function DashboardNavbar({ title, subtitle, userType = 'customer', onMenu
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 10.5a3 3 0 11-6 0 3 3 0 016 0z" />
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M19.5 10.5c0 7.142-7.5 11.25-7.5 11.25S4.5 17.642 4.5 10.5a7.5 7.5 0 1115 0z" />
                         </svg>
-                        <span className="text-sm">Addresses</span>
+                        <span className="text-sm">Saved Addresses</span>
+                      </Link>
+                      <Link href="/favorites" className="flex items-center gap-3 px-4 py-2 text-gray-700 hover:bg-gray-50 transition-colors">
+                        <svg className="w-4 h-4 text-rose-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M21 8.25c0-2.485-2.099-4.5-4.688-4.5-1.935 0-3.597 1.126-4.312 2.733-.715-1.607-2.377-2.733-4.313-2.733C5.1 3.75 3 5.765 3 8.25c0 7.22 9 12 9 12s9-4.78 9-12z" />
+                        </svg>
+                        <span className="text-sm">Favorite Kitchens</span>
+                      </Link>
+                      <Link href="/support" className="flex items-center gap-3 px-4 py-2 text-gray-700 hover:bg-gray-50 transition-colors">
+                        <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8.625 12a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0H8.25m4.125 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0H12m4.125 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0h-.375M21 12c0 4.556-4.03 8.25-9 8.25a9.764 9.764 0 01-2.555-.337A5.972 5.972 0 015.41 20.97a.75.75 0 01-.774-.75 3.75 3.75 0 01.408-1.706A8.281 8.281 0 013 12c0-4.556 4.03-8.25 9-8.25s9 3.694 9 8.25z" />
+                        </svg>
+                        <span className="text-sm">Help & Support</span>
                       </Link>
                     </>
                   )}
@@ -450,6 +688,7 @@ export function DashboardNavbar({ title, subtitle, userType = 'customer', onMenu
               </div>
             )}
           </div>
+        )}
         </div>
       </div>
     </nav>

@@ -4,6 +4,11 @@ import {
   getMyOrders,
   getOrderDetails,
   cancelOrder,
+  getSellerPaymentDetails,
+  submitManualPayment,
+  confirmManualPayment,
+  getOrderMessages,
+  sendOrderMessage,
 } from '../controllers/order.controller';
 import { validate, validateQuery } from '../middleware/validation.middleware';
 import {
@@ -30,5 +35,15 @@ router.get('/:id', getOrderDetails);
 // Cancel order
 router.post('/:id/cancel', validate(cancelOrderSchema), cancelOrder);
 
+// Manual online payment details & submission
+router.get('/:id/payment-details', getSellerPaymentDetails);
+router.post('/:id/submit-payment', submitManualPayment);
+router.post('/:id/confirm-payment', confirmManualPayment);
+
+// In-app order messages (buyer <-> seller/rider)
+router.get('/:id/messages', getOrderMessages);
+router.post('/:id/messages', sendOrderMessage);
+
 export default router;
+
 

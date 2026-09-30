@@ -70,9 +70,33 @@ export class SellerOrderService {
             orderNumber: true,
             orderStatus: true,
             paymentStatus: true,
+            paymentMethod: true,
             totalAmount: true,
             createdAt: true,
             estimatedDeliveryAt: true,
+            deliveryInstructions: true,
+            notes: true,
+            cancellationReason: true,
+            paymentReferenceNumber: true,
+            paymentSenderName: true,
+            paymentSenderAccount: true,
+            paymentProofUrl: true,
+            paymentNotes: true,
+            paymentSubmittedAt: true,
+            deliveryAddress: {
+              select: {
+                area: true,
+                city: true,
+                addressLine1: true,
+                label: true,
+              },
+            },
+            customer: {
+              select: {
+                phone: true,
+                profile: { select: { fullName: true } },
+              },
+            },
           },
         },
         product: {
@@ -80,6 +104,7 @@ export class SellerOrderService {
             id: true,
             name: true,
             slug: true,
+            preparationTime: true,
             images: {
               where: { isPrimary: true },
               take: 1,
@@ -105,9 +130,22 @@ export class SellerOrderService {
             orderNumber: item.order.orderNumber,
             orderStatus: item.order.orderStatus,
             paymentStatus: item.order.paymentStatus,
+            paymentMethod: item.order.paymentMethod,
             totalAmount: Number(item.order.totalAmount),
             createdAt: item.order.createdAt,
             estimatedDeliveryAt: item.order.estimatedDeliveryAt,
+            deliveryInstructions: item.order.deliveryInstructions,
+            notes: item.order.notes,
+            cancellationReason: item.order.cancellationReason,
+            paymentReferenceNumber: item.order.paymentReferenceNumber,
+            paymentSenderName: item.order.paymentSenderName,
+            paymentSenderAccount: item.order.paymentSenderAccount,
+            paymentProofUrl: item.order.paymentProofUrl,
+            paymentNotes: item.order.paymentNotes,
+            paymentSubmittedAt: item.order.paymentSubmittedAt,
+            customerName: item.order.customer?.profile?.fullName || 'Customer',
+            customerPhone: item.order.customer?.phone,
+            deliveryAddress: item.order.deliveryAddress,
           },
           items: [],
         });
@@ -120,6 +158,7 @@ export class SellerOrderService {
               id: item.product.id,
               name: item.product.name,
               slug: item.product.slug,
+              preparationTime: item.product.preparationTime ?? 20,
               image: item.product.images[0]?.imageUrl || null,
             }
           : null,
@@ -398,8 +437,12 @@ export class SellerOrderService {
         result.derivedOrderStatus,
         sellerId,
       );
-      if (result.derivedOrderStatus === 'ready') {
-        await riderService.ensureDeliveryForOrder(orderItem.orderId);
+      // Predictive JIT lookahead dispatch:
+      // Post delivery jobs into the rider network when cooking starts ('confirmed' / 'preparing'),
+      // so riders travel to the kitchen in parallel and arrive just as food is ready.
+      if (['confirmed', 'preparing', 'ready'].includes(result.derivedOrderStatus)) {
+        const prepMins = seller.minPrepTimeMinutes ?? 25;
+        await riderService.ensureDeliveryForOrder(orderItem.orderId, prepMins);
       }
     }
     await realtimeOrderService.emitOrderItemStatusUpdate(orderItemId, status, seller.id);
@@ -514,6 +557,279 @@ export class SellerOrderService {
       orderItemId: result.updatedItem.id,
       status: result.updatedItem.status,
       message: 'Order item cancelled successfully',
+    };
+  }
+
+  /**
+   * Accept an entire order (Section 7: Order Placed -> Accepted -> Preparing)
+   */
+  async acceptOrder(orderId: string, sellerUserId: string) {
+    let seller = await prisma.seller.findUnique({
+      where: { userId: sellerUserId },
+    });
+    if (!seller) {
+      const user = await prisma.user.findUnique({ where: { id: sellerUserId } });
+      if (user?.userType === 'admin' || process.env.NODE_ENV !== 'production') {
+        const orderItem = await prisma.orderItem.findFirst({
+          where: { orderId },
+          include: { seller: true },
+        });
+        if (orderItem?.seller) {
+          seller = orderItem.seller;
+        }
+      }
+    }
+    if (!seller) throw new AppError('Seller not found', 404, 'SELLER_NOT_FOUND');
+
+    const order = await prisma.order.findUnique({
+      where: { id: orderId },
+      include: {
+        items: {
+          where: { sellerId: seller.id },
+          include: { product: true },
+        },
+      },
+    });
+    if (!order) throw new AppError('Order not found', 404, 'ORDER_NOT_FOUND');
+    if (order.items.length === 0) throw new AppError('No items found for this seller', 403, 'FORBIDDEN');
+
+    // If order was already accepted or ready, return gracefully
+    if (['preparing', 'ready'].includes(order.orderStatus)) {
+      return {
+        orderId: order.id,
+        orderStatus: order.orderStatus,
+        message: `Order is already ${order.orderStatus}`,
+      };
+    }
+
+    if (!['pending', 'confirmed'].includes(order.orderStatus)) {
+      throw new AppError(`Cannot accept order with status: ${order.orderStatus}`, 400, 'INVALID_STATUS');
+    }
+
+    // Determine prep time from items or seller default
+    const prepTimes = order.items.map((i) => i.product?.preparationTime || seller.minPrepTimeMinutes || 20);
+    const maxPrepMinutes = Math.max(...prepTimes, 15);
+    const estimatedReadyAt = new Date(Date.now() + maxPrepMinutes * 60 * 1000);
+
+    const result = await prisma.$transaction(async (tx) => {
+      // Advance items to preparing
+      await tx.orderItem.updateMany({
+        where: { orderId: order.id, sellerId: seller.id },
+        data: { status: 'preparing' },
+      });
+
+      // Update order to preparing with estimated ready timestamp
+      const updatedOrder = await tx.order.update({
+        where: { id: order.id },
+        data: {
+          orderStatus: 'preparing',
+          estimatedDeliveryAt: estimatedReadyAt,
+        },
+      });
+
+      await tx.orderStatusHistory.create({
+        data: {
+          orderId: order.id,
+          status: 'preparing',
+          notes: `Order accepted by kitchen. Estimated preparation time: ${maxPrepMinutes} min.`,
+          changedBy: sellerUserId,
+        },
+      });
+
+      return updatedOrder;
+    });
+
+    // JIT rider dispatch lookahead
+    try {
+      await riderService.ensureDeliveryForOrder(order.id, maxPrepMinutes);
+    } catch (err) {
+      console.warn('Rider dispatch warning during acceptOrder:', err);
+    }
+
+    await realtimeOrderService.emitOrderStatusUpdate(order.id, 'preparing', sellerUserId);
+
+    return {
+      orderId: result.id,
+      orderStatus: result.orderStatus,
+      estimatedReadyAt,
+      preparationMinutes: maxPrepMinutes,
+      message: 'Order accepted and kitchen preparation started',
+    };
+  }
+
+  /**
+   * Reject an entire order (Section 7: Seller selects reason, restocks, customer notified)
+   */
+  async rejectOrder(orderId: string, sellerUserId: string, reason: string) {
+    let seller = await prisma.seller.findUnique({
+      where: { userId: sellerUserId },
+    });
+    if (!seller) {
+      const user = await prisma.user.findUnique({ where: { id: sellerUserId } });
+      if (user?.userType === 'admin' || process.env.NODE_ENV !== 'production') {
+        const orderItem = await prisma.orderItem.findFirst({
+          where: { orderId },
+          include: { seller: true },
+        });
+        if (orderItem?.seller) {
+          seller = orderItem.seller;
+        }
+      }
+    }
+    if (!seller) throw new AppError('Seller not found', 404, 'SELLER_NOT_FOUND');
+
+    const order = await prisma.order.findUnique({
+      where: { id: orderId },
+      include: {
+        items: {
+          where: { sellerId: seller.id },
+          include: { product: true },
+        },
+      },
+    });
+    if (!order) throw new AppError('Order not found', 404, 'ORDER_NOT_FOUND');
+    if (order.items.length === 0) throw new AppError('No items found for this seller', 403, 'FORBIDDEN');
+
+    // Allow reject/cancel before actual rider pickup / in-transit delivery
+    if (!['pending', 'confirmed', 'preparing', 'ready'].includes(order.orderStatus)) {
+      throw new AppError(`Cannot reject order with status: ${order.orderStatus}. Only orders before rider dispatch can be declined.`, 400, 'INVALID_STATUS');
+    }
+
+    const rejectionNote = reason?.trim() || 'Kitchen unavailable';
+
+    await prisma.$transaction(async (tx) => {
+      // Mark items cancelled
+      await tx.orderItem.updateMany({
+        where: { orderId: order.id, sellerId: seller.id },
+        data: { status: 'cancelled' },
+      });
+
+      // Restock products
+      for (const item of order.items) {
+        if (item.variantId) {
+          await tx.productVariant.update({
+            where: { id: item.variantId },
+            data: { stockQuantity: { increment: item.quantity } },
+          });
+        }
+        if (item.productId) {
+          await tx.product.update({
+            where: { id: item.productId },
+            data: {
+              ...(item.variantId ? {} : { stockQuantity: { increment: item.quantity } }),
+              totalOrders: { decrement: 1 },
+            },
+          });
+          await tx.inventoryReservation.deleteMany({
+            where: {
+              productId: item.productId,
+              reservationType: 'order',
+              reservationId: order.id,
+            },
+          });
+        }
+      }
+
+      await tx.order.update({
+        where: { id: order.id },
+        data: {
+          orderStatus: 'cancelled',
+          cancellationReason: `Rejected by kitchen: ${rejectionNote}`,
+          cancelledBy: 'seller',
+        },
+      });
+
+      await tx.orderStatusHistory.create({
+        data: {
+          orderId: order.id,
+          status: 'cancelled',
+          notes: `Order rejected by kitchen: ${rejectionNote}`,
+          changedBy: sellerUserId,
+        },
+      });
+    });
+
+    await realtimeOrderService.emitOrderStatusUpdate(order.id, 'cancelled', sellerUserId);
+
+    return {
+      orderId: order.id,
+      orderStatus: 'cancelled',
+      reason: rejectionNote,
+      message: 'Order rejected successfully and customer notified',
+    };
+  }
+
+  /**
+   * Mark food ready for pickup (Section 10: Preparing -> Ready for Pickup)
+   */
+  async markOrderReady(orderId: string, sellerUserId: string) {
+    let seller = await prisma.seller.findUnique({
+      where: { userId: sellerUserId },
+    });
+    if (!seller) {
+      const user = await prisma.user.findUnique({ where: { id: sellerUserId } });
+      if (user?.userType === 'admin' || process.env.NODE_ENV !== 'production') {
+        const orderItem = await prisma.orderItem.findFirst({
+          where: { orderId },
+          include: { seller: true },
+        });
+        if (orderItem?.seller) {
+          seller = orderItem.seller;
+        }
+      }
+    }
+    if (!seller) throw new AppError('Seller not found', 404, 'SELLER_NOT_FOUND');
+
+    const order = await prisma.order.findUnique({
+      where: { id: orderId },
+      include: {
+        items: {
+          where: { sellerId: seller.id },
+        },
+      },
+    });
+    if (!order) throw new AppError('Order not found', 404, 'ORDER_NOT_FOUND');
+    if (order.items.length === 0) throw new AppError('No items found for this seller', 403, 'FORBIDDEN');
+
+    if (order.orderStatus === 'ready') {
+      return {
+        orderId: order.id,
+        orderStatus: 'ready',
+        message: 'Order is already marked ready for pickup',
+      };
+    }
+
+    if (!['confirmed', 'preparing'].includes(order.orderStatus)) {
+      throw new AppError(`Cannot mark ready an order with status: ${order.orderStatus}`, 400, 'INVALID_STATUS');
+    }
+
+    await prisma.$transaction(async (tx) => {
+      await tx.orderItem.updateMany({
+        where: { orderId: order.id, sellerId: seller.id },
+        data: { status: 'ready' },
+      });
+
+      await tx.order.update({
+        where: { id: order.id },
+        data: { orderStatus: 'ready' },
+      });
+
+      await tx.orderStatusHistory.create({
+        data: {
+          orderId: order.id,
+          status: 'ready',
+          notes: 'Food is prepared and ready for pickup by delivery rider.',
+          changedBy: sellerUserId,
+        },
+      });
+    });
+
+    await realtimeOrderService.emitOrderStatusUpdate(order.id, 'ready', sellerUserId);
+
+    return {
+      orderId: order.id,
+      orderStatus: 'ready',
+      message: 'Order is ready for pickup. Rider alerted.',
     };
   }
 }

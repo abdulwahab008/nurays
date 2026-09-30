@@ -7,7 +7,7 @@ import { userProfileService, Address } from '@/lib/services/user-profile.service
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/toast';
 import { useAuthStore } from '@/lib/store/auth-store';
-import { DashboardLayout } from '@/components/layout/DashboardShell';
+import { DashboardLayout, CUSTOMER_SIDEBAR_ITEMS } from '@/components/layout/DashboardShell';
 
 // Dynamically import the map component (no SSR)
 const LocationMap = dynamic(() => import('@/components/ui/LocationMap'), {
@@ -22,11 +22,31 @@ const LocationMap = dynamic(() => import('@/components/ui/LocationMap'), {
   ),
 });
 
+import {
+  Home,
+  Briefcase,
+  MapPin,
+  Check,
+  Plus,
+  Pencil,
+  X,
+  Navigation,
+  Map as MapIcon,
+  Tag,
+  Truck,
+  Star,
+  Trash2,
+  Mail,
+  Lightbulb,
+  Bell,
+  FileText,
+} from 'lucide-react';
+
 // Address type labels with icons
 const addressTypes = [
-  { id: 'home', label: 'Home', icon: '🏠', color: 'from-blue-500 to-blue-600' },
-  { id: 'work', label: 'Work', icon: '💼', color: 'from-purple-500 to-purple-600' },
-  { id: 'other', label: 'Other', icon: '📍', color: 'from-gray-500 to-gray-600' },
+  { id: 'home', label: 'Home', icon: Home, color: 'from-blue-500 to-blue-600' },
+  { id: 'work', label: 'Work', icon: Briefcase, color: 'from-purple-500 to-purple-600' },
+  { id: 'other', label: 'Other', icon: MapPin, color: 'from-gray-500 to-gray-600' },
 ];
 
 // Popular areas by city for quick selection
@@ -87,15 +107,7 @@ export default function AddressesPage() {
     longitude: '',
   });
 
-  const sidebarItems = [
-    { name: 'Dashboard', href: '/dashboard', icon: '' },
-    { name: 'Browse Products', href: '/products', icon: '' },
-    { name: 'My Orders', href: '/orders', icon: '' },
-    { name: 'My Cart', href: '/cart', icon: '' },
-    { name: 'My Profile', href: '/profile', icon: '' },
-    { name: 'Addresses', href: '/profile/addresses', icon: '' },
-    { name: 'Help & Support', href: '/support', icon: '' },
-  ];
+  const sidebarItems = CUSTOMER_SIDEBAR_ITEMS;
 
   useEffect(() => {
     if (!isAuthenticated) {
@@ -203,7 +215,7 @@ export default function AddressesPage() {
     }
 
     setDetectingLocation(true);
-    showToast('📍 Detecting your location...', 'info');
+    showToast('Detecting your location...', 'info');
     
     navigator.geolocation.getCurrentPosition(
       async (position) => {
@@ -240,7 +252,7 @@ export default function AddressesPage() {
               postalCode: addr.postcode || prev.postalCode,
             }));
             
-            showToast(`📍 Location detected: ${matchedCity}!`, 'success');
+            showToast(`Location detected: ${matchedCity}!`, 'success');
           } else {
             // No address data, use coordinate-based city detection
             const coordCity = detectCityFromCoords(latitude, longitude);
@@ -250,7 +262,7 @@ export default function AddressesPage() {
               longitude: longitude.toString(),
               city: coordCity || prev.city,
             }));
-            showToast(`📍 Location detected${coordCity ? `: ${coordCity}` : ''}! Please fill in address details.`, 'success');
+            showToast(`Location detected${coordCity ? `: ${coordCity}` : ''}! Please fill in address details.`, 'success');
           }
         } catch (error) {
           console.error('Reverse geocoding error:', error);
@@ -262,7 +274,7 @@ export default function AddressesPage() {
             longitude: longitude.toString(),
             city: coordCity || prev.city,
           }));
-          showToast(`📍 Location detected${coordCity ? `: ${coordCity}` : ''}! Please fill in address details.`, 'success');
+          showToast(`Location detected${coordCity ? `: ${coordCity}` : ''}! Please fill in address details.`, 'success');
         }
         
         setDetectingLocation(false);
@@ -426,8 +438,8 @@ export default function AddressesPage() {
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
         <div className="bg-white rounded-2xl p-5 border border-gray-100 shadow-sm">
           <div className="flex items-center gap-4">
-            <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-blue-600 rounded-xl flex items-center justify-center shadow-lg shadow-blue-500/30">
-              <span className="text-2xl">📍</span>
+            <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-blue-600 rounded-xl flex items-center justify-center shadow-lg shadow-blue-500/30 text-white">
+              <MapPin className="w-6 h-6" />
             </div>
             <div>
               <p className="text-2xl font-bold text-gray-900">{addresses.length}</p>
@@ -438,8 +450,8 @@ export default function AddressesPage() {
         
         <div className="bg-white rounded-2xl p-5 border border-gray-100 shadow-sm">
           <div className="flex items-center gap-4">
-            <div className="w-12 h-12 bg-gradient-to-br from-green-500 to-green-600 rounded-xl flex items-center justify-center shadow-lg shadow-green-500/30">
-              <span className="text-2xl">✓</span>
+            <div className="w-12 h-12 bg-gradient-to-br from-green-500 to-green-600 rounded-xl flex items-center justify-center shadow-lg shadow-green-500/30 text-white">
+              <Check className="w-6 h-6" />
             </div>
             <div>
               <p className="text-2xl font-bold text-gray-900">
@@ -458,9 +470,9 @@ export default function AddressesPage() {
             </div>
             <button
               onClick={() => { resetForm(); setShowAddForm(true); }}
-              className="w-12 h-12 bg-white/10 hover:bg-white/20 rounded-xl flex items-center justify-center transition-all hover:scale-105"
+              className="w-12 h-12 bg-white/10 hover:bg-white/20 rounded-xl flex items-center justify-center transition-all hover:scale-105 text-white"
             >
-              <span className="text-2xl text-white">+</span>
+              <Plus className="w-6 h-6" />
             </button>
           </div>
         </div>
@@ -473,8 +485,8 @@ export default function AddressesPage() {
           <div className="bg-gradient-to-r from-orange-500 to-red-500 px-6 py-4">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 bg-white/20 rounded-xl flex items-center justify-center">
-                  <span className="text-xl">{editingAddress ? '✏️' : '📍'}</span>
+                <div className="w-10 h-10 bg-white/20 rounded-xl flex items-center justify-center text-white">
+                  {editingAddress ? <Pencil className="w-5 h-5" /> : <MapPin className="w-5 h-5" />}
                 </div>
                 <div className="text-white">
                   <h2 className="font-bold text-lg">{editingAddress ? 'Edit Address' : 'Add New Address'}</h2>
@@ -483,9 +495,9 @@ export default function AddressesPage() {
               </div>
               <button
                 onClick={resetForm}
-                className="w-10 h-10 bg-white/10 hover:bg-white/20 rounded-xl flex items-center justify-center transition-all"
+                className="w-10 h-10 bg-white/10 hover:bg-white/20 rounded-xl flex items-center justify-center transition-all text-white"
               >
-                <span className="text-white text-xl">✕</span>
+                <X className="w-5 h-5" />
               </button>
             </div>
           </div>
@@ -493,7 +505,10 @@ export default function AddressesPage() {
           <div className="p-6">
             {/* Quick Location Options */}
             <div className="mb-6">
-              <p className="text-sm font-semibold text-gray-700 mb-3">📌 Quick Location Options</p>
+              <p className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-1.5">
+                <Navigation className="w-4 h-4 text-[#FF5500]" />
+                Quick Location Options
+              </p>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <button
                   type="button"
@@ -501,11 +516,11 @@ export default function AddressesPage() {
                   disabled={detectingLocation}
                   className="flex items-center gap-3 p-4 bg-gradient-to-r from-blue-50 to-blue-100 border-2 border-blue-200 rounded-xl hover:border-blue-400 transition-all group"
                 >
-                  <div className="w-10 h-10 bg-blue-500 rounded-xl flex items-center justify-center group-hover:scale-110 transition-transform">
+                  <div className="w-10 h-10 bg-blue-500 rounded-xl flex items-center justify-center group-hover:scale-110 transition-transform text-white">
                     {detectingLocation ? (
                       <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
                     ) : (
-                      <span className="text-white">📍</span>
+                      <Navigation className="w-5 h-5" />
                     )}
                   </div>
                   <div className="text-left">
@@ -519,8 +534,8 @@ export default function AddressesPage() {
                   onClick={() => setShowMap(!showMap)}
                   className="flex items-center gap-3 p-4 bg-gradient-to-r from-green-50 to-green-100 border-2 border-green-200 rounded-xl hover:border-green-400 transition-all group"
                 >
-                  <div className="w-10 h-10 bg-green-500 rounded-xl flex items-center justify-center group-hover:scale-110 transition-transform">
-                    <span className="text-white">🗺️</span>
+                  <div className="w-10 h-10 bg-green-500 rounded-xl flex items-center justify-center group-hover:scale-110 transition-transform text-white">
+                    <MapIcon className="w-5 h-5" />
                   </div>
                   <div className="text-left">
                     <p className="font-semibold text-green-800">Pick from Map</p>
@@ -568,13 +583,13 @@ export default function AddressesPage() {
                           postalCode: addr.postcode || prev.postalCode,
                         }));
                         
-                        showToast(`📍 ${matchedCity} selected!`, 'success');
+                        showToast(`${matchedCity} selected!`, 'success');
                       } else {
                         // No address data, use coordinate-based detection
                         const coordCity = detectCityFromCoords(coords.lat, coords.lng);
                         if (coordCity) {
                           setFormData(prev => ({ ...prev, city: coordCity }));
-                          showToast(`📍 ${coordCity} selected!`, 'success');
+                          showToast(`${coordCity} selected!`, 'success');
                         }
                       }
                     } catch (error) {
@@ -583,7 +598,7 @@ export default function AddressesPage() {
                       const coordCity = detectCityFromCoords(coords.lat, coords.lng);
                       if (coordCity) {
                         setFormData(prev => ({ ...prev, city: coordCity }));
-                        showToast(`📍 ${coordCity} selected!`, 'success');
+                        showToast(`${coordCity} selected!`, 'success');
                       }
                     }
                   }}
@@ -592,7 +607,7 @@ export default function AddressesPage() {
                 />
                 <div className="mt-3 flex items-center justify-between bg-gray-50 rounded-xl p-3">
                   <div className="flex items-center gap-2 text-sm text-gray-600">
-                    <span>📍</span>
+                    <MapPin className="w-4 h-4 text-[#FF5500]" />
                     {formData.latitude ? (
                       <span>Selected: {parseFloat(formData.latitude).toFixed(4)}, {parseFloat(formData.longitude).toFixed(4)}</span>
                     ) : (
@@ -602,9 +617,9 @@ export default function AddressesPage() {
                   <button
                     type="button"
                     onClick={() => setShowMap(false)}
-                    className="text-sm text-orange-600 font-semibold hover:text-orange-700"
+                    className="text-sm text-orange-600 font-semibold hover:text-orange-700 flex items-center gap-1"
                   >
-                    ✓ Confirm Location
+                    <Check className="w-4 h-4" /> Confirm Location
                   </button>
                 </div>
               </div>
@@ -612,27 +627,32 @@ export default function AddressesPage() {
 
             {/* Address Type Selection */}
             <div className="mb-6">
-              <p className="text-sm font-semibold text-gray-700 mb-3">🏷️ Address Type</p>
+              <p className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-1.5">
+                <Tag className="w-4 h-4 text-[#FF5500]" /> Address Type
+              </p>
               <div className="flex gap-3">
-                {addressTypes.map((type) => (
-                  <button
-                    key={type.id}
-                    type="button"
-                    onClick={() => setFormData({ ...formData, label: type.id })}
-                    className={`flex-1 p-4 rounded-xl border-2 transition-all ${
-                      formData.label === type.id
-                        ? `border-orange-500 bg-orange-50`
-                        : 'border-gray-200 hover:border-gray-300 bg-white'
-                    }`}
-                  >
-                    <div className={`w-10 h-10 bg-gradient-to-br ${type.color} rounded-lg flex items-center justify-center mx-auto mb-2`}>
-                      <span className="text-xl">{type.icon}</span>
-                    </div>
-                    <p className={`font-semibold text-sm ${
-                      formData.label === type.id ? 'text-orange-700' : 'text-gray-700'
-                    }`}>{type.label}</p>
-                  </button>
-                ))}
+                {addressTypes.map((type) => {
+                  const TypeIcon = type.icon;
+                  return (
+                    <button
+                      key={type.id}
+                      type="button"
+                      onClick={() => setFormData({ ...formData, label: type.id })}
+                      className={`flex-1 p-4 rounded-xl border-2 transition-all ${
+                        formData.label === type.id
+                          ? `border-orange-500 bg-orange-50`
+                          : 'border-gray-200 hover:border-gray-300 bg-white'
+                      }`}
+                    >
+                      <div className={`w-10 h-10 bg-gradient-to-br ${type.color} rounded-lg flex items-center justify-center mx-auto mb-2 text-white`}>
+                        <TypeIcon className="w-5 h-5" />
+                      </div>
+                      <p className={`font-semibold text-sm ${
+                        formData.label === type.id ? 'text-orange-700' : 'text-gray-700'
+                      }`}>{type.label}</p>
+                    </button>
+                  );
+                })}
               </div>
             </div>
 
@@ -678,7 +698,7 @@ export default function AddressesPage() {
                           onClick={() => selectArea(area)}
                           className="w-full px-4 py-3 text-left hover:bg-orange-50 transition-colors flex items-center gap-2"
                         >
-                          <span className="text-gray-400">📍</span>
+                          <MapPin className="w-4 h-4 text-gray-400 shrink-0" />
                           <span className="text-gray-700">{area}</span>
                         </button>
                       ))}
@@ -746,8 +766,9 @@ export default function AddressesPage() {
 
               {/* Delivery Instructions */}
               <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">
-                  🚴 Delivery Instructions (Optional)
+                <label className="block text-sm font-semibold text-gray-700 mb-2 flex items-center gap-1.5">
+                  <Truck className="w-4 h-4 text-slate-500" />
+                  Delivery Instructions (Optional)
                 </label>
                 <textarea
                   value={formData.deliveryInstructions}
@@ -765,9 +786,9 @@ export default function AddressesPage() {
                   id="isDefault"
                   checked={formData.isDefault}
                   onChange={(e) => setFormData({ ...formData, isDefault: e.target.checked })}
-                  className="w-5 h-5 text-orange-500 rounded border-gray-300 focus:ring-orange-500"
+                  className="w-5 h-5 text-orange-500 rounded border-gray-300 focus:ring-orange-500 cursor-pointer"
                 />
-                <label htmlFor="isDefault" className="ml-3">
+                <label htmlFor="isDefault" className="ml-3 cursor-pointer">
                   <span className="font-semibold text-gray-800">Set as default delivery address</span>
                   <p className="text-gray-500 text-sm">This will be auto-selected at checkout</p>
                 </label>
@@ -784,9 +805,9 @@ export default function AddressesPage() {
                 </Button>
                 <Button 
                   type="submit" 
-                  className="flex-1 bg-gradient-to-r from-orange-500 to-red-500 hover:from-orange-600 hover:to-red-600 text-white py-3 shadow-lg shadow-orange-500/30"
+                  className="flex-1 bg-gradient-to-r from-orange-500 to-red-500 hover:from-orange-600 hover:to-red-600 text-white py-3 shadow-lg shadow-orange-500/30 flex items-center justify-center gap-2"
                 >
-                  <span className="mr-2">{editingAddress ? '✓' : '+'}</span> 
+                  {editingAddress ? <Check className="w-4 h-4" /> : <Plus className="w-4 h-4" />}
                   {editingAddress ? 'Update Address' : 'Save Address'}
                 </Button>
               </div>
@@ -798,8 +819,8 @@ export default function AddressesPage() {
       {/* Addresses List */}
       {addresses.length === 0 ? (
         <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-12 text-center">
-          <div className="w-24 h-24 bg-gradient-to-br from-orange-100 to-red-100 rounded-full flex items-center justify-center mx-auto mb-6">
-            <span className="text-5xl">📍</span>
+          <div className="w-24 h-24 bg-gradient-to-br from-orange-100 to-red-100 rounded-full flex items-center justify-center mx-auto mb-6 text-[#FF5500]">
+            <MapPin className="w-12 h-12" />
           </div>
           <h2 className="text-2xl font-bold text-gray-900 mb-2">No addresses saved yet</h2>
           <p className="text-gray-500 mb-6 max-w-md mx-auto">
@@ -807,9 +828,9 @@ export default function AddressesPage() {
           </p>
           <Button 
             onClick={() => setShowAddForm(true)} 
-            className="bg-gradient-to-r from-orange-500 to-red-500 hover:from-orange-600 hover:to-red-600 shadow-lg shadow-orange-500/30"
+            className="bg-gradient-to-r from-orange-500 to-red-500 hover:from-orange-600 hover:from-red-600 shadow-lg shadow-orange-500/30 flex items-center gap-2 mx-auto"
           >
-            <span className="mr-2">+</span> Add Your First Address
+            <Plus className="w-4 h-4" /> Add Your First Address
           </Button>
         </div>
       ) : (
@@ -820,7 +841,8 @@ export default function AddressesPage() {
           
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
             {addresses.map((address) => {
-              const typeInfo = addressTypes.find(t => t.label.toLowerCase() === address.label?.toLowerCase()) || addressTypes[2];
+              const typeInfo = addressTypes.find(t => t.id === address.label?.toLowerCase() || t.label.toLowerCase() === address.label?.toLowerCase()) || addressTypes[2];
+              const TypeIcon = typeInfo.icon;
               return (
                 <div
                   key={address.id}
@@ -833,14 +855,14 @@ export default function AddressesPage() {
                     address.isDefault ? 'bg-gradient-to-r from-orange-50 to-red-50' : 'bg-gray-50'
                   }`}>
                     <div className="flex items-center gap-3">
-                      <div className={`w-10 h-10 bg-gradient-to-br ${typeInfo.color} rounded-xl flex items-center justify-center shadow-sm`}>
-                        <span className="text-lg">{typeInfo.icon}</span>
+                      <div className={`w-10 h-10 bg-gradient-to-br ${typeInfo.color} rounded-xl flex items-center justify-center shadow-sm text-white`}>
+                        <TypeIcon className="w-5 h-5" />
                       </div>
                       <div>
-                        <h4 className="font-bold text-gray-900">{address.label || 'Address'}</h4>
+                        <h4 className="font-bold text-gray-900 capitalize">{address.label || 'Address'}</h4>
                         {address.isDefault && (
-                          <span className="text-xs bg-orange-100 text-orange-700 px-2 py-0.5 rounded-full font-medium">
-                            ✓ Default
+                          <span className="text-xs bg-orange-100 text-orange-700 px-2 py-0.5 rounded-full font-medium flex items-center gap-1 mt-0.5">
+                            <Check className="w-3 h-3" /> Default
                           </span>
                         )}
                       </div>
@@ -854,7 +876,7 @@ export default function AddressesPage() {
                           className="p-2 text-gray-400 hover:text-orange-600 hover:bg-orange-50 rounded-lg transition-colors"
                           title="Set as default"
                         >
-                          ⭐
+                          <Star className="w-4 h-4 text-amber-500" />
                         </button>
                       )}
                       <button 
@@ -862,14 +884,14 @@ export default function AddressesPage() {
                         className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
                         title="Edit"
                       >
-                        ✏️
+                        <Pencil className="w-4 h-4 text-slate-600" />
                       </button>
                       <button 
                         onClick={() => handleDeleteAddress(address.id)}
                         className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
                         title="Delete"
                       >
-                        🗑️
+                        <Trash2 className="w-4 h-4 text-rose-500" />
                       </button>
                     </div>
                   </div>
@@ -885,13 +907,13 @@ export default function AddressesPage() {
                     {(address.landmark || address.postalCode) && (
                       <div className="mt-4 pt-4 border-t border-gray-100 flex flex-wrap gap-2">
                         {address.landmark && (
-                          <span className="inline-flex items-center gap-1 text-xs bg-gray-100 text-gray-600 px-3 py-1.5 rounded-lg">
-                            <span>📌</span> {address.landmark}
+                          <span className="inline-flex items-center gap-1.5 text-xs bg-gray-100 text-gray-600 px-3 py-1.5 rounded-lg">
+                            <MapPin className="w-3.5 h-3.5 text-slate-400 shrink-0" /> {address.landmark}
                           </span>
                         )}
                         {address.postalCode && (
-                          <span className="text-xs bg-gray-100 text-gray-600 px-3 py-1.5 rounded-lg">
-                            📮 {address.postalCode}
+                          <span className="inline-flex items-center gap-1.5 text-xs bg-gray-100 text-gray-600 px-3 py-1.5 rounded-lg">
+                            <Mail className="w-3.5 h-3.5 text-slate-400 shrink-0" /> {address.postalCode}
                           </span>
                         )}
                       </div>
@@ -907,12 +929,12 @@ export default function AddressesPage() {
       {/* Tips Section */}
       <div className="mt-8 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-2xl p-6 border border-blue-100">
         <h3 className="font-bold text-blue-900 mb-4 flex items-center gap-2">
-          <span>💡</span> Tips for Better Delivery
+          <Lightbulb className="w-5 h-5 text-amber-500" /> Tips for Better Delivery
         </h3>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <div className="flex items-start gap-3">
-            <div className="w-8 h-8 bg-blue-100 rounded-lg flex items-center justify-center flex-shrink-0">
-              <span>📍</span>
+            <div className="w-8 h-8 bg-blue-100 rounded-lg flex items-center justify-center flex-shrink-0 text-blue-600">
+              <MapPin className="w-4 h-4" />
             </div>
             <div>
               <p className="font-medium text-blue-800 text-sm">Add Landmarks</p>
@@ -920,8 +942,8 @@ export default function AddressesPage() {
             </div>
           </div>
           <div className="flex items-start gap-3">
-            <div className="w-8 h-8 bg-blue-100 rounded-lg flex items-center justify-center flex-shrink-0">
-              <span>🔔</span>
+            <div className="w-8 h-8 bg-blue-100 rounded-lg flex items-center justify-center flex-shrink-0 text-blue-600">
+              <Bell className="w-4 h-4" />
             </div>
             <div>
               <p className="font-medium text-blue-800 text-sm">Keep Phone On</p>
@@ -929,8 +951,8 @@ export default function AddressesPage() {
             </div>
           </div>
           <div className="flex items-start gap-3">
-            <div className="w-8 h-8 bg-blue-100 rounded-lg flex items-center justify-center flex-shrink-0">
-              <span>📝</span>
+            <div className="w-8 h-8 bg-blue-100 rounded-lg flex items-center justify-center flex-shrink-0 text-blue-600">
+              <FileText className="w-4 h-4" />
             </div>
             <div>
               <p className="font-medium text-blue-800 text-sm">Add Instructions</p>

@@ -4,6 +4,9 @@ import {
   getSellerOrderDetails,
   updateOrderItemStatus,
   cancelOrderItem,
+  acceptOrder,
+  rejectOrder,
+  markOrderReady,
 } from '../controllers/seller-order.controller';
 import { validate, validateQuery } from '../middleware/validation.middleware';
 import {
@@ -15,9 +18,9 @@ import { authenticate, authorize, blockSuspendedSeller } from '../middleware/aut
 
 const router = Router();
 
-// All seller order routes require authentication and seller role
+// All seller order routes require authentication and seller or admin role
 router.use(authenticate);
-router.use(authorize('seller'));
+router.use(authorize('seller', 'admin'));
 router.use(blockSuspendedSeller);
 
 // Get seller orders
@@ -25,6 +28,11 @@ router.get('/orders', validateQuery(getSellerOrdersQuerySchema), getSellerOrders
 
 // Get seller order details
 router.get('/orders/:id', getSellerOrderDetails);
+
+// Whole order lifecycle actions (Section 7 & 10)
+router.post('/orders/:id/accept', acceptOrder);
+router.post('/orders/:id/reject', rejectOrder);
+router.post('/orders/:id/ready', markOrderReady);
 
 // Update order item status
 router.patch(

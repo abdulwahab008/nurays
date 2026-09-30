@@ -30,6 +30,7 @@ export const getProductsQuerySchema = z.object({
   customerLat: z.string().optional().transform((val) => (val ? parseFloat(val) : undefined)),
   customerLng: z.string().optional().transform((val) => (val ? parseFloat(val) : undefined)),
   maxDistanceKm: z.string().optional().transform((val) => (val ? parseFloat(val) : undefined)),
+  communityId: z.string().optional(),
 });
 
 export const getProductQuerySchema = z.object({

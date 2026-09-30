@@ -63,7 +63,7 @@ describe('requireRider gating (via getAvailableDeliveries)', () => {
   it('allows an approved, active rider through', async () => {
     findUniqueRider.mockResolvedValue(makeRider({ verificationStatus: 'approved', status: 'active' }));
     await expect(riderService.getAvailableDeliveries('user-1')).resolves.toEqual([]);
-    expect(findManyDelivery).toHaveBeenCalledTimes(1);
+    expect(findManyDelivery).toHaveBeenCalledTimes(2);
   });
 
   it('rejects when no rider profile exists at all', async () => {

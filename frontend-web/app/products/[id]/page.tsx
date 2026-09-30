@@ -11,9 +11,12 @@ import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/toast';
 import { useCartStore } from '@/lib/store/cart-store';
 import { useAuthStore } from '@/lib/store/auth-store';
-import { DashboardLayout } from '@/components/layout/DashboardShell';
+import { DashboardLayout, CUSTOMER_SIDEBAR_ITEMS } from '@/components/layout/DashboardShell';
 import { apiClient } from '@/lib/api-client';
 import ProductReviews from '@/components/products/ProductReviews';
+import { favoriteService } from '@/lib/services/favorite.service';
+import CartConflictModal, { CartConflictInfo } from '@/components/cart/CartConflictModal';
+import { Heart } from 'lucide-react';
 
 interface CatalogPromotion {
   id: string;
@@ -118,37 +121,38 @@ export default function ProductDetailPage() {
   const [addToCartLoading, setAddToCartLoading] = useState(false);
   const [justAddedToCart, setJustAddedToCart] = useState(false);
   const [selectedVariantId, setSelectedVariantId] = useState<string | null>(null);
+  const [isFavorite, setIsFavorite] = useState(false);
+  const [cartConflict, setCartConflict] = useState<CartConflictInfo | null>(null);
+  const [specialInstructions, setSpecialInstructions] = useState('');
 
-  const sidebarItems = [
-    { name: 'Dashboard', href: '/dashboard', icon: '' },
-    { name: 'Browse Products', href: '/products', icon: '' },
-    { name: 'My Orders', href: '/orders', icon: '' },
-    { name: 'My Cart', href: '/cart', icon: '' },
-    { name: 'My Profile', href: '/profile', icon: '' },
-    { name: 'Addresses', href: '/profile/addresses', icon: '' },
-  ];
+  const sidebarItems = CUSTOMER_SIDEBAR_ITEMS;
 
   useEffect(() => {
-    if (!params.id) return;
-    (async () => {
-      let lat: number | undefined;
-      let lng: number | undefined;
-      if (isAuthenticated) {
-        try {
-          const res = await addressService.getAddresses();
+    const productId = params?.id as string | undefined;
+    if (!productId) return;
+
+    // 1. Immediately fetch product details without blocking on coordinates
+    loadProduct();
+
+    // 2. In parallel, fetch saved coordinates for precise hyperlocal delivery estimates
+    if (isAuthenticated) {
+      addressService
+        .getAddresses()
+        .then((res) => {
           const addresses = res.data || [];
-          const withCoords = addresses.find((a) => a.isDefault && a.coordinates) || addresses.find((a) => a.coordinates);
+          const withCoords =
+            addresses.find((a) => a.isDefault && a.coordinates) ||
+            addresses.find((a) => a.coordinates);
           if (withCoords?.coordinates) {
-            lat = withCoords.coordinates.latitude;
-            lng = withCoords.coordinates.longitude;
+            loadProduct(
+              withCoords.coordinates.latitude,
+              withCoords.coordinates.longitude
+            );
           }
-        } catch {
-          // No address on file — proceed without a location-based delivery estimate.
-        }
-      }
-      loadProduct(lat, lng);
-    })();
-  }, [params.id, isAuthenticated]);
+        })
+        .catch(() => {});
+    }
+  }, [params?.id, isAuthenticated]);
 
   const loadProduct = async (customerLat?: number, customerLng?: number) => {
     setLoading(true);
@@ -191,6 +195,11 @@ export default function ProductDetailPage() {
         seller,
         variants,
       });
+      if (Number(stockHub) === 0 && Number(stockDirect) > 0) {
+        setStockType('direct');
+      } else if (data.stockType === 'direct') {
+        setStockType('direct');
+      }
       const defaultVariant = variants.find((v: { isDefault?: boolean }) => v.isDefault) ?? variants[0];
       setSelectedVariantId(defaultVariant?.id ?? null);
       // Fetch catalog promotions for this product (same as listing – stacked 30% + 5% etc.)
@@ -206,10 +215,40 @@ export default function ProductDetailPage() {
       } catch {
         setCatalogPromotions([]);
       }
+
+      if (seller.id && isAuthenticated) {
+        try {
+          const isFav = await favoriteService.checkFavorite(seller.id);
+          setIsFavorite(isFav);
+        } catch {
+          setIsFavorite(false);
+        }
+      }
     } catch (error) {
       console.error('Failed to load product:', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleToggleFavorite = async () => {
+    if (!isAuthenticated) {
+      router.push('/login');
+      return;
+    }
+    if (!product?.seller?.id) return;
+    try {
+      const res = await favoriteService.toggleFavorite(product.seller.id);
+      const isFav = res.isFavorite;
+      setIsFavorite(isFav);
+      showToast(
+        isFav
+          ? `Saved ${product.seller.businessName} to your favorites!`
+          : `Removed ${product.seller.businessName} from favorites`,
+        'info'
+      );
+    } catch {
+      showToast('Failed to update favorite', 'error');
     }
   };
 
@@ -225,6 +264,7 @@ export default function ProductDetailPage() {
     const availableStock = selectedVariant
       ? selectedVariant.stockQuantity
       : stockType === 'direct' ? product.stock.direct : product.stock.hub;
+
     if (availableStock < quantity) {
       showToast('Insufficient stock', 'error');
       return;
@@ -262,8 +302,94 @@ export default function ProductDetailPage() {
       setJustAddedToCart(true);
       showToast('Product added to cart. View cart in the sidebar or click the cart icon above.', 'success');
     } catch (err: any) {
-      const msg = err?.response?.data?.error?.message || err?.response?.data?.message || err?.message || 'Failed to add to cart';
-      showToast(msg, 'error');
+      if (err?.response?.status === 409 || err?.response?.data?.error?.code === 'CART_SELLER_MISMATCH') {
+        const details = err?.response?.data?.error?.details;
+        setCartConflict({
+          existingSellerName: details?.existingSeller?.name || 'Previous Kitchen',
+          newSellerName: details?.newSeller?.name || product.seller.businessName || 'New Kitchen',
+          onConfirmClearAndAdd: async () => {
+            try {
+              await cartService.addToCart({
+                productId: product.id,
+                variantId: selectedVariant?.id,
+                quantity,
+                stockType,
+                hubId: stockType === 'hub' && selectedHub ? selectedHub : undefined,
+                clearAndAdd: true,
+              });
+              addItem({
+                id: `${product.id}-${selectedVariant?.id ?? stockType}-${Date.now()}`,
+                productId: product.id,
+                productName: selectedVariant ? `${product.name} — ${selectedVariant.name}` : product.name,
+                productImage: product.images[0]?.url,
+                sellerId: product.seller.id,
+                sellerName: product.seller.businessName,
+                quantity,
+                unitPrice,
+                stockType,
+                hubId: stockType === 'hub' ? selectedHub : undefined,
+                subtotal: unitPrice * quantity,
+              });
+              setCartConflict(null);
+              setJustAddedToCart(true);
+              showToast(`Cart replaced with dishes from ${product.seller.businessName}!`, 'success');
+            } catch {
+              showToast('Failed to replace cart', 'error');
+            }
+          },
+          onCancel: () => setCartConflict(null),
+        });
+      } else {
+        const msg = err?.response?.data?.error?.message || err?.response?.data?.message || err?.message || 'Failed to add to cart';
+        showToast(msg, 'error');
+      }
+    } finally {
+      setAddToCartLoading(false);
+    }
+  };
+
+  const handleBuyNow = async () => {
+    if (!isAuthenticated) {
+      router.push('/login');
+      return;
+    }
+    if (!product) return;
+    setAddToCartLoading(true);
+    try {
+      await cartService.addToCart({
+        productId: product.id,
+        variantId: selectedVariantId || undefined,
+        quantity,
+        stockType: 'direct',
+      });
+      router.push('/checkout');
+    } catch (err: any) {
+      if (err?.response?.data?.error?.code === 'CART_SELLER_CONFLICT' || err?.response?.data?.code === 'CART_SELLER_CONFLICT') {
+        const conflictDetails = err.response.data.error?.details || err.response.data.details;
+        setCartConflict({
+          existingSellerName: conflictDetails?.existingSellerName || 'Another Kitchen',
+          newSellerName: product.seller.businessName,
+          onConfirmClearAndAdd: async () => {
+            try {
+              await cartService.addToCart({
+                productId: product.id,
+                variantId: selectedVariantId || undefined,
+                quantity,
+                stockType: 'direct',
+                clearAndAdd: true,
+              });
+              setCartConflict(null);
+              router.push('/checkout');
+            } catch {
+              showToast('Failed to switch kitchen cart', 'error');
+            }
+          },
+          onCancel: () => setCartConflict(null),
+        });
+      } else {
+        const msg = err?.response?.data?.error?.message || err?.response?.data?.message || err?.message || 'Failed to start instant checkout';
+        showToast(msg, 'error');
+      }
     } finally {
       setAddToCartLoading(false);
     }
@@ -508,25 +634,66 @@ export default function ProductDetailPage() {
           </div>
         )}
 
-        {/* Seller */}
-        <div className="flex items-center justify-between py-4 border-y border-gray-100">
-          <div>
-            <p className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-0.5">
-              Sold by
-            </p>
-            <p className="font-semibold text-gray-900">
-              {product.seller?.businessName ?? 'Seller'}
-              {product.seller?.isVerified && (
-                <span className="ml-2 text-xs font-normal text-gray-600 bg-gray-100 px-2 py-0.5 rounded">
-                  Verified
+        {/* Seller & Community Card */}
+        <div className="py-4 border-y border-gray-100 space-y-2">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-2xl bg-orange-100 text-[#FF5500] flex items-center justify-center font-black text-sm">
+                👩‍🍳
+              </div>
+              <div>
+                <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-0.5">
+                  Home Kitchen
+                </p>
+                <p className="font-bold text-gray-900 flex items-center gap-2">
+                  <span>{product.seller?.businessName ?? 'Seller'}</span>
+                  {product.seller?.isVerified && (
+                    <span className="text-[10px] font-bold text-emerald-800 bg-emerald-100 px-1.5 py-0.5 rounded">
+                      Verified Chef
+                    </span>
+                  )}
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={handleToggleFavorite}
+                className="p-2.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 transition-colors shadow-2xs"
+                title="Save Kitchen to Favorites"
+              >
+                <Heart
+                  className={`w-4 h-4 transition-colors ${
+                    isFavorite ? 'fill-red-500 text-red-500' : 'text-slate-400 hover:text-red-500'
+                  }`}
+                />
+              </button>
+              <div className="text-right">
+                <p className="text-[10px] text-gray-400 font-bold uppercase">Rating</p>
+                <p className="font-black text-sm text-gray-900">★ {(product.seller?.rating ?? 0).toFixed(1)}</p>
+              </div>
+            </div>
+          </div>
+
+          {/* Proximity / Community Badge */}
+          {((product as any).isSameCommunity || (product as any).communityBadge || (product as any).community?.name) && (
+            <div className="pt-2 flex items-center gap-2">
+              {(product as any).isSameCommunity ? (
+                <span className="px-2.5 py-1 rounded-lg bg-emerald-100 text-emerald-900 text-xs font-black flex items-center gap-1.5">
+                  <span>🏡</span> Hyperlocal: In Your Community
+                </span>
+              ) : (product as any).communityBadge ? (
+                <span className="px-2.5 py-1 rounded-lg bg-orange-100 text-[#FF5500] text-xs font-black flex items-center gap-1.5">
+                  <span>📍</span> {(product as any).communityBadge}
+                </span>
+              ) : (
+                <span className="px-2.5 py-1 rounded-lg bg-slate-100 text-slate-700 text-xs font-bold flex items-center gap-1.5">
+                  <span>📍</span> {(product as any).community?.name}
                 </span>
               )}
-            </p>
-          </div>
-          <div className="text-right">
-            <p className="text-xs text-gray-500">Seller rating</p>
-            <p className="font-semibold text-gray-900">{(product.seller?.rating ?? 0).toFixed(1)}</p>
-          </div>
+            </div>
+          )}
         </div>
 
         {/* Availability */}
@@ -718,16 +885,40 @@ export default function ProductDetailPage() {
             </div>
           </div>
 
-          {/* Add to cart */}
+          {/* Special Instructions (Section 9) */}
+          <div className="pt-2">
+            <label htmlFor="specialInstructions" className="block text-xs font-bold text-gray-700 mb-1">
+              Special Kitchen Instructions (Optional)
+            </label>
+            <textarea
+              id="specialInstructions"
+              rows={2}
+              value={specialInstructions}
+              onChange={(e) => setSpecialInstructions(e.target.value)}
+              placeholder="e.g. Mild spice, extra raita, less oil, no onions..."
+              className="w-full text-xs p-3 rounded-xl border border-gray-200 focus:border-[#FF5500] focus:ring-1 focus:ring-[#FF5500] outline-none transition-all resize-none bg-white"
+            />
+          </div>
+
+          {/* Action Buttons: Add to Bag & Buy Now */}
           <div className="pt-2 space-y-2">
-            <Button
-              onClick={handleAddToCart}
-              variant="dark"
-              className="w-full h-14 text-base font-semibold"
-              disabled={maxQty < quantity || addToCartLoading}
-            >
-              {addToCartLoading ? 'Adding…' : `Add to bag · ${formatPrice(unitPrice * quantity)}`}
-            </Button>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <Button
+                onClick={handleAddToCart}
+                variant="dark"
+                className="w-full h-12 text-sm font-bold bg-[#0C1016] text-white hover:bg-black rounded-xl"
+                disabled={maxQty < quantity || addToCartLoading}
+              >
+                {addToCartLoading ? 'Adding…' : `Add to Bag · ${formatPrice(unitPrice * quantity)}`}
+              </Button>
+              <Button
+                onClick={handleBuyNow}
+                className="w-full h-12 text-sm font-bold bg-gradient-to-r from-[#FF5500] to-[#FF2A00] hover:brightness-110 text-white shadow-sm rounded-xl"
+                disabled={maxQty < quantity || addToCartLoading}
+              >
+                ⚡ Instant Buy Now
+              </Button>
+            </div>
             {justAddedToCart && (
               <p className="text-center text-sm text-gray-600">
                 <Link href="/cart" className="font-medium text-gray-900 underline hover:no-underline">
@@ -758,6 +949,7 @@ export default function ProductDetailPage() {
         userType="customer"
       >
         {productContent}
+        <CartConflictModal isOpen={!!cartConflict} conflict={cartConflict} />
       </DashboardLayout>
     );
   }
@@ -800,6 +992,7 @@ export default function ProductDetailPage() {
       <div className="max-w-[1440px] mx-auto px-6 md:px-12 py-10 md:py-14">
         {productContent}
       </div>
+      <CartConflictModal isOpen={!!cartConflict} conflict={cartConflict} />
     </div>
   );
 }

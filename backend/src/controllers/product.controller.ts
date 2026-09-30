@@ -32,6 +32,7 @@ export const getProducts = async (req: Request, res: Response) => {
     customerLat: req.query.customerLat as number | undefined,
     customerLng: req.query.customerLng as number | undefined,
     maxDistanceKm: req.query.maxDistanceKm as number | undefined,
+    communityId: req.query.communityId as string | undefined,
   };
 
   const result = await productService.getProducts(filters);

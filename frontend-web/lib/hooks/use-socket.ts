@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { io, Socket } from 'socket.io-client';
 import { useAuthStore } from '../store/auth-store';
+import { apiClient } from '../api-client';
 
 export function useSocket() {
   const socketRef = useRef<Socket | null>(null);
@@ -20,7 +21,7 @@ export function useSocket() {
   useEffect(() => {
     if (!isAuthenticated) return;
 
-    const token = localStorage.getItem('access_token');
+    const token = apiClient.getAccessToken();
     if (!token) return;
 
     const socket = io(process.env.NEXT_PUBLIC_WS_URL || 'http://localhost:3001', {

@@ -23,16 +23,22 @@ model User {
   status        String    @default("active") // active, suspended, banned, deleted
   emailVerified Boolean   @default(false) @map("email_verified")
   phoneVerified Boolean   @default(true) @map("phone_verified")
+  referralCode  String?   @unique @map("referral_code")
+  referredBy    String?   @map("referred_by")
+  primaryCommunityId String? @map("primary_community_id")
   lastLoginAt   DateTime? @map("last_login_at")
   createdAt     DateTime  @default(now()) @map("created_at")
   updatedAt     DateTime  @updatedAt @map("updated_at")
 
   profile       UserProfile?
+  primaryCommunity Community? @relation(fields: [primaryCommunityId], references: [id], onDelete: SetNull)
   addresses     UserAddress[]
   cart          Cart?
   orders        Order[]
   reviews       Review[]
   seller        Seller?
+  favoriteSellers FavoriteSeller[]
+  orderMessages OrderMessage[]
   notifications Notification[]
   supportTickets SupportTicket[]
   auditLogs     AuditLog[]
@@ -70,13 +76,16 @@ model UserAddress {
   city        String
   postalCode  String?  @map("postal_code")
   landmark    String?
+  houseNumber String?  @map("house_number")
+  communityId String?  @map("community_id")
   latitude    Decimal? @db.Decimal(10, 8)
   longitude   Decimal? @db.Decimal(11, 8)
   isDefault   Boolean  @default(false) @map("is_default")
   createdAt   DateTime @default(now()) @map("created_at")
   updatedAt   DateTime @updatedAt @map("updated_at")
 
-  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user        User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  community   Community?  @relation(fields: [communityId], references: [id], onDelete: SetNull)
   orders      Order[]
 
   @@map("user_addresses")
@@ -138,7 +147,9 @@ model Seller {
   bankAccountNumber String?   @map("bank_account_number")
   bankName          String?   @map("bank_name")
   jazzcashNumber    String?   @map("jazzcash_number")
+  jazzcashAccountTitle String? @map("jazzcash_account_title")
   easypaisaNumber   String?   @map("easypaisa_number")
+  easypaisaAccountTitle String? @map("easypaisa_account_title")
   lowStockThreshold Int       @default(10) @map("low_stock_threshold") // Default threshold for low stock alerts
   enableStockAlerts Boolean   @default(true) @map("enable_stock_alerts") // Enable/disable stock alert notifications
   freeDeliveryAreas   Json?     @map("free_delivery_areas") // Areas/cities where this seller offers free delivery, e.g. ["Askari", "DHA"]
@@ -186,15 +197,21 @@ model Seller {
   advanceBookingMinDays Int?     @map("advance_booking_min_days")
   advanceBookingMaxDays Int?     @map("advance_booking_max_days")
 
+  communityId           String?   @map("community_id")
+  allowCrossCommunity   Boolean   @default(true) @map("allow_cross_community")
+  primaryCommunityName  String?   @map("primary_community_name")
+
   createdAt         DateTime  @default(now()) @map("created_at")
   updatedAt         DateTime  @updatedAt @map("updated_at")
 
   user              User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  community         Community? @relation(fields: [communityId], references: [id], onDelete: SetNull)
   products          Product[]
   documents         SellerDocument[]
   badges            SellerBadge[]
   orderItems        OrderItem[]
   reviews           Review[]
+  favoriteSellers   FavoriteSeller[]
   hubInventory      HubInventory[]
   payouts           SellerPayout[]
   payoutSchedule    SellerPayoutSchedule?
@@ -502,11 +519,21 @@ model Order {
   deliveryFee         Decimal   @default(0) @map("delivery_fee") @db.Decimal(10, 2)
   discountAmount      Decimal   @default(0) @map("discount_amount") @db.Decimal(10, 2)
   taxAmount           Decimal   @default(0) @map("tax_amount") @db.Decimal(10, 2)
+  tipAmount           Decimal?  @default(0) @map("tip_amount") @db.Decimal(10, 2)
   totalAmount         Decimal   @map("total_amount") @db.Decimal(10, 2)
   paymentMethod       String    @map("payment_method")
-  paymentStatus       String    @default("pending") @map("payment_status") // pending, paid, failed, refunded
+  paymentStatus       String    @default("pending") @map("payment_status") // pending, paid, failed, refunded, payment_submitted
   paymentTransactionId String?  @map("payment_transaction_id")
   paidAt              DateTime? @map("paid_at")
+  paymentProofUrl     String?   @map("payment_proof_url")
+  paymentSenderName   String?   @map("payment_sender_name")
+  paymentSenderAccount String?  @map("payment_sender_account")
+  paymentReferenceNumber String? @map("payment_reference_number")
+  paymentSubmittedAt  DateTime? @map("payment_submitted_at")
+  paymentNotes        String?   @map("payment_notes")
+  paymentConfirmedBy  String?   @map("payment_confirmed_by") // seller, admin
+  paymentConfirmedAt  DateTime? @map("payment_confirmed_at")
+  paymentDisputeReason String?  @map("payment_dispute_reason")
   deliveryType        String    @map("delivery_type") // home_delivery, hub_pickup, self_pickup
   deliveryAddressId   String?   @map("delivery_address_id")
   deliveryAddressSnapshot Json? @map("delivery_address_snapshot")
@@ -530,6 +557,7 @@ model Order {
   statusHistory       OrderStatusHistory[]
   delivery            Delivery?
   reviews             Review[]
+  orderMessages       OrderMessage[]
   promotionUsages     PromotionUsage[]
   supportTickets      SupportTicket[]
   walletTransactions  WalletTransaction[]
@@ -627,6 +655,11 @@ model Delivery {
   actualDurationMinutes Int?     @map("actual_duration_minutes")
   trackingUrl           String?   @map("tracking_url")
   status                String    @default("assigned")
+  deliveryOtp           String?   @map("delivery_otp")
+  otpVerifiedAt         DateTime? @map("otp_verified_at")
+  arrivedAtPickup       DateTime? @map("arrived_at_pickup")
+  arrivedAtCustomer     DateTime? @map("arrived_at_customer")
+  estimatedReadyAt      DateTime? @map("estimated_ready_at")
   deliveryPhotoUrl      String?   @map("delivery_photo_url")
   customerSignature     String?   @map("customer_signature")
   deliveryNotes         String?   @map("delivery_notes")
@@ -987,5 +1020,89 @@ model AuditLog {
   user          User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
 
   @@map("audit_logs")
+}
+
+// ============================================
+// FINANCIAL LEDGER
+// ============================================
+
+model LedgerEntry {
+  id              String   @id @default(uuid())
+  orderId         String?  @map("order_id")
+  transactionType String   @map("transaction_type") // customer_payment, seller_earning, platform_commission, delivery_fee, refund, adjustment
+  accountType     String   @map("account_type") // asset, liability, revenue, expense
+  entryType       String   @map("entry_type") // debit, credit
+  amount          Decimal  @db.Decimal(12, 2)
+  currency        String   @default("PKR")
+  description     String?
+  sellerId        String?  @map("seller_id")
+  userId          String?  @map("user_id")
+  metadata        Json?
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  @@index([orderId])
+  @@index([sellerId])
+  @@index([transactionType])
+  @@map("ledger_entries")
+}
+
+// ============================================
+// COMMUNITY-FIRST MARKETPLACE MODELS
+// ============================================
+
+model Community {
+  id                    String         @id @default(uuid())
+  name                  String         // e.g. "Askari 11"
+  slug                  String         @unique // "askari-11"
+  city                  String         @default("Lahore")
+  areaDescription       String?        @map("area_description")
+  centerLatitude        Decimal        @map("center_latitude") @db.Decimal(10, 8)
+  centerLongitude       Decimal        @map("center_longitude") @db.Decimal(11, 8)
+  radiusKm              Float          @default(3.0) @map("radius_km")
+  neighborCommunityIds  String[]       @default([]) @map("neighbor_community_ids")
+  crossCommunityEnabled Boolean        @default(true) @map("cross_community_enabled")
+  deliveryBaseFee       Decimal        @default(50) @map("delivery_base_fee") @db.Decimal(10, 2)
+  crossCommunityBaseFee Decimal        @default(150) @map("cross_community_base_fee") @db.Decimal(10, 2)
+  isActive              Boolean        @default(true) @map("is_active")
+  createdAt             DateTime       @default(now()) @map("created_at")
+  updatedAt             DateTime       @updatedAt @map("updated_at")
+
+  users                 User[]
+  sellers               Seller[]
+  addresses             UserAddress[]
+
+  @@map("communities")
+}
+
+model FavoriteSeller {
+  id        String   @id @default(uuid())
+  userId    String   @map("user_id")
+  sellerId  String   @map("seller_id")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  seller    Seller   @relation(fields: [sellerId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, sellerId])
+  @@map("favorite_sellers")
+}
+
+model OrderMessage {
+  id          String    @id @default(uuid())
+  orderId     String    @map("order_id")
+  senderId    String    @map("sender_id")
+  senderRole  String    @map("sender_role") // customer, seller, rider, support
+  message     String
+  messageType String    @default("text") @map("message_type") // text, voice, image
+  mediaUrl    String?   @map("media_url")
+  duration    Int?      // duration in seconds for voice notes
+  isRead      Boolean   @default(false) @map("is_read")
+  readAt      DateTime? @map("read_at")
+  createdAt   DateTime  @default(now()) @map("created_at")
+
+  order       Order     @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  sender      User      @relation(fields: [senderId], references: [id], onDelete: Cascade)
+
+  @@map("order_messages")
 }
 

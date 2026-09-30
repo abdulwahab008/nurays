@@ -1,284 +1,431 @@
-@import url('https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600;700&family=Geist+Mono:wght@400;500&family=Fraunces:opsz,wght@9..144,300;9..144,400;9..144,500&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800;900&family=Geist:wght@300;400;500;600;700&family=Geist+Mono:wght@400;500;600&display=swap');
 @import "tailwindcss";
 @import "leaflet/dist/leaflet.css";
 
 /* ============================================================
-   Nuray Design System — v3 "Premium Marketplace"
-   Forest green · warm cream · Fraunces italic display.
+   NURAY DESIGN SYSTEM — "Gastronomic Noir & Flame Ember"
+   Unorthodox Food Delivery & Sub-Zero Cold-Chain Platform
    ============================================================ */
 
 :root {
-  /* FOREST — primary */
-  --forest-50:  #ecf3ec;
-  --forest-100: #d2e3d2;
-  --forest-200: #a4c8a6;
-  --forest-300: #6fa873;
-  --forest-400: #438849;
-  --forest-500: #0a7a3a;
-  --forest-600: #086530;
-  --forest-700: #074f25;
-  --forest-800: #0a3d1d;
-  --forest-900: #082818;
+  /* FLAME EMBER — Appetite, Heat, Express Delivery */
+  --flame-50:  #fff5ed;
+  --flame-100: #ffe6d4;
+  --flame-200: #ffc9a8;
+  --flame-300: #ffa270;
+  --flame-400: #ff7333;
+  --flame-500: #ff5500;
+  --flame-600: #e64000;
+  --flame-700: #bd3000;
+  --flame-800: #962604;
+  --flame-900: #7a2208;
 
-  /* GOLD — premium accent */
-  --gold-50:  #fbf6e9;
-  --gold-100: #f4e7c2;
-  --gold-200: #e8cf85;
-  --gold-300: #d8b153;
-  --gold-400: #c19a3e;
-  --gold-500: #a17e28;
-  --gold-600: #7a5f1d;
-  --gold-700: #574214;
+  /* SUB-ZERO FROST — -18°C Signature Cold-Chain Integrity */
+  --frost-50:  #ecfeff;
+  --frost-100: #cffafe;
+  --frost-200: #a5f3fc;
+  --frost-300: #67e8f9;
+  --frost-400: #22d3ee;
+  --frost-500: #00b4d8;
+  --frost-600: #0096c7;
+  --frost-700: #0077b6;
+  --frost-800: #023e8a;
+  --frost-neon: #00e5ff;
 
-  /* ANAR — error / sale */
-  --anar-50:  #fbeaea;
-  --anar-100: #f4cdcd;
-  --anar-200: #e69b9b;
-  --anar-500: #a8232c;
-  --anar-600: #871a22;
-  --anar-700: #631218;
+  /* SAFFRON GOLD — Star Ratings & Chef Honors */
+  --saffron-50:  #fffbeb;
+  --saffron-100: #fef3c7;
+  --saffron-400: #fbbf24;
+  --saffron-500: #f59e0b;
+  --saffron-600: #d97706;
 
-  /* INK — warm charcoal */
-  --ink-50:  #f5ece0;
-  --ink-100: #ece1ce;
-  --ink-200: #d9cdb6;
-  --ink-300: #b8a98e;
-  --ink-400: #7e7059;
-  --ink-500: #6a5d47;
-  --ink-600: #4e4434;
-  --ink-700: #3a3225;
-  --ink-800: #29231a;
-  --ink-900: #1a1610;
+  /* FRESH HERB / EMERALD — Live Kitchen, Verified, Fresh */
+  --herb-50:   #ecfdf5;
+  --herb-100:  #d1fae5;
+  --herb-400:  #34d399;
+  --herb-500:  #10b981;
+  --herb-600:  #059669;
 
-  /* CREAM — surfaces */
-  --cream-50:  #fbf8f1;
-  --cream-100: #f5efe1;
-  --cream-200: #ebe2cc;
-  --cream-300: #ddd0b1;
+  /* GASTRONOMIC DARK SLATE & OBSIDIAN (Deep Modern Surfaces) */
+  --obsidian-950: #080B0F;
+  --obsidian-900: #0C1016;
+  --obsidian-850: #121822;
+  --obsidian-800: #1A2230;
+  --obsidian-700: #263346;
 
-  --paper-0: #ffffff;
+  /* LIGHT CRISP PORCELAIN SURFACES */
+  --porcelain-50:  #FAFAFA;
+  --porcelain-100: #F3F4F6;
+  --porcelain-200: #E5E7EB;
+  --porcelain-300: #D1D5DB;
+  --porcelain-400: #9CA3AF;
+  --porcelain-800: #1F2937;
+  --porcelain-900: #111827;
 
-  /* Aliases */
-  --bg-page:    var(--cream-50);
-  --bg-card:    var(--paper-0);
-  --bg-raised:  var(--cream-100);
-  --bg-inverse: var(--ink-900);
+  /* CORE SEMANTIC TOKENS */
+  --bg-page:        #FAFAFA;
+  --bg-card:        #FFFFFF;
+  --bg-raised:      #F3F4F6;
+  --bg-inverse:     #0C1016;
 
-  --fg-default: var(--ink-900);
-  --fg-muted:   var(--ink-600);
-  --fg-subtle:  var(--ink-500);
-  --fg-faint:   var(--ink-400);
-  --fg-inverse: var(--cream-50);
+  --fg-default:     #0F172A;
+  --fg-muted:       #475569;
+  --fg-subtle:      #64748B;
+  --fg-faint:       #94A3B8;
+  --fg-inverse:     #FFFFFF;
 
-  --border-hair:   var(--ink-200);
-  --border-rule:   var(--ink-300);
-  --border-strong: var(--ink-900);
+  --border-hair:    rgba(15, 23, 42, 0.08);
+  --border-rule:    rgba(15, 23, 42, 0.12);
+  --border-strong:  #0F172A;
 
-  --accent:      var(--forest-500);
-  --accent-soft: var(--forest-50);
-  --accent-deep: var(--forest-700);
+  --accent-flame:   #FF5500;
+  --accent-frost:   #00B4D8;
+  --accent-herb:    #10B981;
 
-  /* Elevation */
-  --shadow-xs: 0 1px 0 0 rgba(26, 22, 16, 0.04);
-  --shadow-sm: 0 2px 8px -4px rgba(26, 22, 16, 0.08), 0 1px 2px -1px rgba(26, 22, 16, 0.04);
-  --shadow-md: 0 12px 24px -8px rgba(26, 22, 16, 0.10), 0 4px 8px -2px rgba(26, 22, 16, 0.05);
-  --shadow-lg: 0 28px 48px -16px rgba(26, 22, 16, 0.16), 0 8px 16px -4px rgba(26, 22, 16, 0.06);
+  /* ELEVATION & SHADOWS */
+  --shadow-flame:   0 8px 24px -4px rgba(255, 85, 0, 0.35);
+  --shadow-frost:   0 8px 24px -4px rgba(0, 180, 216, 0.3);
+  --shadow-card:    0 10px 30px -8px rgba(15, 23, 42, 0.08), 0 2px 8px -2px rgba(15, 23, 42, 0.04);
+  --shadow-hover:   0 20px 40px -12px rgba(15, 23, 42, 0.14), 0 6px 16px -4px rgba(15, 23, 42, 0.06);
 
-  /* Type */
-  --font-display: 'Fraunces', 'Times New Roman', Georgia, serif;
-  --font-ui:      'Geist', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-  --font-mono:    'Geist Mono', ui-monospace, Menlo, monospace;
+  /* TYPOGRAPHY */
+  --font-display:   'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-ui:        'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-mono:      'Geist Mono', ui-monospace, Menlo, monospace;
 
-  --ease-out:    cubic-bezier(0.2, 0.6, 0.2, 1);
-  --ease-in-out: cubic-bezier(0.4, 0.0, 0.2, 1);
+  --ease-spring:    cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-smooth:    cubic-bezier(0.2, 0.6, 0.2, 1);
 }
 
 /* ============================================================
-   Tailwind v4 theme — overrides default green/gray to forest/ink
-   so the existing class-heavy pages adopt the new palette
-   without rewriting every utility.
+   TAILWIND THEME CONFIGURATION
    ============================================================ */
 @theme {
-  --font-sans:  'Geist', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --font-sans:  'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   --font-mono:  'Geist Mono', ui-monospace, Menlo, monospace;
-  --font-serif: 'Fraunces', 'Times New Roman', Georgia, serif;
 
-  /* Map bg/foreground to cream/ink */
-  --color-background: #fbf8f1;
-  --color-foreground: #1a1610;
-  --color-border: #d9cdb6;
-  --color-input:  #d9cdb6;
-  --color-ring:   #0a7a3a;
+  --color-primary: #FF5500;
+  --color-primary-hover: #E64000;
+  --color-secondary: #00B4D8;
+  --color-accent: #10B981;
 
-  --color-primary: #0a7a3a;
-  --color-primary-foreground: #fbf8f1;
-  --color-secondary: #f5efe1;
-  --color-secondary-foreground: #1a1610;
-  --color-accent: #ecf3ec;
-  --color-accent-foreground: #074f25;
-  --color-destructive: #a8232c;
-  --color-destructive-foreground: #fbf8f1;
+  --color-flame-50:  #fff5ed;
+  --color-flame-100: #ffe6d4;
+  --color-flame-500: #ff5500;
+  --color-flame-600: #e64000;
 
-  /* Remap Tailwind greens → forest */
-  --color-green-50:  #ecf3ec;
-  --color-green-100: #d2e3d2;
-  --color-green-200: #a4c8a6;
-  --color-green-300: #6fa873;
-  --color-green-400: #438849;
-  --color-green-500: #0a7a3a;
-  --color-green-600: #086530;
-  --color-green-700: #074f25;
-  --color-green-800: #0a3d1d;
-  --color-green-900: #082818;
-
-  /* Remap Tailwind grays → warm ink/cream */
-  --color-gray-50:  #fbf8f1;
-  --color-gray-100: #f5efe1;
-  --color-gray-200: #ebe2cc;
-  --color-gray-300: #d9cdb6;
-  --color-gray-400: #b8a98e;
-  --color-gray-500: #8c7d63;
-  --color-gray-600: #4e4434;
-  --color-gray-700: #3a3225;
-  --color-gray-800: #29231a;
-  --color-gray-900: #1a1610;
-
-  /* Forest as a named scale */
-  --color-forest-50:  #ecf3ec;
-  --color-forest-100: #d2e3d2;
-  --color-forest-200: #a4c8a6;
-  --color-forest-300: #6fa873;
-  --color-forest-400: #438849;
-  --color-forest-500: #0a7a3a;
-  --color-forest-600: #086530;
-  --color-forest-700: #074f25;
-  --color-forest-800: #0a3d1d;
-  --color-forest-900: #082818;
-
-  --color-cream-50:  #fbf8f1;
-  --color-cream-100: #f5efe1;
-  --color-cream-200: #ebe2cc;
-  --color-cream-300: #ddd0b1;
-
-  --color-ink-100: #ece1ce;
-  --color-ink-200: #d9cdb6;
-  --color-ink-300: #b8a98e;
-  --color-ink-400: #8c7d63;
-  --color-ink-500: #6a5d47;
-  --color-ink-600: #4e4434;
-  --color-ink-700: #3a3225;
-  --color-ink-800: #29231a;
-  --color-ink-900: #1a1610;
-
-  --color-gold-400: #c19a3e;
-  --color-gold-500: #a17e28;
-  --color-gold-600: #7a5f1d;
-
-  --color-anar-500: #a8232c;
-  --color-anar-600: #871a22;
-
-  /* Tighter, more square radii — premium leans LESS round */
-  --radius-sm: 0.25rem;
-  --radius-md: 0.5rem;
-  --radius-lg: 0.875rem;
-  --radius-xl: 1.25rem;
+  --color-frost-50:  #ecfeff;
+  --color-frost-100: #cffafe;
+  --color-frost-400: #22d3ee;
+  --color-frost-500: #00b4d8;
+  --color-frost-600: #0096c7;
 }
 
 /* ============================================================
-   BASE
+   BASE RESETS & DEFAULTS
    ============================================================ */
 html, body {
   font-family: var(--font-ui);
-  font-size: 15px;
-  font-weight: 400;
+  background-color: var(--bg-page);
   color: var(--fg-default);
-  background: var(--bg-page);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   text-rendering: optimizeLegibility;
+  scroll-behavior: smooth;
 }
 
 * {
   border-color: var(--border-hair);
 }
 
-h1, h2, h3, h4, h5 {
-  margin: 0;
-  line-height: 1.2;
-  letter-spacing: -0.015em;
-  color: var(--fg-default);
-}
-
-/* The signature serif display moment — italic Fraunces, optical 144 */
-.display,
-.font-display {
+h1, h2, h3, h4, h5, h6 {
   font-family: var(--font-display);
-  font-weight: 300;
-  font-style: italic;
-  font-variation-settings: "opsz" 144;
-  line-height: 1.05;
-  letter-spacing: -0.02em;
-}
-
-.eyebrow {
-  font-size: 10px;
-  font-weight: 500;
-  text-transform: uppercase;
-  letter-spacing: 0.18em;
-  color: var(--fg-subtle);
-}
-
-.price,
-.font-mono {
-  font-family: var(--font-mono);
-  font-feature-settings: 'tnum' on;
-  font-weight: 500;
+  font-weight: 800;
+  letter-spacing: -0.03em;
   color: var(--fg-default);
 }
 
 ::selection {
-  background: var(--forest-200);
-  color: var(--ink-900);
+  background: #FF5500;
+  color: #FFFFFF;
 }
 
-/* Brand mark — green disc with italic N */
-.brand-mark {
-  display: inline-grid;
-  place-items: center;
-  position: relative;
-  flex: 0 0 auto;
+/* ============================================================
+   DELIVERY APP SIGNATURE UTILITY CLASSES
+   ============================================================ */
+
+/* Primary Flame CTA Button */
+.flame-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  height: 48px;
+  padding: 0 24px;
   border-radius: 9999px;
-  background: var(--forest-500);
-  color: var(--cream-50);
+  font-weight: 700;
+  font-size: 14px;
+  letter-spacing: -0.01em;
+  color: #ffffff;
+  background: linear-gradient(135deg, #FF5500 0%, #FF2A00 100%);
+  box-shadow: 0 6px 20px -3px rgba(255, 85, 0, 0.4);
+  transition: all 0.25s var(--ease-spring);
+  cursor: pointer;
+  border: none;
+  text-decoration: none;
 }
-.brand-mark::before {
-  content: '';
-  position: absolute;
-  inset: 2px;
-  border: 1px dashed rgba(251, 248, 241, 0.35);
-  border-radius: 50%;
+.flame-btn:hover {
+  transform: translateY(-2px) scale(1.02);
+  box-shadow: 0 10px 28px -4px rgba(255, 85, 0, 0.55);
 }
-.brand-mark > span {
-  font-family: var(--font-display);
-  font-style: italic;
-  font-weight: 300;
-  line-height: 1;
-  letter-spacing: -0.04em;
+.flame-btn:active {
+  transform: translateY(0) scale(0.98);
+}
+
+/* Sub-Zero Frost Button / Pill */
+.frost-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  height: 44px;
+  padding: 0 20px;
+  border-radius: 9999px;
+  font-weight: 700;
+  font-size: 13px;
+  color: #0077b6;
+  background: #ecfeff;
+  border: 1px solid #a5f3fc;
+  transition: all 0.2s ease;
+}
+.frost-btn:hover {
+  background: #cffafe;
+  transform: translateY(-1px);
+}
+
+/* Modern Food Card */
+.food-delivery-card {
+  position: relative;
+  background: #FFFFFF;
+  border-radius: 24px;
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  box-shadow: var(--shadow-card);
+  transition: all 0.3s var(--ease-spring);
+  overflow: hidden;
+}
+.food-delivery-card:hover {
+  transform: translateY(-6px);
+  box-shadow: var(--shadow-hover);
+  border-color: rgba(255, 85, 0, 0.25);
+}
+
+/* Image container with smooth zoom */
+.food-delivery-card .food-img-container {
+  overflow: hidden;
   position: relative;
 }
-
-/* Custom scrollbar for horizontal scroll containers */
-.scrollbar-thin {
-  scrollbar-width: thin;
-  scrollbar-color: var(--ink-300) transparent;
+.food-delivery-card .food-img-container img {
+  transition: transform 0.6s var(--ease-spring);
 }
-.scrollbar-thin::-webkit-scrollbar { height: 6px; }
-.scrollbar-thin::-webkit-scrollbar-track { background: transparent; }
-.scrollbar-thin::-webkit-scrollbar-thumb {
-  background-color: var(--ink-300);
-  border-radius: 3px;
+.food-delivery-card:hover .food-img-container img {
+  transform: scale(1.08);
 }
-.scrollbar-thin::-webkit-scrollbar-thumb:hover { background-color: var(--ink-500); }
 
-/* No emoji as decoration — design system rule */
-.no-emoji::before, .no-emoji::after { content: none !important; }
+/* Live Delivery Radar Pulse */
+@keyframes radar-pulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7);
+  }
+  70% {
+    box-shadow: 0 0 0 10px rgba(16, 185, 129, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(16, 185, 129, 0);
+  }
+}
+.radar-pulse-dot {
+  width: 10px;
+  height: 10px;
+  background-color: #10B981;
+  border-radius: 9999px;
+  animation: radar-pulse 2s infinite;
+}
+
+/* Unorthodox Sub-Zero Temp Badge */
+.subzero-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 12px;
+  border-radius: 9999px;
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  background: rgba(0, 180, 216, 0.12);
+  color: #0077b6;
+  border: 1px solid rgba(0, 180, 216, 0.3);
+}
+
+/* Glassmorphism Panel */
+.glass-panel {
+  background: rgba(255, 255, 255, 0.85);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.4);
+}
+.dark-glass-panel {
+  background: rgba(12, 16, 22, 0.85);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: #FFFFFF;
+}
+
+/* Backward compatibility aliases for nuray-btn & nuray-input to maintain consistency */
+.nuray-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  height: 46px;
+  padding: 0 22px;
+  border-radius: 9999px;
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  border: 0;
+  text-decoration: none;
+}
+.nuray-btn-primary {
+  background: linear-gradient(135deg, #FF5500 0%, #FF2A00 100%);
+  color: #ffffff;
+  box-shadow: 0 4px 14px -2px rgba(255, 85, 0, 0.35);
+}
+.nuray-btn-primary:hover {
+  background: linear-gradient(135deg, #e64000 0%, #cc2200 100%);
+  transform: translateY(-1px);
+}
+.nuray-btn-dark {
+  background: #0F172A;
+  color: #FFFFFF;
+}
+.nuray-btn-dark:hover {
+  background: #1E293B;
+}
+.nuray-btn-outline {
+  background: transparent;
+  color: #0F172A;
+  border: 1px solid #CBD5E1;
+}
+.nuray-btn-outline:hover {
+  background: #F1F5F9;
+  border-color: #94A3B8;
+}
+.nuray-card {
+  background: #FFFFFF;
+  border-radius: 20px;
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  box-shadow: var(--shadow-card);
+}
+.nuray-input {
+  width: 100%;
+  height: 46px;
+  padding: 0 16px;
+  border-radius: 12px;
+  background: #FFFFFF;
+  border: 1px solid #E2E8F0;
+  color: #0F172A;
+  font-size: 15px;
+  outline: none;
+  transition: all 0.2s ease;
+}
+.nuray-input:focus {
+  border-color: #FF5500;
+  box-shadow: 0 0 0 3px rgba(255, 85, 0, 0.15);
+}
+
+/* Category capsule button */
+.category-capsule {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 20px;
+  border-radius: 9999px;
+  font-size: 13px;
+  font-weight: 700;
+  white-space: nowrap;
+  background: #FFFFFF;
+  border: 1px solid #E2E8F0;
+  color: #334155;
+  transition: all 0.2s var(--ease-spring);
+  cursor: pointer;
+}
+.category-capsule:hover {
+  border-color: #FF5500;
+  color: #FF5500;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px -2px rgba(255, 85, 0, 0.15);
+}
+.category-capsule.active {
+  background: linear-gradient(135deg, #FF5500 0%, #FF2A00 100%);
+  border-color: #FF5500;
+  color: #FFFFFF;
+  box-shadow: 0 4px 16px -2px rgba(255, 85, 0, 0.4);
+}
+
+/* Floating Cart Pill */
+.floating-cart-pill {
+  position: fixed;
+  bottom: 28px;
+  right: 28px;
+  z-index: 99;
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 24px;
+  border-radius: 9999px;
+  background: #0C1016;
+  color: #FFFFFF;
+  font-weight: 800;
+  font-size: 15px;
+  box-shadow: 0 16px 36px -8px rgba(12, 16, 22, 0.6), 0 0 0 1px rgba(255, 255, 255, 0.1);
+  transition: all 0.3s var(--ease-spring);
+}
+.floating-cart-pill:hover {
+  transform: translateY(-4px) scale(1.04);
+  box-shadow: 0 20px 42px -6px rgba(255, 85, 0, 0.35), 0 0 0 1px #FF5500;
+}
+
+/* Custom modern scrollbars */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: #CBD5E1;
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #94A3B8;
+}
+
+/* Utilities to completely hide scrollbar ("moving line") */
+.scrollbar-none::-webkit-scrollbar,
+.no-scrollbar::-webkit-scrollbar,
+[class*="scrollbar-none"]::-webkit-scrollbar {
+  display: none !important;
+  width: 0 !important;
+  height: 0 !important;
+}
+.scrollbar-none,
+.no-scrollbar,
+[class*="scrollbar-none"] {
+  -ms-overflow-style: none !important;
+  scrollbar-width: none !important;
+}

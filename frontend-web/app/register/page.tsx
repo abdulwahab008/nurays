@@ -22,10 +22,13 @@ function RegisterForm() {
     confirmPassword: '',
     full_name: '',
     phone: '',
-    city: '',
+    city: 'Karachi',
+    community: 'Askari 11',
+    house_apt: '',
     area: '',
     user_type: 'customer',
     business_name: '',
+    termsAccepted: false,
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -60,11 +63,17 @@ function RegisterForm() {
         // Only redirect to email verification if explicitly required AND not a Google OAuth user
         if (response.data.requiresEmailVerification && !response.data.user?.emailVerified) {
           router.push('/verify-email-pending');
-        } else if (response.data.user?.user_type === 'seller') {
-          // TODO: Create seller dashboard page
-          router.push('/products');
         } else {
-          router.push('/products');
+          const uType = response.data.user?.userType || response.data.user?.user_type;
+          if (uType === 'seller') {
+            router.push('/sellers/dashboard');
+          } else if (uType === 'rider') {
+            router.push('/riders/dashboard');
+          } else if (uType === 'admin') {
+            router.push('/admin/dashboard');
+          } else {
+            router.push('/dashboard');
+          }
         }
       }
     } catch (err: any) {
@@ -93,6 +102,11 @@ function RegisterForm() {
     // Validate business name for sellers
     if (formData.user_type === 'seller' && !formData.business_name.trim()) {
       setError('Business name is required for sellers');
+      return;
+    }
+
+    if (!formData.termsAccepted) {
+      setError('Please agree to the Terms of Service and Community Guidelines to proceed');
       return;
     }
 
@@ -138,6 +152,7 @@ function RegisterForm() {
 
         // Redirect based on user type
         const dashboardByType: Record<string, string> = {
+          customer: '/dashboard',
           seller: '/sellers/dashboard?onboarding=true',
           rider: '/riders/dashboard',
         };
@@ -150,8 +165,8 @@ function RegisterForm() {
         } else if (dashboardByType[formData.user_type]) {
           router.push(dashboardByType[formData.user_type]);
         } else {
-          // Customer - go to browse products
-          router.push('/products');
+          // Default to customer dashboard
+          router.push('/dashboard');
         }
       } else {
         throw new Error('Invalid response from server');
@@ -182,64 +197,61 @@ function RegisterForm() {
 
   const inputClass = 'nuray-input';
   const inputStyle: React.CSSProperties = {};
-  const labelClass = 'eyebrow block mb-2';
-  const helperClass = 'text-xs mt-1.5';
-  const helperStyle = { color: 'var(--ink-500)' } as const;
+  const labelClass = 'text-xs font-black uppercase tracking-wider text-slate-500 block mb-2';
+  const helperClass = 'text-xs mt-1.5 text-slate-500';
+  const helperStyle = {} as const;
 
   return (
-    <div className="min-h-screen flex items-center justify-center py-12 px-4 nuray-bg-cream">
-      <div className="nuray-w-card-md nuray-card p-10">
+    <div className="min-h-screen flex items-center justify-center py-12 px-4 bg-[#FAFAFA]">
+      <div className="nuray-w-card-md bg-white rounded-3xl p-8 sm:p-10 border border-slate-200/80 shadow-xl">
         <div className="text-center mb-8">
           <Link href="/" className="inline-block">
-            <BrandLockup markSize={44} wordSize={32} />
+            <BrandLockup markSize={44} wordSize={30} />
           </Link>
-          <h1 className="font-display mt-6 text-[40px]" style={{ color: 'var(--ink-900)' }}>
-            Join Nuray.
+          <h1 className="text-2xl sm:text-3xl font-black text-slate-900 mt-6 tracking-tight">
+            Create Your Account
           </h1>
-          <p className="mt-2 text-sm" style={{ color: 'var(--ink-500)' }}>
-            The taste of home, delivered cold.
+          <p className="mt-1 text-xs sm:text-sm text-slate-500 font-medium">
+            Join Pakistan's premier food &amp; cold-chain marketplace.
           </p>
         </div>
 
         {/* User Type Selection */}
         <div className="mb-6">
           <label className={labelClass}>I want to</label>
-          <div className="flex gap-1 p-1 rounded-full" style={{ background: 'var(--cream-100)' }}>
+          <div className="flex gap-1 p-1 rounded-full bg-slate-100 border border-slate-200">
             <button
               type="button"
               onClick={() => setFormData({ ...formData, user_type: 'customer' })}
-              className="flex-1 h-11 rounded-full font-medium transition-colors"
-              style={
+              className={`flex-1 h-11 rounded-full font-bold transition-all text-xs ${
                 formData.user_type === 'customer'
-                  ? { background: 'var(--forest-500)', color: 'var(--cream-50)', fontSize: 13 }
-                  : { background: 'transparent', color: 'var(--ink-700)', fontSize: 13 }
-              }
+                  ? 'bg-gradient-to-r from-[#FF5500] to-[#FF2A00] text-white shadow-sm'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
             >
-              Buy food
+              Order Food
             </button>
             <button
               type="button"
               onClick={() => setFormData({ ...formData, user_type: 'seller' })}
-              className="flex-1 h-11 rounded-full font-medium transition-colors"
-              style={
+              className={`flex-1 h-11 rounded-full font-bold transition-all text-xs ${
                 formData.user_type === 'seller'
-                  ? { background: 'var(--ink-900)', color: 'var(--cream-50)', fontSize: 13 }
-                  : { background: 'transparent', color: 'var(--ink-700)', fontSize: 13 }
-              }
+                  ? 'bg-[#0F172A] text-white shadow-sm'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
             >
-              Sell food
+              Cook &amp; Sell
             </button>
             <button
               type="button"
               onClick={() => setFormData({ ...formData, user_type: 'rider' })}
-              className="flex-1 h-11 rounded-full font-medium transition-colors"
-              style={
+              className={`flex-1 h-11 rounded-full font-bold transition-all text-xs ${
                 formData.user_type === 'rider'
-                  ? { background: 'var(--ink-900)', color: 'var(--cream-50)', fontSize: 13 }
-                  : { background: 'transparent', color: 'var(--ink-700)', fontSize: 13 }
-              }
+                  ? 'bg-[#0F172A] text-white shadow-sm'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
             >
-              Ride & deliver
+              Deliver / Ride
             </button>
           </div>
           {formData.user_type === 'seller' && (
@@ -415,18 +427,72 @@ function RegisterForm() {
           </div>
 
           <div className="mb-4">
-            <label htmlFor="area" className={labelClass}>
-              Area
+            <label htmlFor="community" className={labelClass}>
+              Hyperlocal Community *
+            </label>
+            <select
+              id="community"
+              value={formData.community}
+              onChange={(e) => setFormData({ ...formData, community: e.target.value })}
+              className={inputClass}
+              style={inputStyle}
+              required
+            >
+              <option value="Askari 11">Askari 11 (Sector A/B/C)</option>
+              <option value="Askari 10">Askari 10 (Main / Sector D)</option>
+              <option value="DHA Phase 6">DHA Phase 6</option>
+              <option value="DHA Phase 5">DHA Phase 5 (Commercial & Residential)</option>
+              <option value="Bahria Town">Bahria Town Karachi</option>
+              <option value="Gulshan-e-Iqbal">Gulshan-e-Iqbal</option>
+              <option value="Clifton">Clifton (Blocks 1-9)</option>
+              <option value="Other">Other Community</option>
+            </select>
+            <p className={helperClass} style={helperStyle}>
+              Used to show your nearest home kitchens and fastest delivery riders
+            </p>
+          </div>
+
+          <div className="mb-4">
+            <label htmlFor="house_apt" className={labelClass}>
+              House / Apartment / Street #
             </label>
             <input
               type="text"
-              id="area"
-              value={formData.area}
-              onChange={(e) => setFormData({ ...formData, area: e.target.value })}
-              placeholder="DHA Phase 5"
+              id="house_apt"
+              value={formData.house_apt}
+              onChange={(e) => setFormData({ ...formData, house_apt: e.target.value })}
+              placeholder="e.g. Apt 402, Block B, Street 7"
               className={inputClass}
               style={inputStyle}
             />
+          </div>
+
+          <div className="mb-6">
+            <label className="flex items-start gap-3 cursor-pointer">
+              <input
+                type="checkbox"
+                id="termsAccepted"
+                checked={formData.termsAccepted}
+                onChange={(e) => setFormData({ ...formData, termsAccepted: e.target.checked })}
+                className="mt-1 h-4 w-4 rounded border-gray-300 text-[#FF5500] focus:ring-[#FF5500]"
+                required
+              />
+              <span className="text-xs text-slate-600 leading-relaxed">
+                I agree to the{' '}
+                <Link href="/terms" className="text-[#FF5500] font-semibold hover:underline">
+                  Terms of Service
+                </Link>
+                ,{' '}
+                <Link href="/privacy" className="text-[#FF5500] font-semibold hover:underline">
+                  Privacy Policy
+                </Link>
+                , and{' '}
+                <span className="text-slate-900 font-semibold">
+                  Community Food Safety Guidelines
+                </span>
+                .
+              </span>
+            </label>
           </div>
 
           <Button type="submit" className="w-full" size="lg" disabled={loading}>

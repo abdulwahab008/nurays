@@ -12,30 +12,45 @@ export function calculateGst(subtotalAfterDiscount: number): number {
   return Math.round(subtotalAfterDiscount * GST_RATE * 100) / 100;
 }
 
-export function formatPrice(price: number): string {
+export function formatPrice(price: number | string | undefined | null): string {
+  const num = Number(price ?? 0);
   return new Intl.NumberFormat('en-PK', {
     style: 'currency',
     currency: 'PKR',
     minimumFractionDigits: 0,
-  }).format(price);
+  }).format(isNaN(num) ? 0 : num);
 }
 
-export function formatDate(date: string | Date): string {
-  return new Intl.DateTimeFormat('en-PK', {
-    year: 'numeric',
-    month: 'long',
-    day: 'numeric',
-  }).format(new Date(date));
+export function formatDate(date: string | Date | undefined | null): string {
+  if (!date) return '—';
+  try {
+    const d = new Date(date);
+    if (isNaN(d.getTime())) return '—';
+    return new Intl.DateTimeFormat('en-PK', {
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+    }).format(d);
+  } catch {
+    return '—';
+  }
 }
 
-export function formatDateTime(date: string | Date): string {
-  return new Intl.DateTimeFormat('en-PK', {
-    year: 'numeric',
-    month: 'short',
-    day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  }).format(new Date(date));
+export function formatDateTime(date: string | Date | undefined | null): string {
+  if (!date) return '—';
+  try {
+    const d = new Date(date);
+    if (isNaN(d.getTime())) return '—';
+    return new Intl.DateTimeFormat('en-PK', {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    }).format(d);
+  } catch {
+    return '—';
+  }
 }
 
 export function formatPhoneNumber(phone: string): string {

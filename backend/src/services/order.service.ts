@@ -477,9 +477,48 @@ export class OrderService {
         }
       }
 
-      // Create inventory reservations
+      // FEFO (First-Expired, First-Out) Hub Batch Allocation & Reservation
       for (const item of orderItems) {
         if (item.fulfillmentType === 'hub' && item.hubId) {
+          const availableBatches = await tx.hubInventory.findMany({
+            where: {
+              hubId: item.hubId,
+              productId: item.productId,
+              status: 'available',
+              quantity: { gt: 0 },
+            },
+            orderBy: { expiryDate: 'asc' }, // FEFO: Earliest expiration batch first
+          });
+
+          let remainingQtyToAllocate = item.quantity;
+          for (const batch of availableBatches) {
+            if (remainingQtyToAllocate <= 0) break;
+            const allocateQty = Math.min(batch.quantity, remainingQtyToAllocate);
+            const newQty = batch.quantity - allocateQty;
+
+            await tx.hubInventory.update({
+              where: { id: batch.id },
+              data: {
+                quantity: newQty,
+                status: newQty === 0 ? 'reserved' : 'available',
+              },
+            });
+
+            await tx.hubInventoryLog.create({
+              data: {
+                hubInventoryId: batch.id,
+                action: 'stock_out',
+                quantityChange: -allocateQty,
+                previousQuantity: batch.quantity,
+                newQuantity: newQty,
+                reason: `FEFO batch allocation for Order #${newOrder.orderNumber} (Batch: ${batch.batchNumber || 'N/A'}, Expiry: ${batch.expiryDate.toISOString().slice(0, 10)})`,
+                performedBy: customerId,
+              },
+            });
+
+            remainingQtyToAllocate -= allocateQty;
+          }
+
           await tx.inventoryReservation.create({
             data: {
               productId: item.productId,
@@ -629,6 +668,7 @@ export class OrderService {
           items: {
             select: {
               id: true,
+              productId: true,
               productName: true,
               productImage: true,
               quantity: true,
@@ -682,10 +722,31 @@ export class OrderService {
    * Get order details
    */
   async getOrderDetails(orderId: string, userId: string) {
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { userType: true, email: true },
+    });
+
+    const seller = await prisma.seller.findUnique({
+      where: { userId },
+      select: { id: true },
+    });
+
+    const isAdmin = user?.userType === 'admin';
+
     const order = await prisma.order.findFirst({
       where: {
         id: orderId,
-        customerId: userId,
+        ...(isAdmin
+          ? {}
+          : {
+              OR: [
+                { customerId: userId },
+                ...(seller ? [{ items: { some: { sellerId: seller.id } } }] : []),
+                { items: { some: { seller: { userId } } } },
+                { delivery: { rider: { userId } } },
+              ],
+            }),
       },
       include: {
         items: {
@@ -728,6 +789,9 @@ export class OrderService {
             rider: {
               select: {
                 id: true,
+                vehicleType: true,
+                vehicleNumber: true,
+                ratingAverage: true,
               },
             },
           },
@@ -837,7 +901,402 @@ export class OrderService {
       refundStatus: cancelledOrder.paymentStatus === 'paid' ? 'processing' : 'not_required',
     };
   }
+
+  /**
+   * Get seller account details for manual online payment (Bank, JazzCash, EasyPaisa)
+   */
+  async getSellerPaymentDetails(orderId: string, userId: string) {
+    const order = await prisma.order.findFirst({
+      where: {
+        id: orderId,
+        customerId: userId,
+      },
+      include: {
+        items: {
+          take: 1,
+          include: {
+            seller: {
+              select: {
+                id: true,
+                businessName: true,
+                bankName: true,
+                bankAccountName: true,
+                bankAccountNumber: true,
+                jazzcashNumber: true,
+                easypaisaNumber: true,
+              },
+            },
+          },
+        },
+      },
+    });
+
+    if (!order) {
+      throw new AppError('Order not found', 404, 'ORDER_NOT_FOUND');
+    }
+
+    const seller = order.items[0]?.seller;
+
+    return {
+      orderId: order.id,
+      orderNumber: order.orderNumber,
+      totalAmount: Number(order.totalAmount),
+      paymentMethod: order.paymentMethod,
+      paymentStatus: order.paymentStatus,
+      paymentSubmittedAt: order.paymentSubmittedAt,
+      paymentReferenceNumber: order.paymentReferenceNumber,
+      seller: seller
+        ? {
+            id: seller.id,
+            businessName: seller.businessName,
+            bankName: seller.bankName || 'Meezan Bank / HBL',
+            bankAccountName: seller.bankAccountName || seller.businessName,
+            bankAccountNumber: seller.bankAccountNumber || 'PK00MEZN000123456789',
+            jazzcashNumber: seller.jazzcashNumber || '0300-1234567',
+            easypaisaNumber: seller.easypaisaNumber || '0345-1234567',
+          }
+        : null,
+    };
+  }
+
+  /**
+   * Buyer submits manual payment details (TID / reference / proof)
+   */
+  async submitManualPayment(
+    orderId: string,
+    userId: string,
+    data: {
+      referenceNumber: string;
+      senderName?: string;
+      senderAccount?: string;
+      proofUrl?: string;
+      notes?: string;
+    }
+  ) {
+    const order = await prisma.order.findFirst({
+      where: {
+        id: orderId,
+        customerId: userId,
+      },
+      include: {
+        items: true,
+      },
+    });
+
+    if (!order) {
+      throw new AppError('Order not found', 404, 'ORDER_NOT_FOUND');
+    }
+
+    if (order.paymentStatus === 'paid') {
+      throw new AppError('Order is already marked as paid', 400, 'ALREADY_PAID');
+    }
+
+    const updated = await prisma.order.update({
+      where: { id: orderId },
+      data: {
+        paymentStatus: 'payment_submitted',
+        paymentReferenceNumber: data.referenceNumber,
+        paymentSenderName: data.senderName,
+        paymentSenderAccount: data.senderAccount,
+        paymentProofUrl: data.proofUrl,
+        paymentNotes: data.notes,
+        paymentSubmittedAt: new Date(),
+      },
+    });
+
+    // Add status history record
+    await prisma.orderStatusHistory.create({
+      data: {
+        orderId,
+        status: order.orderStatus,
+        notes: `Payment submitted by customer. Reference/TID: ${data.referenceNumber}`,
+        changedBy: userId,
+      },
+    });
+
+    // Notify via realtime
+    await realtimeOrderService.emitOrderStatusUpdate(orderId, order.orderStatus, userId);
+
+    return {
+      success: true,
+      orderId: updated.id,
+      paymentStatus: updated.paymentStatus,
+      paymentReferenceNumber: updated.paymentReferenceNumber,
+      paymentSubmittedAt: updated.paymentSubmittedAt,
+    };
+  }
+
+  /**
+   * Seller confirms or disputes manual payment
+   */
+  async confirmManualPayment(
+    orderId: string,
+    sellerUserId: string,
+    confirmed: boolean,
+    disputeReason?: string
+  ) {
+    const seller = await prisma.seller.findUnique({
+      where: { userId: sellerUserId },
+    });
+
+    if (!seller) {
+      throw new AppError('Seller profile not found', 404, 'SELLER_NOT_FOUND');
+    }
+
+    const order = await prisma.order.findFirst({
+      where: {
+        id: orderId,
+        items: {
+          some: { sellerId: seller.id },
+        },
+      },
+    });
+
+    if (!order) {
+      throw new AppError('Order not found for this seller', 404, 'ORDER_NOT_FOUND');
+    }
+
+    const newPaymentStatus = confirmed ? 'paid' : 'disputed';
+
+    const updated = await prisma.order.update({
+      where: { id: orderId },
+      data: {
+        paymentStatus: newPaymentStatus,
+        paymentConfirmedBy: confirmed ? 'seller' : undefined,
+        paymentConfirmedAt: confirmed ? new Date() : undefined,
+        paidAt: confirmed ? new Date() : undefined,
+        paymentDisputeReason: !confirmed ? disputeReason || 'Payment verification failed' : null,
+      },
+    });
+
+    await prisma.orderStatusHistory.create({
+      data: {
+        orderId,
+        status: order.orderStatus,
+        notes: confirmed
+          ? 'Payment verified and marked as PAID by seller'
+          : `Payment disputed by seller: ${disputeReason || 'Payment not received'}`,
+        changedBy: sellerUserId,
+      },
+    });
+
+    await realtimeOrderService.emitOrderStatusUpdate(orderId, order.orderStatus, sellerUserId);
+
+    return {
+      success: true,
+      orderId: updated.id,
+      paymentStatus: updated.paymentStatus,
+      confirmed,
+    };
+  }
+
+  /**
+   * In-App Order Messages (Buyer ↔ Seller / Rider)
+   */
+  async getOrderMessages(orderId: string, userId: string, role?: string) {
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { userType: true },
+    });
+
+    const seller = await prisma.seller.findUnique({
+      where: { userId },
+      select: { id: true },
+    });
+
+    const isAdmin = user?.userType === 'admin';
+
+    const order = await prisma.order.findFirst({
+      where: {
+        id: orderId,
+        ...(isAdmin
+          ? {}
+          : {
+              OR: [
+                { customerId: userId },
+                ...(seller ? [{ items: { some: { sellerId: seller.id } } }] : []),
+                { items: { some: { seller: { userId } } } },
+                { delivery: { rider: { userId } } },
+              ],
+            }),
+      },
+    });
+
+    if (!order) {
+      throw new AppError('Order not found or access denied', 404, 'ORDER_NOT_FOUND');
+    }
+
+    // Mark unread messages sent by the counterparty as read (Double Blue Tick)
+    const readCondition =
+      role === 'customer'
+        ? { senderRole: { not: 'customer' } }
+        : role === 'seller'
+        ? { senderRole: { not: 'seller' } }
+        : { senderId: { not: userId } };
+
+    await prisma.orderMessage.updateMany({
+      where: {
+        orderId,
+        ...readCondition,
+        isRead: false,
+      },
+      data: {
+        isRead: true,
+        readAt: new Date(),
+      },
+    });
+
+    const messages = await prisma.orderMessage.findMany({
+      where: { orderId },
+      orderBy: { createdAt: 'asc' },
+      include: {
+        sender: {
+          select: {
+            id: true,
+            userType: true,
+            profile: {
+              select: {
+                fullName: true,
+                avatarUrl: true,
+              },
+            },
+          },
+        },
+      },
+    });
+
+    return messages.map((m) => ({
+      id: m.id,
+      orderId: m.orderId,
+      senderId: m.senderId,
+      senderRole: m.senderRole,
+      senderName: m.sender.profile?.fullName || m.sender.userType,
+      senderAvatar: m.sender.profile?.avatarUrl || null,
+      message: m.message,
+      messageType: m.messageType || 'text',
+      mediaUrl: m.mediaUrl || null,
+      duration: m.duration || null,
+      isRead: m.isRead,
+      readAt: m.readAt,
+      createdAt: m.createdAt,
+      isMe: m.senderId === userId,
+    }));
+  }
+
+  /**
+   * Send In-App Order Message (with Voice Notes, Media, & Role Context)
+   */
+  async sendOrderMessage(
+    orderId: string,
+    userId: string,
+    message: string,
+    options?: {
+      role?: 'customer' | 'seller' | 'rider';
+      messageType?: 'text' | 'voice' | 'image';
+      mediaUrl?: string;
+      duration?: number;
+    }
+  ) {
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { id: true, userType: true },
+    });
+
+    if (!user) {
+      throw new AppError('User not found', 404, 'USER_NOT_FOUND');
+    }
+
+    const seller = await prisma.seller.findUnique({
+      where: { userId },
+      select: { id: true },
+    });
+
+    const isAdmin = user?.userType === 'admin';
+
+    const order = await prisma.order.findFirst({
+      where: {
+        id: orderId,
+        ...(isAdmin
+          ? {}
+          : {
+              OR: [
+                { customerId: userId },
+                ...(seller ? [{ items: { some: { sellerId: seller.id } } }] : []),
+                { items: { some: { seller: { userId } } } },
+                { delivery: { rider: { userId } } },
+              ],
+            }),
+      },
+      include: {
+        items: {
+          select: { sellerId: true, seller: { select: { userId: true } } },
+        },
+      },
+    });
+
+    if (!order) {
+      throw new AppError('Order not found or access denied', 404, 'ORDER_NOT_FOUND');
+    }
+
+    // Determine sender role with high fidelity
+    let effectiveRole: string = 'customer';
+    if (options?.role) {
+      effectiveRole = options.role;
+    } else if (user.userType === 'seller' || (seller && order.items.some((i) => i.sellerId === seller.id || i.seller?.userId === userId))) {
+      effectiveRole = 'seller';
+    } else if (user.userType === 'rider') {
+      effectiveRole = 'rider';
+    } else {
+      effectiveRole = 'customer';
+    }
+
+    const msgType = options?.messageType || 'text';
+    const fallbackMessage = msgType === 'voice' ? '🎙️ Voice note' : (message?.trim() || '');
+
+    const orderMsg = await prisma.orderMessage.create({
+      data: {
+        orderId,
+        senderId: userId,
+        senderRole: effectiveRole,
+        message: fallbackMessage,
+        messageType: msgType,
+        mediaUrl: options?.mediaUrl || null,
+        duration: options?.duration ? Math.round(options.duration) : null,
+        isRead: false,
+      },
+      include: {
+        sender: {
+          select: {
+            id: true,
+            userType: true,
+            profile: {
+              select: {
+                fullName: true,
+                avatarUrl: true,
+              },
+            },
+          },
+        },
+      },
+    });
+
+    return {
+      id: orderMsg.id,
+      orderId: orderMsg.orderId,
+      senderId: orderMsg.senderId,
+      senderRole: orderMsg.senderRole,
+      senderName: orderMsg.sender.profile?.fullName || orderMsg.sender.userType,
+      senderAvatar: orderMsg.sender.profile?.avatarUrl || null,
+      message: orderMsg.message,
+      messageType: orderMsg.messageType,
+      mediaUrl: orderMsg.mediaUrl,
+      duration: orderMsg.duration,
+      isRead: orderMsg.isRead,
+      readAt: orderMsg.readAt,
+      createdAt: orderMsg.createdAt,
+      isMe: true,
+    };
+  }
 }
 
 export default new OrderService();
-

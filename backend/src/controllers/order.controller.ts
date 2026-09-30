@@ -86,3 +86,89 @@ export const cancelOrder = async (req: Request, res: Response) => {
   });
 };
 
+export const getSellerPaymentDetails = async (req: Request, res: Response) => {
+  if (!req.user) {
+    throw new AppError('Authentication required', 401, 'AUTH_REQUIRED');
+  }
+
+  const { id } = req.params;
+  const result = await orderService.getSellerPaymentDetails(id, req.user.userId);
+
+  res.status(200).json({
+    success: true,
+    data: result,
+  });
+};
+
+export const submitManualPayment = async (req: Request, res: Response) => {
+  if (!req.user) {
+    throw new AppError('Authentication required', 401, 'AUTH_REQUIRED');
+  }
+
+  const { id } = req.params;
+  const result = await orderService.submitManualPayment(id, req.user.userId, req.body);
+
+  res.status(200).json({
+    success: true,
+    message: 'Payment details submitted successfully. Awaiting seller confirmation.',
+    data: result,
+  });
+};
+
+export const confirmManualPayment = async (req: Request, res: Response) => {
+  if (!req.user) {
+    throw new AppError('Authentication required', 401, 'AUTH_REQUIRED');
+  }
+
+  const { id } = req.params;
+  const { confirmed, disputeReason } = req.body;
+  const result = await orderService.confirmManualPayment(id, req.user.userId, confirmed, disputeReason);
+
+  res.status(200).json({
+    success: true,
+    message: confirmed ? 'Payment verified and confirmed' : 'Payment marked as disputed',
+    data: result,
+  });
+};
+
+export const getOrderMessages = async (req: Request, res: Response) => {
+  if (!req.user) {
+    throw new AppError('Authentication required', 401, 'AUTH_REQUIRED');
+  }
+
+  const { id } = req.params;
+  const role = req.query.role as string | undefined;
+  const result = await orderService.getOrderMessages(id, req.user.userId, role);
+
+  res.status(200).json({
+    success: true,
+    data: result,
+  });
+};
+
+export const sendOrderMessage = async (req: Request, res: Response) => {
+  if (!req.user) {
+    throw new AppError('Authentication required', 401, 'AUTH_REQUIRED');
+  }
+
+  const { id } = req.params;
+  const { message, role, messageType, mediaUrl, duration } = req.body;
+
+  if (!message && !mediaUrl) {
+    throw new AppError('Message text or media is required', 400, 'MESSAGE_REQUIRED');
+  }
+
+  const result = await orderService.sendOrderMessage(id, req.user.userId, message || '', {
+    role,
+    messageType,
+    mediaUrl,
+    duration,
+  });
+
+  res.status(201).json({
+    success: true,
+    data: result,
+  });
+};
+
+

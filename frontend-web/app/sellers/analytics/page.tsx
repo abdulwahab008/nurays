@@ -1,59 +1,16 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
-import { DashboardLayout } from '@/components/layout/DashboardShell';
+import Link from 'next/link';
+import { DashboardLayout, SELLER_SIDEBAR_ITEMS } from '@/components/layout/DashboardShell';
+import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/toast';
 import { useAuthStore } from '@/lib/store/auth-store';
 import { apiClient } from '@/lib/api-client';
 import { formatPrice } from '@/lib/utils';
 
-const sidebarItems = [
-  { name: 'Dashboard', href: '/sellers/dashboard', icon: '' },
-  { name: 'Orders', href: '/sellers/orders', icon: '' },
-  { name: 'Products', href: '/sellers/products', icon: '' },
-  { name: 'Inventory', href: '/sellers/products?view=inventory', icon: '' },
-  { name: 'Promotions', href: '/sellers/promotions', icon: '' },
-  { name: 'Delivery', href: '/sellers/settings#delivery', icon: '' },
-  { name: 'Earnings', href: '/sellers/earnings', icon: '' },
-  { name: 'Analytics', href: '/sellers/analytics', icon: '' },
-  { name: 'Notifications', href: '/sellers/notifications', icon: '' },
-  { name: 'Settings', href: '/sellers/settings', icon: '' },
-];
-
-// Icons
-const Icons = {
-  today: (
-    <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M12 3v2.25m6.364.386l-1.591 1.591M21 12h-2.25m-.386 6.364l-1.591-1.591M12 18.75V21m-4.773-4.227l-1.591 1.591M5.25 12H3m4.227-4.773L5.636 5.636M15.75 12a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0z" />
-    </svg>
-  ),
-  week: (
-    <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 012.25-2.25h13.5A2.25 2.25 0 0121 7.5v11.25m-18 0A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75m-18 0v-7.5A2.25 2.25 0 015.25 9h13.5A2.25 2.25 0 0121 11.25v7.5" />
-    </svg>
-  ),
-  month: (
-    <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 012.25-2.25h13.5A2.25 2.25 0 0121 7.5v11.25m-18 0A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75m-18 0v-7.5A2.25 2.25 0 015.25 9h13.5A2.25 2.25 0 0121 11.25v7.5m-9-6h.008v.008H12v-.008zM12 15h.008v.008H12V15zm0 2.25h.008v.008H12v-.008zM9.75 15h.008v.008H9.75V15zm0 2.25h.008v.008H9.75v-.008zM7.5 15h.008v.008H7.5V15zm0 2.25h.008v.008H7.5v-.008zm6.75-4.5h.008v.008h-.008v-.008zm0 2.25h.008v.008h-.008V15zm0 2.25h.008v.008h-.008v-.008zm2.25-4.5h.008v.008H16.5v-.008zm0 2.25h.008v.008H16.5V15z" />
-    </svg>
-  ),
-  total: (
-    <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M3 13.125C3 12.504 3.504 12 4.125 12h2.25c.621 0 1.125.504 1.125 1.125v6.75C7.5 20.496 6.996 21 6.375 21h-2.25A1.125 1.125 0 013 19.875v-6.75zM9.75 8.625c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v11.25c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V8.625zM16.5 4.125c0-.621.504-1.125 1.125-1.125h2.25C20.496 3 21 3.504 21 4.125v15.75c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V4.125z" />
-    </svg>
-  ),
-  chart: (
-    <svg className="w-16 h-16 text-gray-300" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M3 13.125C3 12.504 3.504 12 4.125 12h2.25c.621 0 1.125.504 1.125 1.125v6.75C7.5 20.496 6.996 21 6.375 21h-2.25A1.125 1.125 0 013 19.875v-6.75zM9.75 8.625c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v11.25c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V8.625zM16.5 4.125c0-.621.504-1.125 1.125-1.125h2.25C20.496 3 21 3.504 21 4.125v15.75c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V4.125z" />
-    </svg>
-  ),
-  trophy: (
-    <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 18.75h-9m9 0a3 3 0 013 3h-15a3 3 0 013-3m9 0v-3.375c0-.621-.503-1.125-1.125-1.125h-.871M7.5 18.75v-3.375c0-.621.504-1.125 1.125-1.125h.872m5.007 0H9.497m5.007 0a7.454 7.454 0 01-.982-3.172M9.497 14.25a7.454 7.454 0 00.981-3.172M5.25 4.236c-.982.143-1.954.317-2.916.52A6.003 6.003 0 007.73 9.728M5.25 4.236V4.5c0 2.108.966 3.99 2.48 5.228M5.25 4.236V2.721C7.456 2.41 9.71 2.25 12 2.25c2.291 0 4.545.16 6.75.47v1.516M7.73 9.728a6.726 6.726 0 002.748 1.35m8.272-6.842V4.5c0 2.108-.966 3.99-2.48 5.228m2.48-5.492a46.32 46.32 0 012.916.52 6.003 6.003 0 01-5.395 4.972m0 0a6.726 6.726 0 01-2.749 1.35m0 0a6.772 6.772 0 01-3.044 0" />
-    </svg>
-  ),
-};
+type PeriodType = '7d' | '30d' | '90d' | '1y';
 
 interface AnalyticsData {
   sales: {
@@ -67,6 +24,7 @@ interface AnalyticsData {
     thisWeek: number;
     thisMonth: number;
     total: number;
+    graph?: Array<{ date: string; revenue: number }>;
   };
   orders: {
     total: number;
@@ -84,8 +42,18 @@ export default function SellerAnalyticsPage() {
   const router = useRouter();
   const { isAuthenticated, user } = useAuthStore();
   const { showToast } = useToast();
+
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [analytics, setAnalytics] = useState<AnalyticsData | null>(null);
+  const [selectedPeriod, setSelectedPeriod] = useState<PeriodType>('30d');
+  const [chartView, setChartView] = useState<'bar' | 'line'>('bar');
+  const [activeTooltip, setActiveTooltip] = useState<{
+    date: string;
+    revenue: number;
+    x: number;
+    y: number;
+  } | null>(null);
 
   useEffect(() => {
     if (!isAuthenticated) {
@@ -99,177 +67,779 @@ export default function SellerAnalyticsPage() {
       return;
     }
 
-    loadAnalytics();
-  }, [isAuthenticated, user, router]);
+    loadAnalytics(selectedPeriod);
+  }, [isAuthenticated, user, router, selectedPeriod]);
 
-  const loadAnalytics = async () => {
+  const loadAnalytics = async (period: PeriodType) => {
     try {
       setLoading(true);
-      const response = await apiClient.get('/sellers/me/analytics');
+      setError(null);
+      const response = await apiClient.get(`/sellers/me/analytics?period=${period}`);
       if (response.data.success) {
         setAnalytics(response.data.data);
+      } else {
+        throw new Error(response.data.message || 'Failed to load analytics');
       }
-    } catch (error: any) {
-      console.error('Failed to load analytics:', error);
-      // Show placeholder data if endpoint doesn't exist
-      setAnalytics({
-        sales: { today: 0, thisWeek: 0, thisMonth: 0, total: 0 },
-        revenue: { today: 0, thisWeek: 0, thisMonth: 0, total: 0 },
-        orders: { total: 0, completed: 0, cancelled: 0 },
-        topProducts: [],
-      });
+    } catch (err: any) {
+      console.error('Failed to load analytics:', err);
+      const message =
+        err.response?.data?.error?.message ||
+        err.response?.data?.message ||
+        err.message ||
+        'Failed to fetch seller analytics';
+      setError(message);
     } finally {
       setLoading(false);
     }
   };
 
+  // Compute calculated metrics
+  const totalRevenue = analytics?.revenue?.total ?? 0;
+  const totalUnits = analytics?.sales?.total ?? 0;
+  const totalOrders = analytics?.orders?.total ?? 0;
+  const completedOrders = analytics?.orders?.completed ?? 0;
+  const cancelledOrders = analytics?.orders?.cancelled ?? 0;
+  const inProgressOrders = Math.max(0, totalOrders - completedOrders - cancelledOrders);
+
+  const fulfillmentRate = totalOrders > 0
+    ? Math.round((completedOrders / totalOrders) * 100)
+    : 100;
+
+  const averageOrderValue = completedOrders > 0
+    ? Math.round(totalRevenue / completedOrders)
+    : 0;
+
+  // Normalize graph data points across the selected time period
+  const chartData = useMemo(() => {
+    const rawGraph = analytics?.revenue?.graph || [];
+    const dateMap = new Map<string, number>();
+    rawGraph.forEach((item) => {
+      dateMap.set(item.date, Number(item.revenue));
+    });
+
+    const now = new Date();
+    const days = selectedPeriod === '7d' ? 7 : selectedPeriod === '30d' ? 30 : selectedPeriod === '90d' ? 90 : 365;
+    
+    // For 1y, group by month to keep the chart legible; otherwise group by day
+    if (selectedPeriod === '1y') {
+      const months: { label: string; date: string; revenue: number }[] = [];
+      for (let i = 11; i >= 0; i--) {
+        const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+        const monthKey = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+        const monthName = d.toLocaleString('en-US', { month: 'short' });
+        
+        let monthRev = 0;
+        dateMap.forEach((rev, dateStr) => {
+          if (dateStr.startsWith(monthKey)) {
+            monthRev += rev;
+          }
+        });
+        months.push({ label: monthName, date: monthKey, revenue: monthRev });
+      }
+      return months;
+    }
+
+    const result: { label: string; date: string; revenue: number }[] = [];
+    const step = selectedPeriod === '90d' ? 3 : 1; // sample every 3 days if 90d to prevent clutter
+
+    for (let i = days - 1; i >= 0; i -= step) {
+      const d = new Date(now.getTime() - i * 24 * 60 * 60 * 1000);
+      const isoDate = d.toISOString().split('T')[0];
+      const label = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+      
+      let rev = 0;
+      if (step === 1) {
+        rev = dateMap.get(isoDate) || 0;
+      } else {
+        // Sum window
+        for (let s = 0; s < step; s++) {
+          const windowDate = new Date(d.getTime() + s * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+          rev += dateMap.get(windowDate) || 0;
+        }
+      }
+      result.push({ label, date: isoDate, revenue: rev });
+    }
+
+    return result;
+  }, [analytics?.revenue?.graph, selectedPeriod]);
+
+  const maxRevenueInChart = useMemo(() => {
+    const maxVal = Math.max(...chartData.map((d) => d.revenue), 0);
+    return maxVal === 0 ? 1000 : maxVal;
+  }, [chartData]);
+
+  const peakDay = useMemo(() => {
+    if (chartData.length === 0) return null;
+    return chartData.reduce((prev, curr) => (curr.revenue > prev.revenue ? curr : prev), chartData[0]);
+  }, [chartData]);
+
   if (!isAuthenticated) {
     return null;
   }
 
-  const statsCards = analytics ? [
-    {
-      label: "Today's Sales",
-      value: analytics.sales?.today || 0,
-      revenue: analytics.revenue?.today || 0,
-      icon: Icons.today,
-      gradient: 'from-rose-50 to-rose-100',
-      border: 'border-rose-200',
-      iconBg: 'bg-rose-500',
-      shadow: 'shadow-rose-200',
-      textColor: 'text-rose-600',
-    },
-    {
-      label: 'This Week',
-      value: analytics.sales?.thisWeek || 0,
-      revenue: analytics.revenue?.thisWeek || 0,
-      icon: Icons.week,
-      gradient: 'from-violet-50 to-violet-100',
-      border: 'border-violet-200',
-      iconBg: 'bg-violet-500',
-      shadow: 'shadow-violet-200',
-      textColor: 'text-violet-600',
-    },
-    {
-      label: 'This Month',
-      value: analytics.sales?.thisMonth || 0,
-      revenue: analytics.revenue?.thisMonth || 0,
-      icon: Icons.month,
-      gradient: 'from-cyan-50 to-cyan-100',
-      border: 'border-cyan-200',
-      iconBg: 'bg-cyan-500',
-      shadow: 'shadow-cyan-200',
-      textColor: 'text-cyan-600',
-    },
-    {
-      label: 'All Time',
-      value: analytics.sales?.total || 0,
-      revenue: analytics.revenue?.total || 0,
-      icon: Icons.total,
-      gradient: 'from-emerald-50 to-emerald-100',
-      border: 'border-emerald-200',
-      iconBg: 'bg-emerald-500',
-      shadow: 'shadow-emerald-200',
-      textColor: 'text-emerald-600',
-    },
-  ] : [];
-
   return (
     <DashboardLayout
       title="Analytics"
-      subtitle="Track your sales performance and insights"
-      sidebarItems={sidebarItems}
+      subtitle="Sales, orders, and revenue trends"
+      sidebarItems={SELLER_SIDEBAR_ITEMS}
       userType="seller"
     >
-      <div className="max-w-7xl mx-auto">
-        {loading ? (
-          <div className="text-center py-16">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-emerald-500 mx-auto mb-4"></div>
-            <p className="text-gray-500">Loading analytics...</p>
+      <div className="max-w-7xl mx-auto space-y-6">
+        {/* Top Control Bar: Period Filter & Refresh */}
+        <div className="bg-white rounded-2xl p-3 sm:p-4 border border-slate-200 shadow-xs flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+          <div className="flex items-center gap-2">
+            <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse" />
+            <h2 className="text-sm font-bold text-slate-900 tracking-tight">
+              Performance Overview
+            </h2>
           </div>
-        ) : analytics ? (
-          <>
-            {/* Sales Overview - Enhanced */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5 mb-8">
-              {statsCards.map((card, index) => (
-                <div
-                  key={index}
-                  className={`bg-gradient-to-br ${card.gradient} rounded-2xl p-5 border ${card.border} hover:shadow-lg transition-all duration-300 group`}
+
+          <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
+            {/* Period Pills */}
+            <div className="flex items-center bg-slate-100 p-1 rounded-xl border border-slate-200 text-xs font-semibold">
+              {(
+                [
+                  { id: '7d', label: '7D' },
+                  { id: '30d', label: '30D' },
+                  { id: '90d', label: '90D' },
+                  { id: '1y', label: '1Y' },
+                ] as const
+              ).map((p) => (
+                <button
+                  key={p.id}
+                  id={`period-btn-${p.id}`}
+                  onClick={() => setSelectedPeriod(p.id)}
+                  disabled={loading}
+                  className={`px-3 py-1.5 rounded-lg transition-all ${
+                    selectedPeriod === p.id
+                      ? 'bg-slate-900 text-white shadow-xs font-bold'
+                      : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/60'
+                  }`}
                 >
-                  <div className="flex items-center justify-between mb-4">
-                    <p className={`text-sm font-medium ${card.textColor}`}>{card.label}</p>
-                    <div className={`w-12 h-12 ${card.iconBg} rounded-xl flex items-center justify-center text-white shadow-lg ${card.shadow} group-hover:scale-110 transition-transform`}>
-                      {card.icon}
-                    </div>
-                  </div>
-                  <p className="text-3xl font-bold text-gray-900 mb-1">{card.value}</p>
-                  <p className={`text-sm font-semibold ${card.textColor}`}>{formatPrice(card.revenue)}</p>
-                </div>
+                  {p.label}
+                </button>
               ))}
             </div>
 
-            {/* Top Products - Enhanced */}
-            <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
-              <div className="px-6 py-4 bg-gradient-to-r from-gray-50 to-white border-b border-gray-100">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 bg-amber-100 rounded-xl flex items-center justify-center text-amber-600">
-                    {Icons.trophy}
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => loadAnalytics(selectedPeriod)}
+              disabled={loading}
+              className="rounded-xl border-slate-200 text-xs hover:bg-slate-50"
+            >
+              <svg
+                className={`w-3.5 h-3.5 mr-1 text-slate-500 ${loading ? 'animate-spin' : ''}`}
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+              >
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+              </svg>
+              Refresh
+            </Button>
+          </div>
+        </div>
+
+        {/* Error Alert with Retry */}
+        {error && (
+          <div className="bg-rose-50 border border-rose-200 rounded-2xl p-5 shadow-sm flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+            <div className="flex items-start gap-3">
+              <span className="w-8 h-8 rounded-xl bg-rose-500 text-white flex items-center justify-center font-bold text-base shrink-0">
+                ✕
+              </span>
+              <div>
+                <h3 className="text-sm font-bold text-rose-900">Analytics Service Alert</h3>
+                <p className="text-xs text-rose-700 mt-0.5">{error}</p>
+              </div>
+            </div>
+            <Button
+              size="sm"
+              onClick={() => loadAnalytics(selectedPeriod)}
+              className="bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs rounded-xl"
+            >
+              Retry Connection
+            </Button>
+          </div>
+        )}
+
+        {/* Loading Skeleton or Content */}
+        {loading && !analytics ? (
+          <div className="bg-white rounded-3xl p-16 border border-slate-200 text-center">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-emerald-500 mx-auto mb-4"></div>
+            <h3 className="text-base font-bold text-slate-900">Aggregating Kitchen Telemetry...</h3>
+            <p className="text-xs text-slate-400 mt-1">Calculating sales velocity, gross margins, and order fulfillment</p>
+          </div>
+        ) : (
+          <>
+            {/* 4 Core KPI Cards */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+              {/* Card 1: Period Revenue */}
+              <div className="bg-white rounded-3xl p-6 border border-slate-200 shadow-sm hover:shadow-md transition-all duration-200 relative overflow-hidden group">
+                <div className="flex items-center justify-between mb-3">
+                  <span className="text-xs font-black uppercase tracking-wider text-slate-500">
+                    Net Revenue ({selectedPeriod})
+                  </span>
+                  <div className="w-10 h-10 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center font-bold text-base shadow-sm">
+                    ₨
                   </div>
-                  <h2 className="text-lg font-bold text-gray-900">Top Selling Products</h2>
+                </div>
+                <div className="text-3xl font-black text-slate-900 tracking-tight">
+                  {formatPrice(totalRevenue)}
+                </div>
+                <div className="mt-3 pt-3 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500 font-medium">
+                  <span>Today: <strong className="text-slate-900">{formatPrice(analytics?.revenue?.today ?? 0)}</strong></span>
+                  <span>Month: <strong className="text-slate-900">{formatPrice(analytics?.revenue?.thisMonth ?? 0)}</strong></span>
                 </div>
               </div>
-              <div className="p-6">
-                {analytics.topProducts.length === 0 ? (
-                  <div className="text-center py-12">
-                    <div className="w-24 h-24 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                      {Icons.chart}
+
+              {/* Card 2: Units Sold */}
+              <div className="bg-white rounded-3xl p-6 border border-slate-200 shadow-sm hover:shadow-md transition-all duration-200 group">
+                <div className="flex items-center justify-between mb-3">
+                  <span className="text-xs font-black uppercase tracking-wider text-slate-500">
+                    Dishes Sold ({selectedPeriod})
+                  </span>
+                  <div className="w-10 h-10 rounded-2xl bg-orange-50 text-orange-600 flex items-center justify-center font-bold text-base shadow-sm">
+                    🍽️
+                  </div>
+                </div>
+                <div className="text-3xl font-black text-slate-900 tracking-tight">
+                  {totalUnits} <span className="text-sm font-semibold text-slate-400">units</span>
+                </div>
+                <div className="mt-3 pt-3 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500 font-medium">
+                  <span>Today: <strong className="text-slate-900">{analytics?.sales?.today ?? 0} sold</strong></span>
+                  <span>Week: <strong className="text-slate-900">{analytics?.sales?.thisWeek ?? 0} sold</strong></span>
+                </div>
+              </div>
+
+              {/* Card 3: Fulfillment Health */}
+              <div className="bg-white rounded-3xl p-6 border border-slate-200 shadow-sm hover:shadow-md transition-all duration-200 group">
+                <div className="flex items-center justify-between mb-3">
+                  <span className="text-xs font-black uppercase tracking-wider text-slate-500">
+                    Fulfillment Rate
+                  </span>
+                  <div className="w-10 h-10 rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center font-bold text-base shadow-sm">
+                    📦
+                  </div>
+                </div>
+                <div className="text-3xl font-black text-slate-900 tracking-tight">
+                  {fulfillmentRate}%
+                </div>
+                <div className="mt-3 pt-3 border-t border-slate-100 flex items-center justify-between text-xs">
+                  <span className="text-slate-500">
+                    {completedOrders} completed of {totalOrders}
+                  </span>
+                  <span className={`px-2 py-0.5 rounded-full font-bold text-[10px] ${
+                    fulfillmentRate >= 95
+                      ? 'bg-emerald-100 text-emerald-800'
+                      : fulfillmentRate >= 80
+                      ? 'bg-amber-100 text-amber-800'
+                      : 'bg-rose-100 text-rose-800'
+                  }`}>
+                    {fulfillmentRate >= 95 ? 'Excellent' : fulfillmentRate >= 80 ? 'Good' : 'Needs Review'}
+                  </span>
+                </div>
+              </div>
+
+              {/* Card 4: Average Order Value (AOV) */}
+              <div className="bg-white rounded-3xl p-6 border border-slate-200 shadow-sm hover:shadow-md transition-all duration-200 group">
+                <div className="flex items-center justify-between mb-3">
+                  <span className="text-xs font-black uppercase tracking-wider text-slate-500">
+                    Avg. Order Value (AOV)
+                  </span>
+                  <div className="w-10 h-10 rounded-2xl bg-purple-50 text-purple-600 flex items-center justify-center font-bold text-base shadow-sm">
+                    📈
+                  </div>
+                </div>
+                <div className="text-3xl font-black text-slate-900 tracking-tight">
+                  {formatPrice(averageOrderValue)}
+                </div>
+                <div className="mt-3 pt-3 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500 font-medium">
+                  <span>Per completed order</span>
+                  <span>Active in kitchen: <strong className="text-purple-600">{inProgressOrders}</strong></span>
+                </div>
+              </div>
+            </div>
+
+            {/* Interactive Revenue Chart & Sales Trajectory */}
+            <div className="bg-white rounded-3xl border border-slate-200 shadow-sm p-6 sm:p-8">
+              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-6 pb-6 border-b border-slate-100">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-lg font-black text-slate-900 tracking-tight">
+                      Revenue Velocity & Trajectory
+                    </h3>
+                    <span className="px-2.5 py-1 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-800 text-[10px] font-bold">
+                      PKR Daily
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-500 font-medium mt-0.5">
+                    Interactive daily earnings progression across the selected time horizon
+                  </p>
+                </div>
+
+                <div className="flex items-center gap-3">
+                  {peakDay && peakDay.revenue > 0 && (
+                    <div className="hidden md:flex items-center gap-2 px-3 py-1.5 rounded-2xl bg-amber-50 border border-amber-200 text-amber-900 text-xs font-bold">
+                      <span>🏆 Peak Day:</span>
+                      <span className="font-semibold">{peakDay.label} ({formatPrice(peakDay.revenue)})</span>
                     </div>
-                    <p className="text-gray-500 font-medium">No product sales data yet</p>
-                    <p className="text-gray-400 text-sm mt-1">Start selling to see your top products here</p>
+                  )}
+
+                  {/* Chart Style Switcher */}
+                  <div className="flex items-center bg-slate-100 p-1 rounded-xl border border-slate-200 text-xs font-bold">
+                    <button
+                      type="button"
+                      onClick={() => setChartView('bar')}
+                      className={`px-3 py-1.5 rounded-lg transition-all ${
+                        chartView === 'bar' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-900'
+                      }`}
+                    >
+                      Bars
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setChartView('line')}
+                      className={`px-3 py-1.5 rounded-lg transition-all ${
+                        chartView === 'line' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-900'
+                      }`}
+                    >
+                      Wave
+                    </button>
                   </div>
-                ) : (
-                  <div className="space-y-3">
-                    {analytics.topProducts.map((product, index) => (
-                      <div
-                        key={`${product.name}-${index}`}
-                        className="flex items-center justify-between p-4 bg-gray-50 rounded-xl hover:bg-gray-100 transition-colors"
-                      >
-                        <div className="flex items-center gap-4">
-                          <div className={`w-12 h-12 rounded-xl flex items-center justify-center font-bold text-white shadow-lg ${
-                            index === 0 ? 'bg-gradient-to-br from-amber-400 to-amber-600' :
-                            index === 1 ? 'bg-gradient-to-br from-gray-400 to-gray-600' :
-                            index === 2 ? 'bg-gradient-to-br from-orange-400 to-orange-600' :
-                            'bg-gradient-to-br from-blue-400 to-blue-600'
-                          }`}>
-                            #{index + 1}
-                          </div>
-                          <div>
-                            <p className="font-semibold text-gray-900">{product.name}</p>
-                            <p className="text-sm text-gray-500">{product.quantity} units sold</p>
-                          </div>
-                        </div>
-                        <div className="text-right">
-                          <p className="font-bold text-emerald-600 text-lg">{formatPrice(product.revenue)}</p>
-                          <p className="text-xs text-gray-500">Revenue</p>
-                        </div>
+                </div>
+              </div>
+
+              {/* Chart Body */}
+              {totalRevenue === 0 && chartData.every((d) => d.revenue === 0) ? (
+                <div className="py-16 text-center border-2 border-dashed border-slate-200 rounded-2xl">
+                  <div className="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-3 text-2xl">
+                    📊
+                  </div>
+                  <h4 className="text-base font-bold text-slate-900">No Sales Recorded in this Horizon</h4>
+                  <p className="text-xs text-slate-500 max-w-sm mx-auto mt-1 font-medium">
+                    When customers purchase meals and dishes from your kitchen, your daily revenue timeline will render here.
+                  </p>
+                  <Link href="/sellers/products" className="inline-block mt-4">
+                    <Button size="sm" className="bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs rounded-xl">
+                      Manage Food Catalog →
+                    </Button>
+                  </Link>
+                </div>
+              ) : (
+                <div className="relative">
+                  {/* Tooltip Overlay */}
+                  {activeTooltip && (
+                    <div
+                      className="absolute z-20 pointer-events-none bg-slate-900 text-white text-xs rounded-xl p-2.5 shadow-xl transition-all duration-75 -translate-x-1/2 -translate-y-full mb-2"
+                      style={{ left: `${activeTooltip.x}%`, top: `${activeTooltip.y}px` }}
+                    >
+                      <p className="font-semibold text-slate-400 text-[10px]">{activeTooltip.date}</p>
+                      <p className="font-bold text-emerald-400 text-sm mt-0.5">{formatPrice(activeTooltip.revenue)}</p>
+                      <div className="w-2 h-2 bg-slate-900 rotate-45 absolute -bottom-1 left-1/2 -translate-x-1/2" />
+                    </div>
+                  )}
+
+                  {/* SVG Chart */}
+                  <div className="w-full h-64 sm:h-72 select-none">
+                    <svg
+                      viewBox="0 0 1000 300"
+                      preserveAspectRatio="none"
+                      className="w-full h-full overflow-visible"
+                    >
+                      <defs>
+                        <linearGradient id="chartGradient" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="0%" stopColor="#10B981" stopOpacity="0.35" />
+                          <stop offset="100%" stopColor="#10B981" stopOpacity="0.0" />
+                        </linearGradient>
+                        <linearGradient id="barGradient" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="0%" stopColor="#10B981" />
+                          <stop offset="100%" stopColor="#059669" />
+                        </linearGradient>
+                      </defs>
+
+                      {/* Horizontal Grid lines */}
+                      {[0, 0.25, 0.5, 0.75, 1].map((ratio, idx) => {
+                        const y = 260 - ratio * 220;
+                        const labelValue = Math.round(maxRevenueInChart * ratio);
+                        return (
+                          <g key={idx}>
+                            <line
+                              x1="40"
+                              y1={y}
+                              x2="980"
+                              y2={y}
+                              stroke="#F1F5F9"
+                              strokeWidth="1.5"
+                              strokeDasharray={idx === 0 ? '0' : '4 4'}
+                            />
+                            <text
+                              x="35"
+                              y={y + 4}
+                              textAnchor="end"
+                              className="text-[11px] fill-slate-400 font-medium"
+                            >
+                              ₨{labelValue >= 1000 ? `${(labelValue / 1000).toFixed(0)}k` : labelValue}
+                            </text>
+                          </g>
+                        );
+                      })}
+
+                      {/* Bar View */}
+                      {chartView === 'bar' &&
+                        chartData.map((d, i) => {
+                          const totalBars = chartData.length;
+                          const usableWidth = 920;
+                          const barWidth = Math.max(6, Math.min(28, (usableWidth / totalBars) * 0.65));
+                          const stepX = usableWidth / totalBars;
+                          const cx = 55 + i * stepX + stepX / 2;
+                          const barHeight = Math.max(4, (d.revenue / maxRevenueInChart) * 220);
+                          const y = 260 - barHeight;
+
+                          return (
+                            <g
+                              key={i}
+                              className="cursor-pointer group/bar"
+                              onMouseEnter={() => {
+                                setActiveTooltip({
+                                  date: d.date,
+                                  revenue: d.revenue,
+                                  x: ((cx - 40) / 940) * 100,
+                                  y: y * (288 / 300) - 10,
+                                });
+                              }}
+                              onMouseLeave={() => setActiveTooltip(null)}
+                            >
+                              <rect
+                                x={cx - barWidth / 2}
+                                y={y}
+                                width={barWidth}
+                                height={barHeight}
+                                rx={barWidth / 3}
+                                fill={d.revenue > 0 ? 'url(#barGradient)' : '#E2E8F0'}
+                                className="transition-all duration-150 hover:opacity-80"
+                              />
+                            </g>
+                          );
+                        })}
+
+                      {/* Wave / Line View */}
+                      {chartView === 'line' && (
+                        <>
+                          {/* Area fill */}
+                          <path
+                            d={`
+                              M 55 260
+                              ${chartData
+                                .map((d, i) => {
+                                  const stepX = 920 / chartData.length;
+                                  const cx = 55 + i * stepX + stepX / 2;
+                                  const y = 260 - (d.revenue / maxRevenueInChart) * 220;
+                                  return `L ${cx} ${y}`;
+                                })
+                                .join(' ')}
+                              L 965 260 Z
+                            `}
+                            fill="url(#chartGradient)"
+                          />
+
+                          {/* Line stroke */}
+                          <path
+                            d={`
+                              ${chartData
+                                .map((d, i) => {
+                                  const stepX = 920 / chartData.length;
+                                  const cx = 55 + i * stepX + stepX / 2;
+                                  const y = 260 - (d.revenue / maxRevenueInChart) * 220;
+                                  return `${i === 0 ? 'M' : 'L'} ${cx} ${y}`;
+                                })
+                                .join(' ')}
+                            `}
+                            fill="none"
+                            stroke="#10B981"
+                            strokeWidth="3.5"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                          />
+
+                          {/* Data point dots */}
+                          {chartData.map((d, i) => {
+                            const stepX = 920 / chartData.length;
+                            const cx = 55 + i * stepX + stepX / 2;
+                            const y = 260 - (d.revenue / maxRevenueInChart) * 220;
+
+                            return (
+                              <circle
+                                key={i}
+                                cx={cx}
+                                cy={y}
+                                r={d.revenue > 0 ? 5 : 2}
+                                fill={d.revenue > 0 ? '#10B981' : '#CBD5E1'}
+                                stroke="#FFFFFF"
+                                strokeWidth="2"
+                                className="cursor-pointer hover:r-7 transition-all"
+                                onMouseEnter={() => {
+                                  setActiveTooltip({
+                                    date: d.date,
+                                    revenue: d.revenue,
+                                    x: ((cx - 40) / 940) * 100,
+                                    y: y * (288 / 300) - 10,
+                                  });
+                                }}
+                                onMouseLeave={() => setActiveTooltip(null)}
+                              />
+                            );
+                          })}
+                        </>
+                      )}
+
+                      {/* X-Axis Tick Labels */}
+                      {chartData.map((d, i) => {
+                        // Sample dates so labels don't collide
+                        const total = chartData.length;
+                        const modulo = total > 20 ? Math.ceil(total / 7) : total > 10 ? 2 : 1;
+                        if (i % modulo !== 0 && i !== total - 1) return null;
+
+                        const stepX = 920 / total;
+                        const cx = 55 + i * stepX + stepX / 2;
+
+                        return (
+                          <text
+                            key={i}
+                            x={cx}
+                            y="285"
+                            textAnchor="middle"
+                            className="text-[10px] fill-slate-400 font-medium"
+                          >
+                            {d.label}
+                          </text>
+                        );
+                      })}
+                    </svg>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Bottom Grid: Order Fulfillment Health & Top Performing Dishes */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+              {/* Card: Order Status & Kitchen Fulfillment Quality */}
+              <div className="bg-white rounded-3xl p-6 sm:p-8 border border-slate-200 shadow-sm flex flex-col justify-between">
+                <div>
+                  <div className="flex items-center justify-between mb-4">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center font-bold text-lg">
+                        🎯
                       </div>
-                    ))}
+                      <div>
+                        <h3 className="text-base font-black text-slate-900 tracking-tight">
+                          Kitchen Fulfillment Quality
+                        </h3>
+                        <p className="text-xs text-slate-500 font-medium">
+                          Delivery completion & cancellation health
+                        </p>
+                      </div>
+                    </div>
+                    <Link href="/sellers/orders">
+                      <Button variant="outline" size="sm" className="rounded-xl border-slate-200 font-bold text-xs">
+                        Kitchen Orders →
+                      </Button>
+                    </Link>
                   </div>
-                )}
+
+                  {/* Multi-segment Progress Bar */}
+                  <div className="my-6">
+                    <div className="h-4 w-full bg-slate-100 rounded-full overflow-hidden flex shadow-inner">
+                      <div
+                        style={{ width: `${totalOrders > 0 ? (completedOrders / totalOrders) * 100 : 0}%` }}
+                        className="bg-emerald-500 transition-all duration-500"
+                        title={`Completed: ${completedOrders}`}
+                      />
+                      <div
+                        style={{ width: `${totalOrders > 0 ? (inProgressOrders / totalOrders) * 100 : 0}%` }}
+                        className="bg-purple-500 transition-all duration-500"
+                        title={`In Kitchen: ${inProgressOrders}`}
+                      />
+                      <div
+                        style={{ width: `${totalOrders > 0 ? (cancelledOrders / totalOrders) * 100 : 0}%` }}
+                        className="bg-rose-500 transition-all duration-500"
+                        title={`Cancelled: ${cancelledOrders}`}
+                      />
+                    </div>
+
+                    <div className="flex items-center justify-between text-xs font-bold mt-2.5">
+                      <div className="flex items-center gap-1.5 text-emerald-700">
+                        <span className="w-2.5 h-2.5 rounded-full bg-emerald-500" />
+                        <span>Completed ({completedOrders})</span>
+                      </div>
+                      <div className="flex items-center gap-1.5 text-purple-700">
+                        <span className="w-2.5 h-2.5 rounded-full bg-purple-500" />
+                        <span>In Kitchen ({inProgressOrders})</span>
+                      </div>
+                      <div className="flex items-center gap-1.5 text-rose-700">
+                        <span className="w-2.5 h-2.5 rounded-full bg-rose-500" />
+                        <span>Cancelled ({cancelledOrders})</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Metric Tiles */}
+                  <div className="grid grid-cols-3 gap-3 p-4 bg-slate-50 rounded-2xl border border-slate-100">
+                    <div className="text-center">
+                      <p className="text-[11px] font-bold text-slate-400 uppercase">Total Orders</p>
+                      <p className="text-xl font-black text-slate-900 mt-0.5">{totalOrders}</p>
+                    </div>
+                    <div className="text-center border-x border-slate-200">
+                      <p className="text-[11px] font-bold text-slate-400 uppercase">Success Rate</p>
+                      <p className="text-xl font-black text-emerald-600 mt-0.5">{fulfillmentRate}%</p>
+                    </div>
+                    <div className="text-center">
+                      <p className="text-[11px] font-bold text-slate-400 uppercase">Dispute Rate</p>
+                      <p className="text-xl font-black text-slate-900 mt-0.5">
+                        {totalOrders > 0 ? ((cancelledOrders / totalOrders) * 100).toFixed(1) : 0}%
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="mt-6 pt-4 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500 font-medium">
+                  <span>💡 Fast cooking handoffs to riders protect your 5-star seller rating</span>
+                </div>
+              </div>
+
+              {/* Card: Top Performing Dishes Matrix */}
+              <div className="bg-white rounded-3xl p-6 sm:p-8 border border-slate-200 shadow-sm flex flex-col justify-between">
+                <div>
+                  <div className="flex items-center justify-between mb-4">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-2xl bg-amber-50 text-amber-600 flex items-center justify-center font-bold text-lg">
+                        🏆
+                      </div>
+                      <div>
+                        <h3 className="text-base font-black text-slate-900 tracking-tight">
+                          Top Performing Dishes
+                        </h3>
+                        <p className="text-xs text-slate-500 font-medium">
+                          Best sellers ranked by total customer revenue contribution
+                        </p>
+                      </div>
+                    </div>
+                    <Link href="/sellers/products">
+                      <Button variant="outline" size="sm" className="rounded-xl border-slate-200 font-bold text-xs">
+                        View Menu →
+                      </Button>
+                    </Link>
+                  </div>
+
+                  {(!analytics?.topProducts || analytics.topProducts.length === 0) ? (
+                    <div className="py-12 text-center border-2 border-dashed border-slate-200 rounded-2xl">
+                      <div className="w-12 h-12 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-2 text-xl">
+                        🍽️
+                      </div>
+                      <p className="text-sm font-bold text-slate-800">No Food Sales in this Range</p>
+                      <p className="text-xs text-slate-400 mt-0.5">Dishes ordered by buyers will rank here automatically</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-3 mt-4">
+                      {analytics.topProducts.map((product, idx) => {
+                        const productRevenue = Number(product.revenue);
+                        const revenueShare = totalRevenue > 0
+                          ? Math.round((productRevenue / totalRevenue) * 100)
+                          : 0;
+                        const avgPrice = product.quantity > 0
+                          ? Math.round(productRevenue / product.quantity)
+                          : 0;
+
+                        return (
+                          <div
+                            key={idx}
+                            className="p-3.5 bg-slate-50 hover:bg-slate-100/80 rounded-2xl border border-slate-100 transition-all"
+                          >
+                            <div className="flex items-center justify-between mb-1.5">
+                              <div className="flex items-center gap-2.5 min-w-0">
+                                <span
+                                  className={`w-6 h-6 rounded-lg flex items-center justify-center text-xs font-black shrink-0 ${
+                                    idx === 0
+                                      ? 'bg-amber-400 text-amber-950'
+                                      : idx === 1
+                                      ? 'bg-slate-300 text-slate-800'
+                                      : idx === 2
+                                      ? 'bg-orange-300 text-orange-950'
+                                      : 'bg-slate-200 text-slate-600'
+                                  }`}
+                                >
+                                  #{idx + 1}
+                                </span>
+                                <p className="font-bold text-slate-900 text-sm truncate">{product.name}</p>
+                              </div>
+                              <p className="font-black text-emerald-700 text-sm shrink-0">
+                                {formatPrice(productRevenue)}
+                              </p>
+                            </div>
+
+                            {/* Revenue Share Bar */}
+                            <div className="h-1.5 w-full bg-slate-200 rounded-full overflow-hidden mb-2">
+                              <div
+                                style={{ width: `${revenueShare}%` }}
+                                className="h-full bg-emerald-500 rounded-full"
+                              />
+                            </div>
+
+                            <div className="flex items-center justify-between text-[11px] text-slate-500 font-medium">
+                              <span>{product.quantity} portions sold</span>
+                              <span>Avg: <strong className="text-slate-800">{formatPrice(avgPrice)}</strong>/unit</span>
+                              <span className="font-bold text-slate-700">{revenueShare}% share</span>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+
+                <div className="mt-6 pt-4 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500 font-medium">
+                  <span>💡 Consider creating meal combos for your top seller to increase AOV</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Quick Action Dock */}
+            <div className="bg-slate-900 text-white rounded-3xl p-6 sm:p-8 shadow-md">
+              <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
+                <div>
+                  <span className="px-3 py-1 rounded-full bg-orange-500 text-white font-bold text-[10px] uppercase tracking-wider">
+                    Seller Studio Shortcuts
+                  </span>
+                  <h3 className="text-lg sm:text-xl font-black mt-2 tracking-tight">
+                    Optimize Your Kitchen Operations
+                  </h3>
+                  <p className="text-xs sm:text-sm text-slate-400 font-medium mt-1 max-w-xl">
+                    Expand menus, launch promotional discounts, or review active orders to accelerate your sales velocity.
+                  </p>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-3 w-full md:w-auto">
+                  <Link href="/sellers/products/new">
+                    <Button className="bg-orange-500 hover:bg-orange-600 text-white font-bold text-xs rounded-xl px-4 py-2.5">
+                      + Add New Dish
+                    </Button>
+                  </Link>
+                  <Link href="/sellers/promotions">
+                    <Button variant="outline" className="bg-slate-800 border-slate-700 text-white hover:bg-slate-700 font-bold text-xs rounded-xl px-4 py-2.5">
+                      Discount Code
+                    </Button>
+                  </Link>
+                  <Link href="/sellers/earnings">
+                    <Button variant="outline" className="bg-slate-800 border-slate-700 text-white hover:bg-slate-700 font-bold text-xs rounded-xl px-4 py-2.5">
+                      Request Payout
+                    </Button>
+                  </Link>
+                </div>
               </div>
             </div>
           </>
-        ) : (
-          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-16 text-center">
-            <div className="w-24 h-24 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-6">
-              {Icons.chart}
-            </div>
-            <h2 className="text-2xl font-bold text-gray-900 mb-2">No analytics data</h2>
-            <p className="text-gray-500">Start selling to see your analytics here</p>
-          </div>
         )}
       </div>
     </DashboardLayout>
   );
 }
-

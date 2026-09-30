@@ -2,21 +2,14 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { DashboardLayout } from '@/components/layout/DashboardShell';
+import Link from 'next/link';
+import { Bike, Store, ArrowRight, MapPin, Plus, X } from 'lucide-react';
+import { DashboardLayout, SELLER_SIDEBAR_ITEMS } from '@/components/layout/DashboardShell';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/toast';
 import { useAuthStore } from '@/lib/store/auth-store';
 import { apiClient } from '@/lib/api-client';
-import dynamic from 'next/dynamic';
-
-const LocationMap = dynamic(() => import('@/components/ui/LocationMap').then((m) => m.default), {
-  ssr: false,
-  loading: () => (
-    <div className="bg-gray-100 rounded-xl flex items-center justify-center" style={{ height: '280px' }}>
-      <p className="text-gray-600">Loading map...</p>
-    </div>
-  ),
-});
+import { DatePicker } from '@/components/ui/DatePicker';
 
 const MEAL_CATEGORIES = [
   { value: 'breakfast', label: 'Breakfast' },
@@ -30,67 +23,19 @@ const MEAL_CATEGORIES = [
 ];
 
 const BUSINESS_TYPES = [
-  { value: 'restaurant', label: 'Restaurant' },
   { value: 'home_kitchen', label: 'Home Kitchen' },
+  { value: 'restaurant', label: 'Restaurant' },
   { value: 'bakery', label: 'Bakery' },
   { value: 'cafe', label: 'Café' },
   { value: 'cloud_kitchen', label: 'Cloud Kitchen' },
 ];
 
-const DELIVERY_MODES = [
-  { value: 'delivery', label: 'Delivery' },
-  { value: 'pickup', label: 'Pickup' },
-  { value: 'dine_in', label: 'Dine-in' },
-];
-
 const AVAILABILITY_OVERRIDES = [
-  { value: '', label: 'Automatic (follow my schedule below)' },
+  { value: '', label: 'Normal Schedule' },
   { value: 'open', label: 'Force Open' },
-  { value: 'busy', label: 'Busy — not accepting orders' },
+  { value: 'closed', label: 'Temporarily Closed' },
+  { value: 'busy', label: 'Kitchen Busy' },
   { value: 'vacation', label: 'On Vacation' },
-  { value: 'holiday', label: 'Holiday Mode' },
-  { value: 'preorder_only', label: 'Pre-orders only' },
-  { value: 'closed', label: 'Force Closed' },
-];
-
-const DAYS: Array<{ key: string; label: string }> = [
-  { key: 'monday', label: 'Monday' },
-  { key: 'tuesday', label: 'Tuesday' },
-  { key: 'wednesday', label: 'Wednesday' },
-  { key: 'thursday', label: 'Thursday' },
-  { key: 'friday', label: 'Friday' },
-  { key: 'saturday', label: 'Saturday' },
-  { key: 'sunday', label: 'Sunday' },
-];
-
-interface OperatingSession {
-  name: string;
-  open: string;
-  close: string;
-}
-interface DaySchedule {
-  closed: boolean;
-  sessions: OperatingSession[];
-}
-type WeeklySchedule = Record<string, DaySchedule>;
-
-function emptyWeeklySchedule(): WeeklySchedule {
-  const week: WeeklySchedule = {};
-  for (const { key } of DAYS) week[key] = { closed: false, sessions: [{ name: 'Open', open: '09:00', close: '21:00' }] };
-  return week;
-}
-
-const sidebarItems = [
-  { name: 'Dashboard', href: '/sellers/dashboard', icon: '' },
-  { name: 'Orders', href: '/sellers/orders', icon: '' },
-  { name: 'Products', href: '/sellers/products', icon: '' },
-  { name: 'Inventory', href: '/sellers/products?view=inventory', icon: '' },
-  { name: 'Promotions', href: '/sellers/promotions', icon: '' },
-  { name: 'Delivery', href: '/sellers/settings#delivery', icon: '' },
-  { name: 'Earnings', href: '/sellers/earnings', icon: '' },
-  { name: 'Analytics', href: '/sellers/analytics', icon: '' },
-  { name: 'Notifications', href: '/sellers/notifications', icon: '' },
-  { name: 'Settings', href: '/sellers/settings', icon: '' },
 ];
 
 export default function SellerSettingsPage() {
@@ -98,6 +43,11 @@ export default function SellerSettingsPage() {
   const { isAuthenticated, user } = useAuthStore();
   const { showToast } = useToast();
   const [loading, setLoading] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
+
+  const [deliveryModel, setDeliveryModel] = useState<'model_a' | 'model_b'>('model_b');
+  const [newAreaInput, setNewAreaInput] = useState('');
+
   const [formData, setFormData] = useState({
     businessName: '',
     businessNameUrdu: '',
@@ -105,33 +55,36 @@ export default function SellerSettingsPage() {
     kitchenVideoUrl: '',
     coverImageUrl: '',
     jazzcashNumber: '',
+    jazzcashAccountTitle: '',
     easypaisaNumber: '',
+    easypaisaAccountTitle: '',
     bankAccountName: '',
     bankAccountNumber: '',
     bankName: '',
     lowStockThreshold: 10,
     enableStockAlerts: true,
+
+    // Delivery fields
     freeDeliveryAreas: [] as string[],
     freeDeliveryRadiusKm: null as number | null,
-    latitude: null as number | null,
-    longitude: null as number | null,
-    deliveryFeeType: '' as '' | 'fixed' | 'distance',
-    deliveryFeeFixed: null as number | null,
-    deliveryFeeBase: null as number | null,
-    deliveryFeePerKm: null as number | null,
-    maxDeliveryDistanceKm: null as number | null,
-    minOrderAmountForDelivery: null as number | null,
-    freeDeliveryThreshold: null as number | null,
+    latitude: 31.4720 as number | null,
+    longitude: 74.4530 as number | null,
+    deliveryFeeType: 'fixed' as '' | 'fixed' | 'distance',
+    deliveryFeeFixed: 50 as number | null,
+    deliveryFeeBase: 40 as number | null,
+    deliveryFeePerKm: 15 as number | null,
+    maxDeliveryDistanceKm: 5 as number | null,
+    minOrderAmountForDelivery: 250 as number | null,
+    freeDeliveryThreshold: 500 as number | null,
     deliveryModes: ['delivery'] as string[],
 
-    businessType: 'restaurant',
+    businessType: 'home_kitchen',
     mealCategories: [] as string[],
     storeNotice: '',
 
     scheduleMode: 'fixed_daily' as '24_7' | 'fixed_daily' | 'per_day',
     fixedDailyOpen: '09:00',
     fixedDailyClose: '22:00',
-    weeklySchedule: emptyWeeklySchedule(),
 
     availabilityOverride: '' as string,
     availabilityOverrideUntil: '' as string,
@@ -144,10 +97,6 @@ export default function SellerSettingsPage() {
     advanceBookingMinDays: null as number | null,
     advanceBookingMaxDays: null as number | null,
   });
-  const [newAreaInput, setNewAreaInput] = useState('');
-  const [loadError, setLoadError] = useState<string | null>(null);
-  const [fetchingLocation, setFetchingLocation] = useState(false);
-  const [locationAutoFetched, setLocationAutoFetched] = useState(false);
 
   useEffect(() => {
     if (!isAuthenticated) {
@@ -157,19 +106,12 @@ export default function SellerSettingsPage() {
 
     if (user?.userType !== 'seller' && user?.user_type !== 'seller') {
       router.push('/dashboard');
-      showToast('Access denied. Seller privileges required.', 'error');
+      showToast('Seller access required.', 'error');
       return;
     }
 
     loadSettings();
   }, [isAuthenticated, user, router]);
-
-  useEffect(() => {
-    if (typeof window !== 'undefined' && window.location.hash === '#delivery') {
-      const el = document.getElementById('delivery');
-      if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    }
-  }, [loading]);
 
   const loadSettings = async () => {
     try {
@@ -178,6 +120,16 @@ export default function SellerSettingsPage() {
       const response = await apiClient.get('/sellers/me');
       if (response.data.success) {
         const seller = response.data.data;
+        const feeType = seller.deliveryFeeType || '';
+        const isSelf =
+          feeType === 'fixed' ||
+          feeType === 'distance' ||
+          (Array.isArray(seller.freeDeliveryAreas) && seller.freeDeliveryAreas.length > 0) ||
+          (seller.freeDeliveryRadiusKm != null && seller.freeDeliveryRadiusKm > 0) ||
+          seller.deliveryFeeFixed != null;
+
+        setDeliveryModel(isSelf ? 'model_b' : 'model_a');
+
         setFormData({
           businessName: seller.businessName || '',
           businessNameUrdu: seller.businessNameUrdu || '',
@@ -185,35 +137,35 @@ export default function SellerSettingsPage() {
           kitchenVideoUrl: seller.kitchenVideoUrl || '',
           coverImageUrl: seller.coverImageUrl || '',
           jazzcashNumber: seller.jazzcashNumber || '',
+          jazzcashAccountTitle: seller.jazzcashAccountTitle || '',
           easypaisaNumber: seller.easypaisaNumber || '',
+          easypaisaAccountTitle: seller.easypaisaAccountTitle || '',
           bankAccountName: seller.bankAccountName || '',
           bankAccountNumber: seller.bankAccountNumber || '',
           bankName: seller.bankName || '',
           lowStockThreshold: seller.lowStockThreshold ?? 10,
           enableStockAlerts: seller.enableStockAlerts ?? true,
+
           freeDeliveryAreas: Array.isArray(seller.freeDeliveryAreas) ? seller.freeDeliveryAreas : [],
-          freeDeliveryRadiusKm: seller.freeDeliveryRadiusKm ?? null,
-          latitude: seller.latitude ?? null,
-          longitude: seller.longitude ?? null,
-          deliveryFeeType: (seller.deliveryFeeType as '' | 'fixed' | 'distance') || '',
-          deliveryFeeFixed: seller.deliveryFeeFixed ?? null,
-          deliveryFeeBase: seller.deliveryFeeBase ?? null,
-          deliveryFeePerKm: seller.deliveryFeePerKm ?? null,
-          maxDeliveryDistanceKm: seller.maxDeliveryDistanceKm ?? null,
-          minOrderAmountForDelivery: seller.minOrderAmountForDelivery ?? null,
-          freeDeliveryThreshold: seller.freeDeliveryThreshold ?? null,
+          freeDeliveryRadiusKm: seller.freeDeliveryRadiusKm ?? 2.5,
+          latitude: seller.latitude != null ? parseFloat(String(seller.latitude)) : 31.4720,
+          longitude: seller.longitude != null ? parseFloat(String(seller.longitude)) : 74.4530,
+          deliveryFeeType: (seller.deliveryFeeType as '' | 'fixed' | 'distance') || 'fixed',
+          deliveryFeeFixed: seller.deliveryFeeFixed ?? 50,
+          deliveryFeeBase: seller.deliveryFeeBase ?? 40,
+          deliveryFeePerKm: seller.deliveryFeePerKm != null ? parseFloat(String(seller.deliveryFeePerKm)) : 15,
+          maxDeliveryDistanceKm: seller.maxDeliveryDistanceKm ?? 5,
+          minOrderAmountForDelivery: seller.minOrderAmountForDelivery ?? 250,
+          freeDeliveryThreshold: seller.freeDeliveryThreshold ?? 500,
           deliveryModes: Array.isArray(seller.deliveryModes) && seller.deliveryModes.length ? seller.deliveryModes : ['delivery'],
 
-          businessType: seller.businessType || 'restaurant',
+          businessType: seller.businessType || 'home_kitchen',
           mealCategories: Array.isArray(seller.mealCategories) ? seller.mealCategories : [],
           storeNotice: seller.storeNotice || '',
 
           scheduleMode: (seller.scheduleMode as '24_7' | 'fixed_daily' | 'per_day') || 'fixed_daily',
           fixedDailyOpen: seller.operatingHours?.fixedDaily?.open || '09:00',
           fixedDailyClose: seller.operatingHours?.fixedDaily?.close || '22:00',
-          weeklySchedule: seller.operatingHours?.weekly
-            ? { ...emptyWeeklySchedule(), ...seller.operatingHours.weekly }
-            : emptyWeeklySchedule(),
 
           availabilityOverride: seller.availabilityOverride || '',
           availabilityOverrideUntil: seller.availabilityOverrideUntil
@@ -231,54 +183,166 @@ export default function SellerSettingsPage() {
       }
     } catch (error: any) {
       console.error('Failed to load settings:', error);
-      const isNetworkError = error.message === 'Network Error' || error.code === 'ERR_NETWORK';
-      const apiUrl = typeof window !== 'undefined' ? (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api/v1') : '';
-      const message = isNetworkError
-        ? `Cannot reach the API at ${apiUrl}. Start the backend with: cd backend && npm run dev`
-        : (error.response?.data?.error?.message || error.message || 'Failed to load settings');
-      setLoadError(message);
-      showToast(message, 'error');
+      setLoadError('Failed to load settings.');
     } finally {
       setLoading(false);
     }
   };
 
+  const handleAddArea = () => {
+    const trimmed = newAreaInput.trim();
+    if (!trimmed) return;
+    if (formData.freeDeliveryAreas.some((a) => a.toLowerCase() === trimmed.toLowerCase())) {
+      setNewAreaInput('');
+      return;
+    }
+    setFormData((prev) => ({
+      ...prev,
+      freeDeliveryAreas: [...prev.freeDeliveryAreas, trimmed],
+    }));
+    setNewAreaInput('');
+  };
+
+  const handleRemoveArea = (areaToRemove: string) => {
+    setFormData((prev) => ({
+      ...prev,
+      freeDeliveryAreas: prev.freeDeliveryAreas.filter((a) => a !== areaToRemove),
+    }));
+  };
+
+  const toggleMealCategory = (value: string) => {
+    setFormData((prev) => ({
+      ...prev,
+      mealCategories: prev.mealCategories.includes(value)
+        ? prev.mealCategories.filter((c) => c !== value)
+        : [...prev.mealCategories, value],
+    }));
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setLoading(true);
+
     try {
-      setLoading(true);
       const {
-        freeDeliveryAreas, freeDeliveryRadiusKm, latitude, longitude,
-        deliveryFeeType, deliveryFeeFixed, deliveryFeeBase, deliveryFeePerKm,
-        maxDeliveryDistanceKm, minOrderAmountForDelivery, freeDeliveryThreshold, deliveryModes,
-        businessType, mealCategories, storeNotice,
-        scheduleMode, fixedDailyOpen, fixedDailyClose, weeklySchedule,
-        availabilityOverride, availabilityOverrideUntil, availabilityNote,
-        orderCutoffTime, maxDailyOrders, minPrepTimeMinutes, preOrderOnly, advanceBookingMinDays, advanceBookingMaxDays,
+        freeDeliveryAreas,
+        freeDeliveryRadiusKm,
+        latitude,
+        longitude,
+        deliveryFeeType,
+        deliveryFeeFixed,
+        deliveryFeeBase,
+        deliveryFeePerKm,
+        maxDeliveryDistanceKm,
+        minOrderAmountForDelivery,
+        freeDeliveryThreshold,
+        deliveryModes,
+        businessType,
+        mealCategories,
+        storeNotice,
+        scheduleMode,
+        fixedDailyOpen,
+        fixedDailyClose,
+        availabilityOverride,
+        availabilityOverrideUntil,
+        availabilityNote,
+        orderCutoffTime,
+        maxDailyOrders,
+        minPrepTimeMinutes,
+        preOrderOnly,
+        advanceBookingMinDays,
+        advanceBookingMaxDays,
         ...rest
       } = formData;
 
       const operatingHours =
         scheduleMode === 'fixed_daily'
           ? { fixedDaily: { open: fixedDailyOpen, close: fixedDailyClose } }
-          : scheduleMode === 'per_day'
-            ? { weekly: weeklySchedule }
-            : null;
+          : null;
 
-      await apiClient.patch('/sellers/me', {
-        ...rest,
-        freeDeliveryAreas,
-        freeDeliveryRadiusKm: freeDeliveryRadiusKm ?? undefined,
+      let deliveryPayload: Record<string, any> = {
+        deliveryModes: deliveryModes && deliveryModes.length ? deliveryModes : ['delivery'],
         latitude: latitude ?? undefined,
         longitude: longitude ?? undefined,
-        deliveryFeeType: deliveryFeeType || undefined,
-        deliveryFeeFixed: deliveryFeeFixed ?? undefined,
-        deliveryFeeBase: deliveryFeeBase ?? undefined,
-        deliveryFeePerKm: deliveryFeePerKm ?? undefined,
-        maxDeliveryDistanceKm: maxDeliveryDistanceKm ?? undefined,
-        minOrderAmountForDelivery: minOrderAmountForDelivery ?? undefined,
-        freeDeliveryThreshold: freeDeliveryThreshold ?? undefined,
-        deliveryModes,
+      };
+
+      if (deliveryModel === 'model_a') {
+        deliveryPayload = {
+          ...deliveryPayload,
+          deliveryFeeType: null,
+          deliveryFeeFixed: null,
+          deliveryFeeBase: null,
+          deliveryFeePerKm: null,
+          freeDeliveryAreas: [],
+          freeDeliveryRadiusKm: null,
+          freeDeliveryThreshold: null,
+          maxDeliveryDistanceKm: null,
+          minOrderAmountForDelivery: null,
+        };
+      } else {
+        deliveryPayload = {
+          ...deliveryPayload,
+          deliveryFeeType: deliveryFeeType || 'fixed',
+          deliveryFeeFixed:
+            deliveryFeeType === 'fixed' && deliveryFeeFixed != null
+              ? Math.max(0, Math.round(Number(deliveryFeeFixed)))
+              : null,
+          deliveryFeeBase:
+            deliveryFeeType === 'distance' && deliveryFeeBase != null
+              ? Math.max(0, Math.round(Number(deliveryFeeBase)))
+              : null,
+          deliveryFeePerKm:
+            deliveryFeeType === 'distance' && deliveryFeePerKm != null
+              ? Math.max(0, Number(deliveryFeePerKm))
+              : null,
+          freeDeliveryAreas: (freeDeliveryAreas || [])
+            .map((a: string) => (typeof a === 'string' ? a.trim() : ''))
+            .filter((a: string) => a.length > 0),
+          freeDeliveryRadiusKm:
+            freeDeliveryRadiusKm != null && !isNaN(Number(freeDeliveryRadiusKm))
+              ? Math.max(0, Number(freeDeliveryRadiusKm))
+              : null,
+          freeDeliveryThreshold:
+            freeDeliveryThreshold != null && !isNaN(Number(freeDeliveryThreshold))
+              ? Math.max(0, Number(freeDeliveryThreshold))
+              : null,
+          maxDeliveryDistanceKm:
+            maxDeliveryDistanceKm != null && Number(maxDeliveryDistanceKm) > 0
+              ? Number(maxDeliveryDistanceKm)
+              : null,
+          minOrderAmountForDelivery:
+            minOrderAmountForDelivery != null && !isNaN(Number(minOrderAmountForDelivery))
+              ? Math.max(0, Number(minOrderAmountForDelivery))
+              : null,
+        };
+      }
+
+      if (!rest.businessName || !rest.businessName.trim()) {
+        showToast('Business name is required.', 'error');
+        setLoading(false);
+        return;
+      }
+
+      const sanitizedRest = {
+        businessName: rest.businessName.trim(),
+        businessNameUrdu: rest.businessNameUrdu?.trim() || null,
+        description: rest.description?.trim() || null,
+        kitchenVideoUrl: rest.kitchenVideoUrl?.trim() || null,
+        coverImageUrl: rest.coverImageUrl?.trim() || null,
+        jazzcashNumber: rest.jazzcashNumber?.trim() || null,
+        jazzcashAccountTitle: rest.jazzcashAccountTitle?.trim() || null,
+        easypaisaNumber: rest.easypaisaNumber?.trim() || null,
+        easypaisaAccountTitle: rest.easypaisaAccountTitle?.trim() || null,
+        bankAccountName: rest.bankAccountName?.trim() || null,
+        bankAccountNumber: rest.bankAccountNumber?.trim() || null,
+        bankName: rest.bankName?.trim() || null,
+        lowStockThreshold: typeof rest.lowStockThreshold === 'number' ? rest.lowStockThreshold : 10,
+        enableStockAlerts: Boolean(rest.enableStockAlerts),
+      };
+
+      await apiClient.patch('/sellers/me', {
+        ...sanitizedRest,
+        ...deliveryPayload,
         businessType,
         mealCategories,
         storeNotice: storeNotice || undefined,
@@ -296,442 +360,461 @@ export default function SellerSettingsPage() {
         advanceBookingMinDays: advanceBookingMinDays ?? undefined,
         advanceBookingMaxDays: advanceBookingMaxDays ?? undefined,
       });
-      showToast('Settings updated successfully', 'success');
+
+      showToast('Settings saved successfully.', 'success');
     } catch (error: any) {
-      showToast(error.response?.data?.error?.message || 'Failed to update settings', 'error');
+      const firstIssue = error.response?.data?.error?.details?.[0]?.message;
+      const generalMsg = error.response?.data?.error?.message;
+      showToast(firstIssue || generalMsg || 'Failed to save settings', 'error');
     } finally {
       setLoading(false);
     }
   };
 
-  const toggleMealCategory = (value: string) => {
-    setFormData((prev) => ({
-      ...prev,
-      mealCategories: prev.mealCategories.includes(value)
-        ? prev.mealCategories.filter((c) => c !== value)
-        : [...prev.mealCategories, value],
-    }));
-  };
-
-  const toggleDeliveryMode = (value: string) => {
-    setFormData((prev) => {
-      const has = prev.deliveryModes.includes(value);
-      const next = has ? prev.deliveryModes.filter((m) => m !== value) : [...prev.deliveryModes, value];
-      return { ...prev, deliveryModes: next.length ? next : prev.deliveryModes };
-    });
-  };
-
-  const updateDaySchedule = (day: string, patch: Partial<DaySchedule>) => {
-    setFormData((prev) => ({
-      ...prev,
-      weeklySchedule: { ...prev.weeklySchedule, [day]: { ...prev.weeklySchedule[day], ...patch } },
-    }));
-  };
-
-  const addSession = (day: string) => {
-    updateDaySchedule(day, {
-      sessions: [...formData.weeklySchedule[day].sessions, { name: 'Session', open: '12:00', close: '15:00' }],
-    });
-  };
-
-  const updateSession = (day: string, index: number, patch: Partial<OperatingSession>) => {
-    const sessions = formData.weeklySchedule[day].sessions.map((s, i) => (i === index ? { ...s, ...patch } : s));
-    updateDaySchedule(day, { sessions });
-  };
-
-  const removeSession = (day: string, index: number) => {
-    const sessions = formData.weeklySchedule[day].sessions.filter((_, i) => i !== index);
-    updateDaySchedule(day, { sessions });
-  };
-
-  const addFreeDeliveryArea = () => {
-    const area = newAreaInput.trim();
-    if (!area) return;
-    if (formData.freeDeliveryAreas.includes(area)) {
-      showToast('This area is already added', 'info');
-      return;
-    }
-    setFormData({
-      ...formData,
-      freeDeliveryAreas: [...formData.freeDeliveryAreas, area],
-    });
-    setNewAreaInput('');
-  };
-
-  const removeFreeDeliveryArea = (area: string) => {
-    setFormData({
-      ...formData,
-      freeDeliveryAreas: formData.freeDeliveryAreas.filter((a) => a !== area),
-    });
-  };
-
-  const setLocationFromGeolocation = (onSuccess?: () => void) => {
-    if (typeof window === 'undefined' || !navigator.geolocation) return;
-    setFetchingLocation(true);
-    navigator.geolocation.getCurrentPosition(
-      (position) => {
-        const lat = position.coords.latitude;
-        const lng = position.coords.longitude;
-        setFormData((prev) => ({ ...prev, latitude: lat, longitude: lng }));
-        setFetchingLocation(false);
-        onSuccess?.();
-      },
-      () => setFetchingLocation(false),
-      { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
-    );
-  };
-
-  const handleUseCurrentLocation = () => {
-    if (typeof window === 'undefined' || !navigator.geolocation) {
-      showToast('Geolocation is not supported by your browser', 'error');
-      return;
-    }
-    setLocationFromGeolocation(() => showToast('Location updated. Adjust the marker if needed.', 'success'));
-  };
-
-  // Auto-fetch current location once when no saved location (after settings loaded)
-  useEffect(() => {
-    if (loading || locationAutoFetched || !formData) return;
-    const hasLocation = formData.latitude != null && formData.longitude != null;
-    if (hasLocation) {
-      setLocationAutoFetched(true);
-      return;
-    }
-    if (typeof window === 'undefined' || !navigator.geolocation) {
-      setLocationAutoFetched(true);
-      return;
-    }
-    setLocationAutoFetched(true);
-    setFetchingLocation(true);
-    navigator.geolocation.getCurrentPosition(
-      (position) => {
-        setFormData((prev) => ({ ...prev, latitude: position.coords.latitude, longitude: position.coords.longitude }));
-        setFetchingLocation(false);
-      },
-      () => setFetchingLocation(false),
-      { enableHighAccuracy: true, timeout: 8000, maximumAge: 0 }
-    );
-  }, [loading, locationAutoFetched]);
-
-  if (!isAuthenticated) {
-    return null;
-  }
-
   return (
     <DashboardLayout
       title="Settings"
-      subtitle="Manage your seller account settings"
-      sidebarItems={sidebarItems}
+      subtitle="Manage kitchen profile, delivery, and schedule"
+      sidebarItems={SELLER_SIDEBAR_ITEMS}
       userType="seller"
     >
-      <div className="max-w-4xl mx-auto">
+      <div className="max-w-3xl mx-auto space-y-6 pb-16">
         {loadError && (
-          <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-lg text-red-800 text-sm">
-            {loadError}
-            <Button type="button" variant="outline" size="sm" className="mt-2" onClick={() => { setLoadError(null); loadSettings(); }}>
+          <div className="p-3.5 bg-red-50 border border-red-200 rounded-xl text-red-700 text-xs flex items-center justify-between">
+            <span>{loadError}</span>
+            <button onClick={loadSettings} className="font-semibold underline">
               Retry
-            </Button>
+            </button>
           </div>
         )}
-        <form onSubmit={handleSubmit} className="bg-white rounded-lg shadow-sm p-6 space-y-6">
-          {/* Business Information */}
-          <div>
-            <h2 className="text-xl font-bold text-gray-900 mb-4">Business Information</h2>
-            <div className="space-y-4">
+
+        <form onSubmit={handleSubmit} className="space-y-6">
+          {/* Kitchen Profile */}
+          <div className="bg-white rounded-2xl p-5 sm:p-6 border border-slate-200/90 shadow-xs space-y-4">
+            <h3 className="text-sm font-bold text-slate-900 tracking-tight">Kitchen Profile</h3>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
+                <label className="text-xs font-semibold text-slate-700 block mb-1">
                   Business Name (English)
                 </label>
                 <input
                   type="text"
                   value={formData.businessName}
                   onChange={(e) => setFormData({ ...formData, businessName: e.target.value })}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500"
+                  className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-[#FF5500]"
                   required
                 />
               </div>
+
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
+                <label className="text-xs font-semibold text-slate-700 block mb-1">
                   Business Name (Urdu)
                 </label>
                 <input
                   type="text"
                   value={formData.businessNameUrdu}
                   onChange={(e) => setFormData({ ...formData, businessNameUrdu: e.target.value })}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Description
-                </label>
-                <textarea
-                  value={formData.description}
-                  onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                  rows={4}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500"
+                  placeholder="مثلاً: فاطمہ کچن"
+                  className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-[#FF5500]"
                 />
               </div>
             </div>
-          </div>
 
-          {/* Business Type & Meal Categories */}
-          <div>
-            <h2 className="text-xl font-bold text-gray-900 mb-4">Business Type & Meal Categories</h2>
-            <div className="space-y-4">
+            <div>
+              <label className="text-xs font-semibold text-slate-700 block mb-1">Description</label>
+              <textarea
+                value={formData.description}
+                onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                rows={3}
+                placeholder="Tell customers about your kitchen and specialty dishes..."
+                className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-[#FF5500]"
+              />
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-1">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Business Type</label>
+                <label className="text-xs font-semibold text-slate-700 block mb-1">Kitchen Type</label>
                 <select
                   value={formData.businessType}
                   onChange={(e) => setFormData({ ...formData, businessType: e.target.value })}
-                  className="w-full md:w-64 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500"
+                  className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-[#FF5500] bg-white"
                 >
                   {BUSINESS_TYPES.map((t) => (
-                    <option key={t.value} value={t.value}>{t.label}</option>
+                    <option key={t.value} value={t.value}>
+                      {t.label}
+                    </option>
                   ))}
                 </select>
               </div>
+
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Meal categories you serve</label>
-                <p className="text-xs text-gray-500 mb-2">Customers can filter for "Open for Breakfast", "Desserts only", etc. based on these.</p>
-                <div className="flex flex-wrap gap-2">
-                  {MEAL_CATEGORIES.map((c) => (
-                    <button
-                      key={c.value}
-                      type="button"
-                      onClick={() => toggleMealCategory(c.value)}
-                      className={`px-3 py-1.5 rounded-lg text-sm border transition-colors ${
-                        formData.mealCategories.includes(c.value)
-                          ? 'bg-green-600 text-white border-green-600'
-                          : 'bg-white text-gray-700 border-gray-300 hover:border-gray-400'
-                      }`}
-                    >
-                      {c.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Store notice / announcement</label>
-                <p className="text-xs text-gray-500 mb-2">Shown to customers on your storefront, e.g. "Closed for Eid, back on the 15th".</p>
-                <textarea
+                <label className="text-xs font-semibold text-slate-700 block mb-1">Storefront Notice</label>
+                <input
+                  type="text"
                   value={formData.storeNotice}
                   onChange={(e) => setFormData({ ...formData, storeNotice: e.target.value })}
-                  rows={2}
-                  maxLength={500}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500"
+                  placeholder="e.g. Special weekend Biryani available"
+                  className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-[#FF5500]"
                 />
+              </div>
+            </div>
+
+            <div>
+              <label className="text-xs font-semibold text-slate-700 block mb-1.5">Meal Categories &amp; Timings</label>
+              <div className="flex flex-wrap gap-1.5">
+                {MEAL_CATEGORIES.map((c) => (
+                  <button
+                    key={c.value}
+                    type="button"
+                    onClick={() => toggleMealCategory(c.value)}
+                    className={`px-2.5 py-1 rounded-lg text-xs font-medium border transition-colors ${
+                      formData.mealCategories.includes(c.value)
+                        ? 'bg-slate-900 text-white border-slate-900 font-semibold'
+                        : 'bg-white text-slate-600 border-slate-200 hover:border-slate-300'
+                    }`}
+                  >
+                    {c.label}
+                  </button>
+                ))}
+                {formData.mealCategories
+                  .filter((cat) => !MEAL_CATEGORIES.some((c) => c.value === cat))
+                  .map((cat) => (
+                    <button
+                      key={cat}
+                      type="button"
+                      onClick={() => toggleMealCategory(cat)}
+                      className="px-2.5 py-1 rounded-lg text-xs font-medium border bg-slate-800 text-white border-slate-800 transition-colors flex items-center gap-1.5"
+                    >
+                      <span>{cat}</span>
+                      <span className="text-[10px] text-slate-400">✕</span>
+                    </button>
+                  ))}
               </div>
             </div>
           </div>
 
-          {/* Operating Hours & Availability */}
-          <div>
-            <h2 className="text-xl font-bold text-gray-900 mb-4">Operating Hours & Availability</h2>
-            <div className="space-y-4">
+          {/* Delivery & Fulfillment */}
+          <div className="bg-white rounded-2xl p-5 sm:p-6 border border-slate-200/90 shadow-xs space-y-4">
+            <div className="flex items-center justify-between">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Manual availability override</label>
-                <p className="text-xs text-gray-500 mb-2">Overrides your schedule below until the date you pick (or indefinitely if left blank).</p>
-                <div className="flex flex-wrap items-center gap-3">
-                  <select
-                    value={formData.availabilityOverride}
-                    onChange={(e) => setFormData({ ...formData, availabilityOverride: e.target.value })}
-                    className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500"
-                  >
-                    {AVAILABILITY_OVERRIDES.map((o) => (
-                      <option key={o.value} value={o.value}>{o.label}</option>
-                    ))}
-                  </select>
-                  {formData.availabilityOverride && (
+                <h3 className="text-sm font-bold text-slate-900 tracking-tight">Delivery &amp; Rates</h3>
+                <p className="text-[11px] text-slate-500 mt-0.5">Choose fulfillment model and local pricing</p>
+              </div>
+              <Link
+                href="/sellers/delivery"
+                className="inline-flex items-center gap-1.5 text-xs font-bold text-[#FF5500] hover:text-[#e04400]"
+              >
+                <span>Full Delivery Console</span>
+                <ArrowRight className="w-3.5 h-3.5" />
+              </Link>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3 pt-1">
+              <div
+                onClick={() => setDeliveryModel('model_a')}
+                className={`p-3.5 rounded-xl border-2 transition-all cursor-pointer ${
+                  deliveryModel === 'model_a' ? 'border-blue-600 bg-blue-50/20' : 'border-slate-200 bg-white'
+                }`}
+              >
+                <div className="flex items-center gap-2">
+                  <Bike className="w-4 h-4 text-blue-600 shrink-0" />
+                  <span className="text-xs font-bold text-slate-900">Nuray Rider Fleet</span>
+                </div>
+              </div>
+
+              <div
+                onClick={() => setDeliveryModel('model_b')}
+                className={`p-3.5 rounded-xl border-2 transition-all cursor-pointer ${
+                  deliveryModel === 'model_b' ? 'border-emerald-600 bg-emerald-50/20' : 'border-slate-200 bg-white'
+                }`}
+              >
+                <div className="flex items-center gap-2">
+                  <Store className="w-4 h-4 text-emerald-600 shrink-0" />
+                  <span className="text-xs font-bold text-slate-900">Self-Delivery</span>
+                </div>
+              </div>
+            </div>
+
+            {deliveryModel === 'model_b' && (
+              <div className="space-y-4 pt-3 border-t border-slate-100">
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="text-[11px] font-semibold text-slate-600 block mb-1">Community Delivery Fee</label>
+                    <div className="relative">
+                      <input
+                        type="number"
+                        min={0}
+                        step={10}
+                        value={formData.deliveryFeeFixed ?? 50}
+                        onChange={(e) =>
+                          setFormData({
+                            ...formData,
+                            deliveryFeeFixed: e.target.value === '' ? null : parseInt(e.target.value, 10),
+                          })
+                        }
+                        className="w-full pl-3 pr-10 py-1.5 text-xs font-bold border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-[#FF5500]"
+                      />
+                      <span className="absolute right-3 top-2 text-[10px] text-slate-400 font-medium">PKR</span>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="text-[11px] font-semibold text-slate-600 block mb-1">Free Delivery Radius</label>
+                    <div className="relative">
+                      <input
+                        type="number"
+                        min={0}
+                        step={0.5}
+                        value={formData.freeDeliveryRadiusKm ?? 2.5}
+                        onChange={(e) =>
+                          setFormData({
+                            ...formData,
+                            freeDeliveryRadiusKm: e.target.value === '' ? null : parseFloat(e.target.value),
+                          })
+                        }
+                        className="w-full pl-3 pr-8 py-1.5 text-xs font-bold border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-[#FF5500]"
+                      />
+                      <span className="absolute right-3 top-2 text-[10px] text-slate-400 font-medium">KM</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Free Areas */}
+                <div>
+                  <label className="text-[11px] font-semibold text-slate-600 block mb-1">Free Delivery Societies</label>
+                  <div className="flex gap-2 mb-2">
                     <input
-                      type="date"
-                      value={formData.availabilityOverrideUntil}
-                      onChange={(e) => setFormData({ ...formData, availabilityOverrideUntil: e.target.value })}
-                      className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500"
-                      placeholder="Until (optional)"
+                      type="text"
+                      value={newAreaInput}
+                      onChange={(e) => setNewAreaInput(e.target.value)}
+                      placeholder="Add area (e.g. Askari 11)..."
+                      className="flex-1 px-3 py-1.5 text-xs border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-[#FF5500]"
                     />
+                    <Button
+                      type="button"
+                      onClick={handleAddArea}
+                      variant="outline"
+                      className="h-8 px-3 text-xs border-slate-300"
+                    >
+                      Add
+                    </Button>
+                  </div>
+
+                  {formData.freeDeliveryAreas.length > 0 && (
+                    <div className="flex flex-wrap gap-1.5">
+                      {formData.freeDeliveryAreas.map((area) => (
+                        <span
+                          key={area}
+                          className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-emerald-50 border border-emerald-200 text-[11px] font-medium text-emerald-800"
+                        >
+                          <MapPin className="w-2.5 h-2.5 text-emerald-600" />
+                          <span>{area}</span>
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveArea(area)}
+                            className="hover:text-red-500 ml-0.5"
+                          >
+                            <X className="w-2.5 h-2.5" />
+                          </button>
+                        </span>
+                      ))}
+                    </div>
                   )}
                 </div>
-                {formData.availabilityOverride && (
-                  <input
-                    type="text"
-                    value={formData.availabilityNote}
-                    onChange={(e) => setFormData({ ...formData, availabilityNote: e.target.value })}
-                    placeholder="Optional note shown to customers"
-                    maxLength={300}
-                    className="w-full mt-2 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500"
+              </div>
+            )}
+          </div>
+
+          {/* Operating Hours & Schedule */}
+          <div className="bg-white rounded-2xl p-5 sm:p-6 border border-slate-200/90 shadow-xs space-y-4">
+            <h3 className="text-sm font-bold text-slate-900 tracking-tight">Hours &amp; Availability</h3>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label className="text-xs font-semibold text-slate-700 block mb-1">Availability Override</label>
+                <select
+                  value={formData.availabilityOverride}
+                  onChange={(e) => setFormData({ ...formData, availabilityOverride: e.target.value })}
+                  className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-[#FF5500] bg-white"
+                >
+                  {AVAILABILITY_OVERRIDES.map((o) => (
+                    <option key={o.value} value={o.value}>
+                      {o.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {formData.availabilityOverride && (
+                <div>
+                  <label className="text-xs font-semibold text-slate-700 block mb-1">Reopen Date</label>
+                  <DatePicker
+                    value={formData.availabilityOverrideUntil}
+                    onChange={(date) => setFormData({ ...formData, availabilityOverrideUntil: date })}
+                    min={new Date().toISOString().split('T')[0]}
+                    placeholder="Select date"
                   />
-                )}
+                </div>
+              )}
+            </div>
+
+            <div className="grid grid-cols-2 gap-4 pt-1">
+              <div>
+                <label className="text-xs font-semibold text-slate-700 block mb-1">Opening Time</label>
+                <input
+                  type="time"
+                  value={formData.fixedDailyOpen}
+                  onChange={(e) => setFormData({ ...formData, fixedDailyOpen: e.target.value })}
+                  className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-[#FF5500]"
+                />
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Schedule</label>
-                <div className="flex gap-4 mb-3">
-                  {(['24_7', 'fixed_daily', 'per_day'] as const).map((mode) => (
-                    <label key={mode} className="inline-flex items-center gap-2">
-                      <input
-                        type="radio"
-                        name="scheduleMode"
-                        checked={formData.scheduleMode === mode}
-                        onChange={() => setFormData({ ...formData, scheduleMode: mode })}
-                        className="rounded border-gray-300"
-                      />
-                      {mode === '24_7' ? 'Open 24/7' : mode === 'fixed_daily' ? 'Same hours every day' : 'Different hours per day'}
-                    </label>
-                  ))}
-                </div>
+                <label className="text-xs font-semibold text-slate-700 block mb-1">Closing Time</label>
+                <input
+                  type="time"
+                  value={formData.fixedDailyClose}
+                  onChange={(e) => setFormData({ ...formData, fixedDailyClose: e.target.value })}
+                  className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-[#FF5500]"
+                />
+              </div>
+            </div>
 
-                {formData.scheduleMode === 'fixed_daily' && (
-                  <div className="flex items-center gap-3">
-                    <input
-                      type="time"
-                      value={formData.fixedDailyOpen}
-                      onChange={(e) => setFormData({ ...formData, fixedDailyOpen: e.target.value })}
-                      className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-500"
-                    />
-                    <span className="text-gray-500 text-sm">to</span>
-                    <input
-                      type="time"
-                      value={formData.fixedDailyClose}
-                      onChange={(e) => setFormData({ ...formData, fixedDailyClose: e.target.value })}
-                      className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-500"
-                    />
-                  </div>
-                )}
+            <div className="grid grid-cols-2 gap-4 pt-1">
+              <div>
+                <label className="text-xs font-semibold text-slate-700 block mb-1">Daily Cut-off Time</label>
+                <input
+                  type="time"
+                  value={formData.orderCutoffTime}
+                  onChange={(e) => setFormData({ ...formData, orderCutoffTime: e.target.value })}
+                  className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-[#FF5500]"
+                />
+              </div>
 
-                {formData.scheduleMode === 'per_day' && (
-                  <div className="space-y-3">
-                    {DAYS.map(({ key, label }) => {
-                      const day = formData.weeklySchedule[key];
-                      return (
-                        <div key={key} className="border border-gray-200 rounded-lg p-3">
-                          <div className="flex items-center justify-between mb-2">
-                            <span className="font-medium text-gray-900 text-sm">{label}</span>
-                            <label className="inline-flex items-center gap-2 text-sm text-gray-600">
-                              <input
-                                type="checkbox"
-                                checked={day.closed}
-                                onChange={(e) => updateDaySchedule(key, { closed: e.target.checked })}
-                                className="rounded border-gray-300"
-                              />
-                              Closed
-                            </label>
-                          </div>
-                          {!day.closed && (
-                            <div className="space-y-2">
-                              {day.sessions.map((session, i) => (
-                                <div key={i} className="flex items-center gap-2 flex-wrap">
-                                  <input
-                                    type="text"
-                                    value={session.name}
-                                    onChange={(e) => updateSession(key, i, { name: e.target.value })}
-                                    placeholder="e.g. Lunch"
-                                    className="w-28 px-2 py-1.5 text-sm border border-gray-300 rounded-lg"
-                                  />
-                                  <input
-                                    type="time"
-                                    value={session.open}
-                                    onChange={(e) => updateSession(key, i, { open: e.target.value })}
-                                    className="px-2 py-1.5 text-sm border border-gray-300 rounded-lg"
-                                  />
-                                  <span className="text-gray-400 text-sm">to</span>
-                                  <input
-                                    type="time"
-                                    value={session.close}
-                                    onChange={(e) => updateSession(key, i, { close: e.target.value })}
-                                    className="px-2 py-1.5 text-sm border border-gray-300 rounded-lg"
-                                  />
-                                  <button
-                                    type="button"
-                                    onClick={() => removeSession(key, i)}
-                                    className="text-gray-400 hover:text-red-600 text-sm"
-                                    aria-label="Remove session"
-                                  >
-                                    ×
-                                  </button>
-                                </div>
-                              ))}
-                              <button
-                                type="button"
-                                onClick={() => addSession(key)}
-                                className="text-sm text-green-700 hover:text-green-800 underline"
-                              >
-                                + Add session
-                              </button>
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
+              <div>
+                <label className="text-xs font-semibold text-slate-700 block mb-1">Max Daily Orders</label>
+                <input
+                  type="number"
+                  min={1}
+                  placeholder="Unlimited"
+                  value={formData.maxDailyOrders ?? ''}
+                  onChange={(e) =>
+                    setFormData({
+                      ...formData,
+                      maxDailyOrders: e.target.value === '' ? null : parseInt(e.target.value, 10),
+                    })
+                  }
+                  className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-[#FF5500]"
+                />
               </div>
             </div>
           </div>
 
-          {/* Payment Information */}
-          <div>
-            <h2 className="text-xl font-bold text-gray-900 mb-4">Payment Information</h2>
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  JazzCash Number
-                </label>
-                <input
-                  type="text"
-                  value={formData.jazzcashNumber}
-                  onChange={(e) => setFormData({ ...formData, jazzcashNumber: e.target.value })}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500"
-                  placeholder="03001234567"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  EasyPaisa Number
-                </label>
-                <input
-                  type="text"
-                  value={formData.easypaisaNumber}
-                  onChange={(e) => setFormData({ ...formData, easypaisaNumber: e.target.value })}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500"
-                  placeholder="03001234567"
-                />
-              </div>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          {/* Payment & Payouts */}
+          <div className="bg-white rounded-2xl p-5 sm:p-6 border border-slate-200/90 shadow-xs space-y-5">
+            <div>
+              <h3 className="text-sm font-bold text-slate-900 tracking-tight">Direct Payout Accounts</h3>
+              <p className="text-[11px] text-slate-500 mt-0.5">
+                Customers transfer funds directly to these accounts when selecting Bank Transfer, JazzCash, or EasyPaisa.
+              </p>
+            </div>
+
+            {/* JazzCash Section */}
+            <div className="p-4 bg-slate-50/80 rounded-2xl border border-slate-200/80 space-y-3">
+              <span className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                <span className="w-2 h-2 rounded-full bg-red-500" />
+                JazzCash Account
+              </span>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Bank Name
-                  </label>
+                  <label className="text-[11px] font-semibold text-slate-600 block mb-1">JazzCash Mobile Number</label>
+                  <input
+                    type="tel"
+                    placeholder="03XXXXXXXXX"
+                    value={formData.jazzcashNumber}
+                    onChange={(e) => setFormData({ ...formData, jazzcashNumber: e.target.value })}
+                    className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-[#FF5500] bg-white"
+                  />
+                </div>
+                <div>
+                  <label className="text-[11px] font-semibold text-slate-600 block mb-1">Account Title (Name on JazzCash)</label>
                   <input
                     type="text"
+                    placeholder="e.g. Bareera Zarish"
+                    value={formData.jazzcashAccountTitle}
+                    onChange={(e) => setFormData({ ...formData, jazzcashAccountTitle: e.target.value })}
+                    className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-[#FF5500] bg-white"
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* EasyPaisa Section */}
+            <div className="p-4 bg-slate-50/80 rounded-2xl border border-slate-200/80 space-y-3">
+              <span className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                <span className="w-2 h-2 rounded-full bg-emerald-500" />
+                EasyPaisa Account
+              </span>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="text-[11px] font-semibold text-slate-600 block mb-1">EasyPaisa Mobile Number</label>
+                  <input
+                    type="tel"
+                    placeholder="03XXXXXXXXX"
+                    value={formData.easypaisaNumber}
+                    onChange={(e) => setFormData({ ...formData, easypaisaNumber: e.target.value })}
+                    className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-[#FF5500] bg-white"
+                  />
+                </div>
+                <div>
+                  <label className="text-[11px] font-semibold text-slate-600 block mb-1">Account Title (Name on EasyPaisa)</label>
+                  <input
+                    type="text"
+                    placeholder="e.g. Bareera Zarish"
+                    value={formData.easypaisaAccountTitle}
+                    onChange={(e) => setFormData({ ...formData, easypaisaAccountTitle: e.target.value })}
+                    className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-[#FF5500] bg-white"
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Bank Transfer / IBFT Section */}
+            <div className="p-4 bg-slate-50/80 rounded-2xl border border-slate-200/80 space-y-3">
+              <span className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                <span className="w-2 h-2 rounded-full bg-blue-500" />
+                Bank Transfer / Raast (IBFT)
+              </span>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div>
+                  <label className="text-[11px] font-semibold text-slate-600 block mb-1">Bank Name</label>
+                  <input
+                    type="text"
+                    placeholder="e.g. Bank Alfalah / Meezan Bank"
                     value={formData.bankName}
                     onChange={(e) => setFormData({ ...formData, bankName: e.target.value })}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500"
-                    placeholder="e.g., HBL"
+                    className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-[#FF5500] bg-white"
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Bank Account Title
-                  </label>
+                  <label className="text-[11px] font-semibold text-slate-600 block mb-1">Account Title</label>
                   <input
                     type="text"
+                    placeholder="Account Holder Name"
                     value={formData.bankAccountName}
                     onChange={(e) => setFormData({ ...formData, bankAccountName: e.target.value })}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500"
-                    placeholder="Account holder name"
+                    className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-[#FF5500] bg-white"
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Bank Account Number / IBAN
-                  </label>
+                  <label className="text-[11px] font-semibold text-slate-600 block mb-1">IBAN / Account Number</label>
                   <input
                     type="text"
+                    placeholder="PK00XXXX..."
                     value={formData.bankAccountNumber}
                     onChange={(e) => setFormData({ ...formData, bankAccountNumber: e.target.value })}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500"
-                    placeholder="PK00XXXX0000000000000000"
+                    className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-[#FF5500] bg-white"
                   />
                 </div>
               </div>
@@ -739,392 +822,31 @@ export default function SellerSettingsPage() {
           </div>
 
           {/* Stock Alerts */}
-          <div>
-            <h2 className="text-xl font-bold text-gray-900 mb-4">Stock Alerts</h2>
-            <div className="space-y-4">
-              <div className="flex items-center gap-3">
-                <input
-                  type="checkbox"
-                  id="enableStockAlerts"
-                  checked={formData.enableStockAlerts}
-                  onChange={(e) => setFormData({ ...formData, enableStockAlerts: e.target.checked })}
-                  className="w-5 h-5 text-green-600 rounded focus:ring-green-500"
-                />
-                <label htmlFor="enableStockAlerts" className="text-sm font-medium text-gray-700">
-                  Notify me when a product's stock runs low
-                </label>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Low stock threshold
-                </label>
-                <p className="text-xs text-gray-500 mb-2">You'll be alerted when a product's remaining stock falls at or below this number.</p>
-                <input
-                  type="number"
-                  min={0}
-                  value={formData.lowStockThreshold}
-                  onChange={(e) => setFormData({ ...formData, lowStockThreshold: parseInt(e.target.value, 10) || 0 })}
-                  className="w-full md:w-40 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500"
-                  disabled={!formData.enableStockAlerts}
-                />
-              </div>
+          <div className="bg-white rounded-2xl p-5 sm:p-6 border border-slate-200/90 shadow-xs flex items-center justify-between gap-4">
+            <div>
+              <h3 className="text-sm font-bold text-slate-900 tracking-tight">Stock Alerts</h3>
+              <p className="text-[11px] text-slate-500 mt-0.5">Receive alert when food portion inventory runs low</p>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-slate-600">Threshold:</span>
+              <input
+                type="number"
+                min={1}
+                value={formData.lowStockThreshold}
+                onChange={(e) => setFormData({ ...formData, lowStockThreshold: parseInt(e.target.value, 10) || 5 })}
+                className="w-16 px-2.5 py-1 text-xs font-bold border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-[#FF5500]"
+              />
             </div>
           </div>
 
-          {/* Delivery */}
-          <div id="delivery">
-            <h2 className="text-xl font-bold text-gray-900 mb-4">Delivery</h2>
-            <p className="text-sm text-gray-600 mb-4">
-              Delivery is <strong>free</strong> for customers within your chosen radius of your business location. Outside that, charge a <strong>fixed fee</strong> or <strong>distance-based</strong> fee.
-            </p>
-
-            <div className="space-y-4 mb-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">How customers can get your food</label>
-                <div className="flex flex-wrap gap-2">
-                  {DELIVERY_MODES.map((m) => (
-                    <button
-                      key={m.value}
-                      type="button"
-                      onClick={() => toggleDeliveryMode(m.value)}
-                      className={`px-3 py-1.5 rounded-lg text-sm border transition-colors ${
-                        formData.deliveryModes.includes(m.value)
-                          ? 'bg-gray-900 text-white border-gray-900'
-                          : 'bg-white text-gray-700 border-gray-300 hover:border-gray-400'
-                      }`}
-                    >
-                      {m.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Min order for delivery (Rs)</label>
-                  <input
-                    type="number"
-                    min={0}
-                    placeholder="No minimum"
-                    value={formData.minOrderAmountForDelivery ?? ''}
-                    onChange={(e) => setFormData({ ...formData, minOrderAmountForDelivery: e.target.value === '' ? null : parseFloat(e.target.value) })}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-500"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Free delivery above (Rs)</label>
-                  <input
-                    type="number"
-                    min={0}
-                    placeholder="No threshold"
-                    value={formData.freeDeliveryThreshold ?? ''}
-                    onChange={(e) => setFormData({ ...formData, freeDeliveryThreshold: e.target.value === '' ? null : parseFloat(e.target.value) })}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-500"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Max delivery distance (km)</label>
-                  <input
-                    type="number"
-                    min={0}
-                    step={0.5}
-                    placeholder="Unlimited"
-                    value={formData.maxDeliveryDistanceKm ?? ''}
-                    onChange={(e) => setFormData({ ...formData, maxDeliveryDistanceKm: e.target.value === '' ? null : parseFloat(e.target.value) })}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-500"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Free delivery within (km)</label>
-                <p className="text-xs text-gray-500 mb-2">Everyone within this distance from your business location gets free delivery (e.g. 4 = free within 4 km).</p>
-                <input
-                  type="number"
-                  min={0}
-                  step={0.5}
-                  placeholder="e.g. 4"
-                  value={formData.freeDeliveryRadiusKm ?? ''}
-                  onChange={(e) => setFormData({ ...formData, freeDeliveryRadiusKm: e.target.value === '' ? null : parseFloat(e.target.value) })}
-                  className="w-32 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-500"
-                />
-                <span className="ml-2 text-sm text-gray-500">km from your location</span>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Also free in these areas (optional)</label>
-                <p className="text-xs text-gray-500 mb-2">e.g. Askari, DHA — customers in these area names also get free delivery even if outside the radius.</p>
-                <div className="flex gap-2">
-                  <input
-                    type="text"
-                    value={newAreaInput}
-                    onChange={(e) => setNewAreaInput(e.target.value)}
-                    onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), addFreeDeliveryArea())}
-                    placeholder="e.g. Askari, DHA, Clifton"
-                    className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-500 focus:border-gray-500"
-                  />
-                  <Button type="button" variant="outline" onClick={addFreeDeliveryArea}>
-                    Add area
-                  </Button>
-                </div>
-                {formData.freeDeliveryAreas.length > 0 && (
-                  <div className="flex flex-wrap gap-2 mt-2">
-                    {formData.freeDeliveryAreas.map((area) => (
-                      <span
-                        key={area}
-                        className="inline-flex items-center gap-1 px-3 py-1.5 bg-gray-100 text-gray-800 rounded-lg text-sm"
-                      >
-                        {area}
-                        <button
-                          type="button"
-                          onClick={() => removeFreeDeliveryArea(area)}
-                          className="text-gray-500 hover:text-red-600"
-                          aria-label={`Remove ${area}`}
-                        >
-                          ×
-                        </button>
-                      </span>
-                    ))}
-                  </div>
-                )}
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Your business location (for distance-based fee)</label>
-                <p className="text-xs text-gray-500 mb-2">We use your location for delivery estimates. The map is centered on your saved or current location—click or drag the marker to adjust.</p>
-                <div className="rounded-xl overflow-hidden border border-gray-200 mb-3">
-                  <LocationMap
-                    center={
-                      formData.latitude != null && formData.longitude != null
-                        ? { lat: formData.latitude, lng: formData.longitude }
-                        : { lat: 24.8607, lng: 67.0011 }
-                    }
-                    markerPosition={
-                      formData.latitude != null && formData.longitude != null
-                        ? { lat: formData.latitude, lng: formData.longitude }
-                        : null
-                    }
-                    radiusKm={formData.freeDeliveryRadiusKm ?? undefined}
-                    onLocationSelect={({ lat, lng }) =>
-                      setFormData((prev) => ({ ...prev, latitude: lat, longitude: lng }))
-                    }
-                    height="280px"
-                    draggable={true}
-                  />
-                </div>
-                <div className="flex flex-wrap items-center gap-3">
-                  <div className="grid grid-cols-2 gap-2 flex-1 min-w-0">
-                    <input
-                      type="number"
-                      step="any"
-                      placeholder="Latitude"
-                      value={formData.latitude ?? ''}
-                      onChange={(e) => setFormData({ ...formData, latitude: e.target.value === '' ? null : parseFloat(e.target.value) })}
-                      className="px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-500"
-                    />
-                    <input
-                      type="number"
-                      step="any"
-                      placeholder="Longitude"
-                      value={formData.longitude ?? ''}
-                      onChange={(e) => setFormData({ ...formData, longitude: e.target.value === '' ? null : parseFloat(e.target.value) })}
-                      className="px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-500"
-                    />
-                  </div>
-                  <button
-                    type="button"
-                    onClick={handleUseCurrentLocation}
-                    disabled={fetchingLocation}
-                    className="text-sm text-gray-600 hover:text-gray-900 underline disabled:opacity-50"
-                  >
-                    {fetchingLocation ? 'Getting location…' : 'Use my current location'}
-                  </button>
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Fee when address is outside free areas</label>
-                <div className="flex gap-4 mb-3">
-                  <label className="inline-flex items-center gap-2">
-                    <input
-                      type="radio"
-                      name="deliveryFeeType"
-                      checked={formData.deliveryFeeType === 'fixed'}
-                      onChange={() => setFormData({ ...formData, deliveryFeeType: 'fixed' })}
-                      className="rounded border-gray-300"
-                    />
-                    Fixed amount (e.g. Rs 200–300)
-                  </label>
-                  <label className="inline-flex items-center gap-2">
-                    <input
-                      type="radio"
-                      name="deliveryFeeType"
-                      checked={formData.deliveryFeeType === 'distance'}
-                      onChange={() => setFormData({ ...formData, deliveryFeeType: 'distance' })}
-                      className="rounded border-gray-300"
-                    />
-                    Distance-based
-                  </label>
-                </div>
-                {formData.deliveryFeeType === 'fixed' && (
-                  <div>
-                    <input
-                      type="number"
-                      min={0}
-                      placeholder="Rs"
-                      value={formData.deliveryFeeFixed ?? ''}
-                      onChange={(e) => setFormData({ ...formData, deliveryFeeFixed: e.target.value === '' ? null : parseInt(e.target.value, 10) })}
-                      className="w-32 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-500"
-                    />
-                    <span className="ml-2 text-sm text-gray-500">per order outside free areas</span>
-                  </div>
-                )}
-                {formData.deliveryFeeType === 'distance' && (
-                  <div className="flex flex-wrap items-center gap-4">
-                    <div>
-                      <span className="text-sm text-gray-600 mr-2">Base fee (Rs)</span>
-                      <input
-                        type="number"
-                        min={0}
-                        value={formData.deliveryFeeBase ?? ''}
-                        onChange={(e) => setFormData({ ...formData, deliveryFeeBase: e.target.value === '' ? null : parseInt(e.target.value, 10) })}
-                        className="w-24 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-500"
-                      />
-                    </div>
-                    <div>
-                      <span className="text-sm text-gray-600 mr-2">+ Rs per km</span>
-                      <input
-                        type="number"
-                        min={0}
-                        step={0.5}
-                        value={formData.deliveryFeePerKm ?? ''}
-                        onChange={(e) => setFormData({ ...formData, deliveryFeePerKm: e.target.value === '' ? null : parseFloat(e.target.value) })}
-                        className="w-24 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-500"
-                      />
-                    </div>
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-
-          {/* Home Kitchen / Order Controls */}
-          <div>
-            <h2 className="text-xl font-bold text-gray-900 mb-4">Home Kitchen & Order Controls</h2>
-            <p className="text-sm text-gray-600 mb-4">Useful if you cook to order or have limited daily capacity.</p>
-            <div className="space-y-4">
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Order cut-off time</label>
-                  <p className="text-xs text-gray-500 mb-2">Today's orders stop after this time.</p>
-                  <input
-                    type="time"
-                    value={formData.orderCutoffTime}
-                    onChange={(e) => setFormData({ ...formData, orderCutoffTime: e.target.value })}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-500"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Max orders per day</label>
-                  <input
-                    type="number"
-                    min={1}
-                    placeholder="No limit"
-                    value={formData.maxDailyOrders ?? ''}
-                    onChange={(e) => setFormData({ ...formData, maxDailyOrders: e.target.value === '' ? null : parseInt(e.target.value, 10) })}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-500"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Min prep time (minutes)</label>
-                  <input
-                    type="number"
-                    min={0}
-                    placeholder="None"
-                    value={formData.minPrepTimeMinutes ?? ''}
-                    onChange={(e) => setFormData({ ...formData, minPrepTimeMinutes: e.target.value === '' ? null : parseInt(e.target.value, 10) })}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-500"
-                  />
-                </div>
-              </div>
-
-              <div className="flex items-center gap-3">
-                <input
-                  type="checkbox"
-                  id="preOrderOnly"
-                  checked={formData.preOrderOnly}
-                  onChange={(e) => setFormData({ ...formData, preOrderOnly: e.target.checked })}
-                  className="w-5 h-5 text-green-600 rounded focus:ring-green-500"
-                />
-                <label htmlFor="preOrderOnly" className="text-sm font-medium text-gray-700">
-                  Pre-orders only (no same-day orders)
-                </label>
-              </div>
-
-              {(formData.preOrderOnly || formData.advanceBookingMinDays != null || formData.advanceBookingMaxDays != null) && (
-                <div className="flex items-center gap-4">
-                  <div>
-                    <label className="block text-sm text-gray-600 mb-1">Min days in advance</label>
-                    <input
-                      type="number"
-                      min={0}
-                      placeholder="1"
-                      value={formData.advanceBookingMinDays ?? ''}
-                      onChange={(e) => setFormData({ ...formData, advanceBookingMinDays: e.target.value === '' ? null : parseInt(e.target.value, 10) })}
-                      className="w-28 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-500"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm text-gray-600 mb-1">Max days in advance</label>
-                    <input
-                      type="number"
-                      min={0}
-                      placeholder="7"
-                      value={formData.advanceBookingMaxDays ?? ''}
-                      onChange={(e) => setFormData({ ...formData, advanceBookingMaxDays: e.target.value === '' ? null : parseInt(e.target.value, 10) })}
-                      className="w-28 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-gray-500"
-                    />
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* Media */}
-          <div>
-            <h2 className="text-xl font-bold text-gray-900 mb-4">Media</h2>
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Cover Image URL
-                </label>
-                <input
-                  type="url"
-                  value={formData.coverImageUrl}
-                  onChange={(e) => setFormData({ ...formData, coverImageUrl: e.target.value })}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Kitchen Video URL
-                </label>
-                <input
-                  type="url"
-                  value={formData.kitchenVideoUrl}
-                  onChange={(e) => setFormData({ ...formData, kitchenVideoUrl: e.target.value })}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500"
-                />
-              </div>
-            </div>
-          </div>
-
-          <div className="flex justify-end gap-4 pt-4 border-t">
-            <Button type="button" variant="outline" onClick={() => router.back()}>
-              Cancel
-            </Button>
-            <Button type="submit" disabled={loading} className="bg-green-600 hover:bg-green-700">
-              {loading ? 'Saving...' : 'Save Changes'}
+          {/* Save Action */}
+          <div className="flex items-center justify-end pt-2">
+            <Button
+              type="submit"
+              disabled={loading}
+              className="bg-[#FF5500] hover:bg-[#e04400] text-white px-7 py-2.5 rounded-xl font-bold text-xs shadow-sm transition-all"
+            >
+              {loading ? 'Saving...' : 'Save Settings'}
             </Button>
           </div>
         </form>
@@ -1132,4 +854,3 @@ export default function SellerSettingsPage() {
     </DashboardLayout>
   );
 }
-

@@ -47,16 +47,14 @@ const PAKISTANI_CITIES = [
   'Mingora', 'Dera Ghazi Khan', 'Sahiwal', 'Nawabshah', 'Okara'
 ];
 
+import LocationMap from '@/components/ui/LocationMap';
+
 export function SellerOnboardingModal({ isOpen, onClose, onComplete }: SellerOnboardingModalProps) {
   const { showToast } = useToast();
   const { user } = useAuthStore();
   const [step, setStep] = useState(1);
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
-  const [detectingLocation, setDetectingLocation] = useState(false);
-  const mapRef = useRef<HTMLDivElement>(null);
-  const mapInstanceRef = useRef<any>(null);
-  const markerRef = useRef<any>(null);
 
   const [formData, setFormData] = useState<FormData>({
     businessName: '',
@@ -82,62 +80,14 @@ export function SellerOnboardingModal({ isOpen, onClose, onComplete }: SellerOnb
 
   const totalSteps = 5;
 
-  // Initialize map when on step 2
-  useEffect(() => {
-    if (step === 2 && mapRef.current && !mapInstanceRef.current && typeof window !== 'undefined') {
-      initializeMap();
-    }
-  }, [step]);
-
-  const initializeMap = async () => {
-    if (typeof window === 'undefined') return;
-    
-    const L = (await import('leaflet')).default;
-    // @ts-ignore - CSS import
-    await import('leaflet/dist/leaflet.css');
-
-    // Default to Lahore center
-    const defaultLat = formData.latitude || 31.5204;
-    const defaultLng = formData.longitude || 74.3587;
-
-    const map = L.map(mapRef.current!, {
-      center: [defaultLat, defaultLng],
-      zoom: 13,
-    });
-
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      attribution: '© OpenStreetMap contributors'
-    }).addTo(map);
-
-    // Custom marker icon
-    const customIcon = L.divIcon({
-      html: `<div style="background: linear-gradient(135deg, #16a34a, #22c55e); width: 32px; height: 32px; border-radius: 50% 50% 50% 0; transform: rotate(-45deg); border: 3px solid white; box-shadow: 0 2px 8px rgba(0,0,0,0.3);"></div>`,
-      iconSize: [32, 32],
-      iconAnchor: [16, 32],
-      className: 'custom-marker'
-    });
-
-    const marker = L.marker([defaultLat, defaultLng], { 
-      icon: customIcon,
-      draggable: true 
-    }).addTo(map);
-
-    marker.on('dragend', async (e: any) => {
-      const { lat, lng } = e.target.getLatLng();
-      await reverseGeocode(lat, lng);
-    });
-
-    map.on('click', async (e: any) => {
-      const { lat, lng } = e.latlng;
-      marker.setLatLng([lat, lng]);
-      await reverseGeocode(lat, lng);
-    });
-
-    mapInstanceRef.current = map;
-    markerRef.current = marker;
-
-    // Delay to ensure map renders properly
-    setTimeout(() => map.invalidateSize(), 100);
+  const handleLocationSelect = async (coords: { lat: number; lng: number; address?: string }) => {
+    setFormData(prev => ({
+      ...prev,
+      latitude: coords.lat,
+      longitude: coords.lng,
+      address: coords.address || prev.address,
+    }));
+    await reverseGeocode(coords.lat, coords.lng);
   };
 
   const reverseGeocode = async (lat: number, lng: number) => {
@@ -172,9 +122,9 @@ export function SellerOnboardingModal({ isOpen, onClose, onComplete }: SellerOnb
 
         setFormData(prev => ({
           ...prev,
-          city,
-          area,
-          address: fullAddress,
+          city: city || prev.city,
+          area: area || prev.area,
+          address: fullAddress || prev.address,
           latitude: lat,
           longitude: lng,
         }));
@@ -182,33 +132,6 @@ export function SellerOnboardingModal({ isOpen, onClose, onComplete }: SellerOnb
     } catch (error) {
       console.error('Reverse geocode error:', error);
     }
-  };
-
-  const detectCurrentLocation = () => {
-    if (!navigator.geolocation) {
-      showToast('Geolocation is not supported by your browser', 'error');
-      return;
-    }
-
-    setDetectingLocation(true);
-    navigator.geolocation.getCurrentPosition(
-      async (position) => {
-        const { latitude, longitude } = position.coords;
-        
-        if (mapInstanceRef.current && markerRef.current) {
-          mapInstanceRef.current.setView([latitude, longitude], 15);
-          markerRef.current.setLatLng([latitude, longitude]);
-        }
-        
-        await reverseGeocode(latitude, longitude);
-        setDetectingLocation(false);
-      },
-      (error) => {
-        showToast('Unable to get your location. Please select manually.', 'error');
-        setDetectingLocation(false);
-      },
-      { enableHighAccuracy: true, timeout: 10000 }
-    );
   };
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
@@ -461,59 +384,37 @@ export function SellerOnboardingModal({ isOpen, onClose, onComplete }: SellerOnb
   );
 
   const renderStep2 = () => (
-    <div className="space-y-6">
-      <div className="text-center mb-6">
-        <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
-          <svg className="w-8 h-8 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
-          </svg>
-        </div>
-        <h3 className="text-xl font-bold text-gray-900">Where are you located?</h3>
-        <p className="text-gray-500 mt-1">Help customers and riders find you easily</p>
+    <div className="space-y-4">
+      <div className="text-center mb-3">
+        <h3 className="text-lg font-bold text-gray-900">Kitchen Location</h3>
+        <p className="text-gray-500 text-xs mt-0.5">Search or drop a pin at your kitchen</p>
       </div>
 
-      {/* GPS Detection Button */}
-      <button
-        type="button"
-        onClick={detectCurrentLocation}
-        disabled={detectingLocation}
-        className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded-xl hover:from-blue-600 hover:to-blue-700 transition-all disabled:opacity-50"
-      >
-        {detectingLocation ? (
-          <>
-            <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
-            Detecting your location...
-          </>
-        ) : (
-          <>
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
-            </svg>
-            Use My Current Location
-          </>
-        )}
-      </button>
-
-      {/* Map */}
-      <div 
-        ref={mapRef} 
-        className="h-48 rounded-xl border-2 border-gray-200 overflow-hidden"
-        style={{ zIndex: 1 }}
+      <LocationMap
+        center={{
+          lat: formData.latitude || 31.5204,
+          lng: formData.longitude || 74.3587,
+        }}
+        markerPosition={
+          formData.latitude && formData.longitude
+            ? { lat: formData.latitude, lng: formData.longitude }
+            : null
+        }
+        onLocationSelect={handleLocationSelect}
+        height="240px"
       />
 
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-2 gap-3">
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">
-            City <span className="text-gray-600">*</span>
+          <label className="block text-xs font-semibold text-gray-700 mb-1">
+            City <span className="text-red-500">*</span>
           </label>
           <select
             name="city"
             value={formData.city}
             onChange={handleInputChange}
-            className={`w-full px-4 py-3 border rounded-xl focus:ring-2 focus:ring-green-500 focus:border-green-500 transition-all ${
-              errors.city ? 'border-red-500 bg-red-50' : 'border-gray-300'
+            className={`w-full px-3 py-2 text-sm border rounded-xl focus:ring-2 focus:ring-emerald-500 ${
+              errors.city ? 'border-red-500 bg-red-50' : 'border-gray-200'
             }`}
           >
             <option value="">Select City</option>
@@ -521,38 +422,38 @@ export function SellerOnboardingModal({ isOpen, onClose, onComplete }: SellerOnb
               <option key={city} value={city}>{city}</option>
             ))}
           </select>
-          {errors.city && <p className="text-gray-600 text-sm mt-1">{errors.city}</p>}
+          {errors.city && <p className="text-red-500 text-xs mt-1">{errors.city}</p>}
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">
-            Area/Neighborhood <span className="text-gray-600">*</span>
+          <label className="block text-xs font-semibold text-gray-700 mb-1">
+            Area / Society <span className="text-red-500">*</span>
           </label>
           <input
             type="text"
             name="area"
             value={formData.area}
             onChange={handleInputChange}
-            className={`w-full px-4 py-3 border rounded-xl focus:ring-2 focus:ring-green-500 focus:border-green-500 transition-all ${
-              errors.area ? 'border-red-500 bg-red-50' : 'border-gray-300'
+            className={`w-full px-3 py-2 text-sm border rounded-xl focus:ring-2 focus:ring-emerald-500 ${
+              errors.area ? 'border-red-500 bg-red-50' : 'border-gray-200'
             }`}
-            placeholder="e.g., DHA Phase 5"
+            placeholder="e.g. Askari 11, DHA Phase 5"
           />
-          {errors.area && <p className="text-gray-600 text-sm mt-1">{errors.area}</p>}
+          {errors.area && <p className="text-red-500 text-xs mt-1">{errors.area}</p>}
         </div>
       </div>
 
       <div>
-        <label className="block text-sm font-medium text-gray-700 mb-2">
-          Full Address <span className="text-gray-400 text-xs">(Auto-filled from map)</span>
+        <label className="block text-xs font-semibold text-gray-700 mb-1">
+          Full Address
         </label>
-        <textarea
+        <input
+          type="text"
           name="address"
           value={formData.address}
           onChange={handleInputChange}
-          rows={2}
-          className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-green-500 transition-all resize-none text-sm"
-          placeholder="Full address will be auto-filled when you select location on map"
+          className="w-full px-3 py-2 text-sm border border-gray-200 rounded-xl focus:ring-2 focus:ring-emerald-500"
+          placeholder="House, street, and landmark details"
         />
       </div>
     </div>

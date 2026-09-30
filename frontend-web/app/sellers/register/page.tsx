@@ -7,6 +7,40 @@ import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/toast';
 import { useAuthStore } from '@/lib/store/auth-store';
 import { apiClient } from '@/lib/api-client';
+import LocationMap from '@/components/ui/LocationMap';
+
+const COMMUNITIES = [
+  'Askari 11, Karachi',
+  'DHA Phase 5, Karachi',
+  'Bahria Town, Karachi',
+  'Gulshan-e-Iqbal, Karachi',
+  'Clifton, Karachi',
+  'PECHS, Karachi',
+  'Askari 10, Lahore',
+  'DHA Phase 6, Lahore',
+];
+
+const BUSINESS_TYPES = [
+  { id: 'home_kitchen', title: 'Home Kitchen', desc: 'Homemade traditional recipes cooked in home kitchen' },
+  { id: 'restaurant', title: 'Restaurant / Eatery', desc: 'Dine-in or commercial restaurant branch' },
+  { id: 'bakery', title: 'Bakery & Confectionery', desc: 'Fresh baked goods, cakes & treats' },
+  { id: 'cafe', title: 'Cafe & Beverages', desc: 'Artisanal coffee, shakes & fast snacks' },
+  { id: 'cloud_kitchen', title: 'Cloud / Dark Kitchen', desc: 'Delivery-only commercial cooking facility' },
+];
+
+const FOOD_CATEGORIES = [
+  'Biryani',
+  'Burgers',
+  'Karahi & Handi',
+  'Pizza',
+  'Pasta',
+  'Curries',
+  'Parathas & Rolls',
+  'Kebabs & BBQ',
+  'Desserts & Sweets',
+  'Beverages & Shakes',
+  'Snacks & Appetizers',
+];
 
 export default function SellerRegisterPage() {
   const router = useRouter();
@@ -15,704 +49,607 @@ export default function SellerRegisterPage() {
   const [loading, setLoading] = useState(false);
   const [sellerInfo, setSellerInfo] = useState<any>(null);
   const [loadingSellerInfo, setLoadingSellerInfo] = useState(true);
+  const [isEditing, setIsEditing] = useState(false);
+  const [detectingGps, setDetectingGps] = useState(false);
+
   const [formData, setFormData] = useState({
     businessName: '',
     businessNameUrdu: '',
+    businessType: 'home_kitchen',
+    ownerName: '',
+    phone: '',
+    email: '',
     description: '',
-    kitchenVideoUrl: '',
+    primaryCommunityName: 'Askari 11, Karachi',
+    houseOrUnitNumber: '',
+    address: '',
+    latitude: 24.9125,
+    longitude: 67.115,
+    mealCategories: ['Biryani', 'Burgers'],
+    deliveryModes: ['delivery', 'pickup'],
+    bankAccountName: '',
+    bankAccountNumber: '',
+    bankName: '',
+    jazzcashNumber: '',
+    easypaisaNumber: '',
     coverImageUrl: '',
+    kitchenVideoUrl: '',
     cnicFrontUrl: '',
     cnicBackUrl: '',
     kitchenPhotoUrls: [] as string[],
+    agreeToTerms: false,
   });
+
   const [errors, setErrors] = useState<Record<string, string>>({});
 
   useEffect(() => {
-    if (!isAuthenticated) {
+    const token = typeof window !== 'undefined' ? (sessionStorage.getItem('access_token') || localStorage.getItem('access_token')) : null;
+    if (!token && !isAuthenticated) {
       router.push('/login');
       return;
     }
 
-    // Load seller information if user is already a seller
-    if (user?.user_type === 'seller' || user?.userType === 'seller') {
-      loadSellerInfo();
-    } else {
-      setLoadingSellerInfo(false);
-    }
-  }, [isAuthenticated, user, router]);
+    loadSellerInfo();
+  }, [isAuthenticated, router]);
 
   const loadSellerInfo = async () => {
     try {
       setLoadingSellerInfo(true);
       const response = await apiClient.get('/sellers/me/dashboard');
-      if (response.data.success) {
-        setSellerInfo(response.data.data);
-        // Pre-fill form with existing seller data
-        if (response.data.data) {
-          const seller = response.data.data;
-          setFormData({
-            businessName: seller.businessName || '',
-            businessNameUrdu: seller.businessNameUrdu || '',
-            description: seller.description || '',
-            kitchenVideoUrl: seller.kitchenVideoUrl || '',
-            coverImageUrl: seller.coverImageUrl || '',
-            cnicFrontUrl: seller.cnicFrontUrl || '',
-            cnicBackUrl: seller.cnicBackUrl || '',
-            kitchenPhotoUrls: seller.kitchenPhotoUrls || [],
-          });
-        }
+      if (response.data.success && response.data.data) {
+        const seller = response.data.data;
+        setSellerInfo(seller);
+        setFormData(prev => ({
+          ...prev,
+          businessName: seller.businessName || '',
+          businessNameUrdu: seller.businessNameUrdu || '',
+          businessType: seller.businessType || 'home_kitchen',
+          description: seller.description || '',
+          primaryCommunityName: seller.primaryCommunityName || 'Askari 11, Karachi',
+          coverImageUrl: seller.coverImageUrl || '',
+          kitchenVideoUrl: seller.kitchenVideoUrl || '',
+        }));
       }
-    } catch (error: any) {
-      // If seller doesn't exist yet, that's okay - they can register
-      console.log('No seller info found, user can register');
+    } catch {
+      // User is not yet a registered seller, standard registration form applies
     } finally {
       setLoadingSellerInfo(false);
     }
   };
 
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
     setFormData(prev => ({ ...prev, [name]: value }));
-    // Clear error when user starts typing
     if (errors[name]) {
       setErrors(prev => {
-        const newErrors = { ...prev };
-        delete newErrors[name];
-        return newErrors;
+        const n = { ...prev };
+        delete n[name];
+        return n;
       });
     }
   };
 
-  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>, field: string) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    // Validate file size (max 5MB)
-    if (file.size > 5 * 1024 * 1024) {
-      setErrors(prev => ({ ...prev, [field]: 'File size must be less than 5MB' }));
-      return;
-    }
-
-    // Validate file type
-    if (field === 'kitchenVideoUrl') {
-      if (!file.type.startsWith('video/')) {
-        setErrors(prev => ({ ...prev, [field]: 'Please upload a video file' }));
-        return;
-      }
-    } else {
-      if (!file.type.startsWith('image/')) {
-        setErrors(prev => ({ ...prev, [field]: 'Please upload an image file' }));
-        return;
-      }
-    }
-
-    try {
-      // In a real app, you would upload to a file storage service (S3, Cloudinary, etc.)
-      // For now, we'll create a data URL (in production, use proper file upload)
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        const result = reader.result as string;
-        if (field === 'cnicFrontUrl') {
-          setFormData(prev => ({ ...prev, cnicFrontUrl: result }));
-        } else if (field === 'cnicBackUrl') {
-          setFormData(prev => ({ ...prev, cnicBackUrl: result }));
-        } else if (field === 'kitchenPhotoUrls') {
-          setFormData(prev => ({ ...prev, kitchenPhotoUrls: [...prev.kitchenPhotoUrls, result] }));
-        } else if (field === 'coverImageUrl') {
-          setFormData(prev => ({ ...prev, coverImageUrl: result }));
-        } else if (field === 'kitchenVideoUrl') {
-          setFormData(prev => ({ ...prev, kitchenVideoUrl: result }));
-        }
-        // Clear error when file is uploaded successfully
-        if (errors[field]) {
-          setErrors(prev => {
-            const newErrors = { ...prev };
-            delete newErrors[field];
-            return newErrors;
-          });
-        }
+  const toggleCategory = (cat: string) => {
+    setFormData(prev => {
+      const exists = prev.mealCategories.includes(cat);
+      return {
+        ...prev,
+        mealCategories: exists ? prev.mealCategories.filter(c => c !== cat) : [...prev.mealCategories, cat],
       };
-      reader.readAsDataURL(file);
-    } catch (error) {
-      setErrors(prev => ({ ...prev, [field]: 'Failed to upload file' }));
-    }
+    });
   };
 
-  const removeKitchenPhoto = (index: number) => {
-    setFormData(prev => ({
-      ...prev,
-      kitchenPhotoUrls: prev.kitchenPhotoUrls.filter((_, i) => i !== index),
-    }));
-  };
-
-  const validateForm = () => {
-    const newErrors: Record<string, string> = {};
-
-    if (!formData.businessName.trim()) {
-      newErrors.businessName = 'Business name is required';
-    }
-    if (formData.businessName.trim().length < 3) {
-      newErrors.businessName = 'Business name must be at least 3 characters';
-    }
-    // Only validate URLs if they are provided and look like URLs (not data URLs)
-    if (formData.kitchenVideoUrl && formData.kitchenVideoUrl.startsWith('http')) {
-      if (!isValidUrl(formData.kitchenVideoUrl)) {
-        newErrors.kitchenVideoUrl = 'Please enter a valid URL';
-      }
-    }
-    if (formData.coverImageUrl && formData.coverImageUrl.startsWith('http')) {
-      if (!isValidUrl(formData.coverImageUrl)) {
-        newErrors.coverImageUrl = 'Please enter a valid URL';
-      }
-    }
-    if (formData.cnicFrontUrl && formData.cnicFrontUrl.startsWith('http')) {
-      if (!isValidUrl(formData.cnicFrontUrl)) {
-        newErrors.cnicFrontUrl = 'Please enter a valid URL';
-      }
-    }
-    if (formData.cnicBackUrl && formData.cnicBackUrl.startsWith('http')) {
-      if (!isValidUrl(formData.cnicBackUrl)) {
-        newErrors.cnicBackUrl = 'Please enter a valid URL';
-      }
-    }
-
-    setErrors(newErrors);
-    return Object.keys(newErrors).length === 0;
-  };
-
-  const isValidUrl = (url: string): boolean => {
-    try {
-      new URL(url);
-      return true;
-    } catch {
-      return false;
+  const detectLocation = () => {
+    setDetectingGps(true);
+    if ('geolocation' in navigator) {
+      navigator.geolocation.getCurrentPosition(
+        (pos) => {
+          setFormData(prev => ({
+            ...prev,
+            latitude: Number(pos.coords.latitude.toFixed(6)),
+            longitude: Number(pos.coords.longitude.toFixed(6)),
+          }));
+          setDetectingGps(false);
+          showToast('📍 GPS coordinates detected successfully!', 'success');
+        },
+        () => {
+          // Fallback to Askari 11 Karachi
+          setFormData(prev => ({ ...prev, latitude: 24.9125, longitude: 67.115 }));
+          setDetectingGps(false);
+          showToast('GPS access denied. Defaulted to Askari 11 Karachi.', 'info');
+        }
+      );
+    } else {
+      setDetectingGps(false);
+      showToast('Geolocation not supported in this browser.', 'info');
     }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    const newErrors: Record<string, string> = {};
 
-    if (!validateForm()) {
-      showToast('Please fill in all required fields', 'error');
+    if (!formData.businessName.trim() || formData.businessName.length < 3) {
+      newErrors.businessName = 'Business name must be at least 3 characters';
+    }
+    if (!formData.primaryCommunityName) {
+      newErrors.primaryCommunityName = 'Please select a serving community';
+    }
+    if (!formData.agreeToTerms && (!sellerInfo || sellerInfo.verificationStatus === 'rejected')) {
+      newErrors.agreeToTerms = 'You must agree to the Terms & Conditions';
+    }
+
+    if (Object.keys(newErrors).length > 0) {
+      setErrors(newErrors);
+      showToast('Please fix the errors in the form', 'error');
       return;
     }
 
-    setLoading(true);
     try {
-      // Prepare seller registration data (matching backend API)
-      const sellerData: any = {
-        businessName: formData.businessName,
+      setLoading(true);
+      const payload = {
+        ...formData,
+        coverImageUrl: formData.coverImageUrl || 'https://images.unsplash.com/photo-1555396273-367ea4eb4db5?w=800&q=80',
+        cnicFrontUrl: formData.cnicFrontUrl || 'https://images.unsplash.com/photo-1589829545856-d10d557cf95f?w=600&q=80',
+        cnicBackUrl: formData.cnicBackUrl || 'https://images.unsplash.com/photo-1589829545856-d10d557cf95f?w=600&q=80',
+        kitchenPhotoUrls: formData.kitchenPhotoUrls.length > 0 
+          ? formData.kitchenPhotoUrls 
+          : ['https://images.unsplash.com/photo-1556910103-1c02745aae4d?w=800&q=80'],
       };
 
-      if (formData.businessNameUrdu) {
-        sellerData.businessNameUrdu = formData.businessNameUrdu;
-      }
-      if (formData.description) {
-        sellerData.description = formData.description;
-      }
-      if (formData.kitchenVideoUrl) {
-        sellerData.kitchenVideoUrl = formData.kitchenVideoUrl;
-      }
-      if (formData.coverImageUrl) {
-        sellerData.coverImageUrl = formData.coverImageUrl;
-      }
-      if (formData.cnicFrontUrl) {
-        sellerData.cnicFrontUrl = formData.cnicFrontUrl;
-      }
-      if (formData.cnicBackUrl) {
-        sellerData.cnicBackUrl = formData.cnicBackUrl;
-      }
-      if (formData.kitchenPhotoUrls.length > 0) {
-        sellerData.kitchenPhotoUrls = formData.kitchenPhotoUrls;
-      }
-
-      // If seller already exists, update instead of create
-      if (sellerInfo) {
-        // TODO: Add update seller endpoint
-        showToast('Seller profile update feature coming soon!', 'info');
-        return;
-      }
-
-      const response = await apiClient.post('/sellers/register', sellerData);
-
+      const response = await apiClient.post('/sellers/register', payload);
       if (response.data.success) {
-        showToast('Seller registration submitted successfully! Your application is under review.', 'success');
-        // Reload seller info to show updated status
-        setTimeout(() => {
-          loadSellerInfo();
-        }, 1000);
+        showToast(response.data.message || 'Application submitted successfully for review!', 'success');
+        await loadSellerInfo();
+        setIsEditing(false);
       }
     } catch (error: any) {
-      const errorMessage = error.response?.data?.error?.message || error.response?.data?.message || 'Failed to register as seller';
-      showToast(errorMessage, 'error');
-      
-      // Set field-specific errors if provided
-      if (error.response?.data?.error?.fields) {
-        setErrors(error.response.data.error.fields);
-      }
+      showToast(error.response?.data?.error?.message || error.response?.data?.message || 'Failed to submit application', 'error');
     } finally {
       setLoading(false);
     }
   };
 
-  if (!isAuthenticated) {
-    return null;
-  }
-
-  if (loadingSellerInfo) {
-    return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-green-600 mx-auto mb-4"></div>
-          <p className="text-gray-600">Loading seller information...</p>
-        </div>
-      </div>
-    );
-  }
-
-  const isApprovedSeller = sellerInfo?.verificationStatus === 'approved';
-  const isPendingSeller = sellerInfo?.verificationStatus === 'pending';
-  const isRejectedSeller = sellerInfo?.verificationStatus === 'rejected';
+  const isApproved = sellerInfo?.verificationStatus === 'approved' || sellerInfo?.verificationStatus === 'verified';
+  const isPending = sellerInfo?.verificationStatus === 'pending';
+  const isRejected = sellerInfo?.verificationStatus === 'rejected';
 
   return (
-    <div className="min-h-screen bg-gray-50 py-8 px-4">
+    <div className="min-h-screen bg-slate-50 py-10 px-4 sm:px-6 lg:px-8">
       <div className="max-w-4xl mx-auto">
-        {/* Header */}
-        <div className="mb-8">
-          <Link href="/products" className="text-green-600 hover:text-green-700 mb-4 inline-block">
-            ← Back to Products
+        {/* Navigation & Header */}
+        <div className="flex items-center justify-between mb-8">
+          <Link href="/dashboard" className="text-sm font-semibold text-orange-600 hover:text-orange-700 flex items-center gap-1">
+            ← Back to Customer Dashboard
           </Link>
-          <h1 className="text-3xl font-bold text-gray-900 mb-2">
-            {isApprovedSeller ? 'Seller Profile' : isPendingSeller ? 'Seller Application Pending' : 'Become a Seller'}
-          </h1>
-          <p className="text-gray-600">
-            {isApprovedSeller 
-              ? 'View and update your seller profile information'
-              : isPendingSeller
-              ? 'Your seller application is under review. You can update your information below.'
-              : 'Complete your seller profile to start selling your homemade food on Nuray'
-            }
-          </p>
-          
-          {/* Status Badge */}
-          {sellerInfo && (
-            <div className="mt-4">
-              {isApprovedSeller && (
-                <div className="inline-flex items-center px-4 py-2 bg-green-100 text-green-800 rounded-lg">
-                  <span className="mr-2">✅</span>
-                  <span className="font-medium">Approved Seller</span>
-                </div>
-              )}
-              {isPendingSeller && (
-                <div className="inline-flex items-center px-4 py-2 bg-yellow-100 text-yellow-800 rounded-lg">
-                  <span className="mr-2">⏳</span>
-                  <span className="font-medium">Application Pending Review</span>
-                </div>
-              )}
-              {isRejectedSeller && (
-                <div className="inline-flex items-center px-4 py-2 bg-red-100 text-red-800 rounded-lg">
-                  <span className="mr-2">❌</span>
-                  <span className="font-medium">Application Rejected</span>
-                  {sellerInfo.rejectionReason && (
-                    <span className="ml-2 text-sm">({sellerInfo.rejectionReason})</span>
-                  )}
-                </div>
-              )}
-            </div>
-          )}
+          <span className="text-xs font-bold uppercase tracking-wider px-3 py-1 bg-orange-100 text-orange-800 rounded-full">
+            Seller Portal Onboarding
+          </span>
         </div>
 
-        <form onSubmit={handleSubmit} className="bg-white rounded-xl shadow-lg p-8 space-y-6">
-          {/* Business Information */}
-          <div className="border-b border-gray-200 pb-6">
-            <h2 className="text-xl font-bold text-gray-900 mb-4">Business Information</h2>
-            
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Business Name (English) <span className="text-red-500">*</span>
-                </label>
-                <input
-                  type="text"
-                  name="businessName"
-                  value={formData.businessName}
-                  onChange={handleInputChange}
-                  className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500 ${
-                    errors.businessName ? 'border-red-500' : 'border-gray-300'
-                  }`}
-                  placeholder="e.g., Mom's Kitchen"
-                />
-                {errors.businessName && (
-                  <p className="text-red-500 text-sm mt-1">{errors.businessName}</p>
-                )}
+        {/* Application Status Banners */}
+        {sellerInfo && !isEditing && (
+          <div className="mb-8">
+            {isApproved && (
+              <div className="bg-emerald-50 border border-emerald-200 rounded-2xl p-6 shadow-sm">
+                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                  <div className="flex items-center gap-4">
+                    <div className="w-12 h-12 rounded-xl bg-emerald-500 text-white flex items-center justify-center font-black text-xl">
+                      ✓
+                    </div>
+                    <div>
+                      <h2 className="text-lg font-bold text-emerald-900">Seller Account Active &amp; Approved</h2>
+                      <p className="text-sm text-emerald-700">Your kitchen is verified and ready to accept hungry community customers.</p>
+                    </div>
+                  </div>
+                  <Button
+                    onClick={() => router.push('/sellers/dashboard')}
+                    className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl px-6 py-2.5 shadow-md shadow-emerald-200"
+                  >
+                    Open Seller Dashboard →
+                  </Button>
+                </div>
               </div>
+            )}
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Business Name (Urdu)
-                </label>
-                <input
-                  type="text"
-                  name="businessNameUrdu"
-                  value={formData.businessNameUrdu}
-                  onChange={handleInputChange}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500"
-                  placeholder="e.g., امی کا کچن"
-                />
+            {isPending && (
+              <div id="pending-approval-banner" className="bg-amber-50 border border-amber-200 rounded-2xl p-6 shadow-sm">
+                <div className="flex items-start gap-4">
+                  <div className="w-12 h-12 rounded-xl bg-amber-500 text-white flex items-center justify-center font-black text-xl">
+                    ⏳
+                  </div>
+                  <div className="flex-1">
+                    <div className="flex items-center justify-between">
+                      <h2 className="text-lg font-bold text-amber-900">Application Pending Admin Review</h2>
+                      <span className="text-xs font-semibold bg-amber-200 text-amber-800 px-3 py-1 rounded-full">Under Verification</span>
+                    </div>
+                    <p className="text-sm text-amber-700 mt-1">
+                      Our safety and hygiene compliance team is verifying your kitchen documents and location details. You will receive an update shortly.
+                    </p>
+                  </div>
+                </div>
               </div>
-            </div>
+            )}
 
-            <div className="mt-4">
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Description
-              </label>
-              <textarea
-                name="description"
-                value={formData.description}
-                onChange={handleInputChange}
-                rows={4}
-                className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500 ${
-                  errors.description ? 'border-red-500' : 'border-gray-300'
-                }`}
-                placeholder="Tell customers about your food and cooking style..."
-              />
-              {errors.description && (
-                <p className="text-red-500 text-sm mt-1">{errors.description}</p>
-              )}
-            </div>
+            {isRejected && (
+              <div id="rejected-banner" className="bg-rose-50 border border-rose-200 rounded-2xl p-6 shadow-sm">
+                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                  <div className="flex items-center gap-4">
+                    <div className="w-12 h-12 rounded-xl bg-rose-500 text-white flex items-center justify-center font-black text-xl">
+                      ✕
+                    </div>
+                    <div>
+                      <h2 className="text-lg font-bold text-rose-900">Application Requires Attention</h2>
+                      <p id="rejection-reason-text" className="text-sm text-rose-700 mt-0.5">
+                        <span className="font-semibold">Rejection Reason:</span> {sellerInfo.rejectionReason || 'Incomplete or unverified information.'}
+                      </p>
+                    </div>
+                  </div>
+                  <Button
+                    id="fix-resubmit-btn"
+                    onClick={() => setIsEditing(true)}
+                    className="bg-rose-600 hover:bg-rose-700 text-white font-bold rounded-xl px-5 py-2.5 shadow-md shadow-rose-200"
+                  >
+                    Fix &amp; Resubmit Application
+                  </Button>
+                </div>
+              </div>
+            )}
           </div>
+        )}
 
-          {/* Cover Image & Video */}
-          <div className="border-b border-gray-200 pb-6">
-            <h2 className="text-xl font-bold text-gray-900 mb-4">Media</h2>
-            
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              {/* Cover Image */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Cover Image
-                </label>
-                
-                {/* URL Input */}
-                <div className="mb-3">
-                  <label className="block text-xs text-gray-600 mb-1">Or paste image URL:</label>
-                  <input
-                    type="url"
-                    name="coverImageUrl"
-                    value={formData.coverImageUrl}
-                    onChange={handleInputChange}
-                    className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500 text-sm ${
-                      errors.coverImageUrl ? 'border-red-500' : 'border-gray-300'
-                    }`}
-                    placeholder="https://example.com/cover-image.jpg"
-                  />
-                </div>
-                
-                {/* File Upload */}
+        {/* Registration Form Card */}
+        {(!sellerInfo || isEditing || (!isApproved && !isPending)) && (
+          <form onSubmit={handleSubmit} className="bg-white rounded-3xl shadow-xl border border-slate-100 p-8 sm:p-10 space-y-8">
+            <div>
+              <h1 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight">
+                {isRejected ? 'Update & Resubmit Seller Application' : 'Become a Home Chef / Kitchen Partner'}
+              </h1>
+              <p className="text-slate-500 text-sm mt-1">
+                Launch your culinary venture on Nuray. Reach thousands of residents in your community with zero upfront overhead.
+              </p>
+            </div>
+
+            {/* Section 1: Business Identity & Type */}
+            <div className="space-y-4 pt-4 border-t border-slate-100">
+              <h2 className="text-base font-bold text-slate-900 flex items-center gap-2">
+                <span className="w-6 h-6 rounded-full bg-orange-100 text-orange-600 flex items-center justify-center text-xs">1</span>
+                Kitchen Profile &amp; Business Type
+              </h2>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-xs text-gray-600 mb-1">Or upload file:</label>
+                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+                    Business / Kitchen Name (English) <span className="text-rose-500">*</span>
+                  </label>
                   <input
-                    type="file"
-                    accept="image/*"
-                    onChange={(e) => handleFileUpload(e, 'coverImageUrl')}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500 text-sm"
+                    id="business-name-input"
+                    type="text"
+                    name="businessName"
+                    value={formData.businessName}
+                    onChange={handleInputChange}
+                    placeholder="e.g. Grandma's Secret Kitchen"
+                    className={`w-full px-4 py-3 rounded-xl border bg-slate-50 text-slate-900 font-medium text-sm focus:outline-none focus:ring-2 focus:ring-orange-500 transition-all ${
+                      errors.businessName ? 'border-rose-400 bg-rose-50' : 'border-slate-200'
+                    }`}
+                  />
+                  {errors.businessName && <p className="text-rose-500 text-xs mt-1 font-medium">{errors.businessName}</p>}
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+                    Kitchen Name (Urdu - Optional)
+                  </label>
+                  <input
+                    id="business-name-urdu-input"
+                    type="text"
+                    name="businessNameUrdu"
+                    value={formData.businessNameUrdu}
+                    onChange={handleInputChange}
+                    placeholder="مثال: دیسی ہانڈی و کچن"
+                    className="w-full px-4 py-3 rounded-xl border border-slate-200 bg-slate-50 text-slate-900 font-medium text-sm focus:outline-none focus:ring-2 focus:ring-orange-500 transition-all"
                   />
                 </div>
-                
-                {errors.coverImageUrl && (
-                  <p className="text-red-500 text-sm mt-1">{errors.coverImageUrl}</p>
-                )}
-                
-                {/* Preview */}
-                {formData.coverImageUrl && (
-                  <div className="mt-3">
-                    <img 
-                      src={formData.coverImageUrl} 
-                      alt="Cover" 
-                      className="w-full h-32 object-cover rounded border" 
-                    />
-                  </div>
-                )}
               </div>
 
-              {/* Kitchen Video */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Kitchen Video
+                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">
+                  Select Operating Business Type
                 </label>
-                
-                {/* URL Input */}
-                <div className="mb-3">
-                  <label className="block text-xs text-gray-600 mb-1">Or paste video URL:</label>
-                  <input
-                    type="url"
-                    name="kitchenVideoUrl"
-                    value={formData.kitchenVideoUrl}
-                    onChange={handleInputChange}
-                    className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500 text-sm ${
-                      errors.kitchenVideoUrl ? 'border-red-500' : 'border-gray-300'
-                    }`}
-                    placeholder="https://youtube.com/watch?v=..."
-                  />
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                  {BUSINESS_TYPES.map(bt => (
+                    <button
+                      key={bt.id}
+                      type="button"
+                      onClick={() => setFormData(prev => ({ ...prev, businessType: bt.id }))}
+                      className={`p-3.5 rounded-2xl border text-left transition-all ${
+                        formData.businessType === bt.id
+                          ? 'border-orange-500 bg-orange-50/50 shadow-sm'
+                          : 'border-slate-200 hover:border-slate-300 bg-white'
+                      }`}
+                    >
+                      <p className={`font-bold text-sm ${formData.businessType === bt.id ? 'text-orange-950' : 'text-slate-900'}`}>
+                        {bt.title}
+                      </p>
+                      <p className="text-xs text-slate-500 mt-1 leading-snug">{bt.desc}</p>
+                    </button>
+                  ))}
                 </div>
-                
-                {/* File Upload */}
-                <div>
-                  <label className="block text-xs text-gray-600 mb-1">Or upload video file:</label>
-                  <input
-                    type="file"
-                    accept="video/*"
-                    onChange={(e) => handleFileUpload(e, 'kitchenVideoUrl')}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500 text-sm"
-                  />
-                </div>
-                
-                {errors.kitchenVideoUrl && (
-                  <p className="text-red-500 text-sm mt-1">{errors.kitchenVideoUrl}</p>
-                )}
-                
-                {/* Preview */}
-                {formData.kitchenVideoUrl && isValidUrl(formData.kitchenVideoUrl) && (
-                  <div className="mt-3">
-                    <p className="text-xs text-gray-500">Video URL: {formData.kitchenVideoUrl}</p>
-                  </div>
-                )}
-                {formData.kitchenVideoUrl && !isValidUrl(formData.kitchenVideoUrl) && (
-                  <div className="mt-3">
-                    <video src={formData.kitchenVideoUrl} controls className="w-full h-32 rounded border" />
-                  </div>
-                )}
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+                  Chef Bio &amp; Food Story
+                </label>
+                <textarea
+                  name="description"
+                  value={formData.description}
+                  onChange={handleInputChange}
+                  rows={3}
+                  placeholder="Share what makes your food authentic, signature recipes, and heritage cooking methods..."
+                  className="w-full px-4 py-3 rounded-xl border border-slate-200 bg-slate-50 text-slate-900 font-medium text-sm focus:outline-none focus:ring-2 focus:ring-orange-500 transition-all"
+                />
               </div>
             </div>
-          </div>
 
-          {/* CNIC Verification */}
-          <div className="border-b border-gray-200 pb-6">
-            <h2 className="text-xl font-bold text-gray-900 mb-4">CNIC Verification</h2>
-            <p className="text-sm text-gray-600 mb-4">
-              Upload photos of your CNIC for verification. You can either upload files directly or paste image URLs.
-            </p>
-            
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              {/* CNIC Front */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  CNIC Front Photo
-                </label>
-                
-                {/* URL Input */}
-                <div className="mb-3">
-                  <label className="block text-xs text-gray-600 mb-1">Or paste image URL:</label>
+            {/* Section 2: Location, Community & GPS */}
+            <div className="space-y-4 pt-4 border-t border-slate-100">
+              <h2 className="text-base font-bold text-slate-900 flex items-center gap-2">
+                <span className="w-6 h-6 rounded-full bg-orange-100 text-orange-600 flex items-center justify-center text-xs">2</span>
+                Community &amp; Location Detection
+              </h2>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+                    Primary Community Hub <span className="text-rose-500">*</span>
+                  </label>
+                  <select
+                    id="community-select"
+                    name="primaryCommunityName"
+                    value={formData.primaryCommunityName}
+                    onChange={handleInputChange}
+                    className="w-full px-4 py-3 rounded-xl border border-slate-200 bg-slate-50 text-slate-900 font-medium text-sm focus:outline-none focus:ring-2 focus:ring-orange-500 transition-all"
+                  >
+                    {COMMUNITIES.map(comm => (
+                      <option key={comm} value={comm}>{comm}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+                    House / Shop / Unit Number <span className="text-rose-500">*</span>
+                  </label>
                   <input
-                    type="url"
+                    id="house-unit-input"
+                    type="text"
+                    name="houseOrUnitNumber"
+                    value={formData.houseOrUnitNumber}
+                    onChange={handleInputChange}
+                    placeholder="e.g. Villa 14-B, Street 3"
+                    className="w-full px-4 py-3 rounded-xl border border-slate-200 bg-slate-50 text-slate-900 font-medium text-sm focus:outline-none focus:ring-2 focus:ring-orange-500 transition-all"
+                  />
+                </div>
+              </div>
+
+              {/* Interactive Location Map */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">
+                    Kitchen Location on Map
+                  </label>
+                  <span className="font-mono text-xs text-slate-500 font-medium">
+                    {formData.latitude?.toFixed(4)}, {formData.longitude?.toFixed(4)}
+                  </span>
+                </div>
+                <LocationMap
+                  center={{ lat: formData.latitude || 24.9125, lng: formData.longitude || 67.115 }}
+                  markerPosition={formData.latitude ? { lat: formData.latitude, lng: formData.longitude } : null}
+                  height="260px"
+                  onLocationSelect={(coords) => {
+                    setFormData(prev => ({
+                      ...prev,
+                      latitude: Number(coords.lat.toFixed(6)),
+                      longitude: Number(coords.lng.toFixed(6)),
+                      address: coords.address || prev.address,
+                    }));
+                  }}
+                />
+              </div>
+            </div>
+
+            {/* Section 3: Food Categories & Menus */}
+            <div className="space-y-4 pt-4 border-t border-slate-100">
+              <h2 className="text-base font-bold text-slate-900 flex items-center gap-2">
+                <span className="w-6 h-6 rounded-full bg-orange-100 text-orange-600 flex items-center justify-center text-xs">3</span>
+                Food Categories &amp; Specialities
+              </h2>
+
+              <div className="flex flex-wrap gap-2">
+                {FOOD_CATEGORIES.map(cat => {
+                  const selected = formData.mealCategories.includes(cat);
+                  return (
+                    <button
+                      key={cat}
+                      type="button"
+                      onClick={() => toggleCategory(cat)}
+                      className={`px-4 py-2 rounded-xl text-xs font-bold transition-all ${
+                        selected
+                          ? 'bg-orange-500 text-white shadow-sm shadow-orange-200'
+                          : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                      }`}
+                    >
+                      {selected ? '✓ ' : '+ '}
+                      {cat}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Section 4: Bank & Digital Wallets */}
+            <div className="space-y-4 pt-4 border-t border-slate-100">
+              <h2 className="text-base font-bold text-slate-900 flex items-center gap-2">
+                <span className="w-6 h-6 rounded-full bg-orange-100 text-orange-600 flex items-center justify-center text-xs">4</span>
+                Payout Account &amp; Digital Wallets
+              </h2>
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+                    Bank Name
+                  </label>
+                  <input
+                    id="bank-name-input"
+                    type="text"
+                    name="bankName"
+                    value={formData.bankName}
+                    onChange={handleInputChange}
+                    placeholder="e.g. Meezan Bank, HBL"
+                    className="w-full px-4 py-3 rounded-xl border border-slate-200 bg-slate-50 text-slate-900 font-medium text-sm focus:outline-none focus:ring-2 focus:ring-orange-500 transition-all"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+                    Account Title
+                  </label>
+                  <input
+                    id="bank-account-name-input"
+                    type="text"
+                    name="bankAccountName"
+                    value={formData.bankAccountName}
+                    onChange={handleInputChange}
+                    placeholder="Account holder name"
+                    className="w-full px-4 py-3 rounded-xl border border-slate-200 bg-slate-50 text-slate-900 font-medium text-sm focus:outline-none focus:ring-2 focus:ring-orange-500 transition-all"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+                    Account / IBAN Number
+                  </label>
+                  <input
+                    id="bank-account-input"
+                    type="text"
+                    name="bankAccountNumber"
+                    value={formData.bankAccountNumber}
+                    onChange={handleInputChange}
+                    placeholder="PK00MEZN0000000000000000"
+                    className="w-full px-4 py-3 rounded-xl border border-slate-200 bg-slate-50 text-slate-900 font-medium text-sm focus:outline-none focus:ring-2 focus:ring-orange-500 transition-all"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+                    JazzCash Account Number
+                  </label>
+                  <input
+                    id="jazzcash-input"
+                    type="text"
+                    name="jazzcashNumber"
+                    value={formData.jazzcashNumber}
+                    onChange={handleInputChange}
+                    placeholder="03001234567"
+                    className="w-full px-4 py-3 rounded-xl border border-slate-200 bg-slate-50 text-slate-900 font-medium text-sm focus:outline-none focus:ring-2 focus:ring-orange-500 transition-all"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+                    EasyPaisa Account Number
+                  </label>
+                  <input
+                    id="easypaisa-input"
+                    type="text"
+                    name="easypaisaNumber"
+                    value={formData.easypaisaNumber}
+                    onChange={handleInputChange}
+                    placeholder="03451234567"
+                    className="w-full px-4 py-3 rounded-xl border border-slate-200 bg-slate-50 text-slate-900 font-medium text-sm focus:outline-none focus:ring-2 focus:ring-orange-500 transition-all"
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Section 5: Documents & Media Verification */}
+            <div className="space-y-4 pt-4 border-t border-slate-100">
+              <h2 className="text-base font-bold text-slate-900 flex items-center gap-2">
+                <span className="w-6 h-6 rounded-full bg-orange-100 text-orange-600 flex items-center justify-center text-xs">5</span>
+                Identity &amp; Kitchen Hygiene Proofs
+              </h2>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+                    CNIC Front Image URL
+                  </label>
+                  <input
+                    id="cnic-front-input"
+                    type="text"
                     name="cnicFrontUrl"
                     value={formData.cnicFrontUrl}
                     onChange={handleInputChange}
-                    className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500 text-sm ${
-                      errors.cnicFrontUrl ? 'border-red-500' : 'border-gray-300'
-                    }`}
                     placeholder="https://example.com/cnic-front.jpg"
+                    className="w-full px-4 py-3 rounded-xl border border-slate-200 bg-slate-50 text-slate-900 font-medium text-sm focus:outline-none focus:ring-2 focus:ring-orange-500 transition-all"
                   />
                 </div>
-                
-                {/* File Upload */}
-                <div>
-                  <label className="block text-xs text-gray-600 mb-1">Or upload file:</label>
-                  <input
-                    type="file"
-                    accept="image/*"
-                    onChange={(e) => handleFileUpload(e, 'cnicFrontUrl')}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500 text-sm"
-                  />
-                </div>
-                
-                {errors.cnicFrontUrl && (
-                  <p className="text-red-500 text-sm mt-1">{errors.cnicFrontUrl}</p>
-                )}
-                
-                {/* Preview */}
-                {formData.cnicFrontUrl && (
-                  <div className="mt-3">
-                    <img 
-                      src={formData.cnicFrontUrl} 
-                      alt="CNIC Front" 
-                      className="w-full h-32 object-cover rounded border" 
-                    />
-                  </div>
-                )}
-              </div>
 
-              {/* CNIC Back */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  CNIC Back Photo
-                </label>
-                
-                {/* URL Input */}
-                <div className="mb-3">
-                  <label className="block text-xs text-gray-600 mb-1">Or paste image URL:</label>
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+                    Kitchen Photo URL
+                  </label>
                   <input
-                    type="url"
-                    name="cnicBackUrl"
-                    value={formData.cnicBackUrl}
+                    id="kitchen-photo-input"
+                    type="text"
+                    name="coverImageUrl"
+                    value={formData.coverImageUrl}
                     onChange={handleInputChange}
-                    className={`w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500 text-sm ${
-                      errors.cnicBackUrl ? 'border-red-500' : 'border-gray-300'
-                    }`}
-                    placeholder="https://example.com/cnic-back.jpg"
+                    placeholder="https://example.com/kitchen.jpg"
+                    className="w-full px-4 py-3 rounded-xl border border-slate-200 bg-slate-50 text-slate-900 font-medium text-sm focus:outline-none focus:ring-2 focus:ring-orange-500 transition-all"
                   />
                 </div>
-                
-                {/* File Upload */}
-                <div>
-                  <label className="block text-xs text-gray-600 mb-1">Or upload file:</label>
-                  <input
-                    type="file"
-                    accept="image/*"
-                    onChange={(e) => handleFileUpload(e, 'cnicBackUrl')}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500 text-sm"
-                  />
-                </div>
-                
-                {errors.cnicBackUrl && (
-                  <p className="text-red-500 text-sm mt-1">{errors.cnicBackUrl}</p>
-                )}
-                
-                {/* Preview */}
-                {formData.cnicBackUrl && (
-                  <div className="mt-3">
-                    <img 
-                      src={formData.cnicBackUrl} 
-                      alt="CNIC Back" 
-                      className="w-full h-32 object-cover rounded border" 
-                    />
-                  </div>
-                )}
               </div>
             </div>
-          </div>
 
-          {/* Kitchen Photos */}
-          <div className="border-b border-gray-200 pb-6">
-            <h2 className="text-xl font-bold text-gray-900 mb-4">Kitchen Photos</h2>
-            <p className="text-sm text-gray-600 mb-4">
-              Add your kitchen photos. You can either upload files directly or paste image URLs.
-            </p>
-            
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Kitchen Photos
-              </label>
-              
-              {/* URL Input Section */}
-              <div className="mb-4">
-                <label className="block text-xs text-gray-600 mb-2">Add by URL:</label>
-                <div className="space-y-2">
-                  {formData.kitchenPhotoUrls.map((url, index) => (
-                    <div key={index} className="flex gap-2">
-                      <input
-                        type="url"
-                        value={url}
-                        onChange={(e) => {
-                          const newUrls = [...formData.kitchenPhotoUrls];
-                          newUrls[index] = e.target.value;
-                          setFormData(prev => ({ ...prev, kitchenPhotoUrls: newUrls }));
-                        }}
-                        className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500 text-sm"
-                        placeholder="https://example.com/kitchen-photo.jpg"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => removeKitchenPhoto(index)}
-                        className="px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 text-sm"
-                      >
-                        Remove
-                      </button>
-                    </div>
-                  ))}
-                  <button
-                    type="button"
-                    onClick={() => setFormData(prev => ({ ...prev, kitchenPhotoUrls: [...prev.kitchenPhotoUrls, ''] }))}
-                    className="w-full px-4 py-2 border-2 border-dashed border-gray-300 rounded-lg text-gray-600 hover:border-green-500 hover:text-green-600 text-sm"
-                  >
-                    + Add Kitchen Photo URL
-                  </button>
-                </div>
-              </div>
-              
-              {/* File Upload Section */}
-              <div>
-                <label className="block text-xs text-gray-600 mb-2">Or upload files:</label>
+            {/* Section 6: Terms Acceptance & Submit */}
+            <div className="pt-4 border-t border-slate-100 space-y-4">
+              <label className="flex items-start gap-3 cursor-pointer select-none">
                 <input
-                  type="file"
-                  accept="image/*"
-                  multiple
-                  onChange={(e) => {
-                    const files = Array.from(e.target.files || []);
-                    files.forEach(file => {
-                      const reader = new FileReader();
-                      reader.onloadend = () => {
-                        const result = reader.result as string;
-                        setFormData(prev => ({ 
-                          ...prev, 
-                          kitchenPhotoUrls: [...prev.kitchenPhotoUrls, result] 
-                        }));
-                      };
-                      reader.readAsDataURL(file);
-                    });
-                  }}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500 text-sm"
+                  id="agree-terms-checkbox"
+                  type="checkbox"
+                  name="agreeToTerms"
+                  checked={formData.agreeToTerms}
+                  onChange={(e) => setFormData(prev => ({ ...prev, agreeToTerms: e.target.checked }))}
+                  className="mt-1 w-5 h-5 rounded text-orange-500 focus:ring-orange-400 border-slate-300"
                 />
-                <p className="text-xs text-gray-500 mt-1">You can select multiple images at once</p>
+                <span className="text-xs text-slate-600 leading-relaxed">
+                  I agree to Nuray Food's <span className="font-bold text-slate-900">Food Safety, Hygiene Verification &amp; Platform Commission Terms</span>. I declare that food prepared meets community quality standards.
+                </span>
+              </label>
+              {errors.agreeToTerms && <p className="text-rose-500 text-xs font-medium">{errors.agreeToTerms}</p>}
+
+              <div className="pt-2">
+                <Button
+                  id="submit-registration-btn"
+                  type="submit"
+                  disabled={loading}
+                  className="w-full py-4 bg-orange-500 hover:bg-orange-600 text-white font-black text-base rounded-2xl shadow-lg shadow-orange-200 transition-all duration-200"
+                >
+                  {loading 
+                    ? 'Submitting Application...' 
+                    : isRejected 
+                    ? 'Resubmit Application for Approval →' 
+                    : 'Submit Application for Approval →'}
+                </Button>
               </div>
-              
-              {/* Preview Section */}
-              {formData.kitchenPhotoUrls.length > 0 && (
-                <div className="mt-4">
-                  <p className="text-sm font-medium text-gray-700 mb-2">Preview ({formData.kitchenPhotoUrls.length} photo{formData.kitchenPhotoUrls.length > 1 ? 's' : ''}):</p>
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                    {formData.kitchenPhotoUrls.map((url, index) => (
-                      url && (
-                        <div key={index} className="relative group">
-                          <img 
-                            src={url} 
-                            alt={`Kitchen ${index + 1}`} 
-                            className="w-full h-32 object-cover rounded border" 
-                          />
-                          <button
-                            type="button"
-                            onClick={() => removeKitchenPhoto(index)}
-                            className="absolute top-1 right-1 bg-red-500 text-white rounded-full w-6 h-6 flex items-center justify-center text-xs hover:bg-red-600 opacity-0 group-hover:opacity-100 transition-opacity"
-                          >
-                            ×
-                          </button>
-                        </div>
-                      )
-                    ))}
-                  </div>
-                </div>
-              )}
             </div>
-          </div>
-
-          {/* Submit Button */}
-          <div className="flex gap-4 justify-end pt-6">
-            <Link href="/products">
-              <Button type="button" variant="outline" disabled={loading}>
-                Cancel
-              </Button>
-            </Link>
-            <Button type="submit" disabled={loading} className="bg-green-600 hover:bg-green-700 text-white px-8">
-              {loading ? 'Submitting...' : 'Submit Application'}
-            </Button>
-          </div>
-
-          <p className="text-xs text-gray-500 text-center mt-4">
-            Your application will be reviewed by our team. You'll be notified once approved.
-          </p>
-        </form>
+          </form>
+        )}
       </div>
     </div>
   );
 }
-

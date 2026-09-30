@@ -11,6 +11,7 @@ export const addToCartSchema = z.object({
   quantity: z.coerce.number().int().positive('Quantity must be at least 1'),
   stockType: z.enum(['direct', 'hub', 'both']).optional(),
   hubId: optionalHubId,
+  clearAndAdd: z.boolean().optional(),
 });
 
 export const updateCartItemSchema = z.object({

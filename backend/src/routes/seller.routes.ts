@@ -7,6 +7,9 @@ import {
   getSellerAnalytics,
   requestPayout,
   getPayoutHistory,
+  toggleStoreLive,
+  getPublicSellers,
+  getPublicSellerById,
 } from '../controllers/seller.controller';
 import { authenticate, authorize, blockSuspendedSeller } from '../middleware/auth.middleware';
 import { validate } from '../middleware/validation.middleware';
@@ -14,20 +17,27 @@ import { registerSellerSchema, updateSellerSchema, requestPayoutSchema } from '.
 
 const router = Router();
 
+// Public seller discovery routes
+router.get('/', getPublicSellers);
+
 // Register as seller (requires authentication)
 router.post('/register', authenticate, validate(registerSellerSchema), registerAsSeller);
 
-// All other routes require seller role
+// Application status & dashboard check (accessible to applicant checking pending/rejected status)
+router.get('/me', authenticate, getCurrentSeller);
+router.get('/me/dashboard', authenticate, getSellerDashboard);
+
+// Public seller detail route (comes after /me to avoid route conflict)
+router.get('/:id', getPublicSellerById);
+
+// All active operational actions require seller role
 router.use(authenticate);
 router.use(authorize('seller'));
 router.use(blockSuspendedSeller);
 
-// Get / update current seller profile (must be before /me/dashboard so /me matches first)
-router.get('/me', getCurrentSeller);
 router.patch('/me', validate(updateSellerSchema), updateCurrentSeller);
-
-// Get seller dashboard
-router.get('/me/dashboard', getSellerDashboard);
+router.put('/me', validate(updateSellerSchema), updateCurrentSeller);
+router.post('/me/toggle-live', toggleStoreLive);
 
 // Get seller analytics
 router.get('/me/analytics', getSellerAnalytics);

@@ -17,44 +17,53 @@ export function useAuthInit() {
     let mounted = true;
 
     const initAuth = async () => {
-      // Check if we have a token but no user (page refresh scenario)
-      if (typeof window !== 'undefined') {
-        const token = localStorage.getItem('access_token');
-        
-        if (token && !user) {
-          // Try to verify token and get user info
-          try {
-            const response = await apiClient.get('/auth/me');
-            if (mounted && response.data.success && response.data.data) {
-              setUser(response.data.data as any);
-            } else if (mounted) {
-              // Invalid token, clear it
-              localStorage.removeItem('access_token');
-              localStorage.removeItem('refresh_token');
-            }
-          } catch (error: any) {
-            // Token is invalid or expired, clear it
-            if (mounted) {
-              if (error.response?.status === 401) {
-                localStorage.removeItem('access_token');
-                localStorage.removeItem('refresh_token');
+      try {
+        // Check if we have a token but no user (page refresh scenario)
+        if (typeof window !== 'undefined') {
+          const token = apiClient.getAccessToken();
+          
+          if (token && !user) {
+            // Try to verify token and get user info
+            try {
+              const response = await apiClient.get('/auth/me', { timeout: 3000 });
+              if (mounted && response.data?.success && response.data?.data) {
+                setUser(response.data.data as any);
+              } else if (mounted) {
+                // Invalid token, clear it
+                apiClient.clearTokens();
+              }
+            } catch (error: any) {
+              // Token is invalid or expired, clear it
+              if (mounted) {
+                if (error.response?.status === 401) {
+                  apiClient.clearTokens();
+                }
               }
             }
+          } else if (!token && user && mounted) {
+            // We have user but no token - invalid state, clear user
+            setUser(null);
           }
-        } else if (!token && user && mounted) {
-          // We have user but no token - invalid state, clear user
-          setUser(null);
         }
-      }
-      if (mounted) {
-        setInitialized(true);
+      } finally {
+        if (mounted) {
+          setInitialized(true);
+        }
       }
     };
 
     initAuth();
 
+    // Failsafe timer: never leave AuthProvider in uninitialized loading state
+    const timer = setTimeout(() => {
+      if (mounted) {
+        setInitialized(true);
+      }
+    }, 1500);
+
     return () => {
       mounted = false;
+      clearTimeout(timer);
     };
   }, []); // Only run once on mount
 

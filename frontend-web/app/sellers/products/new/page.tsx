@@ -3,24 +3,14 @@
 import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { DashboardLayout } from '@/components/layout/DashboardShell';
+import { DashboardLayout, SELLER_SIDEBAR_ITEMS } from '@/components/layout/DashboardShell';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/toast';
 import { useAuthStore } from '@/lib/store/auth-store';
 import { apiClient } from '@/lib/api-client';
 import { CategoryRequestModal } from '@/components/CategoryRequestModal';
 
-const sidebarItems = [
-  { name: 'Dashboard', href: '/sellers/dashboard', icon: '' },
-  { name: 'Orders', href: '/sellers/orders', icon: '' },
-  { name: 'Products', href: '/sellers/products', icon: '' },
-  { name: 'Inventory', href: '/sellers/products?view=inventory', icon: '' },
-  { name: 'Promotions', href: '/sellers/promotions', icon: '' },
-  { name: 'Earnings', href: '/sellers/earnings', icon: '' },
-  { name: 'Analytics', href: '/sellers/analytics', icon: '' },
-  { name: 'Notifications', href: '/sellers/notifications', icon: '' },
-  { name: 'Settings', href: '/sellers/settings', icon: '' },
-];
+const sidebarItems = SELLER_SIDEBAR_ITEMS;
 
 interface Category {
   id: string;
@@ -721,6 +711,7 @@ export default function AddProductPage() {
               </label>
               <input
                 type="text"
+                id="product-name-input"
                 value={formData.name}
                 onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                 placeholder="e.g., Chicken Samosa (Pack of 12)"
@@ -910,44 +901,78 @@ export default function AddProductPage() {
               return null;
             })()}
 
-            {/* Shelf Life & Preparation Time - Show based on product type */}
-            {formData.productType && formData.productType !== 'frozen' && (
-              <div className="mb-5 p-4 bg-amber-50 border border-amber-200 rounded-xl">
-                <h3 className="text-sm font-semibold text-amber-800 mb-3 flex items-center gap-2">
-                  <span>⏰</span> Freshness & Timing
+            {/* Preparation Time & Kitchen Timing (Section 4) */}
+            <div className="mb-6 p-5 bg-gradient-to-r from-orange-50 to-amber-50 border border-orange-200 rounded-2xl">
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="text-sm font-bold text-orange-900 flex items-center gap-2">
+                  <span>⏱️</span> Kitchen Preparation Time (Important)
                 </h3>
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-xs font-medium text-gray-700 mb-1">
-                      Shelf Life (hours)
-                    </label>
-                    <input
-                      type="number"
-                      value={formData.shelfLifeHours}
-                      onChange={(e) => setFormData({ ...formData, shelfLifeHours: e.target.value })}
-                      placeholder="e.g., 24"
-                      min="1"
-                      className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent text-sm"
-                    />
-                    <p className="text-xs text-gray-400 mt-1">How long stays fresh</p>
-                  </div>
-                  <div>
-                    <label className="block text-xs font-medium text-gray-700 mb-1">
-                      Prep Time (minutes)
-                    </label>
-                    <input
-                      type="number"
-                      value={formData.preparationTime}
-                      onChange={(e) => setFormData({ ...formData, preparationTime: e.target.value })}
-                      placeholder="e.g., 30"
-                      min="1"
-                      className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent text-sm"
-                    />
-                    <p className="text-xs text-gray-400 mt-1">Time to prepare order</p>
-                  </div>
+                <span className="text-xs font-medium text-orange-700 bg-orange-100 px-2.5 py-1 rounded-full">
+                  Used by Delivery Engine for JIT Dispatch
+                </span>
+              </div>
+              <p className="text-xs text-slate-600 mb-3">
+                Estimated minutes required to cook and package this dish after order acceptance.
+              </p>
+
+              {/* Quick Presets matching spec */}
+              <div className="flex flex-wrap gap-2 mb-4">
+                {[
+                  { label: 'Burger', mins: 15 },
+                  { label: 'Shawarma', mins: 20 },
+                  { label: 'Pasta', mins: 25 },
+                  { label: 'Biryani', mins: 30 },
+                  { label: 'Karahi', mins: 45 },
+                ].map(preset => (
+                  <button
+                    key={preset.label}
+                    id={`prep-preset-${preset.mins}`}
+                    type="button"
+                    onClick={() => setFormData(prev => ({ ...prev, preparationTime: preset.mins.toString() }))}
+                    className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
+                      formData.preparationTime === preset.mins.toString()
+                        ? 'bg-orange-500 text-white shadow-sm shadow-orange-200'
+                        : 'bg-white border border-orange-200 text-slate-700 hover:bg-orange-100'
+                    }`}
+                  >
+                    {preset.label} ({preset.mins}m)
+                  </button>
+                ))}
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
+                    Preparation Time (minutes) <span className="text-orange-600">*</span>
+                  </label>
+                  <input
+                    type="number"
+                    id="product-prep-time-input"
+                    value={formData.preparationTime}
+                    onChange={(e) => setFormData({ ...formData, preparationTime: e.target.value })}
+                    placeholder="e.g., 30"
+                    min="1"
+                    className="w-full px-4 py-2.5 border border-orange-200 rounded-xl focus:ring-2 focus:ring-orange-500 bg-white text-slate-900 font-bold text-sm"
+                  />
+                  <p className="text-xs text-slate-400 mt-1">Order ready estimate for riders</p>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
+                    Shelf Life (hours - Optional)
+                  </label>
+                  <input
+                    type="number"
+                    value={formData.shelfLifeHours}
+                    onChange={(e) => setFormData({ ...formData, shelfLifeHours: e.target.value })}
+                    placeholder="e.g., 24"
+                    min="1"
+                    className="w-full px-4 py-2.5 border border-orange-200 rounded-xl focus:ring-2 focus:ring-orange-500 bg-white text-slate-900 font-medium text-sm"
+                  />
+                  <p className="text-xs text-slate-400 mt-1">Freshness window</p>
                 </div>
               </div>
-            )}
+            </div>
 
             {/* Description */}
             <div className="mb-5">
@@ -955,6 +980,7 @@ export default function AddProductPage() {
                 Description <span className="text-gray-400 font-normal">(Optional but recommended)</span>
               </label>
               <textarea
+                id="product-description-input"
                 value={formData.description}
                 onChange={(e) => setFormData({ ...formData, description: e.target.value })}
                 placeholder="Tell customers what makes this special...&#10;• Key ingredients&#10;• Taste & texture&#10;• Perfect for which occasions"
@@ -1033,6 +1059,7 @@ export default function AddProductPage() {
                   <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500 font-semibold text-lg">Rs.</span>
                   <input
                     type="number"
+                    id="product-price-input"
                     value={formData.price}
                     onChange={(e) => setFormData({ ...formData, price: e.target.value })}
                     placeholder="299"
@@ -1143,6 +1170,7 @@ export default function AddProductPage() {
                 <div className="relative">
                   <input
                     type="number"
+                    id="product-stock-input"
                     value={formData.stockQuantity}
                     onChange={(e) => setFormData({ ...formData, stockQuantity: e.target.value })}
                     placeholder="50"

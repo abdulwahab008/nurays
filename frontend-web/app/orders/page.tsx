@@ -1,115 +1,78 @@
 'use client';
 
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState, useRef, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import {
+  ShoppingBag,
+  Clock,
+  CheckCircle2,
+  XCircle,
+  ChefHat,
+  Truck,
+  Package,
+  Calendar,
+  ArrowRight,
+  RotateCcw,
+  Receipt,
+  Search,
+  Sparkles,
+  ShieldCheck,
+  AlertCircle,
+  ExternalLink,
+  ChevronRight,
+  CreditCard,
+  Flame,
+  Store,
+} from 'lucide-react';
 import { orderService, Order } from '@/lib/services/order.service';
 import { formatPrice, formatDate } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { useAuthStore } from '@/lib/store/auth-store';
-import { DashboardLayout } from '@/components/layout/DashboardShell';
+import { DashboardLayout, CUSTOMER_SIDEBAR_ITEMS } from '@/components/layout/DashboardShell';
 import { useSocket } from '@/lib/hooks/use-socket';
 import { useToast } from '@/components/ui/toast';
-
-// SVG icons (no emojis)
-const Icons = {
-  list: (
-    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 10h16M4 14h16M4 18h16" />
-    </svg>
-  ),
-  clock: (
-    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-    </svg>
-  ),
-  check: (
-    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-    </svg>
-  ),
-  preparing: (
-    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
-    </svg>
-  ),
-  package: (
-    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
-    </svg>
-  ),
-  truck: (
-    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M13 16V6a1 1 0 00-1-1H4a1 1 0 00-1 1v10a1 1 0 001 1h1m8-1a1 1 0 01-1 1h9M5 17a2 2 0 104 0m-4 0a2 2 0 114 0m6 0a2 2 0 104 0m-4-4v.5m0-3V6m0 3v.5" />
-    </svg>
-  ),
-  checkCircle: (
-    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-    </svg>
-  ),
-  x: (
-    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-    </svg>
-  ),
-  calendar: (
-    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-    </svg>
-  ),
-  box: (
-    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
-    </svg>
-  ),
-  cart: (
-    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z" />
-    </svg>
-  ),
-};
+import { cartService } from '@/lib/services/cart.service';
+import { apiClient } from '@/lib/api-client';
 
 export default function OrdersPage() {
+  return (
+    <React.Suspense
+      fallback={
+        <div className="min-h-screen flex items-center justify-center bg-slate-50">
+          <div className="w-10 h-10 border-3 border-[#FF5500] border-t-transparent rounded-full animate-spin" />
+        </div>
+      }
+    >
+      <OrdersContent />
+    </React.Suspense>
+  );
+}
+
+function OrdersContent() {
   const router = useRouter();
-  const { isAuthenticated, user } = useAuthStore();
+  const { isAuthenticated } = useAuthStore();
   const { showToast } = useToast();
   const { onOrderStatusUpdate } = useSocket();
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<string>('all');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [reorderingId, setReorderingId] = useState<string | null>(null);
   const mountedRef = useRef(false);
 
-  const sidebarItems = [
-    { name: 'Dashboard', href: '/dashboard', icon: '' },
-    { name: 'Browse Products', href: '/products', icon: '' },
-    { name: 'My Orders', href: '/orders', icon: '' },
-    { name: 'My Cart', href: '/cart', icon: '' },
-    { name: 'My Profile', href: '/profile', icon: '' },
-    { name: 'Addresses', href: '/profile/addresses', icon: '' },
-    { name: 'Help & Support', href: '/support', icon: '' },
-  ];
-
-  const filterOptions = [
-    { value: 'all', label: 'All Orders', icon: Icons.list, color: 'gray' },
-    { value: 'pending', label: 'Pending', icon: Icons.clock, color: 'yellow' },
-    { value: 'confirmed', label: 'Confirmed', icon: Icons.check, color: 'blue' },
-    { value: 'preparing', label: 'Preparing', icon: Icons.preparing, color: 'purple' },
-    { value: 'ready', label: 'Ready', icon: Icons.package, color: 'indigo' },
-    { value: 'in_transit', label: 'In Transit', icon: Icons.truck, color: 'orange' },
-    { value: 'delivered', label: 'Delivered', icon: Icons.checkCircle, color: 'green' },
-    { value: 'cancelled', label: 'Cancelled', icon: Icons.x, color: 'red' },
-  ];
+  const sidebarItems = CUSTOMER_SIDEBAR_ITEMS;
 
   useEffect(() => {
-    if (!isAuthenticated) {
+    const token = apiClient.getAccessToken();
+    if (!token && !isAuthenticated) {
       router.push('/login');
       return;
     }
     loadOrders();
   }, [isAuthenticated]);
 
-  // Live status updates via socket — no page refresh needed
+  // Live status updates via socket — no manual page refresh required
   useEffect(() => {
     if (!onOrderStatusUpdate) return;
     mountedRef.current = true;
@@ -127,6 +90,11 @@ export default function OrdersPage() {
           `Order #${data.orderNumber ?? data.orderId} has been cancelled.`,
           'error',
           10000
+        );
+      } else {
+        showToast(
+          `Order #${data.orderNumber ?? data.orderId} status: ${String(data.status).replace(/_/g, ' ')}`,
+          'info'
         );
       }
     });
@@ -149,10 +117,45 @@ export default function OrdersPage() {
     }
   };
 
-  // Derive effective status — if backend still says 'pending' but every item is cancelled,
-  // treat the order as cancelled (mirrors the detail-page effectiveStatus logic).
+  const handleReorder = async (e: React.MouseEvent, order: Order) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setReorderingId(order.id);
+    try {
+      showToast('Adding order items to tray...', 'info');
+      let items = (order as any).items || [];
+      if (!items.length || !items[0]?.productId) {
+        try {
+          const fullRes = await orderService.getOrder(order.id);
+          items = fullRes.data?.items || items;
+        } catch {
+          // ignore fallback error
+        }
+      }
+      for (const item of items) {
+        const pId = item.productId || (item as any).product?.id;
+        if (pId) {
+          await cartService.addToCart({
+            productId: pId,
+            variantId: item.variantId || undefined,
+            quantity: item.quantity || 1,
+            stockType: 'direct',
+            clearAndAdd: true,
+          });
+        }
+      }
+      showToast('Items added to your tray! Redirecting...', 'success');
+      router.push('/cart');
+    } catch {
+      router.push(`/orders/${order.id}`);
+    } finally {
+      setReorderingId(null);
+    }
+  };
+
+  // Derive effective status
   const getOrderStatus = (o: Order | any): string => {
-    const raw = (o?.orderStatus ?? o?.status ?? '') as string;
+    const raw = String(o?.orderStatus ?? o?.order_status ?? o?.status ?? 'pending');
     if (raw === 'pending') {
       const items: any[] = o?.items ?? [];
       if (items.length > 0 && items.every((item: any) => item.status === 'cancelled')) {
@@ -161,208 +164,521 @@ export default function OrdersPage() {
     }
     return raw;
   };
-  const filteredOrders = filter === 'all'
-    ? orders
-    : orders.filter((o) => getOrderStatus(o) === filter);
 
-  const getStatusColor = (status: string) => {
-    const statusMap: Record<string, string> = {
-      pending: 'bg-yellow-100 text-yellow-800 border-yellow-200',
-      confirmed: 'bg-blue-100 text-blue-800 border-blue-200',
-      preparing: 'bg-purple-100 text-purple-800 border-purple-200',
-      ready: 'bg-indigo-100 text-indigo-800 border-indigo-200',
-      dispatched: 'bg-pink-100 text-pink-800 border-pink-200',
-      in_transit: 'bg-orange-100 text-orange-800 border-orange-200',
-      delivered: 'bg-green-100 text-green-800 border-green-200',
-      completed: 'bg-green-100 text-green-800 border-green-200',
-      cancelled: 'bg-red-100 text-red-800 border-red-200',
-    };
-    return statusMap[status] || 'bg-gray-100 text-gray-800 border-gray-200';
+  // Count summaries
+  const totalOrdersCount = orders.length;
+  const inProgressCount = orders.filter((o) =>
+    ['pending', 'confirmed', 'preparing', 'ready'].includes(getOrderStatus(o))
+  ).length;
+  const onTheWayCount = orders.filter((o) =>
+    ['in_transit', 'dispatched'].includes(getOrderStatus(o))
+  ).length;
+  const deliveredCount = orders.filter((o) =>
+    ['delivered', 'completed'].includes(getOrderStatus(o))
+  ).length;
+  const cancelledCount = orders.filter((o) => getOrderStatus(o) === 'cancelled').length;
+
+  const filteredOrders = useMemo(() => {
+    return orders.filter((o) => {
+      const s = getOrderStatus(o);
+      let matchesFilter = true;
+      if (filter === 'active') {
+        matchesFilter = ['pending', 'confirmed', 'preparing', 'ready', 'in_transit', 'dispatched'].includes(s);
+      } else if (filter === 'past') {
+        matchesFilter = ['delivered', 'completed'].includes(s);
+      } else if (filter === 'cancelled') {
+        matchesFilter = s === 'cancelled';
+      }
+
+      if (!matchesFilter) return false;
+
+      if (searchQuery.trim()) {
+        const q = searchQuery.toLowerCase().trim();
+        const num = String(o.orderNumber || '').toLowerCase();
+        const items = (o as any).items || [];
+        const hasItemMatch = items.some((i: any) =>
+          (i.productName || i.name || '').toLowerCase().includes(q)
+        );
+        return num.includes(q) || hasItemMatch;
+      }
+
+      return true;
+    });
+  }, [orders, filter, searchQuery]);
+
+  const getStatusBadge = (status: string) => {
+    switch (status) {
+      case 'pending':
+        return {
+          label: 'Order Placed',
+          color: 'bg-amber-50 text-amber-800 border-amber-200/80',
+          dotColor: 'bg-amber-500',
+          icon: <Clock className="w-3.5 h-3.5" />,
+        };
+      case 'confirmed':
+        return {
+          label: 'Chef Confirmed',
+          color: 'bg-blue-50 text-blue-800 border-blue-200/80',
+          dotColor: 'bg-blue-500',
+          icon: <Sparkles className="w-3.5 h-3.5" />,
+        };
+      case 'preparing':
+        return {
+          label: 'Preparing in Kitchen',
+          color: 'bg-purple-50 text-purple-800 border-purple-200/80',
+          dotColor: 'bg-purple-500',
+          icon: <ChefHat className="w-3.5 h-3.5" />,
+        };
+      case 'ready':
+        return {
+          label: 'Ready for Dispatch',
+          color: 'bg-indigo-50 text-indigo-800 border-indigo-200/80',
+          dotColor: 'bg-indigo-500',
+          icon: <Package className="w-3.5 h-3.5" />,
+        };
+      case 'dispatched':
+      case 'in_transit':
+        return {
+          label: 'On the Way',
+          color: 'bg-orange-50 text-orange-800 border-orange-200/80',
+          dotColor: 'bg-[#FF5500]',
+          icon: <Truck className="w-3.5 h-3.5" />,
+        };
+      case 'delivered':
+      case 'completed':
+        return {
+          label: 'Delivered',
+          color: 'bg-emerald-50 text-emerald-800 border-emerald-200/80',
+          dotColor: 'bg-emerald-500',
+          icon: <CheckCircle2 className="w-3.5 h-3.5" />,
+        };
+      case 'cancelled':
+        return {
+          label: 'Cancelled',
+          color: 'bg-rose-50 text-rose-800 border-rose-200/80',
+          dotColor: 'bg-rose-500',
+          icon: <XCircle className="w-3.5 h-3.5" />,
+        };
+      default:
+        return {
+          label: status.replace(/_/g, ' '),
+          color: 'bg-slate-50 text-slate-800 border-slate-200',
+          dotColor: 'bg-slate-400',
+          icon: <Clock className="w-3.5 h-3.5" />,
+        };
+    }
   };
 
-  const getStatusIcon = (status: string) => {
-    const iconMap: Record<string, React.ReactNode> = {
-      pending: Icons.clock,
-      confirmed: Icons.check,
-      preparing: Icons.preparing,
-      ready: Icons.package,
-      dispatched: Icons.truck,
-      in_transit: Icons.truck,
-      delivered: Icons.checkCircle,
-      completed: Icons.checkCircle,
-      cancelled: Icons.x,
-    };
-    return iconMap[status] ?? Icons.list;
+  const getStepProgress = (status: string) => {
+    switch (status) {
+      case 'pending':
+        return 1;
+      case 'confirmed':
+        return 2;
+      case 'preparing':
+      case 'ready':
+        return 3;
+      case 'dispatched':
+      case 'in_transit':
+        return 4;
+      case 'delivered':
+      case 'completed':
+        return 5;
+      default:
+        return 1;
+    }
   };
 
   return (
     <DashboardLayout
       title="My Orders"
-      subtitle={`Track and manage all your orders`}
+      subtitle="Track live preparations, dispatch status & view order receipts"
       sidebarItems={sidebarItems}
       userType="customer"
     >
-      {/* Stats Summary */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-        <div className="bg-white rounded-xl p-4 border border-gray-100">
-          <div className="text-2xl font-bold text-gray-900">{orders.length}</div>
-          <div className="text-sm text-gray-500">Total Orders</div>
-        </div>
-        <div className="bg-white rounded-xl p-4 border border-yellow-100">
-          <div className="text-2xl font-bold text-yellow-600">
-            {orders.filter(o => ['pending', 'confirmed', 'preparing', 'ready'].includes(getOrderStatus(o))).length}
+      <div className="max-w-6xl mx-auto space-y-6 pb-12">
+        {/* ============================================================ */}
+        {/* STATS SUMMARY METRICS (Rich Modern Bento Cards) */}
+        {/* ============================================================ */}
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3.5 sm:gap-4">
+          {/* 1. Total Orders */}
+          <div className="relative overflow-hidden rounded-2xl sm:rounded-3xl bg-gradient-to-br from-slate-900/5 via-white to-slate-50 border border-slate-200/80 p-4 sm:p-5 shadow-2xs hover:shadow-xs transition-all">
+            <div className="flex items-center justify-between mb-3">
+              <div className="w-10 h-10 rounded-xl sm:rounded-2xl bg-slate-100 flex items-center justify-center text-slate-700 shadow-inner">
+                <Receipt className="w-5 h-5" />
+              </div>
+              <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">
+                Lifetime
+              </span>
+            </div>
+            <div className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight">
+              {totalOrdersCount}
+            </div>
+            <div className="text-xs sm:text-sm font-semibold text-slate-500 mt-0.5">
+              Total Placed
+            </div>
           </div>
-          <div className="text-sm text-gray-500">In Progress</div>
-        </div>
-        <div className="bg-white rounded-xl p-4 border border-orange-100">
-          <div className="text-2xl font-bold text-orange-600">
-            {orders.filter(o => ['in_transit', 'dispatched'].includes(getOrderStatus(o))).length}
-          </div>
-          <div className="text-sm text-gray-500">On the Way</div>
-        </div>
-        <div className="bg-white rounded-xl p-4 border border-green-100">
-          <div className="text-2xl font-bold text-green-600">
-            {orders.filter(o => ['delivered', 'completed'].includes(getOrderStatus(o))).length}
-          </div>
-          <div className="text-sm text-gray-500">Delivered</div>
-        </div>
-      </div>
 
-      {/* Filter Tabs */}
-      <div className="bg-white rounded-2xl shadow-sm border border-gray-100 mb-6">
-        <div className="p-4 overflow-x-auto">
-          <div className="flex gap-2 min-w-max">
-            {filterOptions.map((option) => (
+          {/* 2. In Progress */}
+          <div className="relative overflow-hidden rounded-2xl sm:rounded-3xl bg-gradient-to-br from-amber-500/10 via-amber-50/30 to-white border border-amber-200/80 p-4 sm:p-5 shadow-2xs hover:shadow-xs transition-all">
+            <div className="flex items-center justify-between mb-3">
+              <div className="w-10 h-10 rounded-xl sm:rounded-2xl bg-amber-100/80 flex items-center justify-center text-amber-700 shadow-inner">
+                <ChefHat className="w-5 h-5" />
+              </div>
+              {inProgressCount > 0 ? (
+                <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 text-[10px] font-bold">
+                  <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-ping" />
+                  Live Cooking
+                </span>
+              ) : (
+                <span className="text-[11px] font-bold text-amber-400 uppercase tracking-wider">
+                  Active
+                </span>
+              )}
+            </div>
+            <div className="text-2xl sm:text-3xl font-black text-amber-900 tracking-tight">
+              {inProgressCount}
+            </div>
+            <div className="text-xs sm:text-sm font-semibold text-amber-700/80 mt-0.5">
+              Kitchen Prep
+            </div>
+          </div>
+
+          {/* 3. On the Way */}
+          <div className="relative overflow-hidden rounded-2xl sm:rounded-3xl bg-gradient-to-br from-orange-500/10 via-orange-50/30 to-white border border-orange-200/80 p-4 sm:p-5 shadow-2xs hover:shadow-xs transition-all">
+            <div className="flex items-center justify-between mb-3">
+              <div className="w-10 h-10 rounded-xl sm:rounded-2xl bg-orange-100/80 flex items-center justify-center text-[#FF5500] shadow-inner">
+                <Truck className="w-5 h-5" />
+              </div>
+              {onTheWayCount > 0 ? (
+                <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-orange-100 text-[#FF5500] text-[10px] font-bold">
+                  <span className="w-1.5 h-1.5 rounded-full bg-[#FF5500] animate-ping" />
+                  Rider Dispatched
+                </span>
+              ) : (
+                <span className="text-[11px] font-bold text-orange-400 uppercase tracking-wider">
+                  Transit
+                </span>
+              )}
+            </div>
+            <div className="text-2xl sm:text-3xl font-black text-[#FF5500] tracking-tight">
+              {onTheWayCount}
+            </div>
+            <div className="text-xs sm:text-sm font-semibold text-orange-700/80 mt-0.5">
+              On the Way
+            </div>
+          </div>
+
+          {/* 4. Delivered */}
+          <div className="relative overflow-hidden rounded-2xl sm:rounded-3xl bg-gradient-to-br from-emerald-500/10 via-emerald-50/30 to-white border border-emerald-200/80 p-4 sm:p-5 shadow-2xs hover:shadow-xs transition-all">
+            <div className="flex items-center justify-between mb-3">
+              <div className="w-10 h-10 rounded-xl sm:rounded-2xl bg-emerald-100/80 flex items-center justify-center text-emerald-700 shadow-inner">
+                <CheckCircle2 className="w-5 h-5" />
+              </div>
+              <span className="text-[11px] font-bold text-emerald-600 uppercase tracking-wider">
+                Fulfilled
+              </span>
+            </div>
+            <div className="text-2xl sm:text-3xl font-black text-emerald-900 tracking-tight">
+              {deliveredCount}
+            </div>
+            <div className="text-xs sm:text-sm font-semibold text-emerald-700/80 mt-0.5">
+              Delivered Meals
+            </div>
+          </div>
+        </div>
+
+        {/* ============================================================ */}
+        {/* FILTER BAR & SEARCH (Modern Segmented Pills) */}
+        {/* ============================================================ */}
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 p-2 bg-white rounded-2xl sm:rounded-3xl border border-slate-200/80 shadow-2xs">
+          {/* Segmented Filter Pills */}
+          <div className="flex items-center gap-1.5 overflow-x-auto p-1 scrollbar-none">
+            {[
+              { id: 'all', label: 'All Orders', count: totalOrdersCount },
+              {
+                id: 'active',
+                label: 'Active Orders',
+                count: inProgressCount + onTheWayCount,
+                hasDot: inProgressCount + onTheWayCount > 0,
+              },
+              { id: 'past', label: 'Past Orders', count: deliveredCount },
+              { id: 'cancelled', label: 'Cancelled', count: cancelledCount },
+            ].map((tab) => {
+              const active = filter === tab.id;
+              return (
+                <button
+                  key={tab.id}
+                  onClick={() => setFilter(tab.id)}
+                  className={`inline-flex items-center gap-2 px-3.5 sm:px-4 py-2 rounded-xl sm:rounded-2xl text-xs sm:text-sm font-bold whitespace-nowrap transition-all duration-150 cursor-pointer ${
+                    active
+                      ? 'bg-[#FF5500] text-white shadow-xs'
+                      : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100/80'
+                  }`}
+                >
+                  {tab.hasDot && (
+                    <span
+                      className={`w-2 h-2 rounded-full ${
+                        active ? 'bg-white' : 'bg-[#FF5500] animate-pulse'
+                      }`}
+                    />
+                  )}
+                  <span>{tab.label}</span>
+                  <span
+                    className={`px-1.5 py-0.2 rounded-md text-[11px] font-extrabold ${
+                      active
+                        ? 'bg-white/25 text-white'
+                        : 'bg-slate-100 text-slate-500'
+                    }`}
+                  >
+                    {tab.count}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Quick Search */}
+          <div className="relative min-w-[220px] sm:min-w-[260px] px-1 sm:px-0">
+            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Search by order # or dish..."
+              className="w-full pl-9 pr-3.5 py-2 rounded-xl text-xs sm:text-sm bg-slate-50 border border-slate-200/90 text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-[#FF5500]/20 focus:border-[#FF5500] transition-all"
+            />
+            {searchQuery && (
               <button
-                key={option.value}
-                onClick={() => setFilter(option.value)}
-                className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-medium transition-all ${
-                  filter === option.value
-                    ? 'bg-green-600 text-white shadow-md'
-                    : 'bg-gray-50 text-gray-700 hover:bg-gray-100'
-                }`}
+                onClick={() => setSearchQuery('')}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-slate-400 hover:text-slate-600"
               >
-                <span className="flex-shrink-0">{option.icon}</span>
-                <span>{option.label}</span>
+                ✕
               </button>
-            ))}
+            )}
           </div>
         </div>
-      </div>
 
-      {/* Loading State */}
-      {loading ? (
-        <div className="bg-white rounded-2xl shadow-sm p-12 text-center border border-gray-100">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-green-600 mx-auto mb-4"></div>
-          <p className="text-gray-600">Loading your orders...</p>
-        </div>
-      ) : filteredOrders.length === 0 ? (
-        <div className="bg-white rounded-2xl shadow-sm p-12 text-center border border-gray-100">
-          <div className="w-20 h-20 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4 text-gray-400">
-            {Icons.package}
+        {/* ============================================================ */}
+        {/* ORDERS LIST */}
+        {/* ============================================================ */}
+        {loading ? (
+          <div className="bg-white rounded-3xl p-12 text-center border border-slate-200/80 shadow-xs">
+            <div className="w-10 h-10 border-3 border-[#FF5500] border-t-transparent rounded-full animate-spin mx-auto mb-3" />
+            <p className="text-sm font-bold text-slate-800">Retrieving your orders...</p>
+            <p className="text-xs text-slate-400 mt-1">Connecting to kitchen order ledger</p>
           </div>
-          <h2 className="text-2xl font-bold text-gray-900 mb-2">
-            {filter === 'all' ? 'No orders yet' : `No ${filter.replace(/_/g, ' ')} orders`}
-          </h2>
-          <p className="text-gray-500 mb-6 max-w-md mx-auto">
-            {filter === 'all'
-              ? 'Start shopping and your orders will appear here!'
-              : `You don't have any orders with "${filter.replace(/_/g, ' ')}" status`
-            }
-          </p>
-          <Link href="/products">
-            <Button className="bg-green-600 hover:bg-green-700">
-              <span className="mr-2">{Icons.cart}</span> Browse Products
-            </Button>
-          </Link>
-        </div>
-      ) : (
-        <div className="space-y-4">
-          {filteredOrders.map((order) => (
-            <Link
-              key={order.id}
-              href={`/orders/${order.id}`}
-              className="block group"
-            >
-              <div className="bg-white rounded-2xl shadow-sm p-4 md:p-6 border border-gray-100 hover:border-green-200 hover:shadow-md transition-all overflow-hidden">
-                <div className="flex items-center justify-between gap-3">
-                  {/* Left Side - Order Info */}
-                  <div className="flex items-start gap-3 min-w-0 flex-1">
-                    {(() => {
-                      const orderStatus = getOrderStatus(order);
-                      const itemCount = (order as any).items?.length ?? (order as any).itemsCount ?? 0;
-                      const items = (order as any).items ?? [];
-                      return (
-                        <>
-                    <div className={`w-12 h-12 md:w-14 md:h-14 rounded-xl flex items-center justify-center ${getStatusColor(orderStatus)} border flex-shrink-0 text-current`}>
-                      {getStatusIcon(orderStatus)}
+        ) : filteredOrders.length === 0 ? (
+          /* Empty State */
+          <div className="bg-gradient-to-b from-white to-slate-50/60 rounded-3xl p-8 sm:p-14 text-center border border-slate-200/90 shadow-2xs">
+            <div className="w-20 h-20 rounded-3xl bg-orange-50 border border-orange-200/70 flex items-center justify-center mx-auto mb-4 text-[#FF5500] shadow-inner">
+              <Package className="w-10 h-10" />
+            </div>
+            <h3 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight mb-2">
+              {searchQuery
+                ? 'No matching orders found'
+                : filter === 'all'
+                ? 'No orders placed yet'
+                : `No ${filter.replace(/_/g, ' ')} orders`}
+            </h3>
+            <p className="text-xs sm:text-sm text-slate-500 max-w-md mx-auto mb-6 leading-relaxed">
+              {searchQuery
+                ? `No orders matching "${searchQuery}". Try searching for another order number or dish.`
+                : filter === 'all'
+                ? 'Order authentic generational dishes & sub-zero provisions from verified home chefs.'
+                : `You currently have no orders categorized as ${filter}. Check other tabs or explore our kitchens.`}
+            </p>
+            <div className="flex items-center justify-center gap-3">
+              <Link href="/dashboard">
+                <Button className="bg-[#FF5500] hover:bg-[#e04b00] text-white font-bold px-6 py-2.5 rounded-2xl shadow-sm">
+                  <ShoppingBag className="w-4 h-4 mr-2" /> Explore Kitchens &amp; Dishes
+                </Button>
+              </Link>
+            </div>
+          </div>
+        ) : (
+          <div className="space-y-4">
+            {filteredOrders.map((order) => {
+              const status = getOrderStatus(order);
+              const badge = getStatusBadge(status);
+              const isActive = [
+                'pending',
+                'confirmed',
+                'preparing',
+                'ready',
+                'dispatched',
+                'in_transit',
+              ].includes(status);
+              const items = (order as any).items ?? [];
+              const itemCount = items.length || (order as any).itemsCount || 1;
+              const step = getStepProgress(status);
+
+              return (
+                <div
+                  key={order.id}
+                  className="group relative bg-white rounded-3xl border border-slate-200/90 hover:border-[#FF5500]/60 shadow-2xs hover:shadow-md transition-all duration-200 overflow-hidden"
+                >
+                  {/* Subtle top accent bar for active orders */}
+                  {isActive && (
+                    <div className="h-1 w-full bg-gradient-to-r from-amber-400 via-[#FF5500] to-orange-500" />
+                  )}
+
+                  <div className="p-4 sm:p-6 space-y-4">
+                    {/* Top Row: Order ID, Badges, Date */}
+                    <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-slate-100">
+                      <div className="flex flex-wrap items-center gap-2.5">
+                        <Link
+                          href={`/orders/${order.id}`}
+                          className="text-base sm:text-lg font-black text-slate-900 hover:text-[#FF5500] transition-colors flex items-center gap-1.5"
+                        >
+                          <span>Order #{order.orderNumber}</span>
+                          <ExternalLink className="w-3.5 h-3.5 opacity-0 group-hover:opacity-100 transition-opacity text-slate-400" />
+                        </Link>
+
+                        {/* Status Badge */}
+                        <span
+                          className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold border ${badge.color}`}
+                        >
+                          <span className={`w-2 h-2 rounded-full ${badge.dotColor}`} />
+                          {badge.label}
+                        </span>
+
+                        {/* Payment Status Badge */}
+                        <span
+                          className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold border ${
+                            order.paymentStatus === 'paid'
+                              ? 'bg-emerald-50 text-emerald-800 border-emerald-200/80'
+                              : 'bg-amber-50 text-amber-800 border-amber-200/80'
+                          }`}
+                        >
+                          <CreditCard className="w-3 h-3" />
+                          {order.paymentStatus === 'paid' ? 'Paid' : 'Payment: Pending'}
+                        </span>
+                      </div>
+
+                      {/* Date & Time */}
+                      <div className="flex items-center gap-1.5 text-xs font-semibold text-slate-500">
+                        <Calendar className="w-3.5 h-3.5 text-slate-400" />
+                        <span>{formatDate(order.createdAt)}</span>
+                      </div>
                     </div>
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-2 mb-1 flex-wrap">
-                        <h3 className="text-base md:text-lg font-bold text-gray-900 truncate">
-                          Order #{order.orderNumber}
-                        </h3>
-                        <span className={`px-2.5 py-0.5 rounded-full text-xs font-medium capitalize ${getStatusColor(orderStatus)} border flex-shrink-0`}>
-                          {(orderStatus as string).replace(/_/g, ' ')}
-                        </span>
+
+                    {/* Active Order Stepper Progress Tracker */}
+                    {isActive && (
+                      <div className="bg-gradient-to-r from-slate-50/80 to-orange-50/40 rounded-2xl p-3.5 border border-slate-100">
+                        <div className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-2 flex items-center gap-1.5">
+                          <Flame className="w-3.5 h-3.5 text-[#FF5500]" />
+                          Live Kitchen Tracking
+                        </div>
+                        <div className="grid grid-cols-4 gap-2 relative">
+                          {[
+                            { stepNum: 1, name: 'Received', icon: Clock },
+                            { stepNum: 2, name: 'Confirmed', icon: Sparkles },
+                            { stepNum: 3, name: 'Cooking', icon: ChefHat },
+                            { stepNum: 4, name: 'On Way', icon: Truck },
+                          ].map((st, idx) => {
+                            const isDone = step >= st.stepNum;
+                            const isCurrent = step === st.stepNum;
+                            const IconComponent = st.icon;
+                            return (
+                              <div key={st.stepNum} className="flex flex-col items-center text-center">
+                                <div
+                                  className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold transition-all ${
+                                    isCurrent
+                                      ? 'bg-[#FF5500] text-white shadow-xs ring-4 ring-orange-100 animate-pulse'
+                                      : isDone
+                                      ? 'bg-emerald-600 text-white'
+                                      : 'bg-slate-200 text-slate-400'
+                                  }`}
+                                >
+                                  <IconComponent className="w-3.5 h-3.5" />
+                                </div>
+                                <span
+                                  className={`text-[11px] font-bold mt-1.5 ${
+                                    isCurrent
+                                      ? 'text-[#FF5500]'
+                                      : isDone
+                                      ? 'text-slate-800'
+                                      : 'text-slate-400'
+                                  }`}
+                                >
+                                  {st.name}
+                                </span>
+                              </div>
+                            );
+                          })}
+                        </div>
                       </div>
-                      <div className="flex items-center gap-2 text-xs md:text-sm text-gray-500 flex-wrap">
-                        <span className="flex items-center gap-1">
-                          {Icons.calendar}
-                          {formatDate(order.createdAt)}
-                        </span>
-                        <span>•</span>
-                        <span>{itemCount} item{itemCount !== 1 ? 's' : ''}</span>
-                        <span>•</span>
-                        <span className={order.paymentStatus === 'paid' ? 'text-green-600' : 'text-amber-600'} title="Payment status">
-                          {order.paymentStatus === 'paid' ? 'Payment: Paid' : `Payment: ${(order.paymentStatus ?? 'pending').replace(/_/g, ' ')}`}
-                        </span>
-                      </div>
-                      {items.length > 0 && (
-                        <div className="mt-3 flex items-center gap-2">
-                          <div className="flex -space-x-2">
-                            {items.slice(0, 3).map((item: any, idx: number) => (
+                    )}
+
+                    {/* Middle Section: Dishes preview */}
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                      <div className="flex-1 min-w-0">
+                        {items.length > 0 ? (
+                          <div className="flex flex-wrap items-center gap-2">
+                            {items.map((it: any, iIdx: number) => (
                               <div
-                                key={item?.id ?? idx}
-                                className="w-8 h-8 rounded-lg bg-gray-100 border-2 border-white flex items-center justify-center text-gray-500"
+                                key={it.id ?? iIdx}
+                                className="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl bg-slate-50 border border-slate-200/70 text-xs font-bold text-slate-800"
                               >
-                                {Icons.box}
+                                <span className="w-5 h-5 rounded-md bg-white border border-slate-200 flex items-center justify-center text-[10px] font-black text-[#FF5500]">
+                                  {it.quantity || 1}×
+                                </span>
+                                <span className="truncate max-w-[180px] sm:max-w-[240px]">
+                                  {it.productName || it.name || (it.product && it.product.name) || 'Delicious Dish'}
+                                </span>
                               </div>
                             ))}
-                            {items.length > 3 && (
-                              <div className="w-8 h-8 rounded-lg bg-gray-200 border-2 border-white flex items-center justify-center text-xs font-medium text-gray-600">
-                                +{items.length - 3}
-                              </div>
-                            )}
                           </div>
-                          <span className="text-xs text-gray-500 truncate max-w-[160px] md:max-w-xs">
-                            {items.slice(0, 2).map((i: any) => i.productName).join(', ')}
-                            {items.length > 2 && ` +${items.length - 2} more`}
+                        ) : (
+                          <div className="text-xs text-slate-500 font-medium">
+                            {itemCount} item{itemCount !== 1 ? 's' : ''} in this order
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Amount and CTAs */}
+                      <div className="flex items-center justify-between sm:justify-end gap-3 sm:gap-4 pt-2 sm:pt-0 border-t sm:border-t-0 border-slate-100">
+                        <div className="text-left sm:text-right">
+                          <span className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                            Order Total
+                          </span>
+                          <span className="text-lg sm:text-2xl font-black text-slate-950 tracking-tight">
+                            {formatPrice(order.totalAmount)}
                           </span>
                         </div>
-                      )}
+
+                        <div className="flex items-center gap-2">
+                          {['delivered', 'completed'].includes(status) && (
+                            <button
+                              type="button"
+                              onClick={(e) => handleReorder(e, order)}
+                              disabled={reorderingId === order.id}
+                              className="inline-flex items-center gap-1.5 px-3 sm:px-3.5 py-2 rounded-xl text-xs font-bold text-[#FF5500] bg-orange-50 hover:bg-[#FF5500] hover:text-white border border-orange-200/80 transition-all cursor-pointer shadow-2xs"
+                              title="Reorder this entire meal into your tray"
+                            >
+                              <RotateCcw className={`w-3.5 h-3.5 ${reorderingId === order.id ? 'animate-spin' : ''}`} />
+                              <span>Reorder</span>
+                            </button>
+                          )}
+
+                          <Link
+                            href={`/orders/${order.id}`}
+                            className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold bg-slate-900 hover:bg-slate-800 text-white transition-all shadow-xs"
+                          >
+                            <span>Details</span>
+                            <ArrowRight className="w-3.5 h-3.5 group-hover:translate-x-0.5 transition-transform" />
+                          </Link>
+                        </div>
+                      </div>
                     </div>
-                        </>
-                      );
-                    })()}
-                  </div>
-                  
-                  {/* Right Side - Amount */}
-                  <div className="text-right flex-shrink-0 pl-2">
-                    <p className="text-lg md:text-2xl font-bold text-green-600 whitespace-nowrap">
-                      {formatPrice(order.totalAmount)}
-                    </p>
-                    <p className="text-xs md:text-sm text-gray-400 group-hover:text-green-600 transition-colors mt-1 whitespace-nowrap">
-                      View Details →
-                    </p>
                   </div>
                 </div>
-              </div>
-            </Link>
-          ))}
-        </div>
-      )}
+              );
+            })}
+          </div>
+        )}
+      </div>
     </DashboardLayout>
   );
 }
-

@@ -3,7 +3,7 @@
 import { useState, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
-import { DashboardLayout } from '@/components/layout/DashboardShell';
+import { DashboardLayout, SELLER_SIDEBAR_ITEMS } from '@/components/layout/DashboardShell';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/toast';
 import { useAuthStore } from '@/lib/store/auth-store';
@@ -86,12 +86,22 @@ interface SellerDashboard {
   businessName: string;
   businessNameUrdu?: string;
   verificationStatus: string;
+  rejectionReason?: string | null;
+  isStoreOpen?: boolean;
+  primaryCommunityName?: string | null;
   overview: {
     totalProducts: number;
     activeOrders: number;
     pendingOrders: number;
     totalEarnings: number;
     pendingPayout: number;
+    todaySales?: number;
+    todayOrders?: number;
+    grossSales?: number;
+    platformFees?: number;
+    netEarnings?: number;
+    pendingSettlement?: number;
+    paidSettlement?: number;
   };
   recentOrders: Array<{
     orderId: string;
@@ -132,18 +142,7 @@ function SellerDashboardContent() {
   const [showOnboarding, setShowOnboarding] = useState(false);
   const [needsOnboarding, setNeedsOnboarding] = useState(false);
 
-  const sidebarItems = [
-    { name: 'Dashboard', href: '/sellers/dashboard', icon: '' },
-    { name: 'Orders', href: '/sellers/orders', icon: '' },
-    { name: 'Products', href: '/sellers/products', icon: '' },
-    { name: 'Inventory', href: '/sellers/products?view=inventory', icon: '' },
-    { name: 'Promotions', href: '/sellers/promotions', icon: '' },
-    { name: 'Delivery', href: '/sellers/settings#delivery', icon: '' },
-    { name: 'Earnings', href: '/sellers/earnings', icon: '' },
-    { name: 'Analytics', href: '/sellers/analytics', icon: '' },
-    { name: 'Notifications', href: '/sellers/notifications', icon: '' },
-    { name: 'Settings', href: '/sellers/settings', icon: '' },
-  ];
+  const sidebarItems = SELLER_SIDEBAR_ITEMS;
 
   useEffect(() => {
     if (!isAuthenticated) {
@@ -151,10 +150,11 @@ function SellerDashboardContent() {
       return;
     }
 
-    // Check if user is a seller
-    if (user?.userType !== 'seller' && user?.user_type !== 'seller') {
+    // Check if user is a seller or admin
+    const role = user?.userType || user?.user_type;
+    if (role !== 'seller' && role !== 'admin') {
       router.push('/dashboard');
-      showToast('Access denied. Seller privileges required.', 'error');
+      showToast('Access denied. Kitchen account required.', 'error');
       return;
     }
 
@@ -191,6 +191,27 @@ function SellerDashboardContent() {
       showToast(errorMessage, 'error');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const [togglingLive, setTogglingLive] = useState(false);
+
+  const handleToggleStoreLive = async () => {
+    try {
+      setTogglingLive(true);
+      const res = await apiClient.post('/sellers/me/toggle-live');
+      if (res.data.success) {
+        setDashboard((prev: any) => prev ? {
+          ...prev,
+          isStoreOpen: res.data.data.isOpen,
+          availabilityOverride: res.data.data.availabilityOverride,
+        } : prev);
+        showToast(res.data.message || (res.data.data.isOpen ? 'Store is now OPEN' : 'Store is now CLOSED'), 'success');
+      }
+    } catch (err: any) {
+      showToast(err.response?.data?.error?.message || 'Failed to toggle store status', 'error');
+    } finally {
+      setTogglingLive(false);
     }
   };
 
@@ -296,96 +317,143 @@ function SellerDashboardContent() {
         sidebarItems={sidebarItems}
         userType="seller"
       >
-        {/* Verification Status */}
-        {dashboard && dashboard.verificationStatus !== 'approved' && (
-          <div className="mb-6 bg-gray-50 border-l-4 border-gray-400 p-4 rounded">
-            <div className="flex items-center justify-between">
-              <div>
-                <h3 className="text-sm font-medium text-gray-800">
-                  {dashboard.verificationStatus === 'pending' 
-                    ? 'Your seller application is under review'
-                    : 'Your seller application was rejected'}
-                </h3>
-                <p className="text-sm text-gray-700 mt-1">
-                  {dashboard.verificationStatus === 'pending'
-                    ? 'We will notify you once your application is reviewed.'
-                    : 'Please contact support for more information.'}
-                </p>
+        {/* Verification Status / Rejection Banner */}
+        {dashboard && dashboard.verificationStatus === 'rejected' && (
+          <div className="mb-6 bg-rose-50 border border-rose-200 rounded-2xl p-5 shadow-sm flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="w-6 h-6 rounded-full bg-rose-500 text-white flex items-center justify-center text-xs font-bold">✕</span>
+                <h3 className="text-base font-bold text-rose-900">Seller Application Requires Attention</h3>
               </div>
-              {getVerificationBadge(dashboard.verificationStatus)}
+              <p className="text-sm text-rose-700 mt-1 font-medium">
+                <span className="font-bold">Reason:</span> {dashboard.rejectionReason || 'Please verify kitchen details and documents.'}
+              </p>
+            </div>
+            <Link href="/sellers/register">
+              <Button className="bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs px-5 py-2.5 rounded-xl shadow-sm">
+                Fix &amp; Resubmit Application →
+              </Button>
+            </Link>
+          </div>
+        )}
+
+        {dashboard && dashboard.verificationStatus === 'pending' && (
+          <div className="mb-6 bg-amber-50 border border-amber-200 rounded-2xl p-5 shadow-sm flex items-center justify-between">
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="w-6 h-6 rounded-full bg-amber-500 text-white flex items-center justify-center text-xs font-bold">⏳</span>
+                <h3 className="text-base font-bold text-amber-900">Seller Application Under Review</h3>
+              </div>
+              <p className="text-sm text-amber-700 mt-1 font-medium">
+                Our team is reviewing your profile and hygiene documents. Your kitchen will go live as soon as approved!
+              </p>
+            </div>
+            {getVerificationBadge('pending')}
+          </div>
+        )}
+
+        {/* Top Control Bar: Store Status & Quick Actions */}
+        {dashboard && dashboard.verificationStatus === 'approved' && (
+          <div className="mb-6 bg-white border border-slate-200/90 rounded-2xl p-4 sm:p-5 shadow-xs flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+            <div className="flex flex-wrap items-center gap-2.5">
+              <button
+                type="button"
+                id="store-live-toggle-btn"
+                onClick={handleToggleStoreLive}
+                disabled={togglingLive}
+                className={`flex items-center gap-2 px-3.5 py-2 rounded-xl font-bold text-xs transition-colors cursor-pointer ${
+                  dashboard.isStoreOpen
+                    ? 'bg-emerald-50 text-emerald-800 border border-emerald-200'
+                    : 'bg-slate-100 text-slate-700 border border-slate-200'
+                }`}
+              >
+                <span className={`w-2 h-2 rounded-full ${dashboard.isStoreOpen ? 'bg-emerald-500 animate-pulse' : 'bg-slate-400'}`} />
+                <span>{dashboard.isStoreOpen ? 'Kitchen Open (Accepting Orders)' : 'Kitchen Closed'}</span>
+              </button>
+
+              {dashboard.primaryCommunityName && (
+                <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-50 border border-slate-200 text-slate-700 text-xs font-medium">
+                  <span className="text-[#FF5500]">📍</span>
+                  <span>{dashboard.primaryCommunityName}</span>
+                </div>
+              )}
+            </div>
+
+            <div className="flex items-center gap-2">
+              <Link href="/sellers/products/new">
+                <Button className="bg-[#FF5500] hover:bg-[#e04400] text-white font-bold text-xs rounded-xl px-4 py-2 shadow-xs">
+                  + Add Food Item
+                </Button>
+              </Link>
+              <Link href="/sellers/orders">
+                <Button variant="outline" className="font-semibold text-xs rounded-xl px-4 py-2 border-slate-200 text-slate-700">
+                  Kitchen Orders
+                </Button>
+              </Link>
             </div>
           </div>
         )}
 
-      {/* Stats Cards - Enhanced with gradients */}
-      {dashboard && (
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 mb-8">
-        {/* Products Card */}
-        <div className="bg-gray-50 rounded-2xl p-5 border border-gray-200 hover:shadow-lg transition-all duration-300 group">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-medium text-gray-600 mb-1">Products</p>
-              <p className="text-3xl font-bold text-gray-900">{dashboard.overview.totalProducts}</p>
-            </div>
-            <div className="w-14 h-14 bg-gray-600 rounded-xl flex items-center justify-center text-white shadow-lg shadow-gray-200 group-hover:scale-110 transition-transform">
-              {Icons.products}
+        {/* Stats Cards */}
+        {dashboard && (
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+          {/* Today's Sales */}
+          <div className="bg-white rounded-2xl p-4 sm:p-5 border border-slate-200/90 shadow-xs hover:border-slate-300 transition-colors">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1">Today's Sales</p>
+                <p className="text-xl sm:text-2xl font-black text-slate-900">{formatPrice(dashboard.overview.todaySales ?? 0)}</p>
+                <p className="text-[11px] text-slate-400 mt-1">{dashboard.overview.todayOrders ?? 0} orders today</p>
+              </div>
+              <div className="w-10 h-10 bg-orange-50 text-orange-600 rounded-xl flex items-center justify-center font-bold text-base">
+                ₨
+              </div>
             </div>
           </div>
-        </div>
 
-        {/* Active Orders Card */}
-        <div className="bg-gray-50 rounded-2xl p-5 border border-gray-200 hover:shadow-lg transition-all duration-300 group">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-medium text-gray-600 mb-1">Active Orders</p>
-              <p className="text-3xl font-bold text-gray-900">{dashboard.overview.activeOrders}</p>
-            </div>
-            <div className="w-14 h-14 bg-gray-600 rounded-xl flex items-center justify-center text-white shadow-lg shadow-gray-200 group-hover:scale-110 transition-transform">
-              {Icons.orders}
+          {/* In Kitchen */}
+          <div className="bg-white rounded-2xl p-4 sm:p-5 border border-slate-200/90 shadow-xs hover:border-slate-300 transition-colors">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1">In Kitchen</p>
+                <p className="text-xl sm:text-2xl font-black text-slate-900">{dashboard.overview.activeOrders ?? 0}</p>
+                <p className="text-[11px] text-purple-600 font-semibold mt-1">Active orders</p>
+              </div>
+              <div className="w-10 h-10 bg-purple-50 text-purple-600 rounded-xl flex items-center justify-center">
+                {Icons.orders}
+              </div>
             </div>
           </div>
-        </div>
 
-        {/* Pending Orders Card */}
-        <div className="bg-gray-50 rounded-2xl p-5 border border-gray-200 hover:shadow-lg transition-all duration-300 group">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-medium text-gray-600 mb-1">Pending</p>
-              <p className="text-3xl font-bold text-gray-900">{dashboard.overview.pendingOrders}</p>
-            </div>
-            <div className="w-14 h-14 bg-gray-600 rounded-xl flex items-center justify-center text-white shadow-lg shadow-gray-200 group-hover:scale-110 transition-transform">
-              {Icons.pending}
+          {/* Menu Items */}
+          <div className="bg-white rounded-2xl p-4 sm:p-5 border border-slate-200/90 shadow-xs hover:border-slate-300 transition-colors">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1">Menu Dishes</p>
+                <p className="text-xl sm:text-2xl font-black text-slate-900">{dashboard.overview.totalProducts ?? 0}</p>
+                <p className="text-[11px] text-slate-400 mt-1">Active dishes</p>
+              </div>
+              <div className="w-10 h-10 bg-blue-50 text-blue-600 rounded-xl flex items-center justify-center">
+                {Icons.products}
+              </div>
             </div>
           </div>
-        </div>
 
-        {/* Total Earnings Card */}
-        <div className="bg-gray-50 rounded-2xl p-5 border border-gray-200 hover:shadow-lg transition-all duration-300 group">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-medium text-gray-600 mb-1">Total Earnings</p>
-              <p className="text-2xl font-bold text-gray-900">{formatPrice(dashboard.overview.totalEarnings)}</p>
-            </div>
-            <div className="w-14 h-14 bg-gray-600 rounded-xl flex items-center justify-center text-white shadow-lg shadow-gray-200 group-hover:scale-110 transition-transform">
-              {Icons.earnings}
-            </div>
-          </div>
-        </div>
-
-        {/* Pending Payout Card */}
-        <div className="bg-gray-50 rounded-2xl p-5 border border-gray-200 hover:shadow-lg transition-all duration-300 group">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-medium text-gray-600 mb-1">Pending Payout</p>
-              <p className="text-2xl font-bold text-gray-900">{formatPrice(dashboard.overview.pendingPayout)}</p>
-            </div>
-            <div className="w-14 h-14 bg-gray-600 rounded-xl flex items-center justify-center text-white shadow-lg shadow-gray-200 group-hover:scale-110 transition-transform">
-              {Icons.payout}
+          {/* Net Earnings */}
+          <div className="bg-white rounded-2xl p-4 sm:p-5 border border-slate-200/90 shadow-xs hover:border-slate-300 transition-colors">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1">Total Earnings</p>
+                <p className="text-xl sm:text-2xl font-black text-emerald-700">{formatPrice(dashboard.overview.totalEarnings ?? 0)}</p>
+                <p className="text-[11px] text-slate-400 mt-1">Pending: {formatPrice(dashboard.overview.pendingPayout ?? 0)}</p>
+              </div>
+              <div className="w-10 h-10 bg-emerald-50 text-emerald-700 rounded-xl flex items-center justify-center">
+                {Icons.earnings}
+              </div>
             </div>
           </div>
         </div>
-      </div>
-      )}
+        )}
 
       {dashboard && (
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
