@@ -158,7 +158,8 @@ jobs:
       - name: Frontend install & build
         working-directory: frontend-web
         env:
-          NODE_ENV: production
+          NEXT_PUBLIC_API_URL: http://localhost:3001/api/v1
+          NEXT_PUBLIC_SAFEPAY_SANDBOX: "true"
         run: |
           npm ci
           npm run build
