@@ -12,10 +12,17 @@
  */
 import { PrismaClient } from '@prisma/client';
 import bcrypt from 'bcrypt';
+import { seedCommunities } from './seed-communities';
 
 const prisma = new PrismaClient();
 
 async function main() {
+  // --- communities ---
+  await seedCommunities();
+  const gulshan = await prisma.community.findUnique({
+    where: { slug: 'gulshan-e-iqbal' },
+  });
+
   // --- category ---
   const category = await prisma.category.upsert({
     where: { slug: 'ready-to-cook' },
@@ -47,13 +54,21 @@ async function main() {
   // --- seller record ---
   const seller = await prisma.seller.upsert({
     where: { userId: sellerUser.id },
-    update: { isVerified: true, status: 'active', verificationStatus: 'approved' },
+    update: {
+      isVerified: true,
+      status: 'active',
+      verificationStatus: 'approved',
+      communityId: gulshan?.id,
+      primaryCommunityName: gulshan?.name,
+    },
     create: {
       userId: sellerUser.id,
       businessName: 'E2E Test Kitchen',
       isVerified: true,
       status: 'active',
       verificationStatus: 'approved',
+      communityId: gulshan?.id,
+      primaryCommunityName: gulshan?.name,
     },
   });
 

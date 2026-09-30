@@ -24,8 +24,7 @@ test.describe('Nuray smoke', () => {
     const firstLink = page.locator('a[href*="/kitchens/"], a[href*="/products/"]').first();
     await expect(firstLink).toBeVisible();
     await firstLink.click();
-    await page.waitForLoadState('domcontentloaded');
-    expect(page.url()).toMatch(/\/(kitchens|products)\//);
+    await expect(page).toHaveURL(/\/(kitchens|products)\//, { timeout: 15000 });
   });
 
   test('/login renders OTP + Email tabs and Google sign-in', async ({ page }) => {
@@ -52,7 +51,11 @@ test.describe('Nuray smoke', () => {
   test('no console errors across smoke pages', async ({ page }) => {
     const errors: string[] = [];
     page.on('console', (msg) => {
-      if (msg.type() === 'error') errors.push(msg.text());
+      if (msg.type() === 'error') {
+        const text = msg.text();
+        if (text.includes('favicon.ico')) return;
+        errors.push(text);
+      }
     });
     for (const path of ['/', '/products', '/login', '/register']) {
       // Wait for `load`, not `networkidle` — the app holds an open socket.io

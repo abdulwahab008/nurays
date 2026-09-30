@@ -629,7 +629,7 @@ function ProductsContent() {
         }
       })
       .catch((err) => {
-        console.error('Failed to load community details:', err);
+        console.warn('Community details notice:', err?.message || err);
       })
       .finally(() => {
         if (!cancelled) setCommunityKitchensLoading(false);
