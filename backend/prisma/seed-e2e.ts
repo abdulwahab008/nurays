@@ -13,12 +13,14 @@
 import { PrismaClient } from '@prisma/client';
 import bcrypt from 'bcrypt';
 import { seedCommunities } from './seed-communities';
+import { seedCommunityKitchens } from './seed-community-kitchens';
 
 const prisma = new PrismaClient();
 
 async function main() {
-  // --- communities ---
+  // --- communities & community kitchens ---
   await seedCommunities();
+  await seedCommunityKitchens();
   const gulshan = await prisma.community.findUnique({
     where: { slug: 'gulshan-e-iqbal' },
   });

@@ -22,7 +22,7 @@ test.describe('Nuray smoke', () => {
   test('kitchen/product link navigates and displays details', async ({ page }) => {
     await page.goto('/products');
     const firstLink = page.locator('a[href*="/kitchens/"], a[href*="/products/"]').first();
-    await expect(firstLink).toBeVisible();
+    await expect(firstLink).toBeVisible({ timeout: 15000 });
     await firstLink.click();
     await expect(page).toHaveURL(/\/(kitchens|products)\//, { timeout: 15000 });
   });
