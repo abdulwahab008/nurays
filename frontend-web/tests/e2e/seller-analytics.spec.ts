@@ -85,6 +85,6 @@ test.describe('Seller Studio Analytics Section', () => {
     await expect(analyticsLink).toBeVisible();
 
     // Take verified screenshot
-    await page.screenshot({ path: '/Users/apple/frozen-nuray/seller-analytics-verified.png', fullPage: true });
+    await page.screenshot({ path: 'test-results/seller-analytics-verified.png', fullPage: true });
   });
 });

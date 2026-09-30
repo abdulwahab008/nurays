@@ -1,6 +1,7 @@
 import { test, expect } from '@playwright/test';
+import * as path from 'node:path';
 
-const ARTIFACT_DIR = '/Users/apple/.gemini/antigravity-ide/brain/a2705288-aff8-4485-a3b0-98a5dfd5f673';
+const ARTIFACT_DIR = process.env.ARTIFACT_DIR ?? path.join(process.cwd(), 'test-results', 'rider');
 
 test('Rider Geofence Proximity Auto-Arrival & Handshake Verification', async ({ page }) => {
   // 1. Login as rider

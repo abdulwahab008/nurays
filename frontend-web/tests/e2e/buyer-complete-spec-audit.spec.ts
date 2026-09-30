@@ -5,7 +5,7 @@ import * as path from 'node:path';
 
 const API_BASE = (process.env.API_BASE ?? 'http://localhost:3001/api/v1').replace(/\/$/, '');
 const DB_URL = process.env.E2E_DB_URL ?? 'postgresql://localhost:5432/frozennuray_dev';
-const ARTIFACT_SCREENSHOT_DIR = '/Users/apple/.gemini/antigravity-ide/brain/b5ab1d9a-10a7-43f3-9b36-7132ded48fbd/customer_spec_audit';
+const ARTIFACT_SCREENSHOT_DIR = process.env.ARTIFACT_SCREENSHOT_DIR ?? path.join(process.cwd(), 'test-results', 'customer_spec_audit');
 
 if (!fs.existsSync(ARTIFACT_SCREENSHOT_DIR)) {
   fs.mkdirSync(ARTIFACT_SCREENSHOT_DIR, { recursive: true });

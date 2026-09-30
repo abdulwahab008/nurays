@@ -8,10 +8,14 @@ const USERS = {
   admin:    { email: 'admin@frozennuray.com', pass: 'Password123!', dashboardUrl: '/admin/dashboard' },
 };
 
+import * as path from 'node:path';
+
+const backendDir = path.resolve(__dirname, '../../../backend');
+
 test.beforeAll(async () => {
   // Ensure all 4 test users are seeded with standard credentials
-  execSync('npx ts-node /Users/apple/frozen-nuray/backend/scripts/seed-ideal-flow-users.ts', {
-    cwd: '/Users/apple/frozen-nuray/backend',
+  execSync('npx ts-node scripts/seed-ideal-flow-users.ts', {
+    cwd: backendDir,
     stdio: 'inherit',
   });
 });
@@ -69,8 +73,8 @@ test.describe('Nuray Multi-Role Login Verification', () => {
 test.describe('Nuray Ideal E2E Operational Flow & Doorstep Handshake', () => {
   test('Executes complete multi-role flow (Order -> Kitchen Prep -> JIT Dispatch -> Doorstep PIN Handshake -> Ledger)', async ({ page }) => {
     // 1. Run the backend orchestrated lifecycle
-    const flowOutput = execSync('npx ts-node /Users/apple/frozen-nuray/backend/scripts/run-ideal-flow.ts', {
-      cwd: '/Users/apple/frozen-nuray/backend',
+    const flowOutput = execSync('npx ts-node scripts/run-ideal-flow.ts', {
+      cwd: backendDir,
       encoding: 'utf-8',
     });
 
