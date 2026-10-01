@@ -5,6 +5,7 @@ import riderService from './rider.service';
 import { releasePromotionUsage } from './promotion.service';
 import { issueRefund, IssuedRefund } from './refund.service';
 import ledgerService from './ledger.service';
+import { releaseHubAllocations } from './hub-allocation.service';
 
 // The main happy-path order pipeline — admin can only move an order exactly
 // one step forward at a time (no skipping straight to 'dispatched'/'delivered',
@@ -465,6 +466,9 @@ export class AdminOrderService {
 
       // A cancelled order shouldn't keep consuming the promo's quota.
       await releasePromotionUsage(tx, orderId);
+
+      // Hub units this order took go back into the batches they came from.
+      await releaseHubAllocations(tx, orderId, { reason: `Order ${order.orderNumber} cancelled by admin`, performedBy: adminId });
 
       // If the customer had already paid, the money is owed back: refund it now
       // (wallet) or queue it for the admin to send (everything else).

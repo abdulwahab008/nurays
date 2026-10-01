@@ -6,6 +6,7 @@ import { SELLER_COMMUNITY_DELIVERY_SELECT } from '../utils/sellerDeliverySelect'
 import { communityService } from './community.service';
 import { eligibleSubtotalForPromotion, releasePromotionUsage } from './promotion.service';
 import { issueRefund, IssuedRefund } from './refund.service';
+import { allocateHubStock, releaseHubAllocations } from './hub-allocation.service';
 import { DeliveryFeeShare } from '../utils/deliveryEarnings';
 import { getDeliveryFeeForSeller } from '../utils/deliveryFee';
 import { createStockAlert } from './stock-alert.service';
@@ -551,47 +552,20 @@ export class OrderService {
         }
       }
 
-      // FEFO (First-Expired, First-Out) Hub Batch Allocation & Reservation
+      // FEFO (First-Expired, First-Out) Hub Batch Allocation & Reservation. Shortfalls
+      // throw (rolling the whole order back) rather than creating an order whose
+      // hub units were never actually taken.
       for (const item of orderItems) {
         if (item.fulfillmentType === 'hub' && item.hubId) {
-          const availableBatches = await tx.hubInventory.findMany({
-            where: {
-              hubId: item.hubId,
-              productId: item.productId,
-              status: 'available',
-              quantity: { gt: 0 },
-            },
-            orderBy: { expiryDate: 'asc' }, // FEFO: Earliest expiration batch first
+          await allocateHubStock(tx, {
+            orderId: newOrder.id,
+            orderNumber: newOrder.orderNumber,
+            hubId: item.hubId,
+            productId: item.productId,
+            productName: item.productName,
+            quantity: item.quantity,
+            performedBy: customerId,
           });
-
-          let remainingQtyToAllocate = item.quantity;
-          for (const batch of availableBatches) {
-            if (remainingQtyToAllocate <= 0) break;
-            const allocateQty = Math.min(batch.quantity, remainingQtyToAllocate);
-            const newQty = batch.quantity - allocateQty;
-
-            await tx.hubInventory.update({
-              where: { id: batch.id },
-              data: {
-                quantity: newQty,
-                status: newQty === 0 ? 'reserved' : 'available',
-              },
-            });
-
-            await tx.hubInventoryLog.create({
-              data: {
-                hubInventoryId: batch.id,
-                action: 'stock_out',
-                quantityChange: -allocateQty,
-                previousQuantity: batch.quantity,
-                newQuantity: newQty,
-                reason: `FEFO batch allocation for Order #${newOrder.orderNumber} (Batch: ${batch.batchNumber || 'N/A'}, Expiry: ${batch.expiryDate.toISOString().slice(0, 10)})`,
-                performedBy: customerId,
-              },
-            });
-
-            remainingQtyToAllocate -= allocateQty;
-          }
 
           await tx.inventoryReservation.create({
             data: {
@@ -1000,6 +974,9 @@ export class OrderService {
 
       // A cancelled order shouldn't keep consuming the promo's quota.
       await releasePromotionUsage(tx, orderId);
+
+      // Hub units this order took go back into the batches they came from.
+      await releaseHubAllocations(tx, orderId, { reason: `Order ${order.orderNumber} cancelled by customer`, performedBy: userId });
 
       // A paid order (wallet payment, or a gateway payment that already cleared)
       // is owed its money back: wallet orders are refunded instantly, the rest

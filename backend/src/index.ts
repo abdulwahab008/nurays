@@ -10,6 +10,7 @@ import helmet from 'helmet';
 import morgan from 'morgan';
 import socketManager from './config/socket';
 import { checkAndCreateStockAlerts } from './services/stock-alert.service';
+import hubService from './services/hub.service';
 import { errorHandler } from './middleware/errorHandler';
 import { notFoundHandler } from './middleware/notFoundHandler';
 import healthRoutes from './routes/health.routes';
@@ -148,6 +149,12 @@ httpServer.listen(PORT, () => {
   setInterval(() => {
     checkAndCreateStockAlerts().catch((err) => console.error('Stock alert sweep failed:', err));
   }, 6 * 60 * 60 * 1000);
+
+  // Hub batches past their expiry stop showing as available (hourly).
+  const sweepHubExpiry = () =>
+    hubService.expireStaleBatches().catch((err) => console.error('Hub expiry sweep failed:', err));
+  sweepHubExpiry();
+  setInterval(sweepHubExpiry, 60 * 60 * 1000);
 });
 
 export default app;

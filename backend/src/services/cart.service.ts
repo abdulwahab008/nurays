@@ -3,6 +3,7 @@ import { AppError } from '../middleware/errorHandler';
 import { getDeliveryFeeForSeller } from '../utils/deliveryFee';
 import { SELLER_COMMUNITY_DELIVERY_SELECT } from '../utils/sellerDeliverySelect';
 import { communityService } from './community.service';
+import { sellableBatchWhere } from '../utils/hubStock';
 
 export class CartService {
   /**
@@ -354,10 +355,12 @@ export class CartService {
     let availableStock = variant ? variant.stockQuantity : product.stockQuantity;
     if (!variant && effectiveStockType === 'hub' && effectiveHubId) {
       const hubStock = await prisma.hubInventory.aggregate({
+        // Only stock that can actually be sold: expired or nearly-expired batches
+        // used to be counted as available here.
         where: {
           productId,
           hubId: effectiveHubId,
-          status: 'available',
+          ...sellableBatchWhere(),
         },
         _sum: { quantity: true },
       });

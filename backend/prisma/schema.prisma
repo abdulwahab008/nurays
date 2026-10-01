@@ -517,6 +517,8 @@ model HubInventory {
   seller          Seller    @relation(fields: [sellerId], references: [id], onDelete: Cascade)
   logs            HubInventoryLog[]
 
+  allocations HubBatchAllocation[]
+
   @@unique([hubId, productId, batchNumber])
 
   @@index([productId])
@@ -615,6 +617,7 @@ model Order {
   orderMessages       OrderMessage[]
   promotionUsages     PromotionUsage[]
   refunds             Refund[]
+  hubAllocations      HubBatchAllocation[]
   supportTickets      SupportTicket[]
   walletTransactions  WalletTransaction[]
 
@@ -1229,6 +1232,26 @@ model Refund {
   @@index([orderId])
   @@index([status])
   @@map("refunds")
+}
+
+// Which hub batches an order's units were taken from (FEFO). Recorded so a
+// cancelled or rejected order can put stock back into the SAME batches, instead
+// of the units vanishing from hub inventory.
+model HubBatchAllocation {
+  id             String       @id @default(uuid())
+  orderId        String       @map("order_id")
+  productId      String       @map("product_id")
+  hubInventoryId String       @map("hub_inventory_id")
+  quantity       Int
+  releasedAt     DateTime?    @map("released_at")
+  createdAt      DateTime     @default(now()) @map("created_at")
+
+  order          Order        @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  hubInventory   HubInventory @relation(fields: [hubInventoryId], references: [id], onDelete: Cascade)
+
+  @@index([orderId, productId])
+  @@index([hubInventoryId])
+  @@map("hub_batch_allocations")
 }
 
 model FavoriteSeller {

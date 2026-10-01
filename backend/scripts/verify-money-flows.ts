@@ -12,6 +12,7 @@ import orderService from '../src/services/order.service';
 import paymentService from '../src/services/payment.service';
 import adminOrderService from '../src/services/admin-order.service';
 import { completeRefund } from '../src/services/refund.service';
+import hubService from '../src/services/hub.service';
 import cartService from '../src/services/cart.service';
 import productService from '../src/services/product.service';
 import ledgerService from '../src/services/ledger.service';
@@ -344,6 +345,90 @@ async function main() {
   const ids = new Set([...pg1.orders, ...pg2.orders].map((o: any) => o.id));
   ok('order history pages cover every order exactly once', pg1.orders.length === 20 && pg2.orders.length === 6 && ids.size === 26 && pg1.pagination.totalPages === 2, `p1=${pg1.orders.length} p2=${pg2.orders.length} unique=${ids.size}`);
   ok('status counts reflect the whole history, not just the page', pg1.statusCounts.pending === 26, JSON.stringify(pg1.statusCounts));
+
+  // ---- 21. hub batches ----
+  const DAY = 24 * 3600 * 1000;
+  const hub = await prisma.hubCenter.create({ data: { name: 'H' + uniq(), code: 'H' + uniq(), city: 'Lahore', area: 'A', address: 'x', latitude: 31.5, longitude: 74.3, capacityCubicFeet: 100 } as any });
+  const hubProd = await prisma.product.create({ data: { sellerId: seller.id, name: 'HP' + uniq(), slug: 'hp-' + uniq(), price: 100, unit: 'pc', stockQuantity: 1000, stockType: 'hub', approvalStatus: 'approved', isActive: true } as any });
+  const intake = (over: any = {}) => hubService.recordBatchIntake({ hubId: hub.id, productId: hubProd.id, quantity: 10, batchNumber: 'B', expiryDate: new Date(Date.now() + 30 * DAY), measuredTemperatureCelsius: -20, ...over });
+  const icode = (over: any) => intake(over).then(() => 'OK', (e: any) => e.code);
+
+  ok('negative intake quantity is refused (it used to remove stock)', (await icode({ quantity: -5, batchNumber: 'NEG' })) === 'INVALID_QUANTITY');
+  ok('fractional / zero intake quantity is refused', (await icode({ quantity: 2.5, batchNumber: 'F' })) === 'INVALID_QUANTITY' && (await icode({ quantity: 0, batchNumber: 'Z' })) === 'INVALID_QUANTITY');
+  ok('a client-supplied seller that does not own the product is refused', (await icode({ sellerId: sellerB.id, batchNumber: 'S' })) === 'SELLER_MISMATCH');
+  ok('an already-expired batch cannot be received', (await icode({ expiryDate: new Date(Date.now() - DAY), batchNumber: 'OLD' })) === 'BATCH_EXPIRED');
+
+  await intake({ batchNumber: 'A', quantity: 5, expiryDate: new Date(Date.now() + 3 * DAY) });   // earliest sellable
+  await intake({ batchNumber: 'B', quantity: 5, expiryDate: new Date(Date.now() + 30 * DAY) });  // later
+  await intake({ batchNumber: 'C', quantity: 50, expiryDate: new Date(Date.now() + 12 * 3600 * 1000) }); // < 24h of shelf life
+  const batchOf = (n: string) => prisma.hubInventory.findFirst({ where: { hubId: hub.id, productId: hubProd.id, batchNumber: n } });
+
+  const conc = await Promise.all([1, 2, 3, 4, 5].map(() => intake({ batchNumber: 'CONC', quantity: 10 }).then(() => 'OK', (e: any) => e.code)));
+  const concRows = await prisma.hubInventory.findMany({ where: { hubId: hub.id, batchNumber: 'CONC' } });
+  ok('5 simultaneous intakes of one batch: one row, nothing lost', concRows.length === 1 && concRows[0].quantity === 50 && conc.every((c) => c === 'OK'), `rows=${concRows.length} qty=${concRows[0]?.quantity} ${conc}`);
+
+  const breachNew: any = await intake({ batchNumber: 'WARM', measuredTemperatureCelsius: -10 });
+  ok('a warm delivery under a new batch number is quarantined', breachNew.status === 'damaged' && (await batchOf('WARM'))!.status === 'damaged');
+  ok('a warm delivery cannot be merged into good stock (it would quarantine all of it)', (await icode({ batchNumber: 'B', measuredTemperatureCelsius: -5 })) === 'BATCH_EXISTS' && (await batchOf('B'))!.status === 'available' && (await batchOf('B'))!.quantity === 5);
+  await intake({ batchNumber: 'WARM', quantity: 3 });
+  ok('a good delivery does not release a quarantined batch', (await batchOf('WARM'))!.status === 'damaged' && (await batchOf('WARM'))!.quantity === 13);
+
+  const pub: any = await hubService.getHubInventory(hub.id, {});
+  const pubBatches = pub.inventory.map((i: any) => i.batchNumber).sort().join(',');
+  ok('public inventory lists only sellable batches', pubBatches === 'A,B,CONC', pubBatches);
+
+  // FEFO allocation: earliest SELLABLE batch first; the <24h batch (earliest expiry) is skipped
+  const hc = await mkUser();
+  const hubOrder = (qty: number, uid = hc.id) => orderService.createOrder(uid, { items: [{ productId: hubProd.id, quantity: qty, stockType: 'hub', hubId: hub.id }], deliveryType: 'self_pickup', paymentMethod: 'cod' } as any) as Promise<any>;
+  const ho1 = await hubOrder(7);
+  const [qa, qb, qc] = [await batchOf('A'), await batchOf('B'), await batchOf('C')];
+  ok('FEFO takes the earliest sellable batch first and never the nearly-expired one', qa!.quantity === 0 && qa!.status === 'reserved' && qb!.quantity === 3 && qc!.quantity === 50, `A=${qa!.quantity} B=${qb!.quantity} C=${qc!.quantity}`);
+  const allocs = await prisma.hubBatchAllocation.findMany({ where: { orderId: ho1.id } });
+  ok('the batches an order took from are recorded', allocs.length === 2 && allocs.reduce((a, x) => a + x.quantity, 0) === 7);
+
+  // shortage: more than all sellable stock (CONC has 50, B 3 => 53 left) -> refused, nothing taken
+  const before = (await prisma.hubInventory.findMany({ where: { hubId: hub.id }, orderBy: { batchNumber: 'asc' } })).map((b) => `${b.batchNumber}:${b.quantity}`).join();
+  const shortage = await hubOrder(60).then(() => 'OK', (e: any) => e.code);
+  const afterShort = (await prisma.hubInventory.findMany({ where: { hubId: hub.id }, orderBy: { batchNumber: 'asc' } })).map((b) => `${b.batchNumber}:${b.quantity}`).join();
+  ok('an order for more than the sellable hub stock is refused and takes nothing', shortage === 'INSUFFICIENT_STOCK' && before === afterShort, `${shortage}`);
+
+  // concurrency: 53 sellable left; 6 orders of 10 -> exactly 5 succeed, hub never negative
+  const cu = await Promise.all(Array.from({ length: 6 }, async () => hubOrder(10, (await mkUser()).id).then(() => 'OK', (e: any) => e.code)));
+  const negative = await prisma.hubInventory.count({ where: { hubId: hub.id, quantity: { lt: 0 } } });
+  ok('simultaneous hub orders cannot oversell a batch', cu.filter((c) => c === 'OK').length === 5 && negative === 0, `${cu}`);
+
+  // cancel returns units to the same batches, once
+  await orderService.cancelOrder(ho1.id, hc.id, 'changed my mind');
+  // (B's remaining 3 units were sold to the concurrent orders above, so only the 2 this order took come back)
+  const [ra, rb] = [await batchOf('A'), await batchOf('B')];
+  ok('cancelling returns the units to the batches they came from (depleted batch is available again)', ra!.quantity === 5 && ra!.status === 'available' && rb!.quantity === 2 && rb!.status === 'available', `A=${ra!.quantity}/${ra!.status} B=${rb!.quantity}/${rb!.status}`);
+  await orderService.cancelOrder(ho1.id, hc.id, 'again').catch(() => null);
+  ok('a second cancel does not return the units twice', (await batchOf('A'))!.quantity === 5);
+
+  // seller cancels one item -> that item's hub units return
+  const ho2 = await hubOrder(2);
+  const ho2Item = await prisma.orderItem.findFirst({ where: { orderId: ho2.id } });
+  const aBefore = (await batchOf('A'))!.quantity;
+  await sellerOrderService.cancelOrderItem(ho2Item!.id, sA!.userId, 'oos');
+  ok('a seller cancelling an item returns its hub units', (await batchOf('A'))!.quantity === aBefore + 2);
+
+  // status rules
+  const batchC = await batchOf('C'); const batchWarm = await batchOf('WARM');
+  await prisma.hubInventory.update({ where: { id: batchC!.id }, data: { expiryDate: new Date(Date.now() - 1000) } });
+  const rel = (id: string, reason?: string) => hubService.updateBatchStatus({ hubId: hub.id, batchId: id, status: 'available', reason }).then(() => 'OK', (e: any) => e.code);
+  ok('an expired batch cannot be released to sellable stock', (await rel(batchC!.id, 'please')) === 'BATCH_EXPIRED');
+  ok('releasing a quarantined batch needs a reason', (await rel(batchWarm!.id)) === 'REASON_REQUIRED' && (await rel(batchWarm!.id, 'Re-tested at -21C, fine')) === 'OK');
+  await prisma.hubInventory.update({ where: { id: batchC!.id }, data: { status: 'available' } });
+  ok('the expiry sweep marks passed batches as expired', (await hubService.expireStaleBatches()) >= 1 && (await batchOf('C'))!.status === 'expired');
+
+  // access control
+  const mgr1 = await mkUser('hub_manager'); const mgr2 = await mkUser('hub_manager');
+  const acc = (u: any) => hubService.assertHubAccess(hub.id, { userId: u.id, userType: 'hub_manager' }).then(() => 'OK', (e: any) => e.code);
+  ok('an unassigned hub stays open to hub managers (legacy)', (await acc(mgr1)) === 'OK');
+  await hubService.assignManager(hub.id, mgr1.id);
+  ok('once assigned, only that manager (or an admin) may operate the hub', (await acc(mgr1)) === 'OK' && (await acc(mgr2)) === 'HUB_ACCESS_DENIED' && (await hubService.assertHubAccess(hub.id, { userId: admin.id, userType: 'admin' }).then(() => 'OK', (e: any) => e.code)) === 'OK');
+  ok('only an active hub-manager account can be assigned', (await hubService.assignManager(hub.id, cust.id).then(() => 'OK', (e: any) => e.code)) === 'INVALID_MANAGER');
+  ok('temperature log limits are bounded (NaN no longer breaks it)', (await hubService.getTemperatureLogs(hub.id, NaN).then(() => 'OK', (e: any) => e.code)) === 'OK' && (await hubService.getTemperatureLogs(hub.id, 1e9).then(() => 'OK', (e: any) => e.code)) === 'OK');
 
   console.log(`\n${pass} passed, ${fail} failed`);
   await prisma.$disconnect();

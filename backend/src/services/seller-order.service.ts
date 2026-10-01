@@ -5,6 +5,7 @@ import riderService from './rider.service';
 import { releasePromotionUsage } from './promotion.service';
 import { refundForCancelledItems } from './refund.service';
 import ledgerService from './ledger.service';
+import { releaseHubAllocations } from './hub-allocation.service';
 import { selfDeliveryFeeFor } from '../utils/deliveryEarnings';
 
 export class SellerOrderService {
@@ -554,6 +555,14 @@ export class SellerOrderService {
       });
       const allCancelled = remaining.every((i) => i.status === 'cancelled');
 
+      if (orderItem.productId) {
+        await releaseHubAllocations(tx, orderItem.orderId, {
+          productIds: [orderItem.productId],
+          reason: `Item cancelled by seller (${orderItem.productName})`,
+          performedBy: sellerId,
+        });
+      }
+
       // The customer paid for this item: refund its share (or everything left if
       // this was the last live item and the whole order is now cancelled).
       await refundForCancelledItems(tx, orderItem.orderId, [orderItemId], {
@@ -785,6 +794,13 @@ export class SellerOrderService {
           });
         }
       }
+
+      // Hub units for the rejected items go back into their batches.
+      await releaseHubAllocations(tx, order.id, {
+        productIds: liveItems.map((i) => i.productId).filter((id): id is string => !!id),
+        reason: `Rejected by ${seller.businessName}`,
+        performedBy: sellerUserId,
+      });
 
       // In a multi-seller order, one kitchen rejecting its items must not cancel
       // the other kitchens' items: the order is cancelled only once nothing is left.

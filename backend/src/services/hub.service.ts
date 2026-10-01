@@ -1,5 +1,6 @@
 import prisma from '../config/database';
 import { AppError } from '../middleware/errorHandler';
+import { sellableBatchWhere } from '../utils/hubStock';
 
 export class HubService {
   /**
@@ -18,7 +19,12 @@ export class HubService {
       where,
       include: {
         inventory: {
-          where: { quantity: { gt: 0 } },
+          // Only stock a customer could actually buy: not quarantined, expired or
+          // about to expire, and for a product that is live on the catalog.
+          where: {
+            ...sellableBatchWhere(),
+            product: { approvalStatus: 'approved', isActive: true },
+          },
           select: { productId: true },
         },
       },
@@ -40,7 +46,7 @@ export class HubService {
         : null,
       operatingHours: hub.operatingHours as any,
       status: hub.status,
-      availableProductsCount: hub.inventory.length,
+      availableProductsCount: new Set(hub.inventory.map((i) => i.productId)).size,
     }));
   }
 
@@ -62,13 +68,17 @@ export class HubService {
       throw new AppError('Hub center not found', 404, 'HUB_NOT_FOUND');
     }
 
+    // Public endpoint: show only what can be bought. It used to list quarantined,
+    // damaged and expired batches, and products that were unapproved or inactive.
     const where: any = {
       hubId,
-      quantity: { gt: 0 },
+      ...sellableBatchWhere(),
+      product: { approvalStatus: 'approved', isActive: true, seller: { status: 'active' } },
     };
 
     if (filters.categoryId) {
       where.product = {
+        ...where.product,
         categoryId: filters.categoryId,
       };
     }
@@ -137,6 +147,16 @@ export class HubService {
   /**
    * Record batch intake at hub with mandatory <= -18°C temperature verification.
    * If measured temperature exceeds -18°C, the batch is automatically quarantined.
+   *
+   * Everything happens in one transaction under a lock on the batch number, so two
+   * simultaneous intakes of the same batch can't collide or lose quantity. Rules:
+   *  - quantity must be a positive whole number (a negative one used to *remove* stock);
+   *  - the seller is taken from the product — a client-supplied sellerId is only
+   *    accepted if it matches;
+   *  - a new delivery never changes the status of stock already on the shelf: it can't
+   *    release a quarantined batch, and a delivery that FAILS the cold-chain check
+   *    can't be merged into (and so quarantine) good stock — it needs its own batch number;
+   *  - when merging, the earliest expiry wins (the conservative choice).
    */
   async recordBatchIntake(data: {
     hubId: string;
@@ -151,106 +171,151 @@ export class HubService {
     barcode?: string;
     staffUserId?: string;
   }) {
+    const quantity = Number(data.quantity);
+    if (!Number.isInteger(quantity) || quantity <= 0 || quantity > 1_000_000) {
+      throw new AppError('Quantity must be a positive whole number', 400, 'INVALID_QUANTITY');
+    }
+    const batchNumber = String(data.batchNumber ?? '').trim();
+    if (!batchNumber || batchNumber.length > 100) {
+      throw new AppError('A batch number is required', 400, 'INVALID_BATCH_NUMBER');
+    }
+    const temperature = Number(data.measuredTemperatureCelsius);
+    if (!Number.isFinite(temperature) || temperature < -100 || temperature > 100) {
+      throw new AppError('A valid measured temperature is required', 400, 'INVALID_TEMPERATURE');
+    }
+    const expiryDate = new Date(data.expiryDate);
+    if (Number.isNaN(expiryDate.getTime())) {
+      throw new AppError('A valid expiry date is required', 400, 'INVALID_EXPIRY');
+    }
+    if (expiryDate.getTime() <= Date.now()) {
+      throw new AppError('This batch has already expired and cannot be received', 400, 'BATCH_EXPIRED');
+    }
+    const manufacturedDate = data.manufacturedDate ? new Date(data.manufacturedDate) : undefined;
+    if (manufacturedDate && (Number.isNaN(manufacturedDate.getTime()) || manufacturedDate.getTime() > Date.now() + 24 * 3600 * 1000)) {
+      throw new AppError('Invalid manufactured date', 400, 'INVALID_MANUFACTURED_DATE');
+    }
+
     const hub = await prisma.hubCenter.findUnique({ where: { id: data.hubId } });
     if (!hub) throw new AppError('Hub center not found', 404, 'HUB_NOT_FOUND');
+    if (hub.status !== 'active') throw new AppError('This hub is not active', 400, 'HUB_INACTIVE');
 
-    let sellerId = data.sellerId;
-    if (!sellerId) {
-      const product = await prisma.product.findUnique({ where: { id: data.productId } });
-      if (!product) throw new AppError('Product not found', 404, 'PRODUCT_NOT_FOUND');
-      sellerId = product.sellerId;
+    const product = await prisma.product.findUnique({ where: { id: data.productId } });
+    if (!product) throw new AppError('Product not found', 404, 'PRODUCT_NOT_FOUND');
+    if (data.sellerId && data.sellerId !== product.sellerId) {
+      throw new AppError('That seller does not own this product', 400, 'SELLER_MISMATCH');
     }
+    const sellerId = product.sellerId;
 
-    const tempBreach = Number(data.measuredTemperatureCelsius) > -18.0;
-    const batchStatus = tempBreach ? 'damaged' : 'available';
+    const tempBreach = temperature > -18.0;
+    const storageUnit = data.storageUnit || undefined;
 
-    // Check if batch with this batchNumber already exists for this hub & product
-    const existingBatch = await prisma.hubInventory.findUnique({
-      where: {
-        hubId_productId_batchNumber: {
-          hubId: data.hubId,
-          productId: data.productId,
-          batchNumber: data.batchNumber,
-        },
-      },
-    });
+    return prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`${data.hubId}:${data.productId}:${batchNumber}`}))`;
 
-    let batch;
-    let previousQuantity = 0;
-    let newQuantity = data.quantity;
-
-    if (existingBatch) {
-      previousQuantity = existingBatch.quantity;
-      newQuantity = existingBatch.quantity + data.quantity;
-      batch = await prisma.hubInventory.update({
-        where: { id: existingBatch.id },
-        data: {
-          quantity: newQuantity,
-          expiryDate: new Date(data.expiryDate),
-          manufacturedDate: data.manufacturedDate ? new Date(data.manufacturedDate) : existingBatch.manufacturedDate,
-          storageUnit: data.storageUnit || existingBatch.storageUnit || 'FREEZER-01',
-          barcode: data.barcode || existingBatch.barcode,
-          status: batchStatus,
+      const existingBatch = await tx.hubInventory.findUnique({
+        where: {
+          hubId_productId_batchNumber: { hubId: data.hubId, productId: data.productId, batchNumber },
         },
       });
-    } else {
-      batch = await prisma.hubInventory.create({
+
+      let batch;
+      let previousQuantity = 0;
+      let newQuantity = quantity;
+      let batchStatus: string = tempBreach ? 'damaged' : 'available';
+      let note = '';
+
+      if (existingBatch) {
+        if (existingBatch.status === 'expired' || existingBatch.expiryDate.getTime() <= Date.now()) {
+          throw new AppError(
+            `Batch ${batchNumber} has expired; receive new stock under a new batch number`,
+            409,
+            'BATCH_EXPIRED'
+          );
+        }
+        if (tempBreach) {
+          throw new AppError(
+            `Batch ${batchNumber} already exists. A delivery that failed the cold-chain check must be logged under a new batch number so it cannot quarantine the stock already on the shelf.`,
+            409,
+            'BATCH_EXISTS'
+          );
+        }
+        previousQuantity = existingBatch.quantity;
+        newQuantity = existingBatch.quantity + quantity;
+        // A good delivery never releases a quarantined batch; that takes an explicit release.
+        batchStatus = existingBatch.status === 'damaged' ? 'damaged' : 'available';
+        if (existingBatch.status === 'damaged') {
+          note = ' The batch stays quarantined until it is explicitly released.';
+        }
+        batch = await tx.hubInventory.update({
+          where: { id: existingBatch.id },
+          data: {
+            quantity: newQuantity,
+            expiryDate: expiryDate < existingBatch.expiryDate ? expiryDate : existingBatch.expiryDate,
+            manufacturedDate: manufacturedDate ?? existingBatch.manufacturedDate,
+            storageUnit: storageUnit || existingBatch.storageUnit || 'FREEZER-01',
+            barcode: data.barcode || existingBatch.barcode,
+            status: batchStatus,
+          },
+        });
+      } else {
+        batch = await tx.hubInventory.create({
+          data: {
+            hubId: data.hubId,
+            productId: data.productId,
+            sellerId,
+            quantity,
+            batchNumber,
+            manufacturedDate,
+            expiryDate,
+            storageUnit: storageUnit || 'FREEZER-01',
+            barcode: data.barcode,
+            status: batchStatus,
+          },
+        });
+      }
+
+      // Record temperature log
+      await tx.hubTemperatureLog.create({
         data: {
           hubId: data.hubId,
-          productId: data.productId,
-          sellerId,
-          quantity: data.quantity,
-          batchNumber: data.batchNumber,
-          manufacturedDate: data.manufacturedDate ? new Date(data.manufacturedDate) : undefined,
-          expiryDate: new Date(data.expiryDate),
-          storageUnit: data.storageUnit || 'FREEZER-01',
-          barcode: data.barcode,
-          status: batchStatus,
+          temperatureCelsius: temperature,
+          freezerUnit: data.storageUnit ? parseInt(data.storageUnit.replace(/\D/g, '')) || 1 : 1,
+          isAlert: tempBreach,
         },
       });
-    }
 
-    // Record temperature log
-    await prisma.hubTemperatureLog.create({
-      data: {
-        hubId: data.hubId,
-        temperatureCelsius: data.measuredTemperatureCelsius,
-        freezerUnit: data.storageUnit ? parseInt(data.storageUnit.replace(/\D/g, '')) || 1 : 1,
-        isAlert: tempBreach,
-      },
+      // Update hub current temperature reading
+      await tx.hubCenter.update({
+        where: { id: data.hubId },
+        data: { temperatureCelsius: temperature },
+      });
+
+      // Record intake audit log
+      await tx.hubInventoryLog.create({
+        data: {
+          hubInventoryId: batch.id,
+          action: tempBreach ? 'expired' : 'stock_in',
+          quantityChange: quantity,
+          previousQuantity,
+          newQuantity,
+          reason: tempBreach
+            ? `COLD CHAIN VIOLATION: Batch intake measured at ${temperature}°C (threshold <= -18°C). Quarantined.`
+            : `Verified batch intake at ${temperature}°C. Passed cold-chain verification.${note}`,
+          performedBy: data.staffUserId || 'Hub Operations',
+        },
+      });
+
+      return {
+        batch,
+        temperatureVerified: !tempBreach,
+        status: batchStatus,
+        message: tempBreach
+          ? `ALERT: Intake temperature (${temperature}°C) exceeded -18°C threshold. Batch has been marked as QUARANTINED.`
+          : batchStatus === 'damaged'
+            ? `Added ${quantity} units to quarantined batch ${batchNumber}.${note}`
+            : `Verified sub-zero batch intake (${temperature}°C). Added to available sellable inventory.`,
+      };
     });
-
-    // Update hub current temperature reading
-    await prisma.hubCenter.update({
-      where: { id: data.hubId },
-      data: {
-        temperatureCelsius: data.measuredTemperatureCelsius,
-      },
-    });
-
-    // Record intake audit log
-    await prisma.hubInventoryLog.create({
-      data: {
-        hubInventoryId: batch.id,
-        action: tempBreach ? 'expired' : 'stock_in',
-        quantityChange: data.quantity,
-        previousQuantity,
-        newQuantity,
-        reason: tempBreach
-          ? `COLD CHAIN VIOLATION: Batch intake measured at ${data.measuredTemperatureCelsius}°C (threshold <= -18°C). Quarantined.`
-          : `Verified batch intake at ${data.measuredTemperatureCelsius}°C. Passed cold-chain verification.`,
-        performedBy: data.staffUserId || 'Hub Operations',
-      },
-    });
-
-    return {
-      batch,
-      temperatureVerified: !tempBreach,
-      status: batchStatus,
-      message: tempBreach
-        ? `ALERT: Intake temperature (${data.measuredTemperatureCelsius}°C) exceeded -18°C threshold. Batch has been marked as QUARANTINED.`
-        : `Verified sub-zero batch intake (${data.measuredTemperatureCelsius}°C). Added to available sellable inventory.`,
-    };
   }
 
   /**
@@ -386,7 +451,9 @@ export class HubService {
   }
 
   /**
-   * Update batch status (e.g. quarantine or release to sellable)
+   * Update batch status (e.g. quarantine or release to sellable).
+   * Releasing needs care: an expired batch can never be released, and releasing a
+   * quarantined one needs a written reason (it puts possibly-compromised stock back on sale).
    */
   async updateBatchStatus(data: {
     hubId: string;
@@ -395,38 +462,119 @@ export class HubService {
     reason?: string;
     performedBy?: string;
   }) {
-    const batch = await prisma.hubInventory.findFirst({
-      where: { id: data.batchId, hubId: data.hubId },
-    });
-
-    if (!batch) {
-      throw new AppError('Batch inventory record not found in this hub', 404, 'BATCH_NOT_FOUND');
+    if (!['available', 'damaged', 'reserved', 'expired'].includes(data.status)) {
+      throw new AppError('Invalid batch status', 400, 'INVALID_STATUS');
     }
 
-    const previousStatus = batch.status;
-    const updated = await prisma.hubInventory.update({
-      where: { id: data.batchId },
-      data: { status: data.status },
-    });
+    return prisma.$transaction(async (tx) => {
+      // Lock the row: an order allocating from this batch at the same moment must see the new status.
+      await tx.$queryRaw`SELECT id FROM hub_inventory WHERE id = ${data.batchId} FOR UPDATE`;
+      const batch = await tx.hubInventory.findFirst({
+        where: { id: data.batchId, hubId: data.hubId },
+      });
 
-    await prisma.hubInventoryLog.create({
-      data: {
-        hubInventoryId: batch.id,
-        action: data.status === 'available' ? 'adjustment' : 'expired',
-        quantityChange: 0,
-        previousQuantity: batch.quantity,
-        newQuantity: batch.quantity,
-        reason: data.reason || `Status updated from ${previousStatus} to ${data.status}`,
-        performedBy: data.performedBy || 'Hub Manager',
-      },
-    });
+      if (!batch) {
+        throw new AppError('Batch inventory record not found in this hub', 404, 'BATCH_NOT_FOUND');
+      }
 
-    return {
-      batch: updated,
-      previousStatus,
-      newStatus: data.status,
-      message: `Batch status changed to ${data.status}`,
-    };
+      const previousStatus = batch.status;
+      if (data.status === 'available') {
+        if (batch.expiryDate.getTime() <= Date.now()) {
+          throw new AppError('An expired batch cannot be released to sellable stock', 400, 'BATCH_EXPIRED');
+        }
+        if (previousStatus === 'damaged' && (data.reason ?? '').trim().length < 5) {
+          throw new AppError(
+            'A reason is required to release a quarantined batch',
+            400,
+            'REASON_REQUIRED'
+          );
+        }
+      }
+
+      const updated = await tx.hubInventory.update({
+        where: { id: data.batchId },
+        data: { status: data.status },
+      });
+
+      await tx.hubInventoryLog.create({
+        data: {
+          hubInventoryId: batch.id,
+          action: data.status === 'available' ? 'adjustment' : 'expired',
+          quantityChange: 0,
+          previousQuantity: batch.quantity,
+          newQuantity: batch.quantity,
+          reason: data.reason || `Status updated from ${previousStatus} to ${data.status}`,
+          performedBy: data.performedBy || 'Hub Manager',
+        },
+      });
+
+      return {
+        batch: updated,
+        previousStatus,
+        newStatus: data.status,
+        message: `Batch status changed to ${data.status}`,
+      };
+    });
+  }
+
+  /**
+   * Mark batches that have passed their expiry as expired, so they stop showing as
+   * available anywhere (the sellable filters already ignore them; this fixes the
+   * status the hub dashboard and counts read). Run on a timer.
+   */
+  async expireStaleBatches(): Promise<number> {
+    const stale = await prisma.hubInventory.findMany({
+      where: { status: 'available', expiryDate: { lte: new Date() } },
+      select: { id: true, quantity: true },
+    });
+    if (stale.length === 0) return 0;
+    await prisma.$transaction([
+      prisma.hubInventory.updateMany({
+        where: { id: { in: stale.map((b) => b.id) }, status: 'available' },
+        data: { status: 'expired' },
+      }),
+      prisma.hubInventoryLog.createMany({
+        data: stale.map((b) => ({
+          hubInventoryId: b.id,
+          action: 'expired',
+          quantityChange: 0,
+          previousQuantity: b.quantity,
+          newQuantity: b.quantity,
+          reason: 'Batch passed its expiry date',
+          performedBy: 'System',
+        })),
+      }),
+    ]);
+    return stale.length;
+  }
+
+  /**
+   * A hub manager may only operate the hub they manage (admins: any). Hubs with no
+   * manager assigned yet stay open to any hub manager so existing deployments keep
+   * working until an admin assigns one.
+   */
+  async assertHubAccess(hubId: string, user: { userId?: string; id?: string; userType: string }) {
+    if (user.userType === 'admin') return;
+    const hub = await prisma.hubCenter.findUnique({ where: { id: hubId }, select: { managerId: true } });
+    if (!hub) throw new AppError('Hub center not found', 404, 'HUB_NOT_FOUND');
+    const uid = user.userId ?? user.id;
+    if (hub.managerId && hub.managerId !== uid) {
+      throw new AppError('You do not manage this hub', 403, 'HUB_ACCESS_DENIED');
+    }
+  }
+
+  /** Assign (or clear) the manager of a hub. Admin only (enforced by the route). */
+  async assignManager(hubId: string, managerId: string | null) {
+    const hub = await prisma.hubCenter.findUnique({ where: { id: hubId } });
+    if (!hub) throw new AppError('Hub center not found', 404, 'HUB_NOT_FOUND');
+    if (managerId) {
+      const user = await prisma.user.findUnique({ where: { id: managerId }, select: { userType: true, status: true } });
+      if (!user || user.userType !== 'hub_manager' || user.status !== 'active') {
+        throw new AppError('The manager must be an active hub manager account', 400, 'INVALID_MANAGER');
+      }
+    }
+    const updated = await prisma.hubCenter.update({ where: { id: hubId }, data: { managerId } });
+    return { id: updated.id, managerId: updated.managerId };
   }
 
   /**
@@ -438,6 +586,9 @@ export class HubService {
     freezerUnit?: number;
     notes?: string;
   }) {
+    if (!Number.isFinite(data.temperatureCelsius) || data.temperatureCelsius < -100 || data.temperatureCelsius > 100) {
+      throw new AppError('A valid temperature reading is required', 400, 'INVALID_TEMPERATURE');
+    }
     const hub = await prisma.hubCenter.findUnique({ where: { id: data.hubId } });
     if (!hub) throw new AppError('Hub center not found', 404, 'HUB_NOT_FOUND');
 
@@ -473,6 +624,8 @@ export class HubService {
    * Get temperature probe history and alert statistics for a hub.
    */
   async getTemperatureLogs(hubId: string, limit: number = 50) {
+    // Bound it: NaN used to 500 and a huge value ran an unbounded query.
+    limit = Number.isFinite(limit) ? Math.min(Math.max(Math.floor(limit), 1), 500) : 50;
     const hub = await prisma.hubCenter.findUnique({ where: { id: hubId } });
     if (!hub) throw new AppError('Hub center not found', 404, 'HUB_NOT_FOUND');
 
