@@ -1,6 +1,7 @@
 import prisma from '../config/database';
 import { AppError } from '../middleware/errorHandler';
 import { parseBreakdown } from '../utils/deliveryEarnings';
+import { GST_RATE } from '../utils/pricing';
 
 type Tx = Parameters<Parameters<typeof prisma.$transaction>[0]>[0];
 
@@ -38,8 +39,13 @@ export async function issueRefund(
   const order = await tx.order.findUnique({ where: { id: orderId } });
   if (!order) throw new AppError('Order not found', 404, 'ORDER_NOT_FOUND');
 
-  // 'paid' = money held and nothing (or only part) refunded so far.
-  if (order.paymentStatus !== 'paid') return null;
+  // 'paid' = money held and nothing (or only part) refunded so far. A customer who has
+  // SENT a manual transfer but whose payment the seller hasn't confirmed yet
+  // ('payment_submitted') may already have lost their money, so cancelling must queue a
+  // refund for the admin to check against the receiving account (and dismiss if nothing
+  // actually arrived) rather than quietly creating nothing.
+  const unconfirmedTransfer = order.paymentStatus === 'payment_submitted';
+  if (order.paymentStatus !== 'paid' && !unconfirmedTransfer) return null;
 
   const total = Number(order.totalAmount);
   const agg = await tx.refund.aggregate({
@@ -91,7 +97,7 @@ export async function issueRefund(
       amount,
       method: isWallet ? 'wallet' : 'manual',
       status: isWallet ? 'completed' : 'pending',
-      reason: opts.reason,
+      reason: unconfirmedTransfer ? `UNCONFIRMED TRANSFER — verify receipt first. ${opts.reason}` : opts.reason,
       createdBy: opts.createdBy,
       processedBy: isWallet ? opts.createdBy : null,
       processedAt: isWallet ? new Date() : null,
@@ -111,7 +117,9 @@ export async function issueRefund(
       status: order.orderStatus,
       notes: isWallet
         ? `Refund of ${amount} credited to the customer's wallet (${opts.reason})`
-        : `Refund of ${amount} is owed to the customer — awaiting manual ${order.paymentMethod} transfer (${opts.reason})`,
+        : unconfirmedTransfer
+          ? `Customer reported sending ${amount} by ${order.paymentMethod} but it was never confirmed. Verify receipt, then send it back or dismiss this refund (${opts.reason})`
+          : `Refund of ${amount} is owed to the customer — awaiting manual ${order.paymentMethod} transfer (${opts.reason})`,
       changedBy: opts.createdBy,
     },
   });
@@ -126,11 +134,67 @@ export async function issueRefund(
 }
 
 /**
- * Refund what a seller's cancelled items were worth. Their share of the order is
- * their part of the subtotal applied to everything but delivery (discount and
- * GST are baked in proportionally, plus that seller's delivery fee once none of
- * their items are left to deliver). When the order is now
- * fully cancelled this refunds everything still unrefunded, delivery included.
+ * What the customer paid for one item: its price less its share of the manual-code
+ * discount, plus GST on that. Orders from before per-item discount shares existed fall
+ * back to a proportional split of the goods portion of the total.
+ */
+function itemNetPaid(
+  item: { totalPrice: unknown; promoDiscount: unknown },
+  order: { subtotal: unknown; totalAmount: unknown; deliveryFee: unknown },
+  hasShares: boolean
+): number {
+  if (hasShares) {
+    return (Number(item.totalPrice) - Number(item.promoDiscount)) * (1 + GST_RATE);
+  }
+  const subtotal = Number(order.subtotal);
+  return subtotal > 0 ? (Number(item.totalPrice) / subtotal) * (Number(order.totalAmount) - Number(order.deliveryFee)) : 0;
+}
+
+/**
+ * An UNPAID order that loses some items (a seller rejected theirs) must shrink: the customer
+ * would otherwise be asked to pay — and the gateway amount check would demand — the full
+ * original total for goods they will never receive, with nothing to refund later.
+ * Re-prices from the items still live: subtotal, discount shares, that sellers' delivery
+ * fees, GST and total.
+ */
+async function shrinkUnpaidOrder(tx: Tx, order: any) {
+  const items = await tx.orderItem.findMany({ where: { orderId: order.id } });
+  const live = items.filter((i: any) => i.status !== 'cancelled');
+  if (live.length === 0) return;
+  const hasShares = items.some((i: any) => Number(i.promoDiscount) > 0);
+
+  const subtotal = money(live.reduce((sum: number, i: any) => sum + Number(i.totalPrice), 0));
+  const oldSubtotal = Number(order.subtotal);
+  const discount = hasShares
+    ? money(live.reduce((sum: number, i: any) => sum + Number(i.promoDiscount), 0))
+    : money(oldSubtotal > 0 ? Number(order.discountAmount) * (subtotal / oldSubtotal) : 0);
+
+  const liveSellers = new Set(live.map((i: any) => i.sellerId));
+  const breakdown = parseBreakdown(order.deliveryFeeBreakdown);
+  const liveBreakdown = breakdown.filter((r) => liveSellers.has(r.sellerId));
+  // Legacy orders have no per-seller split, so their delivery fee stays as it was.
+  const deliveryFee = breakdown.length ? money(liveBreakdown.reduce((sum, r) => sum + r.fee, 0)) : Number(order.deliveryFee);
+
+  const taxAmount = money((subtotal - discount) * GST_RATE);
+  await tx.order.update({
+    where: { id: order.id },
+    data: {
+      subtotal,
+      discountAmount: discount,
+      deliveryFee,
+      deliveryFeeBreakdown: breakdown.length ? (liveBreakdown as any) : undefined,
+      taxAmount,
+      totalAmount: money(subtotal + deliveryFee - discount + taxAmount),
+    },
+  });
+}
+
+/**
+ * Refund what a seller's cancelled items were worth: the customer's net payment for those
+ * items, plus that seller's delivery fee once none of their items are left to deliver. When
+ * the order is now fully cancelled this refunds everything still unrefunded, delivery
+ * included. On an order that hasn't been paid there is nothing to refund, so it is re-priced
+ * instead (see shrinkUnpaidOrder).
  */
 export async function refundForCancelledItems(
   tx: Tx,
@@ -141,20 +205,27 @@ export async function refundForCancelledItems(
   if (opts.orderFullyCancelled) {
     return issueRefund(tx, orderId, { reason: opts.reason, createdBy: opts.createdBy });
   }
+  await tx.$queryRaw`SELECT id FROM orders WHERE id = ${orderId} FOR UPDATE`;
   const order = await tx.order.findUnique({ where: { id: orderId } });
   if (!order) throw new AppError('Order not found', 404, 'ORDER_NOT_FOUND');
-  const subtotal = Number(order.subtotal);
-  if (subtotal <= 0 || cancelledItemIds.length === 0) return null;
-  const items = await tx.orderItem.findMany({ where: { id: { in: cancelledItemIds } } });
-  const itemsTotal = items.reduce((sum, i) => sum + Number(i.totalPrice), 0);
-  const goodsPortion = Number(order.totalAmount) - Number(order.deliveryFee);
+
+  if (['pending', 'failed', 'disputed'].includes(order.paymentStatus)) {
+    await shrinkUnpaidOrder(tx, order);
+    return null;
+  }
+
+  if (Number(order.subtotal) <= 0 || cancelledItemIds.length === 0) return null;
+  const allItems = await tx.orderItem.findMany({ where: { orderId } });
+  const hasShares = allItems.some((i: any) => Number(i.promoDiscount) > 0);
+  const cancelled = allItems.filter((i: any) => cancelledItemIds.includes(i.id));
+  const itemsPaid = cancelled.reduce((sum: number, i: any) => sum + itemNetPaid(i, order, hasShares), 0);
 
   // A seller with no live items left will not be delivering anything, so the
   // delivery fee the customer paid them comes back too. (Needs the per-seller
   // snapshot; orders from before it existed only get the goods refunded.)
   let deliveryBack = 0;
-  for (const sellerId of new Set(items.map((i) => i.sellerId))) {
-    const live = await tx.orderItem.count({ where: { orderId, sellerId, status: { not: 'cancelled' } } });
+  for (const sellerId of new Set(cancelled.map((i: any) => i.sellerId))) {
+    const live = allItems.filter((i: any) => i.sellerId === sellerId && i.status !== 'cancelled').length;
     if (live === 0) {
       deliveryBack += parseBreakdown(order.deliveryFeeBreakdown)
         .filter((r) => r.sellerId === sellerId)
@@ -163,7 +234,7 @@ export async function refundForCancelledItems(
   }
 
   return issueRefund(tx, orderId, {
-    amount: money((itemsTotal / subtotal) * goodsPortion + deliveryBack),
+    amount: money(itemsPaid + deliveryBack),
     reason: opts.reason,
     createdBy: opts.createdBy,
   });
@@ -205,6 +276,49 @@ export async function completeRefund(refundId: string, adminId: string, referenc
         orderId: order.id,
         status: order.orderStatus,
         notes: `Refund of ${Number(refund.amount)} sent to the customer${reference ? ` (ref ${reference})` : ''}`,
+        changedBy: adminId,
+      },
+    });
+    return refund;
+  });
+}
+
+/**
+ * Admin decides a pending refund isn't owed after all — typically an unconfirmed manual
+ * transfer whose money never arrived. The refund is closed as 'failed' (it no longer counts
+ * toward what has been refunded) and, if nothing else was refunded, the order's payment is
+ * recorded as failed rather than left pending a refund that will never be sent.
+ */
+export async function dismissRefund(refundId: string, adminId: string, reason: string) {
+  return prisma.$transaction(async (tx) => {
+    const claimed = await tx.refund.updateMany({
+      where: { id: refundId, status: 'pending' },
+      data: { status: 'failed', reference: reason.trim(), processedBy: adminId, processedAt: new Date() },
+    });
+    if (claimed.count === 0) {
+      const exists = await tx.refund.findUnique({ where: { id: refundId }, select: { status: true } });
+      if (!exists) throw new AppError('Refund not found', 404, 'REFUND_NOT_FOUND');
+      throw new AppError('This refund is not pending', 409, 'REFUND_NOT_PENDING');
+    }
+    const refund = await tx.refund.findUniqueOrThrow({ where: { id: refundId } });
+    await tx.$queryRaw`SELECT id FROM orders WHERE id = ${refund.orderId} FOR UPDATE`;
+    const order = await tx.order.findUniqueOrThrow({ where: { id: refund.orderId } });
+
+    if (order.paymentStatus === 'refund_pending') {
+      const active = await tx.refund.aggregate({
+        where: { orderId: order.id, status: { not: 'failed' } },
+        _count: { _all: true },
+      });
+      // No other refund stands: the customer never actually paid.
+      if (active._count._all === 0) {
+        await tx.order.update({ where: { id: order.id }, data: { paymentStatus: 'failed' } });
+      }
+    }
+    await tx.orderStatusHistory.create({
+      data: {
+        orderId: order.id,
+        status: order.orderStatus,
+        notes: `Refund of ${Number(refund.amount)} dismissed by admin: ${reason.trim()}`,
         changedBy: adminId,
       },
     });

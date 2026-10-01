@@ -7,34 +7,52 @@ export class LedgerService {
    * Idempotent: if ledger entries for orderId already exist, returns existing count.
    */
   async recordOrderCompletion(orderId: string) {
-    const existing = await prisma.ledgerEntry.count({
-      where: { orderId },
-    });
-    if (existing > 0) {
-      return { recorded: false, reason: 'ALREADY_RECORDED' };
-    }
+    // Lock the order first and check inside the transaction: two completion paths (the
+    // rider's, the seller's self-delivery, an admin's) can fire at the same moment, and
+    // count-then-create outside a lock posted the entries twice.
+    return prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT id FROM orders WHERE id = ${orderId} FOR UPDATE`;
 
-    const order = await prisma.order.findUnique({
-      where: { id: orderId },
-      include: {
-        items: true,
-      },
-    });
+      const existing = await tx.ledgerEntry.count({ where: { orderId } });
+      if (existing > 0) {
+        return { recorded: false, reason: 'ALREADY_RECORDED' };
+      }
 
-    if (!order) return { recorded: false, reason: 'ORDER_NOT_FOUND' };
+      const order = await tx.order.findUnique({
+        where: { id: orderId },
+        include: { items: true },
+      });
+      if (!order) return { recorded: false, reason: 'ORDER_NOT_FOUND' };
 
-    const totalAmount = Number(order.totalAmount);
-    const deliveryFee = Number(order.deliveryFee);
-    const totalCommission = order.items.reduce((sum, item) => sum + Number(item.commissionAmount), 0);
-    const totalSellerPayout = order.items.reduce((sum, item) => sum + Number(item.sellerPayout), 0);
-    const primarySellerId = order.items[0]?.sellerId ?? null;
-    const selfDeliveryShares = parseBreakdown(order.deliveryFeeBreakdown).filter((r) => r.provider === 'self');
-    const platformFee = platformDeliveryFee(deliveryFee, order.deliveryFeeBreakdown);
+      // Only items that were actually sold. Cancelled items were refunded to the customer
+      // (and restocked) and earn nothing, so they carry no earning, commission or fee.
+      const liveItems = order.items.filter((i) => i.status !== 'cancelled');
+      const liveSellerIds = new Set(liveItems.map((i) => i.sellerId));
 
-    await prisma.$transaction([
-      // 1. Customer Payment (Asset / Receivable debited)
-      prisma.ledgerEntry.create({
-        data: {
+      // What the customer actually paid net of refunds already given back.
+      const refunded = await tx.refund.aggregate({
+        where: { orderId, status: { not: 'failed' } },
+        _sum: { amount: true },
+      });
+      const totalAmount = Math.max(0, Number(order.totalAmount) - Number(refunded._sum.amount ?? 0));
+
+      const totalCommission = liveItems.reduce((sum, item) => sum + Number(item.commissionAmount), 0);
+      const totalSellerPayout = liveItems.reduce((sum, item) => sum + Number(item.sellerPayout), 0);
+      const primarySellerId = liveItems[0]?.sellerId ?? order.items[0]?.sellerId ?? null;
+
+      // Delivery fees: a seller with nothing left to deliver had theirs refunded.
+      const breakdown = parseBreakdown(order.deliveryFeeBreakdown);
+      const liveBreakdown = breakdown.filter((r) => liveSellerIds.has(r.sellerId));
+      const platformFee = breakdown.length
+        ? liveBreakdown.filter((r) => r.provider !== 'self').reduce((sum, r) => sum + r.fee, 0)
+        : platformDeliveryFee(Number(order.deliveryFee), order.deliveryFeeBreakdown); // legacy order: no split
+      // A COD delivery fee was handed to the seller at the door, so there's nothing payable.
+      const selfDeliveryShares =
+        order.paymentMethod === 'cod' ? [] : liveBreakdown.filter((r) => r.provider === 'self');
+
+      const entries: Array<Record<string, unknown>> = [
+        // 1. Customer Payment (Asset / Receivable debited)
+        {
           orderId,
           transactionType: 'customer_payment',
           accountType: 'asset',
@@ -45,10 +63,8 @@ export class LedgerService {
           userId: order.customerId,
           metadata: { paymentMethod: order.paymentMethod },
         },
-      }),
-      // 2. Seller Earnings (Liability credited to Seller payable)
-      prisma.ledgerEntry.create({
-        data: {
+        // 2. Seller Earnings (Liability credited to Seller payable)
+        {
           orderId,
           transactionType: 'seller_earning',
           accountType: 'liability',
@@ -58,10 +74,8 @@ export class LedgerService {
           description: `Earnings payable to home chef for Order #${order.orderNumber}`,
           sellerId: primarySellerId,
         },
-      }),
-      // 3. Platform Marketplace Commission (Revenue credited to Platform)
-      prisma.ledgerEntry.create({
-        data: {
+        // 3. Platform Marketplace Commission (Revenue credited to Platform)
+        {
           orderId,
           transactionType: 'platform_commission',
           accountType: 'revenue',
@@ -71,42 +85,37 @@ export class LedgerService {
           description: `Platform take-rate commission for Order #${order.orderNumber}`,
           sellerId: primarySellerId,
         },
-      }),
+      ];
       // 4. Delivery fee. Only the part that pays for the platform's own riders is
       // platform revenue; a self-delivering seller keeps the fee they charged, so it
       // is a payable to that seller (no commission, no rider cost).
-      ...(platformFee > 0
-        ? [
-            prisma.ledgerEntry.create({
-              data: {
-                orderId,
-                transactionType: 'delivery_fee',
-                accountType: 'revenue',
-                entryType: 'credit',
-                amount: platformFee,
-                currency: 'PKR',
-                description: `Delivery & cold-chain fulfillment fee for Order #${order.orderNumber}`,
-              },
-            }),
-          ]
-        : []),
-      ...selfDeliveryShares.map((share) =>
-        prisma.ledgerEntry.create({
-          data: {
-            orderId,
-            transactionType: 'seller_delivery_fee',
-            accountType: 'liability',
-            entryType: 'credit',
-            amount: share.fee,
-            currency: 'PKR',
-            description: `Self-delivery fee payable to seller for Order #${order.orderNumber}`,
-            sellerId: share.sellerId,
-          },
-        })
-      ),
-    ]);
+      if (platformFee > 0) {
+        entries.push({
+          orderId,
+          transactionType: 'delivery_fee',
+          accountType: 'revenue',
+          entryType: 'credit',
+          amount: platformFee,
+          currency: 'PKR',
+          description: `Delivery & cold-chain fulfillment fee for Order #${order.orderNumber}`,
+        });
+      }
+      for (const share of selfDeliveryShares) {
+        entries.push({
+          orderId,
+          transactionType: 'seller_delivery_fee',
+          accountType: 'liability',
+          entryType: 'credit',
+          amount: share.fee,
+          currency: 'PKR',
+          description: `Self-delivery fee payable to seller for Order #${order.orderNumber}`,
+          sellerId: share.sellerId,
+        });
+      }
 
-    return { recorded: true, orderId };
+      await tx.ledgerEntry.createMany({ data: entries as any });
+      return { recorded: true, orderId };
+    });
   }
 
   /**

@@ -9,9 +9,9 @@
  */
 import prisma from '../src/config/database';
 import orderService from '../src/services/order.service';
-import paymentService from '../src/services/payment.service';
+import paymentService, { PAYABLE_STATUSES } from '../src/services/payment.service';
 import adminOrderService from '../src/services/admin-order.service';
-import { completeRefund } from '../src/services/refund.service';
+import { completeRefund, dismissRefund } from '../src/services/refund.service';
 import authService from '../src/services/auth.service';
 import otpService from '../src/services/otp.service';
 import hubService from '../src/services/hub.service';
@@ -85,6 +85,7 @@ async function main() {
 
   // ---- 5. admin refund: concurrent double refund ----
   const admin = await mkUser('admin');
+  await prisma.order.update({ where: { id: o2.id }, data: { orderStatus: 'delivered' } }); // refunds on a delivered order (a live one is cancelled instead)
   const refunds = await Promise.all([1, 2, 3].map(() => adminOrderService.processRefund(o2.id, admin.id).then(() => 'OK', (e: any) => e.code)));
   const bal2 = Number((await prisma.wallet.findUnique({ where: { userId: cust.id } }))!.balance);
   ok('concurrent admin refunds credit exactly once', refunds.filter((r) => r === 'OK').length === 1 && bal2 === 1000, `${refunds} bal=${bal2}`);
@@ -480,6 +481,85 @@ async function main() {
   ok('even the right code is refused once locked', (await otpService.verifyOTP(brutePhone, bruteCode, 'login').then(() => 'OK', (e: any) => e.code)) === 'OTP_MAX_ATTEMPTS');
   const fresh = await otpService.generateOTP(brutePhone, 'login');
   ok('requesting a new code after a lock-out gives a NEW code', fresh !== bruteCode || (await prisma.otpVerification.count({ where: { phone: brutePhone } })) === 2);
+
+  // ---- 23. review round: money ----
+  const rc2 = await mkUser();
+  const rcSellerA = await mkSeller(); const rcSellerB = await mkSeller();
+  const pa2 = await mkProduct(rcSellerA.id, 20, 100); const pb2 = await mkProduct(rcSellerB.id, 20, 100);
+  const uB = (await prisma.seller.findUnique({ where: { id: rcSellerB.id } }))!.userId;
+  await prisma.sellerPayoutSchedule.create({ data: { sellerId: rcSellerB.id, minimumPayoutAmount: 1, payoutMethod: 'bank_transfer' } as any });
+
+  // (1) a seller whose items were rejected earns nothing even though the order is delivered by the other seller
+  const two: any = (await order(rc2.id, [{ productId: pa2.id, quantity: 1 }, { productId: pb2.id, quantity: 1 }], { paymentMethod: 'bank' })).order;
+  await prisma.order.update({ where: { id: two.id }, data: { paymentStatus: 'paid' } });
+  await sellerOrderService.rejectOrder(two.id, uB, 'closed');
+  await prisma.order.update({ where: { id: two.id }, data: { orderStatus: 'delivered' } });
+  const dashB: any = await sellerService.getSellerDashboard(rcSellerB.id);
+  ok('a seller whose items were rejected earns nothing from the delivered order', dashB.overview.totalEarnings === 0 && dashB.overview.availableForPayout === 0, `earnings=${dashB.overview.totalEarnings}`);
+  await ledgerService.recordOrderCompletion(two.id);
+  const ledA = await prisma.ledgerEntry.findMany({ where: { orderId: two.id } });
+  const refundedSum = (await prisma.refund.findMany({ where: { orderId: two.id } })).reduce((a, r) => a + Number(r.amount), 0);
+  const custPay = Number(ledA.find((e) => e.transactionType === 'customer_payment')!.amount);
+  const earn = Number(ledA.find((e) => e.transactionType === 'seller_earning')!.amount);
+  ok('ledger counts only live items and the net the customer paid', Math.abs(custPay - (Number(two.totalAmount) - refundedSum)) < 0.02 && earn === Number((await prisma.orderItem.findFirst({ where: { orderId: two.id, sellerId: rcSellerA.id } }))!.sellerPayout), `custPay=${custPay} earn=${earn}`);
+  const ledgerAgain = await Promise.all([ledgerService.recordOrderCompletion(two.id), ledgerService.recordOrderCompletion(two.id)]);
+  ok('ledger posts once even if called twice', ledgerAgain.every((l: any) => !l.recorded) && (await prisma.ledgerEntry.count({ where: { orderId: two.id } })) === ledA.length);
+
+  // (2) a late gateway/transfer confirmation cannot revive a refunded order
+  const lateO: any = (await order(rc2.id, [{ productId: pa2.id, quantity: 1 }], { paymentMethod: 'bank' })).order;
+  await prisma.order.update({ where: { id: lateO.id }, data: { paymentStatus: 'paid' } });
+  await orderService.cancelOrder(lateO.id, rc2.id, 'x');
+  const afterCancel = (await prisma.order.findUnique({ where: { id: lateO.id } }))!.paymentStatus;
+  ok('(setup) cancelling the paid order queues a refund', afterCancel === 'refund_pending');
+  ok('paying a refund-pending order again is refused', (await paymentService.processPayment(lateO.id, rc2.id, 'wallet').then(() => 'OK', (e: any) => e.code)) !== 'OK');
+  const claimLate = await prisma.order.updateMany({ where: { id: lateO.id, paymentStatus: { in: PAYABLE_STATUSES } }, data: { paymentStatus: 'paid' } });
+  ok('a refund-pending / refunded order is outside the payable states a gateway can flip to paid', claimLate.count === 0);
+
+  // (3) cancelling after a bank transfer was reported, before the seller confirmed
+  const sub: any = (await order(rc2.id, [{ productId: pa2.id, quantity: 1 }], { paymentMethod: 'bank' })).order;
+  await orderService.submitManualPayment(sub.id, rc2.id, { referenceNumber: 'TID-77' });
+  const cres: any = await orderService.cancelOrder(sub.id, rc2.id, 'changed mind');
+  const subRefund = await prisma.refund.findFirst({ where: { orderId: sub.id } });
+  ok('cancelling after a reported transfer queues an unconfirmed refund for the admin', cres.refundStatus === 'pending_manual_transfer' && subRefund?.status === 'pending' && /UNCONFIRMED/.test(subRefund?.reason || ''), `${cres.refundStatus} ${subRefund?.reason}`);
+  await dismissRefund(subRefund!.id, admin.id, 'No such transfer arrived in the account');
+  const subAfter = await prisma.order.findUnique({ where: { id: sub.id } });
+  ok('dismissing it (money never arrived) marks the payment failed, not refunded', subAfter!.paymentStatus === 'failed' && (await prisma.refund.findUnique({ where: { id: subRefund!.id } }))!.status === 'failed');
+
+  // (4) partial cancel of an UNPAID order shrinks what the customer owes
+  const unpaid2: any = (await order(rc2.id, [{ productId: pa2.id, quantity: 1 }, { productId: pb2.id, quantity: 1 }], { paymentMethod: 'bank' })).order;
+  await sellerOrderService.rejectOrder(unpaid2.id, uB, 'closed');
+  const shr = (await prisma.order.findUnique({ where: { id: unpaid2.id } }))!;
+  ok('rejecting one seller\'s items on an unpaid order re-prices it to what is left', Math.abs(Number(shr.totalAmount) - 105) < 0.02 && Number(shr.subtotal) === 100, `total=${shr.totalAmount} subtotal=${shr.subtotal}`);
+
+  // (6) seller-scoped promo: refund exactly what was paid for the item
+  const spP = await prisma.promotion.create({ data: { code: 'SC' + uniq(), name: 's', discountType: 'percentage', discountValue: 50, applicableProductIds: [pa2.id], validFrom: new Date(Date.now() - 1e6), validUntil: new Date(Date.now() + 1e9), usageLimitPerUser: 9 } as any });
+  const promoO: any = (await order(rc2.id, [{ productId: pa2.id, quantity: 1 }, { productId: pb2.id, quantity: 1 }], { paymentMethod: 'bank', promotionCode: spP.code })).order;
+  await prisma.order.update({ where: { id: promoO.id }, data: { paymentStatus: 'paid' } });
+  const shares = (await prisma.orderItem.findMany({ where: { orderId: promoO.id } })).map((i) => `${i.sellerId === rcSellerA.id ? 'A' : 'B'}:${i.promoDiscount}`).sort().join();
+  const itemBo = await prisma.orderItem.findFirst({ where: { orderId: promoO.id, sellerId: rcSellerB.id } });
+  await sellerOrderService.cancelOrderItem(itemBo!.id, uB, 'oos');
+  const pRef = await prisma.refund.findFirst({ where: { orderId: promoO.id } });
+  ok('item discount shares are recorded (only the eligible item carries one)', /A:\d+(\.\d+)?,B:0/.test(shares) && !/A:0(\.00)?,/.test(shares), shares);
+  ok('cancelling the NON-discounted seller refunds its full price + GST (not a pro-rata of the discounted total)', Math.abs(Number(pRef!.amount) - 105) < 0.02, `refund=${pRef?.amount}`);
+
+  // (8) refunded orders cannot be delivered; live orders cannot be "refunded" without cancelling
+  const live: any = (await order(rc2.id, [{ productId: pa2.id, quantity: 1 }], { paymentMethod: 'bank' })).order;
+  await prisma.order.update({ where: { id: live.id }, data: { paymentStatus: 'paid' } });
+  ok('a refund on an order still in flight is refused (cancel it instead)', (await adminOrderService.processRefund(live.id, admin.id).then(() => 'OK', (e: any) => e.code)) === 'USE_CANCEL_ENDPOINT');
+  await prisma.order.update({ where: { id: live.id }, data: { orderStatus: 'in_transit', paymentStatus: 'refund_pending' } });
+  ok('an order whose money is being refunded cannot be marked delivered', (await adminOrderService.updateOrderStatus(live.id, admin.id, 'delivered').then(() => 'OK', (e: any) => e.code)) === 'ORDER_REFUNDED');
+
+  // (9) payout can't be both completed and failed
+  const poSeller = await mkSeller(); const poProd = await mkProduct(poSeller.id, 5, 1000);
+  await prisma.sellerPayoutSchedule.create({ data: { sellerId: poSeller.id, minimumPayoutAmount: 1, payoutMethod: 'bank_transfer' } as any });
+  const poO: any = (await order(rc2.id, [{ productId: poProd.id, quantity: 1 }], { paymentMethod: 'bank' })).order;
+  await prisma.order.update({ where: { id: poO.id }, data: { orderStatus: 'delivered', paymentStatus: 'paid' } });
+  const poGoods = Number((await prisma.orderItem.findFirst({ where: { orderId: poO.id } }))!.sellerPayout);
+  await sellerService.requestPayout(poSeller.id, { amount: poGoods, payoutMethod: 'bank_transfer', accountNumber: '1' });
+  const payoutRow = await prisma.sellerPayout.findFirst({ where: { sellerId: poSeller.id } });
+  const { default: adminService } = require('../src/services/admin.service');
+  const both = await Promise.all([adminService.completePayout(payoutRow!.id, 'T1').then(() => 'OK', (e: any) => e.code), adminService.failPayout(payoutRow!.id, 'bounced').then(() => 'OK', (e: any) => e.code)]);
+  ok('a payout cannot be both completed and failed', both.filter((b: string) => b === 'OK').length === 1, both.join());
 
   console.log(`\n${pass} passed, ${fail} failed`);
   await prisma.$disconnect();

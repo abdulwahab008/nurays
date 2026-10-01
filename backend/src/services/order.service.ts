@@ -4,7 +4,8 @@ import { AppError } from '../middleware/errorHandler';
 import realtimeOrderService from './realtime-order.service';
 import { SELLER_COMMUNITY_DELIVERY_SELECT } from '../utils/sellerDeliverySelect';
 import { communityService } from './community.service';
-import { eligibleSubtotalForPromotion, releasePromotionUsage } from './promotion.service';
+import { eligibleSubtotalForPromotion, isItemEligibleForPromotion, releasePromotionUsage } from './promotion.service';
+import { GST_RATE, allocateDiscount } from '../utils/pricing';
 import { issueRefund, IssuedRefund } from './refund.service';
 import { allocateHubStock, releaseHubAllocations } from './hub-allocation.service';
 import { DeliveryFeeShare } from '../utils/deliveryEarnings';
@@ -157,6 +158,7 @@ export class OrderService {
       commissionRate: any;
       commissionAmount: number;
       sellerPayout: number;
+      promoDiscount: number;
       fulfillmentType: string;
       hubId: string | null;
     }> = [];
@@ -241,6 +243,7 @@ export class OrderService {
         commissionRate: product.seller.commissionRate,
         commissionAmount: 0,
         sellerPayout: 0,
+        promoDiscount: 0,
         fulfillmentType: item.stockType || product.stockType,
         hubId: item.hubId || null,
       });
@@ -426,13 +429,23 @@ export class OrderService {
             // Never let a discount exceed the part of the order it applies to.
             discountAmount = Math.min(discountAmount, eligibleSubtotal);
             promotionId = promotion.id;
+
+            // Record each eligible item's share of the discount (to the cent), so a later partial
+            // cancel refunds exactly what the customer paid for that item.
+            const eligibleItems = orderItems.filter((i) =>
+              isItemEligibleForPromotion(promotion, { productId: i.productId, sellerId: i.sellerId, total: i.totalPrice })
+            );
+            const shares = allocateDiscount(eligibleItems.map((i) => ({ total: i.totalPrice })), discountAmount);
+            eligibleItems.forEach((i, idx) => {
+              i.promoDiscount = shares[idx];
+            });
           }
         }
       }
     }
 
     // Calculate tax (5% GST for Pakistan)
-    const taxAmount = (subtotal - discountAmount) * 0.05;
+    const taxAmount = (subtotal - discountAmount) * GST_RATE;
 
     // Calculate total
     const totalAmount = subtotal + deliveryFee - discountAmount + taxAmount;
@@ -489,6 +502,7 @@ export class OrderService {
               commissionRate: item.commissionRate,
               commissionAmount: item.commissionAmount,
               sellerPayout: item.sellerPayout,
+              promoDiscount: item.promoDiscount,
               fulfillmentType: item.fulfillmentType,
               hubId: item.hubId,
               status: 'pending',

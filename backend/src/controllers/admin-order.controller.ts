@@ -1,7 +1,7 @@
 import { Request, Response } from 'express';
 import adminOrderService from '../services/admin-order.service';
 import { AppError } from '../middleware/errorHandler';
-import { completeRefund as completeRefundRecord, listRefunds as listRefundRecords } from '../services/refund.service';
+import { completeRefund as completeRefundRecord, dismissRefund as dismissRefundRecord, listRefunds as listRefundRecords } from '../services/refund.service';
 
 export const getAllOrders = async (req: Request, res: Response) => {
   if (!req.user) {
@@ -128,6 +128,20 @@ export const completeRefund = async (req: Request, res: Response) => {
   res.status(200).json({
     success: true,
     message: 'Refund marked as sent',
+    data: { ...refund, amount: Number(refund.amount) },
+  });
+};
+
+export const dismissRefund = async (req: Request, res: Response) => {
+  if (!req.user) {
+    throw new AppError('Authentication required', 401, 'AUTH_REQUIRED');
+  }
+
+  const refund = await dismissRefundRecord(req.params.refundId, req.user.userId, req.body.reason);
+
+  res.status(200).json({
+    success: true,
+    message: 'Refund dismissed',
     data: { ...refund, amount: Number(refund.amount) },
   });
 };

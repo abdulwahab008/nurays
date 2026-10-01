@@ -595,8 +595,11 @@ export class SellerService {
     // AND the payment having actually been collected — a delivered order whose
     // online payment never completed (or was refunded after delivery) hasn't
     // actually earned the seller anything yet.
+    // Cancelled items (a seller's rejected lines, refunded to the customer) never count:
+    // an order can still be delivered by the other sellers in it.
     const completedItems = orderItems.filter(
       (item) =>
+        item.status !== 'cancelled' &&
         (item.order.orderStatus === 'delivered' || item.order.orderStatus === 'completed') &&
         item.order.paymentStatus === 'paid'
     );
@@ -868,7 +871,9 @@ export class SellerService {
 
     // Calculate revenue
     const completedItems = orderItems.filter(
-      (item) => item.order?.orderStatus === 'delivered' || item.order?.orderStatus === 'completed'
+      (item) =>
+        item.status !== 'cancelled' &&
+        (item.order?.orderStatus === 'delivered' || item.order?.orderStatus === 'completed')
     );
 
     const totalRevenue = completedItems.reduce((sum, item) => {
@@ -1002,6 +1007,7 @@ export class SellerService {
       const orderItems = await tx.orderItem.findMany({
         where: {
           sellerId,
+          status: { not: 'cancelled' },
           order: {
             orderStatus: { in: ['delivered', 'completed'] },
             paymentStatus: 'paid',

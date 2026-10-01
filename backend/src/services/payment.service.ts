@@ -5,6 +5,9 @@ import { getGateway, getConfiguredGateways } from '../gateways';
 
 const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:3000';
 
+/** Payment states from which a gateway / transfer payment may still be accepted. */
+export const PAYABLE_STATUSES = ['pending', 'failed', 'payment_submitted', 'disputed'];
+
 export class PaymentService {
   /**
    * Get available payment methods (gateways enabled via env are marked available)
@@ -89,7 +92,13 @@ export class PaymentService {
       throw new AppError('Order already paid', 400, 'PAYMENT_ALREADY_PAID');
     }
 
-    if (order.orderStatus === 'cancelled') {
+    // A refund in progress (or done) means the money is already on its way back: the order
+    // must not be paid for again.
+    if (['refund_pending', 'refunded'].includes(order.paymentStatus)) {
+      throw new AppError('This order has been refunded', 400, 'ORDER_REFUNDED');
+    }
+
+    if (['cancelled', 'refunded'].includes(order.orderStatus)) {
       throw new AppError('Cannot pay for cancelled order', 400, 'ORDER_CANCELLED');
     }
 
@@ -215,8 +224,10 @@ export class PaymentService {
         where: {
           id: orderId,
           customerId: userId,
-          paymentStatus: { not: 'paid' },
-          orderStatus: { not: 'cancelled' },
+          // Only an order still awaiting payment: never one that is paid, or whose money is
+          // being / has been refunded.
+          paymentStatus: { in: ['pending', 'failed'] },
+          orderStatus: { notIn: ['cancelled', 'refunded'] },
         },
         data: {
           paymentMethod: 'wallet',
@@ -312,6 +323,9 @@ export class PaymentService {
     if (order.customerId !== userId) {
       throw new AppError('Access denied', 403, 'ACCESS_DENIED');
     }
+    if (['refund_pending', 'refunded'].includes(order.paymentStatus)) {
+      throw new AppError('This order has been refunded', 400, 'ORDER_REFUNDED');
+    }
     if (order.paymentStatus === 'paid') {
       return {
         paymentStatus: 'completed',
@@ -386,21 +400,23 @@ export class PaymentService {
 
     // 4. Atomic update. The WHERE clause guards against a webhook flipping
     // the status under us between read and write.
-    // A payment can land after the order was cancelled (the customer was already
-    // at the gateway). The money is real, so it is recorded and immediately
-    // refunded; the order must not be revived to 'confirmed'.
-    const wasCancelled = order.orderStatus === 'cancelled';
+    // A payment can land after the order was cancelled (the customer was already at the
+    // gateway). The money is real, so it is recorded and immediately refunded; the order
+    // must not be revived to 'confirmed'. The decision is made from the order's CURRENT
+    // state under a row lock — the copy read above can be stale by now.
     const updateResult = await prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT id FROM orders WHERE id = ${order.id} FOR UPDATE`;
+      const fresh = await tx.order.findUniqueOrThrow({ where: { id: order.id } });
       const r = await tx.order.updateMany({
-        where: { id: order.id, paymentStatus: { not: 'paid' } },
+        where: { id: order.id, paymentStatus: { in: PAYABLE_STATUSES } },
         data: {
           paymentStatus: 'paid',
           paidAt: new Date(),
           paymentTransactionId: verifyResult.transactionId || paymentTxId,
-          orderStatus: order.orderStatus === 'pending' ? 'confirmed' : order.orderStatus,
+          orderStatus: fresh.orderStatus === 'pending' ? 'confirmed' : fresh.orderStatus,
         },
       });
-      if (r.count > 0 && wasCancelled) {
+      if (r.count > 0 && ['cancelled', 'refunded'].includes(fresh.orderStatus)) {
         await issueRefund(tx, order.id, { reason: 'Payment received after the order was cancelled', createdBy: null });
       }
       return r;

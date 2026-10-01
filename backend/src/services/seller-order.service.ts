@@ -346,6 +346,9 @@ export class SellerOrderService {
       delivery_failed: [],
       cancelled: [],
     };
+    if (status === 'delivered' && ['refund_pending', 'refunded'].includes(orderItem.order.paymentStatus)) {
+      throw new AppError('This order has been refunded and cannot be marked delivered', 400, 'ORDER_REFUNDED');
+    }
     if (!ALLOWED_TRANSITIONS[orderItem.status]?.includes(status)) {
       throw new AppError(
         `Cannot move an item from "${orderItem.status}" to "${status}"`,
@@ -357,6 +360,11 @@ export class SellerOrderService {
     // All DB writes happen inside a single transaction so partial failures
     // can't split item.status and order.orderStatus.
     const result = await prisma.$transaction(async (tx) => {
+      // Lock the order row FIRST. Customer/admin cancels take the order lock and then touch the
+      // items; taking item locks first here would deadlock against them (Postgres aborts one with
+      // a 500). One lock order everywhere: order, then items.
+      await tx.$queryRaw`SELECT id FROM orders WHERE id = ${orderItem.orderId} FOR UPDATE`;
+
       const updatedItem = await tx.orderItem.update({
         where: { id: orderItemId },
         data: { status },
@@ -512,6 +520,11 @@ export class SellerOrderService {
     // single transaction so we can't observe an intermediate state where one
     // item is cancelled but the parent order isn't yet.
     const result = await prisma.$transaction(async (tx) => {
+      // Lock the order row FIRST. Customer/admin cancels take the order lock and then touch the
+      // items; taking item locks first here would deadlock against them (Postgres aborts one with
+      // a 500). One lock order everywhere: order, then items.
+      await tx.$queryRaw`SELECT id FROM orders WHERE id = ${orderItem.orderId} FOR UPDATE`;
+
       // Guarded on the item still being cancellable: two concurrent cancels (or a
       // cancel racing a status change) must not both restock the same item.
       const claimed = await tx.orderItem.updateMany({
@@ -746,6 +759,11 @@ export class SellerOrderService {
     const rejectionNote = reason?.trim() || 'Kitchen unavailable';
 
     const fullyCancelled = await prisma.$transaction(async (tx) => {
+      // Lock the order row FIRST. Customer/admin cancels take the order lock and then touch the
+      // items; taking item locks first here would deadlock against them (Postgres aborts one with
+      // a 500). One lock order everywhere: order, then items.
+      await tx.$queryRaw`SELECT id FROM orders WHERE id = ${order.id} FOR UPDATE`;
+
       // Only this seller's still-live items are rejected and restocked — items
       // already cancelled were restocked when that happened. Read before the update.
       const liveItems = await tx.orderItem.findMany({

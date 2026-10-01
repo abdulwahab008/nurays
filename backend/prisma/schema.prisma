@@ -646,6 +646,9 @@ model OrderItem {
   commissionRate  Decimal   @map("commission_rate") @db.Decimal(5, 2)
   commissionAmount Decimal  @map("commission_amount") @db.Decimal(10, 2)
   sellerPayout    Decimal   @map("seller_payout") @db.Decimal(10, 2)
+  // This item's share of the manual-code discount (catalog deals are already in unitPrice). Lets a
+  // partial cancel refund exactly what the customer paid for the item, even for a seller-scoped code.
+  promoDiscount   Decimal   @default(0) @map("promo_discount") @db.Decimal(10, 2)
   fulfillmentType String?   @map("fulfillment_type") // direct, hub
   hubId           String?   @map("hub_id")
   status          String    @default("pending")

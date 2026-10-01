@@ -326,6 +326,12 @@ export class AdminOrderService {
       );
     }
 
+    // An order whose money is being / has been refunded must not be completed: delivering it
+    // would post earnings to the ledger for goods the customer already got their money back for.
+    if (status === 'delivered' && ['refund_pending', 'refunded'].includes(order.paymentStatus)) {
+      throw new AppError('This order has been refunded and cannot be marked delivered', 400, 'ORDER_REFUNDED');
+    }
+
     // Update order status. Guarded on the status we validated against, so a
     // concurrent change can't be silently overwritten. Delivery carries the same
     // side effects as the seller/rider paths: delivery time, and COD is paid
@@ -566,6 +572,12 @@ export class AdminOrderService {
     }
     if (order.paymentStatus !== 'paid') {
       throw new AppError('Order is not paid, cannot process refund', 400, 'ORDER_NOT_PAID');
+    }
+
+    // On an order that is still in flight a refund would leave it live (and later deliverable)
+    // with its stock and promo still taken. Cancelling does all of that and refunds in one step.
+    if (['pending', 'confirmed', 'preparing', 'ready', 'dispatched', 'in_transit'].includes(order.orderStatus)) {
+      throw new AppError('Cancel this order to refund it', 400, 'USE_CANCEL_ENDPOINT');
     }
 
     const refund = refundAmount || Number(order.totalAmount);

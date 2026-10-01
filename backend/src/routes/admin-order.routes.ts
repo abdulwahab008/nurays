@@ -8,6 +8,7 @@ import {
   processRefund,
   listRefunds,
   completeRefund,
+  dismissRefund,
   getPlatformAnalytics,
   getOrderStatistics,
 } from '../controllers/admin-order.controller';
@@ -18,6 +19,7 @@ import {
   cancelOrderSchema,
   processRefundSchema,
   completeRefundSchema,
+  dismissRefundSchema,
   listRefundsQuerySchema,
   getAnalyticsQuerySchema,
 } from '../validators/admin-order.validator';
@@ -56,6 +58,7 @@ router.post('/orders/:id/refund', validate(processRefundSchema), processRefund);
 // Refund queue: refunds owed to customers, and confirming a manual one was sent
 router.get('/refunds', validateQuery(listRefundsQuerySchema), listRefunds);
 router.post('/refunds/:refundId/complete', validate(completeRefundSchema), completeRefund);
+router.post('/refunds/:refundId/dismiss', validate(dismissRefundSchema), dismissRefund);
 
 export default router;
 

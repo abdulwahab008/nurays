@@ -52,18 +52,22 @@ export interface PromotionScopeItem {
  * code issued by one seller discounted the whole cart, including other sellers'
  * items (the platform/other seller silently funds it).
  */
+export function isItemEligibleForPromotion(
+  promotion: { sellerId: string | null; applicableProductIds: string[] },
+  item: PromotionScopeItem
+): boolean {
+  if (promotion.sellerId && item.sellerId !== promotion.sellerId) return false;
+  return (
+    promotion.applicableProductIds.length === 0 ||
+    (item.productId != null && promotion.applicableProductIds.includes(item.productId))
+  );
+}
+
 export function eligibleSubtotalForPromotion(
   promotion: { sellerId: string | null; applicableProductIds: string[] },
   items: PromotionScopeItem[]
 ): number {
-  return items
-    .filter((i) => !promotion.sellerId || i.sellerId === promotion.sellerId)
-    .filter(
-      (i) =>
-        promotion.applicableProductIds.length === 0 ||
-        (i.productId != null && promotion.applicableProductIds.includes(i.productId))
-    )
-    .reduce((sum, i) => sum + i.total, 0);
+  return items.filter((i) => isItemEligibleForPromotion(promotion, i)).reduce((sum, i) => sum + i.total, 0);
 }
 
 /**

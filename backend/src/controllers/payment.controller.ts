@@ -1,5 +1,5 @@
 import { Request, Response } from 'express';
-import paymentService from '../services/payment.service';
+import paymentService, { PAYABLE_STATUSES } from '../services/payment.service';
 import { AppError } from '../middleware/errorHandler';
 import { verifySafepayWebhook } from '../gateways/safepay.gateway';
 import prisma from '../config/database';
@@ -107,9 +107,10 @@ export const safepayWebhook = async (req: Request, res: Response) => {
       return res.status(200).json({ received: true });
     }
 
-    // Idempotency — already processed
-    if (order.paymentStatus === 'paid') {
-      console.log(`[Safepay Webhook] Order ${orderId} already paid — skipping`);
+    // Idempotency — already processed (paid, or paid and since refunded: a retried webhook
+    // must not flip a refunded order back to paid).
+    if (['paid', 'refund_pending', 'refunded'].includes(order.paymentStatus)) {
+      console.log(`[Safepay Webhook] Order ${orderId} already ${order.paymentStatus} — skipping`);
       return res.status(200).json({ received: true, alreadyPaid: true });
     }
 
@@ -127,15 +128,18 @@ export const safepayWebhook = async (req: Request, res: Response) => {
     // fine — a throw here would 500 and make Safepay retry for nothing. If the
     // order was cancelled before the money arrived, refund it straight away.
     await prisma.$transaction(async (tx) => {
+      // Decide from the order's current state under a row lock, not the copy read earlier.
+      await tx.$queryRaw`SELECT id FROM orders WHERE id = ${orderId} FOR UPDATE`;
+      const fresh = await tx.order.findUniqueOrThrow({ where: { id: orderId } });
       const r = await tx.order.updateMany({
-        where: { id: orderId, paymentStatus: { not: 'paid' } },
+        where: { id: orderId, paymentStatus: { in: PAYABLE_STATUSES } },
         data: {
           paymentStatus: 'paid',
           paidAt: new Date(),
           paymentTransactionId: token,
         },
       });
-      if (r.count > 0 && order.orderStatus === 'cancelled') {
+      if (r.count > 0 && ['cancelled', 'refunded'].includes(fresh.orderStatus)) {
         await issueRefund(tx, orderId, { reason: 'Payment received after the order was cancelled', createdBy: null });
       }
     });
