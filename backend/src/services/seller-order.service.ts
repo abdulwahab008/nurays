@@ -4,6 +4,8 @@ import realtimeOrderService from './realtime-order.service';
 import riderService from './rider.service';
 import { releasePromotionUsage } from './promotion.service';
 import { refundForCancelledItems } from './refund.service';
+import ledgerService from './ledger.service';
+import { selfDeliveryFeeFor } from '../utils/deliveryEarnings';
 
 export class SellerOrderService {
   /**
@@ -278,6 +280,8 @@ export class SellerOrderService {
         subtotal: sellerSubtotal,
         commission: sellerCommission,
         payout: sellerPayout,
+        // Delivery fee this seller keeps because they deliver the order themselves.
+        deliveryFeeKept: selfDeliveryFeeFor(order.deliveryFeeBreakdown, order.items[0]?.sellerId ?? ''),
       },
     };
   }
@@ -433,6 +437,16 @@ export class SellerOrderService {
 
       return { updatedItem, derivedOrderStatus };
     });
+
+    // A seller-completed delivery (self-delivery) never passes through the rider
+    // flow that posts the ledger, so post it here (idempotent).
+    if (result.derivedOrderStatus === 'delivered') {
+      try {
+        await ledgerService.recordOrderCompletion(orderItem.orderId);
+      } catch (ledgerErr) {
+        console.error('Failed to record ledger entries for order:', orderItem.orderId, ledgerErr);
+      }
+    }
 
     // Emit real-time events only after the transaction commits.
     if (result.derivedOrderStatus) {

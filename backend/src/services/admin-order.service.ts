@@ -4,6 +4,7 @@ import realtimeOrderService from './realtime-order.service';
 import riderService from './rider.service';
 import { releasePromotionUsage } from './promotion.service';
 import { issueRefund, IssuedRefund } from './refund.service';
+import ledgerService from './ledger.service';
 
 // The main happy-path order pipeline — admin can only move an order exactly
 // one step forward at a time (no skipping straight to 'dispatched'/'delivered',
@@ -348,6 +349,13 @@ export class AdminOrderService {
       });
     }
     const updatedOrder = await prisma.order.findUniqueOrThrow({ where: { id: orderId } });
+    if (isDelivered) {
+      try {
+        await ledgerService.recordOrderCompletion(orderId);
+      } catch (ledgerErr) {
+        console.error('Failed to record ledger entries for order:', orderId, ledgerErr);
+      }
+    }
 
     // Add status history
     await prisma.orderStatusHistory.create({

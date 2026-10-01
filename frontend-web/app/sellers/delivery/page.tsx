@@ -354,7 +354,7 @@ export default function SellerDeliveryPage() {
                   </div>
                   <div>
                     <h4 className="text-xs font-bold text-slate-900">Self-Delivery</h4>
-                    <p className="text-[11px] text-slate-500 mt-0.5">You deliver your own orders; no platform rider is assigned</p>
+                    <p className="text-[11px] text-slate-500 mt-0.5">You deliver your own orders and keep the delivery fee; no platform rider is assigned</p>
                   </div>
                 </div>
               </div>

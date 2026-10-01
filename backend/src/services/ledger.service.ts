@@ -1,4 +1,5 @@
 import prisma from '../config/database';
+import { parseBreakdown, platformDeliveryFee } from '../utils/deliveryEarnings';
 
 export class LedgerService {
   /**
@@ -27,6 +28,8 @@ export class LedgerService {
     const totalCommission = order.items.reduce((sum, item) => sum + Number(item.commissionAmount), 0);
     const totalSellerPayout = order.items.reduce((sum, item) => sum + Number(item.sellerPayout), 0);
     const primarySellerId = order.items[0]?.sellerId ?? null;
+    const selfDeliveryShares = parseBreakdown(order.deliveryFeeBreakdown).filter((r) => r.provider === 'self');
+    const platformFee = platformDeliveryFee(deliveryFee, order.deliveryFeeBreakdown);
 
     await prisma.$transaction([
       // 1. Customer Payment (Asset / Receivable debited)
@@ -69,8 +72,10 @@ export class LedgerService {
           sellerId: primarySellerId,
         },
       }),
-      // 4. Logistics & Delivery Surcharge (Revenue/Pass-through for rider delivery)
-      ...(deliveryFee > 0
+      // 4. Delivery fee. Only the part that pays for the platform's own riders is
+      // platform revenue; a self-delivering seller keeps the fee they charged, so it
+      // is a payable to that seller (no commission, no rider cost).
+      ...(platformFee > 0
         ? [
             prisma.ledgerEntry.create({
               data: {
@@ -78,13 +83,27 @@ export class LedgerService {
                 transactionType: 'delivery_fee',
                 accountType: 'revenue',
                 entryType: 'credit',
-                amount: deliveryFee,
+                amount: platformFee,
                 currency: 'PKR',
                 description: `Delivery & cold-chain fulfillment fee for Order #${order.orderNumber}`,
               },
             }),
           ]
         : []),
+      ...selfDeliveryShares.map((share) =>
+        prisma.ledgerEntry.create({
+          data: {
+            orderId,
+            transactionType: 'seller_delivery_fee',
+            accountType: 'liability',
+            entryType: 'credit',
+            amount: share.fee,
+            currency: 'PKR',
+            description: `Self-delivery fee payable to seller for Order #${order.orderNumber}`,
+            sellerId: share.sellerId,
+          },
+        })
+      ),
     ]);
 
     return { recorded: true, orderId };

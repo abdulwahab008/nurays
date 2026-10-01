@@ -5,6 +5,7 @@ import { SELLER_COMMUNITY_DELIVERY_SELECT } from '../utils/sellerDeliverySelect'
 import { communityService } from './community.service';
 import { eligibleSubtotalForPromotion, releasePromotionUsage } from './promotion.service';
 import { issueRefund, IssuedRefund } from './refund.service';
+import { DeliveryFeeShare } from '../utils/deliveryEarnings';
 import { getDeliveryFeeForSeller } from '../utils/deliveryFee';
 import { createStockAlert } from './stock-alert.service';
 import promotionService from './promotion.service';
@@ -258,6 +259,7 @@ export class OrderService {
 
     // Calculate delivery fee: per-seller (free in their areas, fixed or distance-based outside), then sum
     let deliveryFee: number;
+    const deliveryFeeBreakdown: DeliveryFeeShare[] = [];
     if (data.deliveryType === 'home_delivery' && !deliveryAddress) {
       // The delivery address carries the buyer's community, which decides whether
       // each seller delivers there and at what fee — it can't be skipped.
@@ -290,6 +292,7 @@ export class OrderService {
           freeDeliveryThreshold: true,
           allowedPostalCodes: true,
           deliveryZones: true,
+          deliveryProvider: true,
           ...SELLER_COMMUNITY_DELIVERY_SELECT,
         },
       });
@@ -323,6 +326,13 @@ export class OrderService {
           throw new AppError(`${seller.businessName}: ${result.reason}`, 400, 'ADDRESS_NOT_DELIVERABLE');
         }
         total += result.fee;
+        if (result.fee > 0) {
+          deliveryFeeBreakdown.push({
+            sellerId: seller.id,
+            fee: result.fee,
+            provider: seller.deliveryProvider === 'self' ? 'self' : 'platform',
+          });
+        }
       }
       deliveryFee = total;
     } else {
@@ -424,6 +434,7 @@ export class OrderService {
           customerId,
           subtotal,
           deliveryFee,
+          deliveryFeeBreakdown: deliveryFeeBreakdown as any,
           discountAmount,
           taxAmount,
           totalAmount,

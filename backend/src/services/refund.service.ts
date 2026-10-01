@@ -1,5 +1,6 @@
 import prisma from '../config/database';
 import { AppError } from '../middleware/errorHandler';
+import { parseBreakdown } from '../utils/deliveryEarnings';
 
 type Tx = Parameters<Parameters<typeof prisma.$transaction>[0]>[0];
 
@@ -127,8 +128,8 @@ export async function issueRefund(
 /**
  * Refund what a seller's cancelled items were worth. Their share of the order is
  * their part of the subtotal applied to everything but delivery (discount and
- * GST are baked in proportionally; the delivery fee isn't split per seller, so
- * it comes back only when the whole order is cancelled). When the order is now
+ * GST are baked in proportionally, plus that seller's delivery fee once none of
+ * their items are left to deliver). When the order is now
  * fully cancelled this refunds everything still unrefunded, delivery included.
  */
 export async function refundForCancelledItems(
@@ -147,8 +148,22 @@ export async function refundForCancelledItems(
   const items = await tx.orderItem.findMany({ where: { id: { in: cancelledItemIds } } });
   const itemsTotal = items.reduce((sum, i) => sum + Number(i.totalPrice), 0);
   const goodsPortion = Number(order.totalAmount) - Number(order.deliveryFee);
+
+  // A seller with no live items left will not be delivering anything, so the
+  // delivery fee the customer paid them comes back too. (Needs the per-seller
+  // snapshot; orders from before it existed only get the goods refunded.)
+  let deliveryBack = 0;
+  for (const sellerId of new Set(items.map((i) => i.sellerId))) {
+    const live = await tx.orderItem.count({ where: { orderId, sellerId, status: { not: 'cancelled' } } });
+    if (live === 0) {
+      deliveryBack += parseBreakdown(order.deliveryFeeBreakdown)
+        .filter((r) => r.sellerId === sellerId)
+        .reduce((sum, r) => sum + r.fee, 0);
+    }
+  }
+
   return issueRefund(tx, orderId, {
-    amount: money((itemsTotal / subtotal) * goodsPortion),
+    amount: money((itemsTotal / subtotal) * goodsPortion + deliveryBack),
     reason: opts.reason,
     createdBy: opts.createdBy,
   });

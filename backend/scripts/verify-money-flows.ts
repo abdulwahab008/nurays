@@ -12,6 +12,8 @@ import orderService from '../src/services/order.service';
 import paymentService from '../src/services/payment.service';
 import adminOrderService from '../src/services/admin-order.service';
 import { completeRefund } from '../src/services/refund.service';
+import ledgerService from '../src/services/ledger.service';
+import sellerService from '../src/services/seller.service';
 import sellerOrderService from '../src/services/seller-order.service';
 
 let pass = 0, fail = 0;
@@ -217,6 +219,67 @@ async function main() {
   const over = await code(adminOrderService.processRefund(pr.id, admin.id, prTotal));
   const prSum = (await prisma.refund.findMany({ where: { orderId: pr.id } })).reduce((a, r) => a + Number(r.amount), 0);
   ok('partial admin refunds accumulate and can never exceed the amount paid', stillPaid && Math.abs(prSum - prTotal) < 0.02, `first=50 then ${over}, refunded=${prSum} of ${prTotal}`);
+
+  // ---- 17. self-delivery fee money ----
+  const selfS = await mkSeller({ deliveryProvider: 'self', deliveryFeeType: 'fixed', deliveryFeeFixed: 100 });
+  const platS = await mkSeller({ deliveryProvider: 'platform', deliveryFeeType: 'fixed', deliveryFeeFixed: 60 });
+  await prisma.sellerPayoutSchedule.create({ data: { sellerId: selfS.id, minimumPayoutAmount: 1, payoutMethod: 'bank_transfer' } as any });
+  await prisma.sellerPayoutSchedule.create({ data: { sellerId: platS.id, minimumPayoutAmount: 1, payoutMethod: 'bank_transfer' } as any });
+  const dc = await mkUser();
+  const addr = await prisma.userAddress.create({ data: { userId: dc.id, addressLine1: 'House 1 Street', area: 'X', city: 'Lahore' } });
+  const sp1 = await mkProduct(selfS.id, 20, 500);
+  const sp2 = await mkProduct(platS.id, 20, 400);
+  const homeOrder = (items: any[], pm: string) =>
+    orderService.createOrder(dc.id, { items, deliveryType: 'home_delivery', deliveryAddressId: addr.id, paymentMethod: pm } as any) as Promise<any>;
+
+  const sdo = await homeOrder([{ productId: sp1.id, quantity: 1 }, { productId: sp2.id, quantity: 1 }], 'bank');
+  const bd: any[] = (sdo.deliveryFeeBreakdown as any) || [];
+  ok('order records who each delivery fee belongs to',
+    Number(sdo.deliveryFee) === 160 && bd.length === 2 && bd.find((b) => b.sellerId === selfS.id)?.provider === 'self' && bd.find((b) => b.sellerId === platS.id)?.provider === 'platform',
+    JSON.stringify(bd));
+
+  await prisma.order.update({ where: { id: sdo.id }, data: { orderStatus: 'delivered', paymentStatus: 'paid' } });
+  const selfItem = await prisma.orderItem.findFirst({ where: { orderId: sdo.id, sellerId: selfS.id } });
+  const platItem = await prisma.orderItem.findFirst({ where: { orderId: sdo.id, sellerId: platS.id } });
+  const selfGoods = Number(selfItem!.sellerPayout), platGoods = Number(platItem!.sellerPayout);
+
+  const payReq = (sid: string, amount: number) => sellerService.requestPayout(sid, { amount, payoutMethod: 'bank_transfer', accountNumber: '1' }).then(() => 'OK', (e: any) => e.code);
+  ok('self-delivering seller cannot withdraw more than goods + their delivery fee', (await payReq(selfS.id, selfGoods + 100 + 0.5)) === 'INSUFFICIENT_BALANCE');
+  ok('self-delivering seller can withdraw goods + their delivery fee', (await payReq(selfS.id, selfGoods + 100)) === 'OK', `goods=${selfGoods}`);
+  ok('platform-fleet seller gets no delivery fee', (await payReq(platS.id, platGoods + 1)) === 'INSUFFICIENT_BALANCE' && (await payReq(platS.id, platGoods)) === 'OK');
+
+  const dash: any = await sellerService.getSellerDashboard(selfS.id);
+  ok('dashboard earnings include the self-delivery fee', Math.abs(dash.overview.totalEarnings - (selfGoods + 100)) < 0.01, `total=${dash.overview.totalEarnings} expected=${selfGoods + 100}`);
+
+  await ledgerService.recordOrderCompletion(sdo.id);
+  const led = await prisma.ledgerEntry.findMany({ where: { orderId: sdo.id } });
+  const platRev = led.find((e) => e.transactionType === 'delivery_fee');
+  const sellerFee = led.find((e) => e.transactionType === 'seller_delivery_fee');
+  ok('ledger: platform revenue is only the platform-delivered fee; the self fee is payable to the seller',
+    Number(platRev?.amount) === 60 && Number(sellerFee?.amount) === 100 && sellerFee?.sellerId === selfS.id,
+    `platform=${platRev?.amount} seller=${sellerFee?.amount}`);
+
+  // COD: the seller was handed the fee at the door, so it is not payable again
+  const spC = await mkProduct(selfS.id, 20, 300);
+  const codOrder = await homeOrder([{ productId: spC.id, quantity: 1 }], 'cod');
+  await prisma.order.update({ where: { id: codOrder.id }, data: { orderStatus: 'delivered', paymentStatus: 'paid' } });
+  const codGoods = Number((await prisma.orderItem.findFirst({ where: { orderId: codOrder.id } }))!.sellerPayout);
+  const dash2: any = await sellerService.getSellerDashboard(selfS.id);
+  ok('COD self-delivery fee counts as earned but is not withdrawable (already paid at the door)',
+    Math.abs(dash2.overview.totalEarnings - (selfGoods + 100 + codGoods + 100)) < 0.01 && dash2.overview.availableForPayout === 0,
+    `total=${dash2.overview.totalEarnings} available=${dash2.overview.availableForPayout}`);
+
+  // cancelling the self seller's item on a paid multi-seller order refunds its share + its delivery fee
+  const sp1b = await mkProduct(selfS.id, 20, 500);
+  const sp2b = await mkProduct(platS.id, 20, 400);
+  const mo = await homeOrder([{ productId: sp1b.id, quantity: 1 }, { productId: sp2b.id, quantity: 1 }], 'bank');
+  await prisma.order.update({ where: { id: mo.id }, data: { paymentStatus: 'paid' } });
+  const moItem = await prisma.orderItem.findFirst({ where: { orderId: mo.id, sellerId: selfS.id } });
+  await sellerOrderService.cancelOrderItem(moItem!.id, (await prisma.seller.findUnique({ where: { id: selfS.id } }))!.userId, 'oos');
+  const mr = await prisma.refund.findFirst({ where: { orderId: mo.id } });
+  const moSub = Number(mo.subtotal), moTot = Number(mo.totalAmount), moDel = Number(mo.deliveryFee);
+  const expectRefund = Math.round(((500 / moSub) * (moTot - moDel) + 100) * 100) / 100;
+  ok('cancelling a seller\'s last item also refunds that seller\'s delivery fee', Math.abs(Number(mr?.amount) - expectRefund) < 0.02, `refund=${mr?.amount} expected=${expectRefund}`);
 
   console.log(`\n${pass} passed, ${fail} failed`);
   await prisma.$disconnect();

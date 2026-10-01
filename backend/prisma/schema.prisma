@@ -524,6 +524,9 @@ model Order {
   customerId          String?   @map("customer_id")
   subtotal            Decimal   @db.Decimal(10, 2)
   deliveryFee         Decimal   @default(0) @map("delivery_fee") @db.Decimal(10, 2)
+  // Snapshot of how deliveryFee splits per seller at order time: [{ sellerId, fee, provider: 'platform' | 'self' }].
+  // A self-delivering seller keeps their own fee; null on orders from before this existed (all treated as platform).
+  deliveryFeeBreakdown Json?    @map("delivery_fee_breakdown")
   discountAmount      Decimal   @default(0) @map("discount_amount") @db.Decimal(10, 2)
   taxAmount           Decimal   @default(0) @map("tax_amount") @db.Decimal(10, 2)
   tipAmount           Decimal?  @default(0) @map("tip_amount") @db.Decimal(10, 2)

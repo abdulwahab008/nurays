@@ -2,6 +2,7 @@ import prisma from '../config/database';
 import { AppError } from '../middleware/errorHandler';
 import adminService from './admin.service';
 import { computeSellerAvailability } from './availability.service';
+import { sumSelfDeliveryFees } from '../utils/deliveryEarnings';
 
 /** Shared shape for the business-operations fields — read by getSellerProfile, written by updateSellerProfile. */
 function formatBusinessOperationsFields(seller: {
@@ -571,6 +572,7 @@ export class SellerService {
             orderStatus: true,
             paymentStatus: true,
             paymentMethod: true,
+            deliveryFeeBreakdown: true,
             createdAt: true,
           },
         },
@@ -599,9 +601,21 @@ export class SellerService {
         item.order.paymentStatus === 'paid'
     );
 
-    const totalEarnings = completedItems.reduce((sum, item) => {
-      return sum + Number(item.sellerPayout);
-    }, 0);
+    // A seller who delivers their own orders keeps the delivery fee (the platform
+    // takes no commission on it and pays no rider). For an online order we hold
+    // that money, so it is withdrawable; for COD it was handed over at the door.
+    const completedOrders = completedItems.map((i) => ({
+      id: i.order.id,
+      deliveryFeeBreakdown: i.order.deliveryFeeBreakdown,
+      paymentMethod: i.order.paymentMethod,
+    }));
+    const selfDeliveryFeesAll = sumSelfDeliveryFees(completedOrders, sellerId, { onlineOnly: false });
+    const selfDeliveryFeesOnline = sumSelfDeliveryFees(completedOrders, sellerId, { onlineOnly: true });
+
+    const totalEarnings =
+      completedItems.reduce((sum, item) => {
+        return sum + Number(item.sellerPayout);
+      }, 0) + selfDeliveryFeesAll;
 
     // We're a facilitator, not an escrow agent: for a COD order the customer
     // paid the seller directly, so that sellerPayout is money the seller
@@ -611,9 +625,10 @@ export class SellerService {
     const codCommissionOwed = completedItems
       .filter((item) => item.order.paymentMethod === 'cod')
       .reduce((sum, item) => sum + Number(item.commissionAmount), 0);
-    const onlineEarnings = completedItems
-      .filter((item) => item.order.paymentMethod !== 'cod')
-      .reduce((sum, item) => sum + Number(item.sellerPayout), 0);
+    const onlineEarnings =
+      completedItems
+        .filter((item) => item.order.paymentMethod !== 'cod')
+        .reduce((sum, item) => sum + Number(item.sellerPayout), 0) + selfDeliveryFeesOnline;
 
     // Get pending payout
     const pendingPayouts = await prisma.sellerPayout.findMany({
@@ -993,7 +1008,7 @@ export class SellerService {
           },
         },
         include: {
-          order: { select: { paymentMethod: true } },
+          order: { select: { id: true, paymentMethod: true, deliveryFeeBreakdown: true } },
         },
       });
 
@@ -1001,9 +1016,20 @@ export class SellerService {
       // straight to the seller, so it's not payable again here — only what we
       // actually collected online is withdrawable, net of the commission the
       // seller owes us on their COD sales.
-      const onlineEarnings = orderItems
-        .filter((item) => item.order.paymentMethod !== 'cod')
-        .reduce((sum, item) => sum + Number(item.sellerPayout), 0);
+      // Includes the delivery fee a self-delivering seller keeps on online orders.
+      const onlineEarnings =
+        orderItems
+          .filter((item) => item.order.paymentMethod !== 'cod')
+          .reduce((sum, item) => sum + Number(item.sellerPayout), 0) +
+        sumSelfDeliveryFees(
+          orderItems.map((i) => ({
+            id: i.order.id,
+            deliveryFeeBreakdown: i.order.deliveryFeeBreakdown,
+            paymentMethod: i.order.paymentMethod,
+          })),
+          sellerId,
+          { onlineOnly: true }
+        );
       const codCommissionOwed = orderItems
         .filter((item) => item.order.paymentMethod === 'cod')
         .reduce((sum, item) => sum + Number(item.commissionAmount), 0);
