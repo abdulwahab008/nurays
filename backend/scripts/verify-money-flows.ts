@@ -338,6 +338,13 @@ async function main() {
   const tk = await Promise.all(Array.from({ length: 10 }, () => supportService.createTicket(nc.id, { category: 'other', subject: 'hello', description: 'a long enough description' }).then((t: any) => t.ticketNumber, (e: any) => 'ERR:' + (e.code || e.message))));
   ok('10 simultaneous support tickets all succeed with distinct numbers', tk.every((t: string) => /^TKT\d{4}\d{6}$/.test(t)) && new Set(tk).size === 10, tk.filter((t: string) => t.startsWith('ERR')).join(','));
 
+  // ---- 20. order history paging + whole-history counts ----
+  const pg1: any = await orderService.getUserOrders(nc.id, { page: 1, limit: 20 });
+  const pg2: any = await orderService.getUserOrders(nc.id, { page: 2, limit: 20 });
+  const ids = new Set([...pg1.orders, ...pg2.orders].map((o: any) => o.id));
+  ok('order history pages cover every order exactly once', pg1.orders.length === 20 && pg2.orders.length === 6 && ids.size === 26 && pg1.pagination.totalPages === 2, `p1=${pg1.orders.length} p2=${pg2.orders.length} unique=${ids.size}`);
+  ok('status counts reflect the whole history, not just the page', pg1.statusCounts.pending === 26, JSON.stringify(pg1.statusCounts));
+
   console.log(`\n${pass} passed, ${fail} failed`);
   await prisma.$disconnect();
   process.exit(fail ? 1 : 0);

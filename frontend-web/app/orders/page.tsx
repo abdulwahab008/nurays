@@ -55,6 +55,13 @@ function OrdersContent() {
   const { showToast } = useToast();
   const { onOrderStatusUpdate } = useSocket();
   const [orders, setOrders] = useState<Order[]>([]);
+  // Orders arrive 20 at a time. The summary cards use whole-history counts from the
+  // server (statusCounts), not just the orders loaded so far.
+  const [statusCounts, setStatusCounts] = useState<Record<string, number> | null>(null);
+  const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const ordersRef = useRef<Order[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState('');
@@ -78,6 +85,21 @@ function OrdersContent() {
     mountedRef.current = true;
     const unsubscribe = onOrderStatusUpdate((data: any) => {
       if (!mountedRef.current) return;
+      // Keep the whole-history counts in step with the change (the order may not be
+      // among the loaded ones, in which case only its old status is unknown).
+      const previous = ordersRef.current.find((o) => (o as any).id === data.orderId) as any;
+      const previousStatus: string | undefined = previous?.orderStatus ?? previous?.status;
+      if (previousStatus && previousStatus !== data.status) {
+        setStatusCounts((prev) =>
+          prev
+            ? {
+                ...prev,
+                [previousStatus]: Math.max(0, (prev[previousStatus] ?? 0) - 1),
+                [data.status]: (prev[data.status] ?? 0) + 1,
+              }
+            : prev
+        );
+      }
       setOrders((prev) =>
         prev.map((o) =>
           (o as any).id === data.orderId
@@ -104,16 +126,29 @@ function OrdersContent() {
     };
   }, [onOrderStatusUpdate, showToast]);
 
-  const loadOrders = async () => {
-    setLoading(true);
+  const PAGE_SIZE = 20;
+
+  const loadOrders = async (pageToLoad = 1) => {
+    const append = pageToLoad > 1;
+    if (append) setLoadingMore(true);
+    else setLoading(true);
     try {
-      const response = await orderService.getMyOrders({});
+      const response = await orderService.getMyOrders({ page: pageToLoad, limit: PAGE_SIZE });
       const data = (response as any)?.data ?? response;
-      setOrders(data?.orders ?? []);
+      const incoming: Order[] = data?.orders ?? [];
+      setOrders((prev) => {
+        if (!append) return incoming;
+        const seen = new Set(prev.map((o) => (o as any).id));
+        return [...prev, ...incoming.filter((o) => !seen.has((o as any).id))];
+      });
+      setPage(data?.pagination?.page ?? pageToLoad);
+      setTotalPages(data?.pagination?.totalPages ?? 1);
+      if (data?.statusCounts) setStatusCounts(data.statusCounts);
     } catch (error) {
       console.error('Failed to load orders:', error);
     } finally {
-      setLoading(false);
+      if (append) setLoadingMore(false);
+      else setLoading(false);
     }
   };
 
@@ -165,18 +200,27 @@ function OrdersContent() {
     return raw;
   };
 
+  ordersRef.current = orders;
+
   // Count summaries
-  const totalOrdersCount = orders.length;
-  const inProgressCount = orders.filter((o) =>
-    ['pending', 'confirmed', 'preparing', 'ready'].includes(getOrderStatus(o))
-  ).length;
-  const onTheWayCount = orders.filter((o) =>
-    ['in_transit', 'dispatched'].includes(getOrderStatus(o))
-  ).length;
-  const deliveredCount = orders.filter((o) =>
-    ['delivered', 'completed'].includes(getOrderStatus(o))
-  ).length;
-  const cancelledCount = orders.filter((o) => getOrderStatus(o) === 'cancelled').length;
+  const sumStatuses = (statuses: string[]) =>
+    statuses.reduce((sum, st) => sum + (statusCounts?.[st] ?? 0), 0);
+  const totalOrdersCount = statusCounts
+    ? Object.values(statusCounts).reduce((a, b) => a + b, 0)
+    : orders.length;
+  const inProgressCount = statusCounts
+    ? sumStatuses(['pending', 'confirmed', 'preparing', 'ready'])
+    : orders.filter((o) => ['pending', 'confirmed', 'preparing', 'ready'].includes(getOrderStatus(o))).length;
+  const onTheWayCount = statusCounts
+    ? sumStatuses(['in_transit', 'dispatched'])
+    : orders.filter((o) => ['in_transit', 'dispatched'].includes(getOrderStatus(o))).length;
+  const deliveredCount = statusCounts
+    ? sumStatuses(['delivered', 'completed'])
+    : orders.filter((o) => ['delivered', 'completed'].includes(getOrderStatus(o))).length;
+  const cancelledCount = statusCounts
+    ? sumStatuses(['cancelled'])
+    : orders.filter((o) => getOrderStatus(o) === 'cancelled').length;
+  const hasMore = page < totalPages;
 
   const filteredOrders = useMemo(() => {
     return orders.filter((o) => {
@@ -676,6 +720,23 @@ function OrdersContent() {
                 </div>
               );
             })}
+          </div>
+        )}
+
+        {hasMore && !loading && (
+          <div className="mt-6 text-center">
+            <Button
+              onClick={() => loadOrders(page + 1)}
+              disabled={loadingMore}
+              className="px-6 py-2.5 rounded-xl text-sm font-bold bg-slate-900 hover:bg-slate-800 text-white"
+            >
+              {loadingMore ? 'Loading…' : `Load more orders (${orders.length} of ${totalOrdersCount})`}
+            </Button>
+            {filter !== 'all' && (
+              <p className="text-xs text-slate-400 mt-2">
+                Showing matches among the orders loaded so far.
+              </p>
+            )}
           </div>
         )}
       </div>

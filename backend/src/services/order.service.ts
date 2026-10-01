@@ -761,7 +761,7 @@ export class OrderService {
       where.orderStatus = filters.status;
     }
 
-    const [orders, total] = await Promise.all([
+    const [orders, total, statusGroups] = await Promise.all([
       prisma.order.findMany({
         where,
         skip,
@@ -786,6 +786,8 @@ export class OrderService {
         },
       }),
       prisma.order.count({ where }),
+      // Whole-history totals for the summary cards (not just the loaded page).
+      prisma.order.groupBy({ by: ['orderStatus'], where: { customerId: userId }, _count: { _all: true } }),
     ]);
 
     return {
@@ -818,6 +820,7 @@ export class OrderService {
         total,
         totalPages: Math.ceil(total / limit),
       },
+      statusCounts: Object.fromEntries(statusGroups.map((g) => [g.orderStatus, g._count._all])),
     };
   }
 
