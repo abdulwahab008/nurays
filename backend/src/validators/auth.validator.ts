@@ -14,6 +14,8 @@ export const registerSchema = z.object({
   user_type: z.enum(['customer', 'seller', 'rider']),
   full_name: z.string().min(2, 'Full name is required').max(255),
   phone: z.string().min(10).max(15).optional(),
+  // OTP received on that phone (from /auth/otp/request, purpose 'registration'). Optional: without it the phone is saved unverified.
+  phone_otp: z.string().length(6).optional(),
   city: z.string().max(100).optional(),
   area: z.string().max(100).optional(),
   business_name: z.string().min(1).max(255).optional(),
@@ -65,4 +67,13 @@ export const updateProfileSchema = z.object({
   city: z.string().max(100).optional(),
   area: z.string().max(100).optional(),
   languagePreference: z.enum(['en', 'ur']).optional(),
+});
+
+export const requestPhoneVerificationSchema = z.object({
+  phone: z.string().min(10).max(15),
+});
+
+export const verifyPhoneSchema = z.object({
+  phone: z.string().min(10).max(15),
+  otp: z.string().length(6),
 });

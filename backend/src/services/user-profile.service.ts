@@ -21,6 +21,7 @@ export class UserProfileService {
     return {
       id: user.id,
       phone: user.phone,
+      phoneVerified: user.phoneVerified,
       email: user.email,
       userType: user.userType,
       status: user.status,

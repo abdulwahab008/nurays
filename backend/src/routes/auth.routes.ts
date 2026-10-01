@@ -9,6 +9,8 @@ import {
   refreshToken,
   getCurrentUser,
   logout,
+  requestPhoneVerification,
+  verifyPhone,
 } from '../controllers/auth.controller';
 import { validate } from '../middleware/validation.middleware';
 import {
@@ -17,6 +19,8 @@ import {
   loginSchema,
   verifyEmailSchema,
   refreshTokenSchema,
+  requestPhoneVerificationSchema,
+  verifyPhoneSchema,
 } from '../validators/auth.validator';
 import { authenticate } from '../middleware/auth.middleware';
 import { loginLimiter, otpLimiter, registerLimiter } from '../middleware/rateLimiter';
@@ -35,6 +39,10 @@ router.post('/refresh', validate(refreshTokenSchema), refreshToken);
 router.get('/me', authenticate, getCurrentUser);
 router.post('/resend-verification', authenticate, resendVerificationEmail);
 router.post('/logout', authenticate, logout);
+
+// Phone verification for the signed-in account (also how an account adds a real number)
+router.post('/phone/request', authenticate, otpLimiter, validate(requestPhoneVerificationSchema), requestPhoneVerification);
+router.post('/phone/verify', authenticate, loginLimiter, validate(verifyPhoneSchema), verifyPhone);
 
 export default router;
 

@@ -6,6 +6,8 @@ export interface RegisterRequest {
   full_name: string;
   user_type: string;
   phone?: string;
+  /** Code sent to `phone` (see registerSendPhoneOtp). Without it the phone is saved unverified. */
+  phone_otp?: string;
   city?: string;
   area?: string;
   business_name?: string; // Required for sellers
@@ -58,6 +60,32 @@ export const authService = {
     const response = await apiClient.post<ApiResponse<AuthResponse>>(
       '/auth/register',
       data
+    );
+    return response.data;
+  },
+
+  // Signup – send a code to the phone number being registered (proves ownership)
+  registerSendPhoneOtp: async (phone: string) => {
+    const response = await apiClient.post<ApiResponse<{ message?: string; phone?: string }>>(
+      '/auth/otp/request',
+      { phone, purpose: 'registration' }
+    );
+    return response.data;
+  },
+
+  // Signed-in account – send a code to a number to verify it (or add a real number)
+  requestPhoneVerification: async (phone: string) => {
+    const response = await apiClient.post<ApiResponse<{ message?: string; phone?: string }>>(
+      '/auth/phone/request',
+      { phone }
+    );
+    return response.data;
+  },
+
+  verifyPhone: async (phone: string, otp: string) => {
+    const response = await apiClient.post<ApiResponse<{ phone: string; phoneVerified: boolean }>>(
+      '/auth/phone/verify',
+      { phone, otp }
     );
     return response.data;
   },

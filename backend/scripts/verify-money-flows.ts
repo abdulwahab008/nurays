@@ -12,6 +12,8 @@ import orderService from '../src/services/order.service';
 import paymentService from '../src/services/payment.service';
 import adminOrderService from '../src/services/admin-order.service';
 import { completeRefund } from '../src/services/refund.service';
+import authService from '../src/services/auth.service';
+import otpService from '../src/services/otp.service';
 import hubService from '../src/services/hub.service';
 import cartService from '../src/services/cart.service';
 import productService from '../src/services/product.service';
@@ -429,6 +431,55 @@ async function main() {
   ok('once assigned, only that manager (or an admin) may operate the hub', (await acc(mgr1)) === 'OK' && (await acc(mgr2)) === 'HUB_ACCESS_DENIED' && (await hubService.assertHubAccess(hub.id, { userId: admin.id, userType: 'admin' }).then(() => 'OK', (e: any) => e.code)) === 'OK');
   ok('only an active hub-manager account can be assigned', (await hubService.assignManager(hub.id, cust.id).then(() => 'OK', (e: any) => e.code)) === 'INVALID_MANAGER');
   ok('temperature log limits are bounded (NaN no longer breaks it)', (await hubService.getTemperatureLogs(hub.id, NaN).then(() => 'OK', (e: any) => e.code)) === 'OK' && (await hubService.getTemperatureLogs(hub.id, 1e9).then(() => 'OK', (e: any) => e.code)) === 'OK');
+
+  // ---- 22. phone verification ----
+  const pn = () => '+92300' + String(Math.floor(1000000 + Math.random() * 8999999));
+  const reg = (email: string, phone?: string, phone_otp?: string) =>
+    authService.register(email, 'secret123', 'customer', 'Test User', phone, undefined, undefined, undefined, phone_otp) as Promise<any>;
+  const lastOtp = async (phone: string, purpose: string) => (await prisma.otpVerification.findFirst({ where: { phone, purpose, isVerified: false }, orderBy: { createdAt: 'desc' } }))!.otpCode;
+
+  const phoneA = pn();
+  const regA = await reg(`a${uniq()}@t.test`, phoneA);
+  ok('a phone typed at signup without proof is stored UNVERIFIED', regA.user.phoneVerified === false && (await prisma.user.findUnique({ where: { id: regA.user.id } }))!.phoneVerified === false);
+  const placeholder = await reg(`b${uniq()}@t.test`);
+  ok('an account with no phone gets an unverified placeholder', placeholder.user.phoneVerified === false && placeholder.user.phone.startsWith('+999'));
+
+  const loginCode = await otpService.generateOTP(phoneA, 'login');
+  ok('OTP login is refused for a phone that was never verified for the account',
+    (await authService.login(phoneA, loginCode, 'otp').then(() => 'OK', (e: any) => e.code)) === 'PHONE_NOT_VERIFIED');
+
+  // verifying the number from the signed-in account
+  await authService.requestPhoneVerification(regA.user.id, phoneA);
+  const vCode = await lastOtp(phoneA, 'registration');
+  ok('a wrong code does not verify', (await authService.verifyPhone(regA.user.id, phoneA, vCode === '000000' ? '111111' : '000000').then(() => 'OK', (e: any) => e.code)) === 'OTP_INVALID');
+  const vOk: any = await authService.verifyPhone(regA.user.id, phoneA, vCode);
+  ok('the right code verifies the number', vOk.phoneVerified === true);
+  const loginCode2 = await otpService.generateOTP(phoneA, 'login');
+  ok('after verification OTP login works', (await authService.login(phoneA, loginCode2, 'otp').then(() => 'OK', (e: any) => e.code)) === 'OK');
+  ok('a code cannot be used twice', (await authService.verifyPhone(regA.user.id, phoneA, vCode).then(() => 'OK', (e: any) => e.code)) !== 'OK');
+
+  // squatting: an attacker registers a victim's number without proof; the real owner can claim it
+  const victimPhone = pn();
+  const squatter = await reg(`s${uniq()}@t.test`, victimPhone);
+  ok('requesting a registration code for a number held by an UNVERIFIED account is allowed', (await authService.requestOTP(victimPhone, 'registration').then(() => 'OK', (e: any) => e.code)) === 'OK');
+  ok('registering that number without proof still fails', (await reg(`v0${uniq()}@t.test`, victimPhone).then(() => 'OK', (e: any) => e.code)) === 'PHONE_EXISTS');
+  const claimCode = await lastOtp(victimPhone, 'registration');
+  const owner = await reg(`v${uniq()}@t.test`, victimPhone, claimCode);
+  const squatterAfter = await prisma.user.findUnique({ where: { id: squatter.user.id } });
+  ok('the real owner claims the number with proof; it moves off the squatter',
+    owner.user.phone === victimPhone && owner.user.phoneVerified === true && squatterAfter!.phone !== victimPhone && squatterAfter!.phone.startsWith('+999') && squatterAfter!.phoneVerified === false);
+  ok('a verified number cannot be taken, even with a code', (await authService.requestOTP(victimPhone, 'registration').then(() => 'OK', (e: any) => e.code)) === 'USER_EXISTS');
+
+  // OTP guessing is capped even under parallel attempts, and a locked code isn't handed back
+  const brutePhone = pn();
+  const bruteCode = await otpService.generateOTP(brutePhone, 'login');
+  const wrong = bruteCode === '123456' ? '654321' : '123456';
+  const guesses = await Promise.all(Array.from({ length: 12 }, () => otpService.verifyOTP(brutePhone, wrong, 'login').then(() => 'OK', (e: any) => e.code)));
+  const bruteRow = await prisma.otpVerification.findFirst({ where: { phone: brutePhone }, orderBy: { createdAt: 'desc' } });
+  ok('parallel wrong guesses are capped at 5', bruteRow!.attempts === 5 && guesses.filter((g) => g === 'OTP_INVALID').length === 5, `attempts=${bruteRow!.attempts} ${guesses.filter((g) => g === 'OTP_INVALID').length} invalid`);
+  ok('even the right code is refused once locked', (await otpService.verifyOTP(brutePhone, bruteCode, 'login').then(() => 'OK', (e: any) => e.code)) === 'OTP_MAX_ATTEMPTS');
+  const fresh = await otpService.generateOTP(brutePhone, 'login');
+  ok('requesting a new code after a lock-out gives a NEW code', fresh !== bruteCode || (await prisma.otpVerification.count({ where: { phone: brutePhone } })) === 2);
 
   console.log(`\n${pass} passed, ${fail} failed`);
   await prisma.$disconnect();

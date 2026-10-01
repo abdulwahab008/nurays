@@ -30,6 +30,11 @@ function RegisterForm() {
     business_name: '',
     termsAccepted: false,
   });
+  // Optional phone proof: send a code to the number, enter it, and the phone is saved verified.
+  const [phoneOtp, setPhoneOtp] = useState('');
+  const [phoneOtpSent, setPhoneOtpSent] = useState(false);
+  const [sendingPhoneOtp, setSendingPhoneOtp] = useState(false);
+  const [phoneOtpMessage, setPhoneOtpMessage] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
@@ -122,6 +127,7 @@ function RegisterForm() {
         full_name: formData.full_name.trim(),
         user_type: formData.user_type,
         phone: formData.phone ? formData.phone.trim() : undefined,
+        phone_otp: formData.phone && phoneOtp.trim() ? phoneOtp.trim() : undefined,
         city: formData.city ? formData.city.trim() : undefined,
         area: formData.area ? formData.area.trim() : undefined,
         business_name: formData.user_type === 'seller' ? formData.business_name.trim() : undefined,
@@ -407,8 +413,48 @@ function RegisterForm() {
               style={inputStyle}
             />
             <p className={helperClass} style={helperStyle}>
-              Add phone for quick OTP login option
+              Verify your phone to enable quick OTP login. Without verification the number is only kept as a contact.
             </p>
+            {formData.phone.trim().length >= 10 && (
+              <div className="mt-2 flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  disabled={sendingPhoneOtp}
+                  onClick={async () => {
+                    setSendingPhoneOtp(true);
+                    setPhoneOtpMessage('');
+                    try {
+                      await authService.registerSendPhoneOtp(formData.phone.trim());
+                      setPhoneOtpSent(true);
+                      setPhoneOtpMessage('Code sent. Enter it below to verify this number.');
+                    } catch (err: any) {
+                      setPhoneOtpMessage(err.response?.data?.error?.message || 'Could not send the code. Try again.');
+                    } finally {
+                      setSendingPhoneOtp(false);
+                    }
+                  }}
+                  className="px-3 py-1.5 text-xs font-bold rounded-lg border border-gray-300 hover:bg-gray-50 disabled:opacity-50"
+                >
+                  {sendingPhoneOtp ? 'Sending…' : phoneOtpSent ? 'Resend code' : 'Send verification code'}
+                </button>
+                {phoneOtpSent && (
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    maxLength={6}
+                    value={phoneOtp}
+                    onChange={(e) => setPhoneOtp(e.target.value.replace(/\D/g, ''))}
+                    placeholder="6-digit code"
+                    className="w-32 px-3 py-1.5 text-sm border border-gray-300 rounded-lg"
+                  />
+                )}
+              </div>
+            )}
+            {phoneOtpMessage && (
+              <p className={helperClass} style={helperStyle}>
+                {phoneOtpMessage}
+              </p>
+            )}
           </div>
 
           <div className="mb-4">

@@ -22,7 +22,9 @@ model User {
   userType      String    @map("user_type") // customer, seller, admin, hub_manager, rider
   status        String    @default("active") // active, suspended, banned, deleted
   emailVerified Boolean   @default(false) @map("email_verified")
-  phoneVerified Boolean   @default(true) @map("phone_verified")
+  // A phone only counts once its owner has proven it with an OTP. Defaulting to true let anyone
+  // register a number they don't own and later receive the real owner's OTP logins.
+  phoneVerified Boolean   @default(false) @map("phone_verified")
   referralCode  String?   @unique @map("referral_code")
   referredBy    String?   @map("referred_by")
   primaryCommunityId String? @map("primary_community_id")

@@ -7,6 +7,7 @@ import { userProfileService, UserProfile } from '@/lib/services/user-profile.ser
 import { formatPhoneNumber } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/toast';
+import { authService } from '@/lib/services/auth.service';
 import { useAuthStore } from '@/lib/store/auth-store';
 import { DashboardLayout, CUSTOMER_SIDEBAR_ITEMS } from '@/components/layout/DashboardShell';
 import {
@@ -37,6 +38,12 @@ export default function ProfilePage() {
   const { showToast } = useToast();
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
+  // Phone verification: a number only counts (for OTP login) once its owner has proven it.
+  const [verifyingPhone, setVerifyingPhone] = useState(false);
+  const [phoneInput, setPhoneInput] = useState('');
+  const [phoneCode, setPhoneCode] = useState('');
+  const [phoneCodeSent, setPhoneCodeSent] = useState(false);
+  const [phoneBusy, setPhoneBusy] = useState(false);
   const [editing, setEditing] = useState(false);
   const [formData, setFormData] = useState({
     fullName: '',
@@ -56,6 +63,43 @@ export default function ProfilePage() {
     }
     loadProfile();
   }, [isAuthenticated]);
+
+  const hasRealPhone = !!profile?.phone && !profile.phone.startsWith('+999');
+
+  const sendPhoneCode = async () => {
+    const number = (phoneInput || (hasRealPhone ? profile!.phone : '')).trim();
+    if (number.length < 10) {
+      showToast('Enter a valid phone number', 'error');
+      return;
+    }
+    setPhoneBusy(true);
+    try {
+      await authService.requestPhoneVerification(number);
+      setPhoneInput(number);
+      setPhoneCodeSent(true);
+      showToast('Verification code sent', 'success');
+    } catch (err: any) {
+      showToast(err.response?.data?.error?.message || 'Could not send the code', 'error');
+    } finally {
+      setPhoneBusy(false);
+    }
+  };
+
+  const confirmPhoneCode = async () => {
+    setPhoneBusy(true);
+    try {
+      await authService.verifyPhone(phoneInput, phoneCode.trim());
+      showToast('Phone number verified', 'success');
+      setVerifyingPhone(false);
+      setPhoneCode('');
+      setPhoneCodeSent(false);
+      loadProfile();
+    } catch (err: any) {
+      showToast(err.response?.data?.error?.message || 'That code did not work', 'error');
+    } finally {
+      setPhoneBusy(false);
+    }
+  };
 
   const loadProfile = async () => {
     setLoading(true);
@@ -323,8 +367,70 @@ export default function ProfilePage() {
                   <p className="text-xs text-gray-500 uppercase tracking-wide mb-1">Phone Number</p>
                   <p className="font-semibold text-gray-900 flex items-center gap-2">
                     <Phone className="w-4 h-4 text-slate-500" />
-                    {profile?.phone ? formatPhoneNumber(profile.phone) : 'Not provided'}
+                    {hasRealPhone ? formatPhoneNumber(profile!.phone) : 'Not provided'}
+                    {hasRealPhone && (
+                      <span
+                        className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                          profile?.phoneVerified ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'
+                        }`}
+                      >
+                        {profile?.phoneVerified ? 'Verified' : 'Not verified'}
+                      </span>
+                    )}
                   </p>
+                  {!(hasRealPhone && profile?.phoneVerified) && !verifyingPhone && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setVerifyingPhone(true);
+                        setPhoneInput(hasRealPhone ? profile!.phone : '');
+                      }}
+                      className="mt-2 text-xs font-bold text-[#FF5500] hover:underline"
+                    >
+                      {hasRealPhone ? 'Verify this number' : 'Add & verify a phone number'}
+                    </button>
+                  )}
+                  {verifyingPhone && (
+                    <div className="mt-3 space-y-2">
+                      <input
+                        type="tel"
+                        value={phoneInput}
+                        onChange={(e) => setPhoneInput(e.target.value)}
+                        placeholder="+923001234567"
+                        disabled={phoneCodeSent}
+                        className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded-lg"
+                      />
+                      {phoneCodeSent && (
+                        <input
+                          type="text"
+                          inputMode="numeric"
+                          maxLength={6}
+                          value={phoneCode}
+                          onChange={(e) => setPhoneCode(e.target.value.replace(/\D/g, ''))}
+                          placeholder="6-digit code"
+                          className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded-lg"
+                        />
+                      )}
+                      <div className="flex gap-2">
+                        {!phoneCodeSent ? (
+                          <button type="button" disabled={phoneBusy} onClick={sendPhoneCode} className="px-3 py-1.5 text-xs font-bold rounded-lg bg-slate-900 text-white disabled:opacity-50">
+                            {phoneBusy ? 'Sending…' : 'Send code'}
+                          </button>
+                        ) : (
+                          <button type="button" disabled={phoneBusy || phoneCode.length !== 6} onClick={confirmPhoneCode} className="px-3 py-1.5 text-xs font-bold rounded-lg bg-emerald-600 text-white disabled:opacity-50">
+                            {phoneBusy ? 'Verifying…' : 'Verify'}
+                          </button>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => { setVerifyingPhone(false); setPhoneCode(''); setPhoneCodeSent(false); }}
+                          className="px-3 py-1.5 text-xs font-bold rounded-lg border border-gray-300"
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    </div>
+                  )}
                 </div>
                 <div className="p-4 bg-gray-50 rounded-xl">
                   <p className="text-xs text-gray-500 uppercase tracking-wide mb-1">Email Address</p>

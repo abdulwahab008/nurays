@@ -3,10 +3,16 @@ import { generateToken, generateRefreshToken, tokenTtlSeconds, JWTPayload } from
 import { formatPhoneNumber, isValidPhoneNumber } from '../utils/otp';
 import { AppError } from '../middleware/errorHandler';
 import bcrypt from 'bcrypt';
+import { randomBytes } from 'crypto';
 import otpService from './otp.service';
 import emailService from './email.service';
 import adminService from './admin.service';
 import { generateVerificationToken } from '../utils/email-verification';
+
+/** A unique stand-in number for an account with no (or an evicted) real phone. Never a real number: +999 isn't assigned. */
+const placeholderPhone = (seed: string): string =>
+  `+999${Buffer.from(seed.toLowerCase()).toString('base64').replace(/[^A-Za-z0-9]/g, '').slice(0, 8)}${Date.now().toString().slice(-8)}${randomBytes(3).toString('hex')}`;
+
 
 export class AuthService {
   /**
@@ -21,7 +27,8 @@ export class AuthService {
     phone?: string,
     city?: string,
     area?: string,
-    businessName?: string // Required for sellers
+    businessName?: string, // Required for sellers
+    phoneOtp?: string // Proof of the phone number (optional): without it the phone is stored UNVERIFIED
   ) {
     // Normalize and validate email
     const normalizedEmail = email.toLowerCase().trim();
@@ -55,13 +62,24 @@ export class AuthService {
       );
     }
 
-    // If phone provided, validate and check if exists
-    // If not provided, generate a temporary unique phone based on email
+    // A phone number is only trusted once its owner has proven it with an OTP. Without
+    // proof it is stored as an unverified contact number: it can't be used to log in, and
+    // it can be claimed by whoever really owns it (see below). Previously every number
+    // typed at signup was marked verified, so anyone could register a victim's number
+    // and later receive the victim's OTP logins into an account they control.
     let formattedPhone: string;
+    let phoneVerified = false;
+    let evictedAccountId: string | null = null;
     if (phone) {
       formattedPhone = formatPhoneNumber(phone);
       if (!isValidPhoneNumber(formattedPhone)) {
         throw new AppError('Invalid phone number format', 400, 'INVALID_PHONE');
+      }
+
+      if (phoneOtp) {
+        // Throws on a wrong / expired / used code.
+        await otpService.verifyOTP(formattedPhone, phoneOtp, 'registration');
+        phoneVerified = true;
       }
 
       const existingUserByPhone = await prisma.user.findUnique({
@@ -69,40 +87,32 @@ export class AuthService {
       });
 
       if (existingUserByPhone) {
-        throw new AppError('Phone number already registered', 409, 'PHONE_EXISTS');
+        // A number held by a *verified* account is taken. One held by an unverified account
+        // was never proven by whoever typed it, so someone who proves they own it wins.
+        if (existingUserByPhone.phoneVerified || !phoneVerified) {
+          throw new AppError('Phone number already registered', 409, 'PHONE_EXISTS');
+        }
+        evictedAccountId = existingUserByPhone.id;
       }
     } else {
-      // Generate temporary phone number based on email hash + timestamp + random
-      // This ensures uniqueness even if multiple users register with similar emails
-      const emailHash = Buffer.from(email.toLowerCase()).toString('base64').slice(0, 8);
-      const timestamp = Date.now().toString().slice(-8);
-      const random = Math.random().toString(36).substring(2, 6);
-      formattedPhone = `+999${emailHash}${timestamp}${random}`;
-      
-      // Ensure the generated phone doesn't already exist (very unlikely, but check anyway)
-      let attempts = 0;
-      let existingUserByPhone = await prisma.user.findUnique({
-        where: { phone: formattedPhone },
-      });
-      
-      while (existingUserByPhone && attempts < 5) {
-        // Regenerate with more randomness
-        const newRandom = Math.random().toString(36).substring(2, 8);
-        formattedPhone = `+999${emailHash}${Date.now().toString().slice(-8)}${newRandom}`;
-        existingUserByPhone = await prisma.user.findUnique({
-          where: { phone: formattedPhone },
-        });
-        attempts++;
-      }
-      
-      if (existingUserByPhone) {
-        throw new AppError('Unable to generate unique phone number. Please provide a phone number.', 500, 'PHONE_GENERATION_FAILED');
+      formattedPhone = placeholderPhone(email);
+      const clash = await prisma.user.findUnique({ where: { phone: formattedPhone } });
+      if (clash) {
+        formattedPhone = placeholderPhone(email + randomBytes(4).toString('hex'));
       }
     }
 
     // Hash password
     const saltRounds = 10;
     const passwordHash = await bcrypt.hash(password, saltRounds);
+
+    // The proven owner takes the number from the account that only ever claimed it.
+    if (evictedAccountId) {
+      await prisma.user.update({
+        where: { id: evictedAccountId },
+        data: { phone: placeholderPhone(`evicted-${evictedAccountId}`), phoneVerified: false },
+      });
+    }
 
     // Create user
     const user = await prisma.user.create({
@@ -112,7 +122,7 @@ export class AuthService {
         phone: formattedPhone,
         userType,
         emailVerified: false, // Can be verified via email verification later
-        phoneVerified: !!formattedPhone,
+        phoneVerified,
         status: 'active',
         profile: {
           create: {
@@ -217,6 +227,7 @@ export class AuthService {
         status: user.status,
         profile: user.profile,
         emailVerified: false,
+        phoneVerified: user.phoneVerified,
       },
       seller: seller ? {
         id: seller.id,
@@ -384,6 +395,7 @@ export class AuthService {
           status: user.status,
           profile: user.profile,
           emailVerified: user.emailVerified,
+          phoneVerified: user.phoneVerified,
         },
         tokens: {
           access_token: accessToken,
@@ -419,6 +431,18 @@ export class AuthService {
         throw new AppError(`Account is ${user.status}`, 403, 'ACCOUNT_SUSPENDED');
       }
 
+      // OTP proves the caller controls this number — but not that the ACCOUNT's owner does. If
+      // the number was never verified for this account, whoever created it may not own it
+      // (they could have typed a victim's number), so logging the OTP holder in would hand them
+      // an account someone else set the password for. Sign in another way and verify the number.
+      if (!user.phoneVerified) {
+        throw new AppError(
+          'This phone number has not been verified for the account. Log in with your email, then verify your phone.',
+          403,
+          'PHONE_NOT_VERIFIED'
+        );
+      }
+
       // Generate tokens
       const tokenPayload: JWTPayload = {
         userId: user.id,
@@ -444,6 +468,7 @@ export class AuthService {
           status: user.status,
           profile: user.profile,
           emailVerified: user.emailVerified,
+          phoneVerified: user.phoneVerified,
         },
         tokens: {
           access_token: accessToken,
@@ -471,7 +496,8 @@ export class AuthService {
         where: { phone: formattedPhone },
       });
 
-      if (existingUser) {
+      // A number held by an account that never verified it can still be claimed.
+      if (existingUser && existingUser.phoneVerified) {
         throw new AppError('User already exists. Please login instead', 409, 'USER_EXISTS');
       }
     }
@@ -496,6 +522,56 @@ export class AuthService {
       // In development, return OTP for testing
       ...(process.env.NODE_ENV === 'development' && { otpCode }),
     };
+  }
+
+  /**
+   * Start verifying a phone number for the signed-in account (also how an email/Google
+   * account adds a real number). Sends an OTP to that number.
+   */
+  async requestPhoneVerification(userId: string, phone: string) {
+    const formattedPhone = formatPhoneNumber(phone);
+    if (!isValidPhoneNumber(formattedPhone)) {
+      throw new AppError('Invalid phone number format', 400, 'INVALID_PHONE');
+    }
+
+    const holder = await prisma.user.findUnique({ where: { phone: formattedPhone } });
+    if (holder && holder.id !== userId && holder.phoneVerified) {
+      throw new AppError('Phone number already registered', 409, 'PHONE_EXISTS');
+    }
+
+    const otpCode = await otpService.generateOTP(formattedPhone, 'registration');
+    return {
+      message: 'OTP sent successfully',
+      phone: formattedPhone,
+      ...(process.env.NODE_ENV === 'development' && { otpCode }),
+    };
+  }
+
+  /**
+   * Finish verifying a phone number: the OTP proves the signed-in user controls it, so it
+   * becomes theirs and verified. An account that merely claimed it without proof loses it.
+   */
+  async verifyPhone(userId: string, phone: string, otpCode: string) {
+    const formattedPhone = formatPhoneNumber(phone);
+    await otpService.verifyOTP(formattedPhone, otpCode, 'registration');
+
+    return prisma.$transaction(async (tx) => {
+      const holder = await tx.user.findUnique({ where: { phone: formattedPhone } });
+      if (holder && holder.id !== userId) {
+        if (holder.phoneVerified) {
+          throw new AppError('Phone number already registered', 409, 'PHONE_EXISTS');
+        }
+        await tx.user.update({
+          where: { id: holder.id },
+          data: { phone: placeholderPhone(`evicted-${holder.id}`), phoneVerified: false },
+        });
+      }
+      const user = await tx.user.update({
+        where: { id: userId },
+        data: { phone: formattedPhone, phoneVerified: true },
+      });
+      return { phone: user.phone, phoneVerified: user.phoneVerified };
+    });
   }
 
   /**
@@ -559,6 +635,8 @@ export class AuthService {
       email: user.email,
       userType: user.userType,
       status: user.status,
+      emailVerified: user.emailVerified,
+      phoneVerified: user.phoneVerified,
       profile: user.profile,
       defaultAddress: user.addresses[0] || null,
     };
