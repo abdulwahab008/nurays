@@ -28,6 +28,8 @@ export interface AddressForDelivery {
   longitude?: number | null;
   /** The community the buyer's address belongs to (UserAddress.communityId). */
   communityId?: string | null;
+  /** True when a real address was checked and matched no community (vs. no address info at all). */
+  communityUnresolved?: boolean;
 }
 
 /** One community's delivery terms, fixed by the seller (SellerCommunityDelivery). */
@@ -154,7 +156,22 @@ function resolveCommunityDelivery(
   subtotal?: number
 ): DeliveryFeeResult | null {
   const buyerCommunityId = address.communityId ?? null;
-  if (!buyerCommunityId) return null;
+  if (!buyerCommunityId) {
+    // A real address that matches no community must not slip past the seller's
+    // community rules (per-community terms, own-community-only delivery).
+    const hasRules = Array.isArray(seller.communityDeliveries) && seller.communityDeliveries.length > 0;
+    const ownCommunityOnly =
+      seller.communityId != null && (seller.allowCrossCommunity === false || seller.community?.crossCommunityEnabled === false);
+    if (address.communityUnresolved && (hasRules || ownCommunityOnly)) {
+      return {
+        deliverable: false,
+        fee: 0,
+        reason: "We couldn't match your address to a community. Choose your community on the address to order from this seller",
+        distanceKm,
+      };
+    }
+    return null;
+  }
 
   const sellerCommunityId = seller.communityId ?? null;
   const isCrossCommunity = sellerCommunityId != null && sellerCommunityId !== buyerCommunityId;

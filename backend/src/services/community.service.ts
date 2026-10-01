@@ -146,6 +146,10 @@ export class CommunityService {
     };
   }
 
+  distanceToCommunityKm(c: { centerLatitude: unknown; centerLongitude: unknown }, lat: number, lng: number): number {
+    return haversineKm(lat, lng, Number(c.centerLatitude), Number(c.centerLongitude));
+  }
+
   /**
    * Detect closest community based on buyer's GPS latitude and longitude
    */
@@ -222,9 +226,19 @@ export class CommunityService {
     const norm = (v?: string | null) => (v ?? '').trim().toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
     const area = norm(address.area);
     if (area) {
-      const byName = communities.find((c) => norm(c.name) === area || norm(c.slug) === area);
+      const byName = communities.find((c) => {
+        const n = norm(c.name);
+        const sl = norm(c.slug);
+        return (n && n === area) || (sl && sl === area);
+      });
       if (byName) return byName.id;
-      const contained = communities.find((c) => area.includes(norm(c.name)));
+      // Whole-word containment ("askari 11 phase 2" names Askari 11, "askari 111" doesn't);
+      // an empty normalised name matches everything under includes(), so it is skipped.
+      const padded = ` ${area} `;
+      const contained = communities.find((c) => {
+        const n = norm(c.name);
+        return n.length > 0 && padded.includes(` ${n} `);
+      });
       if (contained) return contained.id;
     }
 

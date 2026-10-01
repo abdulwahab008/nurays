@@ -1250,16 +1250,20 @@ model HubBatchAllocation {
   id             String       @id @default(uuid())
   orderId        String       @map("order_id")
   productId      String       @map("product_id")
+  // The order line it was taken for. Lets a seller cancelling ONE line return only that line's units
+  // (the same product can be on two lines). Null on allocations made before this existed.
+  orderItemId    String?      @map("order_item_id")
   hubInventoryId String       @map("hub_inventory_id")
   quantity       Int
   releasedAt     DateTime?    @map("released_at")
   createdAt      DateTime     @default(now()) @map("created_at")
 
   order          Order        @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  hubInventory   HubInventory @relation(fields: [hubInventoryId], references: [id], onDelete: Cascade)
+  hubInventory   HubInventory @relation(fields: [hubInventoryId], references: [id], onDelete: Restrict)
 
   @@index([orderId, productId])
   @@index([hubInventoryId])
+  @@index([orderItemId])
   @@map("hub_batch_allocations")
 }
 

@@ -48,7 +48,10 @@ export class OrderService {
         const isOrderNumberClash =
           err?.code === 'P2002' &&
           (Array.isArray(target) ? target.includes('order_number') || target.includes('orderNumber') : /order_?number/i.test(String(target ?? '')));
-        if (!isOrderNumberClash || attempt >= MAX_ATTEMPTS) throw err;
+        // A deadlock / serialization failure aborts only this attempt; the whole
+        // transaction is safe to run again.
+        const isDeadlock = err?.code === 'P2034' || /deadlock detected|40P01/i.test(String(err?.message ?? ''));
+        if (!(isOrderNumberClash || isDeadlock) || attempt >= MAX_ATTEMPTS) throw err;
       }
     }
   }
@@ -334,13 +337,15 @@ export class OrderService {
           })
         : [];
       const hubById = new Map(hubs.map((h) => [h.id, h]));
+      const resolvedCommunityId = deliveryAddress.communityId ?? (await communityService.resolveCommunityIdForAddress(deliveryAddress, customerId));
       const addr = {
         area: deliveryAddress.area,
         city: deliveryAddress.city,
         postalCode: deliveryAddress.postalCode,
         latitude: deliveryAddress.latitude != null ? Number(deliveryAddress.latitude) : null,
         longitude: deliveryAddress.longitude != null ? Number(deliveryAddress.longitude) : null,
-        communityId: deliveryAddress.communityId ?? (await communityService.resolveCommunityIdForAddress(deliveryAddress, customerId)),
+        communityId: resolvedCommunityId,
+      communityUnresolved: !resolvedCommunityId,
       };
       let total = 0;
       for (const seller of sellers) {
@@ -520,7 +525,12 @@ export class OrderService {
         stockQuantity: number;
         stockThreshold: number | null;
       }> = [];
-      for (const item of orderItems) {
+      // Fixed lock order (by variant/product id) so two orders touching the same
+      // products can't deadlock each other.
+      const stockOrdered = [...orderItems].sort((a, b) =>
+        (a.productId + (a.variantId ?? '')).localeCompare(b.productId + (b.variantId ?? ''))
+      );
+      for (const item of stockOrdered) {
         if (item.variantId) {
           // Conditional decrement: the stock check above ran on a pre-transaction
           // read, so two concurrent orders (or two lines for the same product)
@@ -570,12 +580,17 @@ export class OrderService {
       // FEFO (First-Expired, First-Out) Hub Batch Allocation & Reservation. Shortfalls
       // throw (rolling the whole order back) rather than creating an order whose
       // hub units were never actually taken.
-      for (const item of orderItems) {
-        if (item.fulfillmentType === 'hub' && item.hubId) {
+      const hubOrdered = orderItems
+        .map((item, idx) => ({ item, idx }))
+        .filter(({ item }) => item.fulfillmentType === 'hub' && item.hubId)
+        .sort((a, b) => (a.item.hubId! + a.item.productId).localeCompare(b.item.hubId! + b.item.productId));
+      for (const { item, idx } of hubOrdered) {
+        {
           await allocateHubStock(tx, {
             orderId: newOrder.id,
+            orderItemId: createdItems[idx].id,
             orderNumber: newOrder.orderNumber,
-            hubId: item.hubId,
+            hubId: item.hubId!,
             productId: item.productId,
             productName: item.productName,
             quantity: item.quantity,

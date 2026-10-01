@@ -435,6 +435,30 @@ async function main() {
   ok('only an active hub-manager account can be assigned', (await hubService.assignManager(hub.id, cust.id).then(() => 'OK', (e: any) => e.code)) === 'INVALID_MANAGER');
   ok('temperature log limits are bounded (NaN no longer breaks it)', (await hubService.getTemperatureLogs(hub.id, NaN).then(() => 'OK', (e: any) => e.code)) === 'OK' && (await hubService.getTemperatureLogs(hub.id, 1e9).then(() => 'OK', (e: any) => e.code)) === 'OK');
 
+  // ---- 21b. hub intake / release races, per-line allocation ----
+  const hubProd2 = await prisma.product.create({ data: { sellerId: seller.id, name: 'HQ' + uniq(), slug: 'hq-' + uniq(), price: 100, unit: 'pc', stockQuantity: 1000, stockType: 'hub', approvalStatus: 'approved', isActive: true } as any });
+  const intake2 = (over: any = {}) => hubService.recordBatchIntake({ hubId: hub.id, productId: hubProd2.id, quantity: 20, batchNumber: 'R', expiryDate: new Date(Date.now() + 30 * DAY), measuredTemperatureCelsius: -20, ...over });
+  await intake2();
+  const hubOrder2 = (qty: number, uid = hc.id) => orderService.createOrder(uid, { items: [{ productId: hubProd2.id, quantity: qty, stockType: 'hub', hubId: hub.id }], deliveryType: 'self_pickup', paymentMethod: 'cod' } as any) as Promise<any>;
+  const rows2 = () => prisma.hubInventory.findFirst({ where: { hubId: hub.id, productId: hubProd2.id, batchNumber: 'R' } });
+  // concurrent intake of +10 and orders of 3 + 4: nothing may be lost
+  await Promise.all([intake2({ quantity: 10 }), hubOrder2(3, (await mkUser()).id), hubOrder2(4, (await mkUser()).id)]);
+  ok('a delivery landing while orders allocate loses no stock (20+10-3-4)', (await rows2())!.quantity === 23, `${(await rows2())!.quantity}`);
+  const ordR = await hubOrder2(2);
+  const allocR = await prisma.hubBatchAllocation.findMany({ where: { orderId: ordR.id } });
+  ok('hub allocations record the order line', allocR.length > 0 && allocR.every((a) => !!a.orderItemId));
+  // a manual hold on a batch that still has stock survives both a release and an intake
+  await prisma.hubInventory.update({ where: { id: (await rows2())!.id }, data: { status: 'reserved' } });
+  await orderService.cancelOrder(ordR.id, hc.id, "test").catch(() => null);
+  ok('releasing hub units does not reopen a manually held batch', (await rows2())!.status === 'reserved');
+  await intake2({ quantity: 1 });
+  ok('a delivery does not reopen a manually held batch either', (await rows2())!.status === 'reserved');
+  // sweep logs only what it flips
+  await prisma.hubInventory.update({ where: { id: (await rows2())!.id }, data: { status: 'available', expiryDate: new Date(Date.now() - 1000) } });
+  const sweeps = await Promise.all([hubService.expireStaleBatches(), hubService.expireStaleBatches()]);
+  const expLogs = await prisma.hubInventoryLog.count({ where: { hubInventoryId: (await rows2())!.id, action: 'expired' } });
+  ok('concurrent expiry sweeps flip and log a batch once', sweeps.reduce((a, b) => a + b, 0) >= 1 && expLogs === 1, `${sweeps} ${expLogs}`);
+
   // ---- 22. phone verification ----
   const pn = () => '+92300' + String(Math.floor(1000000 + Math.random() * 8999999));
   const reg = (email: string, phone?: string, phone_otp?: string) =>

@@ -229,13 +229,15 @@ export class CartService {
     if (!address) {
       throw new AppError('Address not found', 404, 'ADDRESS_NOT_FOUND');
     }
+    const resolvedCommunityId = address.communityId ?? (await communityService.resolveCommunityIdForAddress(address, userId));
     const addr = {
       area: address.area,
       city: address.city,
       postalCode: address.postalCode,
       latitude: address.latitude != null ? Number(address.latitude) : null,
       longitude: address.longitude != null ? Number(address.longitude) : null,
-      communityId: address.communityId ?? (await communityService.resolveCommunityIdForAddress(address, userId)),
+      communityId: resolvedCommunityId,
+      communityUnresolved: !resolvedCommunityId,
     };
     const sellerSubtotals = new Map<string, number>();
     for (const item of items) {

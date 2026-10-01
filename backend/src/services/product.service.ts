@@ -552,8 +552,17 @@ export class ProductService {
     requestingUserId?: string,
     customerLat?: number,
     customerLng?: number,
-    customerCommunityId?: string
+    customerCommunityIdOrSlug?: string
   ) {
+    // The listing page accepts an id or a slug; the delivery check below compares ids.
+    let customerCommunityId: string | undefined;
+    if (customerCommunityIdOrSlug) {
+      const c = await prisma.community.findFirst({
+        where: { OR: [{ id: customerCommunityIdOrSlug }, { slug: customerCommunityIdOrSlug }] },
+        select: { id: true },
+      });
+      customerCommunityId = c?.id;
+    }
     const product = await prisma.product.findFirst({
       where: {
         OR: [{ id: identifier }, { slug: identifier }],
@@ -718,11 +727,10 @@ export class ProductService {
     // Generate a slug that is unique across the whole catalog. Another seller may
     // legitimately sell "Biryani" too, so a clash with someone else's product gets a
     // suffix; only a duplicate within the seller's own products is an error.
-    const slug = await this.uniqueSlug(data.name, seller.id);
     if (data.images?.length) await this.assertImageUrlsAllowed(data.images, sellerId, seller.id);
 
     // Create product - awaits admin moderation before it appears on the public catalog
-    const product = await prisma.product.create({
+    const createRow = (slug: string) => prisma.product.create({
       data: {
         sellerId: seller.id,
         name: data.name,
@@ -774,7 +782,17 @@ export class ProductService {
       },
     });
 
-    return product;
+    // The slug check and the insert aren't atomic: two requests for the same name can
+    // pick the same slug, and the unique index then rejects one — which just draws again.
+    for (let attempt = 1; ; attempt++) {
+      const slug = await this.uniqueSlug(data.name, seller.id);
+      try {
+        return await createRow(slug);
+      } catch (err: any) {
+        const target = String(err?.meta?.target ?? '');
+        if (err?.code !== 'P2002' || !/slug/i.test(target) || attempt >= 5) throw err;
+      }
+    }
   }
 
   /**

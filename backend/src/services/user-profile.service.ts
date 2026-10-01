@@ -234,6 +234,15 @@ export class UserProfileService {
     if (data.communityId) {
       const community = await prisma.community.findFirst({ where: { id: data.communityId, isActive: true } });
       if (!community) throw new AppError('Community not found', 404, 'COMMUNITY_NOT_FOUND');
+      // The chosen community has to be consistent with the pin: a GPS point that sits
+      // outside it (or resolves to a different community) can't be filed under it,
+      // or the buyer could dodge a seller's per-community rules.
+      if (data.latitude != null && data.longitude != null) {
+        const dist = communityService.distanceToCommunityKm(community, Number(data.latitude), Number(data.longitude));
+        if (dist > community.radiusKm) {
+          throw new AppError('The pinned location is outside the selected community', 400, 'COMMUNITY_LOCATION_MISMATCH');
+        }
+      }
       communityId = community.id;
     } else {
       communityId = await communityService.resolveCommunityIdForAddress(data, userId);

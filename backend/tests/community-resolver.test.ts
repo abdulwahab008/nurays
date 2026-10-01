@@ -65,3 +65,21 @@ describe('resolveCommunityIdForAddress', () => {
     expect(await communityService.resolveCommunityIdForAddress({ area: 'Askari 11', city: 'Lahore' })).toBeNull();
   });
 });
+
+import { getDeliveryFeeForSeller as feeFor } from '../src/utils/deliveryFee';
+
+describe('address with no matching community', () => {
+  const rules = [{ communityId: 'c1', fee: 50, isEnabled: true }];
+  it('is refused by a seller with per-community rules', () => {
+    const r = feeFor({ communityDeliveries: rules } as any, { communityUnresolved: true });
+    expect(r.deliverable).toBe(false);
+  });
+  it('is refused by an own-community-only seller', () => {
+    const r = feeFor({ communityId: 'c1', allowCrossCommunity: false } as any, { communityUnresolved: true });
+    expect(r.deliverable).toBe(false);
+  });
+  it('still falls through for a seller with no community rules', () => {
+    const r = feeFor({} as any, { communityUnresolved: true });
+    expect(r.deliverable).toBe(true);
+  });
+});

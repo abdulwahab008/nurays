@@ -570,6 +570,7 @@ export class SellerOrderService {
 
       if (orderItem.productId) {
         await releaseHubAllocations(tx, orderItem.orderId, {
+          orderItemIds: [orderItem.id],
           productIds: [orderItem.productId],
           reason: `Item cancelled by seller (${orderItem.productName})`,
           performedBy: sellerId,
@@ -815,6 +816,7 @@ export class SellerOrderService {
 
       // Hub units for the rejected items go back into their batches.
       await releaseHubAllocations(tx, order.id, {
+        orderItemIds: liveItems.map((i) => i.id),
         productIds: liveItems.map((i) => i.productId).filter((id): id is string => !!id),
         reason: `Rejected by ${seller.businessName}`,
         performedBy: sellerUserId,

@@ -26,7 +26,7 @@ interface LockedBatch {
  */
 export async function allocateHubStock(
   tx: Tx,
-  opts: { orderId: string; orderNumber: string; hubId: string; productId: string; productName: string; quantity: number; performedBy: string }
+  opts: { orderId: string; orderItemId?: string | null; orderNumber: string; hubId: string; productId: string; productName: string; quantity: number; performedBy: string }
 ) {
   const batches: LockedBatch[] = await tx.$queryRaw`
     SELECT id, quantity, batch_number, expiry_date
@@ -51,7 +51,7 @@ export async function allocateHubStock(
       data: { quantity: newQty, status: newQty === 0 ? 'reserved' : 'available' },
     });
     await tx.hubBatchAllocation.create({
-      data: { orderId: opts.orderId, productId: opts.productId, hubInventoryId: batch.id, quantity: take },
+      data: { orderId: opts.orderId, orderItemId: opts.orderItemId ?? null, productId: opts.productId, hubInventoryId: batch.id, quantity: take },
     });
     await tx.hubInventoryLog.create({
       data: {
@@ -79,21 +79,28 @@ export async function allocateHubStock(
 /**
  * Put back the hub stock an order took, into the batches it came from. Idempotent
  * (each allocation is released once), so cancel paths can call it freely.
- * `productIds` limits it to particular items (a seller cancelling its own items).
- * A depleted batch that this brings back into stock becomes available again —
- * unless it was quarantined or has expired in the meantime.
+ * `orderItemIds` limits it to particular order lines (a seller cancelling its own
+ * items); allocations recorded before lines were tracked (null orderItemId) fall
+ * back to matching on `productIds`.
+ * The batch row is locked and incremented, so a concurrent intake or allocation
+ * isn't overwritten. Only a batch that was depleted (quantity 0 -> status
+ * reserved by allocation) is reopened; a manual hold on a batch that still had
+ * stock stays held. Expired batches stay closed.
  */
 export async function releaseHubAllocations(
   tx: Tx,
   orderId: string,
-  opts: { productIds?: string[]; reason: string; performedBy: string }
+  opts: { orderItemIds?: string[]; productIds?: string[]; reason: string; performedBy: string }
 ) {
+  const scope: any[] = [];
+  if (opts.orderItemIds?.length) scope.push({ orderItemId: { in: opts.orderItemIds } });
+  if (opts.productIds?.length) scope.push({ orderItemId: null, productId: { in: opts.productIds } });
+  const limited = opts.orderItemIds !== undefined || opts.productIds !== undefined;
+  if (limited && scope.length === 0) return;
+
   const allocations = await tx.hubBatchAllocation.findMany({
-    where: {
-      orderId,
-      releasedAt: null,
-      ...(opts.productIds ? { productId: { in: opts.productIds } } : {}),
-    },
+    where: { orderId, releasedAt: null, ...(limited ? { OR: scope } : {}) },
+    orderBy: { hubInventoryId: 'asc' },
   });
 
   for (const a of allocations) {
@@ -104,13 +111,15 @@ export async function releaseHubAllocations(
     });
     if (claimed.count === 0) continue;
 
-    const batch = await tx.hubInventory.findUnique({ where: { id: a.hubInventoryId } });
+    const rows: Array<{ id: string; quantity: number; status: string; expiry_date: Date }> = await tx.$queryRaw`
+      SELECT id, quantity, status, expiry_date FROM hub_inventory WHERE id = ${a.hubInventoryId} FOR UPDATE`;
+    const batch = rows[0];
     if (!batch) continue;
     const newQty = batch.quantity + a.quantity;
-    const stillSellable = batch.status === 'reserved' && new Date(batch.expiryDate) > new Date();
+    const reopen = batch.quantity === 0 && batch.status === 'reserved' && new Date(batch.expiry_date) > new Date();
     await tx.hubInventory.update({
       where: { id: batch.id },
-      data: { quantity: newQty, ...(stillSellable ? { status: 'available' } : {}) },
+      data: { quantity: { increment: a.quantity }, ...(reopen ? { status: 'available' } : {}) },
     });
     await tx.hubInventoryLog.create({
       data: {

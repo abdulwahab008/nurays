@@ -217,6 +217,14 @@ export class HubService {
           hubId_productId_batchNumber: { hubId: data.hubId, productId: data.productId, batchNumber },
         },
       });
+      if (existingBatch) {
+        // Row lock + fresh read: an order allocating from this batch at the same moment
+        // must not have its decrement overwritten by a stale quantity.
+        await tx.$queryRaw`SELECT id FROM hub_inventory WHERE id = ${existingBatch.id} FOR UPDATE`;
+      }
+      const lockedBatch = existingBatch
+        ? await tx.hubInventory.findUniqueOrThrow({ where: { id: existingBatch.id } })
+        : null;
 
       let batch;
       let previousQuantity = 0;
@@ -224,8 +232,8 @@ export class HubService {
       let batchStatus: string = tempBreach ? 'damaged' : 'available';
       let note = '';
 
-      if (existingBatch) {
-        if (existingBatch.status === 'expired' || existingBatch.expiryDate.getTime() <= Date.now()) {
+      if (lockedBatch) {
+        if (lockedBatch.status === 'expired' || lockedBatch.expiryDate.getTime() <= Date.now()) {
           throw new AppError(
             `Batch ${batchNumber} has expired; receive new stock under a new batch number`,
             409,
@@ -239,21 +247,27 @@ export class HubService {
             'BATCH_EXISTS'
           );
         }
-        previousQuantity = existingBatch.quantity;
-        newQuantity = existingBatch.quantity + quantity;
+        previousQuantity = lockedBatch.quantity;
+        newQuantity = lockedBatch.quantity + quantity;
+        const wasDepleted = lockedBatch.quantity === 0;
         // A good delivery never releases a quarantined batch; that takes an explicit release.
-        batchStatus = existingBatch.status === 'damaged' ? 'damaged' : 'available';
-        if (existingBatch.status === 'damaged') {
+        // A manual hold ('reserved' with stock on it) survives a delivery; only a
+        // depleted batch is reopened.
+        batchStatus =
+          lockedBatch.status === 'damaged' ? 'damaged'
+          : lockedBatch.status === 'reserved' && !wasDepleted ? 'reserved'
+          : 'available';
+        if (lockedBatch.status === 'damaged') {
           note = ' The batch stays quarantined until it is explicitly released.';
         }
         batch = await tx.hubInventory.update({
-          where: { id: existingBatch.id },
+          where: { id: lockedBatch.id },
           data: {
-            quantity: newQuantity,
-            expiryDate: expiryDate < existingBatch.expiryDate ? expiryDate : existingBatch.expiryDate,
-            manufacturedDate: manufacturedDate ?? existingBatch.manufacturedDate,
-            storageUnit: storageUnit || existingBatch.storageUnit || 'FREEZER-01',
-            barcode: data.barcode || existingBatch.barcode,
+            quantity: { increment: quantity },
+            expiryDate: expiryDate < lockedBatch.expiryDate ? expiryDate : lockedBatch.expiryDate,
+            manufacturedDate: manufacturedDate ?? lockedBatch.manufacturedDate,
+            storageUnit: storageUnit || lockedBatch.storageUnit || 'FREEZER-01',
+            barcode: data.barcode || lockedBatch.barcode,
             status: batchStatus,
           },
         });
@@ -523,29 +537,26 @@ export class HubService {
    * status the hub dashboard and counts read). Run on a timer.
    */
   async expireStaleBatches(): Promise<number> {
-    const stale = await prisma.hubInventory.findMany({
-      where: { status: 'available', expiryDate: { lte: new Date() } },
-      select: { id: true, quantity: true },
+    // One atomic UPDATE ... RETURNING: only batches this call actually flipped are logged,
+    // so a concurrent sweep (or a batch changed since a read) can't produce a duplicate or
+    // false 'expired' entry.
+    const flipped: Array<{ id: string; quantity: number }> = await prisma.$queryRaw`
+      UPDATE hub_inventory SET status = 'expired'
+      WHERE status = 'available' AND expiry_date <= NOW()
+      RETURNING id, quantity`;
+    if (flipped.length === 0) return 0;
+    await prisma.hubInventoryLog.createMany({
+      data: flipped.map((b) => ({
+        hubInventoryId: b.id,
+        action: 'expired',
+        quantityChange: 0,
+        previousQuantity: b.quantity,
+        newQuantity: b.quantity,
+        reason: 'Batch passed its expiry date',
+        performedBy: 'System',
+      })),
     });
-    if (stale.length === 0) return 0;
-    await prisma.$transaction([
-      prisma.hubInventory.updateMany({
-        where: { id: { in: stale.map((b) => b.id) }, status: 'available' },
-        data: { status: 'expired' },
-      }),
-      prisma.hubInventoryLog.createMany({
-        data: stale.map((b) => ({
-          hubInventoryId: b.id,
-          action: 'expired',
-          quantityChange: 0,
-          previousQuantity: b.quantity,
-          newQuantity: b.quantity,
-          reason: 'Batch passed its expiry date',
-          performedBy: 'System',
-        })),
-      }),
-    ]);
-    return stale.length;
+    return flipped.length;
   }
 
   /**
