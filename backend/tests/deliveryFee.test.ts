@@ -179,3 +179,84 @@ describe('getDeliveryFeeForSeller — existing free-area/radius/fixed behavior s
     expect(result.deliverable).toBe(true);
   });
 });
+
+describe('getDeliveryFeeForSeller — community rules', () => {
+  const HOME = 'comm-askari-11';
+  const NEIGHBOR = 'comm-askari-10';
+  const FAR = 'comm-dha';
+  const rule = (communityId: string, fee: number, extra: Record<string, unknown> = {}) => ({
+    communityId,
+    fee,
+    freeAbove: null,
+    minOrderAmount: null,
+    isEnabled: true,
+    ...extra,
+  });
+  const communitySeller = (overrides: Partial<Record<string, unknown>> = {}) =>
+    baseSeller({
+      communityId: HOME,
+      allowCrossCommunity: true,
+      community: { crossCommunityEnabled: true },
+      communityDeliveries: [],
+      deliveryFeeType: 'fixed',
+      deliveryFeeFixed: 200,
+      ...overrides,
+    });
+  const addr = (communityId: string | null) => ({ area: 'Askari 11', city: 'Lahore', communityId });
+
+  it('uses the fee the seller fixed for the buyer\'s community', () => {
+    const seller = communitySeller({ communityDeliveries: [rule(HOME, 40), rule(NEIGHBOR, 120)] });
+    expect(getDeliveryFeeForSeller(seller, addr(HOME))).toMatchObject({ deliverable: true, fee: 40 });
+    expect(getDeliveryFeeForSeller(seller, addr(NEIGHBOR))).toMatchObject({ deliverable: true, fee: 120 });
+  });
+
+  it('refuses a community the seller has not set up once any terms exist', () => {
+    const seller = communitySeller({ communityDeliveries: [rule(HOME, 40)] });
+    const result = getDeliveryFeeForSeller(seller, addr(FAR));
+    expect(result.deliverable).toBe(false);
+    expect(result.reason).toMatch(/community/i);
+  });
+
+  it('refuses a community the seller explicitly disabled', () => {
+    const seller = communitySeller({ communityDeliveries: [rule(HOME, 40), rule(NEIGHBOR, 120, { isEnabled: false })] });
+    expect(getDeliveryFeeForSeller(seller, addr(NEIGHBOR)).deliverable).toBe(false);
+  });
+
+  it('falls back to the legacy seller-wide policy when no community terms exist', () => {
+    const seller = communitySeller();
+    expect(getDeliveryFeeForSeller(seller, addr(NEIGHBOR))).toMatchObject({ deliverable: true, fee: 200 });
+  });
+
+  it('ignores community rules when the address has no community', () => {
+    const seller = communitySeller({ communityDeliveries: [rule(HOME, 40)] });
+    expect(getDeliveryFeeForSeller(seller, addr(null))).toMatchObject({ deliverable: true, fee: 200 });
+  });
+
+  it('refuses other communities when the seller opted out of cross-community delivery', () => {
+    const seller = communitySeller({ allowCrossCommunity: false });
+    const outside = getDeliveryFeeForSeller(seller, addr(NEIGHBOR));
+    expect(outside.deliverable).toBe(false);
+    expect(outside.reason).toMatch(/own community/i);
+    expect(getDeliveryFeeForSeller(seller, addr(HOME)).deliverable).toBe(true);
+  });
+
+  it('refuses other communities when the seller\'s community has cross-community delivery off', () => {
+    const seller = communitySeller({ community: { crossCommunityEnabled: false } });
+    expect(getDeliveryFeeForSeller(seller, addr(NEIGHBOR)).deliverable).toBe(false);
+  });
+
+  it('applies the community free-above threshold and minimum order', () => {
+    const seller = communitySeller({
+      communityDeliveries: [rule(HOME, 40, { freeAbove: 1000, minOrderAmount: 300 })],
+    });
+    expect(getDeliveryFeeForSeller(seller, addr(HOME), null, null, 200)).toMatchObject({ deliverable: false });
+    expect(getDeliveryFeeForSeller(seller, addr(HOME), null, null, 500)).toMatchObject({ deliverable: true, fee: 40 });
+    expect(getDeliveryFeeForSeller(seller, addr(HOME), null, null, 1000)).toMatchObject({ deliverable: true, fee: 0 });
+  });
+
+  it('accepts Prisma Decimal-like fee values', () => {
+    const decimalLike = { toString: () => '55.00', valueOf: () => 55 };
+    const seller = communitySeller({ communityDeliveries: [rule(HOME, 0, { fee: decimalLike })] });
+    expect(getDeliveryFeeForSeller(seller, addr(HOME)).fee).toBe(55);
+  });
+});

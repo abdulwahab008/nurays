@@ -252,6 +252,9 @@ export class SellerService {
       deliveryFeeFixed: seller.deliveryFeeFixed,
       deliveryFeeBase: seller.deliveryFeeBase,
       deliveryFeePerKm: seller.deliveryFeePerKm != null ? Number(seller.deliveryFeePerKm) : null,
+      deliveryProvider: seller.deliveryProvider,
+      communityId: seller.communityId,
+      allowCrossCommunity: seller.allowCrossCommunity,
       verificationStatus: seller.verificationStatus,
       status: seller.status,
       isVerified: seller.isVerified,
@@ -296,6 +299,8 @@ export class SellerService {
       allowedPostalCodes?: string[];
       deliveryZones?: Array<{ name: string; cities: string[]; areas: string[]; fee: number }> | null;
       deliveryModes?: string[];
+      deliveryProvider?: 'platform' | 'self';
+      allowCrossCommunity?: boolean;
       businessType?: string;
       mealCategories?: string[];
       storeNotice?: string | null;
@@ -350,6 +355,8 @@ export class SellerService {
     if (data.allowedPostalCodes !== undefined) updateData.allowedPostalCodes = data.allowedPostalCodes;
     if (data.deliveryZones !== undefined) updateData.deliveryZones = data.deliveryZones;
     if (data.deliveryModes !== undefined) updateData.deliveryModes = data.deliveryModes;
+    if (data.deliveryProvider !== undefined) updateData.deliveryProvider = data.deliveryProvider;
+    if (data.allowCrossCommunity !== undefined) updateData.allowCrossCommunity = data.allowCrossCommunity;
     if (data.businessType !== undefined) updateData.businessType = data.businessType;
     if (data.mealCategories !== undefined) updateData.mealCategories = data.mealCategories;
     if (data.storeNotice !== undefined) updateData.storeNotice = data.storeNotice;
@@ -394,9 +401,139 @@ export class SellerService {
       deliveryFeeFixed: updated.deliveryFeeFixed,
       deliveryFeeBase: updated.deliveryFeeBase,
       deliveryFeePerKm: updated.deliveryFeePerKm != null ? Number(updated.deliveryFeePerKm) : null,
+      deliveryProvider: updated.deliveryProvider,
+      allowCrossCommunity: updated.allowCrossCommunity,
       updatedAt: updated.updatedAt,
       ...formatBusinessOperationsFields(updated),
     };
+  }
+
+  /**
+   * The seller's delivery terms per community: every active community, with the
+   * fee the seller has fixed for it (if any), plus their delivery provider.
+   */
+  async getCommunityDelivery(userId: string) {
+    const seller = await prisma.seller.findUnique({
+      where: { userId },
+      include: {
+        community: { select: { id: true, name: true, slug: true, city: true, neighborCommunityIds: true } },
+        communityDeliveries: true,
+      },
+    });
+    if (!seller) throw new AppError('Seller not found', 404, 'SELLER_NOT_FOUND');
+
+    const communities = await prisma.community.findMany({
+      where: { isActive: true },
+      orderBy: { name: 'asc' },
+      select: { id: true, name: true, slug: true, city: true, deliveryBaseFee: true, crossCommunityBaseFee: true },
+    });
+    const ruleById = new Map(seller.communityDeliveries.map((r) => [r.communityId, r]));
+    const neighborIds = new Set(seller.community?.neighborCommunityIds ?? []);
+
+    return {
+      deliveryProvider: seller.deliveryProvider,
+      allowCrossCommunity: seller.allowCrossCommunity,
+      homeCommunity: seller.community ? { id: seller.community.id, name: seller.community.name } : null,
+      // true once the seller has fixed terms for any community; from then on a
+      // community without an enabled row is not deliverable.
+      configured: seller.communityDeliveries.length > 0,
+      communities: communities.map((c) => {
+        const rule = ruleById.get(c.id);
+        return {
+          id: c.id,
+          name: c.name,
+          slug: c.slug,
+          city: c.city,
+          isHome: c.id === seller.communityId,
+          isNeighbor: neighborIds.has(c.id),
+          suggestedFee: Number(c.id === seller.communityId ? c.deliveryBaseFee : c.crossCommunityBaseFee),
+          terms: rule
+            ? {
+                fee: Number(rule.fee),
+                freeAbove: rule.freeAbove != null ? Number(rule.freeAbove) : null,
+                minOrderAmount: rule.minOrderAmount != null ? Number(rule.minOrderAmount) : null,
+                isEnabled: rule.isEnabled,
+              }
+            : null,
+        };
+      }),
+    };
+  }
+
+  /**
+   * Replace the seller's per-community delivery terms. An empty list clears them
+   * (the seller falls back to their seller-wide delivery policy).
+   */
+  async setCommunityDelivery(
+    userId: string,
+    terms: Array<{
+      communityId: string;
+      fee: number;
+      freeAbove?: number | null;
+      minOrderAmount?: number | null;
+      isEnabled?: boolean;
+    }>
+  ) {
+    const seller = await prisma.seller.findUnique({ where: { userId } });
+    if (!seller) throw new AppError('Seller not found', 404, 'SELLER_NOT_FOUND');
+
+    const ids = terms.map((t) => t.communityId);
+    if (new Set(ids).size !== ids.length) {
+      throw new AppError('Each community can only be listed once', 400, 'DUPLICATE_COMMUNITY');
+    }
+
+    if (terms.length > 0) {
+      const found = await prisma.community.findMany({
+        where: { id: { in: ids }, isActive: true },
+        select: { id: true },
+      });
+      if (found.length !== ids.length) {
+        throw new AppError('One or more communities were not found', 400, 'COMMUNITY_NOT_FOUND');
+      }
+      // The home community must always have terms: otherwise a seller could fix
+      // fees for neighbours and silently stop delivering to their own street.
+      if (seller.communityId && !ids.includes(seller.communityId)) {
+        throw new AppError(
+          'Set delivery terms for your own community before others',
+          400,
+          'HOME_COMMUNITY_REQUIRED'
+        );
+      }
+      if (!seller.allowCrossCommunity && ids.some((id) => id !== seller.communityId)) {
+        throw new AppError(
+          'Enable cross-community delivery before setting fees for other communities',
+          400,
+          'CROSS_COMMUNITY_DISABLED'
+        );
+      }
+    }
+
+    await prisma.$transaction([
+      prisma.sellerCommunityDelivery.deleteMany({
+        where: { sellerId: seller.id, communityId: { notIn: ids } },
+      }),
+      ...terms.map((t) =>
+        prisma.sellerCommunityDelivery.upsert({
+          where: { sellerId_communityId: { sellerId: seller.id, communityId: t.communityId } },
+          create: {
+            sellerId: seller.id,
+            communityId: t.communityId,
+            fee: t.fee,
+            freeAbove: t.freeAbove ?? null,
+            minOrderAmount: t.minOrderAmount ?? null,
+            isEnabled: t.isEnabled ?? true,
+          },
+          update: {
+            fee: t.fee,
+            freeAbove: t.freeAbove ?? null,
+            minOrderAmount: t.minOrderAmount ?? null,
+            isEnabled: t.isEnabled ?? true,
+          },
+        })
+      ),
+    ]);
+
+    return this.getCommunityDelivery(userId);
   }
 
   /**

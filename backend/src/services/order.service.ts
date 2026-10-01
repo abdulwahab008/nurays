@@ -1,6 +1,8 @@
 import prisma from '../config/database';
 import { AppError } from '../middleware/errorHandler';
 import realtimeOrderService from './realtime-order.service';
+import { SELLER_COMMUNITY_DELIVERY_SELECT } from '../utils/sellerDeliverySelect';
+import { communityService } from './community.service';
 import { getDeliveryFeeForSeller } from '../utils/deliveryFee';
 import { createStockAlert } from './stock-alert.service';
 import promotionService from './promotion.service';
@@ -238,6 +240,11 @@ export class OrderService {
 
     // Calculate delivery fee: per-seller (free in their areas, fixed or distance-based outside), then sum
     let deliveryFee: number;
+    if (data.deliveryType === 'home_delivery' && !deliveryAddress) {
+      // The delivery address carries the buyer's community, which decides whether
+      // each seller delivers there and at what fee — it can't be skipped.
+      throw new AppError('A delivery address is required for home delivery', 400, 'ADDRESS_REQUIRED');
+    }
     if (data.deliveryType === 'self_pickup' || data.deliveryType === 'hub_pickup') {
       deliveryFee = 0;
     } else if (data.deliveryType === 'home_delivery' && deliveryAddress && orderItems.length > 0) {
@@ -265,6 +272,7 @@ export class OrderService {
           freeDeliveryThreshold: true,
           allowedPostalCodes: true,
           deliveryZones: true,
+          ...SELLER_COMMUNITY_DELIVERY_SELECT,
         },
       });
       const hubIds = [...sellerToHubId.values()].filter((id): id is string => id != null);
@@ -281,6 +289,7 @@ export class OrderService {
         postalCode: deliveryAddress.postalCode,
         latitude: deliveryAddress.latitude != null ? Number(deliveryAddress.latitude) : null,
         longitude: deliveryAddress.longitude != null ? Number(deliveryAddress.longitude) : null,
+        communityId: deliveryAddress.communityId ?? (await communityService.resolveCommunityIdForAddress(deliveryAddress, customerId)),
       };
       let total = 0;
       for (const seller of sellers) {

@@ -192,6 +192,55 @@ export class CommunityService {
   }
 
   /**
+   * Work out which community a delivery address belongs to, so community delivery
+   * rules can apply to it. Tried in order:
+   *   1. GPS point inside a community's radius (nearest wins)
+   *   2. the address area naming a community ("Askari 11")
+   *   3. the buyer's own community, if it is in the same city as the address
+   * Returns null when nothing matches (the seller-wide delivery policy then applies).
+   */
+  async resolveCommunityIdForAddress(
+    address: { area?: string | null; city?: string | null; latitude?: unknown; longitude?: unknown },
+    userId?: string
+  ): Promise<string | null> {
+    const communities = await prisma.community.findMany({ where: { isActive: true } });
+    if (communities.length === 0) return null;
+
+    const lat = address.latitude != null ? Number(address.latitude) : null;
+    const lng = address.longitude != null ? Number(address.longitude) : null;
+    if (lat != null && lng != null && Number.isFinite(lat) && Number.isFinite(lng)) {
+      let best: { id: string; distance: number } | null = null;
+      for (const c of communities) {
+        const distance = haversineKm(lat, lng, Number(c.centerLatitude), Number(c.centerLongitude));
+        if (distance <= c.radiusKm && (!best || distance < best.distance)) {
+          best = { id: c.id, distance };
+        }
+      }
+      if (best) return best.id;
+    }
+
+    const norm = (v?: string | null) => (v ?? '').trim().toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+    const area = norm(address.area);
+    if (area) {
+      const byName = communities.find((c) => norm(c.name) === area || norm(c.slug) === area);
+      if (byName) return byName.id;
+      const contained = communities.find((c) => area.includes(norm(c.name)));
+      if (contained) return contained.id;
+    }
+
+    if (userId) {
+      const user = await prisma.user.findUnique({
+        where: { id: userId },
+        select: { primaryCommunityId: true },
+      });
+      const home = communities.find((c) => c.id === user?.primaryCommunityId);
+      if (home && norm(home.city) === norm(address.city)) return home.id;
+    }
+
+    return null;
+  }
+
+  /**
    * Set primary community for a buyer
    */
   async setBuyerCommunity(userId: string, communityId: string) {

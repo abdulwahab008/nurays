@@ -1,6 +1,8 @@
 import prisma from '../config/database';
 import { AppError } from '../middleware/errorHandler';
 import { getDeliveryFeeForSeller } from '../utils/deliveryFee';
+import { SELLER_COMMUNITY_DELIVERY_SELECT } from '../utils/sellerDeliverySelect';
+import { communityService } from './community.service';
 
 export class CartService {
   /**
@@ -204,6 +206,7 @@ export class CartService {
             freeDeliveryThreshold: true,
             allowedPostalCodes: true,
             deliveryZones: true,
+            ...SELLER_COMMUNITY_DELIVERY_SELECT,
           },
         },
         hub: { select: { id: true, latitude: true, longitude: true } },
@@ -224,6 +227,7 @@ export class CartService {
       postalCode: address.postalCode,
       latitude: address.latitude != null ? Number(address.latitude) : null,
       longitude: address.longitude != null ? Number(address.longitude) : null,
+      communityId: address.communityId ?? (await communityService.resolveCommunityIdForAddress(address, userId)),
     };
     const sellerSubtotals = new Map<string, number>();
     for (const item of items) {

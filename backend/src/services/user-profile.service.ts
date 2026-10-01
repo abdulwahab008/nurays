@@ -1,5 +1,6 @@
 import prisma from '../config/database';
 import { AppError } from '../middleware/errorHandler';
+import { communityService } from './community.service';
 
 export class UserProfileService {
   /**
@@ -181,6 +182,7 @@ export class UserProfileService {
       postalCode: addr.postalCode,
       landmark: addr.landmark,
       isDefault: addr.isDefault,
+      communityId: addr.communityId,
       coordinates: addr.latitude && addr.longitude
         ? {
             latitude: Number(addr.latitude),
@@ -204,8 +206,20 @@ export class UserProfileService {
     landmark?: string;
     latitude?: number;
     longitude?: number;
+    communityId?: string;
     isDefault?: boolean;
   }) {
+    // The community decides which sellers deliver here and at what fee: use the
+    // one the buyer picked, otherwise infer it from the address.
+    let communityId: string | null = null;
+    if (data.communityId) {
+      const community = await prisma.community.findFirst({ where: { id: data.communityId, isActive: true } });
+      if (!community) throw new AppError('Community not found', 404, 'COMMUNITY_NOT_FOUND');
+      communityId = community.id;
+    } else {
+      communityId = await communityService.resolveCommunityIdForAddress(data, userId);
+    }
+
     // A user's very first address is always their default, regardless of what was passed.
     const existingCount = await prisma.userAddress.count({ where: { userId } });
     const isDefault = data.isDefault || existingCount === 0;
@@ -230,6 +244,7 @@ export class UserProfileService {
         landmark: data.landmark,
         latitude: data.latitude,
         longitude: data.longitude,
+        communityId,
         isDefault,
       },
     });
@@ -244,6 +259,7 @@ export class UserProfileService {
       postalCode: address.postalCode,
       landmark: address.landmark,
       isDefault: address.isDefault,
+      communityId: address.communityId,
       coordinates: address.latitude && address.longitude
         ? {
             latitude: Number(address.latitude),

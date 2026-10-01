@@ -201,6 +201,12 @@ model Seller {
   allowCrossCommunity   Boolean   @default(true) @map("allow_cross_community")
   primaryCommunityName  String?   @map("primary_community_name")
 
+  // Who physically delivers this seller's home-delivery orders:
+  //   'platform' - the order is posted to the rider pool (default, original behavior)
+  //   'self'     - the seller delivers; no rider job is created and the seller
+  //                drives the order to delivered/delivery_failed themselves.
+  deliveryProvider      String    @default("platform") @map("delivery_provider")
+
   createdAt         DateTime  @default(now()) @map("created_at")
   updatedAt         DateTime  @updatedAt @map("updated_at")
 
@@ -213,6 +219,7 @@ model Seller {
   reviews           Review[]
   favoriteSellers   FavoriteSeller[]
   hubInventory      HubInventory[]
+  communityDeliveries SellerCommunityDelivery[]
   payouts           SellerPayout[]
   payoutSchedule    SellerPayoutSchedule?
   cartItems         CartItem[]
@@ -1070,8 +1077,32 @@ model Community {
   users                 User[]
   sellers               Seller[]
   addresses             UserAddress[]
+  sellerDeliveries      SellerCommunityDelivery[]
 
   @@map("communities")
+}
+
+// Per-community delivery terms a seller has fixed for themselves. Once a seller
+// has at least one row, the rows are authoritative: a buyer in a community with
+// no (enabled) row is not deliverable. A seller with no rows keeps the legacy
+// seller-wide delivery policy (fixed/distance/zones).
+model SellerCommunityDelivery {
+  id             String   @id @default(uuid())
+  sellerId       String   @map("seller_id")
+  communityId    String   @map("community_id")
+  fee            Decimal  @db.Decimal(10, 2)
+  freeAbove      Decimal? @map("free_above") @db.Decimal(10, 2) // subtotal at/above which delivery to this community is free
+  minOrderAmount Decimal? @map("min_order_amount") @db.Decimal(10, 2)
+  isEnabled      Boolean  @default(true) @map("is_enabled")
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  seller         Seller    @relation(fields: [sellerId], references: [id], onDelete: Cascade)
+  community      Community @relation(fields: [communityId], references: [id], onDelete: Cascade)
+
+  @@unique([sellerId, communityId])
+  @@index([communityId])
+  @@map("seller_community_deliveries")
 }
 
 model FavoriteSeller {

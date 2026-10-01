@@ -50,7 +50,8 @@ export const getProduct = async (req: Request, res: Response) => {
     identifier,
     req.user?.id,
     req.query.customerLat as number | undefined,
-    req.query.customerLng as number | undefined
+    req.query.customerLng as number | undefined,
+    req.query.communityId as string | undefined
   );
 
   res.status(200).json({

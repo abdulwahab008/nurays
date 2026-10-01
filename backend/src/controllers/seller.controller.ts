@@ -31,6 +31,30 @@ export const updateCurrentSeller = async (req: Request, res: Response) => {
   });
 };
 
+export const getCommunityDelivery = async (req: Request, res: Response) => {
+  if (!req.user) {
+    throw new AppError('Authentication required', 401, 'AUTH_REQUIRED');
+  }
+
+  const data = await sellerService.getCommunityDelivery(req.user.userId);
+
+  res.status(200).json({ success: true, data });
+};
+
+export const setCommunityDelivery = async (req: Request, res: Response) => {
+  if (!req.user) {
+    throw new AppError('Authentication required', 401, 'AUTH_REQUIRED');
+  }
+
+  const data = await sellerService.setCommunityDelivery(req.user.userId, req.body.terms);
+
+  res.status(200).json({
+    success: true,
+    data,
+    message: 'Community delivery terms saved',
+  });
+};
+
 export const registerAsSeller = async (req: Request, res: Response) => {
   if (!req.user) {
     throw new AppError('Authentication required', 401, 'AUTH_REQUIRED');

@@ -3,6 +3,8 @@ import {
   registerAsSeller,
   getCurrentSeller,
   updateCurrentSeller,
+  getCommunityDelivery,
+  setCommunityDelivery,
   getSellerDashboard,
   getSellerAnalytics,
   requestPayout,
@@ -13,7 +15,7 @@ import {
 } from '../controllers/seller.controller';
 import { authenticate, authorize, blockSuspendedSeller } from '../middleware/auth.middleware';
 import { validate } from '../middleware/validation.middleware';
-import { registerSellerSchema, updateSellerSchema, requestPayoutSchema } from '../validators/seller.validator';
+import { registerSellerSchema, updateSellerSchema, requestPayoutSchema, setCommunityDeliverySchema } from '../validators/seller.validator';
 
 const router = Router();
 
@@ -38,6 +40,10 @@ router.use(blockSuspendedSeller);
 router.patch('/me', validate(updateSellerSchema), updateCurrentSeller);
 router.put('/me', validate(updateSellerSchema), updateCurrentSeller);
 router.post('/me/toggle-live', toggleStoreLive);
+
+// Per-community delivery fees
+router.get('/me/community-delivery', getCommunityDelivery);
+router.put('/me/community-delivery', validate(setCommunityDeliverySchema), setCommunityDelivery);
 
 // Get seller analytics
 router.get('/me/analytics', getSellerAnalytics);

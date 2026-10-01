@@ -2,6 +2,7 @@ import prisma from '../config/database';
 import { AppError } from '../middleware/errorHandler';
 import { computeSellerAvailability, isAcceptingOrders } from './availability.service';
 import { getDeliveryFeeForSeller, haversineKm } from '../utils/deliveryFee';
+import { SELLER_COMMUNITY_DELIVERY_SELECT } from '../utils/sellerDeliverySelect';
 
 const SELLER_AVAILABILITY_SELECT = {
   status: true,
@@ -37,15 +38,17 @@ const SELLER_ORDERING_SELECT = {
   allowedPostalCodes: true,
   deliveryZones: true,
   deliveryModes: true,
-  communityId: true,
   primaryCommunityName: true,
+  communityId: true,
   allowCrossCommunity: true,
+  communityDeliveries: SELLER_COMMUNITY_DELIVERY_SELECT.communityDeliveries,
   community: {
     select: {
       id: true,
       name: true,
       slug: true,
       deliveryBaseFee: true,
+      crossCommunityEnabled: true,
     },
   },
 } as const;
@@ -98,15 +101,16 @@ async function computeCustomerFacingSellerInfo(
     minPrepTimeMinutes: number | null;
   },
   customerLat?: number | null,
-  customerLng?: number | null
+  customerLng?: number | null,
+  customerCommunityId?: string | null
 ) {
   const accepting = await isAcceptingOrders(seller as any);
-  if (customerLat == null || customerLng == null) {
+  if ((customerLat == null || customerLng == null) && !customerCommunityId) {
     return { isAcceptingOrders: accepting.accepting, acceptingReason: accepting.reason, delivery: null };
   }
   const feeResult = getDeliveryFeeForSeller(
     seller as any,
-    { latitude: customerLat, longitude: customerLng },
+    { latitude: customerLat, longitude: customerLng, communityId: customerCommunityId },
     seller.latitude != null ? Number(seller.latitude) : null,
     seller.longitude != null ? Number(seller.longitude) : null
   );
@@ -456,7 +460,7 @@ export class ProductService {
     );
     await Promise.all(
       uniqueSellers.map(async (seller) => {
-        const info = await computeCustomerFacingSellerInfo(seller, filters.customerLat, filters.customerLng);
+        const info = await computeCustomerFacingSellerInfo(seller, filters.customerLat, filters.customerLng, targetCommunity?.id);
         sellerInfoById.set(seller.id, info);
       })
     );
@@ -546,7 +550,8 @@ export class ProductService {
     identifier: string,
     requestingUserId?: string,
     customerLat?: number,
-    customerLng?: number
+    customerLng?: number,
+    customerCommunityId?: string
   ) {
     const product = await prisma.product.findFirst({
       where: {
@@ -561,6 +566,8 @@ export class ProductService {
                 phone: true,
               },
             },
+            community: { select: { id: true, name: true, slug: true, crossCommunityEnabled: true } },
+            communityDeliveries: SELLER_COMMUNITY_DELIVERY_SELECT.communityDeliveries,
           },
         },
         images: {
@@ -597,7 +604,7 @@ export class ProductService {
 
     // Format images with full URLs
     const baseUrl = process.env.BASE_URL || 'http://localhost:3001';
-    const sellerInfo = await computeCustomerFacingSellerInfo(product.seller as any, customerLat, customerLng);
+    const sellerInfo = await computeCustomerFacingSellerInfo(product.seller as any, customerLat, customerLng, customerCommunityId);
 
     return {
       ...product,
