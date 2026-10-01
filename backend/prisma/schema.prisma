@@ -33,6 +33,7 @@ model User {
   profile       UserProfile?
   primaryCommunity Community? @relation(fields: [primaryCommunityId], references: [id], onDelete: SetNull)
   addresses     UserAddress[]
+  managedHubs   HubCenter[] @relation("HubManager")
   cart          Cart?
   orders        Order[]
   reviews       Review[]
@@ -46,6 +47,8 @@ model User {
   searchQueries SearchQuery[]
   wallet        Wallet?
   emailVerification EmailVerification?
+
+  @@index([primaryCommunityId])
 
   @@map("users")
 }
@@ -88,6 +91,9 @@ model UserAddress {
   community   Community?  @relation(fields: [communityId], references: [id], onDelete: SetNull)
   orders      Order[]
 
+  @@index([userId])
+  @@index([communityId])
+
   @@map("user_addresses")
 }
 
@@ -100,6 +106,8 @@ model OtpVerification {
   isVerified Boolean  @default(false) @map("is_verified")
   expiresAt  DateTime @map("expires_at")
   createdAt  DateTime @default(now()) @map("created_at")
+
+  @@index([phone, purpose, createdAt])
 
   @@map("otp_verifications")
 }
@@ -227,6 +235,9 @@ model Seller {
   stockAlerts       StockAlert[]
   promotions        Promotion[]
 
+  @@index([communityId])
+  @@index([status, verificationStatus])
+
   @@map("sellers")
 }
 
@@ -240,6 +251,8 @@ model SellerDocument {
 
   seller      Seller   @relation(fields: [sellerId], references: [id], onDelete: Cascade)
 
+  @@index([sellerId])
+
   @@map("seller_documents")
 }
 
@@ -252,6 +265,8 @@ model SellerBadge {
   earnedAt  DateTime @default(now()) @map("earned_at")
 
   seller    Seller   @relation(fields: [sellerId], references: [id], onDelete: Cascade)
+
+  @@index([sellerId])
 
   @@map("seller_badges")
 }
@@ -272,6 +287,9 @@ model StockAlert {
   readAt        DateTime? @map("read_at")
 
   seller        Seller   @relation(fields: [sellerId], references: [id], onDelete: Cascade)
+
+  @@index([sellerId])
+  @@index([productId])
 
   @@map("stock_alerts")
 }
@@ -299,6 +317,8 @@ model Category {
   products    Product[]
   categoryRequests CategoryRequest[]
 
+  @@index([parentId])
+
   @@map("categories")
 }
 
@@ -319,6 +339,8 @@ model CategoryRequest {
 
   seller          Seller    @relation(fields: [sellerId], references: [id], onDelete: Cascade)
   parentCategory  Category? @relation(fields: [parentCategoryId], references: [id], onDelete: SetNull)
+
+  @@index([sellerId])
 
   @@map("category_requests")
 }
@@ -374,6 +396,10 @@ model Product {
   inventoryReservations InventoryReservation[]
   searchQueries         SearchQuery[]
 
+  @@index([sellerId])
+  @@index([categoryId])
+  @@index([approvalStatus, isActive])
+
   @@map("products")
 }
 
@@ -386,6 +412,8 @@ model ProductImage {
   uploadedAt DateTime @default(now()) @map("uploaded_at")
 
   product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@index([productId])
 
   @@map("product_images")
 }
@@ -407,7 +435,7 @@ model ProductVariant {
   productId       String   @map("product_id")
   name            String   // e.g., "Small Pack", "Medium Pack", "Large Pack"
   nameUrdu        String?  @map("name_urdu")
-  sku             String?  @unique // Optional SKU/barcode
+  sku             String?  // Optional SKU/barcode — unique within a product, not across all sellers
   price           Decimal  @db.Decimal(10, 2)
   originalPrice   Decimal? @map("original_price") @db.Decimal(10, 2)
   costPrice       Decimal? @map("cost_price") @db.Decimal(10, 2)
@@ -423,6 +451,10 @@ model ProductVariant {
   product         Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
   orderItems      OrderItem[]
   cartItems       CartItem[]
+
+  @@index([productId])
+
+  @@unique([productId, sku])
 
   @@map("product_variants")
 }
@@ -458,6 +490,10 @@ model HubCenter {
   temperatureLogs   HubTemperatureLog[]
   riders            Rider[]
 
+  manager             User?     @relation("HubManager", fields: [managerId], references: [id], onDelete: SetNull)
+
+  @@index([managerId])
+
   @@map("hub_centers")
 }
 
@@ -482,6 +518,11 @@ model HubInventory {
   logs            HubInventoryLog[]
 
   @@unique([hubId, productId, batchNumber])
+
+  @@index([productId])
+  @@index([sellerId])
+  @@index([hubId, status, expiryDate])
+
   @@map("hub_inventory")
 }
 
@@ -498,6 +539,8 @@ model HubInventoryLog {
 
   hubInventory    HubInventory @relation(fields: [hubInventoryId], references: [id], onDelete: Cascade)
 
+  @@index([hubInventoryId])
+
   @@map("hub_inventory_logs")
 }
 
@@ -510,6 +553,8 @@ model HubTemperatureLog {
   recordedAt      DateTime @default(now()) @map("recorded_at")
 
   hub             HubCenter @relation(fields: [hubId], references: [id], onDelete: Cascade)
+
+  @@index([hubId])
 
   @@map("hub_temperature_logs")
 }
@@ -573,6 +618,11 @@ model Order {
   supportTickets      SupportTicket[]
   walletTransactions  WalletTransaction[]
 
+  @@index([customerId, createdAt])
+  @@index([orderStatus])
+  @@index([paymentStatus])
+  @@index([createdAt])
+
   @@map("orders")
 }
 
@@ -600,9 +650,13 @@ model OrderItem {
   order           Order     @relation(fields: [orderId], references: [id], onDelete: Cascade)
   product         Product?  @relation(fields: [productId], references: [id], onDelete: SetNull)
   variant         ProductVariant? @relation(fields: [variantId], references: [id], onDelete: SetNull)
-  seller          Seller    @relation(fields: [sellerId], references: [id], onDelete: Cascade)
+  seller          Seller    @relation(fields: [sellerId], references: [id], onDelete: Restrict)
   hub             HubCenter? @relation(fields: [hubId], references: [id], onDelete: SetNull)
   reviews         Review[]
+
+  @@index([orderId])
+  @@index([sellerId])
+  @@index([productId])
 
   @@map("order_items")
 }
@@ -616,6 +670,8 @@ model OrderStatusHistory {
   createdAt DateTime @default(now()) @map("created_at")
 
   order     Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@index([orderId])
 
   @@map("order_status_history")
 }
@@ -645,6 +701,8 @@ model Rider {
 
   hub             HubCenter? @relation(fields: [hubId], references: [id], onDelete: SetNull)
   deliveries      Delivery[]
+
+  @@index([status, verificationStatus])
 
   @@map("riders")
 }
@@ -679,6 +737,8 @@ model Delivery {
 
   order                 Order     @relation(fields: [orderId], references: [id], onDelete: Cascade)
   rider                 Rider?    @relation(fields: [riderId], references: [id], onDelete: SetNull)
+
+  @@index([riderId, status])
 
   @@map("deliveries")
 }
@@ -716,6 +776,11 @@ model Review {
   customer          User       @relation(fields: [customerId], references: [id], onDelete: Cascade)
   seller            Seller     @relation(fields: [sellerId], references: [id], onDelete: Cascade)
   product           Product?   @relation(fields: [productId], references: [id], onDelete: SetNull)
+
+  @@unique([orderItemId, customerId])
+  @@index([sellerId])
+  @@index([productId])
+  @@index([customerId])
 
   @@map("reviews")
 }
@@ -755,6 +820,9 @@ model WalletTransaction {
   wallet        Wallet   @relation(fields: [walletId], references: [id], onDelete: Cascade)
   order         Order?   @relation(fields: [orderId], references: [id], onDelete: SetNull)
 
+  @@index([walletId, createdAt])
+  @@index([orderId])
+
   @@map("wallet_transactions")
 }
 
@@ -775,7 +843,9 @@ model SellerPayout {
   createdAt         DateTime  @default(now()) @map("created_at")
   updatedAt         DateTime  @updatedAt @map("updated_at")
 
-  seller            Seller    @relation(fields: [sellerId], references: [id], onDelete: Cascade)
+  seller            Seller    @relation(fields: [sellerId], references: [id], onDelete: Restrict)
+
+  @@index([sellerId, status])
 
   @@map("seller_payouts")
 }
@@ -824,6 +894,8 @@ model Promotion {
   seller            Seller?   @relation(fields: [sellerId], references: [id], onDelete: Cascade)
   usages            PromotionUsage[]
 
+  @@index([sellerId])
+
   @@map("promotions")
 }
 
@@ -837,6 +909,10 @@ model PromotionUsage {
 
   promotion     Promotion @relation(fields: [promotionId], references: [id], onDelete: Cascade)
   order         Order     @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@unique([promotionId, orderId])
+  @@index([promotionId, userId])
+  @@index([orderId])
 
   @@map("promotion_usages")
 }
@@ -859,6 +935,9 @@ model Notification {
   createdAt DateTime @default(now()) @map("created_at")
 
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, isRead])
+  @@index([userId, createdAt])
 
   @@map("notifications")
 }
@@ -887,6 +966,8 @@ model SupportTicket {
   order           Order?   @relation(fields: [orderId], references: [id], onDelete: SetNull)
   messages        SupportMessage[]
 
+  @@index([userId])
+
   @@map("support_tickets")
 }
 
@@ -900,6 +981,8 @@ model SupportMessage {
   createdAt DateTime @default(now()) @map("created_at")
 
   ticket    SupportTicket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+
+  @@index([ticketId])
 
   @@map("support_messages")
 }
@@ -940,6 +1023,9 @@ model CartItem {
   seller        Seller   @relation(fields: [sellerId], references: [id], onDelete: Cascade)
   hub           HubCenter? @relation(fields: [hubId], references: [id], onDelete: SetNull)
 
+  @@index([cartId])
+  @@index([productId])
+
   @@map("cart_items")
 }
 
@@ -957,6 +1043,9 @@ model InventoryReservation {
   createdAt       DateTime @default(now()) @map("created_at")
 
   product         Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@index([productId])
+  @@index([reservationId])
 
   @@map("inventory_reservations")
 }
@@ -979,6 +1068,8 @@ model UserActivityLog {
 
   user        User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
 
+  @@index([userId, createdAt])
+
   @@map("user_activity_logs")
 }
 
@@ -993,6 +1084,8 @@ model SearchQuery {
 
   user          User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
   clickedProduct Product? @relation(fields: [clickedProductId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
 
   @@map("search_queries")
 }
@@ -1029,6 +1122,9 @@ model AuditLog {
   createdAt     DateTime @default(now()) @map("created_at")
 
   user          User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([userId, createdAt])
+  @@index([entityType, entityId])
 
   @@map("audit_logs")
 }
@@ -1163,6 +1259,8 @@ model OrderMessage {
 
   order       Order     @relation(fields: [orderId], references: [id], onDelete: Cascade)
   sender      User      @relation(fields: [senderId], references: [id], onDelete: Cascade)
+
+  @@index([orderId, createdAt])
 
   @@map("order_messages")
 }

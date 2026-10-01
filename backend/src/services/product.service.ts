@@ -714,17 +714,10 @@ export class ProductService {
       throw new AppError('Seller not found', 404, 'SELLER_NOT_FOUND');
     }
 
-    // Generate slug
-    const slug = this.generateSlug(data.name);
-
-    // Check if slug exists
-    const existingProduct = await prisma.product.findUnique({
-      where: { slug },
-    });
-
-    if (existingProduct) {
-      throw new AppError('Product with this name already exists', 409, 'PRODUCT_EXISTS');
-    }
+    // Generate a slug that is unique across the whole catalog. Another seller may
+    // legitimately sell "Biryani" too, so a clash with someone else's product gets a
+    // suffix; only a duplicate within the seller's own products is an error.
+    const slug = await this.uniqueSlug(data.name, seller.id);
 
     // Create product - awaits admin moderation before it appears on the public catalog
     const product = await prisma.product.create({
@@ -803,17 +796,7 @@ export class ProductService {
     // If name changed, update slug
     let slug = product.slug;
     if (data.name && data.name !== product.name) {
-      slug = this.generateSlug(data.name);
-      // Check if new slug exists
-      const existingProduct = await prisma.product.findFirst({
-        where: {
-          slug,
-          id: { not: productId },
-        },
-      });
-      if (existingProduct) {
-        throw new AppError('Product with this name already exists', 409, 'PRODUCT_EXISTS');
-      }
+      slug = await this.uniqueSlug(data.name, product.sellerId, productId);
     }
 
     // Handle image updates
@@ -957,6 +940,27 @@ export class ProductService {
         totalPages: Math.ceil(total / limit),
       },
     };
+  }
+
+  /**
+   * A slug no other product uses. Throws PRODUCT_EXISTS only when the same seller
+   * already has a product with this name; a clash with another seller's product (or a
+   * name with no URL-safe characters, e.g. Urdu-only) gets a short random suffix.
+   */
+  private async uniqueSlug(name: string, sellerId: string, excludeProductId?: string): Promise<string> {
+    const base = this.generateSlug(name) || 'product';
+    for (let attempt = 0; attempt < 6; attempt++) {
+      const candidate = attempt === 0 && this.generateSlug(name) ? base : `${base}-${Math.random().toString(36).slice(2, 7)}`;
+      const clash = await prisma.product.findFirst({
+        where: { slug: candidate, ...(excludeProductId ? { id: { not: excludeProductId } } : {}) },
+        select: { sellerId: true },
+      });
+      if (!clash) return candidate;
+      if (clash.sellerId === sellerId && attempt === 0) {
+        throw new AppError('Product with this name already exists', 409, 'PRODUCT_EXISTS');
+      }
+    }
+    throw new AppError('Could not generate a unique product URL; try a different name', 409, 'PRODUCT_EXISTS');
   }
 
   /**

@@ -12,6 +12,8 @@ import orderService from '../src/services/order.service';
 import paymentService from '../src/services/payment.service';
 import adminOrderService from '../src/services/admin-order.service';
 import { completeRefund } from '../src/services/refund.service';
+import cartService from '../src/services/cart.service';
+import productService from '../src/services/product.service';
 import ledgerService from '../src/services/ledger.service';
 import sellerService from '../src/services/seller.service';
 import sellerOrderService from '../src/services/seller-order.service';
@@ -280,6 +282,39 @@ async function main() {
   const moSub = Number(mo.subtotal), moTot = Number(mo.totalAmount), moDel = Number(mo.deliveryFee);
   const expectRefund = Math.round(((500 / moSub) * (moTot - moDel) + 100) * 100) / 100;
   ok('cancelling a seller\'s last item also refunds that seller\'s delivery fee', Math.abs(Number(mr?.amount) - expectRefund) < 0.02, `refund=${mr?.amount} expected=${expectRefund}`);
+
+  // ---- 18. schema integrity ----
+  const cc = await mkUser();
+  const cp = await mkProduct(seller.id, 50, 100);
+  const adds = await Promise.all([1, 2, 3, 4, 5].map(() => cartService.addToCart(cc.id, { productId: cp.id, quantity: 1 } as any).then(() => 'OK', (e: any) => e.code)));
+  const cartRow = await prisma.cart.findUnique({ where: { userId: cc.id }, include: { items: true } });
+  ok('concurrent add-to-cart makes one line, not duplicates', cartRow!.items.length === 1 && cartRow!.items[0].quantity === 5, `lines=${cartRow!.items.length} qty=${cartRow!.items[0]?.quantity} ${adds.filter((a) => a !== 'OK')}`);
+
+  const mkProd = (sUserId: string, name: string) => productService.createProduct(sUserId, { name, price: 100, unit: 'pc', stockQuantity: 5, stockType: 'direct' } as any).then((p: any) => p, (e: any) => e.code);
+  const sA = await prisma.seller.findUnique({ where: { id: seller.id } });
+  const sB = await prisma.seller.findUnique({ where: { id: sellerB.id } });
+  const nm = 'Shared Biryani ' + uniq();
+  const pa: any = await mkProd(sA!.userId, nm);
+  const pb: any = await mkProd(sB!.userId, nm);
+  ok('two sellers can list a product with the same name (distinct slugs)', pa?.slug && pb?.slug && pa.slug !== pb.slug, `${pa?.slug} / ${pb?.slug ?? pb}`);
+  ok('the same seller still cannot list a duplicate name', (await mkProd(sA!.userId, nm)) === 'PRODUCT_EXISTS');
+  const urdu1: any = await mkProd(sA!.userId, 'بریانی'), urdu2: any = await mkProd(sB!.userId, 'بریانی');
+  ok('names with no URL-safe characters get unique slugs', !!urdu1?.slug && !!urdu2?.slug && urdu1.slug !== urdu2.slug, `${urdu1?.slug} / ${urdu2?.slug}`);
+
+  const revOrderItem = await prisma.orderItem.findFirst({ where: { orderId: sdo.id } });
+  const revData = { orderId: sdo.id, orderItemId: revOrderItem!.id, customerId: dc.id, sellerId: revOrderItem!.sellerId };
+  await prisma.review.create({ data: revData as any });
+  ok('the database refuses a second review of the same item by the same customer', (await prisma.review.create({ data: revData as any }).then(() => 'OK', (e: any) => e.code)) === 'P2002');
+
+  const dupUse = await prisma.promotion.create({ data: { code: 'DUPU' + uniq(), name: 'd', discountType: 'fixed', discountValue: 1, validFrom: new Date(), validUntil: new Date(Date.now() + 1e9) } as any });
+  const usage = { promotionId: dupUse.id, userId: dc.id, orderId: sdo.id, discountApplied: 1 };
+  await prisma.promotionUsage.create({ data: usage });
+  ok('the database refuses a second usage row for the same promotion on one order', (await prisma.promotionUsage.create({ data: usage }).then(() => 'OK', (e: any) => e.code)) === 'P2002');
+
+  const negStock = await prisma.product.update({ where: { id: cp.id }, data: { stockQuantity: -1 } }).then(() => 'OK', () => 'BLOCKED');
+  ok('stock can never be written negative (CHECK constraint)', negStock === 'BLOCKED', negStock);
+  const sellerWithOrders = await prisma.seller.delete({ where: { id: selfS.id } }).then(() => 'DELETED', () => 'BLOCKED');
+  ok('a seller with order history cannot be deleted (history is kept)', sellerWithOrders === 'BLOCKED', sellerWithOrders);
 
   console.log(`\n${pass} passed, ${fail} failed`);
   await prisma.$disconnect();
