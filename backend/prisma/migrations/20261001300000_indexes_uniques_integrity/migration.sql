@@ -4,7 +4,11 @@
 -- environments are built with `prisma db push` and the migration history
 -- predates much of the schema (see the note in 20261001000000_*).
 --
--- 1. Remove data that would violate the new constraints.
+-- 1. Remove data that would violate the new constraints (backed up first).
+--    NOTE: indexes below are built without CONCURRENTLY (a migration runs in a
+--    transaction); on a large live database run this in a maintenance window.
+--    Environments built with `prisma db push` skip migrations entirely, so they get
+--    neither this clean-up nor the CHECKs: run this file once against them too.
 -- 2. Add the indexes / uniques / foreign keys.
 -- 3. Add CHECK constraints (NOT VALID: enforced for every new write without
 --    scanning or failing on legacy rows). Prisma has no syntax for CHECKs, so
@@ -14,24 +18,68 @@
 -- 1. Clean-up
 -- ---------------------------------------------------------------------------
 
--- One review per customer per purchased item: keep the earliest of any duplicates.
-DELETE FROM "reviews" r
-USING "reviews" keep
-WHERE r."order_item_id" = keep."order_item_id"
-  AND r."customer_id" = keep."customer_id"
-  AND (r."created_at", r."id") > (keep."created_at", keep."id");
+-- Deleted rows are copied to *_dup_backup tables first (created once, kept for audit).
+CREATE TABLE IF NOT EXISTS "reviews_dup_backup" (LIKE "reviews");
+CREATE TABLE IF NOT EXISTS "promotion_usages_dup_backup" (LIKE "promotion_usages");
+
+-- One review per customer per purchased item: keep the earliest of any duplicates,
+-- then re-derive the product / seller rating aggregates the duplicates skewed.
+DROP TABLE IF EXISTS _dup_reviews;
+CREATE TEMP TABLE _dup_reviews AS
+SELECT r."id", r."product_id", r."seller_id"
+FROM "reviews" r
+JOIN "reviews" keep
+  ON r."order_item_id" = keep."order_item_id"
+ AND r."customer_id" = keep."customer_id"
+ AND (r."created_at", r."id") > (keep."created_at", keep."id");
+
+INSERT INTO "reviews_dup_backup" SELECT r.* FROM "reviews" r WHERE r."id" IN (SELECT "id" FROM _dup_reviews);
+DELETE FROM "reviews" WHERE "id" IN (SELECT "id" FROM _dup_reviews);
+
+UPDATE "products" p SET
+  "rating_average" = COALESCE((SELECT ROUND(AVG(r."product_rating")::numeric, 2) FROM "reviews" r WHERE r."product_id" = p."id" AND r."is_approved"), 0),
+  "total_reviews"  = (SELECT COUNT(*) FROM "reviews" r WHERE r."product_id" = p."id" AND r."is_approved")
+WHERE p."id" IN (SELECT "product_id" FROM _dup_reviews);
+UPDATE "sellers" s SET
+  "rating_average" = COALESCE((SELECT ROUND(AVG(r."seller_rating")::numeric, 2) FROM "reviews" r WHERE r."seller_id" = s."id" AND r."is_approved"), 0),
+  "total_reviews"  = (SELECT COUNT(*) FROM "reviews" r WHERE r."seller_id" = s."id" AND r."is_approved")
+WHERE s."id" IN (SELECT "seller_id" FROM _dup_reviews);
+DROP TABLE IF EXISTS _dup_reviews;
 
 -- One usage row per promotion per order: keep the earliest, then re-derive the
--- promotion counters that those duplicates inflated.
-DELETE FROM "promotion_usages" p
-USING "promotion_usages" keep
-WHERE p."promotion_id" = keep."promotion_id"
-  AND p."order_id" = keep."order_id"
-  AND (p."used_at", p."id") > (keep."used_at", keep."id");
+-- counters of only the promotions those duplicates inflated.
+DROP TABLE IF EXISTS _dup_usages;
+CREATE TEMP TABLE _dup_usages AS
+SELECT p."id", p."promotion_id"
+FROM "promotion_usages" p
+JOIN "promotion_usages" keep
+  ON p."promotion_id" = keep."promotion_id"
+ AND p."order_id" = keep."order_id"
+ AND (p."used_at", p."id") > (keep."used_at", keep."id");
+
+INSERT INTO "promotion_usages_dup_backup" SELECT u.* FROM "promotion_usages" u WHERE u."id" IN (SELECT "id" FROM _dup_usages);
+DELETE FROM "promotion_usages" WHERE "id" IN (SELECT "id" FROM _dup_usages);
 
 UPDATE "promotions" pr
 SET "used_count" = (SELECT COUNT(*) FROM "promotion_usages" u WHERE u."promotion_id" = pr."id")
-WHERE pr."used_count" <> (SELECT COUNT(*) FROM "promotion_usages" u WHERE u."promotion_id" = pr."id");
+WHERE pr."id" IN (SELECT "promotion_id" FROM _dup_usages);
+DROP TABLE IF EXISTS _dup_usages;
+
+-- Negative stock / balances would make even an unrelated UPDATE fail the CHECKs below
+-- (NOT VALID still checks every new row version). Keep a record of them, then zero.
+CREATE TABLE IF NOT EXISTS "negative_values_backup" (
+  "table_name" TEXT NOT NULL, "row_id" TEXT NOT NULL, "column_name" TEXT NOT NULL,
+  "old_value" NUMERIC NOT NULL, "recorded_at" TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+INSERT INTO "negative_values_backup" ("table_name","row_id","column_name","old_value")
+  SELECT 'products', "id", 'stock_quantity', "stock_quantity" FROM "products" WHERE "stock_quantity" < 0
+  UNION ALL SELECT 'product_variants', "id", 'stock_quantity', "stock_quantity" FROM "product_variants" WHERE "stock_quantity" < 0
+  UNION ALL SELECT 'wallets', "id", 'balance', "balance" FROM "wallets" WHERE "balance" < 0
+  UNION ALL SELECT 'hub_inventory', "id", 'quantity', "quantity" FROM "hub_inventory" WHERE "quantity" < 0;
+UPDATE "products" SET "stock_quantity" = 0 WHERE "stock_quantity" < 0;
+UPDATE "product_variants" SET "stock_quantity" = 0 WHERE "stock_quantity" < 0;
+UPDATE "wallets" SET "balance" = 0 WHERE "balance" < 0;
+UPDATE "hub_inventory" SET "quantity" = 0 WHERE "quantity" < 0;
 
 -- Hub managers that point at a user that no longer exists.
 UPDATE "hub_centers" SET "manager_id" = NULL

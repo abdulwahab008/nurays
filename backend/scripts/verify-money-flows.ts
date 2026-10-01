@@ -6,6 +6,9 @@
  *     npx prisma db push --skip-generate && npx ts-node scripts/verify-money-flows.ts
  *
  * Creates its own users/sellers/products with unique values; use a throwaway DB.
+ *
+ * The CHECK-constraint assertions need the CHECKs to exist, which `prisma db push`
+ * does not create: apply the 20261001300000 migration.sql first, otherwise those checks fail.
  */
 import prisma from '../src/config/database';
 import orderService from '../src/services/order.service';
@@ -112,7 +115,10 @@ async function main() {
   const scoped = await prisma.promotion.create({ data: { code: 'ONLYP', name: 'p', discountType: 'percentage', discountValue: 50, applicableProductIds: [p.id], validFrom: new Date(Date.now() - 1e6), validUntil: new Date(Date.now() + 1e9), usageLimitPerUser: 5 } as any });
   const o4: any = (await order(cust.id, [{ productId: p.id, quantity: 1 }, { productId: pB2.id, quantity: 1 }], { promotionCode: 'onlyp' })).order;
   const pcode = o4.discountAmount;
-  ok('product-scoped promo discounts only the matching item', Number(pcode) >= 500 - 0.01 && Number(pcode) <= 500 + 0.01 || Number(pcode) > 0 && Number(pcode) < 1000, `discount=${pcode}`);
+  const o4items = await prisma.orderItem.findMany({ where: { orderId: o4.id } });
+  const o4p = o4items.find((i) => i.productId === p.id)!;
+  const o4b = o4items.find((i) => i.productId === pB2.id)!;
+  ok('product-scoped promo discounts only the matching item', Math.abs(Number(pcode) - Number(o4p.totalPrice) / 2) < 0.01 && Number(o4p.promoDiscount) === Number(pcode) && Number(o4b.promoDiscount) === 0, `discount=${pcode} p=${o4p.promoDiscount} b=${o4b.promoDiscount}`);
 
   // ---- 9. promo usage released on cancel ----
   const usedBefore = (await prisma.promotion.findUnique({ where: { id: scoped.id } }))!.usedCount;
@@ -506,7 +512,8 @@ async function main() {
   ok('parallel wrong guesses are capped at 5', bruteRow!.attempts === 5 && guesses.filter((g) => g === 'OTP_INVALID').length === 5, `attempts=${bruteRow!.attempts} ${guesses.filter((g) => g === 'OTP_INVALID').length} invalid`);
   ok('even the right code is refused once locked', (await otpService.verifyOTP(brutePhone, bruteCode, 'login').then(() => 'OK', (e: any) => e.code)) === 'OTP_MAX_ATTEMPTS');
   const fresh = await otpService.generateOTP(brutePhone, 'login');
-  ok('requesting a new code after a lock-out gives a NEW code', fresh !== bruteCode || (await prisma.otpVerification.count({ where: { phone: brutePhone } })) === 2);
+  const freshRow = await prisma.otpVerification.findFirst({ where: { phone: brutePhone }, orderBy: { createdAt: 'desc' } });
+  ok('requesting a new code after a lock-out gives a fresh, unlocked code', (await prisma.otpVerification.count({ where: { phone: brutePhone } })) === 2 && freshRow!.attempts === 0 && freshRow!.id !== bruteRow!.id && !!fresh);
 
   // ---- 23. review round: money ----
   const rc2 = await mkUser();
