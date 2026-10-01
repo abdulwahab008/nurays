@@ -53,6 +53,8 @@ export default function ManualPaymentCard({
   const [localProofUrl, setLocalProofUrl] = useState<string | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
+  // Which upload is current: a removed (or replaced) screenshot's late response must not re-attach it.
+  const uploadToken = useRef(0);
   const { showToast } = useToast();
 
   useEffect(() => {
@@ -99,6 +101,8 @@ export default function ManualPaymentCard({
     }
 
     setScreenshotFile(file);
+    setUploadedProofUrl(null);
+    const token = ++uploadToken.current;
 
     // Create local preview immediately
     const reader = new FileReader();
@@ -116,18 +120,23 @@ export default function ManualPaymentCard({
       const res = await apiClient.post('/upload/payment-proof', formData, {
         headers: { 'Content-Type': 'multipart/form-data' },
       });
-      if (res.data?.success && res.data.data?.url) {
+      if (token === uploadToken.current && res.data?.success && res.data.data?.url) {
         setUploadedProofUrl(res.data.data.url);
       }
     } catch (err) {
-      console.warn('Direct upload fallback to dataURL:', err);
-      // Fallback: we will send the base64 dataUrl if backend upload fails
+      console.warn('Payment proof upload failed:', err);
+      if (token !== uploadToken.current) return;
+      setScreenshotFile(null);
+      setScreenshotPreview(null);
+      showToast('Could not upload the screenshot. Please try again, or enter the reference number instead.', 'error');
     } finally {
-      setUploadingImage(false);
+      if (token === uploadToken.current) setUploadingImage(false);
     }
   };
 
   const removeScreenshot = () => {
+    uploadToken.current++;
+    setUploadingImage(false);
     setScreenshotFile(null);
     setScreenshotPreview(null);
     setUploadedProofUrl(null);
@@ -140,7 +149,9 @@ export default function ManualPaymentCard({
     e.preventDefault();
 
     // Friendly validation: user can provide screenshot OR TID OR simply indicate transfer
-    const activeProofUrl = uploadedProofUrl || screenshotPreview || undefined;
+    // Only a proof that actually uploaded: the local preview is a base64 data URL
+    // (up to the full image size) which the server rejects and must never be sent.
+    const activeProofUrl = uploadedProofUrl || undefined;
     const cleanTid = transactionId.trim();
 
     if (!cleanTid && !activeProofUrl) {
@@ -570,7 +581,7 @@ export default function ManualPaymentCard({
               <div className="pt-2 flex gap-3">
                 <button
                   type="submit"
-                  disabled={submitting || (!transactionId.trim() && !screenshotPreview)}
+                  disabled={submitting || uploadingImage || (!transactionId.trim() && !uploadedProofUrl)}
                   className="flex-1 py-3 px-4 rounded-2xl font-black text-xs text-white bg-[#FF5500] hover:bg-[#e04400] disabled:opacity-50 transition-all shadow-md flex items-center justify-center gap-1.5"
                 >
                   {submitting ? (

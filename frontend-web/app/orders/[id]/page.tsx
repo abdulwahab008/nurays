@@ -1,6 +1,6 @@
 'use client';
 
-import { Suspense, useEffect, useState } from 'react';
+import { Suspense, useEffect, useRef, useState } from 'react';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { orderService } from '@/lib/services/order.service';
@@ -192,7 +192,7 @@ function OrderDetailContent() {
   const searchParams = useSearchParams();
   const { isAuthenticated, user } = useAuthStore();
   const { showToast } = useToast();
-  const { joinOrderRoom, leaveOrderRoom, onOrderStatusUpdate, onDeliveryTracking } = useSocket();
+  const { joinOrderRoom, onOrderStatusUpdate, onDeliveryTracking } = useSocket();
   const [order, setOrder] = useState<OrderDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [trackingData, setTrackingData] = useState<any>(null);
@@ -216,64 +216,87 @@ function OrderDetailContent() {
     }
     if (params.id) {
       loadOrder();
-      joinOrderRoom(params.id as string);
-
-      // Set up real-time listeners
-      const unsubscribeStatus = onOrderStatusUpdate((data: any) => {
-        // Instantly update the status badge
-        setOrder((prev) =>
-          prev ? { ...prev, status: data.status, orderStatus: data.status } : null
-        );
-        if (data.status === 'cancelled') {
-          // Reload full order so timeline, canCancel, etc. are all in sync
-          loadOrder();
-          showToast('Your order has been cancelled.', 'error', 10000);
-          playCancelSound();
-        }
-      });
-
-      const unsubscribeTracking = onDeliveryTracking((data) => {
-        setTrackingData(data);
-      });
-
-      return () => {
-        leaveOrderRoom(params.id as string);
-        unsubscribeStatus?.();
-        unsubscribeTracking?.();
-      };
     }
   }, [params.id, isAuthenticated]);
+
+  // Real-time updates. Depends on the socket-bound functions, so it re-runs (and
+  // re-joins the order room) whenever the socket is replaced — e.g. after a token
+  // refresh — instead of staying attached to a dead connection.
+  useEffect(() => {
+    const orderId = params.id as string | undefined;
+    if (!orderId) return;
+
+    const leaveRoom = joinOrderRoom(orderId);
+
+    const unsubscribeStatus = onOrderStatusUpdate((data: any) => {
+      // The server also pushes every one of this customer's other orders to their
+      // personal room; only this order's updates belong on this page.
+      if (data?.orderId !== orderId) return;
+      // Instantly update the status badge
+      setOrder((prev) =>
+        prev ? { ...prev, status: data.status, orderStatus: data.status } : null
+      );
+      if (data.status === 'cancelled') {
+        // Reload full order so timeline, canCancel, etc. are all in sync
+        loadOrder();
+        showToast('Your order has been cancelled.', 'error', 10000);
+        playCancelSound();
+      }
+    });
+
+    const unsubscribeTracking = onDeliveryTracking((data: any) => {
+      if (data?.orderId && data.orderId !== orderId) return;
+      setTrackingData(data);
+    });
+
+    return () => {
+      leaveRoom?.();
+      unsubscribeStatus?.();
+      unsubscribeTracking?.();
+    };
+  }, [params.id, joinOrderRoom, onOrderStatusUpdate, onDeliveryTracking]);
 
   useEffect(() => {
     if (searchParams.get('placed') === '1') setShowPlacedBanner(true);
   }, [searchParams]);
 
+  // Latest-wins loading: a slow response for an older request must never overwrite a
+  // newer one (polling, a cancel reload and the first load can overlap).
+  const loadSeqRef = useRef(0);
+  const inFlightRef = useRef(false);
+
   const loadOrder = async (silent = false) => {
+    const seq = ++loadSeqRef.current;
+    inFlightRef.current = true;
     if (!silent) setLoading(true);
     try {
       const response = await orderService.getOrderDetails(params.id as string);
+      if (seq !== loadSeqRef.current) return; // a newer load superseded this one
       const raw = (response as any)?.data ?? response;
       setOrder(mapOrderToDetail(raw));
     } catch (error) {
       console.error('Failed to load order:', error);
     } finally {
+      if (seq === loadSeqRef.current) inFlightRef.current = false;
       if (!silent) setLoading(false);
     }
   };
 
-  // Automated live polling loop (every 3 seconds) for real-time status updates across portals
+  // Safety-net polling (every 3 seconds) for portals that update the order without
+  // a socket event. Reads the latest status from a ref instead of calling setState
+  // with a side effect in the updater (updaters must be pure — StrictMode runs
+  // them twice, which fired two requests per tick), and never starts a request
+  // while the previous one is still in flight.
+  const statusRef = useRef('');
+  statusRef.current = order?.status || order?.orderStatus || '';
+
   useEffect(() => {
     if (!isAuthenticated || !params.id) return;
+    const terminal = ['delivered', 'completed', 'cancelled', 'refunded', 'delivery_failed'];
     const interval = setInterval(() => {
-      setOrder((current) => {
-        if (!current) return current;
-        const terminal = ['delivered', 'completed', 'cancelled', 'refunded', 'delivery_failed'];
-        const status = current.status || current.orderStatus || '';
-        if (!terminal.includes(status)) {
-          loadOrder(true);
-        }
-        return current;
-      });
+      if (!statusRef.current || terminal.includes(statusRef.current)) return;
+      if (inFlightRef.current) return;
+      loadOrder(true);
     }, 3000);
     return () => clearInterval(interval);
   }, [isAuthenticated, params.id]);
@@ -282,11 +305,20 @@ function OrderDetailContent() {
     if (!cancelReason.trim()) return;
     try {
       setCancelling(true);
-      await orderService.cancelOrder(params.id as string, cancelReason.trim());
+      const res = await orderService.cancelOrder(params.id as string, cancelReason.trim());
       setShowCancelModal(false);
       setCancelReason('');
       loadOrder();
-      showToast('Order cancelled successfully', 'success');
+      // Say what happens to money already paid, rather than a bare "cancelled".
+      const d = res?.data ?? {};
+      const amt = Number(d.refundAmount ?? 0);
+      if (amt > 0 && d.refundStatus === 'refunded_to_wallet') {
+        showToast(`Order cancelled. Rs ${amt.toLocaleString()} has been refunded to your wallet.`, 'success', 8000);
+      } else if (amt > 0) {
+        showToast(`Order cancelled. Your refund of Rs ${amt.toLocaleString()} is being processed and will be sent to you manually.`, 'success', 10000);
+      } else {
+        showToast('Order cancelled successfully', 'success');
+      }
     } catch (error: any) {
       showToast(error.response?.data?.error?.message || 'Failed to cancel order', 'error');
     } finally {
@@ -468,6 +500,8 @@ function OrderDetailContent() {
                   ? 'bg-green-100 text-green-800'
                   : order.paymentStatus === 'refunded'
                   ? 'bg-blue-100 text-blue-800'
+                  : order.paymentStatus === 'refund_pending'
+                  ? 'bg-amber-100 text-amber-800'
                   : 'bg-gray-100 text-gray-800'
               }`}
             >
@@ -480,7 +514,9 @@ function OrderDetailContent() {
           {/* Order Items */}
           <div className="lg:col-span-2 space-y-4">
             {/* Direct Manual Payment Card */}
-            {order.paymentStatus !== 'paid' && (
+            {!['cancelled', 'refunded'].includes(orderStatus) &&
+              !['cod', 'wallet'].includes((order.paymentMethod ?? '').toLowerCase()) &&
+              ['pending', 'failed', 'disputed', 'payment_submitted'].includes(order.paymentStatus ?? 'pending') && (
               <ManualPaymentCard
                 orderId={order.id}
                 totalAmount={order.pricing?.total ?? 0}

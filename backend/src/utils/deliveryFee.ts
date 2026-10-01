@@ -26,6 +26,19 @@ export interface AddressForDelivery {
   postalCode?: string | null;
   latitude?: number | null;
   longitude?: number | null;
+  /** The community the buyer's address belongs to (UserAddress.communityId). */
+  communityId?: string | null;
+  /** True when a real address was checked and matched no community (vs. no address info at all). */
+  communityUnresolved?: boolean;
+}
+
+/** One community's delivery terms, fixed by the seller (SellerCommunityDelivery). */
+export interface CommunityDeliveryRule {
+  communityId: string;
+  fee: unknown;
+  freeAbove?: unknown;
+  minOrderAmount?: unknown;
+  isEnabled: boolean;
 }
 
 export interface DistancePricingTier {
@@ -55,6 +68,14 @@ export interface SellerDeliveryPolicy {
   freeDeliveryThreshold?: unknown;
   allowedPostalCodes?: string[] | null;
   deliveryZones?: unknown;
+  /** The seller's home community. Community rules only apply when this is known. */
+  communityId?: string | null;
+  /** Seller opt-out of delivering outside their home community (default true). */
+  allowCrossCommunity?: boolean | null;
+  /** Seller's home community settings, for the community-wide cross-community switch. */
+  community?: { crossCommunityEnabled?: boolean | null } | null;
+  /** Per-community terms the seller has fixed. Non-empty => authoritative. */
+  communityDeliveries?: CommunityDeliveryRule[] | null;
 }
 
 export interface DeliveryFeeResult {
@@ -108,6 +129,95 @@ function platformDefaultFee(city?: string | null): number {
   return fee;
 }
 
+function toNumber(value: unknown): number | null {
+  if (value == null) return null;
+  const n = Number(value);
+  return Number.isFinite(n) ? n : null;
+}
+
+/**
+ * Community-aware delivery rules. Returns a final result when the buyer's
+ * community settles the question, or null to fall through to the seller-wide
+ * policy. Only applies when both the seller's home community and the buyer's
+ * address community are known, so sellers/addresses without one behave as before.
+ *
+ *  1. Cross-community: a buyer outside the seller's home community is refused if
+ *     the seller opted out (allowCrossCommunity=false) or the seller's
+ *     community has cross-community delivery switched off.
+ *  2. Per-community terms: once the seller has fixed terms for at least one
+ *     community, those rows are authoritative. A community with no enabled row
+ *     is not deliverable; otherwise the row's fee / free-above / minimum apply.
+ *     Buyers whose address has no community fall through to the seller-wide policy.
+ */
+function resolveCommunityDelivery(
+  seller: SellerDeliveryPolicy,
+  address: AddressForDelivery,
+  distanceKm: number | null,
+  subtotal?: number
+): DeliveryFeeResult | null {
+  const buyerCommunityId = address.communityId ?? null;
+  if (!buyerCommunityId) {
+    // A real address that matches no community must not slip past the seller's
+    // community rules (per-community terms, own-community-only delivery).
+    const hasRules = Array.isArray(seller.communityDeliveries) && seller.communityDeliveries.length > 0;
+    const ownCommunityOnly =
+      seller.communityId != null && (seller.allowCrossCommunity === false || seller.community?.crossCommunityEnabled === false);
+    if (address.communityUnresolved && (hasRules || ownCommunityOnly)) {
+      return {
+        deliverable: false,
+        fee: 0,
+        reason: "We couldn't match your address to a community. Choose your community on the address to order from this seller",
+        distanceKm,
+      };
+    }
+    return null;
+  }
+
+  const sellerCommunityId = seller.communityId ?? null;
+  const isCrossCommunity = sellerCommunityId != null && sellerCommunityId !== buyerCommunityId;
+
+  if (isCrossCommunity) {
+    if (seller.allowCrossCommunity === false || seller.community?.crossCommunityEnabled === false) {
+      return {
+        deliverable: false,
+        fee: 0,
+        reason: "This seller only delivers within their own community",
+        distanceKm,
+      };
+    }
+  }
+
+  const rules = Array.isArray(seller.communityDeliveries) ? seller.communityDeliveries : [];
+  if (rules.length === 0) return null;
+
+  const rule = rules.find((r) => r.communityId === buyerCommunityId);
+  if (!rule || !rule.isEnabled) {
+    return {
+      deliverable: false,
+      fee: 0,
+      reason: "This seller hasn't set up delivery to your community",
+      distanceKm,
+    };
+  }
+
+  const minOrder = toNumber(rule.minOrderAmount) ?? toNumber(seller.minOrderAmountForDelivery);
+  if (minOrder != null && subtotal != null && subtotal < minOrder) {
+    return {
+      deliverable: false,
+      fee: 0,
+      reason: `Minimum order for delivery is Rs ${minOrder}`,
+      distanceKm,
+    };
+  }
+
+  const freeAbove = toNumber(rule.freeAbove);
+  if (freeAbove != null && subtotal != null && subtotal >= freeAbove) {
+    return { deliverable: true, fee: 0, reason: `Free delivery above Rs ${freeAbove}`, distanceKm };
+  }
+
+  return { deliverable: true, fee: Math.max(0, toNumber(rule.fee) ?? 0), reason: null, distanceKm };
+}
+
 /**
  * Get delivery fee (and eligibility) for one seller for a given address.
  * originLat/originLng = hub or seller location (used for distance-based fee/radius/max-distance).
@@ -128,6 +238,11 @@ export function getDeliveryFeeForSeller(
     fromLat != null && fromLng != null && toLat != null && toLng != null
       ? haversineKm(fromLat, fromLng, toLat, toLng)
       : null;
+
+  // Community rules come first: the buyer's community decides whether we
+  // deliver at all and, once the seller has fixed per-community terms, what it costs.
+  const communityResult = resolveCommunityDelivery(seller, address, distanceKm, subtotal);
+  if (communityResult) return communityResult;
 
   const maxKm = seller.maxDeliveryDistanceKm;
   if (maxKm != null && distanceKm != null && distanceKm > maxKm) {

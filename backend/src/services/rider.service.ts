@@ -96,11 +96,20 @@ export class RiderService {
     const order = await prisma.order.findUnique({
       where: { id: orderId },
       include: {
-        items: { include: { seller: { select: { businessName: true, latitude: true, longitude: true } } }, take: 1 },
+        items: { include: { seller: { select: { businessName: true, latitude: true, longitude: true, deliveryProvider: true } } } },
         deliveryAddress: true,
       },
     });
     if (!order || order.deliveryType !== 'home_delivery') return;
+
+    // Sellers who deliver themselves don't post to the rider pool; they drive the
+    // order to delivered / delivery_failed from their own dashboard. If any seller
+    // on the order relies on the platform, the order still needs a rider job.
+    // Hub-fulfilled items are always delivered by the platform, whatever the seller's own setting.
+    const needsPlatformRider = order.items.some(
+      (i) => i.status !== 'cancelled' && (i.fulfillmentType === 'hub' || i.seller?.deliveryProvider !== 'self')
+    );
+    if (!needsPlatformRider) return;
 
     const existing = await prisma.delivery.findUnique({ where: { orderId } });
     if (existing) return;
@@ -116,8 +125,9 @@ export class RiderService {
     const deliveryOtp = Math.floor(1000 + Math.random() * 9000).toString();
     const estimatedReadyAt = new Date(Date.now() + estimatedPrepMinutes * 60 * 1000);
 
-    const pickupLat = order.items[0]?.seller?.latitude ? Number(order.items[0].seller.latitude) : 24.8607;
-    const pickupLng = order.items[0]?.seller?.longitude ? Number(order.items[0].seller.longitude) : 67.0011;
+    const pickupSeller = (order.items.find((i) => i.status !== 'cancelled' && (i.fulfillmentType === 'hub' || i.seller?.deliveryProvider !== 'self')) ?? order.items[0])?.seller;
+    const pickupLat = pickupSeller?.latitude ? Number(pickupSeller.latitude) : 24.8607;
+    const pickupLng = pickupSeller?.longitude ? Number(pickupSeller.longitude) : 67.0011;
     const deliveryLat = order.deliveryAddress?.latitude ? Number(order.deliveryAddress.latitude) : 24.8715;
     const deliveryLng = order.deliveryAddress?.longitude ? Number(order.deliveryAddress.longitude) : 67.0594;
 
@@ -125,7 +135,7 @@ export class RiderService {
       await prisma.delivery.create({
         data: {
           orderId,
-          pickupAddress: order.items[0]?.seller?.businessName ?? 'Seller pickup',
+          pickupAddress: pickupSeller?.businessName ?? 'Seller pickup',
           deliveryAddress,
           pickupLatitude: pickupLat,
           pickupLongitude: pickupLng,

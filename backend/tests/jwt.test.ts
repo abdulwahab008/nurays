@@ -38,10 +38,38 @@ describe('jwt utils', () => {
     expect(decoded?.userId).toBe(payload.userId);
   });
 
-  it('refresh tokens verify with the same secret and carry the same claims', () => {
+  it('refresh tokens verify (as refresh tokens) with the same secret and carry the same claims', () => {
     const refresh = generateRefreshToken(payload);
-    const decoded = verifyToken(refresh);
+    const decoded = require('../src/utils/jwt').verifyRefreshToken(refresh);
     expect(decoded.userId).toBe(payload.userId);
     expect(decoded.userType).toBe(payload.userType);
+  });
+});
+
+describe('jwt token types', () => {
+  // verifyRefreshToken is imported lazily so the existing imports above stay as-is.
+  const { verifyRefreshToken, tokenTtlSeconds } = require('../src/utils/jwt');
+
+  it('stamps access and refresh tokens with their purpose', () => {
+    expect(decodeToken(generateToken(payload))?.typ).toBe('access');
+    expect(decodeToken(generateRefreshToken(payload))?.typ).toBe('refresh');
+  });
+
+  it('does not accept an access token as a refresh token', () => {
+    expect(() => verifyRefreshToken(generateToken(payload))).toThrow('Invalid or expired token');
+  });
+
+  it('does not accept a refresh token as an access token', () => {
+    expect(() => verifyToken(generateRefreshToken(payload))).toThrow('Invalid or expired token');
+  });
+
+  it('accepts a refresh token where a refresh token is required', () => {
+    expect(verifyRefreshToken(generateRefreshToken(payload)).userId).toBe(payload.userId);
+  });
+
+  it('reports the real access-token lifetime', () => {
+    const ttl = tokenTtlSeconds(generateToken(payload));
+    expect(ttl).toBeGreaterThan(0);
+    expect(ttl).toBeLessThan(tokenTtlSeconds(generateRefreshToken(payload)));
   });
 });

@@ -14,12 +14,53 @@ export class AppError extends Error {
   }
 }
 
+/**
+ * Known library errors a client caused, translated to the right 4xx instead of a
+ * blanket 500: a unique-constraint hit (now common — reviews, promo usage, SKUs),
+ * a missing record, a malformed or oversized body, an upload over the size limit.
+ * Anything unrecognised is returned unchanged and handled as a real 500.
+ */
+export const toAppError = (err: any): Error | AppError => {
+  if (err instanceof AppError) return err;
+
+  // Prisma (identified by shape so this file needn't import the client)
+  if (typeof err?.code === 'string' && /^P\d{4}$/.test(err.code) && err.clientVersion) {
+    if (err.code === 'P2002') {
+      return new AppError('This record already exists', 409, 'DUPLICATE_RECORD');
+    }
+    if (err.code === 'P2003') {
+      return new AppError('A referenced record does not exist', 400, 'INVALID_REFERENCE');
+    }
+    if (err.code === 'P2025') {
+      return new AppError('Record not found', 404, 'NOT_FOUND');
+    }
+  }
+
+  // body-parser
+  if (err?.type === 'entity.too.large') {
+    return new AppError('Request body is too large', 413, 'PAYLOAD_TOO_LARGE');
+  }
+  if (err?.type === 'entity.parse.failed') {
+    return new AppError('Request body is not valid JSON', 400, 'INVALID_JSON');
+  }
+
+  // multer
+  if (err?.name === 'MulterError') {
+    return err.code === 'LIMIT_FILE_SIZE'
+      ? new AppError('File is too large', 413, 'FILE_TOO_LARGE')
+      : new AppError(err.message || 'Invalid upload', 400, 'INVALID_UPLOAD');
+  }
+
+  return err;
+};
+
 export const errorHandler = (
-  err: Error | AppError,
+  rawErr: Error | AppError,
   req: Request,
   res: Response,
   _next: NextFunction
 ): void => {
+  const err = toAppError(rawErr);
   // Handle AppError
   if (err instanceof AppError) {
     const statusCode = err.statusCode || 500;

@@ -39,6 +39,65 @@ type CatalogEligiblePromotion = {
   usageLimitPerUser: number;
 };
 
+export interface PromotionScopeItem {
+  productId: string | null;
+  sellerId: string;
+  total: number;
+}
+
+/**
+ * The part of an order a manually-entered promotion code may discount. A
+ * seller's code only covers that seller's items, and a code limited to specific
+ * products only covers those; everything else is untouched. Without this, a
+ * code issued by one seller discounted the whole cart, including other sellers'
+ * items (the platform/other seller silently funds it).
+ */
+export function isItemEligibleForPromotion(
+  promotion: { sellerId: string | null; applicableProductIds: string[] },
+  item: PromotionScopeItem
+): boolean {
+  if (promotion.sellerId && item.sellerId !== promotion.sellerId) return false;
+  return (
+    promotion.applicableProductIds.length === 0 ||
+    (item.productId != null && promotion.applicableProductIds.includes(item.productId))
+  );
+}
+
+export function eligibleSubtotalForPromotion(
+  promotion: { sellerId: string | null; applicableProductIds: string[] },
+  items: PromotionScopeItem[]
+): number {
+  return items.filter((i) => isItemEligibleForPromotion(promotion, i)).reduce((sum, i) => sum + i.total, 0);
+}
+
+/**
+ * Give back the usage a cancelled order consumed, so a cancelled order doesn't
+ * burn a customer's per-user limit or a code's total quota. Call inside the
+ * cancel transaction.
+ */
+export async function releasePromotionUsage(
+  tx: {
+    promotionUsage: {
+      findMany: (a: any) => Promise<Array<{ id: string; promotionId: string }>>;
+      deleteMany: (a: any) => Promise<unknown>;
+    };
+    promotion: { updateMany: (a: any) => Promise<unknown> };
+  },
+  orderId: string
+) {
+  const usages = await tx.promotionUsage.findMany({ where: { orderId } });
+  if (usages.length === 0) return;
+  await tx.promotionUsage.deleteMany({ where: { orderId } });
+  const perPromotion = new Map<string, number>();
+  for (const u of usages) perPromotion.set(u.promotionId, (perPromotion.get(u.promotionId) ?? 0) + 1);
+  for (const [promotionId, n] of perPromotion) {
+    await tx.promotion.updateMany({
+      where: { id: promotionId, usedCount: { gte: n } },
+      data: { usedCount: { decrement: n } },
+    });
+  }
+}
+
 export class PromotionService {
   /** Is this promotion in scope for the product at all (seller + product-scope match)? */
   private isInPromotionScope(
@@ -144,11 +203,35 @@ export class PromotionService {
    */
   async validatePromotionCode(userId: string, code: string, cartTotal: number) {
     const promotion = await prisma.promotion.findUnique({
-      where: { code: code.toUpperCase() },
+      where: { code: code.trim().toUpperCase() },
     });
 
     if (!promotion) {
       throw new AppError('Invalid promotion code', 400, 'INVALID_PROMO_CODE');
+    }
+
+    // A seller- or product-scoped code only discounts the matching part of the
+    // cart. Scope it by the user's server cart when it has items.
+    if (promotion.sellerId || promotion.applicableProductIds.length > 0) {
+      const cartItems = await prisma.cartItem.findMany({ where: { cart: { userId } } });
+      if (cartItems.length > 0) {
+        const eligible = eligibleSubtotalForPromotion(
+          promotion,
+          cartItems.map((i) => ({
+            productId: i.productId,
+            sellerId: i.sellerId,
+            total: Number(i.priceSnapshot) * i.quantity,
+          }))
+        );
+        if (eligible <= 0) {
+          throw new AppError(
+            'This code does not apply to the items in your cart',
+            400,
+            'PROMO_NOT_APPLICABLE'
+          );
+        }
+        cartTotal = Math.min(cartTotal, eligible);
+      }
     }
 
     if (!promotion.isActive) {
@@ -229,7 +312,15 @@ export class PromotionService {
     });
 
     // Filter promotions that haven't exceeded usage limit
+    // Seller-issued codes are only offered to a customer who has that seller's
+    // items in their cart, so one seller's codes can't be enumerated by everyone.
+    const cartSellerIds = new Set(
+      (await prisma.cartItem.findMany({ where: { cart: { userId } }, select: { sellerId: true } })).map(
+        (i) => i.sellerId
+      )
+    );
     const availablePromotions = allPromotions.filter((promo) => {
+      if (promo.sellerId && !cartSellerIds.has(promo.sellerId)) return false;
       if (promo.usageLimitTotal === null) return true;
       return promo.usedCount < promo.usageLimitTotal;
     });

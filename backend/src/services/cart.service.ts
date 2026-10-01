@@ -1,6 +1,9 @@
 import prisma from '../config/database';
 import { AppError } from '../middleware/errorHandler';
 import { getDeliveryFeeForSeller } from '../utils/deliveryFee';
+import { SELLER_COMMUNITY_DELIVERY_SELECT } from '../utils/sellerDeliverySelect';
+import { communityService } from './community.service';
+import { sellableBatchWhere } from '../utils/hubStock';
 
 export class CartService {
   /**
@@ -12,11 +15,18 @@ export class CartService {
     });
 
     if (!cart) {
-      cart = await prisma.cart.create({
-        data: {
-          userId,
-        },
-      });
+      try {
+        cart = await prisma.cart.create({
+          data: {
+            userId,
+          },
+        });
+      } catch (err: any) {
+        // A user's first two requests can race to create the cart (userId is unique):
+        // the loser just uses the winner's row.
+        if (err?.code !== 'P2002') throw err;
+        cart = await prisma.cart.findUniqueOrThrow({ where: { userId } });
+      }
     }
 
     return cart;
@@ -204,6 +214,7 @@ export class CartService {
             freeDeliveryThreshold: true,
             allowedPostalCodes: true,
             deliveryZones: true,
+            ...SELLER_COMMUNITY_DELIVERY_SELECT,
           },
         },
         hub: { select: { id: true, latitude: true, longitude: true } },
@@ -218,12 +229,15 @@ export class CartService {
     if (!address) {
       throw new AppError('Address not found', 404, 'ADDRESS_NOT_FOUND');
     }
+    const resolvedCommunityId = address.communityId ?? (await communityService.resolveCommunityIdForAddress(address, userId));
     const addr = {
       area: address.area,
       city: address.city,
       postalCode: address.postalCode,
       latitude: address.latitude != null ? Number(address.latitude) : null,
       longitude: address.longitude != null ? Number(address.longitude) : null,
+      communityId: resolvedCommunityId,
+      communityUnresolved: !resolvedCommunityId,
     };
     const sellerSubtotals = new Map<string, number>();
     for (const item of items) {
@@ -343,10 +357,12 @@ export class CartService {
     let availableStock = variant ? variant.stockQuantity : product.stockQuantity;
     if (!variant && effectiveStockType === 'hub' && effectiveHubId) {
       const hubStock = await prisma.hubInventory.aggregate({
+        // Only stock that can actually be sold: expired or nearly-expired batches
+        // used to be counted as available here.
         where: {
           productId,
           hubId: effectiveHubId,
-          status: 'available',
+          ...sellableBatchWhere(),
         },
         _sum: { quantity: true },
       });
@@ -365,34 +381,67 @@ export class CartService {
 
     const priceSnapshot = variant ? variant.price : product.price;
 
-    // Find existing cart line by resolved product id + variant (so slug vs uuid doesn't create
-    // duplicates, and different variants of the same product stay separate lines)
-    const existingItem = await prisma.cartItem.findFirst({
-      where: {
-        cartId: cart.id,
-        productId,
-        variantId: variant?.id ?? null,
-        stockType: effectiveStockType,
-        hubId: effectiveHubId,
-      },
-    });
+    // Find-then-create is not atomic, and nullable columns (variant, hub) mean the
+    // database can't enforce one line per product here, so two quick "add to cart"
+    // taps used to create duplicate lines. Serialise adds per cart.
+    return prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${cart.id}))`;
 
-    if (existingItem) {
-      const newQuantity = existingItem.quantity + data.quantity;
+      // Find existing cart line by resolved product id + variant (so slug vs uuid doesn't create
+      // duplicates, and different variants of the same product stay separate lines)
+      const existingItem = await tx.cartItem.findFirst({
+        where: {
+          cartId: cart.id,
+          productId,
+          variantId: variant?.id ?? null,
+          stockType: effectiveStockType,
+          hubId: effectiveHubId,
+        },
+      });
 
-      if (availableStock < newQuantity) {
-        throw new AppError(
-          `Insufficient stock. Available: ${availableStock}. You already have ${existingItem.quantity} in your cart (adding ${data.quantity} would make ${newQuantity}).`,
-          400,
-          'INSUFFICIENT_STOCK'
-        );
+      if (existingItem) {
+        const newQuantity = existingItem.quantity + data.quantity;
+
+        if (availableStock < newQuantity) {
+          throw new AppError(
+            `Insufficient stock. Available: ${availableStock}. You already have ${existingItem.quantity} in your cart (adding ${data.quantity} would make ${newQuantity}).`,
+            400,
+            'INSUFFICIENT_STOCK'
+          );
+        }
+
+        const updatedItem = await tx.cartItem.update({
+          where: { id: existingItem.id },
+          data: {
+            quantity: newQuantity,
+            priceSnapshot, // Update price snapshot
+          },
+          include: {
+            product: {
+              include: {
+                images: {
+                  where: { isPrimary: true },
+                  take: 1,
+                },
+              },
+            },
+          },
+        });
+
+        return updatedItem;
       }
 
-      const updatedItem = await prisma.cartItem.update({
-        where: { id: existingItem.id },
+      // Create new cart item (use resolved productId so slug/uuid never duplicates)
+      const cartItem = await tx.cartItem.create({
         data: {
-          quantity: newQuantity,
-          priceSnapshot, // Update price snapshot
+          cartId: cart.id,
+          productId,
+          variantId: variant?.id,
+          sellerId: product.seller.id,
+          quantity: data.quantity,
+          stockType: effectiveStockType,
+          hubId: effectiveHubId,
+          priceSnapshot,
         },
         include: {
           product: {
@@ -403,43 +452,17 @@ export class CartService {
               },
             },
           },
-        },
-      });
-
-      return updatedItem;
-    }
-
-    // Create new cart item (use resolved productId so slug/uuid never duplicates)
-    const cartItem = await prisma.cartItem.create({
-      data: {
-        cartId: cart.id,
-        productId,
-        variantId: variant?.id,
-        sellerId: product.seller.id,
-        quantity: data.quantity,
-        stockType: effectiveStockType,
-        hubId: effectiveHubId,
-        priceSnapshot,
-      },
-      include: {
-        product: {
-          include: {
-            images: {
-              where: { isPrimary: true },
-              take: 1,
+          seller: {
+            select: {
+              id: true,
+              businessName: true,
             },
           },
         },
-        seller: {
-          select: {
-            id: true,
-            businessName: true,
-          },
-        },
-      },
-    });
+      });
 
-    return cartItem;
+        return cartItem;
+    });
   }
 
   /**

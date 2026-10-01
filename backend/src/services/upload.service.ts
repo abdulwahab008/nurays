@@ -1,6 +1,7 @@
 import multer from 'multer';
 import path from 'path';
 import fs from 'fs';
+import crypto from 'crypto';
 import { AppError } from '../middleware/errorHandler';
 
 // Create uploads directory if it doesn't exist
@@ -14,17 +15,27 @@ const productImagesDir = path.join(uploadsDir, 'products');
   }
 });
 
+const MIME_EXTENSIONS: Record<string, string> = {
+  'image/jpeg': '.jpg',
+  'image/jpg': '.jpg',
+  'image/png': '.png',
+  'image/webp': '.webp',
+  'image/gif': '.gif',
+};
+
 // Configure storage
 const storage = multer.diskStorage({
   destination: (_req, _file, cb) => {
     cb(null, productImagesDir);
   },
-  filename: (_req, file, cb) => {
-    // Generate unique filename: timestamp-random-originalname
-    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-    const ext = path.extname(file.originalname);
-    const name = path.basename(file.originalname, ext).replace(/[^a-zA-Z0-9]/g, '-').substring(0, 30);
-    cb(null, `${uniqueSuffix}-${name}${ext}`);
+  filename: (req, file, cb) => {
+    // The extension comes from the validated mimetype, never from the client's
+    // filename: otherwise "evil.html" uploaded as image/png would be stored and
+    // later served as HTML from our origin. The uploader's id is part of the
+    // name so ownership can be checked on delete (payment proofs share this dir).
+    const ext = MIME_EXTENSIONS[file.mimetype] || '.bin';
+    const owner = ((req as any).user?.userId as string | undefined) || 'anon';
+    cb(null, `${owner}_${crypto.randomUUID()}${ext}`);
   },
 });
 

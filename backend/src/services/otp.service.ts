@@ -27,8 +27,19 @@ export class OTPService {
 
     // If OTP exists and not expired, return existing OTP (for testing)
     // In production, you might want to rate limit this
-    if (existingOTP && !isOTPExpired(existingOTP.createdAt)) {
+    // (A code already locked by too many wrong guesses is NOT reused: otherwise "request a new
+    // OTP" handed back the same dead code and anyone could keep a number locked out.)
+    if (existingOTP && !isOTPExpired(existingOTP.createdAt) && existingOTP.attempts < 5) {
       return existingOTP.otpCode;
+    }
+
+    // Cap SMS per NUMBER, not just per IP: a locked-out code forces a fresh SMS on the next request,
+    // so without this a victim's phone could be pinged (and its codes locked) endlessly from rotating IPs.
+    const sentLastHour = await prisma.otpVerification.count({
+      where: { phone: formattedPhone, createdAt: { gt: new Date(Date.now() - 60 * 60 * 1000) } },
+    });
+    if (sentLastHour >= 5) {
+      throw new AppError('Too many codes were sent to this number. Please try again later.', 429, 'OTP_RATE_LIMITED');
     }
 
     // Generate new OTP
@@ -86,26 +97,30 @@ export class OTPService {
       throw new AppError('OTP has expired', 400, 'OTP_EXPIRED');
     }
 
-    // Check attempts (max 5 attempts)
-    if (otpRecord.attempts >= 5) {
+    // Claim an attempt atomically BEFORE comparing. Reading the count and then
+    // writing count+1 let parallel guesses all see "fewer than 5" and so exceed
+    // the limit; the conditional increment makes at most 5 guesses possible.
+    const claimed = await prisma.otpVerification.updateMany({
+      where: { id: otpRecord.id, isVerified: false, attempts: { lt: 5 } },
+      data: { attempts: { increment: 1 } },
+    });
+    if (claimed.count === 0) {
       throw new AppError('Too many failed attempts. Please request a new OTP', 429, 'OTP_MAX_ATTEMPTS');
     }
 
     // Verify OTP
     if (otpRecord.otpCode !== otpCode) {
-      // Increment attempts
-      await prisma.otpVerification.update({
-        where: { id: otpRecord.id },
-        data: { attempts: otpRecord.attempts + 1 },
-      });
       throw new AppError('Invalid OTP', 400, 'OTP_INVALID');
     }
 
-    // Mark as verified
-    await prisma.otpVerification.update({
-      where: { id: otpRecord.id },
+    // Mark as verified — only once: two parallel correct submissions must not both succeed.
+    const used = await prisma.otpVerification.updateMany({
+      where: { id: otpRecord.id, isVerified: false },
       data: { isVerified: true },
     });
+    if (used.count === 0) {
+      throw new AppError('OTP not found or already used', 404, 'OTP_NOT_FOUND');
+    }
 
     return true;
   }

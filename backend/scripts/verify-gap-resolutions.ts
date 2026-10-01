@@ -93,6 +93,9 @@ async function main() {
     await prisma.hubInventoryLog.deleteMany({
       where: { hubInventoryId: { in: [warmIntake.batch.id, coldIntake.batch.id] } },
     });
+    await prisma.hubBatchAllocation.deleteMany({
+      where: { hubInventoryId: { in: [warmIntake.batch.id, coldIntake.batch.id] } },
+    });
     await prisma.hubInventory.deleteMany({
       where: { id: { in: [warmIntake.batch.id, coldIntake.batch.id] } },
     });

@@ -1,8 +1,9 @@
 import { Request, Response } from 'express';
-import paymentService from '../services/payment.service';
+import paymentService, { PAYABLE_STATUSES } from '../services/payment.service';
 import { AppError } from '../middleware/errorHandler';
 import { verifySafepayWebhook } from '../gateways/safepay.gateway';
 import prisma from '../config/database';
+import { issueRefund } from '../services/refund.service';
 
 export const getPaymentMethods = async (_req: Request, res: Response) => {
   const methods = await paymentService.getPaymentMethods();
@@ -98,7 +99,7 @@ export const safepayWebhook = async (req: Request, res: Response) => {
   try {
     const order = await prisma.order.findUnique({
       where: { id: orderId },
-      select: { id: true, paymentStatus: true, totalAmount: true, paymentTransactionId: true },
+      select: { id: true, paymentStatus: true, orderStatus: true, totalAmount: true, paymentTransactionId: true },
     });
 
     if (!order) {
@@ -106,9 +107,10 @@ export const safepayWebhook = async (req: Request, res: Response) => {
       return res.status(200).json({ received: true });
     }
 
-    // Idempotency — already processed
-    if (order.paymentStatus === 'paid') {
-      console.log(`[Safepay Webhook] Order ${orderId} already paid — skipping`);
+    // Idempotency — already processed (paid, or paid and since refunded: a retried webhook
+    // must not flip a refunded order back to paid).
+    if (['paid', 'refund_pending', 'refunded'].includes(order.paymentStatus)) {
+      console.log(`[Safepay Webhook] Order ${orderId} already ${order.paymentStatus} — skipping`);
       return res.status(200).json({ received: true, alreadyPaid: true });
     }
 
@@ -122,13 +124,24 @@ export const safepayWebhook = async (req: Request, res: Response) => {
       return res.status(200).json({ received: true, amountMismatch: true });
     }
 
-    await prisma.order.update({
-      where: { id: orderId, paymentStatus: { not: 'paid' } },
-      data: {
-        paymentStatus: 'paid',
-        paidAt: new Date(),
-        paymentTransactionId: token,
-      },
+    // Guarded updateMany (not update): a concurrent verify may have won, which is
+    // fine — a throw here would 500 and make Safepay retry for nothing. If the
+    // order was cancelled before the money arrived, refund it straight away.
+    await prisma.$transaction(async (tx) => {
+      // Decide from the order's current state under a row lock, not the copy read earlier.
+      await tx.$queryRaw`SELECT id FROM orders WHERE id = ${orderId} FOR UPDATE`;
+      const fresh = await tx.order.findUniqueOrThrow({ where: { id: orderId } });
+      const r = await tx.order.updateMany({
+        where: { id: orderId, paymentStatus: { in: PAYABLE_STATUSES } },
+        data: {
+          paymentStatus: 'paid',
+          paidAt: new Date(),
+          paymentTransactionId: token,
+        },
+      });
+      if (r.count > 0 && ['cancelled', 'refunded'].includes(fresh.orderStatus)) {
+        await issueRefund(tx, orderId, { reason: 'Payment received after the order was cancelled', createdBy: null });
+      }
     });
     console.log(`[Safepay Webhook] Order ${orderId} marked as paid`);
   } catch (err) {

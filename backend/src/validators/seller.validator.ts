@@ -95,6 +95,8 @@ export const updateSellerSchema = z.object({
     .optional()
     .nullable(),
   deliveryModes: z.array(z.string()).optional().nullable(),
+  deliveryProvider: z.enum(['platform', 'self']).optional(),
+  allowCrossCommunity: z.boolean().optional(),
 
   businessType: z.string().optional().nullable(),
   mealCategories: z.array(z.string()).optional().nullable(),
@@ -113,6 +115,20 @@ export const updateSellerSchema = z.object({
   preOrderOnly: z.boolean().optional(),
   advanceBookingMinDays: z.number().int().min(0).optional().nullable(),
   advanceBookingMaxDays: z.number().int().min(0).optional().nullable(),
+});
+
+export const setCommunityDeliverySchema = z.object({
+  terms: z
+    .array(
+      z.object({
+        communityId: z.string().min(1),
+        fee: z.number().min(0).max(100000),
+        freeAbove: z.number().min(0).optional().nullable(),
+        minOrderAmount: z.number().min(0).optional().nullable(),
+        isEnabled: z.boolean().optional(),
+      })
+    )
+    .max(200),
 });
 
 export const requestPayoutSchema = z.object({

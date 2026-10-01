@@ -121,14 +121,9 @@ export default function SellerSettingsPage() {
       if (response.data.success) {
         const seller = response.data.data;
         const feeType = seller.deliveryFeeType || '';
-        const isSelf =
-          feeType === 'fixed' ||
-          feeType === 'distance' ||
-          (Array.isArray(seller.freeDeliveryAreas) && seller.freeDeliveryAreas.length > 0) ||
-          (seller.freeDeliveryRadiusKm != null && seller.freeDeliveryRadiusKm > 0) ||
-          seller.deliveryFeeFixed != null;
 
-        setDeliveryModel(isSelf ? 'model_b' : 'model_a');
+        // deliveryProvider is the source of truth for who delivers; fee fields no longer imply it.
+        setDeliveryModel(seller.deliveryProvider === 'self' ? 'model_b' : 'model_a');
 
         setFormData({
           businessName: seller.businessName || '',
@@ -262,24 +257,16 @@ export default function SellerSettingsPage() {
 
       let deliveryPayload: Record<string, any> = {
         deliveryModes: deliveryModes && deliveryModes.length ? deliveryModes : ['delivery'],
+        deliveryProvider: deliveryModel === 'model_b' ? 'self' : 'platform',
         latitude: latitude ?? undefined,
         longitude: longitude ?? undefined,
       };
 
-      if (deliveryModel === 'model_a') {
-        deliveryPayload = {
-          ...deliveryPayload,
-          deliveryFeeType: null,
-          deliveryFeeFixed: null,
-          deliveryFeeBase: null,
-          deliveryFeePerKm: null,
-          freeDeliveryAreas: [],
-          freeDeliveryRadiusKm: null,
-          freeDeliveryThreshold: null,
-          maxDeliveryDistanceKm: null,
-          minOrderAmountForDelivery: null,
-        };
-      } else {
+      // Platform fleet: the rider pool delivers, so there is no self-delivery
+      // pricing to send. Existing fee settings are left untouched (they are the
+      // fallback where no per-community fee applies); community fees live on
+      // the Delivery console.
+      if (deliveryModel === 'model_b') {
         deliveryPayload = {
           ...deliveryPayload,
           deliveryFeeType: deliveryFeeType || 'fixed',

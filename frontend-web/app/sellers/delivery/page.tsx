@@ -18,6 +18,38 @@ import {
   Navigation,
 } from 'lucide-react';
 
+interface CommunityTerms {
+  fee: number;
+  freeAbove: number | null;
+  minOrderAmount: number | null;
+  isEnabled: boolean;
+}
+
+interface CommunityRow {
+  id: string;
+  name: string;
+  city: string;
+  isHome: boolean;
+  isNeighbor: boolean;
+  suggestedFee: number;
+  terms: CommunityTerms | null;
+}
+
+// Editable copy of a community's terms. Empty strings = not set.
+interface CommunityDraft {
+  enabled: boolean;
+  fee: string;
+  freeAbove: string;
+  minOrder: string;
+}
+
+const toDraft = (row: CommunityRow): CommunityDraft => ({
+  enabled: row.terms ? row.terms.isEnabled : false,
+  fee: row.terms ? String(row.terms.fee) : '',
+  freeAbove: row.terms?.freeAbove != null ? String(row.terms.freeAbove) : '',
+  minOrder: row.terms?.minOrderAmount != null ? String(row.terms.minOrderAmount) : '',
+});
+
 export default function SellerDeliveryPage() {
   const router = useRouter();
   const { isAuthenticated, user } = useAuthStore();
@@ -47,6 +79,12 @@ export default function SellerDeliveryPage() {
 
   const [newAreaInput, setNewAreaInput] = useState('');
 
+  // Per-community delivery fees
+  const [communities, setCommunities] = useState<CommunityRow[]>([]);
+  const [drafts, setDrafts] = useState<Record<string, CommunityDraft>>({});
+  const [allowCrossCommunity, setAllowCrossCommunity] = useState(true);
+  const [homeCommunityName, setHomeCommunityName] = useState<string | null>(null);
+
   useEffect(() => {
     if (!isAuthenticated) {
       router.push('/login');
@@ -62,23 +100,18 @@ export default function SellerDeliveryPage() {
     loadDeliverySettings();
   }, [isAuthenticated, user, router]);
 
-  const loadDeliverySettings = async () => {
+  const loadDeliverySettings = async (silent = false) => {
     try {
-      setLoading(true);
+      if (!silent) setLoading(true);
       setLoadError(null);
       const res = await apiClient.get('/sellers/me');
       if (res.data?.success) {
         const s = res.data.data;
         const feeType = s.deliveryFeeType || '';
 
-        const isSelfDelivery =
-          feeType === 'fixed' ||
-          feeType === 'distance' ||
-          (Array.isArray(s.freeDeliveryAreas) && s.freeDeliveryAreas.length > 0) ||
-          (s.freeDeliveryRadiusKm != null && s.freeDeliveryRadiusKm > 0) ||
-          s.deliveryFeeFixed != null;
-
-        setDeliveryModel(isSelfDelivery ? 'model_b' : 'model_a');
+        // deliveryProvider is the source of truth for who delivers; the fee
+        // fields no longer imply it.
+        setDeliveryModel(s.deliveryProvider === 'self' ? 'model_b' : 'model_a');
 
         setFormData({
           deliveryFeeType: (feeType as 'fixed' | 'distance' | '') || 'fixed',
@@ -95,11 +128,28 @@ export default function SellerDeliveryPage() {
           longitude: s.longitude != null ? parseFloat(String(s.longitude)) : 74.4530,
         });
       }
+
+      // Its own try/catch: the seller's own settings above are already on screen, and
+      // a failure here must say so instead of looking like the whole page failed.
+      try {
+        const cd = await apiClient.get('/sellers/me/community-delivery');
+        if (cd.data?.success) {
+          const d = cd.data.data;
+          const rows: CommunityRow[] = d.communities;
+          setCommunities(rows);
+          setDrafts(Object.fromEntries(rows.map((r) => [r.id, toDraft(r)])));
+          setAllowCrossCommunity(d.allowCrossCommunity !== false);
+          setHomeCommunityName(d.homeCommunity?.name ?? null);
+        }
+      } catch (err: any) {
+        console.error('Failed to load community delivery fees:', err);
+        showToast('Could not load your per-community delivery fees. Reload the page before saving.', 'error');
+      }
     } catch (err: any) {
       console.error('Failed to load delivery settings:', err);
       setLoadError(err?.response?.data?.message || err?.message || 'Failed to load delivery settings');
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   };
 
@@ -141,24 +191,16 @@ export default function SellerDeliveryPage() {
 
       let payload: Record<string, any> = {
         deliveryModes,
+        deliveryProvider: deliveryModel === 'model_b' ? 'self' : 'platform',
+        allowCrossCommunity,
         latitude: formData.latitude ?? undefined,
         longitude: formData.longitude ?? undefined,
       };
 
-      if (deliveryModel === 'model_a') {
-        payload = {
-          ...payload,
-          deliveryFeeType: null,
-          deliveryFeeFixed: null,
-          deliveryFeeBase: null,
-          deliveryFeePerKm: null,
-          freeDeliveryAreas: [],
-          freeDeliveryRadiusKm: null,
-          freeDeliveryThreshold: null,
-          maxDeliveryDistanceKm: null,
-          minOrderAmountForDelivery: null,
-        };
-      } else {
+      // Platform fleet: the rider pool delivers, so there is no self-delivery
+      // pricing to send. Existing fee settings are left untouched; they are the
+      // fallback wherever no per-community fee applies.
+      if (deliveryModel === 'model_b') {
         payload = {
           ...payload,
           deliveryFeeType: formData.deliveryFeeType || 'fixed',
@@ -196,8 +238,54 @@ export default function SellerDeliveryPage() {
         };
       }
 
+      // Validate per-community terms before saving anything.
+      const visible = communities.filter((c) => c.isHome || allowCrossCommunity);
+      const num = (v: string) => (v.trim() === '' || isNaN(Number(v)) ? null : Math.max(0, Number(v)));
+      const terms: Array<{
+        communityId: string;
+        fee: number;
+        freeAbove: number | null;
+        minOrderAmount: number | null;
+        isEnabled: boolean;
+      }> = [];
+      for (const c of visible) {
+        const d = drafts[c.id];
+        if (!d) continue;
+        const fee = num(d.fee);
+        if (d.enabled && fee == null) {
+          showToast(`Enter a delivery fee for ${c.name}, or switch it off.`, 'error');
+          setSaving(false);
+          return;
+        }
+        // Keep a switched-off community on record (so its fee isn't lost) only if it had terms already.
+        if (d.enabled || c.terms) {
+          terms.push({
+            communityId: c.id,
+            fee: fee ?? c.terms?.fee ?? 0,
+            freeAbove: num(d.freeAbove),
+            minOrderAmount: num(d.minOrder),
+            isEnabled: d.enabled,
+          });
+        }
+      }
+      const home = communities.find((c) => c.isHome);
+      if (terms.some((t) => t.isEnabled) && home && !drafts[home.id]?.enabled) {
+        showToast(`Set a delivery fee for your own community (${home.name}) first.`, 'error');
+        setSaving(false);
+        return;
+      }
+
+      // Settings first: allowCrossCommunity must be saved before fees for other communities.
       const res = await apiClient.patch('/sellers/me', payload);
       if (res.data?.success) {
+        const cdRes = await apiClient.put('/sellers/me/community-delivery', {
+          terms: terms.some((t) => t.isEnabled) ? terms : [],
+        });
+        if (cdRes.data?.success) {
+          const rows: CommunityRow[] = cdRes.data.data.communities;
+          setCommunities(rows);
+          setDrafts(Object.fromEntries(rows.map((r) => [r.id, toDraft(r)])));
+        }
         showToast('Delivery settings saved successfully.', 'success');
       }
     } catch (err: any) {
@@ -208,6 +296,9 @@ export default function SellerDeliveryPage() {
         err?.message ||
         'Failed to save delivery settings';
       showToast(errMsg, 'error');
+      // The first request (settings) may have been saved before the second failed:
+      // show what the server actually holds rather than the unsaved form.
+      loadDeliverySettings(true);
     } finally {
       setSaving(false);
     }
@@ -224,7 +315,7 @@ export default function SellerDeliveryPage() {
         {loadError && (
           <div className="bg-red-50 border border-red-200 rounded-xl p-3.5 flex items-center justify-between text-xs text-red-700">
             <span>{loadError}</span>
-            <button onClick={loadDeliverySettings} className="font-semibold underline">
+            <button onClick={() => loadDeliverySettings()} className="font-semibold underline">
               Retry
             </button>
           </div>
@@ -253,7 +344,7 @@ export default function SellerDeliveryPage() {
                   </div>
                   <div>
                     <h4 className="text-xs font-bold text-slate-900">Nuray Rider Fleet</h4>
-                    <p className="text-[11px] text-slate-500 mt-0.5">Platform courier handles pickup and delivery</p>
+                    <p className="text-[11px] text-slate-500 mt-0.5">Platform riders pick up and deliver your orders</p>
                   </div>
                 </div>
               </div>
@@ -273,18 +364,143 @@ export default function SellerDeliveryPage() {
                   </div>
                   <div>
                     <h4 className="text-xs font-bold text-slate-900">Self-Delivery</h4>
-                    <p className="text-[11px] text-slate-500 mt-0.5">You deliver in your community; keep 100% fee</p>
+                    <p className="text-[11px] text-slate-500 mt-0.5">You deliver your own orders and keep the delivery fee; no platform rider is assigned</p>
                   </div>
                 </div>
               </div>
             </div>
           </div>
 
+          {/* Community delivery fees */}
+          <div className="bg-white rounded-2xl p-5 sm:p-6 border border-slate-200/90 shadow-xs space-y-4">
+            <div>
+              <h3 className="text-sm font-bold text-slate-900 tracking-tight">Delivery fee by community</h3>
+              <p className="text-[11px] text-slate-500 mt-0.5">
+                {homeCommunityName
+                  ? `You are based in ${homeCommunityName}. `
+                  : ''}
+                Fix the fee you charge for each community you deliver to. Once you set fees, you only deliver to the
+                communities you switch on.
+              </p>
+            </div>
+
+            <label className="flex items-center justify-between gap-3 text-xs font-medium text-slate-800 cursor-pointer">
+              <span>
+                Deliver to other communities
+                <span className="block text-[11px] font-normal text-slate-500">
+                  Off = customers outside your community can&apos;t order delivery from you.
+                </span>
+              </span>
+              <input
+                type="checkbox"
+                checked={allowCrossCommunity}
+                onChange={(e) => setAllowCrossCommunity(e.target.checked)}
+                className="w-4 h-4 text-[#FF5500] rounded border-slate-300 focus:ring-[#FF5500] cursor-pointer"
+              />
+            </label>
+
+            {communities.length === 0 ? (
+              <p className="text-xs text-slate-500">No communities are available yet.</p>
+            ) : (
+              <div className="divide-y divide-slate-100 border border-slate-200 rounded-xl">
+                {[...communities]
+                  .filter((c) => c.isHome || allowCrossCommunity)
+                  .sort(
+                    (a, b) =>
+                      Number(b.isHome) - Number(a.isHome) ||
+                      Number(b.isNeighbor) - Number(a.isNeighbor) ||
+                      a.name.localeCompare(b.name)
+                  )
+                  .map((c) => {
+                    const d = drafts[c.id] ?? { enabled: false, fee: '', freeAbove: '', minOrder: '' };
+                    const setDraft = (patch: Partial<CommunityDraft>) =>
+                      setDrafts((prev) => ({ ...prev, [c.id]: { ...d, ...patch } }));
+                    return (
+                      <div key={c.id} className="p-3.5 space-y-2.5">
+                        <label className="flex items-center gap-2.5 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={d.enabled}
+                            onChange={(e) =>
+                              setDraft({
+                                enabled: e.target.checked,
+                                fee: e.target.checked && d.fee === '' ? String(c.suggestedFee) : d.fee,
+                              })
+                            }
+                            className="w-4 h-4 text-[#FF5500] rounded border-slate-300 focus:ring-[#FF5500]"
+                          />
+                          <span className="text-xs font-bold text-slate-900">{c.name}</span>
+                          <span className="text-[11px] text-slate-400">{c.city}</span>
+                          {c.isHome && (
+                            <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700">
+                              Your community
+                            </span>
+                          )}
+                          {!c.isHome && c.isNeighbor && (
+                            <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-blue-50 text-blue-700">
+                              Nearby
+                            </span>
+                          )}
+                        </label>
+
+                        {d.enabled && (
+                          <div className="grid grid-cols-3 gap-2.5 pl-6">
+                            <div>
+                              <label className="text-[11px] text-slate-500 block mb-1">Fee (PKR)</label>
+                              <input
+                                type="number"
+                                min={0}
+                                step={10}
+                                value={d.fee}
+                                onChange={(e) => setDraft({ fee: e.target.value })}
+                                className="w-full px-2.5 py-1.5 text-xs font-semibold border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-[#FF5500]"
+                              />
+                            </div>
+                            <div>
+                              <label className="text-[11px] text-slate-500 block mb-1">Free above (PKR)</label>
+                              <input
+                                type="number"
+                                min={0}
+                                step={50}
+                                placeholder="optional"
+                                value={d.freeAbove}
+                                onChange={(e) => setDraft({ freeAbove: e.target.value })}
+                                className="w-full px-2.5 py-1.5 text-xs font-semibold border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-[#FF5500]"
+                              />
+                            </div>
+                            <div>
+                              <label className="text-[11px] text-slate-500 block mb-1">Min order (PKR)</label>
+                              <input
+                                type="number"
+                                min={0}
+                                step={50}
+                                placeholder="optional"
+                                value={d.minOrder}
+                                onChange={(e) => setDraft({ minOrder: e.target.value })}
+                                className="w-full px-2.5 py-1.5 text-xs font-semibold border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-[#FF5500]"
+                              />
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+              </div>
+            )}
+
+            {!Object.values(drafts).some((d) => d.enabled) && communities.length > 0 && (
+              <p className="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+                No community fees set yet. Your general delivery pricing is used until you switch on at least one
+                community.
+              </p>
+            )}
+          </div>
+
           {/* Model B Details */}
           {deliveryModel === 'model_b' && (
             <div className="bg-white rounded-2xl p-5 sm:p-6 border border-slate-200/90 shadow-xs space-y-5">
               <h3 className="text-sm font-bold text-slate-900 tracking-tight">
-                Self-Delivery Pricing &amp; Zones
+                Self-Delivery Pricing &amp; Zones (used where no community fee applies)
               </h3>
 
               {/* Fee Type */}

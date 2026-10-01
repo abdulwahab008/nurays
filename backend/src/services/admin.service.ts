@@ -469,16 +469,21 @@ export class AdminService {
       throw new AppError(`Payout is already ${payout.status}`, 400, 'PAYOUT_NOT_PENDING');
     }
 
-    const updated = await prisma.sellerPayout.update({
-      where: { id: payoutId },
+    // Conditional on still being pending: a concurrent fail (or second complete) must not also
+    // succeed — money marked sent and failed at once lets the seller request it again.
+    const claimed = await prisma.sellerPayout.updateMany({
+      where: { id: payoutId, status: 'pending' },
       data: {
         status: 'completed',
         transactionId: transactionId || null,
         processedAt: new Date(),
       },
     });
+    if (claimed.count === 0) {
+      throw new AppError('Payout is no longer pending', 409, 'PAYOUT_NOT_PENDING');
+    }
 
-    return { payoutId: updated.id, status: updated.status };
+    return { payoutId, status: 'completed' };
   }
 
   /**
@@ -493,16 +498,19 @@ export class AdminService {
       throw new AppError(`Payout is already ${payout.status}`, 400, 'PAYOUT_NOT_PENDING');
     }
 
-    const updated = await prisma.sellerPayout.update({
-      where: { id: payoutId },
+    const claimed = await prisma.sellerPayout.updateMany({
+      where: { id: payoutId, status: 'pending' },
       data: {
         status: 'failed',
         failedReason: reason,
         processedAt: new Date(),
       },
     });
+    if (claimed.count === 0) {
+      throw new AppError('Payout is no longer pending', 409, 'PAYOUT_NOT_PENDING');
+    }
 
-    return { payoutId: updated.id, status: updated.status };
+    return { payoutId, status: 'failed' };
   }
 
   /**

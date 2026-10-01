@@ -65,8 +65,11 @@ export class ReviewService {
       throw new AppError('Review already exists', 400, 'REVIEW_ALREADY_EXISTS');
     }
 
-    // Create review
-    const review = await prisma.review.create({
+    // Create review. The (orderItem, customer) pair is unique in the database, so a
+    // double-submit that slips past the check above fails cleanly instead of duplicating.
+    let review;
+    try {
+      review = await prisma.review.create({
       data: {
         orderId: data.orderId,
         orderItemId: data.orderItemId,
@@ -81,7 +84,13 @@ export class ReviewService {
         isVerifiedPurchase: true,
         isApproved: true, // Auto-approve for now
       },
-    });
+    })
+    } catch (err: any) {
+      if (err?.code === 'P2002') {
+        throw new AppError('Review already exists', 400, 'REVIEW_ALREADY_EXISTS');
+      }
+      throw err;
+    }
 
     // Update product rating
     if (orderItem.productId) {

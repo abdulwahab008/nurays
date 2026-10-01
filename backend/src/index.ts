@@ -10,6 +10,7 @@ import helmet from 'helmet';
 import morgan from 'morgan';
 import socketManager from './config/socket';
 import { checkAndCreateStockAlerts } from './services/stock-alert.service';
+import hubService from './services/hub.service';
 import { errorHandler } from './middleware/errorHandler';
 import { notFoundHandler } from './middleware/notFoundHandler';
 import healthRoutes from './routes/health.routes';
@@ -78,7 +79,17 @@ app.use(express.json({
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
 // Serve static files (uploaded images) - with CORS headers
-app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
+app.use(
+  '/uploads',
+  express.static(path.join(__dirname, '../uploads'), {
+    // Uploads are images only. Never let a browser sniff one into something
+    // executable, and never render uploaded files as documents.
+    setHeaders: (res) => {
+      res.setHeader('X-Content-Type-Options', 'nosniff');
+      res.setHeader('Content-Security-Policy', "default-src 'none'; img-src 'self'; style-src 'unsafe-inline'; sandbox");
+    },
+  })
+);
 
 // Routes
 app.use(`/api/${API_VERSION}/health`, healthRoutes);
@@ -138,6 +149,12 @@ httpServer.listen(PORT, () => {
   setInterval(() => {
     checkAndCreateStockAlerts().catch((err) => console.error('Stock alert sweep failed:', err));
   }, 6 * 60 * 60 * 1000);
+
+  // Hub batches past their expiry stop showing as available (hourly).
+  const sweepHubExpiry = () =>
+    hubService.expireStaleBatches().catch((err) => console.error('Hub expiry sweep failed:', err));
+  sweepHubExpiry();
+  setInterval(sweepHubExpiry, 60 * 60 * 1000);
 });
 
 export default app;

@@ -3,6 +3,7 @@ import { apiClient, ApiResponse } from '../api-client';
 export interface UserProfile {
   id: string;
   phone: string;
+  phoneVerified?: boolean;
   email?: string;
   userType: string;
   isEmailVerified?: boolean;

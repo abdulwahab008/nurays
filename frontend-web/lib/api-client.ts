@@ -73,10 +73,13 @@ class ApiClient {
     if (this.refreshPromise) return this.refreshPromise;
 
     this.refreshPromise = (async () => {
-      const refreshToken = this.getRefreshToken();
-      if (!refreshToken) return null;
-
       try {
+        // Inside the try so the `finally` below always resets refreshPromise —
+        // returning early before it left a cached `null` forever, which logged
+        // the user out on every later 401 even once a valid refresh token existed.
+        const refreshToken = this.getRefreshToken();
+        if (!refreshToken) return null;
+
         // Use a bare axios call so the response interceptor doesn't recurse.
         const res = await axios.post<{
           success: boolean;
@@ -112,6 +115,8 @@ class ApiClient {
       path === '/' ||
       path.startsWith('/login') ||
       path.startsWith('/register') ||
+      path.startsWith('/forgot-password') ||
+      path.startsWith('/reset-password') ||
       path.startsWith('/products') ||
       path.startsWith('/kitchens') ||
       path.startsWith('/sellers/register') ||

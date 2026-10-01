@@ -114,7 +114,7 @@ export const recordTemperatureProbe = async (req: Request, res: Response) => {
 
 export const getTemperatureLogs = async (req: Request, res: Response) => {
   const { id } = req.params;
-  const limit = req.query.limit ? Number(req.query.limit) : 50;
+  const limit = req.query.limit ? Number(req.query.limit) : 50; // bounded in the service
 
   const result = await hubService.getTemperatureLogs(id, limit);
 
@@ -122,6 +122,12 @@ export const getTemperatureLogs = async (req: Request, res: Response) => {
     success: true,
     data: result,
   });
+};
+
+export const assignHubManager = async (req: Request, res: Response) => {
+  const result = await hubService.assignManager(req.params.id, req.body.managerId);
+
+  res.status(200).json({ success: true, data: result });
 };
 
 export const getHubStats = async (req: Request, res: Response) => {

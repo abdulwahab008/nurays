@@ -1,5 +1,8 @@
 import prisma from '../config/database';
 import { AppError } from '../middleware/errorHandler';
+import { communityService } from './community.service';
+import emailService from './email.service';
+import { generateVerificationToken } from '../utils/email-verification';
 
 export class UserProfileService {
   /**
@@ -20,6 +23,7 @@ export class UserProfileService {
     return {
       id: user.id,
       phone: user.phone,
+      phoneVerified: user.phoneVerified,
       email: user.email,
       userType: user.userType,
       status: user.status,
@@ -54,21 +58,37 @@ export class UserProfileService {
       throw new AppError('User not found', 404, 'USER_NOT_FOUND');
     }
 
-    // Update user email if provided
-    if (data.email && data.email !== user.email) {
+    // Changing the email is changing who owns the account: the new address is unverified until its
+    // owner clicks the link we send to it. (It used to be swapped in silently and stay "verified",
+    // so someone could put a victim's email on an account they controlled and later catch the victim
+    // when they signed in with Google.)
+    const newEmail = data.email?.toLowerCase().trim();
+    if (newEmail && newEmail !== user.email) {
       // Check if email is already taken
       const existingUser = await prisma.user.findUnique({
-        where: { email: data.email },
+        where: { email: newEmail },
       });
 
       if (existingUser && existingUser.id !== userId) {
         throw new AppError('Email already registered', 400, 'EMAIL_ALREADY_EXISTS');
       }
 
-      await prisma.user.update({
-        where: { id: userId },
-        data: { email: data.email },
-      });
+      const token = generateVerificationToken();
+      await prisma.$transaction([
+        prisma.user.update({
+          where: { id: userId },
+          data: { email: newEmail, emailVerified: false },
+        }),
+        prisma.emailVerification.deleteMany({ where: { userId } }),
+        prisma.emailVerification.create({
+          data: { userId, email: newEmail, token, expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000) },
+        }),
+      ]);
+      try {
+        await emailService.sendVerificationEmail(newEmail, data.fullName || 'there', token);
+      } catch (err) {
+        console.error(`[updateProfile] Could not send verification email to ${newEmail}`, err);
+      }
     }
 
     // Get or create profile
@@ -181,6 +201,7 @@ export class UserProfileService {
       postalCode: addr.postalCode,
       landmark: addr.landmark,
       isDefault: addr.isDefault,
+      communityId: addr.communityId,
       coordinates: addr.latitude && addr.longitude
         ? {
             latitude: Number(addr.latitude),
@@ -204,8 +225,29 @@ export class UserProfileService {
     landmark?: string;
     latitude?: number;
     longitude?: number;
+    communityId?: string;
     isDefault?: boolean;
   }) {
+    // The community decides which sellers deliver here and at what fee: use the
+    // one the buyer picked, otherwise infer it from the address.
+    let communityId: string | null = null;
+    if (data.communityId) {
+      const community = await prisma.community.findFirst({ where: { id: data.communityId, isActive: true } });
+      if (!community) throw new AppError('Community not found', 404, 'COMMUNITY_NOT_FOUND');
+      // The chosen community has to be consistent with the pin: a GPS point that sits
+      // outside it (or resolves to a different community) can't be filed under it,
+      // or the buyer could dodge a seller's per-community rules.
+      if (data.latitude != null && data.longitude != null) {
+        const dist = communityService.distanceToCommunityKm(community, Number(data.latitude), Number(data.longitude));
+        if (dist > community.radiusKm) {
+          throw new AppError('The pinned location is outside the selected community', 400, 'COMMUNITY_LOCATION_MISMATCH');
+        }
+      }
+      communityId = community.id;
+    } else {
+      communityId = await communityService.resolveCommunityIdForAddress(data, userId);
+    }
+
     // A user's very first address is always their default, regardless of what was passed.
     const existingCount = await prisma.userAddress.count({ where: { userId } });
     const isDefault = data.isDefault || existingCount === 0;
@@ -230,6 +272,7 @@ export class UserProfileService {
         landmark: data.landmark,
         latitude: data.latitude,
         longitude: data.longitude,
+        communityId,
         isDefault,
       },
     });
@@ -244,6 +287,7 @@ export class UserProfileService {
       postalCode: address.postalCode,
       landmark: address.landmark,
       isDefault: address.isDefault,
+      communityId: address.communityId,
       coordinates: address.latitude && address.longitude
         ? {
             latitude: Number(address.latitude),

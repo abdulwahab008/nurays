@@ -14,8 +14,38 @@ export const requestOTP = async (req: Request, res: Response) => {
   });
 };
 
+export const requestPhoneVerification = async (req: Request, res: Response) => {
+  if (!req.user) {
+    throw new AppError('Authentication required', 401, 'AUTH_REQUIRED');
+  }
+  const result = await authService.requestPhoneVerification(req.user.userId, req.body.phone);
+  res.status(200).json({ success: true, data: result });
+};
+
+export const verifyPhone = async (req: Request, res: Response) => {
+  if (!req.user) {
+    throw new AppError('Authentication required', 401, 'AUTH_REQUIRED');
+  }
+  const result = await authService.verifyPhone(req.user.userId, req.body.phone, req.body.otp);
+  res.status(200).json({ success: true, message: 'Phone number verified', data: result });
+};
+
+export const forgotPassword = async (req: Request, res: Response) => {
+  await authService.forgotPassword(req.body.email);
+  // The same answer whether or not the email has an account.
+  res.status(200).json({
+    success: true,
+    message: 'If an account exists for that email, a reset link is on its way.',
+  });
+};
+
+export const resetPassword = async (req: Request, res: Response) => {
+  await authService.resetPassword(req.body.token, req.body.password);
+  res.status(200).json({ success: true, message: 'Password updated. Please log in with your new password.' });
+};
+
 export const register = async (req: Request, res: Response) => {
-  const { email, password, user_type, full_name, phone, city, area, business_name } = req.body;
+  const { email, password, user_type, full_name, phone, phone_otp, city, area, business_name } = req.body;
 
   // Validate business_name is provided for sellers
   if (user_type === 'seller' && !business_name?.trim()) {
@@ -31,7 +61,8 @@ export const register = async (req: Request, res: Response) => {
     phone,
     city,
     area,
-    business_name
+    business_name,
+    phone_otp
   );
 
   const message =

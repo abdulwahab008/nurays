@@ -1,7 +1,12 @@
 import prisma from '../config/database';
 import { AppError } from '../middleware/errorHandler';
 import realtimeOrderService from './realtime-order.service';
+import socketManager from '../config/socket';
 import riderService from './rider.service';
+import { releasePromotionUsage } from './promotion.service';
+import { issueRefund, IssuedRefund } from './refund.service';
+import ledgerService from './ledger.service';
+import { releaseHubAllocations } from './hub-allocation.service';
 
 // The main happy-path order pipeline — admin can only move an order exactly
 // one step forward at a time (no skipping straight to 'dispatched'/'delivered',
@@ -248,6 +253,7 @@ export class AdminOrderService {
             },
           },
         },
+        refunds: { orderBy: { createdAt: 'asc' } },
       },
     });
 
@@ -257,6 +263,7 @@ export class AdminOrderService {
 
     return {
       ...order,
+      refunds: order.refunds.map((r) => ({ ...r, amount: Number(r.amount) })),
       subtotal: Number(order.subtotal),
       deliveryFee: Number(order.deliveryFee),
       discountAmount: Number(order.discountAmount),
@@ -301,6 +308,17 @@ export class AdminOrderService {
       throw new AppError(`Invalid status: ${status}`, 400, 'INVALID_STATUS');
     }
 
+    // Cancelling and refunding move stock, reservations and money. A bare status
+    // write here would skip all of that (and make the order look cancelled while
+    // its stock stays taken and its items stay actionable), so they only go
+    // through their dedicated endpoints.
+    if (status === 'cancelled') {
+      throw new AppError('Use the cancel endpoint to cancel an order', 400, 'USE_CANCEL_ENDPOINT');
+    }
+    if (status === 'refunded') {
+      throw new AppError('Use the refund endpoint to refund an order', 400, 'USE_REFUND_ENDPOINT');
+    }
+
     if (!isValidOrderStatusTransition(order.orderStatus, status)) {
       throw new AppError(
         `Cannot move an order from "${order.orderStatus}" to "${status}"`,
@@ -309,11 +327,43 @@ export class AdminOrderService {
       );
     }
 
-    // Update order status
-    const updatedOrder = await prisma.order.update({
-      where: { id: orderId },
-      data: { orderStatus: status },
+    // An order whose money is being / has been refunded must not be completed: delivering it
+    // would post earnings to the ledger for goods the customer already got their money back for.
+    if (status === 'delivered' && ['refund_pending', 'refunded'].includes(order.paymentStatus)) {
+      throw new AppError('This order has been refunded and cannot be marked delivered', 400, 'ORDER_REFUNDED');
+    }
+
+    // Update order status. Guarded on the status we validated against, so a
+    // concurrent change can't be silently overwritten. Delivery carries the same
+    // side effects as the seller/rider paths: delivery time, and COD is paid
+    // at the door.
+    const isDelivered = status === 'delivered';
+    const isCodDelivery = isDelivered && order.paymentMethod === 'cod' && order.paymentStatus !== 'paid';
+    const applied = await prisma.order.updateMany({
+      where: { id: orderId, orderStatus: order.orderStatus },
+      data: {
+        orderStatus: status,
+        ...(isDelivered ? { deliveredAt: new Date() } : {}),
+        ...(isCodDelivery ? { paymentStatus: 'paid', paidAt: new Date() } : {}),
+      },
     });
+    if (applied.count === 0) {
+      throw new AppError('Order status changed while updating; please retry', 409, 'ORDER_STATUS_CONFLICT');
+    }
+    if (isDelivered) {
+      await prisma.orderItem.updateMany({
+        where: { orderId, status: { notIn: ['cancelled', 'delivered'] } },
+        data: { status: 'delivered' },
+      });
+    }
+    const updatedOrder = await prisma.order.findUniqueOrThrow({ where: { id: orderId } });
+    if (isDelivered) {
+      try {
+        await ledgerService.recordOrderCompletion(orderId);
+      } catch (ledgerErr) {
+        console.error('Failed to record ledger entries for order:', orderId, ledgerErr);
+      }
+    }
 
     // Add status history
     await prisma.orderStatusHistory.create({
@@ -361,15 +411,28 @@ export class AdminOrderService {
     }
 
     // Cancel order and restore stock
+    let refundIssued = null as IssuedRefund | null;
     const cancelledOrder = await prisma.$transaction(async (tx) => {
-      // Update order status
-      const updatedOrder = await tx.order.update({
-        where: { id: orderId },
+      // Claim the cancellation: only one of any concurrent cancel/accept/ready
+      // transitions can move the order out of a cancellable status. Without this
+      // a stale read let a cancel revive-or-double-restock an order.
+      const claimed = await tx.order.updateMany({
+        where: { id: orderId, orderStatus: { in: cancellableStatuses } },
         data: {
           orderStatus: 'cancelled',
           cancellationReason: reason,
           cancelledBy: 'admin',
         },
+      });
+      if (claimed.count === 0) {
+        throw new AppError('Order can no longer be cancelled', 409, 'ORDER_NOT_CANCELLABLE');
+      }
+      const updatedOrder = await tx.order.findUniqueOrThrow({ where: { id: orderId } });
+
+      // Items already cancelled (e.g. by their seller) were restocked when that
+      // happened; only restock what is still live. Read before the cascade below.
+      const liveItems = await tx.orderItem.findMany({
+        where: { orderId, status: { notIn: ['cancelled', 'delivered'] } },
       });
 
       // Cascade cancellation to all order items so the seller UI doesn't
@@ -382,7 +445,7 @@ export class AdminOrderService {
       // Restore stock — a variant item drew from its own stock pool at order
       // time (see order.service.ts createOrder), so it must be restored there,
       // not on the shared product-level stock it never touched.
-      for (const item of order.items) {
+      for (const item of liveItems) {
         if (item.variantId) {
           await tx.productVariant.update({
             where: { id: item.variantId },
@@ -408,6 +471,19 @@ export class AdminOrderService {
         },
       });
 
+      // A cancelled order shouldn't keep consuming the promo's quota.
+      await releasePromotionUsage(tx, orderId);
+
+      // Hub units this order took go back into the batches they came from.
+      await releaseHubAllocations(tx, orderId, { reason: `Order ${order.orderNumber} cancelled by admin`, performedBy: adminId });
+
+      // If the customer had already paid, the money is owed back: refund it now
+      // (wallet) or queue it for the admin to send (everything else).
+      refundIssued = await issueRefund(tx, orderId, {
+        reason: `Order cancelled by admin: ${reason}`,
+        createdBy: adminId,
+      });
+
       // Add status history
       await tx.orderStatusHistory.create({
         data: {
@@ -427,8 +503,12 @@ export class AdminOrderService {
     return {
       orderId: cancelledOrder.id,
       status: cancelledOrder.orderStatus,
-      refundAmount: cancelledOrder.paymentStatus === 'paid' ? Number(cancelledOrder.totalAmount) : 0,
-      refundStatus: cancelledOrder.paymentStatus === 'paid' ? 'processing' : 'not_required',
+      refundAmount: refundIssued?.amount ?? 0,
+      refundStatus: refundIssued
+        ? refundIssued.status === 'completed'
+          ? 'refunded_to_wallet'
+          : 'pending_manual_transfer'
+        : 'not_required',
     };
   }
 
@@ -451,6 +531,12 @@ export class AdminOrderService {
       );
     }
 
+    // The rider being unassigned must stop receiving this order's events.
+    const previousRider = await prisma.delivery.findUnique({
+      where: { orderId },
+      select: { rider: { select: { userId: true } } },
+    });
+
     await prisma.$transaction(async (tx) => {
       await tx.delivery.updateMany({
         where: { orderId },
@@ -471,6 +557,7 @@ export class AdminOrderService {
       });
     });
 
+    if (previousRider?.rider?.userId) socketManager.removeUserFromOrder(previousRider.rider.userId, orderId);
     await realtimeOrderService.emitOrderStatusUpdate(orderId, 'ready', adminId);
     return { orderId, status: 'ready' };
   }
@@ -495,6 +582,12 @@ export class AdminOrderService {
       throw new AppError('Order is not paid, cannot process refund', 400, 'ORDER_NOT_PAID');
     }
 
+    // On an order that is still in flight a refund would leave it live (and later deliverable)
+    // with its stock and promo still taken. Cancelling does all of that and refunds in one step.
+    if (['pending', 'confirmed', 'preparing', 'ready', 'dispatched', 'in_transit'].includes(order.orderStatus)) {
+      throw new AppError('Cancel this order to refund it', 400, 'USE_CANCEL_ENDPOINT');
+    }
+
     const refund = refundAmount || Number(order.totalAmount);
     const orderTotal = Number(order.totalAmount);
     if (refund <= 0 || refund > orderTotal) {
@@ -507,64 +600,29 @@ export class AdminOrderService {
 
     const isWallet = order.paymentMethod === 'wallet';
 
-    const result = await prisma.$transaction(async (tx) => {
-      if (isWallet) {
-        if (!order.customerId) {
-          throw new AppError(
-            'Cannot refund wallet — order has no customer',
-            400,
-            'NO_CUSTOMER',
-          );
-        }
-        // Credit the wallet back atomically
-        const wallet = await tx.wallet.findUnique({ where: { userId: order.customerId } });
-        if (!wallet) {
-          throw new AppError('Customer wallet not found', 404, 'WALLET_NOT_FOUND');
-        }
-        const balanceBefore = Number(wallet.balance);
-        await tx.wallet.update({
-          where: { id: wallet.id },
-          data: { balance: { increment: refund } },
-        });
-        await tx.walletTransaction.create({
-          data: {
-            walletId: wallet.id,
-            orderId,
-            transactionType: 'credit',
-            amount: refund,
-            balanceBefore,
-            balanceAfter: balanceBefore + refund,
-            description: `Refund for order ${order.orderNumber}`,
-            status: 'completed',
-          },
-        });
+    // issueRefund locks the order row, caps the amount at what is still
+    // unrefunded and (for wallet orders) credits the wallet atomically, so a
+    // double click or two admins can't refund twice. Partial refunds are tracked
+    // cumulatively instead of marking the whole order refunded.
+    const issued = await prisma.$transaction(async (tx) => {
+      const r = await issueRefund(tx, orderId, {
+        amount: refund,
+        reason: 'Refund processed by admin',
+        createdBy: adminId,
+      });
+      if (!r) {
+        throw new AppError('Order is not paid, cannot process refund', 400, 'ORDER_NOT_PAID');
       }
-
-      const updatedOrder = await tx.order.update({
-        where: { id: orderId },
-        data: {
-          paymentStatus: isWallet ? 'refunded' : 'refund_pending',
-          orderStatus: isWallet ? 'refunded' : order.orderStatus,
-        },
-      });
-
-      await tx.orderStatusHistory.create({
-        data: {
-          orderId,
-          status: isWallet ? 'refunded' : 'refund_pending',
-          notes: isWallet
-            ? `Refund credited to wallet by admin. Amount: ${refund}`
-            : `Refund of ${refund} requested by admin — pending manual gateway processing (${order.paymentMethod}).`,
-          changedBy: adminId,
-        },
-      });
-
-      return updatedOrder;
+      if (isWallet && r.fullyRefunded) {
+        await tx.order.update({ where: { id: orderId }, data: { orderStatus: 'refunded' } });
+      }
+      return r;
     });
+    const result = await prisma.order.findUniqueOrThrow({ where: { id: orderId } });
 
     await realtimeOrderService.emitOrderStatusUpdate(
       orderId,
-      isWallet ? 'refunded' : 'refund_pending',
+      isWallet && issued.fullyRefunded ? 'refunded' : result.orderStatus,
       adminId,
     );
 
@@ -577,7 +635,8 @@ export class AdminOrderService {
 
     return {
       orderId: result.id,
-      refundAmount: refund,
+      refundId: issued.refundId,
+      refundAmount: issued.amount,
       status: result.orderStatus,
       paymentStatus: result.paymentStatus,
       requiresManualGatewayAction: !isWallet,

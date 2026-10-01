@@ -146,6 +146,10 @@ export class CommunityService {
     };
   }
 
+  distanceToCommunityKm(c: { centerLatitude: unknown; centerLongitude: unknown }, lat: number, lng: number): number {
+    return haversineKm(lat, lng, Number(c.centerLatitude), Number(c.centerLongitude));
+  }
+
   /**
    * Detect closest community based on buyer's GPS latitude and longitude
    */
@@ -189,6 +193,65 @@ export class CommunityService {
       distanceKm: Math.round(minDistance * 10) / 10,
       isInsideRadius,
     };
+  }
+
+  /**
+   * Work out which community a delivery address belongs to, so community delivery
+   * rules can apply to it. Tried in order:
+   *   1. GPS point inside a community's radius (nearest wins)
+   *   2. the address area naming a community ("Askari 11")
+   *   3. the buyer's own community, if it is in the same city as the address
+   * Returns null when nothing matches (the seller-wide delivery policy then applies).
+   */
+  async resolveCommunityIdForAddress(
+    address: { area?: string | null; city?: string | null; latitude?: unknown; longitude?: unknown },
+    userId?: string
+  ): Promise<string | null> {
+    const communities = await prisma.community.findMany({ where: { isActive: true } });
+    if (communities.length === 0) return null;
+
+    const lat = address.latitude != null ? Number(address.latitude) : null;
+    const lng = address.longitude != null ? Number(address.longitude) : null;
+    if (lat != null && lng != null && Number.isFinite(lat) && Number.isFinite(lng)) {
+      let best: { id: string; distance: number } | null = null;
+      for (const c of communities) {
+        const distance = haversineKm(lat, lng, Number(c.centerLatitude), Number(c.centerLongitude));
+        if (distance <= c.radiusKm && (!best || distance < best.distance)) {
+          best = { id: c.id, distance };
+        }
+      }
+      if (best) return best.id;
+    }
+
+    const norm = (v?: string | null) => (v ?? '').trim().toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+    const area = norm(address.area);
+    if (area) {
+      const byName = communities.find((c) => {
+        const n = norm(c.name);
+        const sl = norm(c.slug);
+        return (n && n === area) || (sl && sl === area);
+      });
+      if (byName) return byName.id;
+      // Whole-word containment ("askari 11 phase 2" names Askari 11, "askari 111" doesn't);
+      // an empty normalised name matches everything under includes(), so it is skipped.
+      const padded = ` ${area} `;
+      const contained = communities.find((c) => {
+        const n = norm(c.name);
+        return n.length > 0 && padded.includes(` ${n} `);
+      });
+      if (contained) return contained.id;
+    }
+
+    if (userId) {
+      const user = await prisma.user.findUnique({
+        where: { id: userId },
+        select: { primaryCommunityId: true },
+      });
+      const home = communities.find((c) => c.id === user?.primaryCommunityId);
+      if (home && norm(home.city) === norm(address.city)) return home.id;
+    }
+
+    return null;
   }
 
   /**

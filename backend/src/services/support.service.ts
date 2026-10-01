@@ -1,4 +1,5 @@
 import { Prisma } from '@prisma/client';
+import { randomInt } from 'crypto';
 import prisma from '../config/database';
 import { AppError } from '../middleware/errorHandler';
 
@@ -31,22 +32,31 @@ export class SupportService {
       }
     }
 
-    // Generate ticket number
-    const ticketCount = await prisma.supportTicket.count();
-    const ticketNumber = `TKT${new Date().getFullYear()}${String(ticketCount + 1).padStart(6, '0')}`;
-
-    const ticket = await prisma.supportTicket.create({
-      data: {
-        userId,
-        orderId: data.orderId,
-        ticketNumber,
-        category: data.category,
-        subject: data.subject,
-        description: data.description,
-        priority: data.priority || 'medium',
-        status: 'open',
-      },
-    });
+    // Ticket numbers are random, not count+1: two tickets created at once read the
+    // same count (and a deleted ticket would make the count reuse a number), so the
+    // second create hit the unique index and failed. The index stays authoritative;
+    // a clash just draws a new number.
+    let ticket;
+    for (let attempt = 1; ; attempt++) {
+      const ticketNumber = `TKT${new Date().getFullYear()}${randomInt(0, 1_000_000).toString().padStart(6, '0')}`;
+      try {
+        ticket = await prisma.supportTicket.create({
+          data: {
+            userId,
+            orderId: data.orderId,
+            ticketNumber,
+            category: data.category,
+            subject: data.subject,
+            description: data.description,
+            priority: data.priority || 'medium',
+            status: 'open',
+          },
+        });
+        break;
+      } catch (err: any) {
+        if (err?.code !== 'P2002' || attempt >= 5) throw err;
+      }
+    }
 
     return {
       ticketNumber: ticket.ticketNumber,

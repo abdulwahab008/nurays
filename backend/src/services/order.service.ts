@@ -1,6 +1,15 @@
+import { randomInt } from 'crypto';
 import prisma from '../config/database';
 import { AppError } from '../middleware/errorHandler';
 import realtimeOrderService from './realtime-order.service';
+import { SELLER_COMMUNITY_DELIVERY_SELECT } from '../utils/sellerDeliverySelect';
+import { communityService } from './community.service';
+import { eligibleSubtotalForPromotion, isItemEligibleForPromotion, releasePromotionUsage } from './promotion.service';
+import { GST_RATE, allocateDiscount } from '../utils/pricing';
+import { issueRefund, IssuedRefund } from './refund.service';
+import { allocateHubStock, releaseHubAllocations } from './hub-allocation.service';
+import { DeliveryFeeShare } from '../utils/deliveryEarnings';
+import { isOwnUploadPath } from '../utils/uploadPaths';
 import { getDeliveryFeeForSeller } from '../utils/deliveryFee';
 import { createStockAlert } from './stock-alert.service';
 import promotionService from './promotion.service';
@@ -8,7 +17,10 @@ import { isAcceptingOrders, validateOrderTiming } from './availability.service';
 
 export class OrderService {
   /**
-   * Generate unique order number
+   * Generate an order number: FN + date + 6 random digits (1,000,000 per day, from
+   * a CSPRNG). The old 4-digit Math.random suffix had only 10,000 values a day, so
+   * collisions became likely at a few hundred orders. Uniqueness is NOT assumed:
+   * the database constraint is authoritative and withOrderNumber retries on a clash.
    */
   private generateOrderNumber(): string {
     const prefix = 'FN';
@@ -16,8 +28,32 @@ export class OrderService {
     const year = date.getFullYear();
     const month = String(date.getMonth() + 1).padStart(2, '0');
     const day = String(date.getDate()).padStart(2, '0');
-    const random = Math.floor(Math.random() * 10000).toString().padStart(4, '0');
+    const random = randomInt(0, 1_000_000).toString().padStart(6, '0');
     return `${prefix}${year}${month}${day}${random}`;
+  }
+
+  /**
+   * Run `create` with a fresh order number, retrying with a new one if another
+   * order took it first. A pre-insert "does it exist?" check can't be made safe —
+   * two concurrent orders can both see it free — so the unique index decides and
+   * the loser simply draws again.
+   */
+  private async withOrderNumber<T>(create: (orderNumber: string) => Promise<T>): Promise<T> {
+    const MAX_ATTEMPTS = 5;
+    for (let attempt = 1; ; attempt++) {
+      try {
+        return await create(this.generateOrderNumber());
+      } catch (err: any) {
+        const target = err?.meta?.target;
+        const isOrderNumberClash =
+          err?.code === 'P2002' &&
+          (Array.isArray(target) ? target.includes('order_number') || target.includes('orderNumber') : /order_?number/i.test(String(target ?? '')));
+        // A deadlock / serialization failure aborts only this attempt; the whole
+        // transaction is safe to run again.
+        const isDeadlock = err?.code === 'P2034' || /deadlock detected|40P01/i.test(String(err?.message ?? ''));
+        if (!(isOrderNumberClash || isDeadlock) || attempt >= MAX_ATTEMPTS) throw err;
+      }
+    }
   }
 
   /**
@@ -96,6 +132,22 @@ export class OrderService {
       }
     }
 
+    // Hub ids come from the client: make sure they name real hubs, and that a
+    // hub pickup actually has one. (A client-chosen hub also picks the origin
+    // used for the delivery-fee calculation below.)
+    const requestedHubIds = [
+      ...new Set([data.hubId, ...data.items.map((i) => i.hubId)].filter((id): id is string => !!id)),
+    ];
+    if (data.deliveryType === 'hub_pickup' && !data.hubId) {
+      throw new AppError('A pickup hub is required for hub pickup', 400, 'HUB_REQUIRED');
+    }
+    if (requestedHubIds.length > 0) {
+      const foundHubs = await prisma.hubCenter.count({ where: { id: { in: requestedHubIds } } });
+      if (foundHubs !== requestedHubIds.length) {
+        throw new AppError('Hub not found', 404, 'HUB_NOT_FOUND');
+      }
+    }
+
     // Process items and calculate totals
     const orderItems: Array<{
       productId: string;
@@ -110,6 +162,7 @@ export class OrderService {
       commissionRate: any;
       commissionAmount: number;
       sellerPayout: number;
+      promoDiscount: number;
       fulfillmentType: string;
       hubId: string | null;
     }> = [];
@@ -194,6 +247,7 @@ export class OrderService {
         commissionRate: product.seller.commissionRate,
         commissionAmount: 0,
         sellerPayout: 0,
+        promoDiscount: 0,
         fulfillmentType: item.stockType || product.stockType,
         hubId: item.hubId || null,
       });
@@ -238,6 +292,12 @@ export class OrderService {
 
     // Calculate delivery fee: per-seller (free in their areas, fixed or distance-based outside), then sum
     let deliveryFee: number;
+    const deliveryFeeBreakdown: DeliveryFeeShare[] = [];
+    if (data.deliveryType === 'home_delivery' && !deliveryAddress) {
+      // The delivery address carries the buyer's community, which decides whether
+      // each seller delivers there and at what fee — it can't be skipped.
+      throw new AppError('A delivery address is required for home delivery', 400, 'ADDRESS_REQUIRED');
+    }
     if (data.deliveryType === 'self_pickup' || data.deliveryType === 'hub_pickup') {
       deliveryFee = 0;
     } else if (data.deliveryType === 'home_delivery' && deliveryAddress && orderItems.length > 0) {
@@ -265,6 +325,8 @@ export class OrderService {
           freeDeliveryThreshold: true,
           allowedPostalCodes: true,
           deliveryZones: true,
+          deliveryProvider: true,
+          ...SELLER_COMMUNITY_DELIVERY_SELECT,
         },
       });
       const hubIds = [...sellerToHubId.values()].filter((id): id is string => id != null);
@@ -275,12 +337,15 @@ export class OrderService {
           })
         : [];
       const hubById = new Map(hubs.map((h) => [h.id, h]));
+      const resolvedCommunityId = deliveryAddress.communityId ?? (await communityService.resolveCommunityIdForAddress(deliveryAddress, customerId));
       const addr = {
         area: deliveryAddress.area,
         city: deliveryAddress.city,
         postalCode: deliveryAddress.postalCode,
         latitude: deliveryAddress.latitude != null ? Number(deliveryAddress.latitude) : null,
         longitude: deliveryAddress.longitude != null ? Number(deliveryAddress.longitude) : null,
+        communityId: resolvedCommunityId,
+      communityUnresolved: !resolvedCommunityId,
       };
       let total = 0;
       for (const seller of sellers) {
@@ -296,6 +361,13 @@ export class OrderService {
           throw new AppError(`${seller.businessName}: ${result.reason}`, 400, 'ADDRESS_NOT_DELIVERABLE');
         }
         total += result.fee;
+        if (result.fee > 0) {
+          deliveryFeeBreakdown.push({
+            sellerId: seller.id,
+            fee: result.fee,
+            provider: seller.deliveryProvider === 'self' ? 'self' : 'platform',
+          });
+        }
       }
       deliveryFee = total;
     } else {
@@ -311,7 +383,7 @@ export class OrderService {
     let promotionId = null;
     if (data.promotionCode) {
       const promotion = await prisma.promotion.findUnique({
-        where: { code: data.promotionCode },
+        where: { code: data.promotionCode.trim().toUpperCase() },
       });
 
       // This exact promotion is already auto-applied as a catalog deal on one or more
@@ -338,45 +410,54 @@ export class OrderService {
           now <= promotion.validUntil &&
           withinLimits
         ) {
-          if (subtotal >= Number(promotion.minOrderAmount)) {
+          // A seller's code (or a product-limited code) only discounts the
+          // matching items — never the rest of a multi-seller cart.
+          const eligibleSubtotal = eligibleSubtotalForPromotion(
+            promotion,
+            orderItems.map((i) => ({ productId: i.productId, sellerId: i.sellerId, total: i.totalPrice }))
+          );
+          if (eligibleSubtotal <= 0) {
+            throw new AppError(
+              'This promotion code does not apply to the items in your order',
+              400,
+              'PROMO_NOT_APPLICABLE'
+            );
+          }
+          if (eligibleSubtotal >= Number(promotion.minOrderAmount)) {
             if (promotion.discountType === 'percentage') {
-              discountAmount = subtotal * (Number(promotion.discountValue) / 100);
+              discountAmount = eligibleSubtotal * (Number(promotion.discountValue) / 100);
               if (promotion.maxDiscountAmount) {
                 discountAmount = Math.min(discountAmount, Number(promotion.maxDiscountAmount));
               }
             } else {
               discountAmount = Number(promotion.discountValue);
             }
-            // Never let a discount exceed the order subtotal it applies to.
-            discountAmount = Math.min(discountAmount, subtotal);
+            // Never let a discount exceed the part of the order it applies to.
+            discountAmount = Math.min(discountAmount, eligibleSubtotal);
             promotionId = promotion.id;
+
+            // Record each eligible item's share of the discount (to the cent), so a later partial
+            // cancel refunds exactly what the customer paid for that item.
+            const eligibleItems = orderItems.filter((i) =>
+              isItemEligibleForPromotion(promotion, { productId: i.productId, sellerId: i.sellerId, total: i.totalPrice })
+            );
+            const shares = allocateDiscount(eligibleItems.map((i) => ({ total: i.totalPrice })), discountAmount);
+            eligibleItems.forEach((i, idx) => {
+              i.promoDiscount = shares[idx];
+            });
           }
         }
       }
     }
 
     // Calculate tax (5% GST for Pakistan)
-    const taxAmount = (subtotal - discountAmount) * 0.05;
+    const taxAmount = (subtotal - discountAmount) * GST_RATE;
 
     // Calculate total
     const totalAmount = subtotal + deliveryFee - discountAmount + taxAmount;
 
-    // Generate order number
-    let orderNumber = this.generateOrderNumber();
-    let orderNumberExists = true;
-    while (orderNumberExists) {
-      const existing = await prisma.order.findUnique({
-        where: { orderNumber },
-      });
-      if (!existing) {
-        orderNumberExists = false;
-      } else {
-        orderNumber = this.generateOrderNumber();
-      }
-    }
-
-    // Create order with items in transaction
-    const order = await prisma.$transaction(async (tx) => {
+    // Create order with items in transaction (retried with a new number on a clash)
+    const order = await this.withOrderNumber((orderNumber) => prisma.$transaction(async (tx) => {
       // Create order
       const newOrder = await tx.order.create({
         data: {
@@ -384,6 +465,7 @@ export class OrderService {
           customerId,
           subtotal,
           deliveryFee,
+          deliveryFeeBreakdown: deliveryFeeBreakdown as any,
           discountAmount,
           taxAmount,
           totalAmount,
@@ -426,6 +508,7 @@ export class OrderService {
               commissionRate: item.commissionRate,
               commissionAmount: item.commissionAmount,
               sellerPayout: item.sellerPayout,
+              promoDiscount: item.promoDiscount,
               fulfillmentType: item.fulfillmentType,
               hubId: item.hubId,
               status: 'pending',
@@ -442,12 +525,25 @@ export class OrderService {
         stockQuantity: number;
         stockThreshold: number | null;
       }> = [];
-      for (const item of orderItems) {
+      // Fixed lock order (by variant/product id) so two orders touching the same
+      // products can't deadlock each other.
+      const stockOrdered = [...orderItems].sort((a, b) =>
+        (a.productId + (a.variantId ?? '')).localeCompare(b.productId + (b.variantId ?? ''))
+      );
+      for (const item of stockOrdered) {
         if (item.variantId) {
-          const updatedVariant = await tx.productVariant.update({
-            where: { id: item.variantId },
+          // Conditional decrement: the stock check above ran on a pre-transaction
+          // read, so two concurrent orders (or two lines for the same product)
+          // could both pass it and drive stock negative. The WHERE makes the
+          // check-and-take atomic; losing the race aborts the whole order.
+          const took = await tx.productVariant.updateMany({
+            where: { id: item.variantId, stockQuantity: { gte: item.quantity } },
             data: { stockQuantity: { decrement: item.quantity } },
           });
+          if (took.count === 0) {
+            throw new AppError(`Insufficient stock for ${item.productName}`, 400, 'INSUFFICIENT_STOCK');
+          }
+          const updatedVariant = await tx.productVariant.findUniqueOrThrow({ where: { id: item.variantId } });
           const updated = await tx.product.update({
             where: { id: item.productId },
             data: { totalOrders: { increment: 1 } },
@@ -460,12 +556,16 @@ export class OrderService {
             stockThreshold: updatedVariant.stockThreshold,
           });
         } else {
+          const took = await tx.product.updateMany({
+            where: { id: item.productId, stockQuantity: { gte: item.quantity } },
+            data: { stockQuantity: { decrement: item.quantity } },
+          });
+          if (took.count === 0) {
+            throw new AppError(`Insufficient stock for ${item.productName}`, 400, 'INSUFFICIENT_STOCK');
+          }
           const updated = await tx.product.update({
             where: { id: item.productId },
-            data: {
-              stockQuantity: { decrement: item.quantity },
-              totalOrders: { increment: 1 },
-            },
+            data: { totalOrders: { increment: 1 } },
           });
           updatedProducts.push({
             id: updated.id,
@@ -477,47 +577,25 @@ export class OrderService {
         }
       }
 
-      // FEFO (First-Expired, First-Out) Hub Batch Allocation & Reservation
-      for (const item of orderItems) {
-        if (item.fulfillmentType === 'hub' && item.hubId) {
-          const availableBatches = await tx.hubInventory.findMany({
-            where: {
-              hubId: item.hubId,
-              productId: item.productId,
-              status: 'available',
-              quantity: { gt: 0 },
-            },
-            orderBy: { expiryDate: 'asc' }, // FEFO: Earliest expiration batch first
+      // FEFO (First-Expired, First-Out) Hub Batch Allocation & Reservation. Shortfalls
+      // throw (rolling the whole order back) rather than creating an order whose
+      // hub units were never actually taken.
+      const hubOrdered = orderItems
+        .map((item, idx) => ({ item, idx }))
+        .filter(({ item }) => item.fulfillmentType === 'hub' && item.hubId)
+        .sort((a, b) => (a.item.hubId! + a.item.productId).localeCompare(b.item.hubId! + b.item.productId));
+      for (const { item, idx } of hubOrdered) {
+        {
+          await allocateHubStock(tx, {
+            orderId: newOrder.id,
+            orderItemId: createdItems[idx].id,
+            orderNumber: newOrder.orderNumber,
+            hubId: item.hubId!,
+            productId: item.productId,
+            productName: item.productName,
+            quantity: item.quantity,
+            performedBy: customerId,
           });
-
-          let remainingQtyToAllocate = item.quantity;
-          for (const batch of availableBatches) {
-            if (remainingQtyToAllocate <= 0) break;
-            const allocateQty = Math.min(batch.quantity, remainingQtyToAllocate);
-            const newQty = batch.quantity - allocateQty;
-
-            await tx.hubInventory.update({
-              where: { id: batch.id },
-              data: {
-                quantity: newQty,
-                status: newQty === 0 ? 'reserved' : 'available',
-              },
-            });
-
-            await tx.hubInventoryLog.create({
-              data: {
-                hubInventoryId: batch.id,
-                action: 'stock_out',
-                quantityChange: -allocateQty,
-                previousQuantity: batch.quantity,
-                newQuantity: newQty,
-                reason: `FEFO batch allocation for Order #${newOrder.orderNumber} (Batch: ${batch.batchNumber || 'N/A'}, Expiry: ${batch.expiryDate.toISOString().slice(0, 10)})`,
-                performedBy: customerId,
-              },
-            });
-
-            remainingQtyToAllocate -= allocateQty;
-          }
 
           await tx.inventoryReservation.create({
             data: {
@@ -547,6 +625,35 @@ export class OrderService {
         allUsagesToRecord.push({ promotionId, discountApplied: discountAmount });
       }
       for (const usage of allUsagesToRecord) {
+        if (usage.promotionId === promotionId) {
+          // Re-check the limits atomically: they were read before this
+          // transaction, so parallel orders could each pass and overshoot.
+          const promo = await tx.promotion.findUniqueOrThrow({ where: { id: usage.promotionId } });
+          const usedByUser = await tx.promotionUsage.count({
+            where: { promotionId: usage.promotionId, userId: customerId },
+          });
+          if (usedByUser >= promo.usageLimitPerUser) {
+            throw new AppError('You have already used this promotion code', 400, 'PROMO_ALREADY_USED');
+          }
+          if (promo.usageLimitTotal != null) {
+            const reserved = await tx.promotion.updateMany({
+              where: { id: usage.promotionId, usedCount: { lt: promo.usageLimitTotal } },
+              data: { usedCount: { increment: 1 } },
+            });
+            if (reserved.count === 0) {
+              throw new AppError('Promotion code usage limit reached', 400, 'PROMO_LIMIT_REACHED');
+            }
+            await tx.promotionUsage.create({
+              data: {
+                promotionId: usage.promotionId,
+                userId: customerId,
+                orderId: newOrder.id,
+                discountApplied: usage.discountApplied,
+              },
+            });
+            continue;
+          }
+        }
         await tx.promotionUsage.create({
           data: {
             promotionId: usage.promotionId,
@@ -563,7 +670,7 @@ export class OrderService {
       }
 
       return { order: newOrder, items: createdItems, updatedProducts };
-    });
+    }));
 
     // Emit new order notification
     await realtimeOrderService.emitNewOrderNotification(order.order.id);
@@ -658,7 +765,7 @@ export class OrderService {
       where.orderStatus = filters.status;
     }
 
-    const [orders, total] = await Promise.all([
+    const [orders, total, statusGroups] = await Promise.all([
       prisma.order.findMany({
         where,
         skip,
@@ -683,6 +790,8 @@ export class OrderService {
         },
       }),
       prisma.order.count({ where }),
+      // Whole-history totals for the summary cards (not just the loaded page).
+      prisma.order.groupBy({ by: ['orderStatus'], where: { customerId: userId }, _count: { _all: true } }),
     ]);
 
     return {
@@ -715,6 +824,7 @@ export class OrderService {
         total,
         totalPages: Math.ceil(total / limit),
       },
+      statusCounts: Object.fromEntries(statusGroups.map((g) => [g.orderStatus, g._count._all])),
     };
   }
 
@@ -841,15 +951,29 @@ export class OrderService {
     }
 
     // Cancel order and restore stock
+    let refundIssued = null as IssuedRefund | null;
     const cancelledOrder = await prisma.$transaction(async (tx) => {
-      // Update order status
-      const updatedOrder = await tx.order.update({
-        where: { id: orderId },
+      // Claim the cancellation: the "still pending" check above ran before this
+      // transaction, so a seller accepting at the same instant (or a second
+      // cancel) must not both win — otherwise the order is revived after its
+      // stock was returned, or its stock is returned twice.
+      const claimed = await tx.order.updateMany({
+        where: { id: orderId, customerId: userId, orderStatus: 'pending' },
         data: {
           orderStatus: 'cancelled',
           cancellationReason: reason,
           cancelledBy: 'customer',
         },
+      });
+      if (claimed.count === 0) {
+        throw new AppError('Order can no longer be cancelled', 409, 'ORDER_NOT_CANCELLABLE');
+      }
+      const updatedOrder = await tx.order.findUniqueOrThrow({ where: { id: orderId } });
+
+      // Items a seller already cancelled were restocked at that time; only
+      // return stock for what is still live. Read before the cascade below.
+      const liveItems = await tx.orderItem.findMany({
+        where: { orderId, status: { notIn: ['cancelled', 'delivered'] } },
       });
 
       // Cascade cancellation to all order items so the seller UI doesn't
@@ -859,16 +983,38 @@ export class OrderService {
         data: { status: 'cancelled' },
       });
 
-      // Restore product stock
-      for (const item of order.items) {
+      // Restore stock. A variant item drew from its own stock pool at order
+      // time, so it goes back there — not onto the shared product-level stock.
+      for (const item of liveItems) {
+        if (!item.productId) continue;
+        if (item.variantId) {
+          await tx.productVariant.update({
+            where: { id: item.variantId },
+            data: { stockQuantity: { increment: item.quantity } },
+          });
+        }
         await tx.product.update({
-          where: { id: item.productId || '' },
+          where: { id: item.productId },
           data: {
-            stockQuantity: { increment: item.quantity },
+            ...(item.variantId ? {} : { stockQuantity: { increment: item.quantity } }),
             totalOrders: { decrement: 1 },
           },
         });
       }
+
+      // A cancelled order shouldn't keep consuming the promo's quota.
+      await releasePromotionUsage(tx, orderId);
+
+      // Hub units this order took go back into the batches they came from.
+      await releaseHubAllocations(tx, orderId, { reason: `Order ${order.orderNumber} cancelled by customer`, performedBy: userId });
+
+      // A paid order (wallet payment, or a gateway payment that already cleared)
+      // is owed its money back: wallet orders are refunded instantly, the rest
+      // are queued for the admin to send.
+      refundIssued = await issueRefund(tx, orderId, {
+        reason: `Order cancelled by customer: ${reason}`,
+        createdBy: userId,
+      });
 
       // Remove inventory reservations
       await tx.inventoryReservation.deleteMany({
@@ -897,8 +1043,12 @@ export class OrderService {
     return {
       orderId: cancelledOrder.id,
       status: cancelledOrder.orderStatus,
-      refundAmount: cancelledOrder.paymentStatus === 'paid' ? Number(cancelledOrder.totalAmount) : 0,
-      refundStatus: cancelledOrder.paymentStatus === 'paid' ? 'processing' : 'not_required',
+      refundAmount: refundIssued?.amount ?? 0,
+      refundStatus: refundIssued
+        ? refundIssued.status === 'completed'
+          ? 'refunded_to_wallet'
+          : 'pending_manual_transfer'
+        : 'not_required',
     };
   }
 
@@ -914,6 +1064,7 @@ export class OrderService {
       include: {
         items: {
           take: 1,
+          orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
           include: {
             seller: {
               select: {
@@ -923,7 +1074,9 @@ export class OrderService {
                 bankAccountName: true,
                 bankAccountNumber: true,
                 jazzcashNumber: true,
+                jazzcashAccountTitle: true,
                 easypaisaNumber: true,
+                easypaisaAccountTitle: true,
               },
             },
           },
@@ -937,6 +1090,32 @@ export class OrderService {
 
     const seller = order.items[0]?.seller;
 
+    // Only accounts the seller has actually configured. The customer sends real
+    // money to whatever is listed here, so there are no placeholder fallbacks —
+    // a seller with nothing configured yields an empty list.
+    const accounts: Array<{ provider: string; accountTitle?: string; accountNumber: string }> = [];
+    if (seller?.jazzcashNumber) {
+      accounts.push({
+        provider: 'JazzCash',
+        accountTitle: seller.jazzcashAccountTitle || seller.businessName,
+        accountNumber: seller.jazzcashNumber,
+      });
+    }
+    if (seller?.easypaisaNumber) {
+      accounts.push({
+        provider: 'EasyPaisa',
+        accountTitle: seller.easypaisaAccountTitle || seller.businessName,
+        accountNumber: seller.easypaisaNumber,
+      });
+    }
+    if (seller?.bankAccountNumber) {
+      accounts.push({
+        provider: seller.bankName || 'Bank Transfer',
+        accountTitle: seller.bankAccountName || seller.businessName,
+        accountNumber: seller.bankAccountNumber,
+      });
+    }
+
     return {
       orderId: order.id,
       orderNumber: order.orderNumber,
@@ -945,17 +1124,9 @@ export class OrderService {
       paymentStatus: order.paymentStatus,
       paymentSubmittedAt: order.paymentSubmittedAt,
       paymentReferenceNumber: order.paymentReferenceNumber,
-      seller: seller
-        ? {
-            id: seller.id,
-            businessName: seller.businessName,
-            bankName: seller.bankName || 'Meezan Bank / HBL',
-            bankAccountName: seller.bankAccountName || seller.businessName,
-            bankAccountNumber: seller.bankAccountNumber || 'PK00MEZN000123456789',
-            jazzcashNumber: seller.jazzcashNumber || '0300-1234567',
-            easypaisaNumber: seller.easypaisaNumber || '0345-1234567',
-          }
-        : null,
+      sellerId: seller?.id ?? null,
+      sellerName: seller?.businessName ?? null,
+      accounts,
     };
   }
 
@@ -991,11 +1162,35 @@ export class OrderService {
       throw new AppError('Order is already marked as paid', 400, 'ALREADY_PAID');
     }
 
-    const updated = await prisma.order.update({
-      where: { id: orderId },
+    // Manual proof only makes sense for an online-transfer order that is still
+    // awaiting payment — not a cancelled/refunded order, and not COD or wallet.
+    if (['cancelled', 'refunded'].includes(order.orderStatus)) {
+      throw new AppError('This order is no longer payable', 400, 'ORDER_NOT_PAYABLE');
+    }
+    if (['cod', 'wallet'].includes(order.paymentMethod)) {
+      throw new AppError('This order is not paid by manual transfer', 400, 'NOT_MANUAL_PAYMENT');
+    }
+
+    const referenceNumber = (data.referenceNumber ?? '').trim();
+    if (!referenceNumber) {
+      throw new AppError('A payment reference number is required', 400, 'REFERENCE_REQUIRED');
+    }
+    // A proof is a link to an uploaded file — never an inline data: payload.
+    if (data.proofUrl && !isOwnUploadPath(data.proofUrl)) {
+      throw new AppError('Invalid payment proof link', 400, 'INVALID_PROOF_URL');
+    }
+
+    // Atomic: only an order still awaiting (or re-submitting/contesting) payment
+    // can move to payment_submitted; never overwrite refund_pending/refunded/paid.
+    const submitted = await prisma.order.updateMany({
+      where: {
+        id: orderId,
+        customerId: userId,
+        paymentStatus: { in: ['pending', 'failed', 'disputed', 'payment_submitted'] },
+      },
       data: {
         paymentStatus: 'payment_submitted',
-        paymentReferenceNumber: data.referenceNumber,
+        paymentReferenceNumber: referenceNumber,
         paymentSenderName: data.senderName,
         paymentSenderAccount: data.senderAccount,
         paymentProofUrl: data.proofUrl,
@@ -1003,6 +1198,10 @@ export class OrderService {
         paymentSubmittedAt: new Date(),
       },
     });
+    if (submitted.count === 0) {
+      throw new AppError('Payment can no longer be submitted for this order', 409, 'PAYMENT_STATE_CONFLICT');
+    }
+    const updated = await prisma.order.findUniqueOrThrow({ where: { id: orderId } });
 
     // Add status history record
     await prisma.orderStatusHistory.create({
@@ -1043,23 +1242,31 @@ export class OrderService {
       throw new AppError('Seller profile not found', 404, 'SELLER_NOT_FOUND');
     }
 
+    // Only the seller the customer was told to pay (the same one
+    // getSellerPaymentDetails shows) may confirm or dispute the transfer; other
+    // sellers on a multi-seller order must not be able to mark it paid.
     const order = await prisma.order.findFirst({
-      where: {
-        id: orderId,
-        items: {
-          some: { sellerId: seller.id },
-        },
-      },
+      where: { id: orderId, items: { some: { sellerId: seller.id } } },
+      include: { items: { take: 1, orderBy: [{ createdAt: 'asc' }, { id: 'asc' }], select: { sellerId: true } } },
     });
 
     if (!order) {
       throw new AppError('Order not found for this seller', 404, 'ORDER_NOT_FOUND');
     }
+    if (order.items[0]?.sellerId !== seller.id) {
+      throw new AppError('Only the seller receiving this payment can confirm it', 403, 'NOT_PAYEE');
+    }
+    if (['cancelled', 'refunded'].includes(order.orderStatus) || ['cod', 'wallet'].includes(order.paymentMethod)) {
+      throw new AppError('This order has no manual payment to confirm', 400, 'NOT_MANUAL_PAYMENT');
+    }
 
     const newPaymentStatus = confirmed ? 'paid' : 'disputed';
 
-    const updated = await prisma.order.update({
-      where: { id: orderId },
+    // Atomic, and only from payment_submitted: a seller can't mark an order paid
+    // that the customer never paid for (which would unlock a payout for money
+    // the platform never received), nor flip a refunded order back to paid.
+    const applied = await prisma.order.updateMany({
+      where: { id: orderId, paymentStatus: 'payment_submitted' },
       data: {
         paymentStatus: newPaymentStatus,
         paymentConfirmedBy: confirmed ? 'seller' : undefined,
@@ -1068,6 +1275,14 @@ export class OrderService {
         paymentDisputeReason: !confirmed ? disputeReason || 'Payment verification failed' : null,
       },
     });
+    if (applied.count === 0) {
+      throw new AppError(
+        'There is no submitted payment awaiting confirmation on this order',
+        409,
+        'NO_PAYMENT_SUBMITTED'
+      );
+    }
+    const updated = await prisma.order.findUniqueOrThrow({ where: { id: orderId } });
 
     await prisma.orderStatusHistory.create({
       data: {
@@ -1127,12 +1342,10 @@ export class OrderService {
     }
 
     // Mark unread messages sent by the counterparty as read (Double Blue Tick)
-    const readCondition =
-      role === 'customer'
-        ? { senderRole: { not: 'customer' } }
-        : role === 'seller'
-        ? { senderRole: { not: 'seller' } }
-        : { senderId: { not: userId } };
+    // Always "messages from someone else". (A client-supplied ?role= used to
+    // steer this, letting a caller mark the other side's messages unread/read.)
+    void role;
+    const readCondition = { senderId: { not: userId } };
 
     await prisma.orderMessage.updateMany({
       where: {
@@ -1231,6 +1444,7 @@ export class OrderService {
         items: {
           select: { sellerId: true, seller: { select: { userId: true } } },
         },
+        delivery: { select: { rider: { select: { userId: true } } } },
       },
     });
 
@@ -1238,17 +1452,17 @@ export class OrderService {
       throw new AppError('Order not found or access denied', 404, 'ORDER_NOT_FOUND');
     }
 
-    // Determine sender role with high fidelity
-    let effectiveRole: string = 'customer';
-    if (options?.role) {
-      effectiveRole = options.role;
-    } else if (user.userType === 'seller' || (seller && order.items.some((i) => i.sellerId === seller.id || i.seller?.userId === userId))) {
-      effectiveRole = 'seller';
-    } else if (user.userType === 'rider') {
-      effectiveRole = 'rider';
-    } else {
-      effectiveRole = 'customer';
-    }
+    // The sender's role comes from their actual relationship to this order, never
+    // from the request: a client-supplied role let a customer post as the seller
+    // or rider. A caller who genuinely holds several roles (e.g. a seller ordering
+    // from their own shop) may pick among those they hold.
+    const heldRoles: string[] = [];
+    if (order.customerId === userId) heldRoles.push('customer');
+    if (seller && order.items.some((i) => i.sellerId === seller.id || i.seller?.userId === userId)) heldRoles.push('seller');
+    if (order.delivery?.rider?.userId === userId) heldRoles.push('rider');
+    if (isAdmin) heldRoles.push('support');
+    const effectiveRole =
+      options?.role && heldRoles.includes(options.role) ? options.role : heldRoles[0] ?? 'customer';
 
     const msgType = options?.messageType || 'text';
     const fallbackMessage = msgType === 'voice' ? '🎙️ Voice note' : (message?.trim() || '');

@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import { getImageUrl, deleteUploadedFile } from '../services/upload.service';
 import { AppError } from '../middleware/errorHandler';
+import prisma from '../config/database';
 
 /**
  * Upload product images
@@ -55,6 +56,24 @@ export const deleteProductImage = async (req: Request, res: Response) => {
   // Validate filename to prevent directory traversal
   if (filename.includes('..') || filename.includes('/')) {
     throw new AppError('Invalid filename', 400, 'INVALID_FILENAME');
+  }
+
+  // A seller may only delete files they uploaded. Uploads are named
+  // "<uploaderId>_<uuid>.<ext>". Older files predate that, so they may be deleted
+  // only if attached to one of the caller's own products.
+  const isAdmin = req.user.userType === 'admin';
+  if (!isAdmin && !filename.startsWith(`${req.user.userId}_`)) {
+    const ownLegacy =
+      !/^[0-9a-f-]{36}_/i.test(filename) &&
+      (await prisma.productImage.count({
+        where: {
+          imageUrl: { endsWith: `/${filename}` },
+          product: { seller: { userId: req.user.userId } },
+        },
+      })) > 0;
+    if (!ownLegacy) {
+      throw new AppError('You can only delete your own uploads', 403, 'FORBIDDEN');
+    }
   }
 
   await deleteUploadedFile(filename);

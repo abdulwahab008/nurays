@@ -2,6 +2,8 @@ import prisma from '../config/database';
 import { AppError } from '../middleware/errorHandler';
 import { computeSellerAvailability, isAcceptingOrders } from './availability.service';
 import { getDeliveryFeeForSeller, haversineKm } from '../utils/deliveryFee';
+import { SELLER_COMMUNITY_DELIVERY_SELECT } from '../utils/sellerDeliverySelect';
+import { isUploadedBy } from '../utils/uploadPaths';
 
 const SELLER_AVAILABILITY_SELECT = {
   status: true,
@@ -37,15 +39,17 @@ const SELLER_ORDERING_SELECT = {
   allowedPostalCodes: true,
   deliveryZones: true,
   deliveryModes: true,
-  communityId: true,
   primaryCommunityName: true,
+  communityId: true,
   allowCrossCommunity: true,
+  communityDeliveries: SELLER_COMMUNITY_DELIVERY_SELECT.communityDeliveries,
   community: {
     select: {
       id: true,
       name: true,
       slug: true,
       deliveryBaseFee: true,
+      crossCommunityEnabled: true,
     },
   },
 } as const;
@@ -98,15 +102,16 @@ async function computeCustomerFacingSellerInfo(
     minPrepTimeMinutes: number | null;
   },
   customerLat?: number | null,
-  customerLng?: number | null
+  customerLng?: number | null,
+  customerCommunityId?: string | null
 ) {
   const accepting = await isAcceptingOrders(seller as any);
-  if (customerLat == null || customerLng == null) {
+  if ((customerLat == null || customerLng == null) && !customerCommunityId) {
     return { isAcceptingOrders: accepting.accepting, acceptingReason: accepting.reason, delivery: null };
   }
   const feeResult = getDeliveryFeeForSeller(
     seller as any,
-    { latitude: customerLat, longitude: customerLng },
+    { latitude: customerLat, longitude: customerLng, communityId: customerCommunityId },
     seller.latitude != null ? Number(seller.latitude) : null,
     seller.longitude != null ? Number(seller.longitude) : null
   );
@@ -456,7 +461,7 @@ export class ProductService {
     );
     await Promise.all(
       uniqueSellers.map(async (seller) => {
-        const info = await computeCustomerFacingSellerInfo(seller, filters.customerLat, filters.customerLng);
+        const info = await computeCustomerFacingSellerInfo(seller, filters.customerLat, filters.customerLng, targetCommunity?.id);
         sellerInfoById.set(seller.id, info);
       })
     );
@@ -546,8 +551,18 @@ export class ProductService {
     identifier: string,
     requestingUserId?: string,
     customerLat?: number,
-    customerLng?: number
+    customerLng?: number,
+    customerCommunityIdOrSlug?: string
   ) {
+    // The listing page accepts an id or a slug; the delivery check below compares ids.
+    let customerCommunityId: string | undefined;
+    if (customerCommunityIdOrSlug) {
+      const c = await prisma.community.findFirst({
+        where: { OR: [{ id: customerCommunityIdOrSlug }, { slug: customerCommunityIdOrSlug }] },
+        select: { id: true },
+      });
+      customerCommunityId = c?.id;
+    }
     const product = await prisma.product.findFirst({
       where: {
         OR: [{ id: identifier }, { slug: identifier }],
@@ -561,6 +576,8 @@ export class ProductService {
                 phone: true,
               },
             },
+            community: { select: { id: true, name: true, slug: true, crossCommunityEnabled: true } },
+            communityDeliveries: SELLER_COMMUNITY_DELIVERY_SELECT.communityDeliveries,
           },
         },
         images: {
@@ -597,16 +614,51 @@ export class ProductService {
 
     // Format images with full URLs
     const baseUrl = process.env.BASE_URL || 'http://localhost:3001';
-    const sellerInfo = await computeCustomerFacingSellerInfo(product.seller as any, customerLat, customerLng);
+    const sellerInfo = await computeCustomerFacingSellerInfo(product.seller as any, customerLat, customerLng, customerCommunityId);
+
+    // This endpoint is public. `product.seller` is the full Seller row (bank and
+    // wallet numbers, commission rate, home coordinates, the seller's phone), so
+    // expose only an explicit public subset, and the product's cost price only
+    // to its owner.
+    const { seller: fullSeller, costPrice: rawCostPrice, ...productFields } = product;
+    const publicSeller = {
+      id: fullSeller.id,
+      businessName: fullSeller.businessName,
+      businessNameUrdu: fullSeller.businessNameUrdu,
+      description: fullSeller.description,
+      coverImageUrl: fullSeller.coverImageUrl,
+      ratingAverage: fullSeller.ratingAverage,
+      totalReviews: fullSeller.totalReviews,
+      isVerified: fullSeller.isVerified,
+      businessType: fullSeller.businessType,
+      mealCategories: fullSeller.mealCategories,
+      status: fullSeller.status,
+      deliveryModes: fullSeller.deliveryModes,
+      freeDeliveryThreshold: fullSeller.freeDeliveryThreshold,
+      minOrderAmountForDelivery: fullSeller.minOrderAmountForDelivery,
+      communityId: fullSeller.communityId,
+      allowCrossCommunity: fullSeller.allowCrossCommunity,
+      primaryCommunityName: fullSeller.primaryCommunityName,
+      community: fullSeller.community,
+      scheduleMode: fullSeller.scheduleMode,
+      operatingHours: fullSeller.operatingHours,
+      availabilityOverride: fullSeller.availabilityOverride,
+      availabilityOverrideUntil: fullSeller.availabilityOverrideUntil,
+      availabilityNote: fullSeller.availabilityNote,
+      orderCutoffTime: fullSeller.orderCutoffTime,
+      maxDailyOrders: fullSeller.maxDailyOrders,
+      preOrderOnly: fullSeller.preOrderOnly,
+      minPrepTimeMinutes: fullSeller.minPrepTimeMinutes,
+    };
 
     return {
-      ...product,
+      ...productFields,
       price: Number(product.price),
       originalPrice: product.originalPrice ? Number(product.originalPrice) : null,
-      costPrice: product.costPrice ? Number(product.costPrice) : null,
+      ...(isOwner ? { costPrice: rawCostPrice ? Number(rawCostPrice) : null } : {}),
       ratingAverage: Number(product.ratingAverage),
       seller: {
-        ...attachAvailability(product.seller),
+        ...attachAvailability(publicSeller),
         isAcceptingOrders: sellerInfo.isAcceptingOrders,
         acceptingOrdersReason: sellerInfo.acceptingReason,
       },
@@ -672,20 +724,13 @@ export class ProductService {
       throw new AppError('Seller not found', 404, 'SELLER_NOT_FOUND');
     }
 
-    // Generate slug
-    const slug = this.generateSlug(data.name);
-
-    // Check if slug exists
-    const existingProduct = await prisma.product.findUnique({
-      where: { slug },
-    });
-
-    if (existingProduct) {
-      throw new AppError('Product with this name already exists', 409, 'PRODUCT_EXISTS');
-    }
+    // Generate a slug that is unique across the whole catalog. Another seller may
+    // legitimately sell "Biryani" too, so a clash with someone else's product gets a
+    // suffix; only a duplicate within the seller's own products is an error.
+    if (data.images?.length) await this.assertImageUrlsAllowed(data.images, sellerId, seller.id);
 
     // Create product - awaits admin moderation before it appears on the public catalog
-    const product = await prisma.product.create({
+    const createRow = (slug: string) => prisma.product.create({
       data: {
         sellerId: seller.id,
         name: data.name,
@@ -737,7 +782,17 @@ export class ProductService {
       },
     });
 
-    return product;
+    // The slug check and the insert aren't atomic: two requests for the same name can
+    // pick the same slug, and the unique index then rejects one — which just draws again.
+    for (let attempt = 1; ; attempt++) {
+      const slug = await this.uniqueSlug(data.name, seller.id);
+      try {
+        return await createRow(slug);
+      } catch (err: any) {
+        const target = String(err?.meta?.target ?? '');
+        if (err?.code !== 'P2002' || !/slug/i.test(target) || attempt >= 5) throw err;
+      }
+    }
   }
 
   /**
@@ -761,21 +816,12 @@ export class ProductService {
     // If name changed, update slug
     let slug = product.slug;
     if (data.name && data.name !== product.name) {
-      slug = this.generateSlug(data.name);
-      // Check if new slug exists
-      const existingProduct = await prisma.product.findFirst({
-        where: {
-          slug,
-          id: { not: productId },
-        },
-      });
-      if (existingProduct) {
-        throw new AppError('Product with this name already exists', 409, 'PRODUCT_EXISTS');
-      }
+      slug = await this.uniqueSlug(data.name, product.sellerId, productId);
     }
 
     // Handle image updates
     if (data.images !== undefined) {
+      if (data.images?.length) await this.assertImageUrlsAllowed(data.images, sellerId, product.sellerId);
       // Delete existing images
       await prisma.productImage.deleteMany({
         where: { productId },
@@ -915,6 +961,65 @@ export class ProductService {
         totalPages: Math.ceil(total / limit),
       },
     };
+  }
+
+  /**
+   * Product image links must be ones the seller may attach. A link into our own /uploads is only
+   * accepted if the seller uploaded that file (named "<theirUserId>_...") or it is already attached
+   * to one of THEIR products (legacy files predate owner-named uploads). Otherwise a seller could
+   * attach another seller's image path to their own product — the public product page shows the
+   * filename — and then use the "delete my own product image" endpoint to unlink the victim's file.
+   * Links to other sites are fine (nothing local can be deleted through them).
+   */
+  private async assertImageUrlsAllowed(urls: string[], userId: string, sellerId: string) {
+    const local: string[] = [];
+    for (const url of urls) {
+      let path = url;
+      if (/^https?:\/\//i.test(url)) {
+        try {
+          path = new URL(url).pathname;
+        } catch {
+          throw new AppError('Invalid image link', 400, 'INVALID_IMAGE_URL');
+        }
+      }
+      if (path.startsWith('/uploads/')) local.push(path);
+      else if (!/^https?:\/\//i.test(url)) {
+        throw new AppError('Invalid image link', 400, 'INVALID_IMAGE_URL');
+      }
+    }
+    if (local.length === 0) return;
+
+    const foreign = local.filter((p) => !isUploadedBy(p, userId));
+    if (foreign.length === 0) return;
+    const mine = await prisma.productImage.findMany({
+      where: { product: { sellerId }, OR: foreign.flatMap((p) => [{ imageUrl: p }, { imageUrl: { endsWith: p } }]) },
+      select: { imageUrl: true },
+    });
+    const owned = new Set(mine.flatMap((m) => foreign.filter((p) => m.imageUrl === p || m.imageUrl.endsWith(p))));
+    if (foreign.some((p) => !owned.has(p))) {
+      throw new AppError('You can only use images you uploaded', 403, 'IMAGE_NOT_OWNED');
+    }
+  }
+
+  /**
+   * A slug no other product uses. Throws PRODUCT_EXISTS only when the same seller
+   * already has a product with this name; a clash with another seller's product (or a
+   * name with no URL-safe characters, e.g. Urdu-only) gets a short random suffix.
+   */
+  private async uniqueSlug(name: string, sellerId: string, excludeProductId?: string): Promise<string> {
+    const base = this.generateSlug(name) || 'product';
+    for (let attempt = 0; attempt < 6; attempt++) {
+      const candidate = attempt === 0 && this.generateSlug(name) ? base : `${base}-${Math.random().toString(36).slice(2, 7)}`;
+      const clash = await prisma.product.findFirst({
+        where: { slug: candidate, ...(excludeProductId ? { id: { not: excludeProductId } } : {}) },
+        select: { sellerId: true },
+      });
+      if (!clash) return candidate;
+      if (clash.sellerId === sellerId && attempt === 0) {
+        throw new AppError('Product with this name already exists', 409, 'PRODUCT_EXISTS');
+      }
+    }
+    throw new AppError('Could not generate a unique product URL; try a different name', 409, 'PRODUCT_EXISTS');
   }
 
   /**

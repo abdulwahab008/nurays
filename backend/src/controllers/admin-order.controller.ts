@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import adminOrderService from '../services/admin-order.service';
 import { AppError } from '../middleware/errorHandler';
+import { completeRefund as completeRefundRecord, dismissRefund as dismissRefundRecord, listRefunds as listRefundRecords } from '../services/refund.service';
 
 export const getAllOrders = async (req: Request, res: Response) => {
   if (!req.user) {
@@ -104,6 +105,44 @@ export const processRefund = async (req: Request, res: Response) => {
     success: true,
     message: 'Refund processed successfully',
     data: result,
+  });
+};
+
+export const listRefunds = async (req: Request, res: Response) => {
+  const result = await listRefundRecords({
+    status: req.query.status as string | undefined,
+    page: req.query.page as number | undefined,
+    limit: req.query.limit as number | undefined,
+  });
+
+  res.status(200).json({ success: true, data: result });
+};
+
+export const completeRefund = async (req: Request, res: Response) => {
+  if (!req.user) {
+    throw new AppError('Authentication required', 401, 'AUTH_REQUIRED');
+  }
+
+  const refund = await completeRefundRecord(req.params.refundId, req.user.userId, req.body.reference);
+
+  res.status(200).json({
+    success: true,
+    message: 'Refund marked as sent',
+    data: { ...refund, amount: Number(refund.amount) },
+  });
+};
+
+export const dismissRefund = async (req: Request, res: Response) => {
+  if (!req.user) {
+    throw new AppError('Authentication required', 401, 'AUTH_REQUIRED');
+  }
+
+  const refund = await dismissRefundRecord(req.params.refundId, req.user.userId, req.body.reason);
+
+  res.status(200).json({
+    success: true,
+    message: 'Refund dismissed',
+    data: { ...refund, amount: Number(refund.amount) },
   });
 };
 

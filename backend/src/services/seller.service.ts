@@ -2,6 +2,7 @@ import prisma from '../config/database';
 import { AppError } from '../middleware/errorHandler';
 import adminService from './admin.service';
 import { computeSellerAvailability } from './availability.service';
+import { sumSelfDeliveryFees } from '../utils/deliveryEarnings';
 
 /** Shared shape for the business-operations fields — read by getSellerProfile, written by updateSellerProfile. */
 function formatBusinessOperationsFields(seller: {
@@ -156,6 +157,13 @@ export class SellerService {
       throw new AppError('User not found', 404, 'USER_NOT_FOUND');
     }
 
+    // Only a customer account can become a seller. This used to overwrite the
+    // role of any logged-in user, so a rider, hub manager or admin could be
+    // silently demoted to (or hijacked as) a seller.
+    if (!['customer', 'seller'].includes(user.userType)) {
+      throw new AppError('This account type cannot register as a seller', 403, 'ROLE_NOT_ALLOWED');
+    }
+
     const commissionRate = await adminService.getSettingValue<number>('commissionRate');
     const seller = await prisma.seller.create({
       data: {
@@ -252,6 +260,9 @@ export class SellerService {
       deliveryFeeFixed: seller.deliveryFeeFixed,
       deliveryFeeBase: seller.deliveryFeeBase,
       deliveryFeePerKm: seller.deliveryFeePerKm != null ? Number(seller.deliveryFeePerKm) : null,
+      deliveryProvider: seller.deliveryProvider,
+      communityId: seller.communityId,
+      allowCrossCommunity: seller.allowCrossCommunity,
       verificationStatus: seller.verificationStatus,
       status: seller.status,
       isVerified: seller.isVerified,
@@ -296,6 +307,8 @@ export class SellerService {
       allowedPostalCodes?: string[];
       deliveryZones?: Array<{ name: string; cities: string[]; areas: string[]; fee: number }> | null;
       deliveryModes?: string[];
+      deliveryProvider?: 'platform' | 'self';
+      allowCrossCommunity?: boolean;
       businessType?: string;
       mealCategories?: string[];
       storeNotice?: string | null;
@@ -350,6 +363,8 @@ export class SellerService {
     if (data.allowedPostalCodes !== undefined) updateData.allowedPostalCodes = data.allowedPostalCodes;
     if (data.deliveryZones !== undefined) updateData.deliveryZones = data.deliveryZones;
     if (data.deliveryModes !== undefined) updateData.deliveryModes = data.deliveryModes;
+    if (data.deliveryProvider !== undefined) updateData.deliveryProvider = data.deliveryProvider;
+    if (data.allowCrossCommunity !== undefined) updateData.allowCrossCommunity = data.allowCrossCommunity;
     if (data.businessType !== undefined) updateData.businessType = data.businessType;
     if (data.mealCategories !== undefined) updateData.mealCategories = data.mealCategories;
     if (data.storeNotice !== undefined) updateData.storeNotice = data.storeNotice;
@@ -394,9 +409,139 @@ export class SellerService {
       deliveryFeeFixed: updated.deliveryFeeFixed,
       deliveryFeeBase: updated.deliveryFeeBase,
       deliveryFeePerKm: updated.deliveryFeePerKm != null ? Number(updated.deliveryFeePerKm) : null,
+      deliveryProvider: updated.deliveryProvider,
+      allowCrossCommunity: updated.allowCrossCommunity,
       updatedAt: updated.updatedAt,
       ...formatBusinessOperationsFields(updated),
     };
+  }
+
+  /**
+   * The seller's delivery terms per community: every active community, with the
+   * fee the seller has fixed for it (if any), plus their delivery provider.
+   */
+  async getCommunityDelivery(userId: string) {
+    const seller = await prisma.seller.findUnique({
+      where: { userId },
+      include: {
+        community: { select: { id: true, name: true, slug: true, city: true, neighborCommunityIds: true } },
+        communityDeliveries: true,
+      },
+    });
+    if (!seller) throw new AppError('Seller not found', 404, 'SELLER_NOT_FOUND');
+
+    const communities = await prisma.community.findMany({
+      where: { isActive: true },
+      orderBy: { name: 'asc' },
+      select: { id: true, name: true, slug: true, city: true, deliveryBaseFee: true, crossCommunityBaseFee: true },
+    });
+    const ruleById = new Map(seller.communityDeliveries.map((r) => [r.communityId, r]));
+    const neighborIds = new Set(seller.community?.neighborCommunityIds ?? []);
+
+    return {
+      deliveryProvider: seller.deliveryProvider,
+      allowCrossCommunity: seller.allowCrossCommunity,
+      homeCommunity: seller.community ? { id: seller.community.id, name: seller.community.name } : null,
+      // true once the seller has fixed terms for any community; from then on a
+      // community without an enabled row is not deliverable.
+      configured: seller.communityDeliveries.length > 0,
+      communities: communities.map((c) => {
+        const rule = ruleById.get(c.id);
+        return {
+          id: c.id,
+          name: c.name,
+          slug: c.slug,
+          city: c.city,
+          isHome: c.id === seller.communityId,
+          isNeighbor: neighborIds.has(c.id),
+          suggestedFee: Number(c.id === seller.communityId ? c.deliveryBaseFee : c.crossCommunityBaseFee),
+          terms: rule
+            ? {
+                fee: Number(rule.fee),
+                freeAbove: rule.freeAbove != null ? Number(rule.freeAbove) : null,
+                minOrderAmount: rule.minOrderAmount != null ? Number(rule.minOrderAmount) : null,
+                isEnabled: rule.isEnabled,
+              }
+            : null,
+        };
+      }),
+    };
+  }
+
+  /**
+   * Replace the seller's per-community delivery terms. An empty list clears them
+   * (the seller falls back to their seller-wide delivery policy).
+   */
+  async setCommunityDelivery(
+    userId: string,
+    terms: Array<{
+      communityId: string;
+      fee: number;
+      freeAbove?: number | null;
+      minOrderAmount?: number | null;
+      isEnabled?: boolean;
+    }>
+  ) {
+    const seller = await prisma.seller.findUnique({ where: { userId } });
+    if (!seller) throw new AppError('Seller not found', 404, 'SELLER_NOT_FOUND');
+
+    const ids = terms.map((t) => t.communityId);
+    if (new Set(ids).size !== ids.length) {
+      throw new AppError('Each community can only be listed once', 400, 'DUPLICATE_COMMUNITY');
+    }
+
+    if (terms.length > 0) {
+      const found = await prisma.community.findMany({
+        where: { id: { in: ids }, isActive: true },
+        select: { id: true },
+      });
+      if (found.length !== ids.length) {
+        throw new AppError('One or more communities were not found', 400, 'COMMUNITY_NOT_FOUND');
+      }
+      // The home community must always have terms: otherwise a seller could fix
+      // fees for neighbours and silently stop delivering to their own street.
+      if (seller.communityId && !ids.includes(seller.communityId)) {
+        throw new AppError(
+          'Set delivery terms for your own community before others',
+          400,
+          'HOME_COMMUNITY_REQUIRED'
+        );
+      }
+      if (!seller.allowCrossCommunity && ids.some((id) => id !== seller.communityId)) {
+        throw new AppError(
+          'Enable cross-community delivery before setting fees for other communities',
+          400,
+          'CROSS_COMMUNITY_DISABLED'
+        );
+      }
+    }
+
+    await prisma.$transaction([
+      prisma.sellerCommunityDelivery.deleteMany({
+        where: { sellerId: seller.id, communityId: { notIn: ids } },
+      }),
+      ...terms.map((t) =>
+        prisma.sellerCommunityDelivery.upsert({
+          where: { sellerId_communityId: { sellerId: seller.id, communityId: t.communityId } },
+          create: {
+            sellerId: seller.id,
+            communityId: t.communityId,
+            fee: t.fee,
+            freeAbove: t.freeAbove ?? null,
+            minOrderAmount: t.minOrderAmount ?? null,
+            isEnabled: t.isEnabled ?? true,
+          },
+          update: {
+            fee: t.fee,
+            freeAbove: t.freeAbove ?? null,
+            minOrderAmount: t.minOrderAmount ?? null,
+            isEnabled: t.isEnabled ?? true,
+          },
+        })
+      ),
+    ]);
+
+    return this.getCommunityDelivery(userId);
   }
 
   /**
@@ -427,6 +572,7 @@ export class SellerService {
             orderStatus: true,
             paymentStatus: true,
             paymentMethod: true,
+            deliveryFeeBreakdown: true,
             createdAt: true,
           },
         },
@@ -449,15 +595,30 @@ export class SellerService {
     // AND the payment having actually been collected — a delivered order whose
     // online payment never completed (or was refunded after delivery) hasn't
     // actually earned the seller anything yet.
+    // Cancelled items (a seller's rejected lines, refunded to the customer) never count:
+    // an order can still be delivered by the other sellers in it.
     const completedItems = orderItems.filter(
       (item) =>
+        item.status !== 'cancelled' &&
         (item.order.orderStatus === 'delivered' || item.order.orderStatus === 'completed') &&
         item.order.paymentStatus === 'paid'
     );
 
-    const totalEarnings = completedItems.reduce((sum, item) => {
-      return sum + Number(item.sellerPayout);
-    }, 0);
+    // A seller who delivers their own orders keeps the delivery fee (the platform
+    // takes no commission on it and pays no rider). For an online order we hold
+    // that money, so it is withdrawable; for COD it was handed over at the door.
+    const completedOrders = completedItems.map((i) => ({
+      id: i.order.id,
+      deliveryFeeBreakdown: i.order.deliveryFeeBreakdown,
+      paymentMethod: i.order.paymentMethod,
+    }));
+    const selfDeliveryFeesAll = sumSelfDeliveryFees(completedOrders, sellerId, { onlineOnly: false });
+    const selfDeliveryFeesOnline = sumSelfDeliveryFees(completedOrders, sellerId, { onlineOnly: true });
+
+    const totalEarnings =
+      completedItems.reduce((sum, item) => {
+        return sum + Number(item.sellerPayout);
+      }, 0) + selfDeliveryFeesAll;
 
     // We're a facilitator, not an escrow agent: for a COD order the customer
     // paid the seller directly, so that sellerPayout is money the seller
@@ -467,9 +628,10 @@ export class SellerService {
     const codCommissionOwed = completedItems
       .filter((item) => item.order.paymentMethod === 'cod')
       .reduce((sum, item) => sum + Number(item.commissionAmount), 0);
-    const onlineEarnings = completedItems
-      .filter((item) => item.order.paymentMethod !== 'cod')
-      .reduce((sum, item) => sum + Number(item.sellerPayout), 0);
+    const onlineEarnings =
+      completedItems
+        .filter((item) => item.order.paymentMethod !== 'cod')
+        .reduce((sum, item) => sum + Number(item.sellerPayout), 0) + selfDeliveryFeesOnline;
 
     // Get pending payout
     const pendingPayouts = await prisma.sellerPayout.findMany({
@@ -490,7 +652,7 @@ export class SellerService {
     // online orders, minus what's already been paid or requested, minus
     // commission owed on COD sales (settled by netting, not a separate bill).
     const alreadyPaidOrRequested = await prisma.sellerPayout.findMany({
-      where: { sellerId, status: { in: ['completed', 'pending'] } },
+      where: { sellerId, status: { in: ['completed', 'pending', 'processing'] } },
       select: { netAmount: true },
     });
     const paidOrRequestedTotal = alreadyPaidOrRequested.reduce(
@@ -709,7 +871,9 @@ export class SellerService {
 
     // Calculate revenue
     const completedItems = orderItems.filter(
-      (item) => item.order?.orderStatus === 'delivered' || item.order?.orderStatus === 'completed'
+      (item) =>
+        item.status !== 'cancelled' &&
+        (item.order?.orderStatus === 'delivered' || item.order?.orderStatus === 'completed')
     );
 
     const totalRevenue = completedItems.reduce((sum, item) => {
@@ -814,57 +978,6 @@ export class SellerService {
       throw new AppError('Seller not found', 404, 'SELLER_NOT_FOUND');
     }
 
-    // Calculate available balance. Must also require paymentStatus: 'paid' —
-    // a delivered order whose online payment never actually completed hasn't
-    // put any money in our hands to pay out.
-    const orderItems = await prisma.orderItem.findMany({
-      where: {
-        sellerId,
-        order: {
-          orderStatus: { in: ['delivered', 'completed'] },
-          paymentStatus: 'paid',
-        },
-      },
-      include: {
-        order: { select: { paymentMethod: true } },
-      },
-    });
-
-    // We're a facilitator, not an escrow agent: COD money already went
-    // straight to the seller, so it's not payable again here — only what we
-    // actually collected online is withdrawable, net of the commission the
-    // seller owes us on their COD sales.
-    const onlineEarnings = orderItems
-      .filter((item) => item.order.paymentMethod !== 'cod')
-      .reduce((sum, item) => sum + Number(item.sellerPayout), 0);
-    const codCommissionOwed = orderItems
-      .filter((item) => item.order.paymentMethod === 'cod')
-      .reduce((sum, item) => sum + Number(item.commissionAmount), 0);
-
-    // Get already paid out AND already-requested-but-not-yet-processed amounts —
-    // a pending payout must reserve its amount too, or a seller could submit
-    // several requests back-to-back before any of them are processed and
-    // collectively withdraw more than they've actually earned.
-    const outstandingPayouts = await prisma.sellerPayout.findMany({
-      where: {
-        sellerId,
-        status: { in: ['completed', 'pending'] },
-      },
-      select: {
-        netAmount: true,
-      },
-    });
-
-    const paidOut = outstandingPayouts.reduce((sum, payout) => {
-      return sum + Number(payout.netAmount);
-    }, 0);
-
-    const availableBalance = onlineEarnings - paidOut - codCommissionOwed;
-
-    if (data.amount > availableBalance) {
-      throw new AppError('Insufficient balance', 400, 'INSUFFICIENT_BALANCE');
-    }
-
     // Get payout schedule
     const schedule = await prisma.sellerPayoutSchedule.findUnique({
       where: { sellerId },
@@ -882,27 +995,98 @@ export class SellerService {
       );
     }
 
-    // No further commission here: order_items.seller_payout is already net of the
-    // seller's commission_rate at order time (see order.service.ts createOrder),
-    // so the requested amount is what the seller actually receives.
-    const commissionDeducted = 0;
-    const netAmount = data.amount;
+    // Compute the balance and create the payout under a row lock on the seller:
+    // two simultaneous requests used to both read the same balance and together
+    // withdraw more than the seller had earned.
+    const payout = await prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT id FROM sellers WHERE id = ${sellerId} FOR UPDATE`;
 
-    // Create payout request
-    const payout = await prisma.sellerPayout.create({
-      data: {
-        sellerId,
-        amount: data.amount,
-        commissionDeducted,
-        netAmount,
-        payoutMethod: data.payoutMethod,
-        accountDetails: {
-          accountNumber: data.accountNumber,
+      // Calculate available balance. Must also require paymentStatus: 'paid' —
+      // a delivered order whose online payment never actually completed hasn't
+      // put any money in our hands to pay out.
+      const orderItems = await tx.orderItem.findMany({
+        where: {
+          sellerId,
+          status: { not: 'cancelled' },
+          order: {
+            orderStatus: { in: ['delivered', 'completed'] },
+            paymentStatus: 'paid',
+          },
         },
-        status: 'pending',
-        periodStart: new Date(),
-        periodEnd: new Date(),
-      },
+        include: {
+          order: { select: { id: true, paymentMethod: true, deliveryFeeBreakdown: true } },
+        },
+      });
+
+      // We're a facilitator, not an escrow agent: COD money already went
+      // straight to the seller, so it's not payable again here — only what we
+      // actually collected online is withdrawable, net of the commission the
+      // seller owes us on their COD sales.
+      // Includes the delivery fee a self-delivering seller keeps on online orders.
+      const onlineEarnings =
+        orderItems
+          .filter((item) => item.order.paymentMethod !== 'cod')
+          .reduce((sum, item) => sum + Number(item.sellerPayout), 0) +
+        sumSelfDeliveryFees(
+          orderItems.map((i) => ({
+            id: i.order.id,
+            deliveryFeeBreakdown: i.order.deliveryFeeBreakdown,
+            paymentMethod: i.order.paymentMethod,
+          })),
+          sellerId,
+          { onlineOnly: true }
+        );
+      const codCommissionOwed = orderItems
+        .filter((item) => item.order.paymentMethod === 'cod')
+        .reduce((sum, item) => sum + Number(item.commissionAmount), 0);
+
+      // Get already paid out AND already-requested-but-not-yet-processed amounts —
+      // a pending payout must reserve its amount too, or a seller could submit
+      // several requests back-to-back before any of them are processed and
+      // collectively withdraw more than they've actually earned.
+      const outstandingPayouts = await tx.sellerPayout.findMany({
+        where: {
+          sellerId,
+          status: { in: ['completed', 'pending', 'processing'] },
+        },
+        select: {
+          netAmount: true,
+        },
+      });
+
+      const paidOut = outstandingPayouts.reduce((sum, payout) => {
+        return sum + Number(payout.netAmount);
+      }, 0);
+
+      const availableBalance = onlineEarnings - paidOut - codCommissionOwed;
+
+      if (data.amount > availableBalance) {
+        throw new AppError('Insufficient balance', 400, 'INSUFFICIENT_BALANCE');
+      }
+
+      // No further commission here: order_items.seller_payout is already net of the
+      // seller's commission_rate at order time (see order.service.ts createOrder),
+      // so the requested amount is what the seller actually receives.
+      const commissionDeducted = 0;
+      const netAmount = data.amount;
+
+      // Create payout request
+      return tx.sellerPayout.create({
+        data: {
+          sellerId,
+          amount: data.amount,
+          commissionDeducted,
+          netAmount,
+          payoutMethod: data.payoutMethod,
+          accountDetails: {
+            accountNumber: data.accountNumber,
+          },
+          status: 'pending',
+          periodStart: new Date(),
+          periodEnd: new Date(),
+        },
+      });
+
     });
 
     return {

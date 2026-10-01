@@ -22,17 +22,24 @@ model User {
   userType      String    @map("user_type") // customer, seller, admin, hub_manager, rider
   status        String    @default("active") // active, suspended, banned, deleted
   emailVerified Boolean   @default(false) @map("email_verified")
-  phoneVerified Boolean   @default(true) @map("phone_verified")
+  // A phone only counts once its owner has proven it with an OTP. Defaulting to true let anyone
+  // register a number they don't own and later receive the real owner's OTP logins.
+  phoneVerified Boolean   @default(false) @map("phone_verified")
   referralCode  String?   @unique @map("referral_code")
   referredBy    String?   @map("referred_by")
   primaryCommunityId String? @map("primary_community_id")
   lastLoginAt   DateTime? @map("last_login_at")
+  // Sessions issued before this instant are void (set on password reset, Google takeover of an
+  // unverified account, phone eviction). Without it a 30-day refresh token outlives all of those.
+  tokensValidAfter DateTime? @map("tokens_valid_after")
   createdAt     DateTime  @default(now()) @map("created_at")
   updatedAt     DateTime  @updatedAt @map("updated_at")
 
   profile       UserProfile?
   primaryCommunity Community? @relation(fields: [primaryCommunityId], references: [id], onDelete: SetNull)
   addresses     UserAddress[]
+  managedHubs   HubCenter[] @relation("HubManager")
+  passwordResets PasswordReset[]
   cart          Cart?
   orders        Order[]
   reviews       Review[]
@@ -46,6 +53,8 @@ model User {
   searchQueries SearchQuery[]
   wallet        Wallet?
   emailVerification EmailVerification?
+
+  @@index([primaryCommunityId])
 
   @@map("users")
 }
@@ -88,6 +97,9 @@ model UserAddress {
   community   Community?  @relation(fields: [communityId], references: [id], onDelete: SetNull)
   orders      Order[]
 
+  @@index([userId])
+  @@index([communityId])
+
   @@map("user_addresses")
 }
 
@@ -100,6 +112,8 @@ model OtpVerification {
   isVerified Boolean  @default(false) @map("is_verified")
   expiresAt  DateTime @map("expires_at")
   createdAt  DateTime @default(now()) @map("created_at")
+
+  @@index([phone, purpose, createdAt])
 
   @@map("otp_verifications")
 }
@@ -201,6 +215,12 @@ model Seller {
   allowCrossCommunity   Boolean   @default(true) @map("allow_cross_community")
   primaryCommunityName  String?   @map("primary_community_name")
 
+  // Who physically delivers this seller's home-delivery orders:
+  //   'platform' - the order is posted to the rider pool (default, original behavior)
+  //   'self'     - the seller delivers; no rider job is created and the seller
+  //                drives the order to delivered/delivery_failed themselves.
+  deliveryProvider      String    @default("platform") @map("delivery_provider")
+
   createdAt         DateTime  @default(now()) @map("created_at")
   updatedAt         DateTime  @updatedAt @map("updated_at")
 
@@ -213,12 +233,16 @@ model Seller {
   reviews           Review[]
   favoriteSellers   FavoriteSeller[]
   hubInventory      HubInventory[]
+  communityDeliveries SellerCommunityDelivery[]
   payouts           SellerPayout[]
   payoutSchedule    SellerPayoutSchedule?
   cartItems         CartItem[]
   categoryRequests  CategoryRequest[]
   stockAlerts       StockAlert[]
   promotions        Promotion[]
+
+  @@index([communityId])
+  @@index([status, verificationStatus])
 
   @@map("sellers")
 }
@@ -233,6 +257,8 @@ model SellerDocument {
 
   seller      Seller   @relation(fields: [sellerId], references: [id], onDelete: Cascade)
 
+  @@index([sellerId])
+
   @@map("seller_documents")
 }
 
@@ -245,6 +271,8 @@ model SellerBadge {
   earnedAt  DateTime @default(now()) @map("earned_at")
 
   seller    Seller   @relation(fields: [sellerId], references: [id], onDelete: Cascade)
+
+  @@index([sellerId])
 
   @@map("seller_badges")
 }
@@ -265,6 +293,9 @@ model StockAlert {
   readAt        DateTime? @map("read_at")
 
   seller        Seller   @relation(fields: [sellerId], references: [id], onDelete: Cascade)
+
+  @@index([sellerId])
+  @@index([productId])
 
   @@map("stock_alerts")
 }
@@ -292,6 +323,8 @@ model Category {
   products    Product[]
   categoryRequests CategoryRequest[]
 
+  @@index([parentId])
+
   @@map("categories")
 }
 
@@ -312,6 +345,8 @@ model CategoryRequest {
 
   seller          Seller    @relation(fields: [sellerId], references: [id], onDelete: Cascade)
   parentCategory  Category? @relation(fields: [parentCategoryId], references: [id], onDelete: SetNull)
+
+  @@index([sellerId])
 
   @@map("category_requests")
 }
@@ -367,6 +402,10 @@ model Product {
   inventoryReservations InventoryReservation[]
   searchQueries         SearchQuery[]
 
+  @@index([sellerId])
+  @@index([categoryId])
+  @@index([approvalStatus, isActive])
+
   @@map("products")
 }
 
@@ -379,6 +418,8 @@ model ProductImage {
   uploadedAt DateTime @default(now()) @map("uploaded_at")
 
   product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@index([productId])
 
   @@map("product_images")
 }
@@ -400,7 +441,7 @@ model ProductVariant {
   productId       String   @map("product_id")
   name            String   // e.g., "Small Pack", "Medium Pack", "Large Pack"
   nameUrdu        String?  @map("name_urdu")
-  sku             String?  @unique // Optional SKU/barcode
+  sku             String?  // Optional SKU/barcode — unique within a product, not across all sellers
   price           Decimal  @db.Decimal(10, 2)
   originalPrice   Decimal? @map("original_price") @db.Decimal(10, 2)
   costPrice       Decimal? @map("cost_price") @db.Decimal(10, 2)
@@ -416,6 +457,10 @@ model ProductVariant {
   product         Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
   orderItems      OrderItem[]
   cartItems       CartItem[]
+
+  @@index([productId])
+
+  @@unique([productId, sku])
 
   @@map("product_variants")
 }
@@ -451,6 +496,10 @@ model HubCenter {
   temperatureLogs   HubTemperatureLog[]
   riders            Rider[]
 
+  manager             User?     @relation("HubManager", fields: [managerId], references: [id], onDelete: SetNull)
+
+  @@index([managerId])
+
   @@map("hub_centers")
 }
 
@@ -474,7 +523,14 @@ model HubInventory {
   seller          Seller    @relation(fields: [sellerId], references: [id], onDelete: Cascade)
   logs            HubInventoryLog[]
 
+  allocations HubBatchAllocation[]
+
   @@unique([hubId, productId, batchNumber])
+
+  @@index([productId])
+  @@index([sellerId])
+  @@index([hubId, status, expiryDate])
+
   @@map("hub_inventory")
 }
 
@@ -491,6 +547,8 @@ model HubInventoryLog {
 
   hubInventory    HubInventory @relation(fields: [hubInventoryId], references: [id], onDelete: Cascade)
 
+  @@index([hubInventoryId])
+
   @@map("hub_inventory_logs")
 }
 
@@ -503,6 +561,8 @@ model HubTemperatureLog {
   recordedAt      DateTime @default(now()) @map("recorded_at")
 
   hub             HubCenter @relation(fields: [hubId], references: [id], onDelete: Cascade)
+
+  @@index([hubId])
 
   @@map("hub_temperature_logs")
 }
@@ -517,6 +577,9 @@ model Order {
   customerId          String?   @map("customer_id")
   subtotal            Decimal   @db.Decimal(10, 2)
   deliveryFee         Decimal   @default(0) @map("delivery_fee") @db.Decimal(10, 2)
+  // Snapshot of how deliveryFee splits per seller at order time: [{ sellerId, fee, provider: 'platform' | 'self' }].
+  // A self-delivering seller keeps their own fee; null on orders from before this existed (all treated as platform).
+  deliveryFeeBreakdown Json?    @map("delivery_fee_breakdown")
   discountAmount      Decimal   @default(0) @map("discount_amount") @db.Decimal(10, 2)
   taxAmount           Decimal   @default(0) @map("tax_amount") @db.Decimal(10, 2)
   tipAmount           Decimal?  @default(0) @map("tip_amount") @db.Decimal(10, 2)
@@ -559,8 +622,15 @@ model Order {
   reviews             Review[]
   orderMessages       OrderMessage[]
   promotionUsages     PromotionUsage[]
+  refunds             Refund[]
+  hubAllocations      HubBatchAllocation[]
   supportTickets      SupportTicket[]
   walletTransactions  WalletTransaction[]
+
+  @@index([customerId, createdAt])
+  @@index([orderStatus])
+  @@index([paymentStatus])
+  @@index([createdAt])
 
   @@map("orders")
 }
@@ -580,6 +650,9 @@ model OrderItem {
   commissionRate  Decimal   @map("commission_rate") @db.Decimal(5, 2)
   commissionAmount Decimal  @map("commission_amount") @db.Decimal(10, 2)
   sellerPayout    Decimal   @map("seller_payout") @db.Decimal(10, 2)
+  // This item's share of the manual-code discount (catalog deals are already in unitPrice). Lets a
+  // partial cancel refund exactly what the customer paid for the item, even for a seller-scoped code.
+  promoDiscount   Decimal   @default(0) @map("promo_discount") @db.Decimal(10, 2)
   fulfillmentType String?   @map("fulfillment_type") // direct, hub
   hubId           String?   @map("hub_id")
   status          String    @default("pending")
@@ -589,9 +662,13 @@ model OrderItem {
   order           Order     @relation(fields: [orderId], references: [id], onDelete: Cascade)
   product         Product?  @relation(fields: [productId], references: [id], onDelete: SetNull)
   variant         ProductVariant? @relation(fields: [variantId], references: [id], onDelete: SetNull)
-  seller          Seller    @relation(fields: [sellerId], references: [id], onDelete: Cascade)
+  seller          Seller    @relation(fields: [sellerId], references: [id], onDelete: Restrict)
   hub             HubCenter? @relation(fields: [hubId], references: [id], onDelete: SetNull)
   reviews         Review[]
+
+  @@index([orderId])
+  @@index([sellerId])
+  @@index([productId])
 
   @@map("order_items")
 }
@@ -605,6 +682,8 @@ model OrderStatusHistory {
   createdAt DateTime @default(now()) @map("created_at")
 
   order     Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@index([orderId])
 
   @@map("order_status_history")
 }
@@ -634,6 +713,8 @@ model Rider {
 
   hub             HubCenter? @relation(fields: [hubId], references: [id], onDelete: SetNull)
   deliveries      Delivery[]
+
+  @@index([status, verificationStatus])
 
   @@map("riders")
 }
@@ -668,6 +749,8 @@ model Delivery {
 
   order                 Order     @relation(fields: [orderId], references: [id], onDelete: Cascade)
   rider                 Rider?    @relation(fields: [riderId], references: [id], onDelete: SetNull)
+
+  @@index([riderId, status])
 
   @@map("deliveries")
 }
@@ -705,6 +788,11 @@ model Review {
   customer          User       @relation(fields: [customerId], references: [id], onDelete: Cascade)
   seller            Seller     @relation(fields: [sellerId], references: [id], onDelete: Cascade)
   product           Product?   @relation(fields: [productId], references: [id], onDelete: SetNull)
+
+  @@unique([orderItemId, customerId])
+  @@index([sellerId])
+  @@index([productId])
+  @@index([customerId])
 
   @@map("reviews")
 }
@@ -744,6 +832,9 @@ model WalletTransaction {
   wallet        Wallet   @relation(fields: [walletId], references: [id], onDelete: Cascade)
   order         Order?   @relation(fields: [orderId], references: [id], onDelete: SetNull)
 
+  @@index([walletId, createdAt])
+  @@index([orderId])
+
   @@map("wallet_transactions")
 }
 
@@ -764,7 +855,9 @@ model SellerPayout {
   createdAt         DateTime  @default(now()) @map("created_at")
   updatedAt         DateTime  @updatedAt @map("updated_at")
 
-  seller            Seller    @relation(fields: [sellerId], references: [id], onDelete: Cascade)
+  seller            Seller    @relation(fields: [sellerId], references: [id], onDelete: Restrict)
+
+  @@index([sellerId, status])
 
   @@map("seller_payouts")
 }
@@ -813,6 +906,8 @@ model Promotion {
   seller            Seller?   @relation(fields: [sellerId], references: [id], onDelete: Cascade)
   usages            PromotionUsage[]
 
+  @@index([sellerId])
+
   @@map("promotions")
 }
 
@@ -826,6 +921,10 @@ model PromotionUsage {
 
   promotion     Promotion @relation(fields: [promotionId], references: [id], onDelete: Cascade)
   order         Order     @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@unique([promotionId, orderId])
+  @@index([promotionId, userId])
+  @@index([orderId])
 
   @@map("promotion_usages")
 }
@@ -848,6 +947,9 @@ model Notification {
   createdAt DateTime @default(now()) @map("created_at")
 
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, isRead])
+  @@index([userId, createdAt])
 
   @@map("notifications")
 }
@@ -876,6 +978,8 @@ model SupportTicket {
   order           Order?   @relation(fields: [orderId], references: [id], onDelete: SetNull)
   messages        SupportMessage[]
 
+  @@index([userId])
+
   @@map("support_tickets")
 }
 
@@ -889,6 +993,8 @@ model SupportMessage {
   createdAt DateTime @default(now()) @map("created_at")
 
   ticket    SupportTicket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+
+  @@index([ticketId])
 
   @@map("support_messages")
 }
@@ -929,6 +1035,9 @@ model CartItem {
   seller        Seller   @relation(fields: [sellerId], references: [id], onDelete: Cascade)
   hub           HubCenter? @relation(fields: [hubId], references: [id], onDelete: SetNull)
 
+  @@index([cartId])
+  @@index([productId])
+
   @@map("cart_items")
 }
 
@@ -946,6 +1055,9 @@ model InventoryReservation {
   createdAt       DateTime @default(now()) @map("created_at")
 
   product         Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@index([productId])
+  @@index([reservationId])
 
   @@map("inventory_reservations")
 }
@@ -968,6 +1080,8 @@ model UserActivityLog {
 
   user        User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
 
+  @@index([userId, createdAt])
+
   @@map("user_activity_logs")
 }
 
@@ -982,6 +1096,8 @@ model SearchQuery {
 
   user          User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
   clickedProduct Product? @relation(fields: [clickedProductId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
 
   @@map("search_queries")
 }
@@ -1018,6 +1134,9 @@ model AuditLog {
   createdAt     DateTime @default(now()) @map("created_at")
 
   user          User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([userId, createdAt])
+  @@index([entityType, entityId])
 
   @@map("audit_logs")
 }
@@ -1070,8 +1189,97 @@ model Community {
   users                 User[]
   sellers               Seller[]
   addresses             UserAddress[]
+  sellerDeliveries      SellerCommunityDelivery[]
 
   @@map("communities")
+}
+
+// Per-community delivery terms a seller has fixed for themselves. Once a seller
+// has at least one row, the rows are authoritative: a buyer in a community with
+// no (enabled) row is not deliverable. A seller with no rows keeps the legacy
+// seller-wide delivery policy (fixed/distance/zones).
+model SellerCommunityDelivery {
+  id             String   @id @default(uuid())
+  sellerId       String   @map("seller_id")
+  communityId    String   @map("community_id")
+  fee            Decimal  @db.Decimal(10, 2)
+  freeAbove      Decimal? @map("free_above") @db.Decimal(10, 2) // subtotal at/above which delivery to this community is free
+  minOrderAmount Decimal? @map("min_order_amount") @db.Decimal(10, 2)
+  isEnabled      Boolean  @default(true) @map("is_enabled")
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  seller         Seller    @relation(fields: [sellerId], references: [id], onDelete: Cascade)
+  community      Community @relation(fields: [communityId], references: [id], onDelete: Cascade)
+
+  @@unique([sellerId, communityId])
+  @@index([communityId])
+  @@map("seller_community_deliveries")
+}
+
+// Money owed back to a customer. A wallet-paid order is refunded instantly (the
+// row is created 'completed'); anything paid through a gateway or bank transfer is
+// created 'pending' and stays in the admin's queue until the money has actually
+// been sent and the refund is marked completed.
+model Refund {
+  id          String    @id @default(uuid())
+  orderId     String    @map("order_id")
+  customerId  String?   @map("customer_id")
+  amount      Decimal   @db.Decimal(10, 2)
+  method      String    // wallet | manual
+  status      String    @default("pending") // pending | completed | failed
+  reason      String?
+  reference   String?   // bank / gateway transfer reference, for manual refunds
+  createdBy   String?   @map("created_by")
+  processedBy String?   @map("processed_by")
+  processedAt DateTime? @map("processed_at")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+
+  order       Order     @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@index([orderId])
+  @@index([status])
+  @@map("refunds")
+}
+
+// Which hub batches an order's units were taken from (FEFO). Recorded so a
+// cancelled or rejected order can put stock back into the SAME batches, instead
+// of the units vanishing from hub inventory.
+model HubBatchAllocation {
+  id             String       @id @default(uuid())
+  orderId        String       @map("order_id")
+  productId      String       @map("product_id")
+  // The order line it was taken for. Lets a seller cancelling ONE line return only that line's units
+  // (the same product can be on two lines). Null on allocations made before this existed.
+  orderItemId    String?      @map("order_item_id")
+  hubInventoryId String       @map("hub_inventory_id")
+  quantity       Int
+  releasedAt     DateTime?    @map("released_at")
+  createdAt      DateTime     @default(now()) @map("created_at")
+
+  order          Order        @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  hubInventory   HubInventory @relation(fields: [hubInventoryId], references: [id], onDelete: Restrict)
+
+  @@index([orderId, productId])
+  @@index([hubInventoryId])
+  @@index([orderItemId])
+  @@map("hub_batch_allocations")
+}
+
+// One-time password-reset tokens. Only a SHA-256 hash is stored, so a database leak can't be replayed.
+model PasswordReset {
+  id        String    @id @default(uuid())
+  userId    String    @map("user_id")
+  tokenHash String    @unique @map("token_hash")
+  expiresAt DateTime  @map("expires_at")
+  usedAt    DateTime? @map("used_at")
+  createdAt DateTime  @default(now()) @map("created_at")
+
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("password_resets")
 }
 
 model FavoriteSeller {
@@ -1102,6 +1310,8 @@ model OrderMessage {
 
   order       Order     @relation(fields: [orderId], references: [id], onDelete: Cascade)
   sender      User      @relation(fields: [senderId], references: [id], onDelete: Cascade)
+
+  @@index([orderId, createdAt])
 
   @@map("order_messages")
 }

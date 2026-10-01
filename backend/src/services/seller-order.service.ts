@@ -2,6 +2,11 @@ import prisma from '../config/database';
 import { AppError } from '../middleware/errorHandler';
 import realtimeOrderService from './realtime-order.service';
 import riderService from './rider.service';
+import { releasePromotionUsage } from './promotion.service';
+import { refundForCancelledItems } from './refund.service';
+import ledgerService from './ledger.service';
+import { releaseHubAllocations } from './hub-allocation.service';
+import { selfDeliveryFeeFor } from '../utils/deliveryEarnings';
 
 export class SellerOrderService {
   /**
@@ -276,6 +281,8 @@ export class SellerOrderService {
         subtotal: sellerSubtotal,
         commission: sellerCommission,
         payout: sellerPayout,
+        // Delivery fee this seller keeps because they deliver the order themselves.
+        deliveryFeeKept: selfDeliveryFeeFor(order.deliveryFeeBreakdown, order.items[0]?.sellerId ?? ''),
       },
     };
   }
@@ -322,10 +329,12 @@ export class SellerOrderService {
     // Order items move forward through this pipeline only (or cancel before dispatch) —
     // no skipping stages, no moving backward.
     const ALLOWED_TRANSITIONS: Record<string, string[]> = {
-      pending: ['confirmed', 'cancelled'],
-      confirmed: ['preparing', 'cancelled'],
-      preparing: ['ready', 'cancelled'],
-      ready: ['dispatched', 'cancelled'],
+      // Cancelling is deliberately absent: it must restock inventory and keep the
+      // parent order consistent, which only cancelOrderItem / rejectOrder do.
+      pending: ['confirmed'],
+      confirmed: ['preparing'],
+      preparing: ['ready'],
+      ready: ['dispatched'],
       // A rider (rider.service.ts) normally drives dispatched -> in_transit ->
       // delivered directly, but a seller must still be able to do this by hand
       // for orders with no rider assigned (e.g. self-delivery). A seller who
@@ -337,6 +346,9 @@ export class SellerOrderService {
       delivery_failed: [],
       cancelled: [],
     };
+    if (status === 'delivered' && ['refund_pending', 'refunded'].includes(orderItem.order.paymentStatus)) {
+      throw new AppError('This order has been refunded and cannot be marked delivered', 400, 'ORDER_REFUNDED');
+    }
     if (!ALLOWED_TRANSITIONS[orderItem.status]?.includes(status)) {
       throw new AppError(
         `Cannot move an item from "${orderItem.status}" to "${status}"`,
@@ -348,6 +360,11 @@ export class SellerOrderService {
     // All DB writes happen inside a single transaction so partial failures
     // can't split item.status and order.orderStatus.
     const result = await prisma.$transaction(async (tx) => {
+      // Lock the order row FIRST. Customer/admin cancels take the order lock and then touch the
+      // items; taking item locks first here would deadlock against them (Postgres aborts one with
+      // a 500). One lock order everywhere: order, then items.
+      await tx.$queryRaw`SELECT id FROM orders WHERE id = ${orderItem.orderId} FOR UPDATE`;
+
       const updatedItem = await tx.orderItem.update({
         where: { id: orderItemId },
         data: { status },
@@ -430,6 +447,16 @@ export class SellerOrderService {
       return { updatedItem, derivedOrderStatus };
     });
 
+    // A seller-completed delivery (self-delivery) never passes through the rider
+    // flow that posts the ledger, so post it here (idempotent).
+    if (result.derivedOrderStatus === 'delivered') {
+      try {
+        await ledgerService.recordOrderCompletion(orderItem.orderId);
+      } catch (ledgerErr) {
+        console.error('Failed to record ledger entries for order:', orderItem.orderId, ledgerErr);
+      }
+    }
+
     // Emit real-time events only after the transaction commits.
     if (result.derivedOrderStatus) {
       await realtimeOrderService.emitOrderStatusUpdate(
@@ -493,10 +520,21 @@ export class SellerOrderService {
     // single transaction so we can't observe an intermediate state where one
     // item is cancelled but the parent order isn't yet.
     const result = await prisma.$transaction(async (tx) => {
-      const updatedItem = await tx.orderItem.update({
-        where: { id: orderItemId },
+      // Lock the order row FIRST. Customer/admin cancels take the order lock and then touch the
+      // items; taking item locks first here would deadlock against them (Postgres aborts one with
+      // a 500). One lock order everywhere: order, then items.
+      await tx.$queryRaw`SELECT id FROM orders WHERE id = ${orderItem.orderId} FOR UPDATE`;
+
+      // Guarded on the item still being cancellable: two concurrent cancels (or a
+      // cancel racing a status change) must not both restock the same item.
+      const claimed = await tx.orderItem.updateMany({
+        where: { id: orderItemId, status: { in: cancellableStatuses } },
         data: { status: 'cancelled' },
       });
+      if (claimed.count === 0) {
+        throw new AppError('Order item can no longer be cancelled', 409, 'ORDER_ITEM_NOT_CANCELLABLE');
+      }
+      const updatedItem = await tx.orderItem.findUniqueOrThrow({ where: { id: orderItemId } });
 
       // A variant item drew from its own stock pool at order time (see
       // order.service.ts createOrder), so restore it there, not on the
@@ -530,11 +568,29 @@ export class SellerOrderService {
       });
       const allCancelled = remaining.every((i) => i.status === 'cancelled');
 
+      if (orderItem.productId) {
+        await releaseHubAllocations(tx, orderItem.orderId, {
+          orderItemIds: [orderItem.id],
+          productIds: [orderItem.productId],
+          reason: `Item cancelled by seller (${orderItem.productName})`,
+          performedBy: sellerId,
+        });
+      }
+
+      // The customer paid for this item: refund its share (or everything left if
+      // this was the last live item and the whole order is now cancelled).
+      await refundForCancelledItems(tx, orderItem.orderId, [orderItemId], {
+        reason: `Item cancelled by seller (${orderItem.productName})`,
+        createdBy: sellerId,
+        orderFullyCancelled: allCancelled,
+      });
+
       if (allCancelled) {
         await tx.order.update({
           where: { id: orderItem.orderId },
           data: { orderStatus: 'cancelled' },
         });
+        await releasePromotionUsage(tx, orderItem.orderId);
         await tx.orderStatusHistory.create({
           data: {
             orderId: orderItem.orderId,
@@ -569,7 +625,7 @@ export class SellerOrderService {
     });
     if (!seller) {
       const user = await prisma.user.findUnique({ where: { id: sellerUserId } });
-      if (user?.userType === 'admin' || process.env.NODE_ENV !== 'production') {
+      if (user?.userType === 'admin') {
         const orderItem = await prisma.orderItem.findFirst({
           where: { orderId },
           include: { seller: true },
@@ -612,20 +668,26 @@ export class SellerOrderService {
     const estimatedReadyAt = new Date(Date.now() + maxPrepMinutes * 60 * 1000);
 
     const result = await prisma.$transaction(async (tx) => {
-      // Advance items to preparing
-      await tx.orderItem.updateMany({
-        where: { orderId: order.id, sellerId: seller.id },
-        data: { status: 'preparing' },
-      });
-
-      // Update order to preparing with estimated ready timestamp
-      const updatedOrder = await tx.order.update({
-        where: { id: order.id },
+      // Claim the transition first. The status check above ran before this
+      // transaction, so a customer cancelling at the same instant must not be
+      // overwritten (that revived a cancelled order whose stock was returned).
+      const claimed = await tx.order.updateMany({
+        where: { id: order.id, orderStatus: { in: ['pending', 'confirmed'] } },
         data: {
           orderStatus: 'preparing',
           estimatedDeliveryAt: estimatedReadyAt,
         },
       });
+      if (claimed.count === 0) {
+        throw new AppError('Order status changed; it can no longer be accepted', 409, 'ORDER_STATUS_CONFLICT');
+      }
+
+      // Advance this seller's live items to preparing (never revive cancelled ones)
+      await tx.orderItem.updateMany({
+        where: { orderId: order.id, sellerId: seller.id, status: { notIn: ['cancelled', 'delivered'] } },
+        data: { status: 'preparing' },
+      });
+      const updatedOrder = await tx.order.findUniqueOrThrow({ where: { id: order.id } });
 
       await tx.orderStatusHistory.create({
         data: {
@@ -666,7 +728,7 @@ export class SellerOrderService {
     });
     if (!seller) {
       const user = await prisma.user.findUnique({ where: { id: sellerUserId } });
-      if (user?.userType === 'admin' || process.env.NODE_ENV !== 'production') {
+      if (user?.userType === 'admin') {
         const orderItem = await prisma.orderItem.findFirst({
           where: { orderId },
           include: { seller: true },
@@ -697,15 +759,37 @@ export class SellerOrderService {
 
     const rejectionNote = reason?.trim() || 'Kitchen unavailable';
 
-    await prisma.$transaction(async (tx) => {
-      // Mark items cancelled
+    const fullyCancelled = await prisma.$transaction(async (tx) => {
+      // Lock the order row FIRST. Customer/admin cancels take the order lock and then touch the
+      // items; taking item locks first here would deadlock against them (Postgres aborts one with
+      // a 500). One lock order everywhere: order, then items.
+      await tx.$queryRaw`SELECT id FROM orders WHERE id = ${order.id} FOR UPDATE`;
+
+      // Only this seller's still-live items are rejected and restocked — items
+      // already cancelled were restocked when that happened. Read before the update.
+      const liveItems = await tx.orderItem.findMany({
+        where: { orderId: order.id, sellerId: seller.id, status: { notIn: ['cancelled', 'delivered'] } },
+      });
+      if (liveItems.length === 0) {
+        throw new AppError('There is nothing left to reject on this order', 409, 'ORDER_STATUS_CONFLICT');
+      }
+
+      // Guard against a concurrent cancel/accept: the status check above ran
+      // outside this transaction.
+      const stillRejectable = await tx.order.count({
+        where: { id: order.id, orderStatus: { in: ['pending', 'confirmed', 'preparing', 'ready'] } },
+      });
+      if (stillRejectable === 0) {
+        throw new AppError('Order status changed; it can no longer be rejected', 409, 'ORDER_STATUS_CONFLICT');
+      }
+
       await tx.orderItem.updateMany({
-        where: { orderId: order.id, sellerId: seller.id },
+        where: { id: { in: liveItems.map((i) => i.id) } },
         data: { status: 'cancelled' },
       });
 
       // Restock products
-      for (const item of order.items) {
+      for (const item of liveItems) {
         if (item.variantId) {
           await tx.productVariant.update({
             where: { id: item.variantId },
@@ -730,32 +814,66 @@ export class SellerOrderService {
         }
       }
 
-      await tx.order.update({
-        where: { id: order.id },
-        data: {
-          orderStatus: 'cancelled',
-          cancellationReason: `Rejected by kitchen: ${rejectionNote}`,
-          cancelledBy: 'seller',
-        },
+      // Hub units for the rejected items go back into their batches.
+      await releaseHubAllocations(tx, order.id, {
+        orderItemIds: liveItems.map((i) => i.id),
+        productIds: liveItems.map((i) => i.productId).filter((id): id is string => !!id),
+        reason: `Rejected by ${seller.businessName}`,
+        performedBy: sellerUserId,
+      });
+
+      // In a multi-seller order, one kitchen rejecting its items must not cancel
+      // the other kitchens' items: the order is cancelled only once nothing is left.
+      const stillLive = await tx.orderItem.count({
+        where: { orderId: order.id, status: { notIn: ['cancelled'] } },
+      });
+      const allGone = stillLive === 0;
+
+      if (allGone) {
+        await tx.order.updateMany({
+          where: { id: order.id, orderStatus: { in: ['pending', 'confirmed', 'preparing', 'ready'] } },
+          data: {
+            orderStatus: 'cancelled',
+            cancellationReason: `Rejected by kitchen: ${rejectionNote}`,
+            cancelledBy: 'seller',
+          },
+        });
+        await releasePromotionUsage(tx, order.id);
+      }
+
+      // The customer paid for these items: give it back (their share if other
+      // kitchens' items remain, everything if the whole order is now cancelled).
+      await refundForCancelledItems(tx, order.id, liveItems.map((i) => i.id), {
+        reason: `Rejected by ${seller.businessName}: ${rejectionNote}`,
+        createdBy: sellerUserId,
+        orderFullyCancelled: allGone,
       });
 
       await tx.orderStatusHistory.create({
         data: {
           orderId: order.id,
-          status: 'cancelled',
-          notes: `Order rejected by kitchen: ${rejectionNote}`,
+          status: allGone ? 'cancelled' : order.orderStatus,
+          notes: allGone
+            ? `Order rejected by kitchen: ${rejectionNote}`
+            : `${seller.businessName} rejected its items: ${rejectionNote}`,
           changedBy: sellerUserId,
         },
       });
+
+      return allGone;
     });
 
-    await realtimeOrderService.emitOrderStatusUpdate(order.id, 'cancelled', sellerUserId);
+    if (fullyCancelled) {
+      await realtimeOrderService.emitOrderStatusUpdate(order.id, 'cancelled', sellerUserId);
+    }
 
     return {
       orderId: order.id,
-      orderStatus: 'cancelled',
+      orderStatus: fullyCancelled ? 'cancelled' : order.orderStatus,
       reason: rejectionNote,
-      message: 'Order rejected successfully and customer notified',
+      message: fullyCancelled
+        ? 'Order rejected successfully and customer notified'
+        : 'Your items were rejected; the other kitchens on this order are unaffected',
     };
   }
 
@@ -768,7 +886,7 @@ export class SellerOrderService {
     });
     if (!seller) {
       const user = await prisma.user.findUnique({ where: { id: sellerUserId } });
-      if (user?.userType === 'admin' || process.env.NODE_ENV !== 'production') {
+      if (user?.userType === 'admin') {
         const orderItem = await prisma.orderItem.findFirst({
           where: { orderId },
           include: { seller: true },
@@ -804,14 +922,17 @@ export class SellerOrderService {
     }
 
     await prisma.$transaction(async (tx) => {
-      await tx.orderItem.updateMany({
-        where: { orderId: order.id, sellerId: seller.id },
-        data: { status: 'ready' },
-      });
-
-      await tx.order.update({
-        where: { id: order.id },
+      const claimed = await tx.order.updateMany({
+        where: { id: order.id, orderStatus: { in: ['confirmed', 'preparing'] } },
         data: { orderStatus: 'ready' },
+      });
+      if (claimed.count === 0) {
+        throw new AppError('Order status changed; it can no longer be marked ready', 409, 'ORDER_STATUS_CONFLICT');
+      }
+
+      await tx.orderItem.updateMany({
+        where: { orderId: order.id, sellerId: seller.id, status: { notIn: ['cancelled', 'delivered'] } },
+        data: { status: 'ready' },
       });
 
       await tx.orderStatusHistory.create({

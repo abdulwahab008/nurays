@@ -47,6 +47,20 @@ export const processRefundSchema = z.object({
   refundAmount: z.number().positive().optional(),
 });
 
+export const completeRefundSchema = z.object({
+  reference: z.string().max(255).optional(),
+});
+
+export const dismissRefundSchema = z.object({
+  reason: z.string().trim().min(5, 'Say why the refund is not owed').max(500),
+});
+
+export const listRefundsQuerySchema = z.object({
+  status: z.enum(['pending', 'completed', 'failed']).optional(),
+  page: z.string().optional().transform((v) => (v ? parseInt(v, 10) : undefined)),
+  limit: z.string().optional().transform((v) => (v ? parseInt(v, 10) : undefined)),
+});
+
 export const getAnalyticsQuerySchema = z.object({
   dateFrom: z.string().optional(),
   dateTo: z.string().optional(),
