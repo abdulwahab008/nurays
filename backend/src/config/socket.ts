@@ -77,9 +77,33 @@ class SocketManager {
       socket.join(`role:${user.userType}`);
 
       // Join order tracking room if orderId provided
-      socket.on('join:order', (orderId: string) => {
-        socket.join(`order:${orderId}`);
-        console.log(`📦 User ${user.userId} joined order room: ${orderId}`);
+      // Only participants of an order may listen to it: its room carries status
+      // changes and the rider's live location. (Any authenticated user could
+      // previously join any order id.)
+      socket.on('join:order', async (orderId: string) => {
+        try {
+          if (typeof orderId !== 'string' || orderId.length === 0 || orderId.length > 64) return;
+          const allowed =
+            user.userType === 'admin' ||
+            (await prisma.order.count({
+              where: {
+                id: orderId,
+                OR: [
+                  { customerId: user.userId },
+                  { items: { some: { seller: { userId: user.userId } } } },
+                  { delivery: { rider: { userId: user.userId } } },
+                ],
+              },
+            })) > 0;
+          if (!allowed) {
+            console.warn(`⛔ User ${user.userId} denied order room: ${orderId}`);
+            return;
+          }
+          socket.join(`order:${orderId}`);
+          console.log(`📦 User ${user.userId} joined order room: ${orderId}`);
+        } catch (err) {
+          console.error('join:order failed:', err);
+        }
       });
 
       // Leave order room

@@ -3,6 +3,7 @@ import { AppError } from '../middleware/errorHandler';
 import realtimeOrderService from './realtime-order.service';
 import { SELLER_COMMUNITY_DELIVERY_SELECT } from '../utils/sellerDeliverySelect';
 import { communityService } from './community.service';
+import { eligibleSubtotalForPromotion, releasePromotionUsage } from './promotion.service';
 import { getDeliveryFeeForSeller } from '../utils/deliveryFee';
 import { createStockAlert } from './stock-alert.service';
 import promotionService from './promotion.service';
@@ -95,6 +96,22 @@ export class OrderService {
 
       if (!deliveryAddress) {
         throw new AppError('Delivery address not found', 404, 'ADDRESS_NOT_FOUND');
+      }
+    }
+
+    // Hub ids come from the client: make sure they name real hubs, and that a
+    // hub pickup actually has one. (A client-chosen hub also picks the origin
+    // used for the delivery-fee calculation below.)
+    const requestedHubIds = [
+      ...new Set([data.hubId, ...data.items.map((i) => i.hubId)].filter((id): id is string => !!id)),
+    ];
+    if (data.deliveryType === 'hub_pickup' && !data.hubId) {
+      throw new AppError('A pickup hub is required for hub pickup', 400, 'HUB_REQUIRED');
+    }
+    if (requestedHubIds.length > 0) {
+      const foundHubs = await prisma.hubCenter.count({ where: { id: { in: requestedHubIds } } });
+      if (foundHubs !== requestedHubIds.length) {
+        throw new AppError('Hub not found', 404, 'HUB_NOT_FOUND');
       }
     }
 
@@ -320,7 +337,7 @@ export class OrderService {
     let promotionId = null;
     if (data.promotionCode) {
       const promotion = await prisma.promotion.findUnique({
-        where: { code: data.promotionCode },
+        where: { code: data.promotionCode.trim().toUpperCase() },
       });
 
       // This exact promotion is already auto-applied as a catalog deal on one or more
@@ -347,17 +364,30 @@ export class OrderService {
           now <= promotion.validUntil &&
           withinLimits
         ) {
-          if (subtotal >= Number(promotion.minOrderAmount)) {
+          // A seller's code (or a product-limited code) only discounts the
+          // matching items — never the rest of a multi-seller cart.
+          const eligibleSubtotal = eligibleSubtotalForPromotion(
+            promotion,
+            orderItems.map((i) => ({ productId: i.productId, sellerId: i.sellerId, total: i.totalPrice }))
+          );
+          if (eligibleSubtotal <= 0) {
+            throw new AppError(
+              'This promotion code does not apply to the items in your order',
+              400,
+              'PROMO_NOT_APPLICABLE'
+            );
+          }
+          if (eligibleSubtotal >= Number(promotion.minOrderAmount)) {
             if (promotion.discountType === 'percentage') {
-              discountAmount = subtotal * (Number(promotion.discountValue) / 100);
+              discountAmount = eligibleSubtotal * (Number(promotion.discountValue) / 100);
               if (promotion.maxDiscountAmount) {
                 discountAmount = Math.min(discountAmount, Number(promotion.maxDiscountAmount));
               }
             } else {
               discountAmount = Number(promotion.discountValue);
             }
-            // Never let a discount exceed the order subtotal it applies to.
-            discountAmount = Math.min(discountAmount, subtotal);
+            // Never let a discount exceed the part of the order it applies to.
+            discountAmount = Math.min(discountAmount, eligibleSubtotal);
             promotionId = promotion.id;
           }
         }
@@ -453,10 +483,18 @@ export class OrderService {
       }> = [];
       for (const item of orderItems) {
         if (item.variantId) {
-          const updatedVariant = await tx.productVariant.update({
-            where: { id: item.variantId },
+          // Conditional decrement: the stock check above ran on a pre-transaction
+          // read, so two concurrent orders (or two lines for the same product)
+          // could both pass it and drive stock negative. The WHERE makes the
+          // check-and-take atomic; losing the race aborts the whole order.
+          const took = await tx.productVariant.updateMany({
+            where: { id: item.variantId, stockQuantity: { gte: item.quantity } },
             data: { stockQuantity: { decrement: item.quantity } },
           });
+          if (took.count === 0) {
+            throw new AppError(`Insufficient stock for ${item.productName}`, 400, 'INSUFFICIENT_STOCK');
+          }
+          const updatedVariant = await tx.productVariant.findUniqueOrThrow({ where: { id: item.variantId } });
           const updated = await tx.product.update({
             where: { id: item.productId },
             data: { totalOrders: { increment: 1 } },
@@ -469,12 +507,16 @@ export class OrderService {
             stockThreshold: updatedVariant.stockThreshold,
           });
         } else {
+          const took = await tx.product.updateMany({
+            where: { id: item.productId, stockQuantity: { gte: item.quantity } },
+            data: { stockQuantity: { decrement: item.quantity } },
+          });
+          if (took.count === 0) {
+            throw new AppError(`Insufficient stock for ${item.productName}`, 400, 'INSUFFICIENT_STOCK');
+          }
           const updated = await tx.product.update({
             where: { id: item.productId },
-            data: {
-              stockQuantity: { decrement: item.quantity },
-              totalOrders: { increment: 1 },
-            },
+            data: { totalOrders: { increment: 1 } },
           });
           updatedProducts.push({
             id: updated.id,
@@ -556,6 +598,35 @@ export class OrderService {
         allUsagesToRecord.push({ promotionId, discountApplied: discountAmount });
       }
       for (const usage of allUsagesToRecord) {
+        if (usage.promotionId === promotionId) {
+          // Re-check the limits atomically: they were read before this
+          // transaction, so parallel orders could each pass and overshoot.
+          const promo = await tx.promotion.findUniqueOrThrow({ where: { id: usage.promotionId } });
+          const usedByUser = await tx.promotionUsage.count({
+            where: { promotionId: usage.promotionId, userId: customerId },
+          });
+          if (usedByUser >= promo.usageLimitPerUser) {
+            throw new AppError('You have already used this promotion code', 400, 'PROMO_ALREADY_USED');
+          }
+          if (promo.usageLimitTotal != null) {
+            const reserved = await tx.promotion.updateMany({
+              where: { id: usage.promotionId, usedCount: { lt: promo.usageLimitTotal } },
+              data: { usedCount: { increment: 1 } },
+            });
+            if (reserved.count === 0) {
+              throw new AppError('Promotion code usage limit reached', 400, 'PROMO_LIMIT_REACHED');
+            }
+            await tx.promotionUsage.create({
+              data: {
+                promotionId: usage.promotionId,
+                userId: customerId,
+                orderId: newOrder.id,
+                discountApplied: usage.discountApplied,
+              },
+            });
+            continue;
+          }
+        }
         await tx.promotionUsage.create({
           data: {
             promotionId: usage.promotionId,
@@ -851,14 +922,27 @@ export class OrderService {
 
     // Cancel order and restore stock
     const cancelledOrder = await prisma.$transaction(async (tx) => {
-      // Update order status
-      const updatedOrder = await tx.order.update({
-        where: { id: orderId },
+      // Claim the cancellation: the "still pending" check above ran before this
+      // transaction, so a seller accepting at the same instant (or a second
+      // cancel) must not both win — otherwise the order is revived after its
+      // stock was returned, or its stock is returned twice.
+      const claimed = await tx.order.updateMany({
+        where: { id: orderId, customerId: userId, orderStatus: 'pending' },
         data: {
           orderStatus: 'cancelled',
           cancellationReason: reason,
           cancelledBy: 'customer',
         },
+      });
+      if (claimed.count === 0) {
+        throw new AppError('Order can no longer be cancelled', 409, 'ORDER_NOT_CANCELLABLE');
+      }
+      const updatedOrder = await tx.order.findUniqueOrThrow({ where: { id: orderId } });
+
+      // Items a seller already cancelled were restocked at that time; only
+      // return stock for what is still live. Read before the cascade below.
+      const liveItems = await tx.orderItem.findMany({
+        where: { orderId, status: { notIn: ['cancelled', 'delivered'] } },
       });
 
       // Cascade cancellation to all order items so the seller UI doesn't
@@ -868,16 +952,27 @@ export class OrderService {
         data: { status: 'cancelled' },
       });
 
-      // Restore product stock
-      for (const item of order.items) {
+      // Restore stock. A variant item drew from its own stock pool at order
+      // time, so it goes back there — not onto the shared product-level stock.
+      for (const item of liveItems) {
+        if (!item.productId) continue;
+        if (item.variantId) {
+          await tx.productVariant.update({
+            where: { id: item.variantId },
+            data: { stockQuantity: { increment: item.quantity } },
+          });
+        }
         await tx.product.update({
-          where: { id: item.productId || '' },
+          where: { id: item.productId },
           data: {
-            stockQuantity: { increment: item.quantity },
+            ...(item.variantId ? {} : { stockQuantity: { increment: item.quantity } }),
             totalOrders: { decrement: 1 },
           },
         });
       }
+
+      // A cancelled order shouldn't keep consuming the promo's quota.
+      await releasePromotionUsage(tx, orderId);
 
       // Remove inventory reservations
       await tx.inventoryReservation.deleteMany({
@@ -923,6 +1018,7 @@ export class OrderService {
       include: {
         items: {
           take: 1,
+          orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
           include: {
             seller: {
               select: {
@@ -932,7 +1028,9 @@ export class OrderService {
                 bankAccountName: true,
                 bankAccountNumber: true,
                 jazzcashNumber: true,
+                jazzcashAccountTitle: true,
                 easypaisaNumber: true,
+                easypaisaAccountTitle: true,
               },
             },
           },
@@ -946,6 +1044,32 @@ export class OrderService {
 
     const seller = order.items[0]?.seller;
 
+    // Only accounts the seller has actually configured. The customer sends real
+    // money to whatever is listed here, so there are no placeholder fallbacks —
+    // a seller with nothing configured yields an empty list.
+    const accounts: Array<{ provider: string; accountTitle?: string; accountNumber: string }> = [];
+    if (seller?.jazzcashNumber) {
+      accounts.push({
+        provider: 'JazzCash',
+        accountTitle: seller.jazzcashAccountTitle || seller.businessName,
+        accountNumber: seller.jazzcashNumber,
+      });
+    }
+    if (seller?.easypaisaNumber) {
+      accounts.push({
+        provider: 'EasyPaisa',
+        accountTitle: seller.easypaisaAccountTitle || seller.businessName,
+        accountNumber: seller.easypaisaNumber,
+      });
+    }
+    if (seller?.bankAccountNumber) {
+      accounts.push({
+        provider: seller.bankName || 'Bank Transfer',
+        accountTitle: seller.bankAccountName || seller.businessName,
+        accountNumber: seller.bankAccountNumber,
+      });
+    }
+
     return {
       orderId: order.id,
       orderNumber: order.orderNumber,
@@ -954,17 +1078,9 @@ export class OrderService {
       paymentStatus: order.paymentStatus,
       paymentSubmittedAt: order.paymentSubmittedAt,
       paymentReferenceNumber: order.paymentReferenceNumber,
-      seller: seller
-        ? {
-            id: seller.id,
-            businessName: seller.businessName,
-            bankName: seller.bankName || 'Meezan Bank / HBL',
-            bankAccountName: seller.bankAccountName || seller.businessName,
-            bankAccountNumber: seller.bankAccountNumber || 'PK00MEZN000123456789',
-            jazzcashNumber: seller.jazzcashNumber || '0300-1234567',
-            easypaisaNumber: seller.easypaisaNumber || '0345-1234567',
-          }
-        : null,
+      sellerId: seller?.id ?? null,
+      sellerName: seller?.businessName ?? null,
+      accounts,
     };
   }
 
@@ -1000,11 +1116,35 @@ export class OrderService {
       throw new AppError('Order is already marked as paid', 400, 'ALREADY_PAID');
     }
 
-    const updated = await prisma.order.update({
-      where: { id: orderId },
+    // Manual proof only makes sense for an online-transfer order that is still
+    // awaiting payment — not a cancelled/refunded order, and not COD or wallet.
+    if (['cancelled', 'refunded'].includes(order.orderStatus)) {
+      throw new AppError('This order is no longer payable', 400, 'ORDER_NOT_PAYABLE');
+    }
+    if (['cod', 'wallet'].includes(order.paymentMethod)) {
+      throw new AppError('This order is not paid by manual transfer', 400, 'NOT_MANUAL_PAYMENT');
+    }
+
+    const referenceNumber = (data.referenceNumber ?? '').trim();
+    if (!referenceNumber) {
+      throw new AppError('A payment reference number is required', 400, 'REFERENCE_REQUIRED');
+    }
+    // A proof is a link to an uploaded file — never an inline data: payload.
+    if (data.proofUrl && !/^(https?:\/\/|\/)/i.test(data.proofUrl)) {
+      throw new AppError('Invalid payment proof link', 400, 'INVALID_PROOF_URL');
+    }
+
+    // Atomic: only an order still awaiting (or re-submitting/contesting) payment
+    // can move to payment_submitted; never overwrite refund_pending/refunded/paid.
+    const submitted = await prisma.order.updateMany({
+      where: {
+        id: orderId,
+        customerId: userId,
+        paymentStatus: { in: ['pending', 'failed', 'disputed', 'payment_submitted'] },
+      },
       data: {
         paymentStatus: 'payment_submitted',
-        paymentReferenceNumber: data.referenceNumber,
+        paymentReferenceNumber: referenceNumber,
         paymentSenderName: data.senderName,
         paymentSenderAccount: data.senderAccount,
         paymentProofUrl: data.proofUrl,
@@ -1012,6 +1152,10 @@ export class OrderService {
         paymentSubmittedAt: new Date(),
       },
     });
+    if (submitted.count === 0) {
+      throw new AppError('Payment can no longer be submitted for this order', 409, 'PAYMENT_STATE_CONFLICT');
+    }
+    const updated = await prisma.order.findUniqueOrThrow({ where: { id: orderId } });
 
     // Add status history record
     await prisma.orderStatusHistory.create({
@@ -1052,23 +1196,31 @@ export class OrderService {
       throw new AppError('Seller profile not found', 404, 'SELLER_NOT_FOUND');
     }
 
+    // Only the seller the customer was told to pay (the same one
+    // getSellerPaymentDetails shows) may confirm or dispute the transfer; other
+    // sellers on a multi-seller order must not be able to mark it paid.
     const order = await prisma.order.findFirst({
-      where: {
-        id: orderId,
-        items: {
-          some: { sellerId: seller.id },
-        },
-      },
+      where: { id: orderId, items: { some: { sellerId: seller.id } } },
+      include: { items: { take: 1, orderBy: [{ createdAt: 'asc' }, { id: 'asc' }], select: { sellerId: true } } },
     });
 
     if (!order) {
       throw new AppError('Order not found for this seller', 404, 'ORDER_NOT_FOUND');
     }
+    if (order.items[0]?.sellerId !== seller.id) {
+      throw new AppError('Only the seller receiving this payment can confirm it', 403, 'NOT_PAYEE');
+    }
+    if (['cancelled', 'refunded'].includes(order.orderStatus) || ['cod', 'wallet'].includes(order.paymentMethod)) {
+      throw new AppError('This order has no manual payment to confirm', 400, 'NOT_MANUAL_PAYMENT');
+    }
 
     const newPaymentStatus = confirmed ? 'paid' : 'disputed';
 
-    const updated = await prisma.order.update({
-      where: { id: orderId },
+    // Atomic, and only from payment_submitted: a seller can't mark an order paid
+    // that the customer never paid for (which would unlock a payout for money
+    // the platform never received), nor flip a refunded order back to paid.
+    const applied = await prisma.order.updateMany({
+      where: { id: orderId, paymentStatus: 'payment_submitted' },
       data: {
         paymentStatus: newPaymentStatus,
         paymentConfirmedBy: confirmed ? 'seller' : undefined,
@@ -1077,6 +1229,14 @@ export class OrderService {
         paymentDisputeReason: !confirmed ? disputeReason || 'Payment verification failed' : null,
       },
     });
+    if (applied.count === 0) {
+      throw new AppError(
+        'There is no submitted payment awaiting confirmation on this order',
+        409,
+        'NO_PAYMENT_SUBMITTED'
+      );
+    }
+    const updated = await prisma.order.findUniqueOrThrow({ where: { id: orderId } });
 
     await prisma.orderStatusHistory.create({
       data: {
@@ -1136,12 +1296,10 @@ export class OrderService {
     }
 
     // Mark unread messages sent by the counterparty as read (Double Blue Tick)
-    const readCondition =
-      role === 'customer'
-        ? { senderRole: { not: 'customer' } }
-        : role === 'seller'
-        ? { senderRole: { not: 'seller' } }
-        : { senderId: { not: userId } };
+    // Always "messages from someone else". (A client-supplied ?role= used to
+    // steer this, letting a caller mark the other side's messages unread/read.)
+    void role;
+    const readCondition = { senderId: { not: userId } };
 
     await prisma.orderMessage.updateMany({
       where: {
@@ -1240,6 +1398,7 @@ export class OrderService {
         items: {
           select: { sellerId: true, seller: { select: { userId: true } } },
         },
+        delivery: { select: { rider: { select: { userId: true } } } },
       },
     });
 
@@ -1247,17 +1406,17 @@ export class OrderService {
       throw new AppError('Order not found or access denied', 404, 'ORDER_NOT_FOUND');
     }
 
-    // Determine sender role with high fidelity
-    let effectiveRole: string = 'customer';
-    if (options?.role) {
-      effectiveRole = options.role;
-    } else if (user.userType === 'seller' || (seller && order.items.some((i) => i.sellerId === seller.id || i.seller?.userId === userId))) {
-      effectiveRole = 'seller';
-    } else if (user.userType === 'rider') {
-      effectiveRole = 'rider';
-    } else {
-      effectiveRole = 'customer';
-    }
+    // The sender's role comes from their actual relationship to this order, never
+    // from the request: a client-supplied role let a customer post as the seller
+    // or rider. A caller who genuinely holds several roles (e.g. a seller ordering
+    // from their own shop) may pick among those they hold.
+    const heldRoles: string[] = [];
+    if (order.customerId === userId) heldRoles.push('customer');
+    if (seller && order.items.some((i) => i.sellerId === seller.id || i.seller?.userId === userId)) heldRoles.push('seller');
+    if (order.delivery?.rider?.userId === userId) heldRoles.push('rider');
+    if (isAdmin) heldRoles.push('support');
+    const effectiveRole =
+      options?.role && heldRoles.includes(options.role) ? options.role : heldRoles[0] ?? 'customer';
 
     const msgType = options?.messageType || 'text';
     const fallbackMessage = msgType === 'voice' ? '🎙️ Voice note' : (message?.trim() || '');

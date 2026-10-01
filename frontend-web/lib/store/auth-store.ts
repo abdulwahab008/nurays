@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
+import { useCartStore } from './cart-store';
 import { apiClient } from '../api-client';
 
 export interface User {
@@ -56,9 +57,22 @@ export const useAuthStore = create<AuthState>()(
         // Fire-and-forget — we don't block UI on the server response, but we
         // do tell the backend so it can blacklist the token if it implements
         // server-side session revocation.
-        apiClient.post('/auth/logout').catch(() => {
-          // Ignore — logout is best-effort.
-        });
+        // The token is read now, before it is cleared below: the request's auth
+        // header is attached asynchronously, so it would otherwise go out empty.
+        const token =
+          typeof window !== 'undefined'
+            ? sessionStorage.getItem('access_token') || localStorage.getItem('access_token')
+            : null;
+        apiClient
+          .post('/auth/logout', {}, token ? { headers: { Authorization: `Bearer ${token}` } } : undefined)
+          .catch(() => {
+            // Ignore — logout is best-effort.
+          });
+        // The cart is persisted per browser, not per account: leaving it behind
+        // let the next person to sign in on this device inherit (and sync into
+        // their own server cart) the previous user's items.
+        useCartStore.getState().clearCart();
+        useCartStore.getState().setAppliedPromoCode(null);
         if (typeof window !== 'undefined') {
           sessionStorage.removeItem('access_token');
           sessionStorage.removeItem('refresh_token');

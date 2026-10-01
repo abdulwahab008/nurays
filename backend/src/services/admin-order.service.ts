@@ -2,6 +2,7 @@ import prisma from '../config/database';
 import { AppError } from '../middleware/errorHandler';
 import realtimeOrderService from './realtime-order.service';
 import riderService from './rider.service';
+import { releasePromotionUsage } from './promotion.service';
 
 // The main happy-path order pipeline — admin can only move an order exactly
 // one step forward at a time (no skipping straight to 'dispatched'/'delivered',
@@ -301,6 +302,17 @@ export class AdminOrderService {
       throw new AppError(`Invalid status: ${status}`, 400, 'INVALID_STATUS');
     }
 
+    // Cancelling and refunding move stock, reservations and money. A bare status
+    // write here would skip all of that (and make the order look cancelled while
+    // its stock stays taken and its items stay actionable), so they only go
+    // through their dedicated endpoints.
+    if (status === 'cancelled') {
+      throw new AppError('Use the cancel endpoint to cancel an order', 400, 'USE_CANCEL_ENDPOINT');
+    }
+    if (status === 'refunded') {
+      throw new AppError('Use the refund endpoint to refund an order', 400, 'USE_REFUND_ENDPOINT');
+    }
+
     if (!isValidOrderStatusTransition(order.orderStatus, status)) {
       throw new AppError(
         `Cannot move an order from "${order.orderStatus}" to "${status}"`,
@@ -309,11 +321,30 @@ export class AdminOrderService {
       );
     }
 
-    // Update order status
-    const updatedOrder = await prisma.order.update({
-      where: { id: orderId },
-      data: { orderStatus: status },
+    // Update order status. Guarded on the status we validated against, so a
+    // concurrent change can't be silently overwritten. Delivery carries the same
+    // side effects as the seller/rider paths: delivery time, and COD is paid
+    // at the door.
+    const isDelivered = status === 'delivered';
+    const isCodDelivery = isDelivered && order.paymentMethod === 'cod' && order.paymentStatus !== 'paid';
+    const applied = await prisma.order.updateMany({
+      where: { id: orderId, orderStatus: order.orderStatus },
+      data: {
+        orderStatus: status,
+        ...(isDelivered ? { deliveredAt: new Date() } : {}),
+        ...(isCodDelivery ? { paymentStatus: 'paid', paidAt: new Date() } : {}),
+      },
     });
+    if (applied.count === 0) {
+      throw new AppError('Order status changed while updating; please retry', 409, 'ORDER_STATUS_CONFLICT');
+    }
+    if (isDelivered) {
+      await prisma.orderItem.updateMany({
+        where: { orderId, status: { notIn: ['cancelled', 'delivered'] } },
+        data: { status: 'delivered' },
+      });
+    }
+    const updatedOrder = await prisma.order.findUniqueOrThrow({ where: { id: orderId } });
 
     // Add status history
     await prisma.orderStatusHistory.create({
@@ -362,14 +393,26 @@ export class AdminOrderService {
 
     // Cancel order and restore stock
     const cancelledOrder = await prisma.$transaction(async (tx) => {
-      // Update order status
-      const updatedOrder = await tx.order.update({
-        where: { id: orderId },
+      // Claim the cancellation: only one of any concurrent cancel/accept/ready
+      // transitions can move the order out of a cancellable status. Without this
+      // a stale read let a cancel revive-or-double-restock an order.
+      const claimed = await tx.order.updateMany({
+        where: { id: orderId, orderStatus: { in: cancellableStatuses } },
         data: {
           orderStatus: 'cancelled',
           cancellationReason: reason,
           cancelledBy: 'admin',
         },
+      });
+      if (claimed.count === 0) {
+        throw new AppError('Order can no longer be cancelled', 409, 'ORDER_NOT_CANCELLABLE');
+      }
+      const updatedOrder = await tx.order.findUniqueOrThrow({ where: { id: orderId } });
+
+      // Items already cancelled (e.g. by their seller) were restocked when that
+      // happened; only restock what is still live. Read before the cascade below.
+      const liveItems = await tx.orderItem.findMany({
+        where: { orderId, status: { notIn: ['cancelled', 'delivered'] } },
       });
 
       // Cascade cancellation to all order items so the seller UI doesn't
@@ -382,7 +425,7 @@ export class AdminOrderService {
       // Restore stock — a variant item drew from its own stock pool at order
       // time (see order.service.ts createOrder), so it must be restored there,
       // not on the shared product-level stock it never touched.
-      for (const item of order.items) {
+      for (const item of liveItems) {
         if (item.variantId) {
           await tx.productVariant.update({
             where: { id: item.variantId },
@@ -407,6 +450,9 @@ export class AdminOrderService {
           reservationId: orderId,
         },
       });
+
+      // A cancelled order shouldn't keep consuming the promo's quota.
+      await releasePromotionUsage(tx, orderId);
 
       // Add status history
       await tx.orderStatusHistory.create({
@@ -508,6 +554,17 @@ export class AdminOrderService {
     const isWallet = order.paymentMethod === 'wallet';
 
     const result = await prisma.$transaction(async (tx) => {
+      // Claim the refund first. paymentStatus was checked outside the
+      // transaction, so a double-click or two admins could both pass it and both
+      // credit the wallet; only one can flip it from 'paid' here.
+      const claimed = await tx.order.updateMany({
+        where: { id: orderId, paymentStatus: 'paid' },
+        data: { paymentStatus: isWallet ? 'refunded' : 'refund_pending' },
+      });
+      if (claimed.count === 0) {
+        throw new AppError('Order is not paid, cannot process refund', 400, 'ORDER_NOT_PAID');
+      }
+
       if (isWallet) {
         if (!order.customerId) {
           throw new AppError(
@@ -521,19 +578,19 @@ export class AdminOrderService {
         if (!wallet) {
           throw new AppError('Customer wallet not found', 404, 'WALLET_NOT_FOUND');
         }
-        const balanceBefore = Number(wallet.balance);
-        await tx.wallet.update({
+        const credited = await tx.wallet.update({
           where: { id: wallet.id },
           data: { balance: { increment: refund } },
         });
+        const balanceAfter = Number(credited.balance);
         await tx.walletTransaction.create({
           data: {
             walletId: wallet.id,
             orderId,
             transactionType: 'credit',
             amount: refund,
-            balanceBefore,
-            balanceAfter: balanceBefore + refund,
+            balanceBefore: balanceAfter - refund,
+            balanceAfter,
             description: `Refund for order ${order.orderNumber}`,
             status: 'completed',
           },
@@ -543,7 +600,6 @@ export class AdminOrderService {
       const updatedOrder = await tx.order.update({
         where: { id: orderId },
         data: {
-          paymentStatus: isWallet ? 'refunded' : 'refund_pending',
           orderStatus: isWallet ? 'refunded' : order.orderStatus,
         },
       });

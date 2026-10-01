@@ -606,14 +606,49 @@ export class ProductService {
     const baseUrl = process.env.BASE_URL || 'http://localhost:3001';
     const sellerInfo = await computeCustomerFacingSellerInfo(product.seller as any, customerLat, customerLng, customerCommunityId);
 
+    // This endpoint is public. `product.seller` is the full Seller row (bank and
+    // wallet numbers, commission rate, home coordinates, the seller's phone), so
+    // expose only an explicit public subset, and the product's cost price only
+    // to its owner.
+    const { seller: fullSeller, costPrice: rawCostPrice, ...productFields } = product;
+    const publicSeller = {
+      id: fullSeller.id,
+      businessName: fullSeller.businessName,
+      businessNameUrdu: fullSeller.businessNameUrdu,
+      description: fullSeller.description,
+      coverImageUrl: fullSeller.coverImageUrl,
+      ratingAverage: fullSeller.ratingAverage,
+      totalReviews: fullSeller.totalReviews,
+      isVerified: fullSeller.isVerified,
+      businessType: fullSeller.businessType,
+      mealCategories: fullSeller.mealCategories,
+      status: fullSeller.status,
+      deliveryModes: fullSeller.deliveryModes,
+      freeDeliveryThreshold: fullSeller.freeDeliveryThreshold,
+      minOrderAmountForDelivery: fullSeller.minOrderAmountForDelivery,
+      communityId: fullSeller.communityId,
+      allowCrossCommunity: fullSeller.allowCrossCommunity,
+      primaryCommunityName: fullSeller.primaryCommunityName,
+      community: fullSeller.community,
+      scheduleMode: fullSeller.scheduleMode,
+      operatingHours: fullSeller.operatingHours,
+      availabilityOverride: fullSeller.availabilityOverride,
+      availabilityOverrideUntil: fullSeller.availabilityOverrideUntil,
+      availabilityNote: fullSeller.availabilityNote,
+      orderCutoffTime: fullSeller.orderCutoffTime,
+      maxDailyOrders: fullSeller.maxDailyOrders,
+      preOrderOnly: fullSeller.preOrderOnly,
+      minPrepTimeMinutes: fullSeller.minPrepTimeMinutes,
+    };
+
     return {
-      ...product,
+      ...productFields,
       price: Number(product.price),
       originalPrice: product.originalPrice ? Number(product.originalPrice) : null,
-      costPrice: product.costPrice ? Number(product.costPrice) : null,
+      ...(isOwner ? { costPrice: rawCostPrice ? Number(rawCostPrice) : null } : {}),
       ratingAverage: Number(product.ratingAverage),
       seller: {
-        ...attachAvailability(product.seller),
+        ...attachAvailability(publicSeller),
         isAcceptingOrders: sellerInfo.isAcceptingOrders,
         acceptingOrdersReason: sellerInfo.acceptingReason,
       },

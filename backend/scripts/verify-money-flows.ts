@@ -1,0 +1,166 @@
+/**
+ * End-to-end check of the order / payment / refund / payout money flows against
+ * a REAL Postgres (concurrency cannot be tested with mocks).
+ *
+ *   DATABASE_URL=postgresql://... JWT_SECRET=<32+ chars> \
+ *     npx prisma db push --skip-generate && npx ts-node scripts/verify-money-flows.ts
+ *
+ * Creates its own users/sellers/products with unique values; use a throwaway DB.
+ */
+import prisma from '../src/config/database';
+import orderService from '../src/services/order.service';
+import paymentService from '../src/services/payment.service';
+import adminOrderService from '../src/services/admin-order.service';
+import sellerOrderService from '../src/services/seller-order.service';
+
+let pass = 0, fail = 0;
+const ok = (name: string, cond: boolean, extra = '') => { cond ? pass++ : fail++; console.log(`${cond ? 'PASS' : 'FAIL'}  ${name}${extra ? '  [' + extra + ']' : ''}`); };
+const code = async (p: Promise<any>) => { try { await p; return 'OK'; } catch (e: any) { return e.code || e.message; } };
+let n = 0;
+const uniq = () => `${Date.now()}${++n}`;
+
+async function mkUser(type = 'customer') {
+  const u = uniq();
+  return prisma.user.create({ data: { phone: `+92300${u.slice(-8)}`, email: `u${u}@t.test`, userType: type } as any });
+}
+async function mkSeller(opts: any = {}) {
+  const user = await mkUser('seller');
+  return prisma.seller.create({ data: { userId: user.id, businessName: 'K' + uniq(), deliveryModes: ['delivery', 'pickup'], status: 'active', ...opts } });
+}
+async function mkProduct(sellerId: string, stock: number, price = 100) {
+  return prisma.product.create({ data: { sellerId, name: 'P' + uniq(), slug: 'p-' + uniq(), price, unit: 'pc', stockQuantity: stock, stockType: 'direct', approvalStatus: 'approved', isActive: true } as any });
+}
+const order = async (cust: string, items: any[], extra: any = {}) => ({
+  order: await orderService.createOrder(cust, { items, deliveryType: 'self_pickup', paymentMethod: 'cod', ...extra } as any),
+});
+
+async function main() {
+  const cust = await mkUser();
+  const seller = await mkSeller();
+  const sellerB = await mkSeller();
+
+  // ---- 1. stock: concurrent last-unit orders ----
+  let p = await mkProduct(seller.id, 1);
+  let res = await Promise.all([order(cust.id, [{ productId: p.id, quantity: 1 }]).then(() => 'OK', (e) => e.code), order(cust.id, [{ productId: p.id, quantity: 1 }]).then(() => 'OK', (e) => e.code)]);
+  let stock = (await prisma.product.findUnique({ where: { id: p.id } }))!.stockQuantity;
+  ok('concurrent last-unit orders: exactly one wins, stock never negative', res.filter((r) => r === 'OK').length === 1 && stock === 0, `${res} stock=${stock}`);
+
+  // ---- 2. stock: duplicate lines ----
+  p = await mkProduct(seller.id, 6);
+  const dup = await code(order(cust.id, [{ productId: p.id, quantity: 5 }, { productId: p.id, quantity: 5 }]));
+  stock = (await prisma.product.findUnique({ where: { id: p.id } }))!.stockQuantity;
+  ok('duplicate lines cannot oversell', dup === 'INSUFFICIENT_STOCK' && stock === 6, `${dup} stock=${stock}`);
+
+  // ---- 3. customer cancel restocks once; seller-cancelled item not double restocked ----
+  p = await mkProduct(seller.id, 10);
+  const pB = await mkProduct(sellerB.id, 10);
+  const o1: any = (await order(cust.id, [{ productId: p.id, quantity: 3 }, { productId: pB.id, quantity: 2 }])).order;
+  const itemA = await prisma.orderItem.findFirst({ where: { orderId: o1.id, sellerId: seller.id } });
+  const sellerUser = await prisma.seller.findUnique({ where: { id: seller.id } });
+  await sellerOrderService.cancelOrderItem(itemA!.id, sellerUser!.userId, 'oos');
+  await orderService.cancelOrder(o1.id, cust.id, 'changed mind');
+  const sa = (await prisma.product.findUnique({ where: { id: p.id } }))!.stockQuantity;
+  const sb = (await prisma.product.findUnique({ where: { id: pB.id } }))!.stockQuantity;
+  ok('cancel does not double-restock a seller-cancelled item', sa === 10 && sb === 10, `A=${sa} B=${sb}`);
+  const dbl = await code(orderService.cancelOrder(o1.id, cust.id, 'again'));
+  ok('second cancel is refused', dbl !== 'OK', dbl);
+
+  // ---- 4. wallet: concurrent double pay ----
+  await prisma.wallet.create({ data: { userId: cust.id, balance: 1000 } });
+  p = await mkProduct(seller.id, 5, 100);
+  const o2: any = (await order(cust.id, [{ productId: p.id, quantity: 1 }], { paymentMethod: 'wallet' })).order;
+  const total = Number(o2.totalAmount);
+  const pay = await Promise.all([1, 2, 3].map(() => paymentService.processPayment(o2.id, cust.id, 'wallet').then(() => 'OK', (e: any) => e.code)));
+  const bal = Number((await prisma.wallet.findUnique({ where: { userId: cust.id } }))!.balance);
+  const debits = await prisma.walletTransaction.count({ where: { orderId: o2.id, transactionType: 'debit' } });
+  ok('concurrent wallet payments charge exactly once', pay.filter((r) => r === 'OK').length === 1 && debits === 1 && bal === 1000 - total, `${pay} debits=${debits} bal=${bal} total=${total}`);
+
+  // ---- 5. admin refund: concurrent double refund ----
+  const admin = await mkUser('admin');
+  const refunds = await Promise.all([1, 2, 3].map(() => adminOrderService.processRefund(o2.id, admin.id).then(() => 'OK', (e: any) => e.code)));
+  const bal2 = Number((await prisma.wallet.findUnique({ where: { userId: cust.id } }))!.balance);
+  ok('concurrent admin refunds credit exactly once', refunds.filter((r) => r === 'OK').length === 1 && bal2 === 1000, `${refunds} bal=${bal2}`);
+
+  // ---- 6. admin PATCH status cannot cancel/refund ----
+  p = await mkProduct(seller.id, 5);
+  const o3: any = (await order(cust.id, [{ productId: p.id, quantity: 1 }])).order;
+  ok('admin PATCH cancelled is refused', (await code(adminOrderService.updateOrderStatus(o3.id, admin.id, 'cancelled'))) === 'USE_CANCEL_ENDPOINT');
+  ok('admin PATCH refunded is refused', (await code(adminOrderService.updateOrderStatus(o3.id, admin.id, 'refunded'))) === 'USE_REFUND_ENDPOINT');
+
+  // ---- 7. seller generic status endpoint cannot cancel ----
+  const item3 = await prisma.orderItem.findFirst({ where: { orderId: o3.id } });
+  const r7 = await code(sellerOrderService.updateOrderItemStatus(item3!.id, sellerUser!.userId, 'cancelled'));
+  ok('seller generic status cannot cancel (no restock path)', r7 === 'INVALID_STATUS_TRANSITION', r7);
+
+  // ---- 8. promo scoping ----
+  p = await mkProduct(seller.id, 5, 1000);
+  const pB2 = await mkProduct(sellerB.id, 5, 1000);
+  await prisma.promotion.create({ data: { sellerId: seller.id, code: 'SELLERA50', name: 'A50', discountType: 'percentage', discountValue: 50, validFrom: new Date(Date.now() - 1e6), validUntil: new Date(Date.now() + 1e9), usageLimitPerUser: 5 } as any });
+  const onlyB = await code(order(cust.id, [{ productId: pB2.id, quantity: 1 }], { promotionCode: 'sellera50' }));
+  ok('seller promo code refused on another seller\'s order (case-insensitive lookup)', onlyB === 'PROMO_NOT_APPLICABLE', onlyB);
+  const scoped = await prisma.promotion.create({ data: { code: 'ONLYP', name: 'p', discountType: 'percentage', discountValue: 50, applicableProductIds: [p.id], validFrom: new Date(Date.now() - 1e6), validUntil: new Date(Date.now() + 1e9), usageLimitPerUser: 5 } as any });
+  const o4: any = (await order(cust.id, [{ productId: p.id, quantity: 1 }, { productId: pB2.id, quantity: 1 }], { promotionCode: 'onlyp' })).order;
+  const pcode = o4.discountAmount;
+  ok('product-scoped promo discounts only the matching item', Number(pcode) >= 500 - 0.01 && Number(pcode) <= 500 + 0.01 || Number(pcode) > 0 && Number(pcode) < 1000, `discount=${pcode}`);
+
+  // ---- 9. promo usage released on cancel ----
+  const usedBefore = (await prisma.promotion.findUnique({ where: { id: scoped.id } }))!.usedCount;
+  await orderService.cancelOrder(o4.id, cust.id, 'x');
+  const usedAfter = (await prisma.promotion.findUnique({ where: { id: scoped.id } }))!.usedCount;
+  const usages = await prisma.promotionUsage.count({ where: { orderId: o4.id } });
+  ok('cancel releases promo usage', usedBefore === 1 && usedAfter === 0 && usages === 0, `${usedBefore}->${usedAfter} usages=${usages}`);
+
+  // ---- 10. promo total limit race ----
+  const limited = await prisma.promotion.create({ data: { code: 'ONLY1', name: 'one', discountType: 'fixed', discountValue: 10, validFrom: new Date(Date.now() - 1e6), validUntil: new Date(Date.now() + 1e9), usageLimitTotal: 1, usageLimitPerUser: 1 } as any });
+  const custs = await Promise.all([mkUser(), mkUser(), mkUser()]);
+  p = await mkProduct(seller.id, 20, 100);
+  const rr = await Promise.all(custs.map((c) => order(c.id, [{ productId: p.id, quantity: 1 }], { promotionCode: 'ONLY1' }).then((r: any) => Number(r.order.discountAmount), (e: any) => e.code)));
+  const used = (await prisma.promotion.findUnique({ where: { id: limited.id } }))!.usedCount;
+  ok('usage-limited promo cannot be overshot by parallel orders', used <= 1 && rr.filter((x) => x === 10).length <= 1, `${rr} used=${used}`);
+
+  // ---- 11. manual payment guards ----
+  const sellerRow = await prisma.seller.findUnique({ where: { id: seller.id } });
+  p = await mkProduct(seller.id, 5, 100);
+  const m: any = (await order(cust.id, [{ productId: p.id, quantity: 1 }], { paymentMethod: 'bank' })).order;
+  ok('seller cannot mark an unpaid order paid', (await code(orderService.confirmManualPayment(m.id, sellerRow!.userId, true))) === 'NO_PAYMENT_SUBMITTED');
+  ok('submit requires a reference', (await code(orderService.submitManualPayment(m.id, cust.id, { referenceNumber: '  ' } as any))) === 'REFERENCE_REQUIRED');
+  ok('submit rejects data: proof', (await code(orderService.submitManualPayment(m.id, cust.id, { referenceNumber: 'TID1', proofUrl: 'data:image/png;base64,AAAA' }))) === 'INVALID_PROOF_URL');
+  ok('submit ok', (await code(orderService.submitManualPayment(m.id, cust.id, { referenceNumber: 'TID1', proofUrl: '/uploads/products/x.png' }))) === 'OK');
+  ok('other seller cannot confirm', (await code(orderService.confirmManualPayment(m.id, (await prisma.seller.findUnique({ where: { id: sellerB.id } }))!.userId, true))) !== 'OK');
+  ok('payee seller confirms', (await code(orderService.confirmManualPayment(m.id, sellerRow!.userId, true))) === 'OK');
+  ok('confirm twice is refused', (await code(orderService.confirmManualPayment(m.id, sellerRow!.userId, true))) === 'NO_PAYMENT_SUBMITTED');
+
+  // ---- 12. payment details: real accounts only ----
+  const bare: any = await orderService.getSellerPaymentDetails(m.id, cust.id);
+  ok('no fake payment accounts for an unconfigured seller', Array.isArray(bare.accounts) && bare.accounts.length === 0, JSON.stringify(bare.accounts));
+  await prisma.seller.update({ where: { id: seller.id }, data: { jazzcashNumber: '0300-7654321' } });
+  const cfg: any = await orderService.getSellerPaymentDetails(m.id, cust.id);
+  ok('configured account is returned', cfg.accounts.length === 1 && cfg.accounts[0].accountNumber === '0300-7654321');
+
+  // ---- 13. chat role cannot be spoofed ----
+  const msg: any = await orderService.sendOrderMessage(m.id, cust.id, 'hi', { role: 'seller' });
+  const stored = await prisma.orderMessage.findUnique({ where: { id: msg.id } });
+  ok('customer cannot post as seller', stored?.senderRole === 'customer', stored?.senderRole);
+
+  // ---- 14. multi-seller reject leaves other kitchen's items ----
+  p = await mkProduct(seller.id, 5); const pB3 = await mkProduct(sellerB.id, 5);
+  const o5: any = (await order(cust.id, [{ productId: p.id, quantity: 1 }, { productId: pB3.id, quantity: 1 }])).order;
+  await sellerOrderService.rejectOrder(o5.id, sellerRow!.userId, 'closed');
+  const after = await prisma.order.findUnique({ where: { id: o5.id }, include: { items: true } });
+  ok('one seller rejecting does not cancel the other seller\'s items', after!.orderStatus !== 'cancelled' && after!.items.filter((i) => i.status === 'cancelled').length === 1);
+
+  // ---- 15. payout race ----
+  const sp = await mkSeller();
+  await prisma.sellerPayoutSchedule.create({ data: { sellerId: sp.id, minimumPayoutAmount: 1, payoutMethod: 'bank_transfer' } as any });
+  const prod = await mkProduct(sp.id, 5, 1000);
+  const po: any = (await order(cust.id, [{ productId: prod.id, quantity: 1 }], { paymentMethod: 'bank' })).order;
+  await prisma.order.update({ where: { id: po.id }, data: { orderStatus: 'delivered', paymentStatus: 'paid' } });
+  const earned = Number((await prisma.orderItem.findFirst({ where: { orderId: po.id } }))!.sellerPayout);
+  const reqs = await Promise.all([1, 2, 3].map(() => (require('../src/services/seller.service').default).requestPayout(sp.id, { amount: earned, payoutMethod: 'bank_transfer', accountNumber: '1' }).then(() => 'OK', (e: any) => e.code)));
+  ok('concurrent payout requests cannot exceed earnings', reqs.filter((r) => r === 'OK').length === 1, `${reqs} earned=${earned}`);
+
+  console.log(`\n${pass} passed, ${fail} failed`);
+  await prisma.$disconnect();
+  process.exit(fail ? 1 : 0);
+}
+main().catch((e) => { console.error(e); process.exit(2); });

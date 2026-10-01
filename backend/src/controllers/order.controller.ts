@@ -157,6 +157,19 @@ export const sendOrderMessage = async (req: Request, res: Response) => {
   if (!message && !mediaUrl) {
     throw new AppError('Message text or media is required', 400, 'MESSAGE_REQUIRED');
   }
+  if (message !== undefined && (typeof message !== 'string' || message.length > 2000)) {
+    throw new AppError('Message must be text of at most 2000 characters', 400, 'INVALID_MESSAGE');
+  }
+  if (messageType !== undefined && !['text', 'voice', 'image'].includes(messageType)) {
+    throw new AppError('Invalid message type', 400, 'INVALID_MESSAGE_TYPE');
+  }
+  // Media is a link to an uploaded file, never an inline payload or script URL.
+  if (mediaUrl !== undefined && (typeof mediaUrl !== 'string' || !/^(https?:\/\/|\/)/i.test(mediaUrl))) {
+    throw new AppError('Invalid media link', 400, 'INVALID_MEDIA_URL');
+  }
+  if (duration !== undefined && (typeof duration !== 'number' || duration < 0 || duration > 3600)) {
+    throw new AppError('Invalid duration', 400, 'INVALID_DURATION');
+  }
 
   const result = await orderService.sendOrderMessage(id, req.user.userId, message || '', {
     role,

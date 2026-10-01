@@ -1,5 +1,5 @@
 import prisma from '../config/database';
-import { generateToken, generateRefreshToken, JWTPayload } from '../utils/jwt';
+import { generateToken, generateRefreshToken, tokenTtlSeconds, JWTPayload } from '../utils/jwt';
 import { formatPhoneNumber, isValidPhoneNumber } from '../utils/otp';
 import { AppError } from '../middleware/errorHandler';
 import bcrypt from 'bcrypt';
@@ -227,7 +227,7 @@ export class AuthService {
       tokens: {
         access_token: accessToken,
         refresh_token: refreshToken,
-        expires_in: 3600,
+        expires_in: tokenTtlSeconds(accessToken),
       },
       requiresEmailVerification: true,
       emailSendFailed,
@@ -388,7 +388,7 @@ export class AuthService {
         tokens: {
           access_token: accessToken,
           refresh_token: refreshToken,
-          expires_in: 3600,
+          expires_in: tokenTtlSeconds(accessToken),
         },
         requiresEmailVerification: false, // Email verification disabled for now
       };
@@ -448,7 +448,7 @@ export class AuthService {
         tokens: {
           access_token: accessToken,
           refresh_token: refreshToken,
-          expires_in: 3600,
+          expires_in: tokenTtlSeconds(accessToken),
         },
         requiresEmailVerification: false, // Email verification disabled for now
       };
@@ -503,8 +503,8 @@ export class AuthService {
    */
   async refreshToken(refreshToken: string) {
     try {
-      const { verifyToken, generateToken } = await import('../utils/jwt');
-      const payload = verifyToken(refreshToken);
+      const { verifyRefreshToken, generateToken } = await import('../utils/jwt');
+      const payload = verifyRefreshToken(refreshToken);
 
       // Verify user still exists and is active
       const user = await prisma.user.findUnique({

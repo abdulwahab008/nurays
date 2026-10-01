@@ -317,8 +317,14 @@ export default function CheckoutPage() {
 
       const response = await orderService.createOrder(orderData);
 
-      // Clear cart
-      await cartService.clearCart();
+      // Clear cart. The order already exists at this point, so a failure here
+      // must not surface as "failed to place order" (the customer would retry
+      // and be charged twice) — the server cart is stale-but-harmless.
+      try {
+        await cartService.clearCart();
+      } catch (clearErr) {
+        console.warn('Order placed but the server cart could not be cleared:', clearErr);
+      }
       useCartStore.getState().clearCart();
       useCartStore.getState().setAppliedPromoCode(null);
 

@@ -156,6 +156,13 @@ export class SellerService {
       throw new AppError('User not found', 404, 'USER_NOT_FOUND');
     }
 
+    // Only a customer account can become a seller. This used to overwrite the
+    // role of any logged-in user, so a rider, hub manager or admin could be
+    // silently demoted to (or hijacked as) a seller.
+    if (!['customer', 'seller'].includes(user.userType)) {
+      throw new AppError('This account type cannot register as a seller', 403, 'ROLE_NOT_ALLOWED');
+    }
+
     const commissionRate = await adminService.getSettingValue<number>('commissionRate');
     const seller = await prisma.seller.create({
       data: {
@@ -627,7 +634,7 @@ export class SellerService {
     // online orders, minus what's already been paid or requested, minus
     // commission owed on COD sales (settled by netting, not a separate bill).
     const alreadyPaidOrRequested = await prisma.sellerPayout.findMany({
-      where: { sellerId, status: { in: ['completed', 'pending'] } },
+      where: { sellerId, status: { in: ['completed', 'pending', 'processing'] } },
       select: { netAmount: true },
     });
     const paidOrRequestedTotal = alreadyPaidOrRequested.reduce(
@@ -951,57 +958,6 @@ export class SellerService {
       throw new AppError('Seller not found', 404, 'SELLER_NOT_FOUND');
     }
 
-    // Calculate available balance. Must also require paymentStatus: 'paid' —
-    // a delivered order whose online payment never actually completed hasn't
-    // put any money in our hands to pay out.
-    const orderItems = await prisma.orderItem.findMany({
-      where: {
-        sellerId,
-        order: {
-          orderStatus: { in: ['delivered', 'completed'] },
-          paymentStatus: 'paid',
-        },
-      },
-      include: {
-        order: { select: { paymentMethod: true } },
-      },
-    });
-
-    // We're a facilitator, not an escrow agent: COD money already went
-    // straight to the seller, so it's not payable again here — only what we
-    // actually collected online is withdrawable, net of the commission the
-    // seller owes us on their COD sales.
-    const onlineEarnings = orderItems
-      .filter((item) => item.order.paymentMethod !== 'cod')
-      .reduce((sum, item) => sum + Number(item.sellerPayout), 0);
-    const codCommissionOwed = orderItems
-      .filter((item) => item.order.paymentMethod === 'cod')
-      .reduce((sum, item) => sum + Number(item.commissionAmount), 0);
-
-    // Get already paid out AND already-requested-but-not-yet-processed amounts —
-    // a pending payout must reserve its amount too, or a seller could submit
-    // several requests back-to-back before any of them are processed and
-    // collectively withdraw more than they've actually earned.
-    const outstandingPayouts = await prisma.sellerPayout.findMany({
-      where: {
-        sellerId,
-        status: { in: ['completed', 'pending'] },
-      },
-      select: {
-        netAmount: true,
-      },
-    });
-
-    const paidOut = outstandingPayouts.reduce((sum, payout) => {
-      return sum + Number(payout.netAmount);
-    }, 0);
-
-    const availableBalance = onlineEarnings - paidOut - codCommissionOwed;
-
-    if (data.amount > availableBalance) {
-      throw new AppError('Insufficient balance', 400, 'INSUFFICIENT_BALANCE');
-    }
-
     // Get payout schedule
     const schedule = await prisma.sellerPayoutSchedule.findUnique({
       where: { sellerId },
@@ -1019,27 +975,86 @@ export class SellerService {
       );
     }
 
-    // No further commission here: order_items.seller_payout is already net of the
-    // seller's commission_rate at order time (see order.service.ts createOrder),
-    // so the requested amount is what the seller actually receives.
-    const commissionDeducted = 0;
-    const netAmount = data.amount;
+    // Compute the balance and create the payout under a row lock on the seller:
+    // two simultaneous requests used to both read the same balance and together
+    // withdraw more than the seller had earned.
+    const payout = await prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT id FROM sellers WHERE id = ${sellerId} FOR UPDATE`;
 
-    // Create payout request
-    const payout = await prisma.sellerPayout.create({
-      data: {
-        sellerId,
-        amount: data.amount,
-        commissionDeducted,
-        netAmount,
-        payoutMethod: data.payoutMethod,
-        accountDetails: {
-          accountNumber: data.accountNumber,
+      // Calculate available balance. Must also require paymentStatus: 'paid' —
+      // a delivered order whose online payment never actually completed hasn't
+      // put any money in our hands to pay out.
+      const orderItems = await tx.orderItem.findMany({
+        where: {
+          sellerId,
+          order: {
+            orderStatus: { in: ['delivered', 'completed'] },
+            paymentStatus: 'paid',
+          },
         },
-        status: 'pending',
-        periodStart: new Date(),
-        periodEnd: new Date(),
-      },
+        include: {
+          order: { select: { paymentMethod: true } },
+        },
+      });
+
+      // We're a facilitator, not an escrow agent: COD money already went
+      // straight to the seller, so it's not payable again here — only what we
+      // actually collected online is withdrawable, net of the commission the
+      // seller owes us on their COD sales.
+      const onlineEarnings = orderItems
+        .filter((item) => item.order.paymentMethod !== 'cod')
+        .reduce((sum, item) => sum + Number(item.sellerPayout), 0);
+      const codCommissionOwed = orderItems
+        .filter((item) => item.order.paymentMethod === 'cod')
+        .reduce((sum, item) => sum + Number(item.commissionAmount), 0);
+
+      // Get already paid out AND already-requested-but-not-yet-processed amounts —
+      // a pending payout must reserve its amount too, or a seller could submit
+      // several requests back-to-back before any of them are processed and
+      // collectively withdraw more than they've actually earned.
+      const outstandingPayouts = await tx.sellerPayout.findMany({
+        where: {
+          sellerId,
+          status: { in: ['completed', 'pending', 'processing'] },
+        },
+        select: {
+          netAmount: true,
+        },
+      });
+
+      const paidOut = outstandingPayouts.reduce((sum, payout) => {
+        return sum + Number(payout.netAmount);
+      }, 0);
+
+      const availableBalance = onlineEarnings - paidOut - codCommissionOwed;
+
+      if (data.amount > availableBalance) {
+        throw new AppError('Insufficient balance', 400, 'INSUFFICIENT_BALANCE');
+      }
+
+      // No further commission here: order_items.seller_payout is already net of the
+      // seller's commission_rate at order time (see order.service.ts createOrder),
+      // so the requested amount is what the seller actually receives.
+      const commissionDeducted = 0;
+      const netAmount = data.amount;
+
+      // Create payout request
+      return tx.sellerPayout.create({
+        data: {
+          sellerId,
+          amount: data.amount,
+          commissionDeducted,
+          netAmount,
+          payoutMethod: data.payoutMethod,
+          accountDetails: {
+            accountNumber: data.accountNumber,
+          },
+          status: 'pending',
+          periodStart: new Date(),
+          periodEnd: new Date(),
+        },
+      });
+
     });
 
     return {

@@ -206,6 +206,28 @@ export class PaymentService {
     const paymentId = `WALLET-${Date.now()}`;
 
     const result = await prisma.$transaction(async (tx) => {
+      // Claim the order first. The "already paid" check in processPayment ran
+      // before this transaction, so two concurrent requests can both pass it;
+      // only one of them can flip paymentStatus here, and the loser aborts
+      // before touching the wallet (no double debit).
+      const claimed = await tx.order.updateMany({
+        where: {
+          id: orderId,
+          customerId: userId,
+          paymentStatus: { not: 'paid' },
+          orderStatus: { not: 'cancelled' },
+        },
+        data: {
+          paymentMethod: 'wallet',
+          paymentStatus: 'paid',
+          paidAt: new Date(),
+          paymentTransactionId: paymentId,
+        },
+      });
+      if (claimed.count === 0) {
+        throw new AppError('Order already paid or no longer payable', 400, 'PAYMENT_ALREADY_PAID');
+      }
+
       // Read the wallet inside the transaction so balanceBefore is consistent
       // with the decrement we're about to apply.
       const wallet = await tx.wallet.findUniqueOrThrow({ where: { userId } });
@@ -241,15 +263,7 @@ export class PaymentService {
         },
       });
 
-      const updatedOrder = await tx.order.update({
-        where: { id: orderId },
-        data: {
-          paymentMethod: 'wallet',
-          paymentStatus: 'paid',
-          paidAt: new Date(),
-          paymentTransactionId: paymentId,
-        },
-      });
+      const updatedOrder = await tx.order.findUniqueOrThrow({ where: { id: orderId } });
 
       return {
         paymentId,

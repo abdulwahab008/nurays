@@ -34,6 +34,11 @@ interface DemoAccount {
   description: string;
 }
 
+// One-click demo accounts (with a shared password) are a development aid only.
+// They must never ship enabled in a production build.
+const SHOW_DEMO_LOGIN =
+  process.env.NODE_ENV !== 'production' || process.env.NEXT_PUBLIC_ENABLE_DEMO_LOGIN === 'true';
+
 const DEMO_ACCOUNTS: DemoAccount[] = [
   {
     id: 'customer',
@@ -328,7 +333,8 @@ export default function LoginPage() {
 
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-12 items-start">
           
-          {/* Left Column: Quick Role Login Area */}
+          {/* Left Column: Quick Role Login Area (development only) */}
+          {SHOW_DEMO_LOGIN && (
           <div className="lg:col-span-7 bg-slate-50/80 rounded-2xl p-5 sm:p-6 border border-slate-200/70">
             <div className="flex items-center justify-between mb-4">
               <div>
@@ -421,9 +427,10 @@ export default function LoginPage() {
               </Link>
             </div>
           </div>
+          )}
 
           {/* Right Column: Standard Login Form */}
-          <div className="lg:col-span-5 flex flex-col justify-center">
+          <div className={SHOW_DEMO_LOGIN ? 'lg:col-span-5 flex flex-col justify-center' : 'lg:col-span-12 max-w-md mx-auto w-full flex flex-col justify-center'}>
             <div className="mb-6">
               <h1 className="text-2xl sm:text-3xl font-bold text-slate-900 tracking-tight">
                 Welcome back.
@@ -544,7 +551,7 @@ export default function LoginPage() {
                     <label htmlFor="password" className={labelClass}>
                       Password
                     </label>
-                    <span className="text-[11px] text-slate-400">Default: Password123!</span>
+                    {SHOW_DEMO_LOGIN && <span className="text-[11px] text-slate-400">Default: Password123!</span>}
                   </div>
                   <input
                     type="password"

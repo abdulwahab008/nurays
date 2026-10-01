@@ -78,7 +78,17 @@ app.use(express.json({
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
 // Serve static files (uploaded images) - with CORS headers
-app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
+app.use(
+  '/uploads',
+  express.static(path.join(__dirname, '../uploads'), {
+    // Uploads are images only. Never let a browser sniff one into something
+    // executable, and never render uploaded files as documents.
+    setHeaders: (res) => {
+      res.setHeader('X-Content-Type-Options', 'nosniff');
+      res.setHeader('Content-Security-Policy', "default-src 'none'; img-src 'self'; style-src 'unsafe-inline'; sandbox");
+    },
+  })
+);
 
 // Routes
 app.use(`/api/${API_VERSION}/health`, healthRoutes);
