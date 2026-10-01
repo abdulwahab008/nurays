@@ -298,6 +298,9 @@ export default function CartPage() {
       return;
     }
     setUpdatingItem(itemId);
+    // Snapshot first: the change below is optimistic, and if the server refuses it
+    // the screen and the saved tray must go back to what they were.
+    const snapshot = { cart, storeItems: useCartStore.getState().items };
     try {
       // Optimistically update local cart and store
       setCart((prev) => {
@@ -329,19 +332,30 @@ export default function CartPage() {
       }
     } catch (error: any) {
       showToast(error?.response?.data?.error?.message || 'Could not update quantity', 'error');
-      try {
-        const fresh = await cartService.getCart();
-        if (fresh.data) setCart(fresh.data);
-      } catch {
-        // fallback
-      }
+      await restoreCart(snapshot);
     } finally {
       setUpdatingItem(null);
     }
   };
 
+  // Undo an optimistic change the server rejected: put back exactly what was on screen
+  // and in the saved tray, then quietly reconcile with the server's real cart. (A failed
+  // removal used to leave the item gone from the screen while the server still held —
+  // and checkout still charged for — it.)
+  const restoreCart = async (snapshot: { cart: typeof cart; storeItems: ReturnType<typeof useCartStore.getState>['items'] }) => {
+    setCart(snapshot.cart);
+    useCartStore.getState().setItems(snapshot.storeItems);
+    try {
+      const fresh = await cartService.getCart();
+      if (fresh.data) setCart(fresh.data);
+    } catch {
+      // keep the restored snapshot
+    }
+  };
+
   const handleRemoveItem = async (itemId: string) => {
     setUpdatingItem(itemId);
+    const snapshot = { cart, storeItems: useCartStore.getState().items };
     try {
       // Optimistically remove from state and store
       setCart((prev) => {
@@ -368,6 +382,7 @@ export default function CartPage() {
       }
     } catch (error: any) {
       showToast(error?.response?.data?.error?.message || 'Failed to remove item', 'error');
+      await restoreCart(snapshot);
     } finally {
       setUpdatingItem(null);
     }

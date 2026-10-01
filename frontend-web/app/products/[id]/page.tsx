@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { productService } from '@/lib/services/product.service';
@@ -154,12 +154,24 @@ export default function ProductDetailPage() {
     }
   }, [params?.id, isAuthenticated]);
 
+  // The product is fetched twice on load: once immediately, and again with the saved
+  // address's coordinates for a precise delivery estimate. Without care the second
+  // fetch flashed the full-page spinner, reset the customer's chosen variant and stock
+  // type, and — if the responses arrived out of order — let the less precise one win.
+  const loadSeqRef = useRef(0);
+  const loadedProductRef = useRef<string | null>(null);
+
   const loadProduct = async (customerLat?: number, customerLng?: number) => {
-    setLoading(true);
+    const requestedId = params.id as string;
+    const seq = ++loadSeqRef.current;
+    const isRefresh = loadedProductRef.current === requestedId; // same product already on screen
+    if (!isRefresh) setLoading(true);
     try {
-      const response = await productService.getProduct(params.id as string, customerLat, customerLng);
+      const response = await productService.getProduct(requestedId, customerLat, customerLng);
+      if (seq !== loadSeqRef.current) return; // a newer request superseded this one
       const data = response.data as any;
       if (!data) return;
+      loadedProductRef.current = requestedId;
       // Ensure stock shape (API may return stockQuantity only or stock: { hub, direct })
       const stockHub = data.stock?.hub ?? data.stockQuantity ?? 0;
       const stockDirect = data.stock?.direct ?? data.stockQuantity ?? 0;
@@ -195,13 +207,21 @@ export default function ProductDetailPage() {
         seller,
         variants,
       });
-      if (Number(stockHub) === 0 && Number(stockDirect) > 0) {
-        setStockType('direct');
-      } else if (data.stockType === 'direct') {
-        setStockType('direct');
+      // Initial choices only on the first load of this product; a refresh keeps what the
+      // customer already picked.
+      if (!isRefresh) {
+        if (Number(stockHub) === 0 && Number(stockDirect) > 0) {
+          setStockType('direct');
+        } else if (data.stockType === 'direct') {
+          setStockType('direct');
+        }
       }
       const defaultVariant = variants.find((v: { isDefault?: boolean }) => v.isDefault) ?? variants[0];
-      setSelectedVariantId(defaultVariant?.id ?? null);
+      setSelectedVariantId((current) =>
+        isRefresh && current && variants.some((v: { id: string }) => v.id === current)
+          ? current
+          : defaultVariant?.id ?? null
+      );
       // Fetch catalog promotions for this product (same as listing – stacked 30% + 5% etc.)
       try {
         const promRes = await apiClient.get<{ success: boolean; data: Record<string, CatalogPromotion[]> }>(
@@ -227,7 +247,7 @@ export default function ProductDetailPage() {
     } catch (error) {
       console.error('Failed to load product:', error);
     } finally {
-      setLoading(false);
+      if (seq === loadSeqRef.current) setLoading(false);
     }
   };
 
