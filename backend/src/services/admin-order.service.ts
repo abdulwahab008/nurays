@@ -1,6 +1,7 @@
 import prisma from '../config/database';
 import { AppError } from '../middleware/errorHandler';
 import realtimeOrderService from './realtime-order.service';
+import socketManager from '../config/socket';
 import riderService from './rider.service';
 import { releasePromotionUsage } from './promotion.service';
 import { issueRefund, IssuedRefund } from './refund.service';
@@ -530,6 +531,12 @@ export class AdminOrderService {
       );
     }
 
+    // The rider being unassigned must stop receiving this order's events.
+    const previousRider = await prisma.delivery.findUnique({
+      where: { orderId },
+      select: { rider: { select: { userId: true } } },
+    });
+
     await prisma.$transaction(async (tx) => {
       await tx.delivery.updateMany({
         where: { orderId },
@@ -550,6 +557,7 @@ export class AdminOrderService {
       });
     });
 
+    if (previousRider?.rider?.userId) socketManager.removeUserFromOrder(previousRider.rider.userId, orderId);
     await realtimeOrderService.emitOrderStatusUpdate(orderId, 'ready', adminId);
     return { orderId, status: 'ready' };
   }

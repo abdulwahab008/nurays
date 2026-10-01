@@ -30,6 +30,20 @@ export const verifyPhone = async (req: Request, res: Response) => {
   res.status(200).json({ success: true, message: 'Phone number verified', data: result });
 };
 
+export const forgotPassword = async (req: Request, res: Response) => {
+  await authService.forgotPassword(req.body.email);
+  // The same answer whether or not the email has an account.
+  res.status(200).json({
+    success: true,
+    message: 'If an account exists for that email, a reset link is on its way.',
+  });
+};
+
+export const resetPassword = async (req: Request, res: Response) => {
+  await authService.resetPassword(req.body.token, req.body.password);
+  res.status(200).json({ success: true, message: 'Password updated. Please log in with your new password.' });
+};
+
 export const register = async (req: Request, res: Response) => {
   const { email, password, user_type, full_name, phone, phone_otp, city, area, business_name } = req.body;
 

@@ -3,6 +3,7 @@ import { AppError } from '../middleware/errorHandler';
 import { computeSellerAvailability, isAcceptingOrders } from './availability.service';
 import { getDeliveryFeeForSeller, haversineKm } from '../utils/deliveryFee';
 import { SELLER_COMMUNITY_DELIVERY_SELECT } from '../utils/sellerDeliverySelect';
+import { isUploadedBy } from '../utils/uploadPaths';
 
 const SELLER_AVAILABILITY_SELECT = {
   status: true,
@@ -718,6 +719,7 @@ export class ProductService {
     // legitimately sell "Biryani" too, so a clash with someone else's product gets a
     // suffix; only a duplicate within the seller's own products is an error.
     const slug = await this.uniqueSlug(data.name, seller.id);
+    if (data.images?.length) await this.assertImageUrlsAllowed(data.images, sellerId, seller.id);
 
     // Create product - awaits admin moderation before it appears on the public catalog
     const product = await prisma.product.create({
@@ -801,6 +803,7 @@ export class ProductService {
 
     // Handle image updates
     if (data.images !== undefined) {
+      if (data.images?.length) await this.assertImageUrlsAllowed(data.images, sellerId, product.sellerId);
       // Delete existing images
       await prisma.productImage.deleteMany({
         where: { productId },
@@ -940,6 +943,44 @@ export class ProductService {
         totalPages: Math.ceil(total / limit),
       },
     };
+  }
+
+  /**
+   * Product image links must be ones the seller may attach. A link into our own /uploads is only
+   * accepted if the seller uploaded that file (named "<theirUserId>_...") or it is already attached
+   * to one of THEIR products (legacy files predate owner-named uploads). Otherwise a seller could
+   * attach another seller's image path to their own product — the public product page shows the
+   * filename — and then use the "delete my own product image" endpoint to unlink the victim's file.
+   * Links to other sites are fine (nothing local can be deleted through them).
+   */
+  private async assertImageUrlsAllowed(urls: string[], userId: string, sellerId: string) {
+    const local: string[] = [];
+    for (const url of urls) {
+      let path = url;
+      if (/^https?:\/\//i.test(url)) {
+        try {
+          path = new URL(url).pathname;
+        } catch {
+          throw new AppError('Invalid image link', 400, 'INVALID_IMAGE_URL');
+        }
+      }
+      if (path.startsWith('/uploads/')) local.push(path);
+      else if (!/^https?:\/\//i.test(url)) {
+        throw new AppError('Invalid image link', 400, 'INVALID_IMAGE_URL');
+      }
+    }
+    if (local.length === 0) return;
+
+    const foreign = local.filter((p) => !isUploadedBy(p, userId));
+    if (foreign.length === 0) return;
+    const mine = await prisma.productImage.findMany({
+      where: { product: { sellerId }, OR: foreign.flatMap((p) => [{ imageUrl: p }, { imageUrl: { endsWith: p } }]) },
+      select: { imageUrl: true },
+    });
+    const owned = new Set(mine.flatMap((m) => foreign.filter((p) => m.imageUrl === p || m.imageUrl.endsWith(p))));
+    if (foreign.some((p) => !owned.has(p))) {
+      throw new AppError('You can only use images you uploaded', 403, 'IMAGE_NOT_OWNED');
+    }
   }
 
   /**

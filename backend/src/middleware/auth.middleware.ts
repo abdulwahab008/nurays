@@ -1,5 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
-import { verifyToken, JWTPayload } from '../utils/jwt';
+import { verifyToken, isTokenRevoked, JWTPayload } from '../utils/jwt';
 import { AppError } from './errorHandler';
 import prisma from '../config/database';
 
@@ -38,7 +38,7 @@ export const authenticate = async (
     // Verify user still exists and is active
     const user = await prisma.user.findUnique({
       where: { id: payload.userId },
-      select: { id: true, status: true, userType: true },
+      select: { id: true, status: true, userType: true, tokensValidAfter: true },
     });
 
     if (!user) {
@@ -47,6 +47,10 @@ export const authenticate = async (
 
     if (user.status !== 'active') {
       throw new AppError(`Account is ${user.status}`, 403, 'ACCOUNT_SUSPENDED');
+    }
+
+    if (isTokenRevoked(payload, user.tokensValidAfter)) {
+      throw new AppError('Session expired, please log in again', 401, 'SESSION_REVOKED');
     }
 
     // Attach user to request — use the freshly-fetched userType, not the JWT's
@@ -86,10 +90,10 @@ export const optionalAuthenticate = async (
 
       const user = await prisma.user.findUnique({
         where: { id: payload.userId },
-        select: { id: true, status: true, userType: true },
+        select: { id: true, status: true, userType: true, tokensValidAfter: true },
       });
 
-      if (user && user.status === 'active') {
+      if (user && user.status === 'active' && !isTokenRevoked(payload, user.tokensValidAfter)) {
         req.user = {
           ...payload,
           userType: user.userType,

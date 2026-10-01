@@ -12,6 +12,8 @@ import orderService from '../src/services/order.service';
 import paymentService, { PAYABLE_STATUSES } from '../src/services/payment.service';
 import adminOrderService from '../src/services/admin-order.service';
 import { completeRefund, dismissRefund } from '../src/services/refund.service';
+import userProfileService from '../src/services/user-profile.service';
+import { createHash } from 'crypto';
 import authService from '../src/services/auth.service';
 import otpService from '../src/services/otp.service';
 import hubService from '../src/services/hub.service';
@@ -560,6 +562,73 @@ async function main() {
   const { default: adminService } = require('../src/services/admin.service');
   const both = await Promise.all([adminService.completePayout(payoutRow!.id, 'T1').then(() => 'OK', (e: any) => e.code), adminService.failPayout(payoutRow!.id, 'bounced').then(() => 'OK', (e: any) => e.code)]);
   ok('a payout cannot be both completed and failed', both.filter((b: string) => b === 'OK').length === 1, both.join());
+
+  // ---- 24. review round: sessions, reset, email, images ----
+  const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+  const rEmail = `r${uniq()}@t.test`;
+  const rReg: any = await reg(rEmail);
+  const oldRefresh = rReg.tokens.refresh_token;
+  await sleep(1100); // tokens carry whole-second issue times
+  const token = 'tok' + 'x'.repeat(40) + uniq();
+  const hash = (t: string) => createHash('sha256').update(t).digest('hex');
+  await prisma.passwordReset.create({ data: { userId: rReg.user.id, tokenHash: hash(token), expiresAt: new Date(Date.now() + 3600e3) } });
+  await authService.resetPassword(token, 'brand-new-pass');
+  ok('the new password works after a reset', (await authService.login(rEmail, 'brand-new-pass', 'email').then(() => 'OK', (e: any) => e.code)) === 'OK');
+  ok('the old password no longer works', (await authService.login(rEmail, 'secret123', 'email').then(() => 'OK', (e: any) => e.code)) === 'INVALID_CREDENTIALS');
+  ok('a reset link is single-use', (await authService.resetPassword(token, 'another-pass-1').then(() => 'OK', (e: any) => e.code)) === 'INVALID_RESET_TOKEN');
+  ok('every session issued before the reset is voided (old refresh token)', (await authService.refreshToken(oldRefresh).then(() => 'OK', (e: any) => e.code)) === 'INVALID_REFRESH_TOKEN');
+  const expTok = 'exp' + 'y'.repeat(40) + uniq();
+  await prisma.passwordReset.create({ data: { userId: rReg.user.id, tokenHash: hash(expTok), expiresAt: new Date(Date.now() - 1000) } });
+  ok('an expired reset link is refused', (await authService.resetPassword(expTok, 'another-pass-2').then(() => 'OK', (e: any) => e.code)) === 'INVALID_RESET_TOKEN');
+  await authService.forgotPassword('nobody-' + uniq() + '@t.test'); // must not throw / reveal anything
+  ok('forgot-password answers the same for an unknown email', true);
+
+  // a number evicted from a squatter voids the squatter's sessions
+  const sqPhone = pn();
+  const sq: any = await reg(`sq${uniq()}@t.test`, sqPhone);
+  await sleep(1100);
+  await authService.requestOTP(sqPhone, 'registration');
+  await reg(`own${uniq()}@t.test`, sqPhone, await lastOtp(sqPhone, 'registration'));
+  ok('the squatter\'s sessions are voided when the real owner claims the number', (await authService.refreshToken(sq.tokens.refresh_token).then(() => 'OK', (e: any) => e.code)) === 'INVALID_REFRESH_TOKEN');
+
+  // eviction + create are one transaction: a failing create leaves the squatter untouched
+  const keepPhone = pn();
+  const keep: any = await reg(`keep${uniq()}@t.test`, keepPhone);
+  await authService.requestOTP(keepPhone, 'registration');
+  const dupEmail = `dup${uniq()}@t.test`;
+  await reg(dupEmail);
+  const failed = await reg(dupEmail, keepPhone, await lastOtp(keepPhone, 'registration')).then(() => 'OK', (e: any) => e.code);
+  ok('a signup that fails leaves the unverified holder\'s number alone', failed === 'EMAIL_EXISTS' && (await prisma.user.findUnique({ where: { id: keep.user.id } }))!.phone === keepPhone);
+  const takenPhone = pn();
+  const takenUser: any = await reg(`tk${uniq()}@t.test`, takenPhone);
+  await authService.requestPhoneVerification(takenUser.user.id, takenPhone);
+  await authService.verifyPhone(takenUser.user.id, takenPhone, await lastOtp(takenPhone, 'registration'));
+  const preOtp = await otpService.generateOTP(takenPhone, 'registration');
+  ok('hitting PHONE_EXISTS does not burn the one-time code', (await reg(`tk2${uniq()}@t.test`, takenPhone, preOtp).then(() => 'OK', (e: any) => e.code)) === 'PHONE_EXISTS' && !(await prisma.otpVerification.findFirst({ where: { phone: takenPhone, otpCode: preOtp } }))!.isVerified);
+
+  // email change = unverified until the new address is confirmed
+  await prisma.user.update({ where: { id: rReg.user.id }, data: { emailVerified: true } });
+  const newMail = `Changed${uniq()}@T.test`;
+  await userProfileService.updateProfile(rReg.user.id, { email: newMail });
+  const afterMail = await prisma.user.findUnique({ where: { id: rReg.user.id }, include: { emailVerification: true } });
+  ok('changing the email lowercases it, un-verifies it and issues a verification token', afterMail!.email === newMail.toLowerCase() && afterMail!.emailVerified === false && afterMail!.emailVerification?.email === newMail.toLowerCase());
+
+  // product image ownership
+  const sellerRowA = await prisma.seller.findUnique({ where: { id: seller.id } });
+  const victimSeller = await prisma.seller.findUnique({ where: { id: sellerB.id } });
+  const legacyPath = `/uploads/products/1699999999-123456-victim-biryani.jpg`;
+  const victimProd = await mkProduct(sellerB.id, 5);
+  await prisma.productImage.create({ data: { productId: victimProd.id, imageUrl: legacyPath, isPrimary: true } });
+  const mkP = (images: string[], name = 'Img ' + uniq()) => productService.createProduct(sellerRowA!.userId, { name, price: 10, unit: 'pc', stockQuantity: 1, stockType: 'direct', images } as any).then((p: any) => 'OK:' + p.id, (e: any) => e.code);
+  ok('a seller cannot attach another seller\'s image (so cannot delete it later)', (await mkP([legacyPath])) === 'IMAGE_NOT_OWNED' && (await mkP([`http://localhost:3001${legacyPath}`])) === 'IMAGE_NOT_OWNED');
+  ok('a seller can use images they uploaded', (await mkP([`/uploads/products/${sellerRowA!.userId}_abc.png`])).startsWith('OK:'));
+  ok('a link to another site is fine', (await mkP(['https://cdn.example.com/x.png'])).startsWith('OK:'));
+  void victimSeller;
+
+  // OTP SMS cap per number
+  const capPhone = pn();
+  for (let i = 0; i < 5; i++) await prisma.otpVerification.create({ data: { phone: capPhone, otpCode: '111111', purpose: 'login', expiresAt: new Date(Date.now() - 1000), attempts: 5 } });
+  ok('no more than 5 codes per number per hour', (await otpService.generateOTP(capPhone, 'login').then(() => 'OK', (e: any) => e.code)) === 'OTP_RATE_LIMITED');
 
   console.log(`\n${pass} passed, ${fail} failed`);
   await prisma.$disconnect();

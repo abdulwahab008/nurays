@@ -77,3 +77,12 @@ export const verifyPhoneSchema = z.object({
   phone: z.string().min(10).max(15),
   otp: z.string().length(6),
 });
+
+export const forgotPasswordSchema = z.object({
+  email: z.string().email('Invalid email format'),
+});
+
+export const resetPasswordSchema = z.object({
+  token: z.string().min(20).max(200),
+  password: z.string().min(6, 'Password must be at least 6 characters').max(200),
+});

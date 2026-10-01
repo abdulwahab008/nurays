@@ -86,7 +86,9 @@ export class GoogleAuthService {
             // If this email was never verified, whoever set its password may have
             // registered it before the real owner (pre-hijack). Google has now
             // proven ownership, so drop that password; the owner signs in via Google.
-            ...(user.emailVerified ? {} : { passwordHash: null }),
+            // Also void every session already issued for it: the person who set that password (and holds a
+            // 30-day refresh token from signup) must not stay logged in to the real owner's account.
+            ...(user.emailVerified ? {} : { passwordHash: null, tokensValidAfter: new Date() }),
           },
           include: {
             profile: true,

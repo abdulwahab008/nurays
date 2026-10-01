@@ -1,9 +1,9 @@
 import prisma from '../config/database';
-import { generateToken, generateRefreshToken, tokenTtlSeconds, JWTPayload } from '../utils/jwt';
+import { generateToken, generateRefreshToken, tokenTtlSeconds, isTokenRevoked, JWTPayload } from '../utils/jwt';
 import { formatPhoneNumber, isValidPhoneNumber } from '../utils/otp';
 import { AppError } from '../middleware/errorHandler';
 import bcrypt from 'bcrypt';
-import { randomBytes } from 'crypto';
+import { randomBytes, createHash } from 'crypto';
 import otpService from './otp.service';
 import emailService from './email.service';
 import adminService from './admin.service';
@@ -13,6 +13,9 @@ import { generateVerificationToken } from '../utils/email-verification';
 const placeholderPhone = (seed: string): string =>
   `+999${Buffer.from(seed.toLowerCase()).toString('base64').replace(/[^A-Za-z0-9]/g, '').slice(0, 8)}${Date.now().toString().slice(-8)}${randomBytes(3).toString('hex')}`;
 
+
+/** A valid bcrypt hash of a random string, for equalising login timing when the account doesn't exist. */
+const DUMMY_PASSWORD_HASH = bcrypt.hashSync(randomBytes(16).toString('hex'), 10);
 
 export class AuthService {
   /**
@@ -76,20 +79,25 @@ export class AuthService {
         throw new AppError('Invalid phone number format', 400, 'INVALID_PHONE');
       }
 
+      const existingUserByPhone = await prisma.user.findUnique({
+        where: { phone: formattedPhone },
+      });
+
+      // A number held by a *verified* account is taken — decided BEFORE a code is consumed, so a
+      // user who hits this doesn't also burn their SMS.
+      if (existingUserByPhone?.phoneVerified) {
+        throw new AppError('Phone number already registered', 409, 'PHONE_EXISTS');
+      }
+
       if (phoneOtp) {
         // Throws on a wrong / expired / used code.
         await otpService.verifyOTP(formattedPhone, phoneOtp, 'registration');
         phoneVerified = true;
       }
 
-      const existingUserByPhone = await prisma.user.findUnique({
-        where: { phone: formattedPhone },
-      });
-
       if (existingUserByPhone) {
-        // A number held by a *verified* account is taken. One held by an unverified account
-        // was never proven by whoever typed it, so someone who proves they own it wins.
-        if (existingUserByPhone.phoneVerified || !phoneVerified) {
+        // Held by an account that only ever *claimed* it: whoever proves they own it wins.
+        if (!phoneVerified) {
           throw new AppError('Phone number already registered', 409, 'PHONE_EXISTS');
         }
         evictedAccountId = existingUserByPhone.id;
@@ -106,35 +114,38 @@ export class AuthService {
     const saltRounds = 10;
     const passwordHash = await bcrypt.hash(password, saltRounds);
 
-    // The proven owner takes the number from the account that only ever claimed it.
-    if (evictedAccountId) {
-      await prisma.user.update({
-        where: { id: evictedAccountId },
-        data: { phone: placeholderPhone(`evicted-${evictedAccountId}`), phoneVerified: false },
-      });
-    }
-
-    // Create user
-    const user = await prisma.user.create({
-      data: {
-        email: normalizedEmail, // Use normalized email (already lowercased and trimmed)
-        passwordHash,
-        phone: formattedPhone,
-        userType,
-        emailVerified: false, // Can be verified via email verification later
-        phoneVerified,
-        status: 'active',
-        profile: {
-          create: {
-            fullName: fullName.trim(),
-            city: city?.trim(),
-            area: area?.trim(),
+    // Create the user. When a proven owner takes a number from an account that only claimed it, the
+    // eviction and the create are ONE transaction: if the create fails (an email race, say) the
+    // other account must not have lost its number for nothing.
+    const user = await prisma.$transaction(async (tx) => {
+      if (evictedAccountId) {
+        await tx.user.update({
+          where: { id: evictedAccountId },
+          // tokensValidAfter: whoever held the number without owning it loses their sessions too.
+          data: { phone: placeholderPhone(`evicted-${evictedAccountId}`), phoneVerified: false, tokensValidAfter: new Date() },
+        });
+      }
+      return tx.user.create({
+        data: {
+          email: normalizedEmail, // Use normalized email (already lowercased and trimmed)
+          passwordHash,
+          phone: formattedPhone,
+          userType,
+          emailVerified: false, // Can be verified via email verification later
+          phoneVerified,
+          status: 'active',
+          profile: {
+            create: {
+              fullName: fullName.trim(),
+              city: city?.trim(),
+              area: area?.trim(),
+            },
           },
         },
-      },
-      include: {
-        profile: true,
-      },
+        include: {
+          profile: true,
+        },
+      });
     });
 
     // If registering as seller, create seller record with pending status
@@ -347,6 +358,8 @@ export class AuthService {
       });
 
       if (!user) {
+        // Spend the same time as a real check, so response time doesn't reveal whether the email exists.
+        await bcrypt.compare(otpCodeOrPassword, DUMMY_PASSWORD_HASH);
         throw new AppError('Invalid email or password', 401, 'INVALID_CREDENTIALS');
       }
 
@@ -563,7 +576,8 @@ export class AuthService {
         }
         await tx.user.update({
           where: { id: holder.id },
-          data: { phone: placeholderPhone(`evicted-${holder.id}`), phoneVerified: false },
+          // tokensValidAfter: the squatter's sessions die with the number they never owned.
+          data: { phone: placeholderPhone(`evicted-${holder.id}`), phoneVerified: false, tokensValidAfter: new Date() },
         });
       }
       const user = await tx.user.update({
@@ -571,6 +585,70 @@ export class AuthService {
         data: { phone: formattedPhone, phoneVerified: true },
       });
       return { phone: user.phone, phoneVerified: user.phoneVerified };
+    });
+  }
+
+  /**
+   * Start a password reset: email a one-time link. Always answers the same way, whether or not the
+   * email has an account (no enumeration). Also how a Google-only account (password dropped) can
+   * set one.
+   */
+  async forgotPassword(email: string): Promise<void> {
+    const normalizedEmail = email.toLowerCase().trim();
+    const user = await prisma.user.findFirst({
+      where: { email: normalizedEmail },
+      include: { profile: true },
+    });
+    if (!user || user.status !== 'active') return;
+
+    // Only the most recent link works.
+    await prisma.passwordReset.deleteMany({ where: { userId: user.id, usedAt: null } });
+
+    const token = generateVerificationToken();
+    await prisma.passwordReset.create({
+      data: {
+        userId: user.id,
+        tokenHash: createHash('sha256').update(token).digest('hex'),
+        expiresAt: new Date(Date.now() + 60 * 60 * 1000), // 1 hour
+      },
+    });
+
+    try {
+      await emailService.sendPasswordResetEmail(normalizedEmail, user.profile?.fullName || 'there', token);
+    } catch (err) {
+      console.error(`[forgotPassword] Could not send the reset email to ${normalizedEmail}`, err);
+    }
+  }
+
+  /**
+   * Finish a password reset. The link is single-use; on success every session the account had is
+   * voided (anyone who was logged in — including an attacker — must sign in again).
+   */
+  async resetPassword(token: string, newPassword: string): Promise<void> {
+    if (!newPassword || newPassword.length < 6) {
+      throw new AppError('Password must be at least 6 characters', 400, 'WEAK_PASSWORD');
+    }
+    const tokenHash = createHash('sha256').update(token).digest('hex');
+    const passwordHash = await bcrypt.hash(newPassword, 10);
+
+    await prisma.$transaction(async (tx) => {
+      const used = await tx.passwordReset.updateMany({
+        where: { tokenHash, usedAt: null, expiresAt: { gt: new Date() } },
+        data: { usedAt: new Date() },
+      });
+      if (used.count === 0) {
+        throw new AppError('This reset link is invalid or has expired', 400, 'INVALID_RESET_TOKEN');
+      }
+      const reset = await tx.passwordReset.findUniqueOrThrow({ where: { tokenHash } });
+      await tx.user.update({
+        where: { id: reset.userId },
+        data: {
+          passwordHash,
+          tokensValidAfter: new Date(),
+          // Receiving the email proves they control the address.
+          emailVerified: true,
+        },
+      });
     });
   }
 
@@ -589,6 +667,9 @@ export class AuthService {
 
       if (!user || user.status !== 'active') {
         throw new AppError('User not found or inactive', 401, 'USER_INACTIVE');
+      }
+      if (isTokenRevoked(payload, user.tokensValidAfter)) {
+        throw new AppError('Session expired, please log in again', 401, 'SESSION_REVOKED');
       }
 
       // Generate new tokens

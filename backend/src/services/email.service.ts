@@ -106,6 +106,18 @@ class EmailService {
     }
   }
 
+  async sendPasswordResetEmail(email: string, name: string, token: string): Promise<void> {
+    const resetUrl = `${process.env.FRONTEND_URL || 'http://localhost:3000'}/reset-password?token=${token}`;
+    const html = `<!DOCTYPE html><html><body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
+      <h2>Reset your Nuray password</h2>
+      <p>Hi ${name}, we received a request to reset your password. This link works once and expires in 1 hour.</p>
+      <p style="text-align:center;margin:30px 0;"><a href="${resetUrl}" style="background:#10b981;color:#fff;padding:14px 32px;text-decoration:none;border-radius:6px;font-weight:600;">Choose a new password</a></p>
+      <p style="font-size:12px;color:#6b7280;word-break:break-all;">${resetUrl}</p>
+      <p style="font-size:13px;color:#6b7280;">If you didn't ask for this, ignore this email — your password won't change.</p>
+    </body></html>`;
+    await this.sendEmail({ to: email, subject: 'Reset your Nuray password', html, text: `Reset your password: ${resetUrl}` });
+  }
+
   async sendVerificationEmail(email: string, name: string, verificationToken: string): Promise<void> {
     const verificationUrl = `${process.env.FRONTEND_URL || 'http://localhost:3000'}/verify-email?token=${verificationToken}`;
 

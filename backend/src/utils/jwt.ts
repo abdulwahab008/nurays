@@ -17,6 +17,9 @@ export interface JWTPayload {
   phone: string;
   /** Token purpose. Access and refresh tokens share a secret, so this keeps one from standing in for the other. */
   typ?: 'access' | 'refresh';
+  /** Issued-at / expiry (seconds), added by jsonwebtoken. */
+  iat?: number;
+  exp?: number;
 }
 
 export const generateToken = (payload: JWTPayload): string => {
@@ -60,10 +63,29 @@ export const verifyRefreshToken = (token: string): JWTPayload => {
   } catch (error) {
     throw new Error('Invalid or expired token');
   }
-  if (decoded.typ !== 'refresh') {
-    throw new Error('Invalid or expired token');
+  if (decoded.typ === 'refresh') return decoded;
+  // Refresh tokens issued before `typ` existed carry none. Keep honouring them — but only if
+  // they look like a refresh token (their lifetime is days, an access token's is hours), so a
+  // legacy ACCESS token still can't be used to mint refresh tokens — and so deploying this
+  // doesn't force every logged-in user to sign in again.
+  if (decoded.typ === undefined && decoded.iat && decoded.exp && decoded.exp - decoded.iat > LEGACY_REFRESH_MIN_LIFETIME_SECONDS) {
+    return decoded;
   }
-  return decoded;
+  throw new Error('Invalid or expired token');
+};
+
+/** A pre-`typ` token with at least this lifetime is treated as a refresh token. */
+const LEGACY_REFRESH_MIN_LIFETIME_SECONDS = 2 * 24 * 60 * 60;
+
+/**
+ * Has this session been revoked? `tokensValidAfter` is set when the account's credentials or
+ * ownership change (password reset, takeover of an unverified account, phone eviction): every
+ * token issued before it stops working, access and refresh alike.
+ */
+export const isTokenRevoked = (payload: { iat?: number }, tokensValidAfter?: Date | null): boolean => {
+  if (!tokensValidAfter) return false;
+  if (!payload.iat) return true; // can't prove it's newer
+  return payload.iat < Math.floor(tokensValidAfter.getTime() / 1000);
 };
 
 /** Lifetime of a freshly issued token in seconds, so `expires_in` reports the real value. */

@@ -9,6 +9,7 @@ import { GST_RATE, allocateDiscount } from '../utils/pricing';
 import { issueRefund, IssuedRefund } from './refund.service';
 import { allocateHubStock, releaseHubAllocations } from './hub-allocation.service';
 import { DeliveryFeeShare } from '../utils/deliveryEarnings';
+import { isOwnUploadPath } from '../utils/uploadPaths';
 import { getDeliveryFeeForSeller } from '../utils/deliveryFee';
 import { createStockAlert } from './stock-alert.service';
 import promotionService from './promotion.service';
@@ -1160,7 +1161,7 @@ export class OrderService {
       throw new AppError('A payment reference number is required', 400, 'REFERENCE_REQUIRED');
     }
     // A proof is a link to an uploaded file — never an inline data: payload.
-    if (data.proofUrl && !/^(https?:\/\/|\/)/i.test(data.proofUrl)) {
+    if (data.proofUrl && !isOwnUploadPath(data.proofUrl)) {
       throw new AppError('Invalid payment proof link', 400, 'INVALID_PROOF_URL');
     }
 

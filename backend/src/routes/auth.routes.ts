@@ -11,6 +11,8 @@ import {
   logout,
   requestPhoneVerification,
   verifyPhone,
+  forgotPassword,
+  resetPassword,
 } from '../controllers/auth.controller';
 import { validate } from '../middleware/validation.middleware';
 import {
@@ -21,6 +23,8 @@ import {
   refreshTokenSchema,
   requestPhoneVerificationSchema,
   verifyPhoneSchema,
+  forgotPasswordSchema,
+  resetPasswordSchema,
 } from '../validators/auth.validator';
 import { authenticate } from '../middleware/auth.middleware';
 import { loginLimiter, otpLimiter, registerLimiter } from '../middleware/rateLimiter';
@@ -31,8 +35,10 @@ const router = Router();
 router.post('/otp/request', otpLimiter, validate(requestOTPSchema), requestOTP);
 router.post('/register', registerLimiter, validate(registerSchema), register);
 router.post('/login', loginLimiter, validate(loginSchema), login);
-router.post('/google', loginWithGoogle); // Google OAuth - no validation needed, handled in service
+router.post('/google', loginLimiter, loginWithGoogle); // Google OAuth - no validation needed, handled in service
 router.post('/verify-email', validate(verifyEmailSchema), verifyEmail);
+router.post('/forgot-password', otpLimiter, validate(forgotPasswordSchema), forgotPassword);
+router.post('/reset-password', loginLimiter, validate(resetPasswordSchema), resetPassword);
 router.post('/refresh', validate(refreshTokenSchema), refreshToken);
 
 // Protected routes

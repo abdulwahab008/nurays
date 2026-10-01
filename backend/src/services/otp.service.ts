@@ -33,6 +33,15 @@ export class OTPService {
       return existingOTP.otpCode;
     }
 
+    // Cap SMS per NUMBER, not just per IP: a locked-out code forces a fresh SMS on the next request,
+    // so without this a victim's phone could be pinged (and its codes locked) endlessly from rotating IPs.
+    const sentLastHour = await prisma.otpVerification.count({
+      where: { phone: formattedPhone, createdAt: { gt: new Date(Date.now() - 60 * 60 * 1000) } },
+    });
+    if (sentLastHour >= 5) {
+      throw new AppError('Too many codes were sent to this number. Please try again later.', 429, 'OTP_RATE_LIMITED');
+    }
+
     // Generate new OTP
     const otpCode = generateOTP();
     const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes

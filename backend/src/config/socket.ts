@@ -1,6 +1,6 @@
 import { Server as HTTPServer } from 'http';
 import { Server as SocketIOServer } from 'socket.io';
-import { verifyToken } from '../utils/jwt';
+import { verifyToken, isTokenRevoked } from '../utils/jwt';
 import prisma from './database';
 
 export interface SocketUser {
@@ -36,10 +36,10 @@ class SocketManager {
         // Verify user exists and is active
         const user = await prisma.user.findUnique({
           where: { id: payload.userId },
-          select: { id: true, status: true, userType: true },
+          select: { id: true, status: true, userType: true, tokensValidAfter: true },
         });
 
-        if (!user || user.status !== 'active') {
+        if (!user || user.status !== 'active' || isTokenRevoked(payload, user.tokensValidAfter)) {
           return next(new Error('Authentication error: User not found or inactive'));
         }
 
@@ -143,6 +143,15 @@ class SocketManager {
   /**
    * Emit event to specific user
    */
+  /**
+   * Take a user's open connections out of an order's room. Room membership is only checked when
+   * joining, so when someone stops being a party to the order (a rider unassigned by a retry) they
+   * must be removed explicitly or they keep receiving its status and live-location events.
+   */
+  removeUserFromOrder(userId: string, orderId: string) {
+    this.io?.in(`user:${userId}`).socketsLeave(`order:${orderId}`);
+  }
+
   emitToUser(userId: string, event: string, data: any) {
     if (this.io) {
       this.io.to(`user:${userId}`).emit(event, data);

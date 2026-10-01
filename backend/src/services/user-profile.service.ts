@@ -1,6 +1,8 @@
 import prisma from '../config/database';
 import { AppError } from '../middleware/errorHandler';
 import { communityService } from './community.service';
+import emailService from './email.service';
+import { generateVerificationToken } from '../utils/email-verification';
 
 export class UserProfileService {
   /**
@@ -56,21 +58,37 @@ export class UserProfileService {
       throw new AppError('User not found', 404, 'USER_NOT_FOUND');
     }
 
-    // Update user email if provided
-    if (data.email && data.email !== user.email) {
+    // Changing the email is changing who owns the account: the new address is unverified until its
+    // owner clicks the link we send to it. (It used to be swapped in silently and stay "verified",
+    // so someone could put a victim's email on an account they controlled and later catch the victim
+    // when they signed in with Google.)
+    const newEmail = data.email?.toLowerCase().trim();
+    if (newEmail && newEmail !== user.email) {
       // Check if email is already taken
       const existingUser = await prisma.user.findUnique({
-        where: { email: data.email },
+        where: { email: newEmail },
       });
 
       if (existingUser && existingUser.id !== userId) {
         throw new AppError('Email already registered', 400, 'EMAIL_ALREADY_EXISTS');
       }
 
-      await prisma.user.update({
-        where: { id: userId },
-        data: { email: data.email },
-      });
+      const token = generateVerificationToken();
+      await prisma.$transaction([
+        prisma.user.update({
+          where: { id: userId },
+          data: { email: newEmail, emailVerified: false },
+        }),
+        prisma.emailVerification.deleteMany({ where: { userId } }),
+        prisma.emailVerification.create({
+          data: { userId, email: newEmail, token, expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000) },
+        }),
+      ]);
+      try {
+        await emailService.sendVerificationEmail(newEmail, data.fullName || 'there', token);
+      } catch (err) {
+        console.error(`[updateProfile] Could not send verification email to ${newEmail}`, err);
+      }
     }
 
     // Get or create profile

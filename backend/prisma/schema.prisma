@@ -29,6 +29,9 @@ model User {
   referredBy    String?   @map("referred_by")
   primaryCommunityId String? @map("primary_community_id")
   lastLoginAt   DateTime? @map("last_login_at")
+  // Sessions issued before this instant are void (set on password reset, Google takeover of an
+  // unverified account, phone eviction). Without it a 30-day refresh token outlives all of those.
+  tokensValidAfter DateTime? @map("tokens_valid_after")
   createdAt     DateTime  @default(now()) @map("created_at")
   updatedAt     DateTime  @updatedAt @map("updated_at")
 
@@ -36,6 +39,7 @@ model User {
   primaryCommunity Community? @relation(fields: [primaryCommunityId], references: [id], onDelete: SetNull)
   addresses     UserAddress[]
   managedHubs   HubCenter[] @relation("HubManager")
+  passwordResets PasswordReset[]
   cart          Cart?
   orders        Order[]
   reviews       Review[]
@@ -1257,6 +1261,21 @@ model HubBatchAllocation {
   @@index([orderId, productId])
   @@index([hubInventoryId])
   @@map("hub_batch_allocations")
+}
+
+// One-time password-reset tokens. Only a SHA-256 hash is stored, so a database leak can't be replayed.
+model PasswordReset {
+  id        String    @id @default(uuid())
+  userId    String    @map("user_id")
+  tokenHash String    @unique @map("token_hash")
+  expiresAt DateTime  @map("expires_at")
+  usedAt    DateTime? @map("used_at")
+  createdAt DateTime  @default(now()) @map("created_at")
+
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("password_resets")
 }
 
 model FavoriteSeller {
