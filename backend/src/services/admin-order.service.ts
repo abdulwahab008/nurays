@@ -3,6 +3,7 @@ import { AppError } from '../middleware/errorHandler';
 import realtimeOrderService from './realtime-order.service';
 import riderService from './rider.service';
 import { releasePromotionUsage } from './promotion.service';
+import { issueRefund, IssuedRefund } from './refund.service';
 
 // The main happy-path order pipeline — admin can only move an order exactly
 // one step forward at a time (no skipping straight to 'dispatched'/'delivered',
@@ -249,6 +250,7 @@ export class AdminOrderService {
             },
           },
         },
+        refunds: { orderBy: { createdAt: 'asc' } },
       },
     });
 
@@ -258,6 +260,7 @@ export class AdminOrderService {
 
     return {
       ...order,
+      refunds: order.refunds.map((r) => ({ ...r, amount: Number(r.amount) })),
       subtotal: Number(order.subtotal),
       deliveryFee: Number(order.deliveryFee),
       discountAmount: Number(order.discountAmount),
@@ -392,6 +395,7 @@ export class AdminOrderService {
     }
 
     // Cancel order and restore stock
+    let refundIssued = null as IssuedRefund | null;
     const cancelledOrder = await prisma.$transaction(async (tx) => {
       // Claim the cancellation: only one of any concurrent cancel/accept/ready
       // transitions can move the order out of a cancellable status. Without this
@@ -454,6 +458,13 @@ export class AdminOrderService {
       // A cancelled order shouldn't keep consuming the promo's quota.
       await releasePromotionUsage(tx, orderId);
 
+      // If the customer had already paid, the money is owed back: refund it now
+      // (wallet) or queue it for the admin to send (everything else).
+      refundIssued = await issueRefund(tx, orderId, {
+        reason: `Order cancelled by admin: ${reason}`,
+        createdBy: adminId,
+      });
+
       // Add status history
       await tx.orderStatusHistory.create({
         data: {
@@ -473,8 +484,12 @@ export class AdminOrderService {
     return {
       orderId: cancelledOrder.id,
       status: cancelledOrder.orderStatus,
-      refundAmount: cancelledOrder.paymentStatus === 'paid' ? Number(cancelledOrder.totalAmount) : 0,
-      refundStatus: cancelledOrder.paymentStatus === 'paid' ? 'processing' : 'not_required',
+      refundAmount: refundIssued?.amount ?? 0,
+      refundStatus: refundIssued
+        ? refundIssued.status === 'completed'
+          ? 'refunded_to_wallet'
+          : 'pending_manual_transfer'
+        : 'not_required',
     };
   }
 
@@ -553,74 +568,29 @@ export class AdminOrderService {
 
     const isWallet = order.paymentMethod === 'wallet';
 
-    const result = await prisma.$transaction(async (tx) => {
-      // Claim the refund first. paymentStatus was checked outside the
-      // transaction, so a double-click or two admins could both pass it and both
-      // credit the wallet; only one can flip it from 'paid' here.
-      const claimed = await tx.order.updateMany({
-        where: { id: orderId, paymentStatus: 'paid' },
-        data: { paymentStatus: isWallet ? 'refunded' : 'refund_pending' },
+    // issueRefund locks the order row, caps the amount at what is still
+    // unrefunded and (for wallet orders) credits the wallet atomically, so a
+    // double click or two admins can't refund twice. Partial refunds are tracked
+    // cumulatively instead of marking the whole order refunded.
+    const issued = await prisma.$transaction(async (tx) => {
+      const r = await issueRefund(tx, orderId, {
+        amount: refund,
+        reason: 'Refund processed by admin',
+        createdBy: adminId,
       });
-      if (claimed.count === 0) {
+      if (!r) {
         throw new AppError('Order is not paid, cannot process refund', 400, 'ORDER_NOT_PAID');
       }
-
-      if (isWallet) {
-        if (!order.customerId) {
-          throw new AppError(
-            'Cannot refund wallet — order has no customer',
-            400,
-            'NO_CUSTOMER',
-          );
-        }
-        // Credit the wallet back atomically
-        const wallet = await tx.wallet.findUnique({ where: { userId: order.customerId } });
-        if (!wallet) {
-          throw new AppError('Customer wallet not found', 404, 'WALLET_NOT_FOUND');
-        }
-        const credited = await tx.wallet.update({
-          where: { id: wallet.id },
-          data: { balance: { increment: refund } },
-        });
-        const balanceAfter = Number(credited.balance);
-        await tx.walletTransaction.create({
-          data: {
-            walletId: wallet.id,
-            orderId,
-            transactionType: 'credit',
-            amount: refund,
-            balanceBefore: balanceAfter - refund,
-            balanceAfter,
-            description: `Refund for order ${order.orderNumber}`,
-            status: 'completed',
-          },
-        });
+      if (isWallet && r.fullyRefunded) {
+        await tx.order.update({ where: { id: orderId }, data: { orderStatus: 'refunded' } });
       }
-
-      const updatedOrder = await tx.order.update({
-        where: { id: orderId },
-        data: {
-          orderStatus: isWallet ? 'refunded' : order.orderStatus,
-        },
-      });
-
-      await tx.orderStatusHistory.create({
-        data: {
-          orderId,
-          status: isWallet ? 'refunded' : 'refund_pending',
-          notes: isWallet
-            ? `Refund credited to wallet by admin. Amount: ${refund}`
-            : `Refund of ${refund} requested by admin — pending manual gateway processing (${order.paymentMethod}).`,
-          changedBy: adminId,
-        },
-      });
-
-      return updatedOrder;
+      return r;
     });
+    const result = await prisma.order.findUniqueOrThrow({ where: { id: orderId } });
 
     await realtimeOrderService.emitOrderStatusUpdate(
       orderId,
-      isWallet ? 'refunded' : 'refund_pending',
+      isWallet && issued.fullyRefunded ? 'refunded' : result.orderStatus,
       adminId,
     );
 
@@ -633,7 +603,8 @@ export class AdminOrderService {
 
     return {
       orderId: result.id,
-      refundAmount: refund,
+      refundId: issued.refundId,
+      refundAmount: issued.amount,
       status: result.orderStatus,
       paymentStatus: result.paymentStatus,
       requiresManualGatewayAction: !isWallet,

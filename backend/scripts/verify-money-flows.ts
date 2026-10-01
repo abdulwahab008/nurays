@@ -11,6 +11,7 @@ import prisma from '../src/config/database';
 import orderService from '../src/services/order.service';
 import paymentService from '../src/services/payment.service';
 import adminOrderService from '../src/services/admin-order.service';
+import { completeRefund } from '../src/services/refund.service';
 import sellerOrderService from '../src/services/seller-order.service';
 
 let pass = 0, fail = 0;
@@ -158,6 +159,64 @@ async function main() {
   const earned = Number((await prisma.orderItem.findFirst({ where: { orderId: po.id } }))!.sellerPayout);
   const reqs = await Promise.all([1, 2, 3].map(() => (require('../src/services/seller.service').default).requestPayout(sp.id, { amount: earned, payoutMethod: 'bank_transfer', accountNumber: '1' }).then(() => 'OK', (e: any) => e.code)));
   ok('concurrent payout requests cannot exceed earnings', reqs.filter((r) => r === 'OK').length === 1, `${reqs} earned=${earned}`);
+
+  // ---- 16. refunds on cancelled PAID orders ----
+  const rc = await mkUser();
+  await prisma.wallet.create({ data: { userId: rc.id, balance: 500 } });
+  const rp = await mkProduct(seller.id, 20, 100);
+  const walletOrder: any = (await order(rc.id, [{ productId: rp.id, quantity: 2 }], { paymentMethod: 'wallet' })).order;
+  await paymentService.processPayment(walletOrder.id, rc.id, 'wallet');
+  const paidTotal = Number(walletOrder.totalAmount);
+  const cancels = await Promise.all([1, 2, 3].map(() => orderService.cancelOrder(walletOrder.id, rc.id, 'changed mind').then((r: any) => r, (e: any) => e.code)));
+  const wRefunds = await prisma.refund.findMany({ where: { orderId: walletOrder.id } });
+  const wBal = Number((await prisma.wallet.findUnique({ where: { userId: rc.id } }))!.balance);
+  const wOrder = await prisma.order.findUnique({ where: { id: walletOrder.id } });
+  ok('cancelling a wallet-paid order refunds the wallet instantly, exactly once',
+    wRefunds.length === 1 && wRefunds[0].status === 'completed' && Number(wRefunds[0].amount) === paidTotal && wBal === 500 && wOrder!.paymentStatus === 'refunded',
+    `refunds=${wRefunds.length} bal=${wBal} pay=${wOrder!.paymentStatus} results=${cancels.map((c: any) => (typeof c === 'string' ? c : c.refundStatus))}`);
+
+  const bankOrder: any = (await order(rc.id, [{ productId: rp.id, quantity: 1 }], { paymentMethod: 'bank' })).order;
+  await prisma.order.update({ where: { id: bankOrder.id }, data: { paymentStatus: 'paid' } });
+  const bres: any = await orderService.cancelOrder(bankOrder.id, rc.id, 'x');
+  const bRefund = await prisma.refund.findFirst({ where: { orderId: bankOrder.id } });
+  const bOrder = await prisma.order.findUnique({ where: { id: bankOrder.id } });
+  ok('cancelling a bank-paid order queues a pending manual refund',
+    bres.refundStatus === 'pending_manual_transfer' && bRefund?.status === 'pending' && bRefund?.method === 'manual' && bOrder!.paymentStatus === 'refund_pending',
+    `${bres.refundStatus} ${bRefund?.status} ${bOrder!.paymentStatus}`);
+  await completeRefund(bRefund!.id, admin.id, 'TXN-1');
+  const bDone = await prisma.order.findUnique({ where: { id: bankOrder.id } });
+  ok('marking the manual refund sent completes it', (await prisma.refund.findUnique({ where: { id: bRefund!.id } }))!.status === 'completed' && bDone!.paymentStatus === 'refunded');
+  ok('a refund can only be completed once', (await code(completeRefund(bRefund!.id, admin.id))) === 'REFUND_NOT_PENDING');
+
+  const unpaid: any = (await order(rc.id, [{ productId: rp.id, quantity: 1 }])).order;
+  await orderService.cancelOrder(unpaid.id, rc.id, 'x');
+  ok('cancelling an unpaid (COD) order creates no refund', (await prisma.refund.count({ where: { orderId: unpaid.id } })) === 0);
+
+  // multi-seller: one kitchen cancels its item of a paid order -> partial refund; the rest on full cancel
+  const rpB = await mkProduct(sellerB.id, 20, 300);
+  const split: any = (await order(rc.id, [{ productId: rp.id, quantity: 1 }, { productId: rpB.id, quantity: 1 }], { paymentMethod: 'bank' })).order;
+  await prisma.order.update({ where: { id: split.id }, data: { paymentStatus: 'paid' } });
+  const itemB = await prisma.orderItem.findFirst({ where: { orderId: split.id, sellerId: sellerB.id } });
+  await sellerOrderService.cancelOrderItem(itemB!.id, (await prisma.seller.findUnique({ where: { id: sellerB.id } }))!.userId, 'oos');
+  const part = await prisma.refund.findMany({ where: { orderId: split.id } });
+  const splitTotal = Number(split.totalAmount), splitDelivery = Number(split.deliveryFee), splitSub = Number(split.subtotal);
+  const expectPartial = Math.round((300 / splitSub) * (splitTotal - splitDelivery) * 100) / 100;
+  ok('one seller cancelling its item refunds that item\'s share only',
+    part.length === 1 && Math.abs(Number(part[0].amount) - expectPartial) < 0.02 && (await prisma.order.findUnique({ where: { id: split.id } }))!.paymentStatus === 'paid',
+    `refund=${part[0]?.amount} expected=${expectPartial}`);
+  await adminOrderService.cancelOrder(split.id, admin.id, 'cancel the rest please');
+  const sum = (await prisma.refund.findMany({ where: { orderId: split.id } })).reduce((a, r) => a + Number(r.amount), 0);
+  ok('full cancel refunds exactly the remainder (total refunded == amount paid)', Math.abs(sum - splitTotal) < 0.02, `refunded=${sum} paid=${splitTotal}`);
+
+  // admin partial refund is cumulative, never exceeds what was paid
+  const pr: any = (await order(rc.id, [{ productId: rp.id, quantity: 2 }], { paymentMethod: 'bank' })).order;
+  await prisma.order.update({ where: { id: pr.id }, data: { paymentStatus: 'paid', orderStatus: 'delivered' } });
+  const prTotal = Number(pr.totalAmount);
+  await adminOrderService.processRefund(pr.id, admin.id, 50);
+  const stillPaid = (await prisma.order.findUnique({ where: { id: pr.id } }))!.paymentStatus === 'paid';
+  const over = await code(adminOrderService.processRefund(pr.id, admin.id, prTotal));
+  const prSum = (await prisma.refund.findMany({ where: { orderId: pr.id } })).reduce((a, r) => a + Number(r.amount), 0);
+  ok('partial admin refunds accumulate and can never exceed the amount paid', stillPaid && Math.abs(prSum - prTotal) < 0.02, `first=50 then ${over}, refunded=${prSum} of ${prTotal}`);
 
   console.log(`\n${pass} passed, ${fail} failed`);
   await prisma.$disconnect();

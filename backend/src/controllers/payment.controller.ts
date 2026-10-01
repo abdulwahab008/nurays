@@ -3,6 +3,7 @@ import paymentService from '../services/payment.service';
 import { AppError } from '../middleware/errorHandler';
 import { verifySafepayWebhook } from '../gateways/safepay.gateway';
 import prisma from '../config/database';
+import { issueRefund } from '../services/refund.service';
 
 export const getPaymentMethods = async (_req: Request, res: Response) => {
   const methods = await paymentService.getPaymentMethods();
@@ -98,7 +99,7 @@ export const safepayWebhook = async (req: Request, res: Response) => {
   try {
     const order = await prisma.order.findUnique({
       where: { id: orderId },
-      select: { id: true, paymentStatus: true, totalAmount: true, paymentTransactionId: true },
+      select: { id: true, paymentStatus: true, orderStatus: true, totalAmount: true, paymentTransactionId: true },
     });
 
     if (!order) {
@@ -122,13 +123,21 @@ export const safepayWebhook = async (req: Request, res: Response) => {
       return res.status(200).json({ received: true, amountMismatch: true });
     }
 
-    await prisma.order.update({
-      where: { id: orderId, paymentStatus: { not: 'paid' } },
-      data: {
-        paymentStatus: 'paid',
-        paidAt: new Date(),
-        paymentTransactionId: token,
-      },
+    // Guarded updateMany (not update): a concurrent verify may have won, which is
+    // fine — a throw here would 500 and make Safepay retry for nothing. If the
+    // order was cancelled before the money arrived, refund it straight away.
+    await prisma.$transaction(async (tx) => {
+      const r = await tx.order.updateMany({
+        where: { id: orderId, paymentStatus: { not: 'paid' } },
+        data: {
+          paymentStatus: 'paid',
+          paidAt: new Date(),
+          paymentTransactionId: token,
+        },
+      });
+      if (r.count > 0 && order.orderStatus === 'cancelled') {
+        await issueRefund(tx, orderId, { reason: 'Payment received after the order was cancelled', createdBy: null });
+      }
     });
     console.log(`[Safepay Webhook] Order ${orderId} marked as paid`);
   } catch (err) {

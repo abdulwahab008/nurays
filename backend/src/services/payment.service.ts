@@ -1,4 +1,5 @@
 import prisma from '../config/database';
+import { issueRefund } from './refund.service';
 import { AppError } from '../middleware/errorHandler';
 import { getGateway, getConfiguredGateways } from '../gateways';
 
@@ -385,14 +386,24 @@ export class PaymentService {
 
     // 4. Atomic update. The WHERE clause guards against a webhook flipping
     // the status under us between read and write.
-    const updateResult = await prisma.order.updateMany({
-      where: { id: order.id, paymentStatus: { not: 'paid' } },
-      data: {
-        paymentStatus: 'paid',
-        paidAt: new Date(),
-        paymentTransactionId: verifyResult.transactionId || paymentTxId,
-        orderStatus: order.orderStatus === 'pending' ? 'confirmed' : order.orderStatus,
-      },
+    // A payment can land after the order was cancelled (the customer was already
+    // at the gateway). The money is real, so it is recorded and immediately
+    // refunded; the order must not be revived to 'confirmed'.
+    const wasCancelled = order.orderStatus === 'cancelled';
+    const updateResult = await prisma.$transaction(async (tx) => {
+      const r = await tx.order.updateMany({
+        where: { id: order.id, paymentStatus: { not: 'paid' } },
+        data: {
+          paymentStatus: 'paid',
+          paidAt: new Date(),
+          paymentTransactionId: verifyResult.transactionId || paymentTxId,
+          orderStatus: order.orderStatus === 'pending' ? 'confirmed' : order.orderStatus,
+        },
+      });
+      if (r.count > 0 && wasCancelled) {
+        await issueRefund(tx, order.id, { reason: 'Payment received after the order was cancelled', createdBy: null });
+      }
+      return r;
     });
 
     // Either we updated it, or the webhook beat us — both are fine.

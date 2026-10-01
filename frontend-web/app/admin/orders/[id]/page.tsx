@@ -36,6 +36,15 @@ interface OrderDetail {
     seller?: { businessName: string };
   }>;
   statusHistory?: Array<{ status: string; notes?: string; createdAt: string }>;
+  refunds?: Array<{
+    id: string;
+    amount: number;
+    method: 'wallet' | 'manual';
+    status: 'pending' | 'completed' | 'failed';
+    reason?: string | null;
+    reference?: string | null;
+    createdAt: string;
+  }>;
 }
 
 export default function AdminOrderDetailPage() {
@@ -96,6 +105,21 @@ export default function AdminOrderDetailPage() {
       loadOrder();
     } catch (error: any) {
       showToast(error.response?.data?.error?.message || 'Failed to retry delivery', 'error');
+    } finally {
+      setUpdating(false);
+    }
+  };
+
+  // A manual (bank / gateway) refund is owed until the admin has actually sent the money.
+  const handleCompleteRefund = async (refundId: string) => {
+    const reference = window.prompt('Transfer reference for this refund (optional):') ?? undefined;
+    try {
+      setUpdating(true);
+      await apiClient.post(`/admin/refunds/${refundId}/complete`, reference ? { reference } : {});
+      showToast('Refund marked as sent', 'success');
+      loadOrder();
+    } catch (error: any) {
+      showToast(error.response?.data?.error?.message || 'Failed to update refund', 'error');
     } finally {
       setUpdating(false);
     }
@@ -457,6 +481,39 @@ export default function AdminOrderDetailPage() {
                         </div>
                       </div>
                     )}
+                  </div>
+                )}
+
+                {order.refunds && order.refunds.length > 0 && (
+                  <div>
+                    <h2 className="text-sm font-medium text-gray-500 uppercase mb-2">Refunds</h2>
+                    <ul className="space-y-2 text-sm">
+                      {order.refunds.map((r) => (
+                        <li key={r.id} className="flex items-center justify-between gap-3 rounded-lg border border-gray-200 px-3 py-2">
+                          <div className="min-w-0">
+                            <span className="font-medium text-gray-900">{formatPrice(r.amount)}</span>
+                            <span className="ml-2 text-gray-500">
+                              {r.method === 'wallet' ? 'to wallet' : 'manual transfer'}
+                              {r.reference ? ` · ref ${r.reference}` : ''}
+                            </span>
+                            {r.reason && <div className="text-xs text-gray-400 truncate">{r.reason}</div>}
+                          </div>
+                          {r.status === 'pending' ? (
+                            <button
+                              onClick={() => handleCompleteRefund(r.id)}
+                              disabled={updating}
+                              className="shrink-0 px-3 py-1.5 bg-amber-600 text-white text-xs rounded-lg hover:bg-amber-700 disabled:opacity-50"
+                            >
+                              Mark as sent
+                            </button>
+                          ) : (
+                            <span className={`shrink-0 text-xs font-medium ${r.status === 'completed' ? 'text-emerald-600' : 'text-red-600'}`}>
+                              {r.status === 'completed' ? 'Refunded' : 'Failed'}
+                            </span>
+                          )}
+                        </li>
+                      ))}
+                    </ul>
                   </div>
                 )}
 

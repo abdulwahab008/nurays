@@ -6,6 +6,8 @@ import {
   cancelOrder,
   retryDelivery,
   processRefund,
+  listRefunds,
+  completeRefund,
   getPlatformAnalytics,
   getOrderStatistics,
 } from '../controllers/admin-order.controller';
@@ -15,6 +17,8 @@ import {
   updateOrderStatusSchema,
   cancelOrderSchema,
   processRefundSchema,
+  completeRefundSchema,
+  listRefundsQuerySchema,
   getAnalyticsQuerySchema,
 } from '../validators/admin-order.validator';
 import { authenticate, authorize } from '../middleware/auth.middleware';
@@ -48,6 +52,10 @@ router.post('/orders/:id/retry-delivery', retryDelivery);
 
 // Process refund
 router.post('/orders/:id/refund', validate(processRefundSchema), processRefund);
+
+// Refund queue: refunds owed to customers, and confirming a manual one was sent
+router.get('/refunds', validateQuery(listRefundsQuerySchema), listRefunds);
+router.post('/refunds/:refundId/complete', validate(completeRefundSchema), completeRefund);
 
 export default router;
 

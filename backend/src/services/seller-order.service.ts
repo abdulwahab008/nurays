@@ -3,6 +3,7 @@ import { AppError } from '../middleware/errorHandler';
 import realtimeOrderService from './realtime-order.service';
 import riderService from './rider.service';
 import { releasePromotionUsage } from './promotion.service';
+import { refundForCancelledItems } from './refund.service';
 
 export class SellerOrderService {
   /**
@@ -539,6 +540,14 @@ export class SellerOrderService {
       });
       const allCancelled = remaining.every((i) => i.status === 'cancelled');
 
+      // The customer paid for this item: refund its share (or everything left if
+      // this was the last live item and the whole order is now cancelled).
+      await refundForCancelledItems(tx, orderItem.orderId, [orderItemId], {
+        reason: `Item cancelled by seller (${orderItem.productName})`,
+        createdBy: sellerId,
+        orderFullyCancelled: allCancelled,
+      });
+
       if (allCancelled) {
         await tx.order.update({
           where: { id: orderItem.orderId },
@@ -781,6 +790,14 @@ export class SellerOrderService {
         });
         await releasePromotionUsage(tx, order.id);
       }
+
+      // The customer paid for these items: give it back (their share if other
+      // kitchens' items remain, everything if the whole order is now cancelled).
+      await refundForCancelledItems(tx, order.id, liveItems.map((i) => i.id), {
+        reason: `Rejected by ${seller.businessName}: ${rejectionNote}`,
+        createdBy: sellerUserId,
+        orderFullyCancelled: allGone,
+      });
 
       await tx.orderStatusHistory.create({
         data: {

@@ -566,6 +566,7 @@ model Order {
   reviews             Review[]
   orderMessages       OrderMessage[]
   promotionUsages     PromotionUsage[]
+  refunds             Refund[]
   supportTickets      SupportTicket[]
   walletTransactions  WalletTransaction[]
 
@@ -1103,6 +1104,32 @@ model SellerCommunityDelivery {
   @@unique([sellerId, communityId])
   @@index([communityId])
   @@map("seller_community_deliveries")
+}
+
+// Money owed back to a customer. A wallet-paid order is refunded instantly (the
+// row is created 'completed'); anything paid through a gateway or bank transfer is
+// created 'pending' and stays in the admin's queue until the money has actually
+// been sent and the refund is marked completed.
+model Refund {
+  id          String    @id @default(uuid())
+  orderId     String    @map("order_id")
+  customerId  String?   @map("customer_id")
+  amount      Decimal   @db.Decimal(10, 2)
+  method      String    // wallet | manual
+  status      String    @default("pending") // pending | completed | failed
+  reason      String?
+  reference   String?   // bank / gateway transfer reference, for manual refunds
+  createdBy   String?   @map("created_by")
+  processedBy String?   @map("processed_by")
+  processedAt DateTime? @map("processed_at")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+
+  order       Order     @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@index([orderId])
+  @@index([status])
+  @@map("refunds")
 }
 
 model FavoriteSeller {

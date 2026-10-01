@@ -4,6 +4,7 @@ import realtimeOrderService from './realtime-order.service';
 import { SELLER_COMMUNITY_DELIVERY_SELECT } from '../utils/sellerDeliverySelect';
 import { communityService } from './community.service';
 import { eligibleSubtotalForPromotion, releasePromotionUsage } from './promotion.service';
+import { issueRefund, IssuedRefund } from './refund.service';
 import { getDeliveryFeeForSeller } from '../utils/deliveryFee';
 import { createStockAlert } from './stock-alert.service';
 import promotionService from './promotion.service';
@@ -921,6 +922,7 @@ export class OrderService {
     }
 
     // Cancel order and restore stock
+    let refundIssued = null as IssuedRefund | null;
     const cancelledOrder = await prisma.$transaction(async (tx) => {
       // Claim the cancellation: the "still pending" check above ran before this
       // transaction, so a seller accepting at the same instant (or a second
@@ -974,6 +976,14 @@ export class OrderService {
       // A cancelled order shouldn't keep consuming the promo's quota.
       await releasePromotionUsage(tx, orderId);
 
+      // A paid order (wallet payment, or a gateway payment that already cleared)
+      // is owed its money back: wallet orders are refunded instantly, the rest
+      // are queued for the admin to send.
+      refundIssued = await issueRefund(tx, orderId, {
+        reason: `Order cancelled by customer: ${reason}`,
+        createdBy: userId,
+      });
+
       // Remove inventory reservations
       await tx.inventoryReservation.deleteMany({
         where: {
@@ -1001,8 +1011,12 @@ export class OrderService {
     return {
       orderId: cancelledOrder.id,
       status: cancelledOrder.orderStatus,
-      refundAmount: cancelledOrder.paymentStatus === 'paid' ? Number(cancelledOrder.totalAmount) : 0,
-      refundStatus: cancelledOrder.paymentStatus === 'paid' ? 'processing' : 'not_required',
+      refundAmount: refundIssued?.amount ?? 0,
+      refundStatus: refundIssued
+        ? refundIssued.status === 'completed'
+          ? 'refunded_to_wallet'
+          : 'pending_manual_transfer'
+        : 'not_required',
     };
   }
 
