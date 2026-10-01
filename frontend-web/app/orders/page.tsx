@@ -89,6 +89,17 @@ function OrdersContent() {
       // among the loaded ones, in which case only its old status is unknown).
       const previous = ordersRef.current.find((o) => (o as any).id === data.orderId) as any;
       const previousStatus: string | undefined = previous?.orderStatus ?? previous?.status;
+      if (!previousStatus) {
+        // Not among the loaded orders (older page): its old status is unknown, so ask the
+        // server for the true counts instead of letting the cards drift.
+        orderService
+          .getMyOrders({ page: 1, limit: 1 })
+          .then((r: any) => {
+            const d = r?.data ?? r;
+            if (mountedRef.current && d?.statusCounts) setStatusCounts(d.statusCounts);
+          })
+          .catch(() => {});
+      }
       if (previousStatus && previousStatus !== data.status) {
         setStatusCounts((prev) =>
           prev
@@ -208,8 +219,13 @@ function OrdersContent() {
   const totalOrdersCount = statusCounts
     ? Object.values(statusCounts).reduce((a, b) => a + b, 0)
     : orders.length;
+  // A pending order whose items were all cancelled is shown as cancelled (see getOrderStatus);
+  // the server counts it as pending, so move the loaded ones across to keep cards and list in step.
+  const derivedCancelled = orders.filter(
+    (o) => String((o as any)?.orderStatus ?? (o as any)?.status ?? 'pending') === 'pending' && getOrderStatus(o) === 'cancelled'
+  ).length;
   const inProgressCount = statusCounts
-    ? sumStatuses(['pending', 'confirmed', 'preparing', 'ready'])
+    ? Math.max(0, sumStatuses(['pending', 'confirmed', 'preparing', 'ready']) - derivedCancelled)
     : orders.filter((o) => ['pending', 'confirmed', 'preparing', 'ready'].includes(getOrderStatus(o))).length;
   const onTheWayCount = statusCounts
     ? sumStatuses(['in_transit', 'dispatched'])
@@ -218,7 +234,7 @@ function OrdersContent() {
     ? sumStatuses(['delivered', 'completed'])
     : orders.filter((o) => ['delivered', 'completed'].includes(getOrderStatus(o))).length;
   const cancelledCount = statusCounts
-    ? sumStatuses(['cancelled'])
+    ? sumStatuses(['cancelled']) + derivedCancelled
     : orders.filter((o) => getOrderStatus(o) === 'cancelled').length;
   const hasMore = page < totalPages;
 

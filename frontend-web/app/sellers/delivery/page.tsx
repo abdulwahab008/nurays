@@ -100,9 +100,9 @@ export default function SellerDeliveryPage() {
     loadDeliverySettings();
   }, [isAuthenticated, user, router]);
 
-  const loadDeliverySettings = async () => {
+  const loadDeliverySettings = async (silent = false) => {
     try {
-      setLoading(true);
+      if (!silent) setLoading(true);
       setLoadError(null);
       const res = await apiClient.get('/sellers/me');
       if (res.data?.success) {
@@ -129,20 +129,27 @@ export default function SellerDeliveryPage() {
         });
       }
 
-      const cd = await apiClient.get('/sellers/me/community-delivery');
-      if (cd.data?.success) {
-        const d = cd.data.data;
-        const rows: CommunityRow[] = d.communities;
-        setCommunities(rows);
-        setDrafts(Object.fromEntries(rows.map((r) => [r.id, toDraft(r)])));
-        setAllowCrossCommunity(d.allowCrossCommunity !== false);
-        setHomeCommunityName(d.homeCommunity?.name ?? null);
+      // Its own try/catch: the seller's own settings above are already on screen, and
+      // a failure here must say so instead of looking like the whole page failed.
+      try {
+        const cd = await apiClient.get('/sellers/me/community-delivery');
+        if (cd.data?.success) {
+          const d = cd.data.data;
+          const rows: CommunityRow[] = d.communities;
+          setCommunities(rows);
+          setDrafts(Object.fromEntries(rows.map((r) => [r.id, toDraft(r)])));
+          setAllowCrossCommunity(d.allowCrossCommunity !== false);
+          setHomeCommunityName(d.homeCommunity?.name ?? null);
+        }
+      } catch (err: any) {
+        console.error('Failed to load community delivery fees:', err);
+        showToast('Could not load your per-community delivery fees. Reload the page before saving.', 'error');
       }
     } catch (err: any) {
       console.error('Failed to load delivery settings:', err);
       setLoadError(err?.response?.data?.message || err?.message || 'Failed to load delivery settings');
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   };
 
@@ -289,6 +296,9 @@ export default function SellerDeliveryPage() {
         err?.message ||
         'Failed to save delivery settings';
       showToast(errMsg, 'error');
+      // The first request (settings) may have been saved before the second failed:
+      // show what the server actually holds rather than the unsaved form.
+      loadDeliverySettings(true);
     } finally {
       setSaving(false);
     }
@@ -305,7 +315,7 @@ export default function SellerDeliveryPage() {
         {loadError && (
           <div className="bg-red-50 border border-red-200 rounded-xl p-3.5 flex items-center justify-between text-xs text-red-700">
             <span>{loadError}</span>
-            <button onClick={loadDeliverySettings} className="font-semibold underline">
+            <button onClick={() => loadDeliverySettings()} className="font-semibold underline">
               Retry
             </button>
           </div>

@@ -115,6 +115,8 @@ class ApiClient {
       path === '/' ||
       path.startsWith('/login') ||
       path.startsWith('/register') ||
+      path.startsWith('/forgot-password') ||
+      path.startsWith('/reset-password') ||
       path.startsWith('/products') ||
       path.startsWith('/kitchens') ||
       path.startsWith('/sellers/register') ||

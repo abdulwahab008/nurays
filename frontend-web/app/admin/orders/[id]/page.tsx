@@ -112,7 +112,9 @@ export default function AdminOrderDetailPage() {
 
   // A manual (bank / gateway) refund is owed until the admin has actually sent the money.
   const handleCompleteRefund = async (refundId: string) => {
-    const reference = window.prompt('Transfer reference for this refund (optional):') ?? undefined;
+    const entered = window.prompt('Transfer reference for this refund (optional):');
+    if (entered === null) return; // cancelled the prompt: don't mark the refund as sent
+    const reference = entered.trim() || undefined;
     try {
       setUpdating(true);
       await apiClient.post(`/admin/refunds/${refundId}/complete`, reference ? { reference } : {});
@@ -120,6 +122,25 @@ export default function AdminOrderDetailPage() {
       loadOrder();
     } catch (error: any) {
       showToast(error.response?.data?.error?.message || 'Failed to update refund', 'error');
+    } finally {
+      setUpdating(false);
+    }
+  };
+
+  const handleDismissRefund = async (refundId: string) => {
+    const reason = window.prompt('Why is this refund not owed? (min 5 characters)');
+    if (reason === null) return;
+    if (reason.trim().length < 5) {
+      showToast('Please give a reason (at least 5 characters)', 'warning');
+      return;
+    }
+    try {
+      setUpdating(true);
+      await apiClient.post(`/admin/refunds/${refundId}/dismiss`, { reason: reason.trim() });
+      showToast('Refund dismissed', 'success');
+      loadOrder();
+    } catch (error: any) {
+      showToast(error.response?.data?.error?.message || 'Failed to dismiss refund', 'error');
     } finally {
       setUpdating(false);
     }
@@ -505,6 +526,15 @@ export default function AdminOrderDetailPage() {
                               className="shrink-0 px-3 py-1.5 bg-amber-600 text-white text-xs rounded-lg hover:bg-amber-700 disabled:opacity-50"
                             >
                               Mark as sent
+                            </button>
+                          ) : null}
+                          {r.status === 'pending' ? (
+                            <button
+                              onClick={() => handleDismissRefund(r.id)}
+                              disabled={updating}
+                              className="shrink-0 px-3 py-1.5 border border-gray-300 text-gray-700 text-xs rounded-lg hover:bg-gray-50 disabled:opacity-50"
+                            >
+                              Dismiss
                             </button>
                           ) : (
                             <span className={`shrink-0 text-xs font-medium ${r.status === 'completed' ? 'text-emerald-600' : 'text-red-600'}`}>

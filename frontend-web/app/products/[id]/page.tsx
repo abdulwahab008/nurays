@@ -160,6 +160,7 @@ export default function ProductDetailPage() {
   // type, and — if the responses arrived out of order — let the less precise one win.
   const loadSeqRef = useRef(0);
   const loadedProductRef = useRef<string | null>(null);
+  const appliedSeqRef = useRef(0);
 
   const loadProduct = async (customerLat?: number, customerLng?: number) => {
     const requestedId = params.id as string;
@@ -168,9 +169,12 @@ export default function ProductDetailPage() {
     if (!isRefresh) setLoading(true);
     try {
       const response = await productService.getProduct(requestedId, customerLat, customerLng);
-      if (seq !== loadSeqRef.current) return; // a newer request superseded this one
+      // Apply unless something newer has already been applied. (Not "unless a newer one is
+      // merely in flight": if that one then fails, nothing would ever be shown.)
+      if (seq < appliedSeqRef.current) return;
       const data = response.data as any;
       if (!data) return;
+      appliedSeqRef.current = seq;
       loadedProductRef.current = requestedId;
       // Ensure stock shape (API may return stockQuantity only or stock: { hub, direct })
       const stockHub = data.stock?.hub ?? data.stockQuantity ?? 0;
@@ -247,7 +251,7 @@ export default function ProductDetailPage() {
     } catch (error) {
       console.error('Failed to load product:', error);
     } finally {
-      if (seq === loadSeqRef.current) setLoading(false);
+      if (seq === loadSeqRef.current || loadedProductRef.current === requestedId) setLoading(false);
     }
   };
 

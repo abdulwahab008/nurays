@@ -305,11 +305,20 @@ function OrderDetailContent() {
     if (!cancelReason.trim()) return;
     try {
       setCancelling(true);
-      await orderService.cancelOrder(params.id as string, cancelReason.trim());
+      const res = await orderService.cancelOrder(params.id as string, cancelReason.trim());
       setShowCancelModal(false);
       setCancelReason('');
       loadOrder();
-      showToast('Order cancelled successfully', 'success');
+      // Say what happens to money already paid, rather than a bare "cancelled".
+      const d = res?.data ?? {};
+      const amt = Number(d.refundAmount ?? 0);
+      if (amt > 0 && d.refundStatus === 'refunded_to_wallet') {
+        showToast(`Order cancelled. Rs ${amt.toLocaleString()} has been refunded to your wallet.`, 'success', 8000);
+      } else if (amt > 0) {
+        showToast(`Order cancelled. Your refund of Rs ${amt.toLocaleString()} is being processed and will be sent to you manually.`, 'success', 10000);
+      } else {
+        showToast('Order cancelled successfully', 'success');
+      }
     } catch (error: any) {
       showToast(error.response?.data?.error?.message || 'Failed to cancel order', 'error');
     } finally {
@@ -491,6 +500,8 @@ function OrderDetailContent() {
                   ? 'bg-green-100 text-green-800'
                   : order.paymentStatus === 'refunded'
                   ? 'bg-blue-100 text-blue-800'
+                  : order.paymentStatus === 'refund_pending'
+                  ? 'bg-amber-100 text-amber-800'
                   : 'bg-gray-100 text-gray-800'
               }`}
             >
@@ -503,7 +514,9 @@ function OrderDetailContent() {
           {/* Order Items */}
           <div className="lg:col-span-2 space-y-4">
             {/* Direct Manual Payment Card */}
-            {order.paymentStatus !== 'paid' && (
+            {!['cancelled', 'refunded'].includes(orderStatus) &&
+              !['cod', 'wallet'].includes((order.paymentMethod ?? '').toLowerCase()) &&
+              ['pending', 'failed', 'disputed', 'payment_submitted'].includes(order.paymentStatus ?? 'pending') && (
               <ManualPaymentCard
                 orderId={order.id}
                 totalAmount={order.pricing?.total ?? 0}

@@ -407,7 +407,15 @@ function RegisterForm() {
               type="tel"
               id="phone"
               value={formData.phone}
-              onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+              onChange={(e) => {
+                // A code was issued for the old number: it means nothing for the new one.
+                setFormData({ ...formData, phone: e.target.value });
+                if (phoneOtpSent || phoneOtp || phoneOtpMessage) {
+                  setPhoneOtp('');
+                  setPhoneOtpSent(false);
+                  setPhoneOtpMessage('');
+                }
+              }}
               placeholder="+923001234567"
               className={inputClass}
               style={inputStyle}

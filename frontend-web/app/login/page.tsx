@@ -563,6 +563,11 @@ export default function LoginPage() {
                     className={inputClass}
                     style={inputStyle}
                   />
+                  <div className="mt-1.5 text-right">
+                    <Link href="/forgot-password" className="text-xs font-semibold text-slate-500 underline hover:text-slate-800">
+                      Forgot password?
+                    </Link>
+                  </div>
                 </div>
                 <Button type="submit" className="w-full h-12 text-sm font-bold shadow-md" disabled={loading}>
                   {loading ? 'Logging in...' : 'Login'}

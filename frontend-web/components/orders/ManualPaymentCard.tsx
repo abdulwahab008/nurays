@@ -53,6 +53,8 @@ export default function ManualPaymentCard({
   const [localProofUrl, setLocalProofUrl] = useState<string | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
+  // Which upload is current: a removed (or replaced) screenshot's late response must not re-attach it.
+  const uploadToken = useRef(0);
   const { showToast } = useToast();
 
   useEffect(() => {
@@ -99,6 +101,8 @@ export default function ManualPaymentCard({
     }
 
     setScreenshotFile(file);
+    setUploadedProofUrl(null);
+    const token = ++uploadToken.current;
 
     // Create local preview immediately
     const reader = new FileReader();
@@ -116,20 +120,23 @@ export default function ManualPaymentCard({
       const res = await apiClient.post('/upload/payment-proof', formData, {
         headers: { 'Content-Type': 'multipart/form-data' },
       });
-      if (res.data?.success && res.data.data?.url) {
+      if (token === uploadToken.current && res.data?.success && res.data.data?.url) {
         setUploadedProofUrl(res.data.data.url);
       }
     } catch (err) {
       console.warn('Payment proof upload failed:', err);
+      if (token !== uploadToken.current) return;
       setScreenshotFile(null);
       setScreenshotPreview(null);
       showToast('Could not upload the screenshot. Please try again, or enter the reference number instead.', 'error');
     } finally {
-      setUploadingImage(false);
+      if (token === uploadToken.current) setUploadingImage(false);
     }
   };
 
   const removeScreenshot = () => {
+    uploadToken.current++;
+    setUploadingImage(false);
     setScreenshotFile(null);
     setScreenshotPreview(null);
     setUploadedProofUrl(null);
