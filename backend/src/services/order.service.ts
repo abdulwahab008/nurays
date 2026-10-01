@@ -1,3 +1,4 @@
+import { randomInt } from 'crypto';
 import prisma from '../config/database';
 import { AppError } from '../middleware/errorHandler';
 import realtimeOrderService from './realtime-order.service';
@@ -13,7 +14,10 @@ import { isAcceptingOrders, validateOrderTiming } from './availability.service';
 
 export class OrderService {
   /**
-   * Generate unique order number
+   * Generate an order number: FN + date + 6 random digits (1,000,000 per day, from
+   * a CSPRNG). The old 4-digit Math.random suffix had only 10,000 values a day, so
+   * collisions became likely at a few hundred orders. Uniqueness is NOT assumed:
+   * the database constraint is authoritative and withOrderNumber retries on a clash.
    */
   private generateOrderNumber(): string {
     const prefix = 'FN';
@@ -21,8 +25,29 @@ export class OrderService {
     const year = date.getFullYear();
     const month = String(date.getMonth() + 1).padStart(2, '0');
     const day = String(date.getDate()).padStart(2, '0');
-    const random = Math.floor(Math.random() * 10000).toString().padStart(4, '0');
+    const random = randomInt(0, 1_000_000).toString().padStart(6, '0');
     return `${prefix}${year}${month}${day}${random}`;
+  }
+
+  /**
+   * Run `create` with a fresh order number, retrying with a new one if another
+   * order took it first. A pre-insert "does it exist?" check can't be made safe —
+   * two concurrent orders can both see it free — so the unique index decides and
+   * the loser simply draws again.
+   */
+  private async withOrderNumber<T>(create: (orderNumber: string) => Promise<T>): Promise<T> {
+    const MAX_ATTEMPTS = 5;
+    for (let attempt = 1; ; attempt++) {
+      try {
+        return await create(this.generateOrderNumber());
+      } catch (err: any) {
+        const target = err?.meta?.target;
+        const isOrderNumberClash =
+          err?.code === 'P2002' &&
+          (Array.isArray(target) ? target.includes('order_number') || target.includes('orderNumber') : /order_?number/i.test(String(target ?? '')));
+        if (!isOrderNumberClash || attempt >= MAX_ATTEMPTS) throw err;
+      }
+    }
   }
 
   /**
@@ -411,22 +436,8 @@ export class OrderService {
     // Calculate total
     const totalAmount = subtotal + deliveryFee - discountAmount + taxAmount;
 
-    // Generate order number
-    let orderNumber = this.generateOrderNumber();
-    let orderNumberExists = true;
-    while (orderNumberExists) {
-      const existing = await prisma.order.findUnique({
-        where: { orderNumber },
-      });
-      if (!existing) {
-        orderNumberExists = false;
-      } else {
-        orderNumber = this.generateOrderNumber();
-      }
-    }
-
-    // Create order with items in transaction
-    const order = await prisma.$transaction(async (tx) => {
+    // Create order with items in transaction (retried with a new number on a clash)
+    const order = await this.withOrderNumber((orderNumber) => prisma.$transaction(async (tx) => {
       // Create order
       const newOrder = await tx.order.create({
         data: {
@@ -655,7 +666,7 @@ export class OrderService {
       }
 
       return { order: newOrder, items: createdItems, updatedProducts };
-    });
+    }));
 
     // Emit new order notification
     await realtimeOrderService.emitNewOrderNotification(order.order.id);

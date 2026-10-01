@@ -316,6 +316,28 @@ async function main() {
   const sellerWithOrders = await prisma.seller.delete({ where: { id: selfS.id } }).then(() => 'DELETED', () => 'BLOCKED');
   ok('a seller with order history cannot be deleted (history is kept)', sellerWithOrders === 'BLOCKED', sellerWithOrders);
 
+  // ---- 19. order / ticket numbers ----
+  const nc = await mkUser();
+  const np = await mkProduct(seller.id, 500, 10);
+  const burst = await Promise.all(Array.from({ length: 25 }, () => order(nc.id, [{ productId: np.id, quantity: 1 }]).then((r: any) => r.order.orderNumber, (e: any) => 'ERR:' + (e.code || e.message))));
+  ok('25 simultaneous orders all succeed with distinct 6-digit numbers', burst.every((b) => /^FN\d{8}\d{6}$/.test(b)) && new Set(burst).size === 25, burst.filter((b) => b.startsWith('ERR')).join(','));
+
+  // force clashes: make the generator return an already-used number twice, then a fresh one
+  const svc: any = orderService;
+  const taken = burst[0];
+  const original = svc.generateOrderNumber.bind(svc);
+  let calls = 0;
+  svc.generateOrderNumber = () => (calls++ < 2 ? taken : original());
+  const clashOrder: any = (await order(nc.id, [{ productId: np.id, quantity: 1 }])).order;
+  svc.generateOrderNumber = original;
+  ok('an order-number clash is retried with a new number instead of failing', clashOrder.orderNumber !== taken && calls === 3, `calls=${calls}`);
+  const stockAfter = (await prisma.product.findUnique({ where: { id: np.id } }))!.stockQuantity;
+  ok('retried attempts leave stock correct (26 units taken)', stockAfter === 500 - 26, `stock=${stockAfter}`);
+
+  const { default: supportService } = require('../src/services/support.service');
+  const tk = await Promise.all(Array.from({ length: 10 }, () => supportService.createTicket(nc.id, { category: 'other', subject: 'hello', description: 'a long enough description' }).then((t: any) => t.ticketNumber, (e: any) => 'ERR:' + (e.code || e.message))));
+  ok('10 simultaneous support tickets all succeed with distinct numbers', tk.every((t: string) => /^TKT\d{4}\d{6}$/.test(t)) && new Set(tk).size === 10, tk.filter((t: string) => t.startsWith('ERR')).join(','));
+
   console.log(`\n${pass} passed, ${fail} failed`);
   await prisma.$disconnect();
   process.exit(fail ? 1 : 0);
