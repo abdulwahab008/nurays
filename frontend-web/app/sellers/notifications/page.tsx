@@ -10,6 +10,8 @@ import { useToast } from '@/components/ui/toast';
 import { useAuthStore } from '@/lib/store/auth-store';
 import { apiClient } from '@/lib/api-client';
 import { formatDate } from '@/lib/utils';
+import { useT } from '@/lib/i18n';
+import { accountMessages } from '@/lib/i18n/messages/account';
 
 const sidebarItems = SELLER_SIDEBAR_ITEMS;
 
@@ -66,6 +68,7 @@ export default function SellerNotificationsPage() {
   const router = useRouter();
   const { isAuthenticated, user } = useAuthStore();
   const { showToast } = useToast();
+  const t = useT(accountMessages);
   const [loading, setLoading] = useState(true);
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [filter, setFilter] = useState<'all' | 'unread'>('all');
@@ -79,7 +82,7 @@ export default function SellerNotificationsPage() {
 
     if (user?.userType !== 'seller' && user?.user_type !== 'seller') {
       router.push('/dashboard');
-      showToast('Access denied. Seller privileges required.', 'error');
+      showToast(t('sellerAccessDenied'), 'error');
       return;
     }
 
@@ -106,8 +109,8 @@ export default function SellerNotificationsPage() {
       const isNetwork = error?.message === 'Network Error' || error?.code === 'ERR_NETWORK';
       setLoadError(
         isNetwork
-          ? 'Could not reach the server. Check your connection and that the API is running.'
-          : error?.response?.data?.error?.message || 'Failed to load notifications.'
+          ? t('networkError')
+          : error?.response?.data?.error?.message || t('loadNotificationsFailed')
       );
     } finally {
       setLoading(false);
@@ -132,11 +135,11 @@ export default function SellerNotificationsPage() {
     try {
       await apiClient.patch('/notifications/read-all');
       setNotifications(notifications.map(n => ({ ...n, isRead: true })));
-      showToast('All notifications marked as read', 'success');
+      showToast(t('allMarkedRead'), 'success');
     } catch (error: any) {
       // For demo, just update locally
       setNotifications(notifications.map(n => ({ ...n, isRead: true })));
-      showToast('All notifications marked as read', 'success');
+      showToast(t('allMarkedRead'), 'success');
     }
   };
 
@@ -169,8 +172,8 @@ export default function SellerNotificationsPage() {
 
   return (
     <DashboardLayout
-      title="Notifications"
-      subtitle={`You have ${unreadCount} unread notification${unreadCount !== 1 ? 's' : ''}`}
+      title={t('notifications')}
+      subtitle={t(unreadCount !== 1 ? 'youHaveUnreadMany' : 'youHaveUnreadOne', { count: unreadCount })}
       sidebarItems={sidebarItems}
       userType="seller"
     >
@@ -187,7 +190,7 @@ export default function SellerNotificationsPage() {
                     : 'text-gray-600 hover:bg-gray-100'
                 }`}
               >
-                All
+                {t('all')}
               </button>
               <button
                 onClick={() => setFilter('unread')}
@@ -197,7 +200,7 @@ export default function SellerNotificationsPage() {
                     : 'text-gray-600 hover:bg-gray-100'
                 }`}
               >
-                Unread
+                {t('unread')}
                 {unreadCount > 0 && (
                   <span className={`px-2 py-0.5 rounded-full text-xs ${
                     filter === 'unread' ? 'bg-white text-blue-600' : 'bg-blue-100 text-blue-600'
@@ -209,7 +212,7 @@ export default function SellerNotificationsPage() {
             </div>
             <div className="flex items-center gap-2">
               <Link href="/notifications/settings" className="text-sm font-medium text-slate-600 hover:text-slate-900 underline">
-                Alert settings
+                {t('alertSettings')}
               </Link>
               {unreadCount > 0 && (
                 <Button
@@ -218,7 +221,7 @@ export default function SellerNotificationsPage() {
                   onClick={handleMarkAllAsRead}
                   className="text-blue-600 border-blue-200 hover:bg-blue-50"
                 >
-                  Mark all as read
+                  {t('markAllRead')}
                 </Button>
               )}
             </div>
@@ -229,14 +232,14 @@ export default function SellerNotificationsPage() {
           <div className="mb-6 bg-amber-50 border border-amber-200 rounded-2xl p-5 flex items-center justify-between gap-4 flex-wrap">
             <p className="text-amber-800 text-sm">{loadError}</p>
             <Button variant="outline" size="sm" onClick={() => loadNotifications()} className="border-amber-300 text-amber-800 hover:bg-amber-100">
-              Retry
+              {t('retry')}
             </Button>
           </div>
         )}
         {loading ? (
           <div className="text-center py-16">
             <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mx-auto mb-4"></div>
-            <p className="text-gray-500">Loading notifications...</p>
+            <p className="text-gray-500">{t('loadingNotifications')}</p>
           </div>
         ) : filteredNotifications.length === 0 ? (
           <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-16 text-center">
@@ -244,12 +247,12 @@ export default function SellerNotificationsPage() {
               {Icons.bell}
             </div>
             <h2 className="text-2xl font-bold text-gray-900 mb-2">
-              {filter === 'unread' ? 'No unread notifications' : 'No notifications'}
+              {filter === 'unread' ? t('noUnreadNotifications') : t('noNotificationsShort')}
             </h2>
             <p className="text-gray-500">
               {filter === 'unread' 
-                ? "You're all caught up! Check back later for new updates."
-                : "You don't have any notifications yet."}
+                ? t('caughtUpCheckLater')
+                : t('noNotificationsYetLong')}
             </p>
           </div>
         ) : (
@@ -268,7 +271,7 @@ export default function SellerNotificationsPage() {
                     }
                   }}
                   className={`bg-white rounded-2xl shadow-sm border border-gray-100 p-5 transition-all duration-200 cursor-pointer hover:shadow-md ${
-                    !notification.isRead ? 'border-l-4 border-l-blue-500' : ''
+                    !notification.isRead ? 'border-s-4 border-s-blue-500' : ''
                   }`}
                 >
                   <div className="flex gap-4">

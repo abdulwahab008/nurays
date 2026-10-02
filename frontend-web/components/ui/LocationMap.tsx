@@ -3,6 +3,9 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import dynamic from 'next/dynamic';
 import { Search, Navigation, MapPin, Loader2, Check } from 'lucide-react';
+import { useT } from '@/lib/i18n';
+import { commonMessages } from '@/lib/i18n/messages/common';
+import { accountMessages } from '@/lib/i18n/messages/account';
 
 export interface LocationMapProps {
   center?: { lat: number; lng: number };
@@ -31,6 +34,8 @@ function LocationMapInner({
   height = '320px',
   draggable = true,
 }: LocationMapProps) {
+  const t = useT(accountMessages);
+  const tc = useT(commonMessages);
   const mapRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<any>(null);
   const markerRef = useRef<any>(null);
@@ -312,17 +317,17 @@ function LocationMapInner({
                 handleSearch();
               }
             }}
-            placeholder="Search society or area (e.g. Askari 11, DHA)..."
-            className="w-full pl-8 pr-16 py-1.5 text-xs rounded-xl border border-slate-200 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-[#FF5500] outline-none transition-all"
+            placeholder={t('mapSearchPlaceholder')}
+            className="w-full ps-8 pe-16 py-1.5 text-xs rounded-xl border border-slate-200 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-[#FF5500] outline-none transition-all"
           />
-          <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-2.5 pointer-events-none" />
+          <Search className="w-3.5 h-3.5 text-slate-400 absolute start-2.5 top-2.5 pointer-events-none" />
           <button
             type="button"
             onClick={() => handleSearch()}
             disabled={isSearching || !searchQuery.trim()}
-            className="absolute right-1 top-1 px-2.5 py-1 bg-slate-900 hover:bg-slate-800 disabled:opacity-40 text-white text-[10px] font-bold rounded-lg transition-colors cursor-pointer"
+            className="absolute end-1 top-1 px-2.5 py-1 bg-slate-900 hover:bg-slate-800 disabled:opacity-40 text-white text-[10px] font-bold rounded-lg transition-colors cursor-pointer"
           >
-            {isSearching ? <Loader2 className="w-3 h-3 animate-spin" /> : 'Search'}
+            {isSearching ? <Loader2 className="w-3 h-3 animate-spin" /> : tc('search')}
           </button>
         </div>
 
@@ -342,15 +347,15 @@ function LocationMapInner({
             type="button"
             onClick={handleLocateMe}
             disabled={locating}
-            title="Detect my location"
-            className="p-1.5 rounded-lg bg-orange-50 hover:bg-orange-100 text-[#FF5500] text-xs font-bold transition-colors shrink-0 cursor-pointer ml-auto flex items-center gap-1"
+            title={t('detectMyLocation')}
+            className="p-1.5 rounded-lg bg-orange-50 hover:bg-orange-100 text-[#FF5500] text-xs font-bold transition-colors shrink-0 cursor-pointer ms-auto flex items-center gap-1"
           >
             {locating ? (
               <Loader2 className="w-3.5 h-3.5 animate-spin" />
             ) : (
               <Navigation className="w-3.5 h-3.5" />
             )}
-            <span className="text-[10px] font-semibold hidden sm:inline">My Location</span>
+            <span className="text-[10px] font-semibold hidden sm:inline">{t('myLocation')}</span>
           </button>
         </div>
       </div>
@@ -363,7 +368,7 @@ function LocationMapInner({
         <div className="absolute inset-0 bg-slate-50 flex items-center justify-center z-10">
           <div className="flex items-center gap-2 text-xs font-semibold text-slate-500">
             <Loader2 className="w-4 h-4 animate-spin text-[#FF5500]" />
-            <span>Loading map...</span>
+            <span>{t('loadingMap')}</span>
           </div>
         </div>
       )}
@@ -372,10 +377,10 @@ function LocationMapInner({
       <div className="px-3 py-1.5 bg-white/95 backdrop-blur-xs border-t border-slate-100 flex items-center justify-between text-[11px] text-slate-500">
         <span className="flex items-center gap-1 text-slate-600">
           <MapPin className="w-3 h-3 text-[#FF5500]" />
-          <span>Click anywhere on the map or drag the pin to reposition</span>
+          <span>{t('mapHint')}</span>
         </span>
         {currentCoords && (
-          <span className="font-mono font-medium text-slate-700 bg-slate-100 px-2 py-0.5 rounded text-[10px]">
+          <span className="font-mono font-medium text-slate-700 bg-slate-100 px-2 py-0.5 rounded text-[10px]" data-ltr>
             {currentCoords.lat.toFixed(4)}, {currentCoords.lng.toFixed(4)}
           </span>
         )}
@@ -384,13 +389,18 @@ function LocationMapInner({
   );
 }
 
+function MapLoadingText() {
+  const t = useT(accountMessages);
+  return <span>{t('loadingMap')}</span>;
+}
+
 const LocationMap = dynamic(() => Promise.resolve(LocationMapInner), {
   ssr: false,
   loading: () => (
     <div className="bg-slate-100 rounded-2xl flex items-center justify-center border border-slate-200" style={{ height: '300px' }}>
       <div className="flex items-center gap-2 text-xs font-semibold text-slate-400">
         <Loader2 className="w-4 h-4 animate-spin" />
-        <span>Loading map...</span>
+        <MapLoadingText />
       </div>
     </div>
   ),
