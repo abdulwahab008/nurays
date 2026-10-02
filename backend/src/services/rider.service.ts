@@ -4,6 +4,7 @@ import { AppError } from '../middleware/errorHandler';
 import realtimeOrderService from './realtime-order.service';
 import ledgerService from './ledger.service';
 import { haversineKm, calculateDeliveryFeeCorridor } from '../utils/deliveryFee';
+import { newHandoverCode, verifyHandoverCode } from './handover.service';
 
 // Delivery.status lifecycle:
 // pending (unclaimed) -> assigned (claimed) -> arrived_at_pickup -> picked_up -> in_transit -> arrived_at_customer -> delivered (with OTP).
@@ -17,9 +18,10 @@ const VALID_TRANSITIONS: Record<string, string[]> = {
   arrived_at_customer: ['delivered', 'delivery_failed'],
 };
 
-// Delivery status -> order-level status it should push the order to.
+// Delivery status -> order-level status it should push the order to. Only forward:
+// a rider arriving at the kitchen says nothing about the food, so it no longer moves
+// a ready order back to "preparing".
 const ORDER_STATUS_FOR_DELIVERY_STATUS: Record<string, string> = {
-  arrived_at_pickup: 'preparing',
   picked_up: 'dispatched',
   in_transit: 'in_transit',
   arrived_at_customer: 'in_transit',
@@ -27,9 +29,13 @@ const ORDER_STATUS_FOR_DELIVERY_STATUS: Record<string, string> = {
   delivery_failed: 'delivery_failed',
 };
 
-type DeliveryWithOrder = Prisma.DeliveryGetPayload<{
-  include: { order: { select: { orderNumber: true; totalAmount: true; paymentMethod: true; orderStatus: true } } };
-}>;
+// The handover code is never part of a delivery we send anywhere (the client omits it globally).
+type DeliveryWithOrder = Omit<
+  Prisma.DeliveryGetPayload<{
+    include: { order: { select: { orderNumber: true; totalAmount: true; paymentMethod: true; orderStatus: true } } };
+  }>,
+  'deliveryOtp'
+>;
 
 function formatDelivery(delivery: DeliveryWithOrder & {
   arrivedAtPickup?: Date | null;
@@ -124,8 +130,9 @@ export class RiderService {
         ? [snapshot.addressLine1, snapshot.area, snapshot.city].filter(Boolean).join(', ')
         : 'Address unavailable';
 
-    // Generate secure 4-digit OTP for customer doorstep verification
-    const deliveryOtp = Math.floor(1000 + Math.random() * 9000).toString();
+    // The customer's handover code lives on the order. Older orders created without
+    // one get it now, before a rider can be assigned.
+    await prisma.order.updateMany({ where: { id: orderId, handoverCode: null }, data: { handoverCode: newHandoverCode() } });
     const estimatedReadyAt = new Date(Date.now() + estimatedPrepMinutes * 60 * 1000);
 
     const pickupSeller = (order.items.find((i) => i.status !== 'cancelled' && (i.fulfillmentType === 'hub' || i.seller?.deliveryProvider !== 'self')) ?? order.items[0])?.seller;
@@ -145,7 +152,6 @@ export class RiderService {
           deliveryLatitude: deliveryLat,
           deliveryLongitude: deliveryLng,
           status: 'pending',
-          deliveryOtp,
           estimatedReadyAt,
         },
       });
@@ -312,111 +318,139 @@ export class RiderService {
     otp?: string
   ) {
     const rider = await this.requireRider(userId);
-    const delivery = await prisma.delivery.findUnique({ where: { id: deliveryId } });
-    if (!delivery) {
+    const first = await prisma.delivery.findUnique({
+      where: { id: deliveryId },
+      select: { id: true, orderId: true, riderId: true, status: true, deliveryOtp: true },
+    });
+    if (!first) {
       throw new AppError('Delivery not found', 404, 'DELIVERY_NOT_FOUND');
     }
-    if (delivery.riderId !== rider.id) {
+    if (first.riderId !== rider.id) {
       throw new AppError('This delivery is not assigned to you', 403, 'ACCESS_DENIED');
     }
-    if (!VALID_TRANSITIONS[delivery.status]?.includes(status)) {
-      throw new AppError(`Cannot move from ${delivery.status} to ${status}`, 400, 'INVALID_TRANSITION');
+    if (!VALID_TRANSITIONS[first.status]?.includes(status)) {
+      throw new AppError(`Cannot move from ${first.status} to ${status}`, 400, 'INVALID_TRANSITION');
     }
-
-    const order = await prisma.order.findUnique({
-      where: { id: delivery.orderId },
-      select: { orderStatus: true, paymentStatus: true, paymentMethod: true },
-    });
-    if (order && ['cancelled', 'refunded', 'completed'].includes(order.orderStatus)) {
-      throw new AppError(
-        `Order is already ${order.orderStatus}; delivery status can no longer be updated`,
-        409,
-        'ORDER_ALREADY_TERMINAL'
-      );
-    }
-    if (order && ['refund_pending', 'refunded'].includes(order.paymentStatus)) {
-      throw new AppError(
-        `Order payment is ${order.paymentStatus}; delivery status can no longer be updated`,
-        409,
-        'ORDER_ALREADY_TERMINAL'
-      );
-    }
-
-    const updateData: Record<string, unknown> = { status };
-    if (status === 'arrived_at_pickup') updateData.arrivedAtPickup = new Date();
-    if (status === 'picked_up' || (status === 'in_transit' && !delivery.pickupTime)) updateData.pickupTime = new Date();
-    if (status === 'arrived_at_customer') updateData.arrivedAtCustomer = new Date();
+    // The customer's code, checked (and wrong guesses counted) before anything changes.
     if (status === 'delivered') {
-      // Validate customer doorstep delivery PIN (OTP)
-      if (delivery.deliveryOtp) {
-        if (!otp || otp.trim() !== delivery.deliveryOtp) {
-          throw new AppError(
-            'Invalid or missing 4-digit customer delivery PIN. Please ask the customer for the PIN displayed on their order screen.',
-            400,
-            'INVALID_DELIVERY_OTP'
-          );
-        }
-        updateData.otpVerifiedAt = new Date();
-      }
-      updateData.deliveryTime = new Date();
+      await verifyHandoverCode(first.orderId, otp, first.deliveryOtp);
     }
-    if (status === 'delivery_failed') updateData.deliveryNotes = reason;
 
-    const updated = await prisma.delivery.update({
-      where: { id: deliveryId },
-      data: updateData,
-      include: { order: { select: { orderNumber: true, totalAmount: true, paymentMethod: true, orderStatus: true } } },
-    });
+    // One transaction, order row locked first (the same lock order as cancels), every
+    // write guarded on the state it was decided from: a double tap, or a cancel landing
+    // at the same moment, can no longer apply a transition twice or half-way.
+    const result = await prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT id FROM orders WHERE id = ${first.orderId} FOR UPDATE`;
+      const delivery = await tx.delivery.findUniqueOrThrow({ where: { id: deliveryId } });
+      if (delivery.riderId !== rider.id) {
+        throw new AppError('This delivery is not assigned to you', 403, 'ACCESS_DENIED');
+      }
+      if (delivery.status === 'cancelled') {
+        throw new AppError('This delivery was cancelled', 409, 'DELIVERY_CANCELLED');
+      }
+      if (!VALID_TRANSITIONS[delivery.status]?.includes(status)) {
+        throw new AppError(`Cannot move from ${delivery.status} to ${status}`, 400, 'INVALID_TRANSITION');
+      }
 
-    const newOrderStatus = ORDER_STATUS_FOR_DELIVERY_STATUS[status];
-    if (newOrderStatus) {
-      const isCodPayment = order?.paymentMethod === 'cod' && order.paymentStatus !== 'paid';
-      await prisma.order.update({
+      const order = await tx.order.findUniqueOrThrow({
         where: { id: delivery.orderId },
-        data: {
-          orderStatus: newOrderStatus,
-          ...(status === 'delivered' ? { deliveredAt: new Date() } : {}),
-          ...(status === 'delivered' && isCodPayment ? { paymentStatus: 'paid', paymentCollectedBy: 'rider', paidAt: new Date() } : {}),
-        },
+        select: { orderStatus: true, paymentStatus: true, paymentMethod: true },
       });
+      if (['cancelled', 'refunded', 'completed'].includes(order.orderStatus)) {
+        throw new AppError(
+          `Order is already ${order.orderStatus}; delivery status can no longer be updated`,
+          409,
+          'ORDER_ALREADY_TERMINAL'
+        );
+      }
+      if (['refund_pending', 'refunded'].includes(order.paymentStatus)) {
+        throw new AppError(
+          `Order payment is ${order.paymentStatus}; delivery status can no longer be updated`,
+          409,
+          'ORDER_ALREADY_TERMINAL'
+        );
+      }
+      // Food paid online or by transfer leaves the kitchen only once the payment is confirmed.
+      if (status === 'picked_up' && order.paymentMethod !== 'cod' && order.paymentStatus !== 'paid') {
+        throw new AppError(
+          "The customer's payment hasn't been confirmed yet; wait for the kitchen to confirm it before pickup",
+          409,
+          'PAYMENT_NOT_CONFIRMED'
+        );
+      }
 
-      await prisma.orderItem.updateMany({
-        where: { orderId: delivery.orderId, status: { not: 'cancelled' } },
-        data: { status: newOrderStatus },
+      const now = new Date();
+      const updateData: Record<string, unknown> = { status };
+      if (status === 'arrived_at_pickup') updateData.arrivedAtPickup = now;
+      if (status === 'picked_up' || (status === 'in_transit' && !delivery.pickupTime)) updateData.pickupTime = now;
+      if (status === 'arrived_at_customer') updateData.arrivedAtCustomer = now;
+      if (status === 'delivered') {
+        updateData.otpVerifiedAt = now;
+        updateData.deliveryTime = now;
+      }
+      if (status === 'delivery_failed') updateData.deliveryNotes = reason;
+
+      const claimed = await tx.delivery.updateMany({
+        where: { id: deliveryId, status: delivery.status, riderId: rider.id },
+        data: updateData,
       });
+      if (claimed.count === 0) {
+        throw new AppError('This delivery was just updated; refresh and try again', 409, 'DELIVERY_STATUS_CONFLICT');
+      }
 
-      await prisma.orderStatusHistory.create({
-        data: {
-          orderId: delivery.orderId,
-          status: newOrderStatus,
-          notes:
-            status === 'delivery_failed'
-              ? `Rider reported failed delivery: ${reason}`
-              : status === 'delivered'
-                ? 'Rider delivered order (verified via customer PIN)'
-                : `Rider marked delivery as ${status.replace(/_/g, ' ')}`,
-          changedBy: userId,
-        },
+      const newOrderStatus = ORDER_STATUS_FOR_DELIVERY_STATUS[status] ?? null;
+      if (newOrderStatus && newOrderStatus !== order.orderStatus) {
+        const isCodPayment = order.paymentMethod === 'cod' && order.paymentStatus !== 'paid';
+        await tx.order.update({
+          where: { id: delivery.orderId },
+          data: {
+            orderStatus: newOrderStatus,
+            ...(status === 'delivered' ? { deliveredAt: now } : {}),
+            ...(status === 'delivered' && isCodPayment ? { paymentStatus: 'paid', paymentCollectedBy: 'rider', paidAt: now } : {}),
+          },
+        });
+        await tx.orderItem.updateMany({
+          where: { orderId: delivery.orderId, status: { not: 'cancelled' } },
+          data: { status: newOrderStatus },
+        });
+        await tx.orderStatusHistory.create({
+          data: {
+            orderId: delivery.orderId,
+            status: newOrderStatus,
+            notes:
+              status === 'delivery_failed'
+                ? `Rider reported failed delivery: ${reason}`
+                : status === 'delivered'
+                  ? "Rider delivered order (verified with the customer's code)"
+                  : `Rider marked delivery as ${status.replace(/_/g, ' ')}`,
+            changedBy: userId,
+          },
+        });
+      }
+      if (status === 'delivered') {
+        await tx.rider.update({ where: { id: rider.id }, data: { totalDeliveries: { increment: 1 } } });
+      }
+
+      const updated = await tx.delivery.findUniqueOrThrow({
+        where: { id: deliveryId },
+        include: { order: { select: { orderNumber: true, totalAmount: true, paymentMethod: true, orderStatus: true } } },
       });
+      return { updated, newOrderStatus, orderId: delivery.orderId };
+    });
 
-      await realtimeOrderService.emitOrderStatusUpdate(delivery.orderId, newOrderStatus, userId);
+    // Side effects only after the commit.
+    if (result.newOrderStatus) {
+      await realtimeOrderService.emitOrderStatusUpdate(result.orderId, result.newOrderStatus, userId);
     }
-
     if (status === 'delivered') {
-      await prisma.rider.update({
-        where: { id: rider.id },
-        data: { totalDeliveries: { increment: 1 } },
-      });
-
-      // Post immutable entries to double-entry financial ledger
       try {
-        await ledgerService.recordOrderCompletion(delivery.orderId);
+        await ledgerService.recordOrderCompletion(result.orderId);
       } catch (ledgerErr) {
-        console.error('Failed to record financial ledger entries for order:', delivery.orderId, ledgerErr);
+        console.error('Failed to record financial ledger entries for order:', result.orderId, ledgerErr);
       }
     }
 
-    return formatDelivery(updated);
+    return formatDelivery(result.updated);
   }
 
   async getRiderProfile(userId: string) {

@@ -16,6 +16,7 @@ import promotionService from './promotion.service';
 import { isAcceptingOrders, validateOrderTiming } from './availability.service';
 import { SELLER_DIRECT_METHODS } from '../utils/paymentCustody';
 import ledgerService from './ledger.service';
+import { newHandoverCode } from './handover.service';
 
 export class OrderService {
   /**
@@ -501,6 +502,7 @@ export class OrderService {
         data: {
           orderNumber,
           customerId,
+          handoverCode: newHandoverCode(),
           subtotal,
           deliveryFee,
           deliveryFeeBreakdown: deliveryFeeBreakdown as any,
@@ -952,8 +954,16 @@ export class OrderService {
       throw new AppError('Order not found', 404, 'ORDER_NOT_FOUND');
     }
 
+    // The handover code is shown to the customer only: the rider or seller who hands the
+    // order over has to get it from them.
+    const handover =
+      order.customerId === userId
+        ? await prisma.order.findUnique({ where: { id: order.id }, select: { handoverCode: true } })
+        : null;
+
     return {
       ...order,
+      ...(handover ? { handoverCode: handover.handoverCode } : {}),
       subtotal: Number(order.subtotal),
       deliveryFee: Number(order.deliveryFee),
       discountAmount: Number(order.discountAmount),

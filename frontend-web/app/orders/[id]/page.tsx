@@ -153,7 +153,8 @@ function mapOrderToDetail(raw: any): OrderDetail {
       estimatedAt: raw.estimatedDeliveryAt
         ? new Date(raw.estimatedDeliveryAt).toISOString()
         : raw.delivery?.deliveryTime ?? undefined,
-      otp: raw.delivery?.deliveryOtp ?? undefined,
+      // Only the customer is ever sent the handover code.
+      otp: raw.handoverCode ?? undefined,
       arrivedAtCustomer: raw.delivery?.arrivedAtCustomer ?? undefined,
       rider:
         raw.delivery?.rider ?
@@ -578,7 +579,7 @@ function OrderDetailContent() {
               <h2 className="text-xl font-bold text-gray-900">Delivery Information</h2>
 
               {/* Doorstep Handover PIN Card */}
-              {order.delivery?.otp && effectiveStatus !== 'delivered' && effectiveStatus !== 'completed' && effectiveStatus !== 'cancelled' && (
+              {order.delivery?.otp && !['delivered', 'completed', 'cancelled', 'refunded'].includes(effectiveStatus) && (
                 <div className="bg-gradient-to-r from-amber-50 to-orange-50 border-2 border-amber-500/50 rounded-xl p-4 shadow-sm">
                   <div className="flex items-center justify-between flex-wrap gap-3">
                     <div>
@@ -587,7 +588,7 @@ function OrderDetailContent() {
                         <span className="text-xs uppercase font-bold tracking-wider text-amber-950">Doorstep Handover PIN</span>
                       </div>
                       <p className="text-xs text-amber-800 mt-1 max-w-sm">
-                        Provide this 4-digit verification code to your rider only after physically receiving and inspecting your package.
+                        Give this 4-digit code to whoever hands you the order (the rider, the kitchen, or the pickup counter), and only after you have the food. Never share it before.
                       </p>
                     </div>
                     <div className="bg-white border-2 border-amber-500 px-5 py-2 rounded-xl text-center shadow-inner">

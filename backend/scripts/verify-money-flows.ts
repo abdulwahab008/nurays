@@ -381,6 +381,61 @@ async function main() {
   ok('without an online gateway, JazzCash means a transfer to the kitchen (no fake payment page)', (await paymentService.processPayment(gwO.id, gwC.id, 'jazzcash').then(() => 'OK', (e: any) => e.code)) === 'MANUAL_TRANSFER_METHOD');
   ok('card payment without a configured gateway is refused, not faked', (await paymentService.processPayment(gwO.id, gwC.id, 'card').then(() => 'OK', (e: any) => e.code)) === 'GATEWAY_UNAVAILABLE');
 
+  // ---- 17d. handover code: only the customer sees it; it gates every handover ----
+  const { default: riderService } = require('../src/services/rider.service');
+  const hoCust = await mkUser();
+  const hoAddr = await prisma.userAddress.create({ data: { userId: hoCust.id, addressLine1: 'House 2 Street', area: 'X', city: 'Lahore' } });
+  const hoProd = await mkProduct(platS.id, 20, 300);
+  const hoOrder: any = await orderService.createOrder(hoCust.id, { items: [{ productId: hoProd.id, quantity: 1 }], deliveryType: 'home_delivery', deliveryAddressId: hoAddr.id, paymentMethod: 'cod' } as any);
+  const hoCode = (await prisma.order.findUnique({ where: { id: hoOrder.id }, select: { handoverCode: true } }))!.handoverCode;
+  ok('every order gets a 4-digit handover code', /^\d{4}$/.test(hoCode || ''), String(hoCode));
+  ok('the code is not in the order returned at creation', !('handoverCode' in hoOrder));
+  const platUser = (await prisma.seller.findUnique({ where: { id: platS.id } }))!.userId;
+  const asCustomer: any = await orderService.getOrderDetails(hoOrder.id, hoCust.id);
+  const asSeller: any = await orderService.getOrderDetails(hoOrder.id, platUser);
+  ok('the customer sees the code, the kitchen does not', asCustomer.handoverCode === hoCode && !('handoverCode' in asSeller), `${asCustomer.handoverCode} / ${'handoverCode' in asSeller}`);
+
+  // a Nuray rider delivers it
+  const riderUser = await mkUser('rider');
+  await prisma.rider.create({ data: { userId: riderUser.id, city: 'Lahore', verificationStatus: 'approved', status: 'active' } as any });
+  await prisma.order.update({ where: { id: hoOrder.id }, data: { orderStatus: 'ready' } });
+  await riderService.ensureDeliveryForOrder(hoOrder.id, 0);
+  const hoDelivery = await prisma.delivery.findUnique({ where: { orderId: hoOrder.id } });
+  await riderService.claimDelivery(riderUser.id, hoDelivery!.id);
+  const asRider: any = await orderService.getOrderDetails(hoOrder.id, riderUser.id);
+  const riderList: any = await riderService.getMyDeliveries(riderUser.id);
+  ok('the rider never receives the code (order details or delivery list)',
+    !('handoverCode' in asRider) && !('deliveryOtp' in (asRider.delivery || {})) && !JSON.stringify(riderList).includes(`"${hoCode}"`),
+    `order=${'handoverCode' in asRider} delivery=${'deliveryOtp' in (asRider.delivery || {})}`);
+  for (const st of ['picked_up', 'in_transit']) await riderService.updateDeliveryStatus(riderUser.id, hoDelivery!.id, st);
+  const rcode = (c?: string) => riderService.updateDeliveryStatus(riderUser.id, hoDelivery!.id, 'delivered', undefined, c).then(() => 'OK', (e: any) => e.code);
+  ok('the rider cannot mark it delivered without the code', (await rcode(undefined)) === 'INVALID_DELIVERY_OTP');
+  const wrongCode = hoCode === '1234' ? '4321' : '1234';
+  ok('a wrong code is refused and counted', (await rcode(wrongCode)) === 'INVALID_DELIVERY_OTP' && (await prisma.order.findUnique({ where: { id: hoOrder.id } }))!.handoverAttempts === 2);
+  ok('the right code completes the delivery and the COD cash is recorded with the rider', (await rcode(hoCode!)) === 'OK' &&
+    (await prisma.order.findUnique({ where: { id: hoOrder.id } }))!.paymentCollectedBy === 'rider');
+  ok('a second "delivered" tap cannot double count', (await rcode(hoCode!)) !== 'OK' && (await prisma.rider.findUnique({ where: { userId: riderUser.id } }))!.totalDeliveries === 1);
+
+  // brute force locks the code
+  const bfOrder: any = await orderService.createOrder(hoCust.id, { items: [{ productId: hoProd.id, quantity: 1 }], deliveryType: 'home_delivery', deliveryAddressId: hoAddr.id, paymentMethod: 'cod' } as any);
+  const { verifyHandoverCode } = require('../src/services/handover.service');
+  const bfCode = (await prisma.order.findUnique({ where: { id: bfOrder.id }, select: { handoverCode: true } }))!.handoverCode!;
+  const bad = bfCode === '0000' ? '1111' : '0000';
+  const tries = await Promise.all(Array.from({ length: 8 }, () => verifyHandoverCode(bfOrder.id, bad).then(() => 'OK', (e: any) => e.code)));
+  ok('guessing is capped: after 5 wrong codes the handover locks, even for the right code',
+    !tries.includes('OK') && (await verifyHandoverCode(bfOrder.id, bfCode).then(() => 'OK', (e: any) => e.code)) === 'HANDOVER_LOCKED', tries.join());
+
+  // a self-delivering kitchen needs the code too
+  const sdProd = await mkProduct(selfS.id, 20, 300);
+  const sdOrder: any = await orderService.createOrder(hoCust.id, { items: [{ productId: sdProd.id, quantity: 1 }], deliveryType: 'home_delivery', deliveryAddressId: hoAddr.id, paymentMethod: 'cod' } as any);
+  const sdCode = (await prisma.order.findUnique({ where: { id: sdOrder.id }, select: { handoverCode: true } }))!.handoverCode!;
+  const sdItem = await prisma.orderItem.findFirst({ where: { orderId: sdOrder.id } });
+  await prisma.orderItem.update({ where: { id: sdItem!.id }, data: { status: 'dispatched' } });
+  const selfUser = (await prisma.seller.findUnique({ where: { id: selfS.id } }))!.userId;
+  ok('a self-delivering kitchen cannot mark delivered without the customer\'s code', (await code(sellerOrderService.updateOrderItemStatus(sdItem!.id, selfUser, 'delivered'))) === 'INVALID_DELIVERY_OTP');
+  ok('with the code it can', (await code(sellerOrderService.updateOrderItemStatus(sdItem!.id, selfUser, 'delivered', undefined, sdCode))) === 'OK' &&
+    (await prisma.order.findUnique({ where: { id: sdOrder.id } }))!.paymentCollectedBy === 'seller');
+
   // ---- 18. schema integrity ----
   const cc = await mkUser();
   const cp = await mkProduct(seller.id, 50, 100);
