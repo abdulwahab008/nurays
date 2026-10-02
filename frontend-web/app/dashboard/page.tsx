@@ -8,13 +8,15 @@ import { useAuthStore } from '@/lib/store/auth-store';
 import { useCartStore } from '@/lib/store/cart-store';
 import { useCommunityStore } from '@/lib/store/community-store';
 import { useToast } from '@/components/ui/toast';
-import { apiClient } from '@/lib/api-client';
-import { formatPrice } from '@/lib/utils';
+import { isAxiosError } from 'axios';
+import { apiClient, ApiError } from '@/lib/api-client';
+import { formatPrice, displayRating } from '@/lib/utils';
 import { sellerService, PublicSeller } from '@/lib/services/seller.service';
+import { productService, Product } from '@/lib/services/product.service';
 import { communityService, CommunityDetail } from '@/lib/services/community.service';
 import { cartService } from '@/lib/services/cart.service';
 import { ConfirmModal } from '@/components/ui/ConfirmModal';
-import { getSmartTrendingDishes, TrendingDishItem } from '@/lib/utils/trending-algorithm';
+import { CoverImage } from '@/components/ui/CoverImage';
 import { CuisineCarousel, PLATFORM_CUISINES } from '@/components/marketplace/CuisineCarousel';
 import {
   Sparkles,
@@ -61,6 +63,72 @@ interface Order {
     productImage: string | null;
     quantity: number;
   }>;
+}
+
+// The products API also returns each dish's category and preparation time.
+type ListedProduct = Product & {
+  category?: { name?: string | null } | null;
+  preparationTime?: number | null;
+};
+
+/** A real dish from the products API, shaped for the dashboard rows. */
+interface DashboardDish {
+  id: string;
+  name: string;
+  nameUrdu?: string | null;
+  kitchenName: string;
+  sellerId: string;
+  price: number;
+  /** Only set when it is above the current price (a real discount). */
+  originalPrice: number | null;
+  photo: string | null;
+  isFrozen: boolean;
+  /** From displayRating(): null until the dish has reviews, shown as "New". */
+  rating: string | null;
+  prepTimeMinutes: number | null;
+  /** Category, kitchen meal categories and name, lowercased, for the cuisine rows. */
+  searchText: string;
+}
+
+function toDashboardDish(p: ListedProduct): DashboardDish {
+  const price = Number(p.price) || 0;
+  const originalPrice = Number(p.originalPrice) || 0;
+  return {
+    id: p.id,
+    name: p.name,
+    nameUrdu: p.nameUrdu,
+    kitchenName: p.seller?.businessName || '',
+    sellerId: p.seller?.id || '',
+    price,
+    originalPrice: originalPrice > price ? originalPrice : null,
+    photo: p.primaryImage || null,
+    isFrozen: p.productType === 'frozen',
+    rating: displayRating(p.ratingAverage, p.totalReviews),
+    prepTimeMinutes: p.preparationTime && p.preparationTime > 0 ? p.preparationTime : null,
+    searchText: [p.category?.name, ...(p.seller?.mealCategories || []), p.name]
+      .filter(Boolean)
+      .join(' ')
+      .toLowerCase(),
+  };
+}
+
+/** The kitchen's real number of listed dishes (the list response only carries a few of them). */
+function dishCountLabel(k: PublicSeller): string {
+  const count = k.productCount ?? k.products?.length ?? 0;
+  return `${count} ${count === 1 ? 'dish' : 'dishes'}`;
+}
+
+/** "20% off" when the kitchen lists a higher original price; nothing otherwise. */
+function DealBadge({ dish }: { dish: DashboardDish }) {
+  if (!dish.originalPrice) return null;
+  const percentOff = Math.round((1 - dish.price / dish.originalPrice) * 100);
+  if (percentOff <= 0) return null;
+  return (
+    <span className="absolute top-2.5 left-2.5 px-2 py-0.5 rounded-lg text-white text-[10px] font-bold bg-[#FF5500] shadow-xs uppercase tracking-wider flex items-center gap-1">
+      <Tag className="w-3 h-3" />
+      <span>{percentOff}% off</span>
+    </span>
+  );
 }
 
 // Cuisine → Kitchen mapping (which kitchen specialties match which cuisine query)
@@ -124,7 +192,7 @@ export default function CustomerDashboardPage() {
   const [conflictModal, setConflictModal] = useState<{
     isOpen: boolean;
     existingKitchenName: string;
-    dish: any | null;
+    dish: DashboardDish | null;
   }>({
     isOpen: false,
     existingKitchenName: '',
@@ -132,10 +200,10 @@ export default function CustomerDashboardPage() {
   });
   const [switchingKitchen, setSwitchingKitchen] = useState(false);
 
-  // Load trending dishes calculated by the smart algorithm
-  const trendingDishes = useMemo(() => {
-    return getSmartTrendingDishes();
-  }, []);
+  // Real dishes from the products API, most popular first (kitchens in the selected
+  // community are listed first by the API).
+  const [trendingDishes, setTrendingDishes] = useState<DashboardDish[]>([]);
+  const [dishesLoading, setDishesLoading] = useState(true);
 
   // Label for selected cuisine
   const selectedCuisineLabel = useMemo(() => {
@@ -147,9 +215,8 @@ export default function CustomerDashboardPage() {
   const matchingDishes = useMemo(() => {
     return trendingDishes.filter((dish) => {
       if (selectedCuisine) {
-        const dishText = (dish.category + ' ' + dish.cuisine + ' ' + dish.name).toLowerCase();
         const tags = CUISINE_KITCHEN_TAGS[selectedCuisine] || [selectedCuisine];
-        if (!tags.some((t) => dishText.includes(t))) return false;
+        if (!tags.some((t) => dish.searchText.includes(t))) return false;
       }
       if (dishesFilter === 'fresh' && dish.isFrozen) return false;
       if (dishesFilter === 'frozen' && !dish.isFrozen) return false;
@@ -214,21 +281,21 @@ export default function CustomerDashboardPage() {
   // Biryani & Rice Degs rail
   const biryaniDishes = useMemo(() => {
     return displayDishes.filter((d) =>
-      ['biryani', 'pulao', 'rice', 'dum'].some((t) => (d.category + ' ' + d.name + ' ' + d.cuisine).toLowerCase().includes(t))
+      ['biryani', 'pulao', 'rice', 'dum'].some((t) => d.searchText.includes(t))
     );
   }, [displayDishes]);
 
   // Slow Pots: Nihari, Karahi, Slow Braise
   const slowPotDishes = useMemo(() => {
     return displayDishes.filter((d) =>
-      ['nihari', 'karahi', 'curry', 'kunna', 'gosht', 'kebab'].some((t) => (d.category + ' ' + d.name + ' ' + d.cuisine).toLowerCase().includes(t))
+      ['nihari', 'karahi', 'curry', 'kunna', 'gosht', 'kebab'].some((t) => d.searchText.includes(t))
     );
   }, [displayDishes]);
 
   // Sub-Zero Frozen Savories
   const frozenSavoriesDishes = useMemo(() => {
     return displayDishes.filter((d) =>
-      d.isFrozen || ['samosa', 'roll', 'frozen', 'patties', 'paratha', 'shami'].some((t) => (d.category + ' ' + d.name).toLowerCase().includes(t))
+      d.isFrozen || ['samosa', 'roll', 'frozen', 'patties', 'paratha', 'shami'].some((t) => d.searchText.includes(t))
     );
   }, [displayDishes]);
 
@@ -254,6 +321,22 @@ export default function CustomerDashboardPage() {
         if (!cancelled && sellers) setDbSellers(sellers);
       })
       .catch((err) => console.error('Failed to load sellers on dashboard:', err));
+
+    setDishesLoading(true);
+    productService
+      .getProducts({ sort: 'popular', limit: 40, communityId: selectedCommunity?.id })
+      .then((res) => {
+        if (cancelled) return;
+        const products = (res?.data?.products || []) as ListedProduct[];
+        setTrendingDishes(products.map(toDashboardDish));
+      })
+      .catch((err) => {
+        console.error('Failed to load dishes on dashboard:', err);
+        if (!cancelled) setTrendingDishes([]);
+      })
+      .finally(() => {
+        if (!cancelled) setDishesLoading(false);
+      });
 
     const commId = selectedCommunity?.id || selectedCommunity?.slug || 'askari-11';
     communityService
@@ -291,20 +374,8 @@ export default function CustomerDashboardPage() {
     return () => { cancelled = true; };
   }, [isAuthenticated, selectedCommunity?.id, selectedCommunity?.slug]);
 
-  const handleAddToCart = async (dish: TrendingDishItem) => {
-    addCartItem({
-      id: `${dish.id}-${Date.now()}`,
-      productId: dish.id,
-      productName: dish.name,
-      productImage: dish.photo,
-      sellerId: dish.sellerId,
-      sellerName: dish.kitchenName,
-      quantity: 1,
-      unitPrice: dish.price,
-      stockType: dish.isFrozen ? 'hub' : 'direct',
-      subtotal: dish.price,
-    });
-
+  const handleAddToCart = async (dish: DashboardDish) => {
+    // Server cart first: only show the dish in the tray once the API has accepted it.
     if (isAuthenticated) {
       try {
         await cartService.addToCart({
@@ -312,9 +383,10 @@ export default function CustomerDashboardPage() {
           quantity: 1,
           stockType: dish.isFrozen ? 'hub' : 'direct',
         });
-      } catch (err: any) {
-        if (err?.response?.status === 409 || err?.response?.data?.error?.code === 'CART_SELLER_MISMATCH') {
-          const details = err?.response?.data?.error?.details;
+      } catch (err) {
+        const response = isAxiosError<ApiError>(err) ? err.response : undefined;
+        if (response?.status === 409 || response?.data?.error?.code === 'CART_SELLER_MISMATCH') {
+          const details = response?.data?.error?.details as { existingSeller?: { name?: string } } | undefined;
           setConflictModal({
             isOpen: true,
             existingKitchenName: details?.existingSeller?.name || 'another kitchen',
@@ -322,9 +394,23 @@ export default function CustomerDashboardPage() {
           });
           return;
         }
+        showToast(response?.data?.error?.message || `Could not add ${dish.name} to your tray`, 'error');
+        return;
       }
     }
 
+    addCartItem({
+      id: `${dish.id}-${Date.now()}`,
+      productId: dish.id,
+      productName: dish.name,
+      productImage: dish.photo || undefined,
+      sellerId: dish.sellerId,
+      sellerName: dish.kitchenName,
+      quantity: 1,
+      unitPrice: dish.price,
+      stockType: dish.isFrozen ? 'hub' : 'direct',
+      subtotal: dish.price,
+    });
     showToast(`Added ${dish.name} to tray`, 'success');
   };
 
@@ -344,7 +430,7 @@ export default function CustomerDashboardPage() {
         id: `${dish.id}-${Date.now()}`,
         productId: dish.id,
         productName: dish.name,
-        productImage: dish.photo,
+        productImage: dish.photo || undefined,
         sellerId: dish.sellerId,
         sellerName: dish.kitchenName,
         quantity: 1,
@@ -361,12 +447,16 @@ export default function CustomerDashboardPage() {
     }
   };
 
-  const currentCommunityName = selectedCommunity?.name || 'Askari 11';
+  const currentCommunityName = selectedCommunity?.name || null;
 
   return (
     <DashboardLayout
       title="Kitchens &amp; Menus"
-      subtitle={`Certified home kitchens, signature recipes & provisions in ${currentCommunityName}`}
+      subtitle={
+        currentCommunityName
+          ? `Verified home kitchens and their menus in ${currentCommunityName}`
+          : 'Verified home kitchens and their menus. Choose your area to see kitchens near you.'
+      }
       sidebarItems={CUSTOMER_SIDEBAR_ITEMS}
       userType="customer"
     >
@@ -517,7 +607,7 @@ export default function CustomerDashboardPage() {
                     <span>Verified Domestic Cooks</span>
                   </div>
                   <h2 className="text-xl font-black text-slate-900 tracking-tight">
-                    "{selectedCuisineLabel}" Kitchens in {currentCommunityName}
+                    "{selectedCuisineLabel}" Kitchens{currentCommunityName ? ` in ${currentCommunityName}` : ''}
                   </h2>
                   <p className="text-xs text-slate-500 font-medium">
                     Showing verified domestic kitchens specializing in {selectedCuisineLabel}
@@ -554,10 +644,12 @@ export default function CustomerDashboardPage() {
                       className="group bg-white rounded-2xl border border-slate-200/90 shadow-2xs hover:shadow-lg hover:border-slate-300 transition-all overflow-hidden flex flex-col justify-between h-full"
                     >
                       <div className="relative aspect-[16/10] w-full overflow-hidden bg-slate-100">
-                        <img
-                          src={k.coverImageUrl || 'https://images.unsplash.com/photo-1565557623262-b51c2513a641?w=800&q=80&auto=format&fit=crop'}
+                        <CoverImage
+                          src={k.coverImageUrl}
                           alt={k.businessName}
-                          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                          label={k.businessName}
+                          size="md"
+                          className="w-full h-full group-hover:scale-105 transition-transform duration-300"
                         />
                         <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent" />
                         <span className="absolute bottom-2.5 left-2.5 px-2 py-0.5 rounded-md bg-emerald-600/90 text-white text-[10px] font-bold flex items-center gap-1">
@@ -566,40 +658,46 @@ export default function CustomerDashboardPage() {
                         </span>
                         <span className="absolute bottom-2.5 right-2.5 px-2 py-0.5 rounded-md bg-black/75 text-white text-[11px] font-bold flex items-center gap-1">
                           <Star className="w-3 h-3 fill-amber-400 text-amber-400" />
-                          <span>{k.ratingAverage || 4.9}</span>
+                          <span>{displayRating(k.ratingAverage, k.totalReviews) ?? 'New'}</span>
                         </span>
                       </div>
 
                       <div className="p-4 flex-1 flex flex-col justify-between">
                         <div>
                           <div className="flex items-center gap-2.5 mb-2">
-                            <img
-                              src={k.chef.avatar || 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=150&q=80&auto=format&fit=crop'}
+                            <CoverImage
+                              src={k.chef.avatar}
                               alt={k.chef.name}
-                              className="w-8 h-8 rounded-xl object-cover border border-slate-200 shrink-0"
+                              label={k.chef.name}
+                              size="sm"
+                              className="w-8 h-8 rounded-xl border border-slate-200 shrink-0"
                             />
                             <div className="min-w-0">
                               <h3 className="text-sm font-bold text-slate-900 group-hover:text-[#FF5500] transition-colors truncate">
                                 {k.businessName}
                               </h3>
                               <p className="text-[11px] text-slate-500 truncate">
-                                {k.chef.name} • {k.chef.area || currentCommunityName}
+                                {[k.chef.name, k.chef.area].filter(Boolean).join(' • ')}
                               </p>
                             </div>
                           </div>
                           <div className="text-xs text-slate-500 flex items-center gap-2 mt-2">
-                            <span className="flex items-center gap-1 font-semibold text-slate-700">
-                              <Clock className="w-3 h-3 text-slate-400" />
-                              {k.minPrepTimeMinutes || 25} min
-                            </span>
-                            <span>•</span>
-                            <span>{k.products?.length || 4} dishes</span>
+                            {(k.minPrepTimeMinutes ?? 0) > 0 && (
+                              <>
+                                <span className="flex items-center gap-1 font-semibold text-slate-700">
+                                  <Clock className="w-3 h-3 text-slate-400" />
+                                  {k.minPrepTimeMinutes} min
+                                </span>
+                                <span>•</span>
+                              </>
+                            )}
+                            <span>{dishCountLabel(k)}</span>
                           </div>
                         </div>
 
                         <div className="mt-3.5 pt-2.5 border-t border-slate-100 flex items-center justify-between text-xs">
                           <span className="text-[11px] font-semibold text-slate-500 truncate">
-                            {k.mealCategories?.[0] || selectedCuisineLabel}
+                            {k.mealCategories?.[0] || 'Home Cooked'}
                           </span>
                           <span className="font-bold text-[#FF5500] inline-flex items-center gap-0.5 group-hover:translate-x-0.5 transition-transform shrink-0">
                             <span>View Menu</span>
@@ -619,13 +717,13 @@ export default function CustomerDashboardPage() {
                 <div>
                   <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-orange-100 text-[#FF5500] text-[10px] font-bold uppercase tracking-wider mb-1">
                     <Flame className="w-3.5 h-3.5 text-[#FF5500]" />
-                    <span>Real-Time Trending</span>
+                    <span>Popular Dishes</span>
                   </div>
                   <h2 className="text-xl font-black text-slate-900 tracking-tight">
-                    Trending "{selectedCuisineLabel}" Dishes
+                    &quot;{selectedCuisineLabel}&quot; Dishes
                   </h2>
                   <p className="text-xs text-slate-500 font-medium">
-                    Most requested {selectedCuisineLabel} preparations right now
+                    Popular {selectedCuisineLabel} dishes from kitchens on Nuray
                   </p>
                 </div>
                 <div className="flex items-center gap-2">
@@ -652,23 +750,27 @@ export default function CustomerDashboardPage() {
                 ref={top10RowRef}
                 className="flex gap-4 overflow-x-auto scrollbar-none pb-2 scroll-smooth"
               >
+                {displayDishes.length === 0 && (
+                  <p className="text-xs text-slate-500 font-medium py-6">
+                    {dishesLoading ? 'Loading dishes…' : `No ${selectedCuisineLabel} dishes are listed yet.`}
+                  </p>
+                )}
                 {displayDishes.map((dish) => (
                   <div key={dish.id} className="w-[240px] sm:w-[270px] shrink-0">
                     <div className="group bg-white rounded-2xl border border-slate-200/90 shadow-2xs hover:shadow-lg hover:border-orange-300 transition-all overflow-hidden flex flex-col justify-between h-full">
                       <div className="relative aspect-[16/10] w-full overflow-hidden bg-slate-100">
-                        <img
+                        <CoverImage
                           src={dish.photo}
                           alt={dish.name}
-                          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                          label={dish.name}
+                          size="md"
+                          className="w-full h-full group-hover:scale-105 transition-transform duration-300"
                         />
                         <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-transparent to-transparent" />
-                        <span className="absolute top-2.5 left-2.5 px-2 py-0.5 rounded-lg text-white text-[10px] font-bold bg-[#FF5500] shadow-xs uppercase tracking-wider flex items-center gap-1">
-                          <Flame className="w-3 h-3" />
-                          <span>{dish.trendingBadge}</span>
-                        </span>
+                        <DealBadge dish={dish} />
                         <span className="absolute bottom-2.5 right-2.5 px-2 py-0.5 rounded-md bg-white/95 text-slate-900 text-[11px] font-bold flex items-center gap-1 shadow-2xs">
                           <Star className="w-3 h-3 fill-amber-500 text-amber-500" />
-                          <span>{dish.rating}</span>
+                          <span>{dish.rating ?? 'New'}</span>
                         </span>
                       </div>
 
@@ -716,7 +818,7 @@ export default function CustomerDashboardPage() {
                     <div className="flex items-center gap-2 mb-1">
                       <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-gradient-to-r from-amber-500 to-[#FF5500] text-white text-[10px] font-black uppercase tracking-wider shadow-xs">
                         <Trophy className="w-3 h-3" />
-                        <span>TOP 10 TODAY</span>
+                        <span>TOP 10</span>
                       </div>
                       {isRandomOrder && (
                         <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-violet-100 text-violet-700 text-[10px] font-bold">
@@ -726,10 +828,12 @@ export default function CustomerDashboardPage() {
                       )}
                     </div>
                     <h2 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight">
-                      Top 10 Trending in {currentCommunityName}
+                      Top 10 Popular Dishes
                     </h2>
                     <p className="text-xs text-slate-500 font-medium mt-0.5">
-                      Updated hourly · Ranked by 24h order volume, repeat reorders & live kitchen preparation
+                      {selectedCommunity?.name
+                        ? `Most popular dishes on Nuray, with kitchens in ${selectedCommunity.name} listed first`
+                        : 'Most popular dishes on Nuray'}
                     </p>
                   </div>
 
@@ -759,6 +863,13 @@ export default function CustomerDashboardPage() {
                   ref={top10RowRef}
                   className="flex gap-2 sm:gap-4 overflow-x-auto scrollbar-none pb-4 pt-1 px-1 scroll-smooth"
                 >
+                  {top10Dishes.length === 0 && (
+                    <p className="text-xs text-slate-500 font-medium py-6">
+                      {dishesLoading
+                        ? 'Loading dishes…'
+                        : 'No dishes are listed yet. Browse the kitchens below to see their menus.'}
+                    </p>
+                  )}
                   {top10Dishes.map((dish, index) => (
                     <div
                       key={dish.id}
@@ -778,35 +889,36 @@ export default function CustomerDashboardPage() {
                       {/* Food Poster Card (slightly overlaps the number) */}
                       <div className="relative z-10 w-[230px] sm:w-[260px] bg-white rounded-2xl border border-slate-200/90 shadow-2xs hover:shadow-xl hover:border-orange-300 transition-all overflow-hidden flex flex-col justify-between shrink-0">
                         <div className="relative aspect-[16/10] w-full overflow-hidden bg-slate-100">
-                          <img
+                          <CoverImage
                             src={dish.photo}
                             alt={dish.name}
-                            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                            label={dish.name}
+                            size="md"
+                            className="w-full h-full group-hover:scale-105 transition-transform duration-300"
                           />
                           <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-transparent to-transparent" />
 
-                          <span className="absolute top-2.5 left-2.5 px-2 py-0.5 rounded-lg text-white text-[10px] font-bold bg-[#FF5500] shadow-xs uppercase tracking-wider flex items-center gap-1">
-                            <Flame className="w-3 h-3" />
-                            <span>{dish.trendingBadge}</span>
-                          </span>
+                          <DealBadge dish={dish} />
 
-                          <span className="absolute bottom-2.5 left-2.5 px-2 py-0.5 rounded-md bg-black/70 backdrop-blur-xs text-white text-[10px] font-bold flex items-center gap-1">
-                            {dish.isFrozen ? (
-                              <>
-                                <Snowflake className="w-3 h-3 text-cyan-400" />
-                                <span>Frozen</span>
-                              </>
-                            ) : (
-                              <>
-                                <Clock className="w-3 h-3 text-amber-400" />
-                                <span>{dish.prepTimeMinutes}m Cook</span>
-                              </>
-                            )}
-                          </span>
+                          {(dish.isFrozen || dish.prepTimeMinutes) && (
+                            <span className="absolute bottom-2.5 left-2.5 px-2 py-0.5 rounded-md bg-black/70 backdrop-blur-xs text-white text-[10px] font-bold flex items-center gap-1">
+                              {dish.isFrozen ? (
+                                <>
+                                  <Snowflake className="w-3 h-3 text-cyan-400" />
+                                  <span>Frozen</span>
+                                </>
+                              ) : (
+                                <>
+                                  <Clock className="w-3 h-3 text-amber-400" />
+                                  <span>{dish.prepTimeMinutes}m Cook</span>
+                                </>
+                              )}
+                            </span>
+                          )}
 
                           <span className="absolute bottom-2.5 right-2.5 px-2 py-0.5 rounded-md bg-white/95 text-slate-900 text-[11px] font-bold flex items-center gap-1 shadow-2xs">
                             <Star className="w-3 h-3 fill-amber-500 text-amber-500" />
-                            <span>{dish.rating}</span>
+                            <span>{dish.rating ?? 'New'}</span>
                           </span>
                         </div>
 
@@ -822,12 +934,6 @@ export default function CustomerDashboardPage() {
                             <div className="mt-1.5 text-xs text-slate-500 flex items-center gap-1.5 truncate">
                               <ChefHat className="w-3 h-3 text-slate-400 shrink-0" />
                               <span className="font-semibold text-slate-700 truncate">{dish.kitchenName}</span>
-                            </div>
-
-                            <div className="mt-1.5 text-[11px] text-slate-400 flex items-center gap-2">
-                              <span className="text-slate-600 font-semibold">{dish.orderCount24h} orders</span>
-                              <span>•</span>
-                              <span className="text-emerald-600 font-semibold">{dish.repeatOrderPercent}% reorder</span>
                             </div>
                           </div>
 
@@ -858,20 +964,20 @@ export default function CustomerDashboardPage() {
               </section>
             )}
 
-            {/* ── ROW 2: 👨‍🍳 CERTIFIED DOMESTIC KITCHENS ── */}
+            {/* ── ROW 2: 👨‍🍳 VERIFIED HOME KITCHENS ── */}
             {(viewMode === 'all' || viewMode === 'kitchens') && (
               <section>
                 <div className="flex items-center justify-between mb-3">
                   <div>
                     <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-slate-100 text-slate-700 text-[10px] font-bold uppercase tracking-wider mb-1">
                       <ChefHat className="w-3.5 h-3.5 text-[#FF5500]" />
-                      <span>Certified Domestic Cooks</span>
+                      <span>Verified Home Cooks</span>
                     </div>
                     <h2 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight">
-                      Certified Kitchens in {currentCommunityName}
+                      Verified Kitchens{currentCommunityName ? ` in ${currentCommunityName}` : ''}
                     </h2>
                     <p className="text-xs text-slate-500 font-medium mt-0.5">
-                      Independent home cooks preparing authentic recipes with hygiene verification
+                      Independent home cooks, each approved by Nuray before they can sell
                     </p>
                   </div>
 
@@ -912,10 +1018,12 @@ export default function CustomerDashboardPage() {
                         className="group bg-white rounded-2xl border border-slate-200/90 shadow-2xs hover:shadow-lg hover:border-slate-300 transition-all overflow-hidden flex flex-col justify-between h-full"
                       >
                         <div className="relative aspect-[16/10] w-full overflow-hidden bg-slate-100">
-                          <img
-                            src={k.coverImageUrl || 'https://images.unsplash.com/photo-1565557623262-b51c2513a641?w=800&q=80&auto=format&fit=crop'}
+                          <CoverImage
+                            src={k.coverImageUrl}
                             alt={k.businessName}
-                            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                            label={k.businessName}
+                            size="md"
+                            className="w-full h-full group-hover:scale-105 transition-transform duration-300"
                           />
                           <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent" />
                           <span className="absolute bottom-2.5 left-2.5 px-2 py-0.5 rounded-md bg-emerald-600/90 text-white text-[10px] font-bold flex items-center gap-1">
@@ -924,34 +1032,40 @@ export default function CustomerDashboardPage() {
                           </span>
                           <span className="absolute bottom-2.5 right-2.5 px-2 py-0.5 rounded-md bg-black/75 text-white text-[11px] font-bold flex items-center gap-1">
                             <Star className="w-3 h-3 fill-amber-400 text-amber-400" />
-                            <span>{k.ratingAverage || 4.9}</span>
+                            <span>{displayRating(k.ratingAverage, k.totalReviews) ?? 'New'}</span>
                           </span>
                         </div>
 
                         <div className="p-4 flex-1 flex flex-col justify-between">
                           <div>
                             <div className="flex items-center gap-2.5 mb-2">
-                              <img
-                                src={k.chef.avatar || 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=150&q=80&auto=format&fit=crop'}
+                              <CoverImage
+                                src={k.chef.avatar}
                                 alt={k.chef.name}
-                                className="w-8 h-8 rounded-xl object-cover border border-slate-200 shrink-0"
+                                label={k.chef.name}
+                                size="sm"
+                                className="w-8 h-8 rounded-xl border border-slate-200 shrink-0"
                               />
                               <div className="min-w-0">
                                 <h3 className="text-sm font-bold text-slate-900 group-hover:text-[#FF5500] transition-colors truncate">
                                   {k.businessName}
                                 </h3>
                                 <p className="text-[11px] text-slate-500 truncate">
-                                  {k.chef.name} • {k.chef.area || currentCommunityName}
+                                  {[k.chef.name, k.chef.area].filter(Boolean).join(' • ')}
                                 </p>
                               </div>
                             </div>
                             <div className="text-xs text-slate-500 flex items-center gap-2 mt-2">
-                              <span className="flex items-center gap-1 font-semibold text-slate-700">
-                                <Clock className="w-3 h-3 text-slate-400" />
-                                {k.minPrepTimeMinutes || 25} min prep
-                              </span>
-                              <span>•</span>
-                              <span>{k.products?.length || 4} dishes</span>
+                              {(k.minPrepTimeMinutes ?? 0) > 0 && (
+                                <>
+                                  <span className="flex items-center gap-1 font-semibold text-slate-700">
+                                    <Clock className="w-3 h-3 text-slate-400" />
+                                    {k.minPrepTimeMinutes} min prep
+                                  </span>
+                                  <span>•</span>
+                                </>
+                              )}
+                              <span>{dishCountLabel(k)}</span>
                             </div>
                           </div>
 
@@ -1017,19 +1131,18 @@ export default function CustomerDashboardPage() {
                     <div key={dish.id} className="w-[240px] sm:w-[270px] shrink-0">
                       <div className="group bg-white rounded-2xl border border-slate-200/90 shadow-2xs hover:shadow-lg hover:border-orange-300 transition-all overflow-hidden flex flex-col justify-between h-full">
                         <div className="relative aspect-[16/10] w-full overflow-hidden bg-slate-100">
-                          <img
+                          <CoverImage
                             src={dish.photo}
                             alt={dish.name}
-                            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                            label={dish.name}
+                            size="md"
+                            className="w-full h-full group-hover:scale-105 transition-transform duration-300"
                           />
                           <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-transparent to-transparent" />
-                          <span className="absolute top-2.5 left-2.5 px-2 py-0.5 rounded-lg text-white text-[10px] font-bold bg-[#FF5500] shadow-xs uppercase tracking-wider flex items-center gap-1">
-                            <Flame className="w-3 h-3" />
-                            <span>{dish.trendingBadge}</span>
-                          </span>
+                          <DealBadge dish={dish} />
                           <span className="absolute bottom-2.5 right-2.5 px-2 py-0.5 rounded-md bg-white/95 text-slate-900 text-[11px] font-bold flex items-center gap-1 shadow-2xs">
                             <Star className="w-3 h-3 fill-amber-500 text-amber-500" />
-                            <span>{dish.rating}</span>
+                            <span>{dish.rating ?? 'New'}</span>
                           </span>
                         </div>
 
@@ -1111,19 +1224,18 @@ export default function CustomerDashboardPage() {
                     <div key={dish.id} className="w-[240px] sm:w-[270px] shrink-0">
                       <div className="group bg-white rounded-2xl border border-slate-200/90 shadow-2xs hover:shadow-lg hover:border-orange-300 transition-all overflow-hidden flex flex-col justify-between h-full">
                         <div className="relative aspect-[16/10] w-full overflow-hidden bg-slate-100">
-                          <img
+                          <CoverImage
                             src={dish.photo}
                             alt={dish.name}
-                            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                            label={dish.name}
+                            size="md"
+                            className="w-full h-full group-hover:scale-105 transition-transform duration-300"
                           />
                           <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-transparent to-transparent" />
-                          <span className="absolute top-2.5 left-2.5 px-2 py-0.5 rounded-lg text-white text-[10px] font-bold bg-[#FF5500] shadow-xs uppercase tracking-wider flex items-center gap-1">
-                            <Flame className="w-3 h-3" />
-                            <span>{dish.trendingBadge}</span>
-                          </span>
+                          <DealBadge dish={dish} />
                           <span className="absolute bottom-2.5 right-2.5 px-2 py-0.5 rounded-md bg-white/95 text-slate-900 text-[11px] font-bold flex items-center gap-1 shadow-2xs">
                             <Star className="w-3 h-3 fill-amber-500 text-amber-500" />
-                            <span>{dish.rating}</span>
+                            <span>{dish.rating ?? 'New'}</span>
                           </span>
                         </div>
 
@@ -1205,19 +1317,25 @@ export default function CustomerDashboardPage() {
                     <div key={dish.id} className="w-[240px] sm:w-[270px] shrink-0">
                       <div className="group bg-white rounded-2xl border border-slate-200/90 shadow-2xs hover:shadow-lg hover:border-cyan-300 transition-all overflow-hidden flex flex-col justify-between h-full">
                         <div className="relative aspect-[16/10] w-full overflow-hidden bg-slate-100">
-                          <img
+                          <CoverImage
                             src={dish.photo}
                             alt={dish.name}
-                            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                            label={dish.name}
+                            size="md"
+                            className="w-full h-full group-hover:scale-105 transition-transform duration-300"
                           />
                           <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-transparent to-transparent" />
-                          <span className="absolute top-2.5 left-2.5 px-2 py-0.5 rounded-lg text-white text-[10px] font-bold bg-cyan-600 shadow-xs uppercase tracking-wider flex items-center gap-1">
-                            <Snowflake className="w-3 h-3" />
-                            <span>Frozen</span>
-                          </span>
+                          {dish.isFrozen ? (
+                            <span className="absolute top-2.5 left-2.5 px-2 py-0.5 rounded-lg text-white text-[10px] font-bold bg-cyan-600 shadow-xs uppercase tracking-wider flex items-center gap-1">
+                              <Snowflake className="w-3 h-3" />
+                              <span>Frozen</span>
+                            </span>
+                          ) : (
+                            <DealBadge dish={dish} />
+                          )}
                           <span className="absolute bottom-2.5 right-2.5 px-2 py-0.5 rounded-md bg-white/95 text-slate-900 text-[11px] font-bold flex items-center gap-1 shadow-2xs">
                             <Star className="w-3 h-3 fill-amber-500 text-amber-500" />
-                            <span>{dish.rating}</span>
+                            <span>{dish.rating ?? 'New'}</span>
                           </span>
                         </div>
 

@@ -164,14 +164,14 @@ export function CommunitySelector({ variant = 'navbar' }: CommunitySelectorProps
               variant === 'navbar' ? 'text-orange-700' : 'text-slate-400'
             }`}
           >
-            Delivering to
+            {selectedCommunity ? 'Delivering to' : 'Your area'}
           </span>
           <span
             className={`text-xs sm:text-sm font-extrabold truncate max-w-[130px] sm:max-w-[170px] leading-tight ${
               variant === 'navbar' ? 'text-slate-900' : 'text-white'
             }`}
           >
-            {selectedCommunity ? selectedCommunity.name : 'Askari 11'}
+            {selectedCommunity ? selectedCommunity.name : 'Choose your area'}
           </span>
         </div>
         <ChevronDown
@@ -224,7 +224,7 @@ export function CommunitySelector({ variant = 'navbar' }: CommunitySelectorProps
                       Current Location
                     </p>
                     <p className="text-xs font-bold text-slate-900 truncate">
-                      {selectedCommunity ? `${selectedCommunity.name}, ${selectedCommunity.city}` : 'Askari 11, Lahore'}
+                      {selectedCommunity ? `${selectedCommunity.name}, ${selectedCommunity.city}` : 'No area chosen yet'}
                     </p>
                   </div>
                 </div>

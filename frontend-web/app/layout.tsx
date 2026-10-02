@@ -19,8 +19,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Nuray Food & Frost | Pakistan's Unorthodox Food & Cold-Chain Delivery",
-  description: "Express hot homemade meals & sub-zero -18°C frozen packs delivered straight from verified home kitchens in Karachi.",
+  title: "Nuray | Home-cooked food from kitchens in your community",
+  description: "Order fresh and frozen home-cooked food from verified home kitchens in your community, for delivery or pickup.",
 };
 
 export default function RootLayout({

@@ -234,19 +234,6 @@ export function resolveLocationSmart(
     }
   }
 
-  // 3. Fallback default to Askari 11
-  const askari11 = availableCommunities.find((c) => c.slug === 'askari-11');
-  if (askari11) {
-    return {
-      community: askari11,
-      confidence: 0.5,
-      matchedBy: 'default',
-    };
-  }
-
-  return {
-    community: availableCommunities[0],
-    confidence: 0.5,
-    matchedBy: 'default',
-  };
+  // Nothing to go on: no guess. The buyer chooses their area.
+  return null;
 }

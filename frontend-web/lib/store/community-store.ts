@@ -46,13 +46,10 @@ export const useCommunityStore = create<CommunityState>()(
           const list = await communityService.getCommunities();
           set({ communities: list, isLoading: false });
 
-          // Default to Askari 11 or smart match if none selected
+          // No community is picked on the buyer's behalf: until they choose one (or GPS
+          // finds one), pages ask them to choose instead of showing some other area's kitchens.
           const current = get().selectedCommunity;
-          if (!current && list.length > 0) {
-            const smartDefault = resolveLocationSmart({}, list);
-            const defaultComm = smartDefault?.community || list.find((c) => c.slug === 'askari-11') || list[0];
-            set({ selectedCommunity: defaultComm });
-          } else if (current && list.length > 0) {
+          if (current && list.length > 0) {
             // Re-sync with fresh community from list by id or slug
             const fresh = list.find((c) => c.id === current.id || c.slug === current.slug);
             if (fresh) {

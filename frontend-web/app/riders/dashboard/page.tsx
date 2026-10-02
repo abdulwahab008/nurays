@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/toast';
 import { useAuthStore } from '@/lib/store/auth-store';
 import { riderService, Delivery, RiderProfile } from '@/lib/services/rider.service';
-import { formatPrice } from '@/lib/utils';
+import { formatPrice, displayRating } from '@/lib/utils';
 
 const ROAD_STEPS = [
   { id: 'assigned', label: 'Claimed', icon: '📋' },
@@ -276,6 +276,14 @@ export default function RiderDashboardPage() {
   const floatingLimit = profile?.floatingLimit ?? 10000;
   const cashPercent = Math.min(100, Math.round((cashInHand / floatingLimit) * 100));
 
+  // The profile API returns null for details the rider hasn't provided and a 0 rating
+  // until they are rated: show "Not set" / "New" rather than made-up values.
+  const riderRating = displayRating(profile?.ratingAverage);
+  const vehicleLabel =
+    [profile?.vehicleType, profile?.vehicleNumber ? `(${profile.vehicleNumber})` : null]
+      .filter(Boolean)
+      .join(' ') || 'Not set';
+
   return (
     <DashboardLayout
       title="Rider Fleet Command"
@@ -294,17 +302,14 @@ export default function RiderDashboardPage() {
             <div>
               <div className="flex items-center gap-2 flex-wrap">
                 <h2 className="font-black text-lg text-white">
-                  {profile?.name || (user as any)?.profile?.fullName || 'Tariq Mehmood'}
+                  {profile?.name || (user as any)?.profile?.fullName || 'Name not set'}
                 </h2>
                 <span className="px-2 py-0.5 rounded text-[11px] font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
-                  ⭐ {profile?.ratingAverage?.toFixed(1) || '4.9'} Fleet Score
-                </span>
-                <span className="px-2 py-0.5 rounded text-[11px] font-bold bg-cyan-500/20 text-cyan-400 border border-cyan-500/30">
-                  ❄️ -18°C Box Verified
+                  ⭐ {riderRating ? `${riderRating} Fleet Score` : 'New'}
                 </span>
               </div>
               <p className="text-xs text-slate-400 mt-0.5">
-                Vehicle: <strong className="text-slate-200">{profile?.vehicleType || 'Motorbike'} ({profile?.vehicleNumber || 'KHI-8921'})</strong> • Base: <strong className="text-slate-200">{profile?.city || 'Karachi'} Central Hub</strong>
+                Vehicle: <strong className="text-slate-200">{vehicleLabel}</strong> • City: <strong className="text-slate-200">{profile?.city || 'Not set'}</strong>
               </p>
             </div>
           </div>
@@ -688,7 +693,7 @@ export default function RiderDashboardPage() {
                               <div className="flex items-center gap-1.5 flex-wrap">
                                 {d.isRouteMatch && (
                                   <span className="px-2 py-0.5 rounded text-[10px] font-black bg-emerald-600 text-white shadow-xs animate-pulse">
-                                    ⚡ Route Match (+Rs {d.batchBonus || 100})
+                                    ⚡ Route Match (+Rs {d.batchBonus})
                                   </span>
                                 )}
                                 <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-800">
@@ -720,10 +725,10 @@ export default function RiderDashboardPage() {
                               <div className="flex items-center justify-between">
                                 <span className="text-slate-600 font-semibold">Standard Delivery Payout:</span>
                                 <span className="font-black text-emerald-700">
-                                  Rs {d.standardFee || 160}
+                                  Rs {d.standardFee}
                                   {d.isRouteMatch && (
                                     <span className="text-[10px] text-emerald-600 font-bold ml-1">
-                                      (+Rs {d.batchBonus || 100} bonus)
+                                      (+Rs {d.batchBonus} bonus)
                                     </span>
                                   )}
                                 </span>
@@ -731,7 +736,7 @@ export default function RiderDashboardPage() {
                               <div className="flex items-center justify-between text-[10px] text-slate-500">
                                 <span>inDrive Regulated Corridor:</span>
                                 <span className="font-medium text-slate-700">
-                                  Rs {d.minAskFee || 120} – Rs {d.maxAskFee || 240} cap
+                                  Rs {d.minAskFee} – Rs {d.maxAskFee} cap
                                 </span>
                               </div>
                             </div>
@@ -755,18 +760,20 @@ export default function RiderDashboardPage() {
                                 {busyId === d.id
                                   ? 'Claiming...'
                                   : d.isRouteMatch
-                                  ? `Claim Batched (+Rs ${d.batchBonus || 100})`
-                                  : `Claim (Rs ${d.standardFee || 160})`}
+                                  ? `Claim Batched (+Rs ${d.batchBonus})`
+                                  : `Claim (Rs ${d.standardFee})`}
                               </Button>
-                              <Button
-                                variant="outline"
-                                onClick={() => handleClaim(d.id, d.maxAskFee || 220)}
-                                disabled={busyId === d.id}
-                                className="border-cyan-300 text-cyan-800 hover:bg-cyan-50 font-bold text-[11px] py-2 px-2.5 rounded-xl whitespace-nowrap"
-                                title="Ask max capped fee for this corridor (inDrive model)"
-                              >
-                                Ask Rs {d.maxAskFee || 220}
-                              </Button>
+                              {(d.maxAskFee ?? 0) > (d.standardFee ?? 0) && (
+                                <Button
+                                  variant="outline"
+                                  onClick={() => handleClaim(d.id, d.maxAskFee)}
+                                  disabled={busyId === d.id}
+                                  className="border-cyan-300 text-cyan-800 hover:bg-cyan-50 font-bold text-[11px] py-2 px-2.5 rounded-xl whitespace-nowrap"
+                                  title="Ask the highest fee allowed for this distance"
+                                >
+                                  Ask Rs {d.maxAskFee}
+                                </Button>
+                              )}
                             </div>
                           )}
                         </div>
@@ -862,18 +869,8 @@ export default function RiderDashboardPage() {
                   </div>
 
                   <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-100">
-                    <span className="text-slate-400 block text-[10px] font-bold uppercase">On-Time Rate</span>
-                    <span className="text-base font-black text-emerald-600">99.4%</span>
-                  </div>
-
-                  <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-100">
-                    <span className="text-slate-400 block text-[10px] font-bold uppercase">Handshake Rate</span>
-                    <span className="text-base font-black text-emerald-600">100%</span>
-                  </div>
-
-                  <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-100">
-                    <span className="text-slate-400 block text-[10px] font-bold uppercase">Cold Compliance</span>
-                    <span className="text-base font-black text-cyan-600">-18.4°C</span>
+                    <span className="text-slate-400 block text-[10px] font-bold uppercase">Active Now</span>
+                    <span className="text-base font-black text-slate-800">{activeDeliveries.length}</span>
                   </div>
                 </div>
               </div>

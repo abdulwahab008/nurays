@@ -10,261 +10,199 @@ import {
   ShieldCheck,
   Heart,
   MapPin,
-  Flame,
   Snowflake,
   ChefHat,
-  SlidersHorizontal,
   ChevronRight,
   ArrowUpDown,
+  ShoppingBag,
 } from 'lucide-react';
 import { BrandLockup } from '@/components/ui/Mark';
-import { sellerService, PublicSeller } from '@/lib/services/seller.service';
+import { CoverImage } from '@/components/ui/CoverImage';
+import { apiClient, ApiResponse } from '@/lib/api-client';
+import type { PublicSeller, PublicSellerAvailability } from '@/lib/services/seller.service';
+import { displayRating, formatPrice } from '@/lib/utils';
 import { useAuthStore } from '@/lib/store/auth-store';
 import { useCartStore } from '@/lib/store/cart-store';
 import { DashboardLayout, CUSTOMER_SIDEBAR_ITEMS } from '@/components/layout/DashboardShell';
 import { CommunitySelector } from '@/components/community/CommunitySelector';
-import { ShoppingBag } from 'lucide-react';
 
+/** A kitchen card, built only from what the API returns — no made-up defaults. */
 interface Kitchen {
   id: string;
   name: string;
   chef: string;
+  /** "Area, City", or '' when the kitchen hasn't set a location. */
   area: string;
-  rating: number;
+  /** Rating to show ("4.6"), or null when there are no reviews yet (shown as "New"). */
+  rating: string | null;
+  /** Numeric rating for sorting/filtering; 0 when there are no reviews. */
+  ratingValue: number;
   reviewsCount: number;
-  eta: string;
-  deliveryFee: string;
-  distance: string;
+  /** The kitchen's own delivery terms, or null when it hasn't set any (the fee is worked out at checkout). */
+  deliveryFee: string | null;
+  offersFreeDelivery: boolean;
+  /** Minimum order for delivery, or null when the kitchen has none. */
+  minOrder: number | null;
   isOpen: boolean;
-  closesAt: string;
-  deal?: string;
-  dealTag?: string;
+  /** Short open/closed label from the API's availability; null when the API didn't say. */
+  openLabel: string | null;
+  /** Longer version of openLabel, with the next opening/closing time when known. */
+  openDetail: string | null;
+  /** At least one dish is really discounted (the API's originalPrice is above its price). */
+  hasDiscount: boolean;
   cuisine: string[];
-  coverPhoto: string;
-  avatar: string;
+  coverPhoto: string | null;
+  avatar: string | null;
   badge: string;
-  popularDish: string;
-  minOrder: string;
   href: string;
-  isSubZero?: boolean;
+  isSubZero: boolean;
 }
 
-const ALL_KITCHENS: Kitchen[] = [
-  {
-    id: 'k-saima',
-    name: "Saima's Craft Kitchen",
-    chef: 'Chef Saima Akhtar',
-    area: 'Gulshan-e-Iqbal, Block 4',
-    rating: 4.8,
-    reviewsCount: 245,
-    eta: '20-30 min',
-    deliveryFee: 'Free over Rs 500',
-    distance: '1.2 km',
-    isOpen: true,
-    closesAt: '11:30 PM',
-    deal: 'Free Delivery',
-    dealTag: 'PROMO',
-    cuisine: ['Desi Ghee Parathas', 'Shami Kebabs', 'Frozen Packs'],
-    coverPhoto: 'https://images.unsplash.com/photo-1565557623262-b51c2513a641?w=800&q=80&auto=format&fit=crop',
-    avatar: 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=150&q=80&auto=format&fit=crop',
-    badge: 'Verified Home Cook',
-    popularDish: 'Hand-Rolled Aloo Paratha (6-pack)',
-    minOrder: 'Rs 300',
-    href: '/kitchens/k-saima',
-    isSubZero: true,
-  },
-  {
-    id: 'k-naseem',
-    name: "Naseem's Dum Pukht",
-    chef: 'Chef Naseem Bano',
-    area: 'DHA Phase 6',
-    rating: 4.9,
-    reviewsCount: 480,
-    eta: '25-35 min',
-    deliveryFee: 'Rs 80 delivery',
-    distance: '1.8 km',
-    isOpen: true,
-    closesAt: '11:00 PM',
-    deal: '20% OFF (Code: DUM20)',
-    dealTag: 'HOT DEAL',
-    cuisine: ['Sindhi Dum Biryani', 'Yakhni Pulao', 'Zarda'],
-    coverPhoto: 'https://images.unsplash.com/photo-1633945274405-b6c8069047b0?w=800&q=80&auto=format&fit=crop',
-    avatar: 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=150&q=80&auto=format&fit=crop',
-    badge: 'Master Biryani Chef',
-    popularDish: 'Special Zafrani Dum Biryani',
-    minOrder: 'Rs 500',
-    href: '/kitchens/k-naseem',
-    isSubZero: false,
-  },
-  {
-    id: 'k-asma',
-    name: "Phupo Asma's Heritage Pot",
-    chef: 'Asma Begum',
-    area: 'PECHS Block 2',
-    rating: 4.95,
-    reviewsCount: 310,
-    eta: '30-40 min',
-    deliveryFee: 'Rs 100 delivery',
-    distance: '2.6 km',
-    isOpen: true,
-    closesAt: '10:30 PM',
-    deal: 'Buy 1 Get 1 Naan',
-    dealTag: 'SPECIAL',
-    cuisine: ['Slow-Cooked Beef Nihari', 'Kunna Gosht', 'Nalli'],
-    coverPhoto: 'https://images.unsplash.com/photo-1603894584373-5ac82b2ae398?w=800&q=80&auto=format&fit=crop',
-    avatar: 'https://images.unsplash.com/photo-1580489944761-15a19d654956?w=150&q=80&auto=format&fit=crop',
-    badge: '12h Slow-Cook Specialist',
-    popularDish: 'Royal Shahi Beef Nihari',
-    minOrder: 'Rs 600',
-    href: '/kitchens/k-asma',
-    isSubZero: false,
-  },
-  {
-    id: 'k-fareeha',
-    name: "Fareeha's Frozen Savories",
-    chef: 'Fareeha Tariq',
-    area: 'Clifton Block 5',
-    rating: 4.75,
-    reviewsCount: 190,
-    eta: 'Sub-Zero Dispatch',
-    deliveryFee: 'Free over Rs 1,000',
-    distance: '3.1 km',
-    isOpen: true,
-    closesAt: '12:00 AM',
-    deal: 'Free Chutney Pack',
-    dealTag: 'SNACK BONUS',
-    cuisine: ['Cocktail Samosas', 'Spring Rolls', 'Patties'],
-    coverPhoto: 'https://images.unsplash.com/photo-1601050690597-df0568f70950?w=800&q=80&auto=format&fit=crop',
-    avatar: 'https://images.unsplash.com/photo-1567532939604-b6b5b0db2604?w=150&q=80&auto=format&fit=crop',
-    badge: 'Sub-Zero Cold Chain',
-    popularDish: 'Chicken & Cheese Spring Rolls (12-pack)',
-    minOrder: 'Rs 400',
-    href: '/kitchens/k-fareeha',
-    isSubZero: true,
-  },
-  {
-    id: 'k-burns',
-    name: 'Burns Road Heritage Kitchen',
-    chef: 'Chef Usman Qureshi',
-    area: 'Saddar Downtown',
-    rating: 4.88,
-    reviewsCount: 620,
-    eta: '25-35 min',
-    deliveryFee: 'Rs 70 delivery',
-    distance: '3.8 km',
-    isOpen: true,
-    closesAt: '2:00 AM',
-    deal: 'Free Raita with Platter',
-    dealTag: 'MIDNIGHT SPECIAL',
-    cuisine: ['Seekh Kebabs', 'Beef Bihari', 'Dhaga Kebab'],
-    coverPhoto: 'https://images.unsplash.com/photo-1555939594-58d7cb561ad1?w=800&q=80&auto=format&fit=crop',
-    avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150&q=80&auto=format&fit=crop',
-    badge: 'Old Karachi Master',
-    popularDish: 'Smoked Melt-in-Mouth Bihari Boti',
-    minOrder: 'Rs 450',
-    href: '/kitchens/k-burns',
-    isSubZero: false,
-  },
-  {
-    id: 'k-dadi',
-    name: "Dadi's Desi Kitchen",
-    chef: 'Zubaida Begum',
-    area: 'Federal B Area',
-    rating: 4.92,
-    reviewsCount: 380,
-    eta: '30-40 min',
-    deliveryFee: 'Free over Rs 600',
-    distance: '4.2 km',
-    isOpen: true,
-    closesAt: '10:00 PM',
-    deal: 'Complimentary Kheer',
-    dealTag: 'TRADITIONAL',
-    cuisine: ['Daal Chawal', 'Kadhi Pakora', 'Aloo Gosht'],
-    coverPhoto: 'https://images.unsplash.com/photo-1546833999-b9f581a1996d?w=800&q=80&auto=format&fit=crop',
-    avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&q=80&auto=format&fit=crop',
-    badge: 'Pure Home Comfort',
-    popularDish: 'Tarka Daal with Basmati Chawal',
-    minOrder: 'Rs 350',
-    href: '/kitchens/k-dadi',
-    isSubZero: false,
-  },
-];
+type SortOption = 'rating' | 'reviews';
+type LoadStatus = 'loading' | 'ready' | 'error';
+
+// Kitchens set their hours in Pakistan time.
+const PKT = 'Asia/Karachi';
+
+const BUSINESS_TYPE_LABEL: Record<string, string> = {
+  home_kitchen: 'Home Kitchen',
+  restaurant: 'Restaurant',
+  bakery: 'Bakery',
+  cafe: 'Café',
+  cloud_kitchen: 'Cloud Kitchen',
+};
+
+// Kept short: the label sits on the card photo next to the verified badge.
+const CLOSED_LABEL: Partial<Record<PublicSellerAvailability['status'], string>> = {
+  busy: 'Busy now',
+  vacation: 'On vacation',
+  preorder_only: 'Pre-orders',
+};
+
+function positiveAmount(value: number | null | undefined): number | null {
+  const n = Number(value);
+  return value != null && Number.isFinite(n) && n > 0 ? n : null;
+}
+
+function nonNegativeAmount(value: number | null | undefined): number | null {
+  const n = Number(value);
+  return value != null && Number.isFinite(n) && n >= 0 ? n : null;
+}
+
+/** "today at 7:00 PM", "tomorrow at 1:00 PM", "Mon, Oct 5 at 1:00 PM"; null for a missing/invalid date. */
+function formatWhen(iso: string | null | undefined): string | null {
+  if (!iso) return null;
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return null;
+  const dayKey = (d: Date) => d.toLocaleDateString('en-CA', { timeZone: PKT });
+  const now = Date.now();
+  const day =
+    dayKey(date) === dayKey(new Date(now))
+      ? 'today'
+      : dayKey(date) === dayKey(new Date(now + 86400000))
+      ? 'tomorrow'
+      : date.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', timeZone: PKT });
+  const time = date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true, timeZone: PKT });
+  return `${day} at ${time}`;
+}
+
+function describeOpenState(availability?: PublicSellerAvailability | null): { label: string | null; detail: string | null } {
+  if (!availability) return { label: null, detail: null };
+  if (availability.isOpen) {
+    const closes = formatWhen(availability.closesAt);
+    return { label: 'Open now', detail: closes ? `Open now · closes ${closes}` : 'Open now' };
+  }
+  const label = CLOSED_LABEL[availability.status] ?? 'Closed';
+  const opens = formatWhen(availability.opensAt || availability.nextOpenAt);
+  return { label, detail: opens ? `${label} · opens ${opens}` : label };
+}
+
+/** The kitchen's own delivery terms in a few words, or null when it hasn't set any. */
+function describeDeliveryFee(feeType: string | null | undefined, fixedFee: number | null, freeOver: number | null): string | null {
+  if (fixedFee === 0) return 'Free delivery';
+  if (freeOver != null) return `Free over ${formatPrice(freeOver)}`;
+  if (fixedFee != null) return `${formatPrice(fixedFee)} delivery`;
+  if (feeType === 'distance') return 'Fee by distance';
+  return null;
+}
+
+/** "evening_snacks" -> "Evening snacks" */
+function formatCategory(category: string): string {
+  const text = category.replace(/_/g, ' ').trim();
+  return text.charAt(0).toUpperCase() + text.slice(1);
+}
+
+function toKitchen(s: PublicSeller): Kitchen {
+  const reviewsCount = Number(s.totalReviews) || 0;
+  const rating = displayRating(s.ratingAverage, reviewsCount);
+  const products = s.products ?? [];
+  const area = [s.chef?.area, s.chef?.city || s.community?.city].filter(Boolean).join(', ') || s.community?.name || '';
+  const freeOver = positiveAmount(s.freeDeliveryThreshold);
+  const fixedFee = s.deliveryFeeType === 'fixed' ? nonNegativeAmount(s.deliveryFeeFixed) : null;
+  const open = describeOpenState(s.availability);
+
+  return {
+    id: s.id,
+    name: s.businessName,
+    chef: s.chef?.name || s.businessName,
+    area,
+    rating,
+    ratingValue: rating ? Number(s.ratingAverage) : 0,
+    reviewsCount,
+    deliveryFee: describeDeliveryFee(s.deliveryFeeType, fixedFee, freeOver),
+    offersFreeDelivery: fixedFee === 0 || freeOver != null,
+    minOrder: positiveAmount(s.minOrderAmountForDelivery),
+    isOpen: s.availability?.isOpen === true,
+    openLabel: open.label,
+    openDetail: open.detail,
+    hasDiscount: products.some((p) => p.originalPrice != null && Number(p.originalPrice) > Number(p.price)),
+    cuisine: (s.mealCategories ?? []).map(formatCategory),
+    coverPhoto: s.coverImageUrl || null,
+    avatar: s.chef?.avatar || null,
+    // Only verified, approved kitchens are listed by the API.
+    badge: `Verified ${BUSINESS_TYPE_LABEL[s.businessType ?? ''] ?? 'Kitchen'}`,
+    href: `/kitchens/${s.id}`,
+    isSubZero: products.some((p) => p.productType === 'frozen'),
+  };
+}
 
 export default function KitchensDirectoryPage() {
-  const { isAuthenticated, user } = useAuthStore();
+  const { isAuthenticated } = useAuthStore();
   const { items: cartItems } = useCartStore();
   const [search, setSearch] = useState('');
   const [selectedFilter, setSelectedFilter] = useState('all');
   const [favorites, setFavorites] = useState<Set<string>>(new Set());
-  const [sortBy, setSortBy] = useState<'rating' | 'eta' | 'reviews'>('rating');
-  const [dbKitchens, setDbKitchens] = useState<Kitchen[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [sortBy, setSortBy] = useState<SortOption>('rating');
+  const [kitchens, setKitchens] = useState<Kitchen[]>([]);
+  const [status, setStatus] = useState<LoadStatus>('loading');
+  const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
-    sellerService.getPublicSellers().then((sellers) => {
-      if (cancelled) return;
-      if (sellers && sellers.length > 0) {
-        const mapped: Kitchen[] = sellers.map((s) => {
-          const locParts = [s.chef.area, s.chef.city || s.community?.city].filter(Boolean);
-          const area = locParts.length > 0 ? locParts.join(', ') : (s.community?.name || 'Local Community');
+    // Calls the API directly: sellerService.getPublicSellers() turns a failed request into an
+    // empty list, which would wrongly tell people there are no kitchens instead of offering a retry.
+    apiClient
+      .get<ApiResponse<PublicSeller[]>>('/sellers', { params: { limit: 50 } })
+      .then((res) => {
+        if (cancelled) return;
+        setKitchens((res.data?.data ?? []).map(toKitchen));
+        setStatus('ready');
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        console.error('Failed to load kitchens directory:', err);
+        setStatus('error');
+      });
 
-          let deliveryFee = 'Free over Rs 500';
-          if (s.freeDeliveryThreshold != null && Number(s.freeDeliveryThreshold) > 0) {
-            deliveryFee = `Free over Rs ${s.freeDeliveryThreshold}`;
-          } else if (s.deliveryFeeFixed != null && Number(s.deliveryFeeFixed) > 0) {
-            deliveryFee = `Rs ${s.deliveryFeeFixed} delivery`;
-          } else if (s.community?.deliveryBaseFee) {
-            deliveryFee = `Rs ${s.community.deliveryBaseFee} delivery`;
-          }
+    return () => {
+      cancelled = true;
+    };
+  }, [reloadKey]);
 
-          let minOrder = 'No min order';
-          if (s.minOrderAmountForDelivery != null && Number(s.minOrderAmountForDelivery) > 0) {
-            minOrder = `Rs ${s.minOrderAmountForDelivery}`;
-          }
-
-          const isOpen = s.availability ? s.availability.isOpen : true;
-          let closesAt = '11:00 PM';
-          if (s.availability?.closesAt) {
-            closesAt = new Date(s.availability.closesAt).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
-          }
-
-          return {
-            id: s.id,
-            name: s.businessName,
-            chef: s.chef.name,
-            area,
-            rating: Number(s.ratingAverage) || 4.8,
-            reviewsCount: s.totalReviews || 120,
-            eta: `${s.minPrepTimeMinutes || 20}-${(s.minPrepTimeMinutes || 20) + 10} min`,
-            deliveryFee,
-            distance: '1.4 km',
-            isOpen,
-            closesAt,
-            deal: s.products.some((p) => p.originalPrice && p.originalPrice > p.price) ? 'Special Discount' : undefined,
-            dealTag: s.products.some((p) => p.originalPrice && p.originalPrice > p.price) ? 'PROMO' : undefined,
-            cuisine: s.mealCategories && s.mealCategories.length > 0 ? s.mealCategories : ['Home Cooked Meals', 'Family Recipes'],
-            coverPhoto: s.coverImageUrl || 'https://images.unsplash.com/photo-1565557623262-b51c2513a641?w=800&q=80&auto=format&fit=crop',
-            avatar: s.chef.avatar || 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=150&q=80&auto=format&fit=crop',
-            badge: s.businessType === 'home_kitchen' ? 'Certified Home Chef' : 'Verified Domestic Cook',
-            popularDish: s.products[0]?.name || 'Specialty Home Meal',
-            minOrder,
-            href: `/kitchens/${s.id}`,
-            isSubZero: s.products.some((p) => p.productType === 'frozen'),
-          };
-        });
-        setDbKitchens(mapped);
-      }
-    }).catch((err) => {
-      console.error('Failed to load kitchens directory:', err);
-    }).finally(() => {
-      if (!cancelled) setLoading(false);
-    });
-
-    return () => { cancelled = true; };
-  }, []);
-
-  const kitchenSource = dbKitchens.length > 0 ? dbKitchens : ALL_KITCHENS;
+  const retry = () => {
+    setStatus('loading');
+    setReloadKey((k) => k + 1);
+  };
 
   const toggleFavorite = (id: string, e: React.MouseEvent) => {
     e.preventDefault();
@@ -278,28 +216,45 @@ export default function KitchensDirectoryPage() {
   };
 
   const filteredKitchens = useMemo(() => {
-    return kitchenSource.filter((k) => {
-      if (search.trim()) {
-        const q = search.toLowerCase();
-        const matchesName = k.name.toLowerCase().includes(q);
-        const matchesChef = k.chef.toLowerCase().includes(q);
-        const matchesArea = k.area.toLowerCase().includes(q);
-        const matchesCuisine = k.cuisine.some((c) => c.toLowerCase().includes(q));
-        if (!matchesName && !matchesChef && !matchesArea && !matchesCuisine) return false;
-      }
+    const q = search.trim().toLowerCase();
+    return kitchens
+      .filter((k) => {
+        if (q) {
+          const matchesName = k.name.toLowerCase().includes(q);
+          const matchesChef = k.chef.toLowerCase().includes(q);
+          const matchesArea = k.area.toLowerCase().includes(q);
+          const matchesCuisine = k.cuisine.some((c) => c.toLowerCase().includes(q));
+          if (!matchesName && !matchesChef && !matchesArea && !matchesCuisine) return false;
+        }
 
-      if (selectedFilter === 'top_rated' && k.rating < 4.85) return false;
-      if (selectedFilter === 'fast' && !k.eta.includes('20')) return false;
-      if (selectedFilter === 'free_delivery' && !k.deliveryFee.toLowerCase().includes('free')) return false;
-      if (selectedFilter === 'frozen' && !k.isSubZero) return false;
+        if (selectedFilter === 'top_rated' && (!k.rating || k.ratingValue < 4.85)) return false;
+        if (selectedFilter === 'open_now' && !k.isOpen) return false;
+        if (selectedFilter === 'free_delivery' && !k.offersFreeDelivery) return false;
+        if (selectedFilter === 'frozen' && !k.isSubZero) return false;
 
-      return true;
-    }).sort((a, b) => {
-      if (sortBy === 'rating') return b.rating - a.rating;
-      if (sortBy === 'reviews') return b.reviewsCount - a.reviewsCount;
-      return a.eta.localeCompare(b.eta);
-    });
-  }, [kitchenSource, search, selectedFilter, sortBy]);
+        return true;
+      })
+      .sort((a, b) => {
+        if (sortBy === 'reviews') return b.reviewsCount - a.reviewsCount;
+        // Highest rated first; kitchens with no reviews yet ("New") come after rated ones.
+        return b.ratingValue - a.ratingValue || b.reviewsCount - a.reviewsCount;
+      });
+  }, [kitchens, search, selectedFilter, sortBy]);
+
+  // Average over every review across the listed kitchens; null until someone has reviewed.
+  const averageRating = useMemo(() => {
+    let total = 0;
+    let count = 0;
+    for (const k of kitchens) {
+      if (!k.rating) continue;
+      total += k.ratingValue * k.reviewsCount;
+      count += k.reviewsCount;
+    }
+    return count > 0 ? (total / count).toFixed(1) : null;
+  }, [kitchens]);
+
+  const isReady = status === 'ready';
+  const kitchenCountLabel = `${kitchens.length} ${kitchens.length === 1 ? 'Kitchen' : 'Kitchens'}`;
 
   const renderToolbar = () => (
     <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4">
@@ -326,9 +281,9 @@ export default function KitchensDirectoryPage() {
         {[
           { id: 'all', label: 'All Kitchens', icon: ChefHat },
           { id: 'top_rated', label: 'Top Rated (4.85+)', icon: Star },
-          { id: 'fast', label: 'Under 30 min', icon: Clock },
+          { id: 'open_now', label: 'Open Now', icon: Clock },
           { id: 'free_delivery', label: 'Free Delivery', icon: Bike },
-          { id: 'frozen', label: '-18°C Sub-Zero', icon: Snowflake },
+          { id: 'frozen', label: 'Frozen', icon: Snowflake },
         ].map((chip) => {
           const Icon = chip.icon;
           const isActive = selectedFilter === chip.id;
@@ -354,35 +309,99 @@ export default function KitchensDirectoryPage() {
           <ArrowUpDown className="w-3.5 h-3.5" />
           <select
             value={sortBy}
-            onChange={(e) => setSortBy(e.target.value as any)}
+            onChange={(e) => setSortBy(e.target.value as SortOption)}
             className="bg-transparent text-xs font-semibold text-slate-700 outline-none cursor-pointer"
           >
             <option value="rating">Highest Rated</option>
             <option value="reviews">Most Reviewed</option>
-            <option value="eta">Fastest Delivery</option>
           </select>
         </div>
       </div>
     </div>
   );
 
+  const renderLoadingSkeleton = () => (
+    <div
+      className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-3 gap-6"
+      aria-busy="true"
+      aria-label="Loading kitchens"
+    >
+      {Array.from({ length: 6 }).map((_, i) => (
+        <div
+          key={i}
+          className="bg-white rounded-2xl border border-slate-200/90 shadow-xs overflow-hidden animate-pulse"
+        >
+          <div className="aspect-[16/10] w-full bg-slate-100" />
+          <div className="p-4 space-y-3">
+            <div className="flex items-center gap-2.5">
+              <div className="w-9 h-9 rounded-xl bg-slate-100 flex-shrink-0" />
+              <div className="flex-1 space-y-1.5">
+                <div className="h-3.5 w-2/3 rounded bg-slate-100" />
+                <div className="h-2.5 w-1/2 rounded bg-slate-100" />
+              </div>
+            </div>
+            <div className="h-3 w-3/4 rounded bg-slate-100" />
+            <div className="pt-2.5 border-t border-slate-100 flex gap-1">
+              <div className="h-4 w-16 rounded-md bg-slate-100" />
+              <div className="h-4 w-12 rounded-md bg-slate-100" />
+            </div>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+
   const renderKitchensGrid = (isPublic: boolean) => (
     <div className={isPublic ? 'max-w-[1400px] mx-auto px-4 sm:px-6 py-8' : 'py-2'}>
-      <div className="flex items-center justify-between mb-6">
-        <p className="text-xs font-semibold text-slate-500">
-          Showing <span className="font-bold text-slate-900">{filteredKitchens.length}</span> certified kitchens
-        </p>
-        {selectedFilter !== 'all' && (
-          <button
-            onClick={() => setSelectedFilter('all')}
-            className="text-xs font-semibold text-[#FF5500] hover:underline"
-          >
-            Reset Filters
-          </button>
-        )}
-      </div>
+      {isReady && kitchens.length > 0 && (
+        <div className="flex items-center justify-between mb-6">
+          <p className="text-xs font-semibold text-slate-500">
+            Showing <span className="font-bold text-slate-900">{filteredKitchens.length}</span> verified{' '}
+            {filteredKitchens.length === 1 ? 'kitchen' : 'kitchens'}
+          </p>
+          {selectedFilter !== 'all' && (
+            <button
+              onClick={() => setSelectedFilter('all')}
+              className="text-xs font-semibold text-[#FF5500] hover:underline"
+            >
+              Reset Filters
+            </button>
+          )}
+        </div>
+      )}
 
-      {filteredKitchens.length === 0 ? (
+      {status === 'loading' ? (
+        renderLoadingSkeleton()
+      ) : status === 'error' ? (
+        <div
+          role="alert"
+          className="bg-white rounded-2xl border border-slate-200 p-12 text-center max-w-md mx-auto my-12"
+        >
+          <div className="w-12 h-12 rounded-2xl bg-orange-50 text-[#FF5500] flex items-center justify-center mx-auto mb-3">
+            <ChefHat className="w-6 h-6" />
+          </div>
+          <h3 className="text-base font-bold text-slate-900 mb-1">We couldn&apos;t load kitchens</h3>
+          <p className="text-xs text-slate-500 mb-5">
+            Something went wrong while fetching the kitchen list. Check your connection and try again.
+          </p>
+          <button
+            onClick={retry}
+            className="px-4 py-2 rounded-xl bg-slate-900 text-white text-xs font-semibold hover:bg-black transition-colors"
+          >
+            Try Again
+          </button>
+        </div>
+      ) : kitchens.length === 0 ? (
+        <div className="bg-white rounded-2xl border border-slate-200 p-12 text-center max-w-md mx-auto my-12">
+          <div className="w-12 h-12 rounded-2xl bg-orange-50 text-[#FF5500] flex items-center justify-center mx-auto mb-3">
+            <ChefHat className="w-6 h-6" />
+          </div>
+          <h3 className="text-base font-bold text-slate-900 mb-1">No kitchens listed yet</h3>
+          <p className="text-xs text-slate-500">
+            There are no verified kitchens on Nuray right now. Please check back soon.
+          </p>
+        </div>
+      ) : filteredKitchens.length === 0 ? (
         <div className="bg-white rounded-2xl border border-slate-200 p-12 text-center max-w-md mx-auto my-12">
           <div className="w-12 h-12 rounded-2xl bg-orange-50 text-[#FF5500] flex items-center justify-center mx-auto mb-3">
             <ChefHat className="w-6 h-6" />
@@ -413,18 +432,19 @@ export default function KitchensDirectoryPage() {
               >
                 {/* Photo Container */}
                 <div className="relative aspect-[16/10] w-full overflow-hidden bg-slate-100">
-                  <img
+                  <CoverImage
                     src={kitchen.coverPhoto}
                     alt={kitchen.name}
-                    loading="lazy"
-                    className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+                    label={kitchen.name}
+                    size="md"
+                    className="w-full h-full transition-transform duration-500 group-hover:scale-105"
                   />
                   <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-black/10" />
 
-                  {/* Deal Ribbon */}
-                  {kitchen.deal && (
+                  {/* Discount Ribbon — only when a dish really is discounted */}
+                  {kitchen.hasDiscount && (
                     <span className="absolute top-3 left-3 px-2.5 py-1 rounded-md text-white text-[10px] font-bold bg-[#FF5500] shadow-xs uppercase tracking-wider">
-                      {kitchen.deal}
+                      Discounted dishes
                     </span>
                   )}
 
@@ -441,13 +461,18 @@ export default function KitchensDirectoryPage() {
                     />
                   </button>
 
-                  {/* ETA Pill */}
-                  <span className="absolute bottom-3 right-3 px-2.5 py-1 rounded-lg bg-black/75 backdrop-blur-xs text-white text-[11px] font-bold flex items-center gap-1">
-                    <Clock className="w-3 h-3" />
-                    <span>{kitchen.eta}</span>
-                  </span>
+                  {/* Opening State Pill (from the API's availability) */}
+                  {kitchen.openLabel && (
+                    <span
+                      title={kitchen.openDetail ?? undefined}
+                      className="absolute bottom-3 right-3 px-2.5 py-1 rounded-lg bg-black/75 backdrop-blur-xs text-white text-[11px] font-bold flex items-center gap-1 whitespace-nowrap"
+                    >
+                      <Clock className="w-3 h-3" />
+                      <span>{kitchen.openLabel}</span>
+                    </span>
+                  )}
 
-                  {/* Verified Chef Badge */}
+                  {/* Verified Kitchen Badge */}
                   <span className="absolute bottom-3 left-3 px-2 py-0.5 rounded-md bg-emerald-600/90 backdrop-blur-xs text-white text-[10px] font-bold flex items-center gap-1">
                     <ShieldCheck className="w-3 h-3" />
                     <span>{kitchen.badge}</span>
@@ -459,10 +484,12 @@ export default function KitchensDirectoryPage() {
                   <div>
                     <div className="flex items-start justify-between gap-2 mb-2">
                       <div className="flex items-center gap-2.5 min-w-0">
-                        <img
+                        <CoverImage
                           src={kitchen.avatar}
                           alt={kitchen.chef}
-                          className="w-9 h-9 rounded-xl object-cover border border-slate-200 flex-shrink-0"
+                          label={kitchen.chef}
+                          size="sm"
+                          className="w-9 h-9 rounded-xl border border-slate-200 flex-shrink-0"
                         />
                         <div className="min-w-0">
                           <h2 className="text-sm font-bold text-slate-900 group-hover:text-[#FF5500] truncate transition-colors">
@@ -470,17 +497,34 @@ export default function KitchensDirectoryPage() {
                           </h2>
                           <p className="text-[11px] text-slate-500 font-medium truncate flex items-center gap-1">
                             <span>{kitchen.chef}</span>
-                            <span>•</span>
-                            <MapPin className="w-3 h-3 text-slate-400 inline flex-shrink-0" />
-                            <span>{kitchen.area.split(',')[0]}</span>
+                            {kitchen.area && (
+                              <>
+                                <span>•</span>
+                                <MapPin className="w-3 h-3 text-slate-400 inline flex-shrink-0" />
+                                <span>{kitchen.area.split(',')[0]}</span>
+                              </>
+                            )}
                           </p>
                         </div>
                       </div>
 
-                      {/* Rating pill */}
-                      <span className="flex-shrink-0 bg-amber-50 text-amber-900 px-2 py-0.5 rounded-lg text-xs font-bold border border-amber-200/80 flex items-center gap-1">
-                        <Star className="w-3 h-3 fill-amber-500 text-amber-500" />
-                        <span>{kitchen.rating}</span>
+                      {/* Rating pill — "New" until the kitchen has real reviews */}
+                      <span
+                        title={
+                          kitchen.rating
+                            ? `${kitchen.rating} from ${kitchen.reviewsCount} ${kitchen.reviewsCount === 1 ? 'review' : 'reviews'}`
+                            : 'No reviews yet'
+                        }
+                        className="flex-shrink-0 bg-amber-50 text-amber-900 px-2 py-0.5 rounded-lg text-xs font-bold border border-amber-200/80 flex items-center gap-1"
+                      >
+                        {kitchen.rating ? (
+                          <>
+                            <Star className="w-3 h-3 fill-amber-500 text-amber-500" />
+                            <span>{kitchen.rating}</span>
+                          </>
+                        ) : (
+                          <span>New</span>
+                        )}
                       </span>
                     </div>
 
@@ -488,26 +532,28 @@ export default function KitchensDirectoryPage() {
                     <div className="mt-2 text-xs text-slate-600 font-medium flex items-center gap-2">
                       <span className="flex items-center gap-1 text-slate-700">
                         <Bike className="w-3.5 h-3.5 text-slate-400" />
-                        {kitchen.deliveryFee}
+                        {kitchen.deliveryFee ?? 'Delivery fee at checkout'}
                       </span>
                       <span className="text-slate-300">•</span>
-                      <span>{kitchen.distance}</span>
-                      <span className="text-slate-300">•</span>
-                      <span className="text-[11px] text-slate-400">Min {kitchen.minOrder}</span>
+                      <span className="text-[11px] text-slate-400">
+                        {kitchen.minOrder != null ? `Min ${formatPrice(kitchen.minOrder)}` : 'No min order'}
+                      </span>
                     </div>
                   </div>
 
                   {/* Cuisines */}
-                  <div className="mt-3 pt-2.5 border-t border-slate-100 flex flex-wrap gap-1">
-                    {kitchen.cuisine.map((c) => (
-                      <span
-                        key={c}
-                        className="px-2 py-0.5 rounded-md bg-slate-50 text-[10px] font-semibold text-slate-600 border border-slate-100"
-                      >
-                        {c}
-                      </span>
-                    ))}
-                  </div>
+                  {kitchen.cuisine.length > 0 && (
+                    <div className="mt-3 pt-2.5 border-t border-slate-100 flex flex-wrap gap-1">
+                      {kitchen.cuisine.map((c) => (
+                        <span
+                          key={c}
+                          className="px-2 py-0.5 rounded-md bg-slate-50 text-[10px] font-semibold text-slate-600 border border-slate-100"
+                        >
+                          {c}
+                        </span>
+                      ))}
+                    </div>
+                  )}
                 </div>
               </Link>
             );
@@ -522,7 +568,7 @@ export default function KitchensDirectoryPage() {
     return (
       <DashboardLayout
         title="Verified Kitchens"
-        subtitle="Discover certified domestic kitchens and home cooks in your neighborhood"
+        subtitle="Discover verified kitchens and home cooks on Nuray"
         sidebarItems={CUSTOMER_SIDEBAR_ITEMS}
         userType="customer"
       >
@@ -535,28 +581,28 @@ export default function KitchensDirectoryPage() {
               <ChevronRight className="w-3.5 h-3.5 rotate-180" />
               <span>Browse All Dishes</span>
             </Link>
-            <span className="text-xs font-medium text-slate-500">
-              Showing {filteredKitchens.length} domestic kitchens
-            </span>
+            {isReady && (
+              <span className="text-xs font-medium text-slate-500">
+                Showing {filteredKitchens.length} {filteredKitchens.length === 1 ? 'kitchen' : 'kitchens'}
+              </span>
+            )}
           </div>
 
           <div className="bg-white rounded-2xl border border-slate-200/80 p-5 shadow-xs">
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-5">
               <div>
-                <h2 className="text-base font-bold text-slate-900">Community Certified Kitchens</h2>
+                <h2 className="text-base font-bold text-slate-900">Community Verified Kitchens</h2>
                 <p className="text-xs text-slate-500">
                   Order directly from independent domestic chefs or batch prep kitchens
                 </p>
               </div>
               <div className="flex items-center gap-3 flex-wrap">
-                <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-50 border border-slate-200 text-xs font-semibold text-slate-700">
-                  <ChefHat className="w-3.5 h-3.5 text-[#FF5500]" />
-                  {kitchenSource.length} Verified Kitchens
-                </span>
-                <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-cyan-50 border border-cyan-200 text-xs font-semibold text-cyan-800">
-                  <Snowflake className="w-3.5 h-3.5 text-cyan-600" />
-                  -18°C Sub-Zero Fleet
-                </span>
+                {isReady && (
+                  <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-50 border border-slate-200 text-xs font-semibold text-slate-700">
+                    <ChefHat className="w-3.5 h-3.5 text-[#FF5500]" />
+                    {kitchens.length} Verified {kitchens.length === 1 ? 'Kitchen' : 'Kitchens'}
+                  </span>
+                )}
               </div>
             </div>
             {renderToolbar()}
@@ -625,31 +671,35 @@ export default function KitchensDirectoryPage() {
             <div>
               <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-orange-50 border border-orange-200 text-[#FF5500] text-xs font-bold uppercase tracking-wider mb-2.5">
                 <ChefHat className="w-3.5 h-3.5" />
-                <span>Karachi Multi-Vendor Home Kitchens</span>
+                <span>Multi-Vendor Home Kitchens</span>
               </div>
               <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-slate-900">
-                Verified Domestic Kitchens
+                Verified Kitchens
               </h1>
               <p className="text-xs sm:text-sm text-slate-500 font-medium mt-1 max-w-2xl leading-relaxed">
-                Discover independent home cooks crafting small-batch recipes, freshly cooked and delivered via express or -18°C cold-chain fleet.
+                Independent home cooks in your community, each approved by Nuray before they can sell. Fresh meals and frozen packs, delivered or ready for pickup.
               </p>
             </div>
 
-            {/* Quick Metrics Pills */}
+            {/* Quick Metrics Pills — real counts, "—" while loading */}
             <div className="flex items-center gap-3 flex-wrap">
               <div className="px-3.5 py-2 rounded-xl bg-slate-50 border border-slate-200 text-left">
-                <div className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">Certified Kitchens</div>
-                <div className="text-sm font-bold text-slate-900">{kitchenSource.length} Domestic Cooks</div>
-              </div>
-              <div className="px-3.5 py-2 rounded-xl bg-slate-50 border border-slate-200 text-left">
-                <div className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">Cold-Chain</div>
-                <div className="text-sm font-bold text-cyan-700">-18°C Insulated</div>
+                <div className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">Verified Kitchens</div>
+                <div className="text-sm font-bold text-slate-900">{isReady ? kitchenCountLabel : '—'}</div>
               </div>
               <div className="px-3.5 py-2 rounded-xl bg-slate-50 border border-slate-200 text-left">
                 <div className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">Average Rating</div>
                 <div className="text-sm font-bold text-amber-700 flex items-center gap-1">
-                  <Star className="w-3.5 h-3.5 fill-amber-500 text-amber-500" />
-                  <span>4.87 / 5.0</span>
+                  {!isReady ? (
+                    <span>—</span>
+                  ) : averageRating ? (
+                    <>
+                      <Star className="w-3.5 h-3.5 fill-amber-500 text-amber-500" />
+                      <span>{averageRating} / 5.0</span>
+                    </>
+                  ) : (
+                    <span>No reviews yet</span>
+                  )}
                 </div>
               </div>
             </div>
@@ -669,4 +719,3 @@ export default function KitchensDirectoryPage() {
     </div>
   );
 }
-

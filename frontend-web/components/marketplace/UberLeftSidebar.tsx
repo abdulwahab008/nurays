@@ -44,7 +44,7 @@ export function UberLeftSidebar({
     { label: 'Frozen Pantry', href: '/products?productType=frozen', icon: Snowflake, id: 'frozen' },
     { label: 'Fresh Hot Specials', href: '/products?productType=fresh', icon: Flame, id: 'fresh' },
     { label: 'Daily Deals & Offers', href: '/products?offers=true', icon: Tag, id: 'offers' },
-    { label: 'Top Rated Chefs (4.8+)', href: '/products?sort=rating', icon: Star, id: 'top_rated' },
+    { label: 'Top Rated Kitchens', href: '/products?sort=rating', icon: Star, id: 'top_rated' },
   ];
 
   const quickCategories = [

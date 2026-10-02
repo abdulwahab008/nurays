@@ -12,18 +12,18 @@ export interface CuisineCategory {
   isColdChain?: boolean;
 }
 
+// Browse shortcuts: each tile searches the catalog. The photos illustrate the dish type;
+// they are not photos of any kitchen's food.
 export const PLATFORM_CUISINES: CuisineCategory[] = [
   {
     label: 'Dum Biryani',
     query: 'biryani',
     image: 'https://images.unsplash.com/photo-1633945274405-b6c8069047b0?w=300&q=80&auto=format&fit=crop',
-    badge: 'Popular',
   },
   {
     label: 'Shahi Nihari',
     query: 'nihari',
     image: 'https://images.unsplash.com/photo-1589302168068-964664d93dc0?w=300&q=80&auto=format&fit=crop',
-    badge: '12h Braise',
   },
   {
     label: 'Desi Parathas',
@@ -34,13 +34,11 @@ export const PLATFORM_CUISINES: CuisineCategory[] = [
     label: 'Charcoal Kebabs',
     query: 'kebab',
     image: 'https://images.unsplash.com/photo-1599488615731-7e5c2823ff28?w=300&q=80&auto=format&fit=crop',
-    badge: 'Hot BBQ',
   },
   {
     label: 'Halwa Puri',
     query: 'halwa',
     image: 'https://images.unsplash.com/photo-1589301760014-d929f3979dbc?w=300&q=80&auto=format&fit=crop',
-    badge: 'Morning',
   },
   {
     label: 'Kunna & Karahi',
@@ -58,7 +56,6 @@ export const PLATFORM_CUISINES: CuisineCategory[] = [
     label: 'Matka Kheer',
     query: 'kheer',
     image: 'https://images.unsplash.com/photo-1593560708920-61dd98c46a4e?w=300&q=80&auto=format&fit=crop',
-    badge: 'Artisanal',
   },
   {
     label: 'Pulao & Yakhni',

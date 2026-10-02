@@ -11,17 +11,21 @@ test.describe('Nuray smoke', () => {
     await expect(page.locator('a[href="/login"]').first()).toBeVisible();
   });
 
+  // A first visit has no area chosen: the Kitchens tab asks for one, and the Dishes tab
+  // lists the whole catalog.
   test('/products lists items fetched from backend', async ({ page }) => {
     await page.goto('/products');
-    await expect(page.getByRole('heading', { name: /Karachi Home Kitchens/i })).toBeVisible({ timeout: 15000 });
-    const cards = page.locator('a[href*="/products/"], a[href*="/kitchens/"]');
+    await expect(page.getByRole('heading', { level: 1, name: /Home Kitchens & Menus/i })).toBeVisible({ timeout: 15000 });
+    await page.getByRole('button', { name: /^Dishes/ }).click();
+    const cards = page.locator('a[href*="/products/"]');
     await expect(cards.first()).toBeVisible({ timeout: 15000 });
     expect(await cards.count()).toBeGreaterThan(0);
   });
 
   test('kitchen/product link navigates and displays details', async ({ page }) => {
     await page.goto('/products');
-    const firstLink = page.locator('a[href*="/kitchens/"], a[href*="/products/"]').first();
+    await page.getByRole('button', { name: /^Dishes/ }).click();
+    const firstLink = page.locator('a[href*="/products/"]').first();
     await expect(firstLink).toBeVisible({ timeout: 15000 });
     await firstLink.click();
     await expect(page).toHaveURL(/\/(kitchens|products)\//, { timeout: 15000 });

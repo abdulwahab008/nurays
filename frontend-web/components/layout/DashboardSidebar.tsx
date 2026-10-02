@@ -442,17 +442,17 @@ function DashboardSidebarContent({ items, userType }: DashboardSidebarProps) {
               Fleet SOS &amp; Support
             </h4>
             <p className="text-[11px] mb-3 text-slate-600 font-medium">
-              Road emergency or dispute? Contact central dispatch immediately.
+              Problem on a run or a dispute? Open a support ticket and our team will follow up.
             </p>
-            <a
-              href="tel:02111168729"
+            <Link
+              href="/support"
               className="flex items-center justify-center gap-1.5 w-full py-2 text-xs font-bold rounded-xl transition-all active:scale-95 shadow-sm bg-emerald-600 hover:bg-emerald-700 text-white"
             >
               <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 6.75c0 8.284 6.716 15 15 15h2.25a2.25 2.25 0 002.25-2.25v-1.372c0-.516-.351-.966-.852-1.091l-4.423-1.106c-.44-.11-.902.055-1.173.417l-.97 1.293c-.282.376-.769.542-1.21.38a12.035 12.035 0 01-7.143-7.143c-.162-.441.004-.928.38-1.21l1.293-.97c.363-.271.527-.734.417-1.173L6.963 3.102a1.125 1.125 0 00-1.091-.852H4.5A2.25 2.25 0 002.25 4.5v2.25z" />
+                <path strokeLinecap="round" strokeLinejoin="round" d="M8.625 12a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0H8.25m4.125 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0H12m4.125 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0h-.375M21 12c0 4.556-4.03 8.25-9 8.25a9.764 9.764 0 01-2.555-.337A5.972 5.972 0 015.41 20.97a5.969 5.969 0 01-.474-.065 4.48 4.48 0 00.978-2.025c.09-.457-.133-.901-.467-1.226C3.93 16.178 3 14.189 3 12c0-4.556 4.03-8.25 9-8.25s9 3.694 9 8.25z" />
               </svg>
-              Call Dispatch (24/7)
-            </a>
+              Contact Support
+            </Link>
           </div>
         ) : effectiveUserType === 'seller' ? (
           <div className="mt-8 p-4 rounded-2xl bg-slate-50 border border-slate-200">
@@ -466,25 +466,7 @@ function DashboardSidebarContent({ items, userType }: DashboardSidebarProps) {
               Need fresh ingredients or cold storage space? Request allocation at your hub.
             </p>
           </div>
-        ) : (
-          <div className="mt-8 p-4 rounded-2xl bg-gradient-to-br from-orange-50/80 to-amber-50/60 border border-orange-200/70 shadow-xs">
-            <h4 className="font-bold text-xs mb-1 text-slate-900 flex items-center gap-1.5">
-              <svg className="w-4 h-4 text-[#FF5500]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M21 11.25v8.25a1.5 1.5 0 01-1.5 1.5H4.5a1.5 1.5 0 01-1.5-1.5v-8.25M12 4.875A2.625 2.625 0 109.375 7.5H12m0-2.625V7.5m0-2.625A2.625 2.625 0 1114.625 7.5H12m0 0V21m-8.625-9.75h17.25c.621 0 1.125-.504 1.125-1.125v-1.5c0-.621-.504-1.125-1.125-1.125H3.375c-.621 0-1.125.504-1.125 1.125v1.5c0 .621.504 1.125 1.125 1.125z" />
-              </svg>
-              Refer a food lover
-            </h4>
-            <p className="text-[11px] mb-3 text-slate-600 font-medium">
-              Share Nuray &amp; get Rs 250 wallet credit on their first order.
-            </p>
-            <button className="flex items-center justify-center gap-1 w-full py-2 text-xs font-bold rounded-xl transition-all active:scale-95 shadow-xs bg-[#FF5500] hover:bg-[#E04400] text-white">
-              <span>Invite Friends</span>
-              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
-              </svg>
-            </button>
-          </div>
-        )}
+        ) : null}
       </div>
     </aside>
   );
