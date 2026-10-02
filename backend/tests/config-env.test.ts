@@ -76,6 +76,11 @@ describe('startup configuration', () => {
     expect(configProblems({ ...goodProd, RIDER_CASH_LIMIT: '15000' })).toEqual([]);
   });
 
+  it('needs both VAPID keys for web push, or neither', () => {
+    expect(configProblems({ ...goodProd, VAPID_PUBLIC_KEY: 'BPub' }).join(' ')).toMatch(/VAPID/);
+    expect(configProblems({ ...goodProd, VAPID_PUBLIC_KEY: 'BPub', VAPID_PRIVATE_KEY: 'priv' })).toEqual([]);
+  });
+
   it('is relaxed in development', () => {
     expect(configProblems({ NODE_ENV: 'development', DATABASE_URL: 'postgresql://x', JWT_SECRET: 'x'.repeat(10) + 'abcdefghijklmnopqrstuvwxyz' } as any)).toEqual([]);
     expect(emailProvider({ NODE_ENV: 'development' } as any)).toBe('ethereal');

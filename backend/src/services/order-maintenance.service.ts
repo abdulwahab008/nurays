@@ -1,6 +1,6 @@
 import prisma from '../config/database';
 import adminOrderService from './admin-order.service';
-import notificationService from './notification.service';
+import { notify } from './notify.service';
 
 /**
  * Orders that nobody is moving forward release their stock and the customer's money.
@@ -85,15 +85,17 @@ export async function sweepStaleOrders(now: Date = new Date()) {
     for (const o of unconfirmed) {
       await prisma.orderStatusHistory.create({ data: { orderId: o.id, status: o.orderStatus, notes: ESCALATION_NOTE } });
       for (const a of admins) {
-        await notificationService
-          .createNotification(a.id, {
-            type: 'payment_unconfirmed',
-            title: `Order #${o.orderNumber}: payment not confirmed`,
-            message: `The customer reported a transfer more than ${rules.confirmPaymentHours} hours ago and the kitchen hasn't confirmed or disputed it.`,
-            data: { orderId: o.id },
-            actionUrl: `/admin/orders/${o.id}`,
-          })
-          .catch(() => undefined);
+        await notify({
+          userId: a.id,
+          category: 'orders',
+          type: 'payment_unconfirmed',
+          title: `Order #${o.orderNumber}: payment not confirmed`,
+          message: `The customer reported a transfer more than ${rules.confirmPaymentHours} hours ago and the kitchen hasn't confirmed or disputed it.`,
+          data: { orderId: o.id },
+          actionUrl: `/admin/orders/${o.id}`,
+          channels: ['push', 'email'],
+          dedupeKey: `order:${o.id}:escalated:${a.id}`,
+        });
       }
       result.escalated++;
     }

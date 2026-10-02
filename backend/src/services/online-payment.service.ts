@@ -5,7 +5,7 @@ import { createSafepayCheckout, safepayGateway } from '../gateways/safepay.gatew
 import { issueRefund } from './refund.service';
 import { creditWallet } from './wallet.service';
 import realtimeOrderService from './realtime-order.service';
-import notificationService from './notification.service';
+import { notify, notifyMany } from './notify.service';
 import { PAYABLE_STATUSES } from '../utils/paymentCustody';
 import { logger } from '../utils/logger';
 import { reportError } from '../config/sentry';
@@ -216,27 +216,64 @@ export async function settleAttempt(tracker: string, via: 'return' | 'webhook', 
       if (order) {
         await realtimeOrderService.emitOrderStatusUpdate(result.orderId, order.orderStatus, 'payment');
         if (result.outcome === 'paid') {
-          for (const sellerUserId of new Set(order.items.map((i) => i.seller.userId).filter(Boolean))) {
-            await notificationService.createNotification(sellerUserId, {
+          // Paid: now the kitchen should start (the new-order alert waited for this).
+          await notifyMany(
+            order.items.map((i) => i.seller.userId).filter(Boolean),
+            (sellerUserId) => ({
+              category: 'orders',
               type: 'order',
-              title: 'Payment received',
-              message: `Order #${order.orderNumber} has been paid online.`,
+              title: 'New paid order',
+              message: `Order #${order.orderNumber} has been paid online. Please accept it within 30 minutes.`,
               actionUrl: `/sellers/orders/${result.orderId}`,
               data: { orderId: result.orderId },
+              channels: ['push', 'email', 'sms'],
+              dedupeKey: `order:${result.orderId}:paid:${sellerUserId}`,
+            })
+          );
+          if (order.customerId) {
+            await notify({
+              userId: order.customerId,
+              category: 'payments',
+              type: 'payment',
+              title: 'Payment received',
+              message: `We received your payment for order #${order.orderNumber}.`,
+              actionUrl: `/orders/${result.orderId}`,
+              data: { orderId: result.orderId },
+              channels: ['email'],
+              dedupeKey: `order:${result.orderId}:paid:customer`,
             });
           }
         } else if (order.customerId) {
-          await notificationService.createNotification(order.customerId, {
+          await notify({
+            userId: order.customerId,
+            category: 'payments',
             type: 'payment',
             title: 'Payment credited to your wallet',
             message: `An online payment for order #${order.orderNumber} wasn't needed, so it is in your Nuray Wallet.`,
             actionUrl: '/wallet',
             data: { orderId: result.orderId },
+            channels: ['push', 'email'],
           });
         }
       }
     } catch (err) {
       logger.error({ err, orderId: result.orderId }, 'Payment notifications failed');
+    }
+  }
+  if (result.purpose === 'wallet_topup' && result.outcome === 'paid') {
+    // Mostly for a payment confirmed after the customer closed the page.
+    const attempt = await prisma.paymentAttempt.findUnique({ where: { tracker }, select: { userId: true, amount: true } });
+    if (attempt) {
+      await notify({
+        userId: attempt.userId,
+        category: 'payments',
+        type: 'payment',
+        title: 'Wallet topped up',
+        message: `Rs ${Number(attempt.amount).toLocaleString()} was added to your Nuray Wallet.`,
+        actionUrl: '/wallet',
+        channels: ['push', 'email'],
+        dedupeKey: `topup:${tracker}`,
+      });
     }
   }
   if (result.outcome === 'unknown') {

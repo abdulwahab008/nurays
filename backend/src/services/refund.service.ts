@@ -1,4 +1,5 @@
 import prisma from '../config/database';
+import { notify } from './notify.service';
 import { AppError } from '../middleware/errorHandler';
 import { parseBreakdown } from '../utils/deliveryEarnings';
 import { GST_RATE } from '../utils/pricing';
@@ -246,6 +247,26 @@ export async function refundForCancelledItems(
  * completed, the order's paymentStatus becomes 'refunded'.
  */
 export async function completeRefund(refundId: string, adminId: string, reference?: string) {
+  const refund = await completeRefundRecord(refundId, adminId, reference);
+  // After the commit: tell the customer the money is on its way.
+  const order = await prisma.order.findUnique({ where: { id: refund.orderId }, select: { orderNumber: true, customerId: true } });
+  if (order?.customerId) {
+    await notify({
+      userId: order.customerId,
+      category: 'payments',
+      type: 'payment',
+      title: 'Refund sent',
+      message: `We sent your refund of Rs ${Number(refund.amount).toLocaleString()} for order #${order.orderNumber}${refund.reference ? ` (reference ${refund.reference})` : ''}.`,
+      actionUrl: `/orders/${refund.orderId}`,
+      data: { orderId: refund.orderId, refundId },
+      channels: ['push', 'email'],
+      dedupeKey: `refund:${refundId}:sent`,
+    });
+  }
+  return refund;
+}
+
+async function completeRefundRecord(refundId: string, adminId: string, reference?: string) {
   return prisma.$transaction(async (tx) => {
     const claimed = await tx.refund.updateMany({
       where: { id: refundId, status: 'pending' },

@@ -1,5 +1,6 @@
 import prisma from '../config/database';
 import socketManager from '../config/socket';
+import { notify } from './notify.service';
 
 type Tx = Parameters<Parameters<typeof prisma.$transaction>[0]>[0];
 
@@ -37,5 +38,25 @@ export function notifyDeliveryCancelled(cancelled: CancelledDelivery | null): vo
     socketManager.emitToRole('rider', 'delivery:removed', payload);
   } catch {
     // Realtime is best-effort; the rider's next refresh shows it anyway.
+  }
+  // The assigned rider may be on the road towards it: tell their phone too.
+  if (cancelled.riderUserId) {
+    const riderUserId = cancelled.riderUserId;
+    void prisma.order
+      .findUnique({ where: { id: cancelled.orderId }, select: { orderNumber: true } })
+      .then((order) =>
+        notify({
+          userId: riderUserId,
+          category: 'deliveries',
+          type: 'delivery',
+          title: 'Job cancelled',
+          message: `Order #${order?.orderNumber ?? ''} was cancelled. Don't pick it up; if you already have the food, contact support.`,
+          actionUrl: '/riders/dashboard',
+          data: { orderId: cancelled.orderId, deliveryId: cancelled.deliveryId },
+          channels: ['push'],
+          dedupeKey: `delivery:${cancelled.deliveryId}:cancelled`,
+        })
+      )
+      .catch(() => undefined);
   }
 }

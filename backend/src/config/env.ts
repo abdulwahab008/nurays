@@ -64,6 +64,10 @@ export function configProblems(env: NodeJS.ProcessEnv = process.env): string[] {
   else if (jwt.length < 32) problems.push('JWT_SECRET must be at least 32 characters.');
   else if (prod && looksLikePlaceholder(jwt)) problems.push('JWT_SECRET is a placeholder value; generate a real one (e.g. `openssl rand -hex 32`).');
 
+  if (!!(env.VAPID_PUBLIC_KEY || '').trim() !== !!(env.VAPID_PRIVATE_KEY || '').trim()) {
+    problems.push('Web push needs both VAPID_PUBLIC_KEY and VAPID_PRIVATE_KEY (generate them with `npx web-push generate-vapid-keys`), or neither.');
+  }
+
   const cashLimit = (env.RIDER_CASH_LIMIT || '').trim();
   if (cashLimit && !(Number(cashLimit) > 0)) problems.push(`RIDER_CASH_LIMIT must be an amount in rupees above 0 (got "${cashLimit}").`);
 
@@ -119,6 +123,9 @@ export function configWarnings(env: NodeJS.ProcessEnv = process.env): string[] {
     warnings.push(`NODE_ENV="${env.NODE_ENV}" is not recognised: running with production rules.`);
   }
   if (mode !== 'production' && smsProvider(env) === 'console') warnings.push('SMS codes are printed to this console (development only).');
+  if (mode === 'production' && !(env.VAPID_PUBLIC_KEY || '').trim()) {
+    warnings.push('Push notifications are off (no VAPID keys). Kitchens and customers only get in-app, email and SMS alerts.');
+  }
   if (mode === 'production' && (env.STORAGE_DRIVER || 'local').toLowerCase() === 'local') {
     warnings.push('Uploads are stored on this server\'s disk (UPLOADS_DIR). Make sure it is a persistent, backed-up volume; S3-compatible storage is recommended.');
   }
