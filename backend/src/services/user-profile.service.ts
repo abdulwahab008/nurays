@@ -1,4 +1,5 @@
 import prisma from '../config/database';
+import { isStoredFile, storedFileOwner } from '../storage';
 import { AppError } from '../middleware/errorHandler';
 import { communityService } from './community.service';
 import emailService from './email.service';
@@ -146,6 +147,11 @@ export class UserProfileService {
    * Update avatar
    */
   async updateAvatar(userId: string, avatarUrl: string) {
+    // A profile photo is shown to other people: it must be one this user uploaded
+    // (POST /upload/avatar), never an arbitrary external link.
+    if (!isStoredFile(avatarUrl, { public: 'avatars' }) || storedFileOwner(avatarUrl) !== userId) {
+      throw new AppError('Please upload your profile photo through the app', 400, 'INVALID_AVATAR_URL');
+    }
     const user = await prisma.user.findUnique({
       where: { id: userId },
     });

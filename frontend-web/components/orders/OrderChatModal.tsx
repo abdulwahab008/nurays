@@ -2,6 +2,7 @@
 
 import React, { useEffect, useState, useRef, useCallback } from 'react';
 import { Send, X, ShieldCheck, Mic, Square, Trash2, Play, Pause, Check, CheckCheck, Sparkles } from 'lucide-react';
+import { apiClient } from '@/lib/api-client';
 import { orderService, OrderMessage } from '@/lib/services/order.service';
 import { useToast } from '@/components/ui/toast';
 
@@ -347,28 +348,31 @@ export default function OrderChatModal({
       const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
       mediaRecorderRef.current?.stream.getTracks().forEach((track) => track.stop());
 
-      // Convert to Base64 Data URL for persistent storage & playback
-      const reader = new FileReader();
-      reader.readAsDataURL(audioBlob);
-      reader.onloadend = async () => {
-        const base64Audio = reader.result as string;
-        setSending(true);
-        try {
-          const res = await orderService.sendOrderMessage(orderId, '🎙️ Voice note', {
-            role: currentRole,
-            messageType: 'voice',
-            mediaUrl: base64Audio,
-            duration: Math.max(1, duration),
-          });
-          if (res.data) {
-            setMessages((prev) => [...prev, { ...res.data, isMe: true }]);
-          }
-        } catch (err: any) {
-          showToast(err.response?.data?.error?.message || 'Failed to send voice note', 'error');
-        } finally {
-          setSending(false);
+      // Upload the recording as a private file (only this order's participants can
+      // play it), then send the message that points at it.
+      setSending(true);
+      try {
+        const form = new FormData();
+        form.append('file', audioBlob, 'voice-note.webm');
+        const upload = await apiClient.post('/upload/chat-media', form, {
+          headers: { 'Content-Type': 'multipart/form-data' },
+        });
+        const ref = upload.data?.data?.ref;
+        if (!ref) throw new Error('Upload failed');
+        const res = await orderService.sendOrderMessage(orderId, '🎙️ Voice note', {
+          role: currentRole,
+          messageType: 'voice',
+          mediaUrl: ref,
+          duration: Math.max(1, duration),
+        });
+        if (res.data) {
+          setMessages((prev) => [...prev, { ...res.data, isMe: true }]);
         }
-      };
+      } catch (err: any) {
+        showToast(err.response?.data?.error?.message || 'Failed to send voice note', 'error');
+      } finally {
+        setSending(false);
+      }
     };
 
     mediaRecorderRef.current.stop();

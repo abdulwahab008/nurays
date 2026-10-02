@@ -69,3 +69,13 @@ export function maskPhoneNumber(phone: string): string {
   return phone;
 }
 
+
+/**
+ * A smaller stored size of an uploaded photo. Uploads are stored in three sizes
+ * ("...-lg.webp", "-md.webp", "-sm.webp"); lists should load "md" or "sm" instead of
+ * the full photo. Older images (and external ones) are returned unchanged.
+ */
+export function imageVariant(url: string | null | undefined, size: 'sm' | 'md' | 'lg'): string | undefined {
+  if (!url) return undefined;
+  return url.replace(/-(lg|md|sm)\.webp(\?.*)?$/, `-${size}.webp$2`);
+}

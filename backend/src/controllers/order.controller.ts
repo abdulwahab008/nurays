@@ -1,7 +1,7 @@
 import { Request, Response } from 'express';
 import orderService from '../services/order.service';
 import { AppError } from '../middleware/errorHandler';
-import { isOwnUploadPath } from '../utils/uploadPaths';
+import { isStoredFile, isPrivateRef, storedFileOwner } from '../storage';
 
 export const createOrder = async (req: Request, res: Response) => {
   if (!req.user) {
@@ -165,7 +165,13 @@ export const sendOrderMessage = async (req: Request, res: Response) => {
     throw new AppError('Invalid message type', 400, 'INVALID_MESSAGE_TYPE');
   }
   // Media is a link to an uploaded file, never an inline payload or script URL.
-  if (mediaUrl !== undefined && (typeof mediaUrl !== 'string' || !isOwnUploadPath(mediaUrl))) {
+  // It must be a chat upload by the sender (a private file), or a legacy upload path.
+  if (
+    mediaUrl !== undefined &&
+    (typeof mediaUrl !== 'string' ||
+      !isStoredFile(mediaUrl, { private: 'chat' }) ||
+      (isPrivateRef(mediaUrl) && storedFileOwner(mediaUrl) !== req.user.userId))
+  ) {
     throw new AppError('Invalid media link', 400, 'INVALID_MEDIA_URL');
   }
   if (duration !== undefined && (typeof duration !== 'number' || duration < 0 || duration > 3600)) {
