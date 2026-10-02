@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { isAxiosError } from 'axios';
@@ -44,6 +44,12 @@ import { cartService } from '@/lib/services/cart.service';
 import { favoriteService } from '@/lib/services/favorite.service';
 import { apiClient, type ApiResponse } from '@/lib/api-client';
 import { ConfirmModal } from '@/components/ui/ConfirmModal';
+import { LanguageSwitcher } from '@/components/i18n/LanguageSwitcher';
+import { useLocale, useT, type Locale, type Vars } from '@/lib/i18n';
+import { homeMessages, type HomeKey } from '@/lib/i18n/messages/home';
+
+/** The home page's translate function, passed to the helpers below. */
+type HomeT = (key: HomeKey, vars?: Vars) => string;
 
 // ============================================================
 // TYPES — everything on this page comes from the live API
@@ -125,28 +131,28 @@ const TOP_RATED_MIN_REVIEWS = 5;
 const QUICK_PREP_MAX_MINUTES = 30;
 const PK_TIME_ZONE = 'Asia/Karachi';
 
-const AVAILABILITY_LABELS: Record<PublicSellerAvailability['status'], string> = {
-  open: 'Open now',
-  closed: 'Closed',
-  busy: 'Busy right now',
-  vacation: 'On vacation',
-  holiday: 'Closed for a holiday',
-  preorder_only: 'Pre-orders only',
+const AVAILABILITY_LABELS: Record<PublicSellerAvailability['status'], HomeKey> = {
+  open: 'avail.open',
+  closed: 'avail.closed',
+  busy: 'avail.busy',
+  vacation: 'avail.vacation',
+  holiday: 'avail.holiday',
+  preorder_only: 'avail.preorder_only',
 };
 
-const BUSINESS_TYPE_LABELS: Record<string, string> = {
-  home_kitchen: 'Home kitchen',
-  restaurant: 'Restaurant',
-  bakery: 'Bakery',
-  cafe: 'Café',
-  cloud_kitchen: 'Cloud kitchen',
+const BUSINESS_TYPE_LABELS: Record<string, HomeKey> = {
+  home_kitchen: 'biz.home_kitchen',
+  restaurant: 'biz.restaurant',
+  bakery: 'biz.bakery',
+  cafe: 'biz.cafe',
+  cloud_kitchen: 'biz.cloud_kitchen',
 };
 
-const PRODUCT_TYPE_LABELS: Record<string, string> = {
-  frozen: 'Frozen',
-  fresh: 'Fresh',
-  ready_to_eat: 'Ready to eat',
-  ready_to_cook: 'Ready to cook',
+const PRODUCT_TYPE_LABELS: Record<string, HomeKey> = {
+  frozen: 'ptype.frozen',
+  fresh: 'ptype.fresh',
+  ready_to_eat: 'ptype.ready_to_eat',
+  ready_to_cook: 'ptype.ready_to_cook',
 };
 
 /** "evening_snacks" → "Evening snacks"; labels that already have capitals are kept as typed. */
@@ -156,15 +162,16 @@ function humanize(value: unknown): string {
   return text === text.toLowerCase() ? text.charAt(0).toUpperCase() + text.slice(1) : text;
 }
 
-function businessTypeLabel(type?: string | null): string {
-  if (!type) return 'Home kitchen';
-  return BUSINESS_TYPE_LABELS[type] ?? (humanize(type) || 'Home kitchen');
+function businessTypeLabel(t: HomeT, type?: string | null): string {
+  if (!type) return t('biz.home_kitchen');
+  const key = BUSINESS_TYPE_LABELS[type];
+  return key ? t(key) : humanize(type) || t('biz.home_kitchen');
 }
 
 const pkDayKey = (date: Date) => new Intl.DateTimeFormat('en-CA', { timeZone: PK_TIME_ZONE }).format(date);
 
 /** A kitchen open/close instant as "11:00 PM", "tomorrow 9:00 AM", "Mon 9:00 AM" or "Oct 20 9:00 AM" (Pakistan time). */
-function formatKitchenTime(value?: string | null): string | null {
+function formatKitchenTime(t: HomeT, locale: Locale, value?: string | null): string | null {
   if (!value) return null;
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return null;
@@ -172,31 +179,31 @@ function formatKitchenTime(value?: string | null): string | null {
   const now = new Date();
   const day = pkDayKey(date);
   if (day === pkDayKey(now)) return time;
-  if (day === pkDayKey(new Date(now.getTime() + 24 * 60 * 60 * 1000))) return `tomorrow ${time}`;
+  if (day === pkDayKey(new Date(now.getTime() + 24 * 60 * 60 * 1000))) return t('tomorrowAt', { time });
   const withinWeek = date.getTime() - now.getTime() < 6 * 24 * 60 * 60 * 1000;
   const prefix = new Intl.DateTimeFormat(
-    'en-US',
+    locale === 'ur' ? 'ur-PK' : 'en-US',
     withinWeek ? { weekday: 'short', timeZone: PK_TIME_ZONE } : { month: 'short', day: 'numeric', timeZone: PK_TIME_ZONE }
   ).format(date);
   return `${prefix} ${time}`;
 }
 
 /** Only the delivery terms the kitchen actually configured; nothing when it set none. */
-function deliveryTerms(s: PublicSeller): { text: string | null; free: boolean } {
+function deliveryTerms(t: HomeT, s: PublicSeller): { text: string | null; free: boolean } {
   const fixed = s.deliveryFeeFixed != null ? Number(s.deliveryFeeFixed) : null;
   if (s.deliveryFeeType === 'fixed' && fixed != null && Number.isFinite(fixed) && fixed >= 0) {
-    return fixed === 0 ? { text: 'Free delivery', free: true } : { text: `${formatPrice(fixed)} delivery`, free: false };
+    return fixed === 0 ? { text: t('freeDelivery'), free: true } : { text: t('deliveryFixed', { fee: formatPrice(fixed) }), free: false };
   }
   const threshold = s.freeDeliveryThreshold != null ? Number(s.freeDeliveryThreshold) : null;
   if (threshold != null && Number.isFinite(threshold)) {
     return threshold > 0
-      ? { text: `Free delivery over ${formatPrice(threshold)}`, free: true }
-      : { text: 'Free delivery', free: true };
+      ? { text: t('freeDeliveryOver', { amount: formatPrice(threshold) }), free: true }
+      : { text: t('freeDelivery'), free: true };
   }
   return { text: null, free: false };
 }
 
-function toHomeKitchen(s: PublicSeller): HomeKitchen {
+function toHomeKitchen(s: PublicSeller, t: HomeT, locale: Locale): HomeKitchen {
   const products = s.products ?? [];
   const cuisine = Array.from(new Set((s.mealCategories ?? []).map(humanize).filter(Boolean)));
   const area = (s.chef?.area || s.community?.name || '').split(',')[0].trim();
@@ -207,7 +214,7 @@ function toHomeKitchen(s: PublicSeller): HomeKitchen {
   const minOrder = s.minOrderAmountForDelivery != null ? Number(s.minOrderAmountForDelivery) : null;
   const ratingValue = Number(s.ratingAverage) || 0;
   const reviewsCount = Number(s.totalReviews) || 0;
-  const delivery = deliveryTerms(s);
+  const delivery = deliveryTerms(t, s);
 
   return {
     id: s.id,
@@ -219,17 +226,17 @@ function toHomeKitchen(s: PublicSeller): HomeKitchen {
     reviewsCount,
     prepMinutes: Number.isFinite(prep) && prep > 0 ? prep : null,
     isOpen,
-    statusLabel: availability ? (isOpen ? 'Open now' : AVAILABILITY_LABELS[availability.status] ?? 'Closed') : null,
-    closesAt: isOpen ? formatKitchenTime(availability?.closesAt) : null,
-    opensAt: isOpen ? null : formatKitchenTime(availability?.opensAt ?? availability?.nextOpenAt),
-    deal: products.some((p) => p.originalPrice != null && Number(p.originalPrice) > Number(p.price)) ? 'Deal' : null,
+    statusLabel: availability ? t(isOpen ? 'avail.open' : AVAILABILITY_LABELS[availability.status] ?? 'avail.closed') : null,
+    closesAt: isOpen ? formatKitchenTime(t, locale, availability?.closesAt) : null,
+    opensAt: isOpen ? null : formatKitchenTime(t, locale, availability?.opensAt ?? availability?.nextOpenAt),
+    deal: products.some((p) => p.originalPrice != null && Number(p.originalPrice) > Number(p.price)) ? t('deal') : null,
     deliveryFee: delivery.text,
     offersFreeDelivery: delivery.free,
     minOrder: minOrder != null && Number.isFinite(minOrder) && minOrder > 0 ? formatPrice(minOrder) : null,
     cuisine,
     coverPhoto: s.coverImageUrl || null,
     avatar: s.chef?.avatar || null,
-    badge: businessTypeLabel(s.businessType),
+    badge: businessTypeLabel(t, s.businessType),
     hasFrozen: products.some((p) => p.productType === 'frozen') || cuisine.some((c) => /frozen/i.test(c)),
     searchText: [s.businessName, s.chef?.name, area, city, s.community?.name, ...cuisine, ...products.map((p) => p.name)]
       .filter(Boolean)
@@ -239,7 +246,7 @@ function toHomeKitchen(s: PublicSeller): HomeKitchen {
   };
 }
 
-function toHomeDish(p: Product): HomeDish {
+function toHomeDish(p: Product, t: HomeT): HomeDish {
   const price = Number(p.price);
   const original = p.originalPrice != null ? Number(p.originalPrice) : null;
   return {
@@ -251,7 +258,7 @@ function toHomeDish(p: Product): HomeDish {
     originalPrice: original != null && Number.isFinite(original) && original > price ? original : null,
     rating: displayRating(p.ratingAverage, p.totalReviews),
     isFrozen: p.productType === 'frozen',
-    typeLabel: p.productType ? PRODUCT_TYPE_LABELS[p.productType] ?? null : null,
+    typeLabel: p.productType && PRODUCT_TYPE_LABELS[p.productType] ? t(PRODUCT_TYPE_LABELS[p.productType]) : null,
     photo: p.primaryImage || null,
   };
 }
@@ -277,11 +284,12 @@ function matchesText(k: HomeKitchen, text: string): boolean {
 }
 
 const formatCount = (n: number) => n.toLocaleString('en-US');
-const countLabel = (n: number, one: string, many: string) => `${formatCount(n)} ${n === 1 ? one : many}`;
+/** "1 review" / "12 reviews": the one/many message keys, filled with the formatted count. */
+const countLabel = (t: HomeT, n: number, one: HomeKey, many: HomeKey) => t(n === 1 ? one : many, { n: formatCount(n) });
 
-function kitchenCaption(k: HomeKitchen): string | null {
-  const prep = k.prepMinutes != null ? `${k.prepMinutes} min prep` : null;
-  if (k.isOpen) return prep ?? 'Open now';
+function kitchenCaption(t: HomeT, k: HomeKitchen): string | null {
+  const prep = k.prepMinutes != null ? t('minPrep', { n: k.prepMinutes }) : null;
+  if (k.isOpen) return prep ?? t('avail.open');
   return k.statusLabel ?? prep;
 }
 
@@ -310,6 +318,7 @@ function SectionNotice({
 }
 
 function RetryButton({ onClick }: { onClick: () => void }) {
+  const t = useT(homeMessages);
   return (
     <button
       type="button"
@@ -317,7 +326,7 @@ function RetryButton({ onClick }: { onClick: () => void }) {
       className="inline-flex items-center gap-1.5 bg-slate-950 hover:bg-black text-white px-3.5 py-2 rounded-xl text-xs font-semibold transition-colors shadow-sm"
     >
       <RefreshCw className="w-3.5 h-3.5" />
-      <span>Try again</span>
+      <span>{t('tryAgain')}</span>
     </button>
   );
 }
@@ -374,6 +383,8 @@ export default function Home() {
   const { isAuthenticated, user, logout } = useAuthStore();
   const { addItem, getItemCount } = useCartStore();
   const { showToast } = useToast();
+  const t = useT(homeMessages);
+  const { locale } = useLocale();
 
   const [orderMode, setOrderMode] = useState<'delivery' | 'pickup' | 'coldchain'>('delivery');
   const [userDropdownOpen, setUserDropdownOpen] = useState(false);
@@ -385,10 +396,10 @@ export default function Home() {
   const [selectedCuisine, setSelectedCuisine] = useState<string>('');
   const [favoriteKitchenIds, setFavoriteKitchenIds] = useState<Set<string>>(new Set());
 
-  const [kitchens, setKitchens] = useState<HomeKitchen[]>([]);
+  const [sellers, setSellers] = useState<PublicSeller[]>([]);
   const [kitchensState, setKitchensState] = useState<LoadState>('loading');
   const [kitchensAttempt, setKitchensAttempt] = useState(0);
-  const [dishes, setDishes] = useState<HomeDish[]>([]);
+  const [products, setProducts] = useState<Product[]>([]);
   const [dishesState, setDishesState] = useState<LoadState>('loading');
   const [dishesAttempt, setDishesAttempt] = useState(0);
   const [stats, setStats] = useState<PublicStats | null>(null);
@@ -412,7 +423,7 @@ export default function Home() {
       .get<ApiResponse<PublicSeller[]>>('/sellers', { params: { limit: 12 } })
       .then((res) => {
         if (cancelled) return;
-        setKitchens((res.data?.data ?? []).map(toHomeKitchen));
+        setSellers(res.data?.data ?? []);
         setKitchensState('ready');
       })
       .catch((err) => {
@@ -432,7 +443,7 @@ export default function Home() {
       .getProducts({ limit: 12, sort: 'popular' })
       .then((res) => {
         if (cancelled) return;
-        setDishes((res?.data?.products ?? []).map(toHomeDish));
+        setProducts(res?.data?.products ?? []);
         setDishesState('ready');
       })
       .catch((err) => {
@@ -487,6 +498,10 @@ export default function Home() {
     }
   }, [isAuthenticated, user, router]);
 
+  // Mapped at render so the labels follow the chosen language.
+  const kitchens = useMemo(() => sellers.map((s) => toHomeKitchen(s, t, locale)), [sellers, t, locale]);
+  const dishes = useMemo(() => products.map((p) => toHomeDish(p, t)), [products, t]);
+
   const retryKitchens = () => {
     setKitchensState('loading');
     setKitchensAttempt((n) => n + 1);
@@ -507,7 +522,7 @@ export default function Home() {
     e.preventDefault();
     e.stopPropagation();
     if (!isAuthenticated) {
-      showToast('Sign in to save kitchens to your favorites', 'info');
+      showToast(t('signInToSave'), 'info');
       return;
     }
     const wasSaved = favoriteKitchenIds.has(kitchenId);
@@ -522,10 +537,10 @@ export default function Home() {
     try {
       if (wasSaved) await favoriteService.removeFavorite(kitchenId);
       else await favoriteService.addFavorite(kitchenId);
-      showToast(wasSaved ? 'Removed from saved kitchens' : 'Saved to your favorite kitchens', wasSaved ? 'info' : 'success');
+      showToast(wasSaved ? t('removedSaved') : t('savedFav'), wasSaved ? 'info' : 'success');
     } catch {
       setSaved(wasSaved);
-      showToast('Could not update your saved kitchens. Please try again.', 'error');
+      showToast(t('favFailed'), 'error');
     }
   };
 
@@ -560,14 +575,14 @@ export default function Home() {
         if (response?.status === 409 || apiError?.code === 'CART_SELLER_MISMATCH') {
           setConflictModal({
             isOpen: true,
-            existingKitchenName: apiError?.details?.existingSeller?.name || 'another kitchen',
+            existingKitchenName: apiError?.details?.existingSeller?.name || t('anotherKitchen'),
             dish,
           });
           return;
         }
       }
     }
-    showToast(`Added ${dish.name} to tray!`, 'success');
+    showToast(t('addedToTray', { name: dish.name }), 'success');
   };
 
   const handleConfirmSwitchKitchen = async () => {
@@ -594,10 +609,10 @@ export default function Home() {
         stockType: dish.isFrozen ? 'hub' : 'direct',
         subtotal: dish.price,
       });
-      showToast(`Tray updated with dishes from ${dish.kitchenName}!`, 'success');
+      showToast(t('trayUpdated', { name: dish.kitchenName }), 'success');
       setConflictModal({ isOpen: false, existingKitchenName: '', dish: null });
     } catch {
-      showToast('Failed to replace cart items', 'error');
+      showToast(t('replaceFailed'), 'error');
     } finally {
       setSwitchingKitchen(false);
     }
@@ -623,12 +638,12 @@ export default function Home() {
   });
 
   const filterChips: Array<{ id: KitchenFilter; label: string; icon: LucideIcon }> = [
-    { id: 'all', label: 'All Kitchens', icon: ChefHat },
-    { id: 'top_rated', label: `Top Rated (${TOP_RATED_MIN_RATING}+)`, icon: Star },
-    { id: 'fast', label: `Prep under ${QUICK_PREP_MAX_MINUTES} min`, icon: Clock },
-    { id: 'free_delivery', label: 'Free Delivery', icon: Bike },
-    { id: 'deals', label: 'Special Deals', icon: Tag },
-    { id: 'frozen', label: 'Frozen', icon: Snowflake },
+    { id: 'all', label: t('fAll'), icon: ChefHat },
+    { id: 'top_rated', label: t('fTopRated', { n: TOP_RATED_MIN_RATING }), icon: Star },
+    { id: 'fast', label: t('fFast', { n: QUICK_PREP_MAX_MINUTES }), icon: Clock },
+    { id: 'free_delivery', label: t('fFree'), icon: Bike },
+    { id: 'deals', label: t('fDeals'), icon: Tag },
+    { id: 'frozen', label: t('fFrozen'), icon: Snowflake },
   ];
 
   const statCards: Array<{ key: string; icon: LucideIcon; iconClass: string; valueClass: string; value: string; label: string }> =
@@ -640,7 +655,7 @@ export default function Home() {
             iconClass: 'text-orange-400',
             valueClass: 'text-white',
             value: formatCount(stats.kitchens),
-            label: stats.kitchens === 1 ? 'Verified kitchen' : 'Verified kitchens',
+            label: stats.kitchens === 1 ? t('statKitchen') : t('statKitchens'),
           },
           {
             key: 'communities',
@@ -648,7 +663,7 @@ export default function Home() {
             iconClass: 'text-emerald-400',
             valueClass: 'text-white',
             value: formatCount(stats.communities),
-            label: stats.communities === 1 ? 'Community' : 'Communities',
+            label: stats.communities === 1 ? t('statCommunity') : t('statCommunities'),
           },
           {
             key: 'dishes',
@@ -656,7 +671,7 @@ export default function Home() {
             iconClass: 'text-cyan-400',
             valueClass: 'text-white',
             value: formatCount(stats.dishes),
-            label: stats.dishes === 1 ? 'Dish listed' : 'Dishes listed',
+            label: stats.dishes === 1 ? t('statDish') : t('statDishes'),
           },
           ...(stats.averageRating != null
             ? [
@@ -666,7 +681,7 @@ export default function Home() {
                   iconClass: 'text-amber-400',
                   valueClass: 'text-amber-400',
                   value: `${stats.averageRating.toFixed(1)} / 5`,
-                  label: `Avg. of ${countLabel(stats.reviews, 'review', 'reviews')}`,
+                  label: t('statAvg', { reviews: countLabel(t, stats.reviews, 'reviewsOne', 'reviewsMany') }),
                 },
               ]
             : []),
@@ -695,21 +710,23 @@ export default function Home() {
         <div className="max-w-[1440px] mx-auto flex items-center justify-between">
           <div className="flex items-center gap-2">
             <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-            <span className="text-emerald-400 font-bold uppercase text-[10px] tracking-wider">PLATFORM LIVE</span>
+            <span className="text-emerald-400 font-bold uppercase text-[10px] tracking-wider">{t('platformLive')}</span>
             {stats && stats.kitchens > 0 && (
               <span className="text-slate-300 hidden sm:inline text-xs">
-                {countLabel(stats.kitchens, 'verified kitchen', 'verified kitchens')} •{' '}
-                {countLabel(stats.dishes, 'dish', 'dishes')} listed
+                {t('liveLine', {
+                  kitchens: countLabel(t, stats.kitchens, 'liveKitchensOne', 'liveKitchens'),
+                  dishes: countLabel(t, stats.dishes, 'liveDishOne', 'liveDishes'),
+                })}
               </span>
             )}
           </div>
           <div className="flex items-center gap-4 text-xs text-slate-300">
             <Link href="/sellers/register" className="text-[#FF5500] hover:text-[#ff7333] font-semibold flex items-center gap-1">
               <ChefHat className="w-3 h-3" />
-              <span>Open a Home Kitchen</span>
+              <span>{t('openHomeKitchen')}</span>
             </Link>
             <Link href="/riders/dashboard" className="hidden md:inline hover:text-white text-slate-400">
-              Rider Portal
+              {t('riderPortal')}
             </Link>
           </div>
         </div>
@@ -725,7 +742,7 @@ export default function Home() {
             <button
               onClick={() => setIsSidebarOpen(true)}
               className="w-9 h-9 rounded-xl bg-slate-100 hover:bg-slate-200/80 flex items-center justify-center text-slate-700 transition-colors"
-              aria-label="Open navigation menu"
+              aria-label={t('openNav')}
             >
               <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h16" />
@@ -748,7 +765,7 @@ export default function Home() {
               }`}
             >
               <Bike className="w-3.5 h-3.5 text-slate-600" />
-              <span>Fresh Delivery</span>
+              <span>{t('freshDelivery')}</span>
             </button>
             <button
               onClick={() => setOrderMode('pickup')}
@@ -759,7 +776,7 @@ export default function Home() {
               }`}
             >
               <ShoppingBag className="w-3.5 h-3.5 text-slate-600" />
-              <span>Pickup</span>
+              <span>{t('pickup')}</span>
             </button>
             <button
               onClick={() => {
@@ -773,7 +790,7 @@ export default function Home() {
               }`}
             >
               <Snowflake className="w-3.5 h-3.5 text-cyan-600" />
-              <span>Frozen Hub</span>
+              <span>{t('frozenHub')}</span>
             </button>
           </div>
 
@@ -785,18 +802,19 @@ export default function Home() {
           {/* Search Bar */}
           <div className="flex-1 max-w-md relative hidden sm:block">
             <div className="relative flex items-center">
-              <Search className="w-4 h-4 text-slate-400 absolute left-3.5 pointer-events-none" />
+              <Search className="w-4 h-4 text-slate-400 absolute start-3.5 pointer-events-none" />
               <input
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Search biryani, shami kebabs, parathas, or home chef..."
-                className="w-full h-10 pl-10 pr-4 rounded-xl bg-slate-50 hover:bg-slate-100 focus:bg-white text-xs font-medium text-slate-900 placeholder:text-slate-400 border border-slate-200 focus:border-[#FF5500] focus:ring-2 focus:ring-orange-500/10 transition-all outline-none"
+                placeholder={t('searchPlaceholder')}
+                className="w-full h-10 ps-10 pe-4 rounded-xl bg-slate-50 hover:bg-slate-100 focus:bg-white text-xs font-medium text-slate-900 placeholder:text-slate-400 border border-slate-200 focus:border-[#FF5500] focus:ring-2 focus:ring-orange-500/10 transition-all outline-none"
               />
               {searchQuery && (
                 <button
                   onClick={() => setSearchQuery('')}
-                  className="absolute right-3 text-xs text-slate-400 hover:text-slate-700"
+                  aria-label={t('clearSearch')}
+                  className="absolute end-3 text-xs text-slate-400 hover:text-slate-700"
                 >
                   ✕
                 </button>
@@ -805,15 +823,17 @@ export default function Home() {
           </div>
 
           {/* Right Action Buttons: Cart Drawer Trigger & Auth */}
-          <div className="flex items-center gap-2 flex-shrink-0">
+          <div className="flex items-center gap-1 sm:gap-2 flex-shrink-0">
+            <LanguageSwitcher className="px-2" />
+
             {/* Slide-over Cart Button */}
             <button
               onClick={() => setIsCartOpen(true)}
               className="relative flex items-center gap-1.5 h-10 px-3 sm:px-3.5 rounded-xl bg-slate-100 hover:bg-slate-200/80 text-slate-900 border border-slate-200 text-xs font-bold transition-colors"
-              aria-label="Open food tray"
+              aria-label={t('openTray')}
             >
               <ShoppingBag className="w-4 h-4 text-slate-700" />
-              <span className="hidden md:inline">Tray</span>
+              <span className="hidden md:inline">{t('tray')}</span>
               {cartCount > 0 && (
                 <span className="w-5 h-5 rounded-full bg-[#FF5500] text-white text-[11px] font-bold flex items-center justify-center shadow-xs">
                   {cartCount}
@@ -838,10 +858,10 @@ export default function Home() {
                 </button>
 
                 {userDropdownOpen && (
-                  <div className="absolute right-0 mt-2 w-56 bg-white rounded-2xl shadow-xl border border-slate-200 p-1.5 z-50">
+                  <div className="absolute end-0 mt-2 w-56 bg-white rounded-2xl shadow-xl border border-slate-200 p-1.5 z-50">
                     <div className="px-3 py-2 border-b border-slate-100 mb-1">
-                      <p className="text-xs font-bold text-slate-900 truncate">{user.profile?.fullName || 'Customer'}</p>
-                      <p className="text-[11px] text-slate-500 truncate">{user.email}</p>
+                      <p className="text-xs font-bold text-slate-900 truncate">{user.profile?.fullName || t('customer')}</p>
+                      <p className="text-[11px] text-slate-500 truncate" data-ltr>{user.email}</p>
                     </div>
                     <Link
                       href="/orders"
@@ -849,7 +869,7 @@ export default function Home() {
                       className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium text-slate-700 hover:bg-orange-50 hover:text-[#FF5500] transition-colors"
                     >
                       <Package className="w-3.5 h-3.5 text-slate-500" />
-                      <span>My Orders</span>
+                      <span>{t('myOrders')}</span>
                     </Link>
                     <Link
                       href="/dashboard"
@@ -857,7 +877,7 @@ export default function Home() {
                       className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium text-slate-700 hover:bg-orange-50 hover:text-[#FF5500] transition-colors"
                     >
                       <LayoutDashboard className="w-3.5 h-3.5 text-slate-500" />
-                      <span>Customer Dashboard</span>
+                      <span>{t('customerDashboard')}</span>
                     </Link>
                     <Link
                       href="/profile/addresses"
@@ -865,17 +885,17 @@ export default function Home() {
                       className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium text-slate-700 hover:bg-orange-50 hover:text-[#FF5500] transition-colors"
                     >
                       <MapPin className="w-3.5 h-3.5 text-slate-500" />
-                      <span>Saved Addresses</span>
+                      <span>{t('savedAddresses')}</span>
                     </Link>
                     <button
                       onClick={() => {
                         setUserDropdownOpen(false);
                         logout();
                       }}
-                      className="w-full text-left flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium text-red-600 hover:bg-red-50 transition-colors mt-1 border-t border-slate-100"
+                      className="w-full text-start flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium text-red-600 hover:bg-red-50 transition-colors mt-1 border-t border-slate-100"
                     >
                       <LogOut className="w-3.5 h-3.5 text-red-500" />
-                      <span>Sign Out</span>
+                      <span>{t('signOut')}</span>
                     </button>
                   </div>
                 )}
@@ -886,13 +906,13 @@ export default function Home() {
                   href="/login"
                   className="h-10 inline-flex items-center px-3 rounded-xl text-xs font-semibold text-slate-700 hover:bg-slate-100 transition-colors"
                 >
-                  Sign In
+                  {t('signIn')}
                 </Link>
                 <Link
                   href="/register"
                   className="h-10 inline-flex items-center px-3.5 rounded-xl text-xs font-bold bg-[#FF5500] hover:bg-[#E04400] text-white shadow-2xs transition-colors"
                 >
-                  Join
+                  {t('join')}
                 </Link>
               </div>
             )}
@@ -944,8 +964,8 @@ export default function Home() {
             href="/products"
             className="hidden sm:inline-flex items-center gap-1 text-xs font-bold text-[#FF5500] hover:text-[#e04400] whitespace-nowrap"
           >
-            <span>Browse all menus</span>
-            <ChevronRight className="w-3.5 h-3.5" />
+            <span>{t('browseAllMenus')}</span>
+            <ChevronRight className="rtl:-scale-x-100 w-3.5 h-3.5" />
           </Link>
         </div>
       </section>
@@ -960,13 +980,13 @@ export default function Home() {
             <div className="relative z-10">
               <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-black/25 text-[10px] font-bold uppercase tracking-wider mb-2">
                 <Flame className="w-3 h-3 text-orange-200" />
-                <span>Authentic Home Food</span>
+                <span>{t('b1Tag')}</span>
               </span>
               <h2 className="text-xl sm:text-2xl font-bold tracking-tight leading-tight">
-                Crave it? Get it fresh.
+                {t('b1Title')}
               </h2>
               <p className="text-xs text-orange-100 mt-1 max-w-[260px] font-normal leading-relaxed">
-                Handmade family recipes from verified home cooks in Karachi and Lahore.
+                {t('b1Body')}
               </p>
             </div>
             <div className="relative z-10 pt-3">
@@ -974,8 +994,8 @@ export default function Home() {
                 href="/products"
                 className="inline-flex items-center gap-1.5 bg-slate-950 hover:bg-black text-white px-3.5 py-2 rounded-xl text-xs font-semibold transition-colors shadow-sm"
               >
-                <span>Find Kitchens</span>
-                <ChevronRight className="w-3.5 h-3.5" />
+                <span>{t('b1Cta')}</span>
+                <ChevronRight className="rtl:-scale-x-100 w-3.5 h-3.5" />
               </Link>
             </div>
           </div>
@@ -985,13 +1005,13 @@ export default function Home() {
             <div className="relative z-10">
               <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-black/30 text-[10px] font-bold uppercase tracking-wider mb-2">
                 <ChefHat className="w-3 h-3 text-amber-200" />
-                <span>For Home Cooks</span>
+                <span>{t('b2Tag')}</span>
               </span>
               <h2 className="text-xl sm:text-2xl font-bold tracking-tight leading-tight">
-                Cook at home? Sell on Nuray.
+                {t('b2Title')}
               </h2>
               <p className="text-xs text-amber-100 mt-1 max-w-[260px] font-normal leading-relaxed">
-                Apply to open your kitchen and set your own menu, prices and hours.
+                {t('b2Body')}
               </p>
             </div>
             <div className="relative z-10 pt-3">
@@ -999,8 +1019,8 @@ export default function Home() {
                 href="/sellers/register"
                 className="inline-flex items-center gap-1.5 bg-slate-950 hover:bg-black text-white px-3.5 py-2 rounded-xl text-xs font-semibold transition-colors shadow-sm"
               >
-                <span>Open a Kitchen</span>
-                <ChevronRight className="w-3.5 h-3.5" />
+                <span>{t('b2Cta')}</span>
+                <ChevronRight className="rtl:-scale-x-100 w-3.5 h-3.5" />
               </Link>
             </div>
           </div>
@@ -1010,13 +1030,13 @@ export default function Home() {
             <div className="relative z-10">
               <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-black/30 text-[10px] font-bold uppercase tracking-wider mb-2">
                 <Snowflake className="w-3 h-3 text-cyan-200" />
-                <span>Frozen Packs</span>
+                <span>{t('b3Tag')}</span>
               </span>
               <h2 className="text-xl sm:text-2xl font-bold tracking-tight leading-tight">
-                Artisanal Frozen Pantry
+                {t('b3Title')}
               </h2>
               <p className="text-xs text-cyan-100 mt-1 max-w-[260px] font-normal leading-relaxed">
-                Stock your freezer with frozen packs made in home kitchens.
+                {t('b3Body')}
               </p>
             </div>
             <div className="relative z-10 pt-3">
@@ -1024,8 +1044,8 @@ export default function Home() {
                 href="/products?productType=frozen"
                 className="inline-flex items-center gap-1.5 bg-slate-950 hover:bg-black text-white px-3.5 py-2 rounded-xl text-xs font-semibold transition-colors shadow-sm"
               >
-                <span>Stock My Freezer</span>
-                <ChevronRight className="w-3.5 h-3.5" />
+                <span>{t('b3Cta')}</span>
+                <ChevronRight className="rtl:-scale-x-100 w-3.5 h-3.5" />
               </Link>
             </div>
           </div>
@@ -1041,18 +1061,18 @@ export default function Home() {
           <div className="flex items-center justify-between mb-4">
             <div>
               <h3 className="text-lg sm:text-xl font-bold text-slate-900 tracking-tight">
-                Kitchens on Nuray
+                {t('kitchensOnNuray')}
               </h3>
               <p className="text-xs text-slate-500 font-medium mt-0.5">
-                Verified kitchens — tap one to see its menu
+                {t('kitchensOnNuraySub')}
               </p>
             </div>
             <Link
               href="/kitchens"
               className="text-xs font-bold text-[#FF5500] hover:underline flex items-center gap-1"
             >
-              <span>See all</span>
-              <ChevronRight className="w-3.5 h-3.5" />
+              <span>{t('seeAll')}</span>
+              <ChevronRight className="rtl:-scale-x-100 w-3.5 h-3.5" />
             </Link>
           </div>
 
@@ -1061,7 +1081,7 @@ export default function Home() {
             {kitchensState === 'loading'
               ? Array.from({ length: 8 }, (_, i) => <KitchenAvatarSkeleton key={i} />)
               : kitchens.map((k) => {
-                  const caption = kitchenCaption(k);
+                  const caption = kitchenCaption(t, k);
                   return (
                     <Link
                       key={k.id}
@@ -1078,7 +1098,7 @@ export default function Home() {
                         />
                         {k.statusLabel && (
                           <span
-                            className={`absolute bottom-0.5 right-0.5 w-3 h-3 rounded-full border border-white ${
+                            className={`absolute bottom-0.5 end-0.5 w-3 h-3 rounded-full border border-white ${
                               k.isOpen ? 'bg-emerald-500' : 'bg-slate-400'
                             }`}
                             title={k.statusLabel}
@@ -1110,24 +1130,24 @@ export default function Home() {
           <div>
             <div className="inline-flex items-center gap-1 text-[11px] font-bold uppercase tracking-wider text-[#FF5500] mb-0.5">
               <Sparkles className="w-3.5 h-3.5" />
-              <span>Verified Kitchens</span>
+              <span>{t('verifiedKitchens')}</span>
             </div>
             <h2 className="text-xl sm:text-2xl font-bold text-slate-900 tracking-tight">
-              Browse Home Kitchens
+              {t('browseHomeKitchens')}
             </h2>
           </div>
           <Link
             href="/kitchens"
             className="text-xs font-bold text-[#FF5500] hover:underline flex items-center gap-1"
           >
-            <span>View all</span>
-            <ChevronRight className="w-3.5 h-3.5" />
+            <span>{t('viewAll')}</span>
+            <ChevronRight className="rtl:-scale-x-100 w-3.5 h-3.5" />
           </Link>
         </div>
 
         {kitchensState === 'loading' ? (
           <div role="status" className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-3 gap-5">
-            <span className="sr-only">Loading kitchens…</span>
+            <span className="sr-only">{t('loadingKitchens')}</span>
             {Array.from({ length: 6 }, (_, i) => (
               <KitchenCardSkeleton key={i} />
             ))}
@@ -1135,35 +1155,35 @@ export default function Home() {
         ) : kitchensState === 'error' ? (
           <SectionNotice
             role="alert"
-            title="We couldn't load kitchens right now"
-            message="Please check your connection and try again."
+            title={t('kitchensError')}
+            message={t('checkConnection')}
             action={<RetryButton onClick={retryKitchens} />}
           />
         ) : kitchens.length === 0 ? (
           <SectionNotice
-            title="No kitchens are taking orders yet"
-            message="Check back soon. If you cook at home, you can apply to open your kitchen on Nuray."
+            title={t('noKitchens')}
+            message={t('noKitchensBody')}
             action={
               <Link
                 href="/sellers/register"
                 className="inline-flex items-center gap-1.5 bg-slate-950 hover:bg-black text-white px-3.5 py-2 rounded-xl text-xs font-semibold transition-colors shadow-sm"
               >
                 <ChefHat className="w-3.5 h-3.5" />
-                <span>Open a Home Kitchen</span>
+                <span>{t('openHomeKitchen')}</span>
               </Link>
             }
           />
         ) : filteredKitchens.length === 0 ? (
           <SectionNotice
-            title="No kitchens match these filters"
-            message="Try a different search, cuisine or filter."
+            title={t('noMatch')}
+            message={t('noMatchBody')}
             action={
               <button
                 type="button"
                 onClick={clearFilters}
                 className="inline-flex items-center gap-1.5 bg-slate-950 hover:bg-black text-white px-3.5 py-2 rounded-xl text-xs font-semibold transition-colors shadow-sm"
               >
-                Clear filters
+                {t('clearFilters')}
               </button>
             }
           />
@@ -1191,7 +1211,7 @@ export default function Home() {
 
                     {/* Deal Tag — only when one of its dishes is really discounted */}
                     {kitchen.deal && (
-                      <span className="absolute top-3 left-3 px-2.5 py-1 rounded-md text-white text-[10px] font-bold bg-[#FF5500] shadow-xs uppercase tracking-wider">
+                      <span className="absolute top-3 start-3 px-2.5 py-1 rounded-md text-white text-[10px] font-bold bg-[#FF5500] shadow-xs uppercase tracking-wider">
                         {kitchen.deal}
                       </span>
                     )}
@@ -1199,8 +1219,8 @@ export default function Home() {
                     {/* Heart Button */}
                     <button
                       onClick={(e) => toggleFavorite(kitchen.id, e)}
-                      className="absolute top-3 right-3 w-8 h-8 rounded-full bg-white/90 backdrop-blur-xs flex items-center justify-center text-slate-700 hover:scale-110 transition-transform shadow-xs"
-                      aria-label={isFav ? 'Remove from saved kitchens' : 'Save to favorites'}
+                      className="absolute top-3 end-3 w-8 h-8 rounded-full bg-white/90 backdrop-blur-xs flex items-center justify-center text-slate-700 hover:scale-110 transition-transform shadow-xs"
+                      aria-label={isFav ? t('removeSaved') : t('saveFav')}
                       aria-pressed={isFav}
                     >
                       <Heart
@@ -1212,14 +1232,14 @@ export default function Home() {
 
                     {/* Prep Time Pill (the kitchen's own minimum prep time) */}
                     {kitchen.prepMinutes != null && (
-                      <span className="absolute bottom-3 right-3 px-2.5 py-1 rounded-lg bg-black/75 backdrop-blur-xs text-white text-[11px] font-bold flex items-center gap-1">
+                      <span className="absolute bottom-3 end-3 px-2.5 py-1 rounded-lg bg-black/75 backdrop-blur-xs text-white text-[11px] font-bold flex items-center gap-1">
                         <Clock className="w-3 h-3" />
-                        <span>{kitchen.prepMinutes} min prep</span>
+                        <span>{t('minPrep', { n: kitchen.prepMinutes })}</span>
                       </span>
                     )}
 
                     {/* Kitchen Type Badge (every listed kitchen is verified) */}
-                    <span className="absolute bottom-3 left-3 px-2 py-0.5 rounded-md bg-emerald-600/90 backdrop-blur-xs text-white text-[10px] font-bold flex items-center gap-1">
+                    <span className="absolute bottom-3 start-3 px-2 py-0.5 rounded-md bg-emerald-600/90 backdrop-blur-xs text-white text-[10px] font-bold flex items-center gap-1">
                       <ShieldCheck className="w-3 h-3" />
                       <span>{kitchen.badge}</span>
                     </span>
@@ -1260,7 +1280,7 @@ export default function Home() {
                         {kitchen.rating ? (
                           <span
                             className="flex-shrink-0 bg-amber-50 text-amber-900 px-2 py-0.5 rounded-lg text-xs font-bold border border-amber-200/80 flex items-center gap-1"
-                            title={countLabel(kitchen.reviewsCount, 'review', 'reviews')}
+                            title={countLabel(t, kitchen.reviewsCount, 'reviewsOne', 'reviewsMany')}
                           >
                             <Star className="w-3 h-3 fill-amber-500 text-amber-500" />
                             <span>{kitchen.rating}</span>
@@ -1268,7 +1288,7 @@ export default function Home() {
                           </span>
                         ) : (
                           <span className="flex-shrink-0 bg-slate-50 text-slate-600 px-2 py-0.5 rounded-lg text-xs font-bold border border-slate-200">
-                            New
+                            {t('newBadge')}
                           </span>
                         )}
                       </div>
@@ -1285,10 +1305,10 @@ export default function Home() {
                             {kitchen.statusLabel}
                           </span>
                           {kitchen.isOpen && kitchen.closesAt && (
-                            <span className="font-medium text-slate-400">• Closes {kitchen.closesAt}</span>
+                            <span className="font-medium text-slate-400">{t('closesAt', { time: kitchen.closesAt })}</span>
                           )}
                           {!kitchen.isOpen && kitchen.opensAt && (
-                            <span className="font-medium text-slate-400">• Opens {kitchen.opensAt}</span>
+                            <span className="font-medium text-slate-400">{t('opensAt', { time: kitchen.opensAt })}</span>
                           )}
                         </div>
                       )}
@@ -1304,7 +1324,7 @@ export default function Home() {
                           )}
                           {kitchen.deliveryFee && kitchen.minOrder && <span className="text-slate-300">•</span>}
                           {kitchen.minOrder && (
-                            <span className="text-[11px] text-slate-400">Min {kitchen.minOrder}</span>
+                            <span className="text-[11px] text-slate-400">{t('minOrder', { amount: kitchen.minOrder })}</span>
                           )}
                         </div>
                       )}
@@ -1336,27 +1356,27 @@ export default function Home() {
           <div>
             <div className="inline-flex items-center gap-1 text-[11px] font-bold uppercase tracking-wider text-[#FF5500] mb-0.5">
               <UtensilsCrossed className="w-3.5 h-3.5" />
-              <span>From Home Kitchens</span>
+              <span>{t('fromHomeKitchens')}</span>
             </div>
             <h2 className="text-xl sm:text-2xl font-bold text-slate-900 tracking-tight">
-              Popular Dishes
+              {t('popularDishes')}
             </h2>
             <p className="text-xs text-slate-500 font-medium mt-0.5">
-              Click &apos;+&apos; to add directly to your food tray
+              {t('popularDishesSub')}
             </p>
           </div>
           <Link
             href="/products"
             className="text-xs font-bold text-[#FF5500] hover:underline flex items-center gap-1"
           >
-            <span>Explore all dishes</span>
-            <ChevronRight className="w-3.5 h-3.5" />
+            <span>{t('exploreAllDishes')}</span>
+            <ChevronRight className="rtl:-scale-x-100 w-3.5 h-3.5" />
           </Link>
         </div>
 
         {dishesState === 'loading' ? (
           <div role="status" className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3.5 sm:gap-4">
-            <span className="sr-only">Loading dishes…</span>
+            <span className="sr-only">{t('loadingDishes')}</span>
             {Array.from({ length: 6 }, (_, i) => (
               <DishCardSkeleton key={i} />
             ))}
@@ -1364,14 +1384,14 @@ export default function Home() {
         ) : dishesState === 'error' ? (
           <SectionNotice
             role="alert"
-            title="We couldn't load dishes right now"
-            message="Please check your connection and try again."
+            title={t('dishesError')}
+            message={t('checkConnection')}
             action={<RetryButton onClick={retryDishes} />}
           />
         ) : dishes.length === 0 ? (
           <SectionNotice
-            title="No dishes are listed yet"
-            message="Dishes appear here once kitchens add them to their menus. Check back soon."
+            title={t('noDishes')}
+            message={t('noDishesBody')}
           />
         ) : (
           /* Dishes Grid */
@@ -1394,7 +1414,7 @@ export default function Home() {
                   {/* Product Type Tag (as set by the kitchen) */}
                   {dish.typeLabel && (
                     <span
-                      className={`absolute top-2 left-2 px-1.5 py-0.5 rounded-md text-white text-[9px] font-bold flex items-center gap-0.5 ${
+                      className={`absolute top-2 start-2 px-1.5 py-0.5 rounded-md text-white text-[9px] font-bold flex items-center gap-0.5 ${
                         dish.isFrozen ? 'bg-cyan-600' : 'bg-[#FF5500]'
                       }`}
                     >
@@ -1406,9 +1426,9 @@ export default function Home() {
                   {/* Direct Add to Cart Button */}
                   <button
                     onClick={(e) => handleAddDishToCart(dish, e)}
-                    className="absolute bottom-2 right-2 w-8 h-8 rounded-full bg-[#FF5500] hover:bg-[#e04400] text-white shadow-md flex items-center justify-center font-bold text-sm transition-transform active:scale-95"
-                    title="Add to food tray"
-                    aria-label={`Add ${dish.name} to food tray`}
+                    className="absolute bottom-2 end-2 w-8 h-8 rounded-full bg-[#FF5500] hover:bg-[#e04400] text-white shadow-md flex items-center justify-center font-bold text-sm transition-transform active:scale-95"
+                    title={t('addToTray')}
+                    aria-label={t('addNameToTray', { name: dish.name })}
                   >
                     <Plus className="w-4 h-4" />
                   </button>
@@ -1458,10 +1478,10 @@ export default function Home() {
         <section className="bg-slate-900 text-white py-12 border-t border-slate-800">
           <div className="max-w-[1440px] mx-auto px-4 sm:px-8 text-center">
             <h3 className="text-xl sm:text-2xl font-bold tracking-tight text-white">
-              Homemade food from your community.
+              {t('statsTitle')}
             </h3>
             <p className="text-slate-400 text-xs sm:text-sm mt-1.5 max-w-xl mx-auto font-normal">
-              Nuray connects verified kitchens in Karachi and Lahore with neighbours looking for real home cooking.
+              {t('statsBody')}
             </p>
 
             <div
@@ -1494,28 +1514,28 @@ export default function Home() {
               <BrandLockup markSize={28} wordSize={20} />
               <span className="text-xs text-slate-300">|</span>
               <span className="text-xs font-medium text-slate-500">
-                Community Food Marketplace
+                {t('footerTagline')}
               </span>
             </div>
 
             <div className="flex flex-wrap items-center justify-center gap-x-5 gap-y-2 text-xs font-medium text-slate-600">
-              <Link href="/kitchens" className="hover:text-[#FF5500]">All Kitchens</Link>
-              <Link href="/products" className="hover:text-[#FF5500]">Dishes &amp; Packs</Link>
-              <Link href="/products?productType=frozen" className="hover:text-[#FF5500]">Frozen Pantry</Link>
-              <Link href="/sellers/register" className="hover:text-[#FF5500]">Open Kitchen</Link>
-              <Link href="/riders/dashboard" className="hover:text-[#FF5500]">Rider Portal</Link>
-              <Link href="/support" className="hover:text-[#FF5500]">Help</Link>
+              <Link href="/kitchens" className="hover:text-[#FF5500]">{t('allKitchens')}</Link>
+              <Link href="/products" className="hover:text-[#FF5500]">{t('dishesPacks')}</Link>
+              <Link href="/products?productType=frozen" className="hover:text-[#FF5500]">{t('frozenPantry')}</Link>
+              <Link href="/sellers/register" className="hover:text-[#FF5500]">{t('openKitchen')}</Link>
+              <Link href="/riders/dashboard" className="hover:text-[#FF5500]">{t('riderPortal')}</Link>
+              <Link href="/support" className="hover:text-[#FF5500]">{t('help')}</Link>
             </div>
           </div>
 
           <div className="mt-6 pt-6 border-t border-slate-100 flex flex-col sm:flex-row items-center justify-between text-[11px] text-slate-400 font-normal gap-2">
-            <p>© {new Date().getFullYear()} Nuray. All rights reserved.</p>
-            <nav aria-label="Legal" className="flex flex-wrap items-center justify-center gap-x-4 gap-y-1">
-              <Link href="/terms" className="hover:text-[#FF5500]">Terms of Service</Link>
-              <Link href="/privacy" className="hover:text-[#FF5500]">Privacy Policy</Link>
-              <Link href="/refund-policy" className="hover:text-[#FF5500]">Refund Policy</Link>
+            <p>{t('rights', { year: new Date().getFullYear() })}</p>
+            <nav aria-label={t('legal')} className="flex flex-wrap items-center justify-center gap-x-4 gap-y-1">
+              <Link href="/terms" className="hover:text-[#FF5500]">{t('terms')}</Link>
+              <Link href="/privacy" className="hover:text-[#FF5500]">{t('privacy')}</Link>
+              <Link href="/refund-policy" className="hover:text-[#FF5500]">{t('refund')}</Link>
             </nav>
-            <p>Karachi &amp; Lahore, Pakistan</p>
+            <p>{t('cities')}</p>
           </div>
         </div>
       </footer>
@@ -1523,10 +1543,10 @@ export default function Home() {
       {/* Styled Modern Modal for Single Kitchen Batch Switching */}
       <ConfirmModal
         isOpen={conflictModal.isOpen}
-        title="Start Order from This Kitchen?"
-        message={`Your tray currently contains dishes from ${conflictModal.existingKitchenName}. An order can only include dishes from one kitchen. Would you like to clear your existing tray and start a new order with ${conflictModal.dish?.kitchenName}?`}
-        confirmText="Clear Tray & Add Dish"
-        cancelText="Keep Existing Tray"
+        title={t('conflictTitle')}
+        message={t('conflictBody', { existing: conflictModal.existingKitchenName, kitchen: conflictModal.dish?.kitchenName })}
+        confirmText={t('conflictConfirm')}
+        cancelText={t('conflictCancel')}
         variant="warning"
         loading={switchingKitchen}
         onConfirm={handleConfirmSwitchKitchen}

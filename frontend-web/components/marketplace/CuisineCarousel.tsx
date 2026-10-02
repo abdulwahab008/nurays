@@ -3,8 +3,11 @@
 import { useRef } from 'react';
 import Link from 'next/link';
 import { ChevronLeft, ChevronRight, Snowflake, Sparkles } from 'lucide-react';
+import { useT } from '@/lib/i18n';
+import { homeMessages, type HomeKey } from '@/lib/i18n/messages/home';
 
 export interface CuisineCategory {
+  /** English label (other pages use it); the carousel shows the translated `cuisine.<query>` message. */
   label: string;
   query: string;
   image: string;
@@ -76,6 +79,11 @@ interface CuisineCarouselProps {
 
 export function CuisineCarousel({ selectedCuisine, onSelectCuisine }: CuisineCarouselProps) {
   const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const t = useT(homeMessages);
+  const cuisineLabel = (item: CuisineCategory) => {
+    const key = `cuisine.${item.query}` as HomeKey;
+    return key in homeMessages.en ? t(key) : item.label;
+  };
 
   const scroll = (direction: 'left' | 'right') => {
     if (scrollContainerRef.current) {
@@ -89,10 +97,10 @@ export function CuisineCarousel({ selectedCuisine, onSelectCuisine }: CuisineCar
       {/* Scroll Left Button */}
       <button
         onClick={() => scroll('left')}
-        className="hidden md:flex absolute -left-3.5 top-1/2 -translate-y-1/2 z-10 w-8 h-8 rounded-full bg-white shadow-md border border-slate-200 items-center justify-center text-slate-700 hover:bg-slate-50 transition-all opacity-0 group-hover:opacity-100"
-        aria-label="Scroll cuisines left"
+        className="hidden md:flex absolute -start-3.5 top-1/2 -translate-y-1/2 z-10 w-8 h-8 rounded-full bg-white shadow-md border border-slate-200 items-center justify-center text-slate-700 hover:bg-slate-50 transition-all opacity-0 group-hover:opacity-100"
+        aria-label={t('scrollLeft')}
       >
-        <ChevronLeft className="w-4 h-4" />
+        <ChevronLeft className="rtl:-scale-x-100 w-4 h-4" />
       </button>
 
       {/* Horizontal Scroll Container */}
@@ -129,13 +137,13 @@ export function CuisineCarousel({ selectedCuisine, onSelectCuisine }: CuisineCar
               >
                 <img
                   src={item.image}
-                  alt={item.label}
+                  alt={cuisineLabel(item)}
                   className="w-full h-full object-cover group-hover/card:scale-108 transition-transform duration-300"
                 />
                 <div className="absolute inset-0 bg-black/5 group-hover/card:bg-transparent transition-colors" />
 
                 {item.isColdChain && (
-                  <span className="absolute bottom-0.5 right-0.5 w-4 h-4 rounded-full bg-cyan-600 text-white flex items-center justify-center shadow-xs">
+                  <span className="absolute bottom-0.5 end-0.5 w-4 h-4 rounded-full bg-cyan-600 text-white flex items-center justify-center shadow-xs">
                     <Snowflake className="w-2.5 h-2.5" />
                   </span>
                 )}
@@ -146,11 +154,11 @@ export function CuisineCarousel({ selectedCuisine, onSelectCuisine }: CuisineCar
                 <span className={`block text-xs font-semibold truncate transition-colors ${
                   isSelected ? 'text-[#FF5500]' : 'text-slate-700 group-hover/card:text-slate-950'
                 }`}>
-                  {item.label}
+                  {cuisineLabel(item)}
                 </span>
                 {item.badge && (
                   <span className="inline-block text-[9px] font-semibold uppercase tracking-wider text-slate-500 bg-slate-100 px-1.5 py-0.2 rounded">
-                    {item.badge}
+                    {t('badgeFrozen')}
                   </span>
                 )}
               </div>
@@ -162,10 +170,10 @@ export function CuisineCarousel({ selectedCuisine, onSelectCuisine }: CuisineCar
       {/* Scroll Right Button */}
       <button
         onClick={() => scroll('right')}
-        className="hidden md:flex absolute -right-3.5 top-1/2 -translate-y-1/2 z-10 w-8 h-8 rounded-full bg-white shadow-md border border-slate-200 items-center justify-center text-slate-700 hover:bg-slate-50 transition-all opacity-0 group-hover:opacity-100"
-        aria-label="Scroll cuisines right"
+        className="hidden md:flex absolute -end-3.5 top-1/2 -translate-y-1/2 z-10 w-8 h-8 rounded-full bg-white shadow-md border border-slate-200 items-center justify-center text-slate-700 hover:bg-slate-50 transition-all opacity-0 group-hover:opacity-100"
+        aria-label={t('scrollRight')}
       >
-        <ChevronRight className="w-4 h-4" />
+        <ChevronRight className="rtl:-scale-x-100 w-4 h-4" />
       </button>
     </div>
   );
