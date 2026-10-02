@@ -1,514 +1,208 @@
-# FrozenNuray - Project README
+# Nuray Food & Frost
 
-[![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-[![Platform](https://img.shields.io/badge/platform-Web%20%7C%20Android%20%7C%20iOS-lightgrey.svg)](https://frozennuray.com)
-[![Status](https://img.shields.io/badge/status-In%20Development-yellow.svg)]()
+A community-based food marketplace for Pakistan. Nuray is the bridge between home kitchens (sellers) and the people
+in their neighbourhoods (buyers): orders are organised around **communities** such as Askari 11, DHA Phase 5 or
+Gulshan-e-Iqbal, and every seller decides, community by community, whether they deliver there and what it costs.
 
-## 🥘 About FrozenNuray
+## What it does
 
-**FrozenNuray** is Pakistan's first dedicated marketplace platform for frozen homemade food, connecting talented home-based food entrepreneurs with customers seeking authentic, convenient, and high-quality frozen meals.
+- **Buyers** browse kitchens and dishes for their community, fill a cart (one cart can hold several sellers), pay by
+  COD, wallet or manual bank/mobile transfer, and follow the order live.
+- **Sellers** run a kitchen: products and variants, stock, orders, earnings, promotions, payouts, and their
+  **delivery terms per community** (see below).
+- **Riders** pick up platform-delivered orders and confirm delivery with a customer OTP.
+- **Hub centers** hold cold-chain stock (batches with expiry dates, temperature logs) for products fulfilled from a hub.
+- **Admins** approve sellers, riders and products, handle refunds and payouts, and manage hubs and communities.
 
-### The Problem We're Solving
+### Community delivery model
 
-- **For Customers**: Limited access to quality, authentic frozen homemade food with no reliable discovery platform
-- **For Sellers**: Stuck in local WhatsApp groups with limited reach and manual payment/delivery hassles
-- **For Everyone**: No professional frozen food marketplace in Pakistan (Foodpanda/Cheetah focus on fresh restaurant food)
+- Every seller belongs to a home community and can fix a **fee, a free-delivery threshold and a minimum order for
+  each community** they serve (Seller studio → Delivery). Once a seller has switched on any community, only those
+  communities are deliverable.
+- "Deliver to other communities" turns cross-community delivery on or off. Nearby communities are suggested.
+- A buyer's address is resolved to a community (chosen on the address, GPS position, or the area name). An address
+  that matches no community cannot order from a seller with community rules until the buyer picks one.
+- The seller picks **who delivers**: the Nuray rider fleet (the delivery fee is platform revenue) or **self-delivery**
+  (the seller keeps the fee they charged; no rider job is created). Items fulfilled from a hub are always delivered by
+  the platform.
+- In a multi-seller order, each seller's fee is stored in `Order.deliveryFeeBreakdown`, and the ledger splits platform
+  and seller delivery money from it.
 
-### Our Solution
+### Money, in short
 
-A comprehensive multi-platform marketplace featuring:
-- 🌐 **Web App**: Full-featured responsive web application
-- 📱 **Android App**: Native-like Flutter application
-- 🍎 **iOS App**: Native-like Flutter application
-- 🏪 **Hub Centers**: Innovative micro-fulfillment centers for fast delivery & quality control
-- 💳 **Secure Payments**: Escrow system with multiple payment options (JazzCash, EasyPaisa, COD, Cards)
-- ⭐ **Quality Assurance**: Verified sellers, product reviews, and hub-based quality checks
+- Orders, stock and promo discounts are written inside database transactions with atomic stock decrements.
+- Cancelling a paid order creates a **refund record**: wallet refunds are instant, manual ones stay `pending` until an
+  admin marks them sent (or dismisses them) on the admin order page. Refunds are capped at what was paid.
+- Completing an order writes immutable ledger entries (customer payment, seller earning, commission, delivery fees).
 
----
+## Tech stack
 
-## 📊 Project Status
+| Layer | What |
+|---|---|
+| Backend | Node.js 20, Express 5, TypeScript, Prisma 6, PostgreSQL, Redis (ioredis), Socket.IO, Zod |
+| Frontend | Next.js 16 (App Router), React 19, Tailwind CSS 4, Zustand, React Hook Form, Leaflet, Socket.IO client |
+| Auth | JWT access + refresh tokens, session revocation, email verification, phone OTP (Twilio), password reset by email, Google sign-in |
+| Tests | Jest (backend), Playwright (frontend E2E), a real-database money-flow script |
+| CI | GitHub Actions: typecheck + build, Docker build smoke, Playwright E2E |
 
-**Current Phase**: MVP Development (Phase 1)
-**Target Launch**: Q1 2026
-**Launch City**: Karachi, Pakistan
+There is no mobile app in this repository.
 
-### Milestones
-
-- [x] Market validation (200-300 orders via WhatsApp)
-- [x] Architecture design
-- [x] Database schema design
-- [x] API documentation
-- [ ] Backend development (In Progress)
-- [ ] Frontend development (Web)
-- [ ] Mobile app development (Android)
-- [ ] Hub center setup
-- [ ] Seller onboarding
-- [ ] Beta testing
-- [ ] Public launch
-
----
-
-## 🏗️ Architecture
-
-### High-Level Overview
+## Repository layout
 
 ```
-┌─────────────────────────────────────────────────────────┐
-│                    CLIENT LAYER                          │
-│  Web (Next.js) | Android (Flutter) | iOS (Flutter)       │
-└─────────────────────┬───────────────────────────────────┘
-                      │
-                      ▼
-┌─────────────────────────────────────────────────────────┐
-│              API GATEWAY (Node.js + Express)             │
-└─────────────────────┬───────────────────────────────────┘
-                      │
-        ┌─────────────┼─────────────┐
-        ▼             ▼             ▼
-    Auth Service  Business Logic  Integration
-                                  (Payments, SMS, etc.)
-                      │
-                      ▼
-┌─────────────────────────────────────────────────────────┐
-│          DATA LAYER                                      │
-│  PostgreSQL | Redis Cache | Cloudinary (Files)          │
-└─────────────────────────────────────────────────────────┘
+backend/
+  src/
+    controllers/  routes/  validators/   HTTP layer (routes mounted under /api/v1)
+    services/                            business logic (orders, refunds, ledger, hubs, riders, ...)
+    middleware/  utils/  config/  gateways/
+  prisma/
+    schema.prisma                        data model
+    migrations/                          SQL migrations
+    seed-e2e.ts                          sample data (communities, kitchens, products, a seller)
+  scripts/                               admin helpers and verification scripts
+  tests/                                 Jest tests and SQL fixtures
+frontend-web/
+  app/                                   pages (customer, sellers/, riders/, admin/, ...)
+  components/  lib/                      UI, API client, services, hooks
+  tests/e2e/                             Playwright tests
+docs/                                    architecture, API, deployment and operations notes
+docker-compose.yml                       backend + frontend containers
 ```
 
-### Technology Stack
-
-**Backend:**
-- Runtime: Node.js 20.x LTS
-- Framework: Express.js
-- Language: TypeScript
-- Database: PostgreSQL 15.x
-- Cache: Redis 7.x
-- ORM: Prisma
-- Queue: Bull (Redis-based)
-
-**Frontend (Web):**
-- Framework: Next.js 14 (App Router)
-- Language: TypeScript
-- UI: React 18 + Tailwind CSS
-- State: Zustand
-- Forms: React Hook Form + Zod
-
-**Mobile Apps:**
-- Framework: Flutter 3.x
-- Language: Dart
-- State: Riverpod
-- HTTP: Dio
-
-**Infrastructure:**
-- Hosting: AWS (Bahrain region) or DigitalOcean
-- CDN: Cloudflare
-- File Storage: Cloudinary
-- CI/CD: GitHub Actions
-
-**Third-Party Integrations:**
-- Payments: JazzCash, EasyPaisa, Stripe
-- SMS: Twilio / Local gateway
-- Email: SendGrid
-- Maps: Google Maps API
-- Push: Firebase Cloud Messaging
-
----
-
-## 📁 Repository Structure
-
-```
-frozen-nuray/
-├── backend/                    # Node.js backend API
-│   ├── src/
-│   │   ├── controllers/       # Route controllers
-│   │   ├── services/          # Business logic
-│   │   ├── models/            # Database models (Prisma)
-│   │   ├── middleware/        # Auth, validation, etc.
-│   │   ├── routes/            # API routes
-│   │   ├── utils/             # Helper functions
-│   │   └── config/            # Configuration files
-│   ├── prisma/
-│   │   └── schema.prisma      # Database schema
-│   ├── tests/                 # Unit & integration tests
-│   ├── package.json
-│   └── tsconfig.json
-│
-├── frontend-web/               # Next.js web application (App Router — no src/ wrapper)
-│   ├── app/                   # Pages & routes
-│   ├── components/            # React components
-│   ├── lib/                   # Utilities, API client, services
-│   ├── tests/                 # Playwright E2E tests
-│   ├── package.json
-│   └── next.config.js
-│
-├── docs/                       # Documentation (see the full list further down)
-│
-├── docker-compose.yml          # Local development (backend + frontend containers)
-├── .gitignore
-├── LICENSE
-└── README.md                  # This file
-```
-
-There is no mobile app and no root-level `scripts/` directory in this repo — one-off admin/seed/debug scripts
-live in `backend/scripts/` (run as `node scripts/<name>.js` from inside `backend/`).
-
----
-
-## 🚀 Getting Started
+## Running it locally
 
 ### Prerequisites
 
-**Required:**
-- Node.js 20.x or higher
-- PostgreSQL 15.x
-- Redis 7.x
-- Git
+- Node.js 20+
+- PostgreSQL 15+ and Redis 7+ running locally (or reachable by URL)
 
-**Optional:**
-- Docker & Docker Compose (for containerized development)
-- VS Code or preferred IDE
-
-### Installation
-
-#### 1. Clone the repository
-
-```bash
-git clone https://github.com/yourusername/frozen-nuray.git
-cd frozen-nuray
-```
-
-#### 2. Backend Setup
+### 1. Backend
 
 ```bash
 cd backend
-
-# Install dependencies
 npm install
-
-# Copy environment variables
-cp .env.example .env
-
-# Edit .env with your configuration
-# DATABASE_URL, REDIS_URL, JWT_SECRET, etc.
-
-# Run database migrations
-npx prisma migrate dev
-
-# (Optional) load sample e2e data
-npm run seed:e2e
-
-# Start development server
-npm run dev
+cp .env.example .env        # then edit it (see "Environment variables")
+npx prisma generate
+npx prisma db push          # create the tables from schema.prisma
+npm run seed:e2e            # optional: communities, 13 kitchens, products, a test seller
+npm run dev                 # http://localhost:3001  (API: /api/v1, health: /api/v1/health)
 ```
 
-Backend will run on `http://localhost:3001` (API base `http://localhost:3001/api/v1`).
+`.env` needs at least `DATABASE_URL`, `REDIS_URL` and `JWT_SECRET` (32+ characters). Without Redis the health check
+reports it unhealthy.
 
-There is no default admin account and none can be created via public registration — see
-[`docs/ACCOUNT_CREDENTIALS.md`](docs/ACCOUNT_CREDENTIALS.md) for how to bootstrap one (`node
-scripts/create-admin.js <email> <password> <name>`) and how every other role gets access.
+> **Schema changes:** a fresh database is created with `npx prisma db push`. The migration history under
+> `prisma/migrations` is incomplete (early tables were created by `db push`), so `prisma migrate dev` will not build a
+> database from nothing. On an existing database, apply the migration files you have not run yet, in order. The
+> `20261001300000_indexes_uniques_integrity` migration also adds CHECK constraints (non-negative stock and balances)
+> that `db push` does not create; it cleans up legacy duplicates and negative values first, backing them up, and is
+> safe to re-run. Its index builds are not concurrent, so use a maintenance window on a large live database.
 
-#### 3. Web Frontend Setup
+### 2. Frontend
 
 ```bash
 cd frontend-web
-
-# Install dependencies
 npm install
-
-# There's no .env.example here — create .env.local yourself:
 echo "NEXT_PUBLIC_API_URL=http://localhost:3001/api/v1" > .env.local
-
-# Start development server
-npm run dev
+npm run dev                 # http://localhost:3000
 ```
 
-Web app will run on `http://localhost:3000`.
+### 3. Try it
 
-### Using Docker (Alternative)
+After `npm run seed:e2e`:
 
-The repo ships Dockerfiles for both the backend and the frontend and a
-`docker-compose.yml` that runs them together. Postgres and Redis are
-expected on the host machine (where you already use them in dev).
+| Role | Login | Where |
+|---|---|---|
+| Seller | `e2e-seller@nuray.test` / `SellerPass123!` | http://localhost:3000/login → Seller studio |
+| Customer | register at `/register` | works immediately |
+| Rider | register at `/register` | needs admin approval at `/admin/riders` |
+| Admin | none by default; create one with `node scripts/create-admin.js <email> <password> <name>` (from `backend/`) | http://localhost:3000/admin/login |
+
+See [`docs/ACCOUNT_CREDENTIALS.md`](docs/ACCOUNT_CREDENTIALS.md) for how each role is created and approved.
+
+A quick walk-through of the community delivery screen: log in as the seller, open **Delivery**, tick your home community
+and any others you serve, set a fee for each, and press **Save Settings**. Saving with other communities switched on but
+no fee for your own community is refused. Reload the page to see the saved terms.
+
+### Docker
+
+`docker-compose.yml` builds and runs the backend and frontend containers. PostgreSQL and Redis are expected on the host
+(reached through `host.docker.internal`).
 
 ```bash
-# 1. Make sure backend/.env exists (copy from .env.example and fill in)
 cp backend/.env.example backend/.env
-
-# 2. Build + run both containers
-docker compose up --build
-
-# Tail logs
-docker compose logs -f
-
-# Stop
-docker compose down
+docker compose up --build   # frontend :3000, backend :3001
 ```
 
-After `up`, the frontend is on http://localhost:3000 and the backend on
-http://localhost:3001. The frontend container talks to the backend via
-the compose network; the backend talks to your host's Postgres/Redis via
-`host.docker.internal`.
+## Environment variables
 
-### CI/CD
+Backend (`backend/.env`):
 
-GitHub Actions:
-- **CI** (`.github/workflows/ci.yml`) — runs on every PR and push to
-  `main`: typechecks + builds both packages, then builds both Docker
-  images as a smoke test. No push to a registry on PRs.
-- **Publish** (`.github/workflows/docker-publish.yml`) — runs on push to
-  `main` and on `v*` tags: builds and pushes images to
-  `ghcr.io/<owner>/nuray-backend` and `ghcr.io/<owner>/nuray-frontend`.
-  Tags emitted: `main`, `sha-<short>`, plus `:v1.2.3` / `:latest` on
-  release tags.
+| Variable | Purpose |
+|---|---|
+| `DATABASE_URL`, `REDIS_URL` | PostgreSQL and Redis connections |
+| `JWT_SECRET` (required), `JWT_EXPIRES_IN`, `JWT_REFRESH_EXPIRES_IN` | token signing and lifetimes |
+| `PORT` (3001), `API_VERSION` (v1), `NODE_ENV` | server |
+| `FRONTEND_URL` | links in emails (verification, password reset) |
+| `CORS_ORIGIN` | allowed browser origin (default `http://localhost:3000`) |
+| `BASE_URL` | public base URL of the backend, used for upload URLs |
+| `EMAIL_SERVICE`, `EMAIL_USER`, `EMAIL_PASSWORD`, `EMAIL_FROM`, `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURE`, `SMTP_USER`, `SMTP_PASSWORD` | outgoing email (Gmail or SMTP); without it emails are not sent |
+| `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_PHONE_NUMBER` | SMS for phone OTP |
+| `GOOGLE_CLIENT_ID` | Google sign-in (see `docs/GOOGLE_OAUTH_SETUP.md`) |
+| `JAZZCASH_*`, `EASYPAISA_*`, `SAFEPAY_*`, `BANK_*` | payment gateway credentials (all optional; unconfigured gateways show as `not_configured`) |
 
----
+Frontend (`frontend-web/.env.local`):
 
-## 📚 Documentation
+| Variable | Purpose |
+|---|---|
+| `NEXT_PUBLIC_API_URL` | backend API base, e.g. `http://localhost:3001/api/v1` |
+| `NEXT_PUBLIC_GOOGLE_CLIENT_ID` | optional, Google sign-in |
+| `NEXT_PUBLIC_SAFEPAY_SANDBOX` | optional, payment sandbox mode |
+| `NEXT_PUBLIC_ENABLE_DEMO_LOGIN` | set `true` to show the demo-account shortcuts in a production build (shown automatically in development) |
 
-**Core Documentation:**
-- **[System Architecture](docs/ARCHITECTURE.md)**: Complete technical architecture, database design, and system components
-- **[API Documentation](docs/API_DOCUMENTATION.md)**: Full API reference with request/response examples
-- **[Database Schema](docs/DATABASE_SCHEMA.sql)**: PostgreSQL database schema with tables, indexes, and relationships
-- **[Product Requirements](docs/PRODUCT_REQUIREMENTS.md)**: Detailed product requirements, user stories, and feature specifications
-- **[Account Credentials](docs/ACCOUNT_CREDENTIALS.md)**: Every account type (customer/seller/rider/admin), how to register or bootstrap one, and known local test accounts
-- **[End-to-End Testing Guide](docs/E2E_TESTING_GUIDE.md)**: Every URL and use case to click through, organized by role
+## Background jobs
 
-**Additional Documentation:**
-- **[Security & Compliance](docs/SECURITY_AND_COMPLIANCE.md)**: Security architecture and compliance requirements
-- **[Hub Operations Manual](docs/HUB_OPERATIONS_MANUAL.md)**: Complete hub center operations guide
-- **[Testing Strategy](docs/TESTING_STRATEGY.md)**: Comprehensive testing approach and guidelines
-- **[Deployment Guide](docs/DEPLOYMENT_GUIDE.md)**: Infrastructure setup and deployment procedures
-- **[Developer Onboarding](docs/DEVELOPER_ONBOARDING.md)**: Setup guide for new developers
-- **[Technology Stack Review](docs/TECHNOLOGY_STACK_REVIEW.md)**: Assessment of technology choices
-- **[Architecture Review](docs/ARCHITECTURE_REVIEW_AND_UPDATES.md)**: Issues identified and updates made
+The backend runs two in-process timers (no separate worker): a stock-alert sweep every 6 hours and an hourly sweep that
+marks hub batches past their expiry as `expired`.
 
----
-
-## 🧪 Testing
-
-### Backend Tests
+## Testing
 
 ```bash
+# Backend unit tests
+cd backend && npm test
+
+# Money-flow verification against a REAL throwaway PostgreSQL (concurrency can't be tested with mocks)
 cd backend
+export DATABASE_URL=postgresql://postgres@localhost:5432/scratch JWT_SECRET=<32+ chars>
+npx prisma db push --skip-generate
+psql "$DATABASE_URL" -f prisma/migrations/20261001300000_indexes_uniques_integrity/migration.sql   # adds the CHECK constraints
+npx ts-node scripts/verify-money-flows.ts
 
-# Run all tests
-npm test
-
-# Run with coverage
-npm run test:coverage
-
-# Run specific test file
-npm test -- auth.test.ts
+# Frontend end-to-end (needs the backend and frontend running with seeded data)
+cd frontend-web && npm run test:e2e
 ```
 
-### Frontend Tests
+Never point `verify-money-flows.ts` at a database you care about: it creates its own users, sellers and orders.
 
-```bash
-cd frontend-web
+## Continuous integration
 
-# Run E2E tests (Playwright) — there's no separate unit-test script currently
-npm run test:e2e
-npm run test:e2e:ui   # interactive UI mode
-```
+`.github/workflows/ci.yml` runs on every pull request and on pushes to `main`: backend and frontend typecheck + build,
+Docker image builds, and the Playwright suite. `docker-publish.yml` publishes images to GitHub Container Registry on
+pushes to `main` and on `v*` tags.
 
----
+## API overview
 
-## 🔧 Configuration
+All routes are under `/api/v1`: `auth`, `users`, `sellers`, `seller` (order management), `products`, `product-variants`,
+`categories`, `cart`, `orders`, `payments`, `communities`, `hubs`, `riders`, `reviews`, `promotions`, `favorites`,
+`notifications`, `support`, `realtime`, `admin`, `upload`, `health`. Order status changes are pushed to clients over
+Socket.IO. The full reference is [`docs/API_DOCUMENTATION.md`](docs/API_DOCUMENTATION.md).
 
-### Environment Variables
+## More documentation
 
-**Backend (.env):**
-```bash
-# Database
-DATABASE_URL=postgresql://user:password@localhost:5432/frozennuray
+- [Architecture](docs/ARCHITECTURE.md), [system flows](docs/SYSTEM_FLOWS_AND_PROCESSES.md), [database schema](docs/DATABASE_SCHEMA.sql)
+- [Account credentials and access](docs/ACCOUNT_CREDENTIALS.md), [end-to-end testing guide](docs/E2E_TESTING_GUIDE.md)
+- [Deployment guide](docs/DEPLOYMENT_GUIDE.md), [hub operations manual](docs/HUB_OPERATIONS_MANUAL.md)
+- [Payment gateway integration](docs/PAYMENT_GATEWAY_INTEGRATION.md), [security and compliance](docs/SECURITY_AND_COMPLIANCE.md)
 
-# Redis
-REDIS_URL=redis://localhost:6379
-
-# JWT
-JWT_SECRET=your-secret-key
-JWT_EXPIRES_IN=24h
-
-# Payment Gateways
-JAZZCASH_MERCHANT_ID=your-merchant-id
-JAZZCASH_PASSWORD=your-password
-EASYPAISA_STORE_ID=your-store-id
-STRIPE_SECRET_KEY=sk_test_...
-
-# SMS
-TWILIO_ACCOUNT_SID=your-sid
-TWILIO_AUTH_TOKEN=your-token
-TWILIO_PHONE_NUMBER=+1234567890
-
-# File Storage
-CLOUDINARY_CLOUD_NAME=your-cloud-name
-CLOUDINARY_API_KEY=your-api-key
-CLOUDINARY_API_SECRET=your-api-secret
-
-# Email
-SENDGRID_API_KEY=your-sendgrid-key
-
-# Maps
-GOOGLE_MAPS_API_KEY=your-google-maps-key
-```
-
-**Frontend (.env.local — you create this file, there's no `.env.example` to copy):**
-```bash
-NEXT_PUBLIC_API_URL=http://localhost:3001/api/v1
-NEXT_PUBLIC_GOOGLE_CLIENT_ID=your-google-oauth-client-id   # optional — Google sign-in
-NEXT_PUBLIC_SAFEPAY_SANDBOX=true                           # optional — payment gateway sandbox mode
-```
-
----
-
-## 📦 Deployment
-
-### Production Deployment
-
-**Backend (AWS EC2 or DigitalOcean):**
-
-```bash
-# Build TypeScript
-npm run build
-
-# Start production server
-npm run start:prod
-```
-
-**Frontend (Vercel - Recommended):**
-
-```bash
-# Deploy to Vercel
-vercel --prod
-```
-
-See [`docs/DEPLOYMENT_GUIDE.md`](docs/DEPLOYMENT_GUIDE.md) for detailed deployment instructions.
-
----
-
-## 🤝 Contributing
-
-We welcome contributions! Please follow these guidelines:
-
-### Development Workflow
-
-1. **Fork the repository**
-2. **Create a feature branch**: `git checkout -b feature/amazing-feature`
-3. **Commit your changes**: `git commit -m 'Add amazing feature'`
-4. **Push to branch**: `git push origin feature/amazing-feature`
-5. **Open a Pull Request**
-
-### Code Standards
-
-- **TypeScript/JavaScript**: Follow Airbnb style guide
-- **Dart/Flutter**: Follow official Dart style guide
-- **Commit Messages**: Use conventional commits (feat, fix, docs, etc.)
-- **Tests**: Write tests for new features
-- **Documentation**: Update docs for API/feature changes
-
-### Pull Request Process
-
-1. Ensure all tests pass
-2. Update documentation if needed
-3. Add description of changes
-4. Request review from maintainers
-5. Address review feedback
-6. Squash commits before merge
-
----
-
-## 🐛 Bug Reports & Feature Requests
-
-- **Bug Reports**: [Open an issue](https://github.com/yourusername/frozen-nuray/issues/new?template=bug_report.md)
-- **Feature Requests**: [Open an issue](https://github.com/yourusername/frozen-nuray/issues/new?template=feature_request.md)
-
-Please include:
-- Clear description
-- Steps to reproduce (for bugs)
-- Expected vs actual behavior
-- Screenshots/logs if applicable
-- Environment details (OS, browser, app version)
-
----
-
-## 📈 Roadmap
-
-### Phase 1: MVP (Q1 2026) - Current
-- ✅ Architecture & design
-- 🔄 Backend API development
-- 🔄 Web application
-- 🔄 Android app
-- 🔄 Payment integration
-- 🔄 Hub center setup
-- 🔄 Seller onboarding
-
-### Phase 2: Growth (Q2 2026)
-- iOS app launch
-- Advanced analytics
-- Loyalty program
-- Marketing campaigns
-- Lahore expansion
-
-### Phase 3: Scale (Q3-Q4 2026)
-- Multi-city expansion (5+ cities)
-- Subscription boxes
-- Corporate bulk ordering
-- 200+ sellers, 10K+ customers
-
-### Phase 4: Maturity (2027)
-- 10+ cities nationwide
-- Private label products
-- International expansion
-- Franchise model
-
----
-
-## 📞 Contact & Support
-
-- **Website**: [https://frozennuray.com](https://frozennuray.com) (coming soon)
-- **Email**: support@frozennuray.com
-- **WhatsApp**: +92-300-XXXXXXX
-- **Facebook**: [@FrozenNuray](https://facebook.com/frozennuray)
-- **Instagram**: [@frozen_nuray](https://instagram.com/frozen_nuray)
-
-### Team
-
-- **Founder**: [Your Name]
-- **Tech Lead**: [Name]
-- **Product Manager**: [Name]
-
----
-
-## 📄 License
-
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
----
-
-## 🙏 Acknowledgments
-
-- All the home cooks who validated this idea through WhatsApp orders
-- The amazing Pakistani tech community
-- Open-source contributors whose libraries we use
-- Our beta testers and early adopters
-
----
-
-## 🌟 Star History
-
-If you find this project useful, please consider giving it a ⭐️ on GitHub!
-
----
-
-## 📊 Project Statistics
-
-![GitHub stars](https://img.shields.io/github/stars/yourusername/frozen-nuray?style=social)
-![GitHub forks](https://img.shields.io/github/forks/yourusername/frozen-nuray?style=social)
-![GitHub issues](https://img.shields.io/github/issues/yourusername/frozen-nuray)
-![GitHub pull requests](https://img.shields.io/github/issues-pr/yourusername/frozen-nuray)
-
----
-
-**Made with ❤️ in Pakistan for Pakistan** 🇵🇰
-
-**Bringing the taste of home to every Pakistani** 🥘
+Some of these documents were written early in the project and may describe plans (mobile apps, other cities) that are
+not built; the code and this README are the source of truth.
