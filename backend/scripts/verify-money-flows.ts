@@ -239,6 +239,8 @@ async function main() {
 
   // ---- 17. self-delivery fee money ----
   const selfS = await mkSeller({ deliveryProvider: 'self', deliveryFeeType: 'fixed', deliveryFeeFixed: 100 });
+  // A Nuray-rider kitchen's own fee (60) no longer applies: Nuray's price does (Rs 150 here: no
+  // community on either side, so the fallback base fee).
   const platS = await mkSeller({ deliveryProvider: 'platform', deliveryFeeType: 'fixed', deliveryFeeFixed: 60 });
   await prisma.sellerPayoutSchedule.create({ data: { sellerId: selfS.id, minimumPayoutAmount: 1, payoutMethod: 'bank_transfer' } as any });
   await prisma.sellerPayoutSchedule.create({ data: { sellerId: platS.id, minimumPayoutAmount: 1, payoutMethod: 'bank_transfer' } as any });
@@ -257,7 +259,7 @@ async function main() {
   const bdP: any[] = (pdo.deliveryFeeBreakdown as any) || [];
   ok('orders record who delivers and who each delivery fee belongs to',
     Number(sdo.deliveryFee) === 100 && bd[0]?.provider === 'self' && sdo.deliveryProvider === 'self' &&
-      Number(pdo.deliveryFee) === 60 && bdP[0]?.provider === 'platform' && pdo.deliveryProvider === 'platform',
+      Number(pdo.deliveryFee) === 150 && bdP[0]?.provider === 'platform' && pdo.deliveryProvider === 'platform',
     `${JSON.stringify(bd)} ${sdo.deliveryProvider} / ${JSON.stringify(bdP)} ${pdo.deliveryProvider}`);
 
   for (const o of [sdo, pdo]) await prisma.order.update({ where: { id: o.id }, data: { orderStatus: 'delivered', paymentStatus: 'paid', paidAt: new Date() } });
@@ -280,7 +282,7 @@ async function main() {
   const sellerFee = ledS.find((e) => e.transactionType === 'seller_delivery_fee');
   const platRev = ledP.find((e) => e.transactionType === 'delivery_fee');
   ok('ledger: platform revenue is only the platform-delivered fee; the self fee is payable to the seller',
-    Number(platRev?.amount) === 60 && !ledS.some((e) => e.transactionType === 'delivery_fee') && Number(sellerFee?.amount) === 100 && sellerFee?.sellerId === selfS.id,
+    Number(platRev?.amount) === 150 && !ledS.some((e) => e.transactionType === 'delivery_fee') && Number(sellerFee?.amount) === 100 && sellerFee?.sellerId === selfS.id,
     `platform=${platRev?.amount} seller=${sellerFee?.amount}`);
 
   // COD at the seller's own door: they hold everything, and owe the platform everything that isn't theirs
@@ -1436,6 +1438,31 @@ async function main() {
     const results = await Promise.all([crSvc.approveRequest(req.id, admin2.id).then(() => 'OK', (e: any) => e.message), crSvc.approveRequest(req.id, admin2.id).then(() => 'OK', (e: any) => e.message)]);
     ok('two admins approving the same request create one category', (await prisma.category.count({ where: { name: catName } })) === 1 && results.filter((r) => r === 'OK').length === 1, results.join(' / '));
     ok('the kitchen is told its category was approved', (await prisma.notification.count({ where: { userId: kCat.userId, title: 'Category approved' } })) === 1);
+  }
+
+  // Nuray delivery prices: fixed within a community, by distance to another; whole-rupee totals.
+  {
+    const adminSvc = require('../src/services/admin.service').default;
+    const commA = await prisma.community.create({ data: { name: 'Fee A ' + uniq(), slug: 'fee-a-' + uniq(), city: 'Lahore', centerLatitude: 31.5, centerLongitude: 74.35, deliveryBaseFee: 100, crossCommunityBaseFee: 150 } });
+    const commB = await prisma.community.create({ data: { name: 'Fee B ' + uniq(), slug: 'fee-b-' + uniq(), city: 'Lahore', centerLatitude: 31.545, centerLongitude: 74.35, deliveryBaseFee: 120, crossCommunityBaseFee: 180 } });
+    require('../src/services/delivery-pricing.service').invalidateDeliveryPricing();
+    const kFee = await mkSeller({ deliveryProvider: 'platform', communityId: commA.id, latitude: 31.5, longitude: 74.35, allowCrossCommunity: true });
+    const pFee = await mkProduct(kFee.id, 100, 1455);
+    const buyer = await mkUser();
+    const addrA = await prisma.userAddress.create({ data: { userId: buyer.id, addressLine1: 'House 1', area: 'A', city: 'Lahore', communityId: commA.id, latitude: 31.501, longitude: 74.351 } as any });
+    const addrB = await prisma.userAddress.create({ data: { userId: buyer.id, addressLine1: 'House 2', area: 'B', city: 'Lahore', communityId: commB.id, latitude: 31.556, longitude: 74.35 } as any });
+    const place = (addressId: string) => orderService.createOrder(buyer.id, { items: [{ productId: pFee.id, quantity: 1 }], deliveryType: 'home_delivery', deliveryAddressId: addressId, paymentMethod: 'cod' } as any) as any;
+    const same = await place(addrA.id);
+    ok('same community: the fixed fee the admin set for the community', Number(same.deliveryFee) === 100, String(same.deliveryFee));
+    ok('the total is whole rupees (1455 + 100 + GST 72.75 -> 1628)', Number(same.totalAmount) === 1628 && Number(same.taxAmount) === 73, `${same.totalAmount} / tax ${same.taxAmount}`);
+    const cross = await place(addrB.id);
+    // ~6.2 km: 150 + (6.2 - 3) * 20 = 214 -> 220
+    ok("another community: the kitchen community's base + per km beyond 3 km, to the next Rs 10", Number(cross.deliveryFee) === 220, String(cross.deliveryFee));
+    await adminSvc.updateSettings({ deliveryPerKm: 30 }, buyer.id);
+    const cross2 = await place(addrB.id);
+    ok("an admin's new per-km rate applies at once", Number(cross2.deliveryFee) === 250, String(cross2.deliveryFee)); // 150 + 3.2*30 = 246 -> 250
+    await adminSvc.updateSettings({ deliveryPerKm: 20 }, buyer.id);
+    ok('every order total is whole rupees', [same, cross, cross2].every((o: any) => Number.isInteger(Number(o.totalAmount))));
   }
 
   // OTP SMS cap per number

@@ -32,6 +32,8 @@ interface CommunityRow {
   isHome: boolean;
   isNeighbor: boolean;
   suggestedFee: number;
+  /** What customers there pay when a Nuray rider delivers (null: too far for Nuray riders). */
+  nurayFee: number | null;
   terms: CommunityTerms | null;
 }
 
@@ -252,7 +254,8 @@ export default function SellerDeliveryPage() {
         const d = drafts[c.id];
         if (!d) continue;
         const fee = num(d.fee);
-        if (d.enabled && fee == null) {
+        // With Nuray riders the fee is Nuray's; the kitchen only sets one for its own deliveries.
+        if (d.enabled && fee == null && deliveryModel === 'model_b') {
           showToast(`Enter a delivery fee for ${c.name}, or switch it off.`, 'error');
           setSaving(false);
           return;
@@ -270,7 +273,7 @@ export default function SellerDeliveryPage() {
       }
       const home = communities.find((c) => c.isHome);
       if (terms.some((t) => t.isEnabled) && home && !drafts[home.id]?.enabled) {
-        showToast(`Set a delivery fee for your own community (${home.name}) first.`, 'error');
+        showToast(`Switch on your own community (${home.name}) first.`, 'error');
         setSaving(false);
         return;
       }
@@ -344,7 +347,7 @@ export default function SellerDeliveryPage() {
                   </div>
                   <div>
                     <h4 className="text-xs font-bold text-slate-900">Nuray Rider Fleet</h4>
-                    <p className="text-[11px] text-slate-500 mt-0.5">Platform riders pick up and deliver your orders</p>
+                    <p className="text-[11px] text-slate-500 mt-0.5">Platform riders pick up and deliver your orders; customers pay Nuray's delivery price</p>
                   </div>
                 </div>
               </div>
@@ -374,13 +377,16 @@ export default function SellerDeliveryPage() {
           {/* Community delivery fees */}
           <div className="bg-white rounded-2xl p-5 sm:p-6 border border-slate-200/90 shadow-xs space-y-4">
             <div>
-              <h3 className="text-sm font-bold text-slate-900 tracking-tight">Delivery fee by community</h3>
+              <h3 className="text-sm font-bold text-slate-900 tracking-tight">
+                {deliveryModel === 'model_a' ? 'Where you deliver' : 'Delivery fee by community'}
+              </h3>
               <p className="text-[11px] text-slate-500 mt-0.5">
                 {homeCommunityName
                   ? `You are based in ${homeCommunityName}. `
                   : ''}
-                Fix the fee you charge for each community you deliver to. Once you set fees, you only deliver to the
-                communities you switch on.
+                {deliveryModel === 'model_a'
+                  ? "Nuray riders deliver your orders at Nuray's prices: a fixed fee within your community, and a fee by distance to other communities. Choose the communities you deliver to and, if you like, a minimum order."
+                  : 'Fix the fee you charge for each community you deliver to. Once you set fees, you only deliver to the communities you switch on.'}
               </p>
             </div>
 
@@ -443,7 +449,34 @@ export default function SellerDeliveryPage() {
                           )}
                         </label>
 
-                        {d.enabled && (
+                        {d.enabled && deliveryModel === 'model_a' && (
+                          <div className="grid grid-cols-3 gap-2.5 ps-6" data-testid="nuray-fee-row">
+                            <div className="col-span-2">
+                              <span className="text-[11px] text-slate-500 block mb-1">Customers pay Nuray</span>
+                              <span className="text-xs font-bold text-slate-900">
+                                {c.nurayFee == null
+                                  ? 'Too far for Nuray riders'
+                                  : c.isHome
+                                    ? `Rs ${c.nurayFee} (fixed)`
+                                    : `about Rs ${c.nurayFee} (by distance)`}
+                              </span>
+                            </div>
+                            <div>
+                              <label className="text-[11px] text-slate-500 block mb-1">Min order (PKR)</label>
+                              <input
+                                type="number"
+                                min={0}
+                                step={50}
+                                placeholder="optional"
+                                value={d.minOrder}
+                                onChange={(e) => setDraft({ minOrder: e.target.value })}
+                                className="w-full px-2.5 py-1.5 text-xs font-semibold border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-[#FF5500]"
+                              />
+                            </div>
+                          </div>
+                        )}
+
+                        {d.enabled && deliveryModel === 'model_b' && (
                           <div className="grid grid-cols-3 gap-2.5 ps-6">
                             <div>
                               <label className="text-[11px] text-slate-500 block mb-1">Fee (PKR)</label>
@@ -490,8 +523,9 @@ export default function SellerDeliveryPage() {
 
             {!Object.values(drafts).some((d) => d.enabled) && communities.length > 0 && (
               <p className="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
-                No community fees set yet. Your general delivery pricing is used until you switch on at least one
-                community.
+                {deliveryModel === 'model_a'
+                  ? 'No communities chosen yet: Nuray riders deliver anywhere they reach until you switch on at least one.'
+                  : 'No community fees set yet. Your general delivery pricing is used until you switch on at least one community.'}
               </p>
             )}
           </div>

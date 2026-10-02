@@ -2,7 +2,7 @@ import prisma from '../config/database';
 import { notify } from './notify.service';
 import { AppError } from '../middleware/errorHandler';
 import { parseBreakdown } from '../utils/deliveryEarnings';
-import { GST_RATE } from '../utils/pricing';
+import { GST_RATE, priceOrder } from '../utils/pricing';
 
 type Tx = Parameters<Parameters<typeof prisma.$transaction>[0]>[0];
 
@@ -176,7 +176,7 @@ async function shrinkUnpaidOrder(tx: Tx, order: any) {
   // Legacy orders have no per-seller split, so their delivery fee stays as it was.
   const deliveryFee = breakdown.length ? money(liveBreakdown.reduce((sum, r) => sum + r.fee, 0)) : Number(order.deliveryFee);
 
-  const taxAmount = money((subtotal - discount) * GST_RATE);
+  const { taxAmount, totalAmount } = priceOrder(subtotal - discount, deliveryFee);
   await tx.order.update({
     where: { id: order.id },
     data: {
@@ -185,7 +185,7 @@ async function shrinkUnpaidOrder(tx: Tx, order: any) {
       deliveryFee,
       deliveryFeeBreakdown: breakdown.length ? (liveBreakdown as any) : undefined,
       taxAmount,
-      totalAmount: money(subtotal + deliveryFee - discount + taxAmount),
+      totalAmount,
     },
   });
 }

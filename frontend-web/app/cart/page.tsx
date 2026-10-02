@@ -29,7 +29,7 @@ import {
   AlertCircle,
 } from 'lucide-react';
 import { cartService, CartResponse } from '@/lib/services/cart.service';
-import { formatPrice, calculateGst, imageVariant } from '@/lib/utils';
+import { formatPrice, imageVariant, orderTotals } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { useAuthStore } from '@/lib/store/auth-store';
 import { useCartStore, CartItem as LocalCartItem } from '@/lib/store/cart-store';
@@ -427,8 +427,7 @@ export default function CartPage() {
   const promotionSavings = hasItems ? Math.max(0, cart.summary.subtotal - discountedSubtotal) : 0;
   const deliveryFee = deliveryEstimate ? deliveryEstimate.deliveryFee : (discountedSubtotal >= 800 ? 0 : 80);
   const isFreeDelivery = deliveryEstimate ? deliveryEstimate.isFree : discountedSubtotal >= 800;
-  const gst = calculateGst(Math.max(0, discountedSubtotal - (cart?.summary.discount || 0)));
-  const displayTotal = discountedSubtotal + (isFreeDelivery ? 0 : deliveryFee) - (cart?.summary.discount || 0) + gst;
+  const { gst, total: displayTotal } = orderTotals(discountedSubtotal - (cart?.summary.discount || 0), isFreeDelivery ? 0 : deliveryFee);
 
   // Free delivery threshold progress (target Rs 800)
   const freeDeliveryThreshold = 800;

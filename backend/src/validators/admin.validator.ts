@@ -33,6 +33,11 @@ export const updateSettingsSchema = z.object({
   supportPhone: z.string().min(1).optional(),
   commissionRate: z.number().min(0).max(100).optional(),
   minPayoutAmount: z.number().min(0).optional(),
+  // Nuray rider delivery to other communities (delivery-pricing.service.ts).
+  deliveryPerKm: z.number().min(0).max(1000).optional(),
+  deliveryIncludedKm: z.number().min(0).max(100).optional(),
+  deliveryMaxKm: z.number().min(1).max(200).optional(),
+  deliveryFallbackFee: z.number().min(0).max(5000).optional(),
 });
 
 
