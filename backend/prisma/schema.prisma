@@ -2,12 +2,16 @@
 // learn more about it in the docs: https://pris.ly/d/prisma-schema
 
 generator client {
-  provider = "prisma-client-js"
+  provider        = "prisma-client-js"
+  previewFeatures = ["postgresqlExtensions"]
 }
 
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider   = "postgresql"
+  url        = env("DATABASE_URL")
+  // pg_trgm: indexes for the catalog's "contains" search. Bundled with PostgreSQL and
+  // enabled on every major managed service (RDS, Cloud SQL, Azure, Supabase, Neon).
+  extensions = [pg_trgm]
 }
 
 // ============================================
@@ -404,7 +408,12 @@ model Product {
 
   @@index([sellerId])
   @@index([categoryId])
-  @@index([approvalStatus, isActive])
+  // The public catalog's filter, in its default (newest first) order.
+  @@index([approvalStatus, isActive, createdAt(sort: Desc)])
+  // Catalog search (case-insensitive "contains") on name, Urdu name and description.
+  @@index([name(ops: raw("gin_trgm_ops"))], type: Gin, map: "products_name_trgm_idx")
+  @@index([nameUrdu(ops: raw("gin_trgm_ops"))], type: Gin, map: "products_name_urdu_trgm_idx")
+  @@index([description(ops: raw("gin_trgm_ops"))], type: Gin, map: "products_description_trgm_idx")
 
   @@map("products")
 }
@@ -683,7 +692,8 @@ model OrderItem {
   reviews         Review[]
 
   @@index([orderId])
-  @@index([sellerId])
+  // A seller's items by date: daily order caps, dashboards and reports.
+  @@index([sellerId, createdAt])
   @@index([productId])
 
   @@map("order_items")

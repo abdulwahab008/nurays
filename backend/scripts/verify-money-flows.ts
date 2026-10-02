@@ -945,6 +945,49 @@ async function main() {
   ok("but not another seller's stored photo", (await mkP([`/media/p/products/${victimSeller!.userId}/${require('crypto').randomUUID()}-lg.webp`])) === 'IMAGE_NOT_OWNED');
   void victimSeller;
 
+  // ---- catalog listing: community tiers, paging, computed filters (all in the database) ----
+  const mkCommunity = (name: string, lat: number, lng: number, neighbours: string[] = []) =>
+    prisma.community.create({ data: { name, slug: 'c-' + uniq(), centerLatitude: lat, centerLongitude: lng, neighborCommunityIds: neighbours } as any });
+  const farC = await mkCommunity('Far', 25.5, 68.0);
+  const nearC = await mkCommunity('Near', 24.95, 67.15);
+  const homeC = await mkCommunity('Home', 24.91, 67.11, [nearC.id]);
+  const cat = await prisma.category.create({ data: { name: 'Cat ' + uniq(), slug: 'cat-' + uniq() } });
+  const kHome = await mkSeller({ communityId: homeC.id, latitude: 24.91, longitude: 67.11, scheduleMode: '24_7' });
+  const kNear = await mkSeller({ communityId: nearC.id, latitude: 24.95, longitude: 67.15, scheduleMode: '24_7' });
+  const kFar = await mkSeller({ communityId: farC.id, latitude: 25.5, longitude: 68.0, scheduleMode: '24_7' });
+  const kClosed = await mkSeller({ latitude: 24.912, longitude: 67.112, scheduleMode: '24_7', availabilityOverride: 'closed' });
+  const catProduct = (sellerId: string, rating: number, extra: any = {}) => prisma.product.create({ data: { sellerId, categoryId: cat.id, name: 'Dish ' + uniq(), slug: 'd-' + uniq(), price: 100, unit: 'pc', stockQuantity: 5, stockType: 'direct', approvalStatus: 'approved', isActive: true, ratingAverage: rating, ...extra } as any });
+  for (const r of [3, 5, 4, 3, 5, 4, 3]) await catProduct(kHome.id, r);
+  for (let i = 0; i < 5; i++) await catProduct(kNear.id, 5);
+  for (let i = 0; i < 4; i++) await catProduct(kFar.id, 5);
+  for (let i = 0; i < 3; i++) await catProduct(kClosed.id, 5);
+  await catProduct(kHome.id, 5, { isActive: false });
+  await catProduct(kHome.id, 5, { approvalStatus: 'pending' });
+  const listCat = (page: number, extra: any = {}) => productService.getProducts({ categoryId: cat.id, communityId: homeC.id, page, limit: 4, ...extra } as any);
+  const catPages = await Promise.all([1, 2, 3, 4, 5, 6].map((pg) => listCat(pg)));
+  const catIds = catPages.flatMap((r: any) => r.products.map((x: any) => x.id));
+  const catSellers = catPages.flatMap((r: any) => r.products.map((x: any) => x.seller.id));
+  ok('catalog: every listed dish appears exactly once across pages, hidden ones never', catIds.length === 19 && new Set(catIds).size === 19 && catPages[0].pagination.total === 19 && catPages[0].pagination.totalPages === 5, `${catIds.length} total=${catPages[0].pagination.total}`);
+  ok('catalog: own community first, then its neighbours, then everywhere else', catSellers.slice(0, 7).every((s) => s === kHome.id) && catSellers.slice(7, 12).every((s) => s === kNear.id) && catSellers.slice(12).every((s) => s === kFar.id || s === kClosed.id));
+  const homeRatings = catPages.flatMap((r: any) => r.products).slice(0, 7).map((x: any) => x.ratingAverage);
+  ok('catalog: best rated first within a tier', homeRatings.join() === '5,5,4,4,3,3,3', homeRatings.join());
+  const openOnly: any = await listCat(1, { openNow: true, limit: 50 });
+  ok('catalog: "open now" leaves out a closed kitchen and still counts in the database', openOnly.pagination.total === 16 && !openOnly.products.some((x: any) => x.seller.id === kClosed.id));
+  const nearby: any = await listCat(1, { customerLat: 24.91, customerLng: 67.11, maxDistanceKm: 10, limit: 50 });
+  ok('catalog: "within 10 km" leaves out the far kitchen', nearby.pagination.total === 15 && !nearby.products.some((x: any) => x.seller.id === kFar.id), `total=${nearby.pagination.total}`);
+  const cheap: any = await listCat(1, { sort: 'price_low', limit: 50 });
+  ok('catalog: an explicit sort ignores community tiers but lists everything', cheap.pagination.total === 19 && cheap.products.length === 19);
+  ok('catalog: the public list never shows switched-off dishes, whatever the query says', (await listCat(1, { isActive: false, limit: 50 }) as any).pagination.total === 19);
+  const clamped: any = await listCat(-3, { limit: -5 });
+  ok('catalog: nonsense page/limit values are clamped instead of failing', clamped.pagination.page === 1 && clamped.products.length === 1, `${clamped.pagination.page}/${clamped.products.length}`);
+  const bigCat = await prisma.category.create({ data: { name: 'Big ' + uniq(), slug: 'big-' + uniq() } });
+  const bigRun = uniq();
+  await prisma.product.createMany({ data: Array.from({ length: 510 }, (_, i) => ({ sellerId: kHome.id, categoryId: bigCat.id, name: `Bulk ${bigRun} ${i}`, slug: `bulk-${bigRun}-${i}`, price: 50, unit: 'pc', stockQuantity: 1, stockType: 'direct', approvalStatus: 'approved', isActive: true })) as any });
+  const bigLast: any = await productService.getProducts({ categoryId: bigCat.id, communityId: homeC.id, openNow: true, page: 26, limit: 20 } as any);
+  ok('catalog: no 500-dish ceiling: the 510th dish is on page 26 and counted', bigLast.pagination.total === 510 && bigLast.products.length === 10, `total=${bigLast.pagination.total} last=${bigLast.products.length}`);
+  const searchHit: any = await productService.getProducts({ search: `bulk ${bigRun} 50`, limit: 50 } as any);
+  ok('catalog: search still matches inside names', searchHit.products.length >= 1 && searchHit.products.every((x: any) => x.name.toLowerCase().includes(`bulk ${bigRun} 50`)));
+
   // OTP SMS cap per number
   const capPhone = pn();
   for (let i = 0; i < 5; i++) await prisma.otpVerification.create({ data: { phone: capPhone, otpCode: '111111', purpose: 'login', expiresAt: new Date(Date.now() - 1000), attempts: 5 } });
