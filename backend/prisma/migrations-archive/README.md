@@ -1,6 +1,6 @@
 # Archived migrations
 
-The migration history before `migrations/20261002400000_baseline`. Kept for reference only:
+The migration history before `migrations/0_baseline`. Kept for reference only:
 Prisma does not read this folder.
 
 These migrations could not build a database by themselves (the first tables were created with

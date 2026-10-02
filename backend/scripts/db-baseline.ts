@@ -17,7 +17,7 @@ import { spawnSync } from 'child_process';
 import path from 'path';
 import { PrismaClient } from '@prisma/client';
 
-const BASELINE = '20261002400000_baseline';
+const BASELINE = '0_baseline';
 const BASELINE_SCHEMA = path.join(__dirname, '..', 'prisma', 'baseline', 'schema.prisma');
 // Backup tables an old clean-up migration left behind; not part of the schema, harmless.
 const LEFTOVER_TABLES = ['reviews_dup_backup', 'promotion_usages_dup_backup', 'negative_values_backup'];
