@@ -92,6 +92,12 @@ const communityFields = {
 export const createCommunitySchema = z.object(communityFields).partial().required({ name: true, city: true, centerLatitude: true, centerLongitude: true });
 export const updateCommunitySchema = z.object(communityFields).partial();
 
+export const pairFeeSchema = z.object({
+  communityAId: z.string().min(1),
+  communityBId: z.string().min(1),
+  fee: z.number().min(0).max(5000),
+});
+
 const hubFields = {
   name: z.string().trim().min(2).max(80),
   code: z.string().trim().min(2).max(20),

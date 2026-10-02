@@ -7,6 +7,7 @@ import { useToast } from '@/components/ui/toast';
 import LocationMap from '@/components/ui/LocationMap';
 import { apiClient, apiErrorMessage } from '@/lib/api-client';
 import { formatPrice } from '@/lib/utils';
+import { CommunityPairFees } from '@/components/admin/CommunityPairFees';
 
 interface Community {
   id: string;
@@ -289,6 +290,8 @@ export default function AdminCommunitiesPage() {
             </table>
           )}
         </div>
+
+        <CommunityPairFees communities={communities} />
       </div>
     </UserLayout>
   );

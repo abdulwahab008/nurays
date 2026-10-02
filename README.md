@@ -31,7 +31,8 @@ Gulshan-e-Iqbal, and every seller decides, community by community, whether they 
 - The seller picks **who delivers**: the Nuray rider fleet or **self-delivery** (the seller keeps the fee they
   charged; no rider job is created). Items fulfilled from a hub are always delivered by the platform.
 - **Nuray's delivery prices** (when a Nuray rider delivers; the fee is platform revenue): within a community, the fixed
-  fee an admin sets for that community (admin → Communities); to another community, that community's base fee for
+  fee an admin sets for that community (admin → Communities); between two communities an admin has priced as a pair
+  (admin → Communities → "Prices between two communities"), that price in both directions; to any other community, that community's base fee for
   other communities plus a per-km rate beyond the included km, rounded up to Rs 10, up to a maximum distance (admin →
   Settings → Nuray delivery prices). Distance is kitchen to customer, or community centre to centre when either location
   is missing. The kitchen still chooses which communities it serves and its minimum order; its own fees and free-delivery

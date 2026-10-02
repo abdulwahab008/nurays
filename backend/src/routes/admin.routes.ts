@@ -34,6 +34,9 @@ import {
   getCommunitiesAdmin,
   postCommunity,
   patchCommunity,
+  getPairFees,
+  putPairFee,
+  removePairFee,
   getHubsAdmin,
   postHub,
   patchHub,
@@ -64,6 +67,7 @@ import {
   hubManagerSchema,
   createCommunitySchema,
   updateCommunitySchema,
+  pairFeeSchema,
   createHubSchema,
   updateHubSchema,
   assignHubManagerSchema,
@@ -122,6 +126,10 @@ router.delete('/hub-managers/:id', deleteHubManager);
 router.get('/communities', getCommunitiesAdmin);
 router.post('/communities', validate(createCommunitySchema), postCommunity);
 router.patch('/communities/:id', validate(updateCommunitySchema), patchCommunity);
+// Nuray delivery prices between pairs of communities
+router.get('/community-pair-fees', getPairFees);
+router.put('/community-pair-fees', validate(pairFeeSchema), putPairFee);
+router.delete('/community-pair-fees/:id', removePairFee);
 router.get('/hubs', getHubsAdmin);
 router.post('/hubs', validate(createHubSchema), postHub);
 router.patch('/hubs/:id', validate(updateHubSchema), patchHub);

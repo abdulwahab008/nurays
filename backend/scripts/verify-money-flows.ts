@@ -1462,6 +1462,14 @@ async function main() {
     const cross2 = await place(addrB.id);
     ok("an admin's new per-km rate applies at once", Number(cross2.deliveryFee) === 250, String(cross2.deliveryFee)); // 150 + 3.2*30 = 246 -> 250
     await adminSvc.updateSettings({ deliveryPerKm: 20 }, buyer.id);
+    const places = require('../src/services/admin-places.service');
+    const pairs = await places.setPairFee(commB.id, commA.id, 175, buyer.id);
+    const pairOrder = await place(addrB.id);
+    ok('a price an admin set for the pair of communities replaces the distance fee', Number(pairOrder.deliveryFee) === 175, String(pairOrder.deliveryFee));
+    ok('a pair is stored once, whichever way round it was entered', (await prisma.communityPairFee.count({ where: { OR: [{ communityAId: commA.id }, { communityBId: commA.id }] } })) === 1);
+    ok('the same community is not a pair', (await code(places.setPairFee(commA.id, commA.id, 50, buyer.id))) === 'SAME_COMMUNITY');
+    await places.deletePairFee(pairs.find((x: any) => [x.communityA.id, x.communityB.id].includes(commA.id)).id);
+    ok('removing it brings back the distance fee', Number((await place(addrB.id)).deliveryFee) === 220);
     ok('every order total is whole rupees', [same, cross, cross2].every((o: any) => Number.isInteger(Number(o.totalAmount))));
   }
 

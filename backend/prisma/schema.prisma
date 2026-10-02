@@ -1330,8 +1330,29 @@ model Community {
   sellers               Seller[]
   addresses             UserAddress[]
   sellerDeliveries      SellerCommunityDelivery[]
+  pairFeesAsA           CommunityPairFee[]     @relation("PairFeeA")
+  pairFeesAsB           CommunityPairFee[]     @relation("PairFeeB")
 
   @@map("communities")
+}
+
+/// Nuray's delivery price between two communities, set by an admin. Same price both ways:
+/// stored once with community_a_id < community_b_id. Replaces the distance formula for that trip.
+model CommunityPairFee {
+  id           String    @id @default(uuid())
+  communityAId String    @map("community_a_id")
+  communityBId String    @map("community_b_id")
+  fee          Decimal   @db.Decimal(10, 2)
+  updatedBy    String?   @map("updated_by")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
+
+  communityA   Community @relation("PairFeeA", fields: [communityAId], references: [id], onDelete: Cascade)
+  communityB   Community @relation("PairFeeB", fields: [communityBId], references: [id], onDelete: Cascade)
+
+  @@unique([communityAId, communityBId])
+  @@index([communityBId])
+  @@map("community_pair_fees")
 }
 
 // Per-community delivery terms a seller has fixed for themselves. Once a seller

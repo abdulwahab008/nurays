@@ -458,9 +458,10 @@ export class SellerService {
           suggestedFee: Number(c.id === seller.communityId ? c.deliveryBaseFee : c.crossCommunityBaseFee),
           // What a customer there pays when a Nuray rider delivers (community centre to centre;
           // the real fee uses the exact addresses). null: too far for Nuray riders.
-          nurayFee: (() => {
+          ...(() => {
             const r = platformDeliveryFee(seller.communityId, { communityId: c.id }, null, pricing);
-            return r.deliverable ? r.fee : null;
+            // fixed: the community's own fee or an admin's pair price; distance: estimated by distance
+            return { nurayFee: r.deliverable ? r.fee : null, nurayFeeIsFixed: r.pricing === 'same_community' || r.pricing === 'community_pair' };
           })(),
           terms: rule
             ? {

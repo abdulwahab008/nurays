@@ -281,3 +281,38 @@ export async function hubsManagedBy(userId: string) {
     select: { id: true, name: true, code: true, city: true, area: true, status: true },
   });
 }
+
+// ---- Prices between pairs of communities (Nuray rider delivery) ----
+
+/** Every pair price, with both communities' names, cheapest first within each community. */
+export async function listPairFees() {
+  const rows = await prisma.communityPairFee.findMany({
+    include: { communityA: { select: { id: true, name: true, city: true } }, communityB: { select: { id: true, name: true, city: true } } },
+    orderBy: [{ communityA: { name: 'asc' } }, { communityB: { name: 'asc' } }],
+  });
+  return rows.map((r) => ({ id: r.id, fee: Number(r.fee), communityA: r.communityA, communityB: r.communityB, updatedAt: r.updatedAt }));
+}
+
+/** Set (or change) the price between two communities; the same price applies both ways. */
+export async function setPairFee(firstId: string, secondId: string, fee: number, adminId: string) {
+  if (firstId === secondId) throw new AppError('Pick two different communities (within one community its own fee applies)', 400, 'SAME_COMMUNITY');
+  inRange(fee, 0, 5000, 'Fee');
+  const [a, b] = firstId < secondId ? [firstId, secondId] : [secondId, firstId];
+  const found = await prisma.community.count({ where: { id: { in: [a, b] } } });
+  if (found !== 2) throw new AppError('Community not found', 404, 'COMMUNITY_NOT_FOUND');
+  await prisma.communityPairFee.upsert({
+    where: { communityAId_communityBId: { communityAId: a, communityBId: b } },
+    create: { communityAId: a, communityBId: b, fee, updatedBy: adminId },
+    update: { fee, updatedBy: adminId },
+  });
+  invalidateDeliveryPricing();
+  return listPairFees();
+}
+
+/** Remove a pair price: that trip goes back to the distance formula. */
+export async function deletePairFee(id: string) {
+  const deleted = await prisma.communityPairFee.deleteMany({ where: { id } });
+  if (deleted.count === 0) throw new AppError('Pair price not found', 404, 'PAIR_FEE_NOT_FOUND');
+  invalidateDeliveryPricing();
+  return listPairFees();
+}
