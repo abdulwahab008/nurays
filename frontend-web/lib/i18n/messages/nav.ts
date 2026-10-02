@@ -35,6 +35,9 @@ export const navMessages = defineMessages({
     menu: 'Menu',
     expand: 'Expand {name}',
     collapse: 'Collapse {name}',
+    riderHelpTitle: 'Fleet SOS & Support',
+    riderHelpText: 'Problem on a run or a dispute? Open a support ticket and our team will follow up.',
+    contactSupport: 'Contact Support',
   },
   ur: {
     Dashboard: 'ڈیش بورڈ',
@@ -66,5 +69,8 @@ export const navMessages = defineMessages({
     menu: 'مینو',
     expand: '{name} کھولیں',
     collapse: '{name} بند کریں',
+    riderHelpTitle: 'ہنگامی مدد',
+    riderHelpText: 'ڈیلیوری میں کوئی مسئلہ یا جھگڑا؟ سپورٹ ٹکٹ کھولیں، ہماری ٹیم رابطہ کرے گی۔',
+    contactSupport: 'سپورٹ سے رابطہ کریں',
   },
 });

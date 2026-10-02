@@ -457,7 +457,7 @@ export default function KitchenStorefrontPage() {
         <div className="flex items-center gap-3">
           <Link
             href="/products"
-            className="text-xs font-semibold text-slate-700 hover:text-[#FF5500] px-3 py-1.5"
+            className="hidden sm:inline-block text-xs font-semibold text-slate-700 hover:text-[#FF5500] px-3 py-1.5"
           >
             {tk('browseMarketplace')}
           </Link>
@@ -475,7 +475,7 @@ export default function KitchenStorefrontPage() {
           </Link>
           <Link
             href="/login"
-            className="text-xs font-semibold text-slate-700 hover:text-[#FF5500] px-2 py-1.5"
+            className="hidden sm:inline-block text-xs font-semibold text-slate-700 hover:text-[#FF5500] px-2 py-1.5"
           >
             {tk('signIn')}
           </Link>

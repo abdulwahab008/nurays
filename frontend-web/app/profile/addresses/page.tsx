@@ -6,6 +6,7 @@ import dynamic from 'next/dynamic';
 import { userProfileService, Address } from '@/lib/services/user-profile.service';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/toast';
+import { apiClient } from '@/lib/api-client';
 import { useAuthStore } from '@/lib/store/auth-store';
 import { DashboardLayout, CUSTOMER_SIDEBAR_ITEMS } from '@/components/layout/DashboardShell';
 import { useT } from '@/lib/i18n';
@@ -125,7 +126,8 @@ export default function AddressesPage() {
   const sidebarItems = CUSTOMER_SIDEBAR_ITEMS;
 
   useEffect(() => {
-    if (!isAuthenticated) {
+    // The saved session loads a moment after the page; a stored token means "signed in".
+    if (!isAuthenticated && !apiClient.getAccessToken()) {
       router.push('/login');
       return;
     }

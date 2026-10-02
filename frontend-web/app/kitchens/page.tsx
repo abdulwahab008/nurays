@@ -651,7 +651,7 @@ export default function KitchensDirectoryPage() {
           <div className="flex items-center gap-3">
             <Link
               href="/products"
-              className="text-xs font-semibold text-slate-700 hover:text-[#FF5500] transition-colors px-3 py-1.5 rounded-lg hover:bg-slate-100"
+              className="hidden sm:inline-block text-xs font-semibold text-slate-700 hover:text-[#FF5500] transition-colors px-3 py-1.5 rounded-lg hover:bg-slate-100"
             >
               {tk('browseAllDishes')}
             </Link>
@@ -669,7 +669,7 @@ export default function KitchensDirectoryPage() {
             </Link>
             <Link
               href="/login"
-              className="text-xs font-semibold text-slate-700 hover:text-[#FF5500] px-2 py-1.5"
+              className="hidden sm:inline-block text-xs font-semibold text-slate-700 hover:text-[#FF5500] px-2 py-1.5"
             >
               {tk('signIn')}
             </Link>
