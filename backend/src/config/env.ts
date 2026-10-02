@@ -64,6 +64,9 @@ export function configProblems(env: NodeJS.ProcessEnv = process.env): string[] {
   else if (jwt.length < 32) problems.push('JWT_SECRET must be at least 32 characters.');
   else if (prod && looksLikePlaceholder(jwt)) problems.push('JWT_SECRET is a placeholder value; generate a real one (e.g. `openssl rand -hex 32`).');
 
+  const cashLimit = (env.RIDER_CASH_LIMIT || '').trim();
+  if (cashLimit && !(Number(cashLimit) > 0)) problems.push(`RIDER_CASH_LIMIT must be an amount in rupees above 0 (got "${cashLimit}").`);
+
   if (prod) {
     need('REDIS_URL', 'rate limits, realtime updates and background jobs');
     need('FRONTEND_URL', 'used in email links for verification and password reset');

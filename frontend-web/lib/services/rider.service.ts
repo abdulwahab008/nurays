@@ -21,7 +21,8 @@ export interface Delivery {
     | 'in_transit'
     | 'arrived_at_customer'
     | 'delivered'
-    | 'delivery_failed';
+    | 'delivery_failed'
+    | 'cancelled';
   pickupTime?: string | null;
   deliveryTime?: string | null;
   arrivedAtPickup?: string | null;
@@ -33,32 +34,88 @@ export interface Delivery {
   standardFee?: number;
   minAskFee?: number;
   maxAskFee?: number;
-  distanceKm?: number;
+  // Unknown (null) when either end's location isn't known.
+  distanceKm?: number | null;
   // Batch corridor match
   isRouteMatch?: boolean;
   batchBonus?: number;
-  corridorDistanceKm?: number;
+  corridorDistanceKm?: number | null;
   riderAskFee?: number | null;
+  // What this rider is paid for the job, fixed when they claimed it.
+  riderFee?: number | null;
+  riderBonus?: number | null;
+  // A cash order that would take the rider past their cash limit.
+  exceedsCashLimit?: boolean;
 }
 
 export interface RiderProfile {
   id: string;
-  name: string;
-  phone: string;
-  vehicleType: string;
-  vehicleNumber: string;
-  city: string;
+  name: string | null;
+  phone: string | null;
+  vehicleType: string | null;
+  vehicleNumber: string | null;
+  city: string | null;
   ratingAverage: number;
   totalDeliveries: number;
   isAvailable: boolean;
+  /** Cash collected at the door and not yet handed in. */
   cashInHand: number;
+  /** The most cash this rider may carry before cash orders stop being offered. */
   floatingLimit: number;
+  /** What the platform owes the rider (negative: what the rider owes). */
+  balance: number;
 }
+
+export type RiderLedgerType = 'delivery_fee' | 'bonus' | 'cod_collected' | 'cash_deposit' | 'payout' | 'adjustment';
+
+export interface RiderLedgerEntry {
+  id: string;
+  type: RiderLedgerType;
+  /** Signed: + the platform owes the rider more, − less. */
+  amount: number;
+  orderId: string | null;
+  reference: string | null;
+  note: string | null;
+  createdAt: string;
+}
+
+export interface RiderMoneySummary {
+  balance: number;
+  cashHeld: number;
+  /** Pay earned and not yet paid to the rider (balance + cash held). */
+  unpaid: number;
+  earned: number;
+  paidOut: number;
+  cashLimit: number;
+  earnedToday: number;
+  earnedThisWeek: number;
+  deliveriesToday: number;
+  deliveriesThisWeek: number;
+}
+
+export interface RiderEarnings extends RiderMoneySummary {
+  entries: RiderLedgerEntry[];
+  pagination: { page: number; limit: number; total: number; totalPages: number };
+}
+
+export const LEDGER_LABELS: Record<RiderLedgerType, string> = {
+  delivery_fee: 'Delivery fee',
+  bonus: 'Route bonus',
+  cod_collected: 'Cash collected',
+  cash_deposit: 'Cash handed in',
+  payout: 'Paid to you',
+  adjustment: 'Adjustment',
+};
 
 export const riderService = {
   getRiderProfile: async () => {
     const response = await apiClient.get<ApiResponse<RiderProfile>>('/riders/me');
     return response.data;
+  },
+
+  getEarnings: async (page = 1) => {
+    const response = await apiClient.get<ApiResponse<RiderEarnings>>('/riders/me/earnings', { params: { page } });
+    return response.data.data!;
   },
 
   toggleDutyStatus: async (isAvailable?: boolean) => {
@@ -104,8 +161,8 @@ export const riderService = {
     const response = await apiClient.post<ApiResponse<{
       delivery: Delivery;
       currentLocation: { latitude: number; longitude: number };
-      distanceToPickupMeters: number;
-      distanceToDeliveryMeters: number;
+      distanceToPickupMeters: number | null;
+      distanceToDeliveryMeters: number | null;
       isInsidePickupGeofence: boolean;
       isInsideDeliveryGeofence: boolean;
       autoTriggeredStatus: string | null;

@@ -218,3 +218,9 @@ export interface ApiError {
   timestamp?: string;
 }
 
+
+/** The server's message for a failed request, or `fallback` when there isn't one. */
+export function apiErrorMessage(err: unknown, fallback: string): string {
+  if (axios.isAxiosError<ApiError>(err)) return err.response?.data?.error?.message || fallback;
+  return fallback;
+}

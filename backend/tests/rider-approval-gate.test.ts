@@ -9,6 +9,7 @@ jest.mock('../src/config/database', () => ({
   default: {
     rider: { findUnique: jest.fn() },
     delivery: { findMany: jest.fn() },
+    riderLedgerEntry: { groupBy: jest.fn().mockResolvedValue([]) },
   },
 }));
 

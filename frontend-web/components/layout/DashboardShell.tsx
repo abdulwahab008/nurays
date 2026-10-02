@@ -43,7 +43,7 @@ export const RIDER_SIDEBAR_ITEMS: SidebarItem[] = [
   { name: 'Fleet Dashboard', href: '/riders/dashboard', icon: 'dashboard' },
   { name: 'Active Runs', href: '/riders/dashboard#active', icon: 'orders' },
   { name: 'Available Pool', href: '/riders/dashboard#available', icon: 'addresses' },
-  { name: 'Cash in Hand', href: '/riders/dashboard#cash', icon: 'earnings' },
+  { name: 'Earnings & Cash', href: '/riders/earnings', icon: 'earnings' },
   { name: 'Help & Support', href: '/support', icon: 'support' },
 ];
 

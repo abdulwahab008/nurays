@@ -10,6 +10,8 @@ import { riderService, Delivery, RiderProfile } from '@/lib/services/rider.servi
 import { formatPrice, displayRating } from '@/lib/utils';
 import { apiClient } from '@/lib/api-client';
 import { useLiveRefresh } from '@/lib/hooks/use-live-refresh';
+import { useRiderLocation, LocationSharing } from '@/lib/hooks/use-rider-location';
+import Link from 'next/link';
 
 const ROAD_STEPS = [
   { id: 'assigned', label: 'Claimed', icon: '📋' },
@@ -19,6 +21,19 @@ const ROAD_STEPS = [
   { id: 'arrived_at_customer', label: 'At Doorstep', icon: '📍' },
   { id: 'delivered', label: 'Delivered', icon: '✅' },
 ];
+
+const SHARING_BADGE: Record<LocationSharing, { label: string; tone: string; dot: string }> = {
+  sharing: { label: 'Sharing your location', tone: 'text-emerald-400', dot: 'bg-emerald-400 animate-ping' },
+  waiting: { label: 'Finding your location…', tone: 'text-slate-300', dot: 'bg-slate-400 animate-pulse' },
+  denied: { label: 'Location blocked: allow it for this site', tone: 'text-amber-300', dot: 'bg-amber-400' },
+  unavailable: { label: 'Location unavailable', tone: 'text-amber-300', dot: 'bg-amber-400' },
+  off: { label: 'Location shared only during a job', tone: 'text-slate-400', dot: 'bg-slate-500' },
+};
+
+const TABS = ['active', 'available', 'history'] as const;
+
+// A job that is over: delivered, reported failed, or called off (order cancelled).
+const FINISHED_STATUSES = ['delivered', 'delivery_failed', 'cancelled'];
 
 const STEP_ORDER: Record<string, number> = {
   assigned: 0,
@@ -81,7 +96,7 @@ export default function RiderDashboardPage() {
 
       // Auto-switch to active tab if there is an active run
       const activeRuns = myList.filter(
-        (d) => d.status !== 'delivered' && d.status !== 'delivery_failed'
+        (d) => !FINISHED_STATUSES.includes(d.status)
       );
       if (activeRuns.length > 0 && activeTab === 'available' && availableList.length === 0) {
         setActiveTab('active');
@@ -102,6 +117,17 @@ export default function RiderDashboardPage() {
   }, [showToast, activeTab]);
 
   const isRider = user?.user_type === 'rider' || user?.userType === 'rider';
+
+  // The sidebar links to #active / #available / #history.
+  useEffect(() => {
+    const fromHash = () => {
+      const tab = window.location.hash.replace('#', '') as (typeof TABS)[number];
+      if (TABS.includes(tab)) setActiveTab(tab);
+    };
+    fromHash();
+    window.addEventListener('hashchange', fromHash);
+    return () => window.removeEventListener('hashchange', fromHash);
+  }, []);
 
   // Auth guard and initial load. The saved session can load a moment after the first
   // render, so a stored token means "wait for it", not "send to login".
@@ -130,10 +156,15 @@ export default function RiderDashboardPage() {
   });
 
   const activeDeliveries = mine.filter(
-    (d) => d.status !== 'delivered' && d.status !== 'delivery_failed'
+    (d) => !FINISHED_STATUSES.includes(d.status)
   );
   const completedDeliveries = mine.filter((d) => d.status === 'delivered');
-  const failedDeliveries = mine.filter((d) => d.status === 'delivery_failed');
+
+  // The phone's position goes to each job in progress (and nowhere when there is none).
+  const locationSharing = useRiderLocation(
+    activeDeliveries.map((d) => d.id),
+    () => loadAll(true)
+  );
 
   // Toggle on-duty / off-duty
   const handleToggleDuty = async () => {
@@ -281,7 +312,7 @@ export default function RiderDashboardPage() {
 
   const cashInHand = profile?.cashInHand ?? 0;
   const floatingLimit = profile?.floatingLimit ?? 10000;
-  const cashPercent = Math.min(100, Math.round((cashInHand / floatingLimit) * 100));
+  const cashPercent = floatingLimit > 0 ? Math.min(100, Math.round((cashInHand / floatingLimit) * 100)) : cashInHand > 0 ? 100 : 0;
 
   // The profile API returns null for details the rider hasn't provided and a 0 rating
   // until they are rated: show "Not set" / "New" rather than made-up values.
@@ -322,10 +353,10 @@ export default function RiderDashboardPage() {
           </div>
 
           <div className="flex items-center gap-3 flex-wrap w-full md:w-auto justify-between md:justify-end">
-            {/* Live Status indicator */}
-            <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-slate-800/80 border border-slate-700 text-xs">
-              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
-              <span className="text-emerald-400 font-semibold">Live Telemetry (3s)</span>
+            {/* Location sharing, only while on a job */}
+            <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-slate-800/80 border border-slate-700 text-xs" data-testid="location-sharing">
+              <span className={`w-2 h-2 rounded-full ${SHARING_BADGE[locationSharing].dot}`} />
+              <span className={`font-semibold ${SHARING_BADGE[locationSharing].tone}`}>{SHARING_BADGE[locationSharing].label}</span>
             </div>
 
             {/* Capacity Limit Indicator */}
@@ -461,6 +492,7 @@ export default function RiderDashboardPage() {
                         return (
                           <div
                             key={delivery.id}
+                            data-testid={`run-${delivery.orderNumber ?? delivery.id}`}
                             className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden"
                           >
                             {/* Card Header & Order Badge */}
@@ -476,13 +508,17 @@ export default function RiderDashboardPage() {
                                 </div>
                               </div>
 
-                              <div className="flex items-center gap-2">
+                              <div className="flex items-center gap-3 flex-wrap">
                                 <span className="text-[11px] font-bold text-slate-400">
-                                  {delivery.paymentMethod === 'cod' ? '💵 COD:' : '💳 Prepaid:'}
+                                  {delivery.paymentMethod === 'cod' ? '💵 Collect:' : '💳 Prepaid:'}{' '}
+                                  <span className="text-sm font-black text-emerald-400">{formatPrice(delivery.totalAmount || 0)}</span>
                                 </span>
-                                <span className="text-sm font-black text-emerald-400">
-                                  {formatPrice(delivery.totalAmount || 0)}
-                                </span>
+                                {delivery.riderFee != null && (
+                                  <span className="text-[11px] font-bold text-slate-400">
+                                    You earn:{' '}
+                                    <span className="text-sm font-black text-white">{formatPrice(delivery.riderFee + (delivery.riderBonus ?? 0))}</span>
+                                  </span>
+                                )}
                               </div>
                             </div>
 
@@ -686,6 +722,7 @@ export default function RiderDashboardPage() {
                       {available.map((d) => (
                         <div
                           key={d.id}
+                          data-testid={`job-${d.orderNumber ?? d.id}`}
                           className={`bg-white rounded-2xl border p-4 transition-all flex flex-col justify-between shadow-xs ${
                             d.isRouteMatch
                               ? 'border-emerald-500 ring-2 ring-emerald-500/20 bg-emerald-50/20'
@@ -757,6 +794,11 @@ export default function RiderDashboardPage() {
                             >
                               🔒 At Capacity (2/2 Orders Active)
                             </Button>
+                          ) : d.exceedsCashLimit ? (
+                            <div className="rounded-xl bg-amber-50 border border-amber-200 p-2.5 text-[11px] text-amber-900" data-testid="cash-limit-blocked">
+                              <strong>Cash limit reached.</strong> This is a cash order and would take you over your limit of{' '}
+                              {formatPrice(floatingLimit)}. Hand in your cash to take cash orders again; prepaid orders are still open to you.
+                            </div>
                           ) : (
                             <div className="flex gap-2 items-center">
                               <Button
@@ -794,7 +836,7 @@ export default function RiderDashboardPage() {
               {activeTab === 'history' && (
                 <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-sm">
                   <div className="p-4 bg-slate-50 border-b border-slate-200 flex items-center justify-between">
-                    <h3 className="font-black text-sm text-slate-900">Delivered Orders Today</h3>
+                    <h3 className="font-black text-sm text-slate-900">Delivered orders</h3>
                     <span className="text-xs font-bold text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-full border border-emerald-200">
                       {completedDeliveries.length} Successful Deliveries
                     </span>
@@ -802,7 +844,7 @@ export default function RiderDashboardPage() {
 
                   {completedDeliveries.length === 0 ? (
                     <div className="p-10 text-center text-slate-500 text-xs">
-                      No deliveries completed yet today.
+                      No deliveries completed yet.
                     </div>
                   ) : (
                     <div className="divide-y divide-slate-100">
@@ -821,8 +863,8 @@ export default function RiderDashboardPage() {
                             <span className="inline-flex items-center gap-1 font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full text-[11px] border border-emerald-200">
                               ✓ PIN Verified
                             </span>
-                            {d.totalAmount && (
-                              <p className="font-bold text-slate-900 mt-1">{formatPrice(d.totalAmount)}</p>
+                            {d.riderFee != null && (
+                              <p className="font-bold text-slate-900 mt-1">You earned {formatPrice(d.riderFee + (d.riderBonus ?? 0))}</p>
                             )}
                           </div>
                         </div>
@@ -838,11 +880,19 @@ export default function RiderDashboardPage() {
             <div className="lg:col-span-4 space-y-4">
 
               {/* COD CASH IN HAND & SETTLEMENT */}
-              <div className="bg-white rounded-2xl p-5 shadow-sm border border-slate-200">
+              <div className="bg-white rounded-2xl p-5 shadow-sm border border-slate-200" id="cash" data-testid="rider-cash-card">
                 <div className="flex items-center justify-between mb-2">
-                  <h3 className="font-black text-sm text-slate-900">COD Cash in Hand</h3>
-                  <span className="text-[11px] font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
-                    Safe Float
+                  <h3 className="font-black text-sm text-slate-900">Cash in hand</h3>
+                  <span
+                    className={`text-[11px] font-bold px-2 py-0.5 rounded-full border ${
+                      cashPercent >= 100
+                        ? 'text-red-700 bg-red-50 border-red-200'
+                        : cashPercent > 80
+                        ? 'text-amber-700 bg-amber-50 border-amber-200'
+                        : 'text-emerald-600 bg-emerald-50 border-emerald-200'
+                    }`}
+                  >
+                    {cashPercent >= 100 ? 'Limit reached' : cashPercent > 80 ? 'Near limit' : 'Within limit'}
                   </span>
                 </div>
 
@@ -861,8 +911,18 @@ export default function RiderDashboardPage() {
                 </div>
 
                 <p className="text-[11px] text-slate-500">
-                  {cashPercent}% of daily floating cash capacity utilized. Hand over cash at base hub during shift checkout.
+                  Cash you collected at the door and haven&apos;t handed in yet. At the limit, cash orders stop being offered to you
+                  until you hand cash in at a hub.
                 </p>
+                <div className="mt-3 pt-3 border-t border-slate-100 flex items-center justify-between text-xs">
+                  <span className="text-slate-500">
+                    {(profile?.balance ?? 0) >= 0 ? 'Nuray owes you' : 'You owe Nuray'}{' '}
+                    <strong className="text-slate-900">{formatPrice(Math.abs(profile?.balance ?? 0))}</strong>
+                  </span>
+                  <Link href="/riders/earnings" className="font-bold text-emerald-700 hover:underline">
+                    Earnings →
+                  </Link>
+                </div>
               </div>
 
               {/* FLEET DIAGNOSTICS */}
@@ -968,7 +1028,7 @@ export default function RiderDashboardPage() {
               </div>
 
               {/* COD Reminder Banner */}
-              {pinModalDelivery.totalAmount && (
+              {pinModalDelivery.paymentMethod === 'cod' && !!pinModalDelivery.totalAmount && (
                 <div className="bg-amber-50 border border-amber-200 rounded-2xl p-3.5 flex items-center justify-between">
                   <span className="text-xs font-semibold text-amber-900">
                     💵 Collect Cash on Delivery:
