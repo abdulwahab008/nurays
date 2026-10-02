@@ -2,13 +2,12 @@
  * End-to-end check of the order / payment / refund / payout money flows against
  * a REAL Postgres (concurrency cannot be tested with mocks).
  *
- *   DATABASE_URL=postgresql://... JWT_SECRET=<32+ chars> \
- *     npx prisma db push --skip-generate && npx ts-node scripts/verify-money-flows.ts
+ *   DATABASE_URL=postgresql://... JWT_SECRET=<32+ chars> NODE_ENV=test \
+ *     npx prisma migrate deploy && npx ts-node scripts/verify-money-flows.ts
  *
  * Creates its own users/sellers/products with unique values; use a throwaway DB.
- *
- * The CHECK-constraint assertions need the CHECKs to exist, which `prisma db push`
- * does not create: apply the 20261001300000 migration.sql first, otherwise those checks fail.
+ * Build it with `migrate deploy` (not `db push`): the CHECK constraints these checks rely
+ * on are only in the migrations.
  */
 import prisma from '../src/config/database';
 import orderService from '../src/services/order.service';

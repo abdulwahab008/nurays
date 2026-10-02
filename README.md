@@ -74,7 +74,8 @@ docker-compose.yml                       backend + frontend containers
 ### Prerequisites
 
 - Node.js 20+
-- PostgreSQL 15+ and Redis 7+ running locally (or reachable by URL)
+- PostgreSQL 15+ (with the bundled `pg_trgm` extension, as on every major managed service)
+- Redis 7+: required in production, optional in development
 
 ### 1. Backend
 
@@ -83,20 +84,18 @@ cd backend
 npm install
 cp .env.example .env        # then edit it (see "Environment variables")
 npx prisma generate
-npx prisma db push          # create the tables from schema.prisma
+npm run db:migrate          # build the schema from the migrations (prisma migrate deploy)
 npm run seed:e2e            # optional: communities, 13 kitchens, products, a test seller
 npm run dev                 # http://localhost:3001  (API: /api/v1, health: /api/v1/health)
 ```
 
-`.env` needs at least `DATABASE_URL`, `REDIS_URL` and `JWT_SECRET` (32+ characters). Without Redis the health check
-reports it unhealthy.
+`.env` needs at least `DATABASE_URL` and `JWT_SECRET` (32+ characters). `REDIS_URL` is required in production; in
+development it is optional (without it, rate limits, live updates and background jobs stay within the one process).
 
-> **Schema changes:** a fresh database is created with `npx prisma db push`. The migration history under
-> `prisma/migrations` is incomplete (early tables were created by `db push`), so `prisma migrate dev` will not build a
-> database from nothing. On an existing database, apply the migration files you have not run yet, in order. The
-> `20261001300000_indexes_uniques_integrity` migration also adds CHECK constraints (non-negative stock and balances)
-> that `db push` does not create; it cleans up legacy duplicates and negative values first, backing them up, and is
-> safe to re-run. Its index builds are not concurrent, so use a maintenance window on a large live database.
+> **Database schema:** `npm run db:migrate` builds a new database and deploys later changes; change the schema with
+> `npx prisma migrate dev --name <change>`. A database created before the migration baseline (with `prisma db push` or
+> the old migrations) is brought under migrations once with `npm run db:baseline`. Details:
+> [`backend/prisma/README.md`](backend/prisma/README.md).
 
 ### 2. Frontend
 
@@ -173,9 +172,8 @@ cd backend && npm test
 
 # Money-flow verification against a REAL throwaway PostgreSQL (concurrency can't be tested with mocks)
 cd backend
-export DATABASE_URL=postgresql://postgres@localhost:5432/scratch JWT_SECRET=<32+ chars>
-npx prisma db push --skip-generate
-psql "$DATABASE_URL" -f prisma/migrations/20261001300000_indexes_uniques_integrity/migration.sql   # adds the CHECK constraints
+export DATABASE_URL=postgresql://postgres@localhost:5432/scratch JWT_SECRET=<32+ chars> NODE_ENV=test
+npx prisma migrate deploy
 npx ts-node scripts/verify-money-flows.ts
 
 # Frontend end-to-end (needs the backend and frontend running with seeded data)
