@@ -14,6 +14,7 @@ import { DashboardLayout, CUSTOMER_SIDEBAR_ITEMS } from '@/components/layout/Das
 import WriteReviewForm from '@/components/products/WriteReviewForm';
 import { apiClient } from '@/lib/api-client';
 import ManualPaymentCard from '@/components/orders/ManualPaymentCard';
+import OnlinePaymentCard from '@/components/orders/OnlinePaymentCard';
 import OrderChatModal from '@/components/orders/OrderChatModal';
 import TriPartiteReviewModal from '@/components/orders/TriPartiteReviewModal';
 
@@ -97,6 +98,40 @@ interface OrderDetail {
 }
 
 /** Map backend order (Prisma shape) to OrderDetail for the UI */
+/** How the customer paid, in words. */
+function paymentChannelLabel(method?: string, senderAccount?: string | null): string {
+  const m = (method ?? '').toLowerCase();
+  const via = senderAccount ? ` (from ${senderAccount})` : '';
+  if (m === 'cod') return 'Cash on delivery';
+  if (m === 'wallet') return 'Nuray Wallet';
+  if (m === 'safepay' || m === 'card') return 'Paid online (card / mobile wallet)';
+  if (m === 'jazzcash') return `JazzCash transfer to the kitchen${via}`;
+  if (m === 'easypaisa') return `EasyPaisa transfer to the kitchen${via}`;
+  if (m === 'bank') return `Bank transfer to the kitchen${via}`;
+  return method ? method.toUpperCase() : 'Not recorded';
+}
+
+/** Where the payment stands, in words. Only a transfer into the kitchen's account is confirmed by the kitchen. */
+function paymentStatusLabel(method?: string, status?: string): string {
+  const toKitchen = ['jazzcash', 'easypaisa', 'bank'].includes((method ?? '').toLowerCase());
+  switch (status) {
+    case 'paid':
+      return toKitchen ? 'Paid, confirmed by the kitchen' : 'Paid';
+    case 'payment_submitted':
+      return 'Receipt sent, waiting for the kitchen to confirm';
+    case 'disputed':
+      return 'The kitchen could not find this payment';
+    case 'refund_pending':
+      return 'Refund being sent';
+    case 'refunded':
+      return 'Refunded';
+    case 'failed':
+      return 'Payment failed';
+    default:
+      return (method ?? '').toLowerCase() === 'cod' ? 'To be paid on delivery' : 'Not paid yet';
+  }
+}
+
 function mapOrderToDetail(raw: any): OrderDetail {
   const addr = raw.deliveryAddress;
   const addressStr = addr
@@ -413,6 +448,22 @@ function OrderDetailContent() {
       userType="customer"
     >
       <div className="print-hide space-y-6">
+        {/* Back from the payment page */}
+        {searchParams.get('payment') === 'paid' && (
+          <div role="status" className="bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-xl p-4 text-sm font-medium">
+            Payment received. The kitchen has been told and will start on your order.
+          </div>
+        )}
+        {searchParams.get('payment') === 'duplicate' && (
+          <div role="status" className="bg-sky-50 border border-sky-200 text-sky-900 rounded-xl p-4 text-sm font-medium">
+            This order was already paid, so your payment went to your{' '}
+            <Link href="/wallet" className="underline font-semibold">
+              Nuray Wallet
+            </Link>
+            .
+          </div>
+        )}
+
         {/* Just-placed confirmation banner */}
         {showPlacedBanner && (
           <div className="bg-green-600 text-white rounded-xl p-4 flex items-center justify-between flex-wrap gap-2">
@@ -515,9 +566,16 @@ function OrderDetailContent() {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           {/* Order Items */}
           <div className="lg:col-span-2 space-y-4">
-            {/* Direct Manual Payment Card */}
+            {/* Online payment not finished yet */}
             {!['cancelled', 'refunded'].includes(orderStatus) &&
-              !['cod', 'wallet'].includes((order.paymentMethod ?? '').toLowerCase()) &&
+              ['safepay', 'card'].includes((order.paymentMethod ?? '').toLowerCase()) &&
+              ['pending', 'failed'].includes(order.paymentStatus ?? 'pending') && (
+              <OnlinePaymentCard orderId={order.id} totalAmount={order.pricing?.total ?? 0} />
+            )}
+
+            {/* Direct Manual Payment Card (transfer into the kitchen's own account) */}
+            {!['cancelled', 'refunded'].includes(orderStatus) &&
+              ['jazzcash', 'easypaisa', 'bank'].includes((order.paymentMethod ?? '').toLowerCase()) &&
               ['pending', 'failed', 'disputed', 'payment_submitted'].includes(order.paymentStatus ?? 'pending') && (
               <ManualPaymentCard
                 orderId={order.id}
@@ -926,25 +984,13 @@ function OrderDetailContent() {
               <div className="flex items-center justify-between">
                 <span className="font-bold text-slate-700">Payment Channel:</span>
                 <span className="font-extrabold text-slate-900">
-                  {order.paymentSenderAccount || (
-                    order.paymentMethod?.toLowerCase().includes('jazz')
-                      ? 'JazzCash Mobile Wallet'
-                      : order.paymentMethod?.toLowerCase().includes('easy')
-                      ? 'EasyPaisa Mobile Wallet'
-                      : order.paymentMethod?.toLowerCase().includes('bank') || order.paymentMethod?.toLowerCase().includes('alfalah')
-                      ? 'Bank Alfalah / Raast IBFT'
-                      : order.paymentMethod?.toUpperCase() || 'Direct Kitchen Transfer'
-                  )}
+                  {paymentChannelLabel(order.paymentMethod, order.paymentSenderAccount)}
                 </span>
               </div>
               <div className="flex items-center justify-between">
                 <span className="font-bold text-slate-700">Verification Status:</span>
                 <span className="font-extrabold text-emerald-700">
-                  {order.paymentStatus === 'paid'
-                    ? '✓ PAID & VERIFIED BY KITCHEN'
-                    : order.paymentStatus === 'payment_submitted'
-                    ? '✓ PROOF SUBMITTED (PENDING VERIFICATION)'
-                    : 'PENDING'}
+                  {paymentStatusLabel(order.paymentMethod, order.paymentStatus)}
                 </span>
               </div>
               {order.paymentReferenceNumber && (
@@ -1073,21 +1119,13 @@ function OrderDetailContent() {
                   <div className="flex justify-between">
                     <span className="font-bold text-slate-700">Payment Channel:</span>
                     <span className="font-extrabold text-slate-900">
-                      {order.paymentSenderAccount || (
-                        order.paymentMethod?.toLowerCase().includes('jazz')
-                          ? 'JazzCash Mobile Wallet'
-                          : order.paymentMethod?.toLowerCase().includes('easy')
-                          ? 'EasyPaisa Mobile Wallet'
-                          : order.paymentMethod?.toLowerCase().includes('bank') || order.paymentMethod?.toLowerCase().includes('alfalah')
-                          ? 'Bank Alfalah / Raast IBFT'
-                          : order.paymentMethod?.toUpperCase() || 'Direct Transfer'
-                      )}
+                      {paymentChannelLabel(order.paymentMethod, order.paymentSenderAccount)}
                     </span>
                   </div>
                   <div className="flex justify-between">
                     <span className="font-bold text-slate-700">Payment Status:</span>
                     <span className="font-extrabold text-emerald-700">
-                      {order.paymentStatus === 'paid' ? '✓ PAID & VERIFIED' : 'PENDING / SUBMITTED'}
+                      {paymentStatusLabel(order.paymentMethod, order.paymentStatus)}
                     </span>
                   </div>
                   {order.paymentProofUrl && (

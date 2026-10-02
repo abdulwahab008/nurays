@@ -18,6 +18,7 @@ import { SELLER_DIRECT_METHODS } from '../utils/paymentCustody';
 import ledgerService from './ledger.service';
 import { newHandoverCode } from './handover.service';
 import { cancelOpenDelivery, notifyDeliveryCancelled, CancelledDelivery } from './delivery-lifecycle.service';
+import { debitWallet } from './wallet.service';
 
 export class OrderService {
   /**
@@ -721,6 +722,21 @@ export class OrderService {
         await tx.promotion.update({
           where: { id: usage.promotionId },
           data: { usedCount: { increment: 1 } },
+        });
+      }
+
+      // Paying from the Nuray Wallet: the debit commits with the order or not at all, so an
+      // order is never left waiting for wallet money that isn't there.
+      if (data.paymentMethod === 'wallet') {
+        await debitWallet(tx, {
+          userId: customerId,
+          amount: Number(newOrder.totalAmount),
+          orderId: newOrder.id,
+          description: `Payment for order ${newOrder.orderNumber}`,
+        });
+        await tx.order.update({
+          where: { id: newOrder.id },
+          data: { paymentStatus: 'paid', paymentCollectedBy: 'platform', paidAt: new Date(), paymentTransactionId: `WALLET-${newOrder.id}` },
         });
       }
 

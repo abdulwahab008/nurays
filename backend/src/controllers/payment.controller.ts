@@ -1,156 +1,112 @@
 import { Request, Response } from 'express';
-import paymentService, { PAYABLE_STATUSES } from '../services/payment.service';
+import paymentService from '../services/payment.service';
 import { AppError } from '../middleware/errorHandler';
-import { verifySafepayWebhook } from '../gateways/safepay.gateway';
-import prisma from '../config/database';
-import { issueRefund } from '../services/refund.service';
+import { verifySafepayReturn, verifySafepayWebhook } from '../gateways/safepay.gateway';
+import {
+  settleAttempt,
+  landingUrlFor,
+  attemptByTracker,
+  successfulTrackerFromWebhook,
+  startWalletTopup,
+  orderPaymentStatus,
+  onlinePaymentsAvailable,
+  TOPUP_MIN,
+  TOPUP_MAX,
+} from '../services/online-payment.service';
+import { listWalletTransactions } from '../services/wallet.service';
+import { logger } from '../utils/logger';
+
+const userIdOf = (req: Request) => {
+  if (!req.user) throw new AppError('Authentication required', 401, 'AUTH_REQUIRED');
+  return req.user.userId;
+};
 
 export const getPaymentMethods = async (_req: Request, res: Response) => {
-  const methods = await paymentService.getPaymentMethods();
-
-  res.status(200).json({
-    success: true,
-    data: methods,
-  });
+  res.status(200).json({ success: true, data: await paymentService.getPaymentMethods() });
 };
 
 export const processPayment = async (req: Request, res: Response) => {
-  if (!req.user) {
-    throw new AppError('Authentication required', 401, 'AUTH_REQUIRED');
-  }
-
-  const { orderId, paymentMethod, paymentDetails } = req.body;
-  const result = await paymentService.processPayment(
-    orderId,
-    req.user.userId,
-    paymentMethod,
-    paymentDetails
-  );
-
-  res.status(200).json({
-    success: true,
-    data: result,
-    message: 'Payment processed successfully',
-  });
+  const { orderId, paymentMethod } = req.body;
+  const result = await paymentService.processPayment(orderId, userIdOf(req), paymentMethod);
+  res.status(200).json({ success: true, data: result, message: 'Payment processed successfully' });
 };
 
 export const verifyPayment = async (req: Request, res: Response) => {
-  if (!req.user) {
-    throw new AppError('Authentication required', 401, 'AUTH_REQUIRED');
-  }
-
   const { paymentId, transactionId } = req.body;
-  const result = await paymentService.verifyPayment(paymentId, req.user.userId, transactionId);
+  const result = await paymentService.verifyPayment(paymentId, userIdOf(req), transactionId);
+  res.status(200).json({ success: true, data: result, message: 'Payment verified successfully' });
+};
 
-  res.status(200).json({
-    success: true,
-    data: result,
-    message: 'Payment verified successfully',
-  });
+export const getOrderPaymentStatus = async (req: Request, res: Response) => {
+  const data = await orderPaymentStatus(String(req.params.orderId), userIdOf(req));
+  res.status(200).json({ success: true, data });
 };
 
 export const getWalletBalance = async (req: Request, res: Response) => {
-  if (!req.user) {
-    throw new AppError('Authentication required', 401, 'AUTH_REQUIRED');
-  }
-
-  const wallet = await paymentService.getWalletBalance(req.user.userId);
-
+  const wallet = await paymentService.getWalletBalance(userIdOf(req));
   res.status(200).json({
     success: true,
-    data: wallet,
+    data: { ...wallet, topUp: { available: onlinePaymentsAvailable(), min: TOPUP_MIN, max: TOPUP_MAX } },
   });
 };
 
-/**
- * Safepay webhook — called by Safepay server when payment status changes.
- * Public route (no auth middleware), validated via HMAC signature on the raw body.
- *
- * Hardened against:
- *   - signature spoofing (HMAC verify on rawBody)
- *   - replay / duplicate delivery (idempotent — skip if already paid)
- *   - amount mismatch (refuses to mark paid if gateway amount < order total)
- */
-export const safepayWebhook = async (req: Request, res: Response) => {
-  const rawBody = (req as Request & { rawBody?: Buffer }).rawBody;
-  const signature = req.headers['x-sfpy-hmac-sha256'] as string | undefined;
-
-  if (!rawBody || !verifySafepayWebhook(rawBody, signature)) {
-    console.warn('[Safepay Webhook] Invalid signature — rejected');
-    return res.status(401).json({ error: 'Invalid signature' });
-  }
-
-  const body = req.body as {
-    data?: { tracker?: { state?: string; token?: string; amount?: number }; order_id?: string };
-    metadata?: { order_id?: string };
-  };
-  const state = body?.data?.tracker?.state ?? '';
-  const token = body?.data?.tracker?.token ?? '';
-  const orderId = body?.metadata?.order_id ?? body?.data?.order_id ?? '';
-  const gatewayAmount = Number(body?.data?.tracker?.amount ?? 0);
-
-  console.log(`[Safepay Webhook] state=${state} orderId=${orderId} token=${token} amount=${gatewayAmount}`);
-
-  if (state !== 'TRACKER_PAID' || !orderId) {
-    // Nothing to do — still 200 so Safepay doesn't retry.
-    return res.status(200).json({ received: true });
-  }
-
-  try {
-    const order = await prisma.order.findUnique({
-      where: { id: orderId },
-      select: { id: true, paymentStatus: true, orderStatus: true, totalAmount: true, paymentTransactionId: true },
-    });
-
-    if (!order) {
-      console.warn(`[Safepay Webhook] Unknown orderId=${orderId} — ignoring`);
-      return res.status(200).json({ received: true });
-    }
-
-    // Idempotency — already processed (paid, or paid and since refunded: a retried webhook
-    // must not flip a refunded order back to paid).
-    if (['paid', 'refund_pending', 'refunded'].includes(order.paymentStatus)) {
-      console.log(`[Safepay Webhook] Order ${orderId} already ${order.paymentStatus} — skipping`);
-      return res.status(200).json({ received: true, alreadyPaid: true });
-    }
-
-    // Amount verification — gateway must have collected >= order total (PKR, no decimals)
-    const expectedAmount = Math.round(Number(order.totalAmount));
-    if (gatewayAmount < expectedAmount) {
-      console.error(
-        `[Safepay Webhook] Amount mismatch on order ${orderId}: gateway=${gatewayAmount} expected=${expectedAmount}`,
-      );
-      // Don't mark paid. Still 200 so Safepay stops retrying; we'll review out-of-band.
-      return res.status(200).json({ received: true, amountMismatch: true });
-    }
-
-    // Guarded updateMany (not update): a concurrent verify may have won, which is
-    // fine — a throw here would 500 and make Safepay retry for nothing. If the
-    // order was cancelled before the money arrived, refund it straight away.
-    await prisma.$transaction(async (tx) => {
-      // Decide from the order's current state under a row lock, not the copy read earlier.
-      await tx.$queryRaw`SELECT id FROM orders WHERE id = ${orderId} FOR UPDATE`;
-      const fresh = await tx.order.findUniqueOrThrow({ where: { id: orderId } });
-      const r = await tx.order.updateMany({
-        where: { id: orderId, paymentStatus: { in: PAYABLE_STATUSES } },
-        data: {
-          paymentStatus: 'paid',
-          paymentCollectedBy: 'platform',
-          paidAt: new Date(),
-          paymentTransactionId: token,
-        },
-      });
-      if (r.count > 0 && ['cancelled', 'refunded'].includes(fresh.orderStatus)) {
-        await issueRefund(tx, orderId, { reason: 'Payment received after the order was cancelled', createdBy: null });
-      }
-    });
-    console.log(`[Safepay Webhook] Order ${orderId} marked as paid`);
-  } catch (err) {
-    console.error('[Safepay Webhook] DB update failed', err);
-    // Return 500 so Safepay retries on transient DB errors.
-    return res.status(500).json({ error: 'Internal error' });
-  }
-
-  return res.status(200).json({ received: true });
+export const getWalletTransactions = async (req: Request, res: Response) => {
+  const page = Number(req.query.page) || 1;
+  const limit = Number(req.query.limit) || 20;
+  res.status(200).json({ success: true, data: await listWalletTransactions(userIdOf(req), page, limit) });
 };
 
+export const topUpWallet = async (req: Request, res: Response) => {
+  const result = await startWalletTopup(userIdOf(req), Number(req.body?.amount));
+  res.status(200).json({ success: true, data: result });
+};
+
+/**
+ * Where Safepay sends the customer after paying: a form POST of { tracker, sig, reference,
+ * order_id } (also accepted as a query string). Public: it is authenticated by the signature
+ * (HMAC-SHA256 of the tracker with our secret key). The payment is settled here and the
+ * customer is redirected to the right page of the web app.
+ */
+export const safepayReturn = async (req: Request, res: Response) => {
+  const src = { ...(req.query as Record<string, unknown>), ...((req.body as Record<string, unknown>) ?? {}) };
+  const tracker = typeof src.tracker === 'string' ? src.tracker : undefined;
+  const sig = typeof src.sig === 'string' ? src.sig : undefined;
+  const reference = typeof src.reference === 'string' ? src.reference : typeof src.ref === 'string' ? src.ref : null;
+
+  if (!tracker || !verifySafepayReturn(tracker, sig)) {
+    logger.warn({ tracker }, 'Safepay return with a missing or invalid signature');
+    const attempt = tracker ? await attemptByTracker(tracker) : null;
+    return res.redirect(
+      303,
+      landingUrlFor({ outcome: 'unknown', purpose: attempt?.purpose as 'order' | 'wallet_topup' | undefined, orderId: attempt?.orderId }, false)
+    );
+  }
+  const result = await settleAttempt(tracker, 'return', reference);
+  return res.redirect(303, landingUrlFor(result, result.outcome !== 'unknown'));
+};
+
+/**
+ * Safepay webhook. Public; verified by the X-SFPY-SIGNATURE header. A successful-payment
+ * event settles the checkout session it names (once; a retry or the customer's return having
+ * done it already changes nothing). Answers 200 for anything it doesn't act on, so Safepay
+ * stops retrying, and 500 only on a server error, so it retries.
+ */
+export const safepayWebhook = async (req: Request, res: Response) => {
+  const signature = req.get('x-sfpy-signature') ?? undefined;
+  if (!verifySafepayWebhook(req.body, signature)) {
+    logger.warn('Safepay webhook with an invalid signature: rejected');
+    return res.status(401).json({ error: 'Invalid signature' });
+  }
+  const tracker = successfulTrackerFromWebhook(req.body);
+  if (!tracker) {
+    logger.info({ type: req.body?.type }, 'Safepay webhook ignored (not a successful payment)');
+    return res.status(200).json({ received: true });
+  }
+  try {
+    const result = await settleAttempt(tracker, 'webhook');
+    return res.status(200).json({ received: true, outcome: result.outcome });
+  } catch (err) {
+    logger.error({ err, tracker }, 'Safepay webhook could not be applied');
+    return res.status(500).json({ error: 'Internal error' });
+  }
+};

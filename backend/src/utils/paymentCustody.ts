@@ -21,6 +21,8 @@ export type DeliveryProvider = 'platform' | 'self';
 export const SELLER_DIRECT_METHODS = ['jazzcash', 'easypaisa', 'bank'];
 /** Payment methods whose money the platform receives. */
 export const PLATFORM_METHODS = ['wallet', 'safepay', 'card'];
+/** Payment states from which a gateway / transfer payment may still be accepted. */
+export const PAYABLE_STATUSES = ['pending', 'failed', 'payment_submitted', 'disputed'];
 
 interface OrderDeliveryShape {
   deliveryType: string;

@@ -26,6 +26,7 @@ import { apiLimiter } from './middleware/rateLimiter';
 import { requestId, httpLogger } from './middleware/requestContext';
 import { isProduction } from './config/env';
 import { sweepStaleOrders, purgeExpiredSecrets } from './services/order-maintenance.service';
+import { expireAbandonedAttempts } from './services/online-payment.service';
 import { errorHandler } from './middleware/errorHandler';
 import { notFoundHandler } from './middleware/notFoundHandler';
 import healthRoutes from './routes/health.routes';
@@ -85,16 +86,7 @@ app.use(cors({
 app.use(requestId);
 app.use(httpLogger);
 
-// Parse JSON. For webhook routes we also capture the raw Buffer so HMAC
-// signature checks can verify the exact bytes Safepay sent.
-app.use(express.json({
-  limit: '10mb',
-  verify: (req, _res, buf) => {
-    if ((req as express.Request).path?.endsWith('/safepay-webhook')) {
-      (req as express.Request & { rawBody?: Buffer }).rawBody = buf;
-    }
-  },
-}));
+app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
 // Uploaded files: public media, signed private files, legacy /uploads (see storage/serve.ts).
@@ -163,6 +155,8 @@ httpServer.listen(PORT, () => {
   scheduleJob('stale-orders', 2 * 60 * 1000, () => sweepStaleOrders());
   // Old one-time codes and used / expired reset tokens.
   scheduleJob('purge-expired-secrets', 6 * 60 * 60 * 1000, () => purgeExpiredSecrets());
+  // Online checkout sessions nobody completed (a late payment confirmation still settles).
+  scheduleJob('expire-payment-attempts', 15 * 60 * 1000, () => expireAbandonedAttempts());
 
   // Background jobs (emails, notifications). With Redis every instance takes queued jobs.
   startWorkers();

@@ -81,7 +81,8 @@ async function main() {
   // ---- 4. wallet: concurrent double pay ----
   await prisma.wallet.create({ data: { userId: cust.id, balance: 1000 } });
   p = await mkProduct(seller.id, 5, 100);
-  const o2: any = (await order(cust.id, [{ productId: p.id, quantity: 1 }], { paymentMethod: 'wallet' })).order;
+  // An unpaid order paid from the wallet afterwards (wallet orders placed at checkout are paid at creation).
+  const o2: any = (await order(cust.id, [{ productId: p.id, quantity: 1 }], { paymentMethod: 'cod' })).order;
   const total = Number(o2.totalAmount);
   const pay = await Promise.all([1, 2, 3].map(() => paymentService.processPayment(o2.id, cust.id, 'wallet').then(() => 'OK', (e: any) => e.code)));
   const bal = Number((await prisma.wallet.findUnique({ where: { userId: cust.id } }))!.balance);
@@ -170,8 +171,8 @@ async function main() {
   const sp = await mkSeller();
   await prisma.sellerPayoutSchedule.create({ data: { sellerId: sp.id, minimumPayoutAmount: 1, payoutMethod: 'bank_transfer' } as any });
   const prod = await mkProduct(sp.id, 5, 1000);
-  const po: any = (await order(cust.id, [{ productId: prod.id, quantity: 1 }], { paymentMethod: 'wallet' })).order;
-  await prisma.order.update({ where: { id: po.id }, data: { orderStatus: 'delivered', paymentStatus: 'paid', paidAt: new Date() } });
+  const po: any = (await order(cust.id, [{ productId: prod.id, quantity: 1 }], { paymentMethod: 'cod' })).order;
+  await prisma.order.update({ where: { id: po.id }, data: { orderStatus: 'delivered', paymentMethod: 'wallet', paymentCollectedBy: 'platform', paymentStatus: 'paid', paidAt: new Date() } });
   const earned = Number((await prisma.orderItem.findFirst({ where: { orderId: po.id } }))!.sellerPayout);
   const reqs = await Promise.all([1, 2, 3].map(() => (require('../src/services/seller.service').default).requestPayout(sp.id, { amount: earned, payoutMethod: 'bank_transfer', accountNumber: '1' }).then(() => 'OK', (e: any) => e.code)));
   ok('concurrent payout requests cannot exceed earnings', reqs.filter((r) => r === 'OK').length === 1, `${reqs} earned=${earned}`);
@@ -180,8 +181,7 @@ async function main() {
   const rc = await mkUser();
   await prisma.wallet.create({ data: { userId: rc.id, balance: 500 } });
   const rp = await mkProduct(seller.id, 20, 100);
-  const walletOrder: any = (await order(rc.id, [{ productId: rp.id, quantity: 2 }], { paymentMethod: 'wallet' })).order;
-  await paymentService.processPayment(walletOrder.id, rc.id, 'wallet');
+  const walletOrder: any = (await order(rc.id, [{ productId: rp.id, quantity: 2 }], { paymentMethod: 'wallet' })).order; // paid at checkout
   const paidTotal = Number(walletOrder.totalAmount);
   const cancels = await Promise.all([1, 2, 3].map(() => orderService.cancelOrder(walletOrder.id, rc.id, 'changed mind').then((r: any) => r, (e: any) => e.code)));
   const wRefunds = await prisma.refund.findMany({ where: { orderId: walletOrder.id } });
@@ -240,6 +240,7 @@ async function main() {
   await prisma.sellerPayoutSchedule.create({ data: { sellerId: selfS.id, minimumPayoutAmount: 1, payoutMethod: 'bank_transfer' } as any });
   await prisma.sellerPayoutSchedule.create({ data: { sellerId: platS.id, minimumPayoutAmount: 1, payoutMethod: 'bank_transfer' } as any });
   const dc = await mkUser();
+  await prisma.wallet.create({ data: { userId: dc.id, balance: 100000 } }); // wallet orders are paid at checkout
   const addr = await prisma.userAddress.create({ data: { userId: dc.id, addressLine1: 'House 1 Street', area: 'X', city: 'Lahore' } });
   const sp1 = await mkProduct(selfS.id, 20, 500);
   const sp2 = await mkProduct(platS.id, 20, 400);
@@ -305,6 +306,7 @@ async function main() {
   await prisma.sellerPayoutSchedule.create({ data: { sellerId: cs.id, minimumPayoutAmount: 1, payoutMethod: 'bank_transfer' } as any });
   const csProd = await mkProduct(cs.id, 50, 1000);
   const custC = await mkUser();
+  await prisma.wallet.create({ data: { userId: custC.id, balance: 100000 } }); // wallet orders are paid at checkout
   const csOrder = (pm: string) => order(custC.id, [{ productId: csProd.id, quantity: 1 }], { paymentMethod: pm }).then((r: any) => r.order);
   const csBal = () => require('../src/services/seller-balance.service').computeSellerBalance(prisma, cs.id);
 
@@ -372,7 +374,7 @@ async function main() {
   const gwO: any = (await order(gwC.id, [{ productId: gwP.id, quantity: 1 }], { paymentMethod: 'jazzcash' })).order;
   const vcode = (pid: string) => paymentService.verifyPayment(pid, gwC.id).then(() => 'OK', (e: any) => e.code);
   ok('a crafted JC-PAY-* id cannot pick a gateway and mark an order paid', (await vcode(`JC-PAY-1-${gwO.id}`)) !== 'OK');
-  ok('verifying an order with no online payment started is refused', (await vcode(`PAY-1-${gwO.id}`)) === 'VERIFY_PENDING');
+  ok('verifying an order with no online payment started is refused', (await vcode(`PAY-1-${gwO.id}`)) !== 'OK');
   ok('the order is still unpaid', (await prisma.order.findUnique({ where: { id: gwO.id } }))!.paymentStatus === 'pending');
   const { jazzcashGateway, easypaisaGateway } = require('../src/gateways');
   const jcv = await jazzcashGateway.verifyPayment({ paymentId: 'anything' });
@@ -872,8 +874,8 @@ async function main() {
   // (9) payout can't be both completed and failed
   const poSeller = await mkSeller(); const poProd = await mkProduct(poSeller.id, 5, 1000);
   await prisma.sellerPayoutSchedule.create({ data: { sellerId: poSeller.id, minimumPayoutAmount: 1, payoutMethod: 'bank_transfer' } as any });
-  const poO: any = (await order(rc2.id, [{ productId: poProd.id, quantity: 1 }], { paymentMethod: 'wallet' })).order;
-  await prisma.order.update({ where: { id: poO.id }, data: { orderStatus: 'delivered', paymentStatus: 'paid', paidAt: new Date() } });
+  const poO: any = (await order(rc2.id, [{ productId: poProd.id, quantity: 1 }], { paymentMethod: 'cod' })).order;
+  await prisma.order.update({ where: { id: poO.id }, data: { orderStatus: 'delivered', paymentMethod: 'wallet', paymentCollectedBy: 'platform', paymentStatus: 'paid', paidAt: new Date() } });
   const poGoods = Number((await prisma.orderItem.findFirst({ where: { orderId: poO.id } }))!.sellerPayout);
   await sellerService.requestPayout(poSeller.id, { amount: poGoods, payoutMethod: 'bank_transfer', accountNumber: '1' });
   const payoutRow = await prisma.sellerPayout.findFirst({ where: { sellerId: poSeller.id } });
@@ -944,6 +946,128 @@ async function main() {
   ok('a seller can use a photo they uploaded through the storage layer', (await mkP([`/media/p/products/${sellerRowA!.userId}/${require('crypto').randomUUID()}-lg.webp`])).startsWith('OK:'));
   ok("but not another seller's stored photo", (await mkP([`/media/p/products/${victimSeller!.userId}/${require('crypto').randomUUID()}-lg.webp`])) === 'IMAGE_NOT_OWNED');
   void victimSeller;
+
+  // ---- online payments (Safepay stand-in) and the wallet ----
+  {
+    const http = require('http');
+    const crypto = require('crypto');
+    let initCount = 0;
+    const lastInit: any[] = [];
+    const sfServer = http.createServer((req: any, res: any) => {
+      let body = '';
+      req.on('data', (c: any) => (body += c));
+      req.on('end', () => {
+        if (req.method === 'POST' && req.url === '/order/v1/init') {
+          lastInit.push(JSON.parse(body || '{}'));
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          return res.end(JSON.stringify({ data: { token: `track_${++initCount}_${uniq()}` } }));
+        }
+        res.writeHead(404);
+        res.end('{}');
+      });
+    });
+    await new Promise<void>((r) => sfServer.listen(0, r));
+    const sfPort = sfServer.address().port;
+    Object.assign(process.env, {
+      SAFEPAY_PUBLIC_KEY: 'pk_test',
+      SAFEPAY_SECRET_KEY: 'sk_test_secret',
+      SAFEPAY_WEBHOOK_SECRET: 'wh_test_secret',
+      SAFEPAY_API_URL: `http://127.0.0.1:${sfPort}`,
+      SAFEPAY_CHECKOUT_URL: 'https://checkout.test/checkout',
+      BASE_URL: 'https://api.test',
+      FRONTEND_URL: 'https://app.test',
+    });
+    const op = require('../src/services/online-payment.service');
+    const sg = require('../src/gateways/safepay.gateway');
+    const sign = (tracker: string) => crypto.createHmac('sha256', 'sk_test_secret').update(tracker).digest('hex');
+
+    const payC = await mkUser();
+    const payP = await mkProduct(seller.id, 50, 200);
+    const onlineOrder: any = (await order(payC.id, [{ productId: payP.id, quantity: 2 }], { paymentMethod: 'safepay' })).order;
+    const total = Number(onlineOrder.totalAmount);
+    const started: any = await paymentService.processPayment(onlineOrder.id, payC.id, 'safepay');
+    const url = new URL(started.redirectUrl!);
+    ok('online payment: Safepay is asked for exactly the order total, with our public key', lastInit[0]?.amount === total && lastInit[0]?.client === 'pk_test' && lastInit[0]?.currency === 'PKR', JSON.stringify(lastInit[0]));
+    ok('online payment: the customer is sent to Safepay checkout, returning to our signed-return endpoint', url.origin + url.pathname === 'https://checkout.test/checkout' && url.searchParams.get('beacon') === started.paymentId && url.searchParams.get('redirect_url') === 'https://api.test/api/v1/payments/safepay/return' && url.searchParams.get('order_id') === onlineOrder.id);
+    const attempt = await prisma.paymentAttempt.findUnique({ where: { tracker: started.paymentId } });
+    ok('online payment: the checkout session is recorded with its order and amount', attempt?.orderId === onlineOrder.id && Number(attempt?.amount) === total && attempt?.status === 'pending');
+
+    ok('online payment: a forged return signature is refused', !sg.verifySafepayReturn(started.paymentId, sign('track_other')) && !sg.verifySafepayReturn(started.paymentId, undefined) && sg.verifySafepayReturn(started.paymentId, sign(started.paymentId)));
+    ok('online payment: asking to verify does not mark the order paid', (await paymentService.verifyPayment(started.paymentId, payC.id).then(() => 'OK', (e: any) => e.code)) === 'VERIFY_PENDING');
+
+    // Two confirmations at once (return + webhook): settled exactly once.
+    const both = await Promise.all([op.settleAttempt(started.paymentId, 'return', 'REF1'), op.settleAttempt(started.paymentId, 'webhook')]);
+    const outcomes = both.map((r: any) => r.outcome).sort();
+    const paidOrder = await prisma.order.findUnique({ where: { id: onlineOrder.id } });
+    ok('online payment: concurrent confirmations settle once (one paid, one already settled)', outcomes.join() === 'already_settled,paid' && paidOrder!.paymentStatus === 'paid' && paidOrder!.paymentCollectedBy === 'platform', outcomes.join());
+    ok('online payment: the customer is then sent to their order page', op.landingUrlFor(both.find((r: any) => r.outcome === 'paid'), true) === `https://app.test/orders/${onlineOrder.id}?payment=paid`);
+    ok('online payment: verify now reports it completed', (await paymentService.verifyPayment(started.paymentId, payC.id) as any).paymentStatus === 'completed');
+
+    // A second session for an already-paid order (customer paid twice): credited to the wallet.
+    await prisma.order.update({ where: { id: onlineOrder.id }, data: { paymentStatus: 'pending' } });
+    const second: any = await paymentService.processPayment(onlineOrder.id, payC.id, 'safepay');
+    await prisma.order.update({ where: { id: onlineOrder.id }, data: { paymentStatus: 'paid' } });
+    const walletBefore = Number((await prisma.wallet.findUnique({ where: { userId: payC.id } }))?.balance ?? 0);
+    const dup = await op.settleAttempt(second.paymentId, 'webhook');
+    const walletAfter = Number((await prisma.wallet.findUnique({ where: { userId: payC.id } }))!.balance);
+    ok('online payment: paying twice credits the second payment to the wallet', dup.outcome === 'duplicate' && walletAfter - walletBefore === total, `${dup.outcome} ${walletBefore}->${walletAfter}`);
+
+    // Paid after the order was cancelled: recorded and refunded (queued for the admin).
+    const lateC = await mkUser();
+    const lateOrd: any = (await order(lateC.id, [{ productId: payP.id, quantity: 1 }], { paymentMethod: 'safepay' })).order;
+    const lateStart: any = await paymentService.processPayment(lateOrd.id, lateC.id, 'safepay');
+    await orderService.cancelOrder(lateOrd.id, lateC.id, 'changed my mind');
+    const lateRes = await op.settleAttempt(lateStart.paymentId, 'return');
+    const lateRefund = await prisma.refund.findFirst({ where: { orderId: lateOrd.id } });
+    ok('online payment: money arriving after a cancellation is refunded, the order stays cancelled', lateRes.outcome === 'paid' && lateRefund?.status === 'pending' && Number(lateRefund?.amount) === Number(lateOrd.totalAmount) && (await prisma.order.findUnique({ where: { id: lateOrd.id } }))!.orderStatus === 'cancelled');
+
+    // Items cancelled while the customer paid: the difference goes to the wallet.
+    const shrinkC = await mkUser();
+    const shrinkOrd: any = (await order(shrinkC.id, [{ productId: payP.id, quantity: 3 }], { paymentMethod: 'safepay' })).order;
+    const shrinkStart: any = await paymentService.processPayment(shrinkOrd.id, shrinkC.id, 'safepay');
+    await prisma.order.update({ where: { id: shrinkOrd.id }, data: { totalAmount: Number(shrinkOrd.totalAmount) - 100 } });
+    await op.settleAttempt(shrinkStart.paymentId, 'return');
+    ok('online payment: paying more than the (reduced) total credits the difference to the wallet', Number((await prisma.wallet.findUnique({ where: { userId: shrinkC.id } }))!.balance) === 100 && (await prisma.order.findUnique({ where: { id: shrinkOrd.id } }))!.paymentStatus === 'paid');
+
+    // Webhook signature and payload.
+    const whBody = { type: 'payment:created', data: { tracker: 'track_wh', amount: 500, metadata: { order_id: 'x' } } };
+    const whSig = crypto.createHmac('sha512', 'wh_test_secret').update(Buffer.from(JSON.stringify(whBody.data))).digest('hex');
+    ok('webhook: a correctly signed event is accepted, a tampered one refused', sg.verifySafepayWebhook(whBody, whSig) && !sg.verifySafepayWebhook({ ...whBody, data: { ...whBody.data, amount: 1 } }, whSig) && !sg.verifySafepayWebhook(whBody, undefined));
+    ok('webhook: only successful-payment events name a session to settle', op.successfulTrackerFromWebhook(whBody) === 'track_wh' && op.successfulTrackerFromWebhook({ type: 'payment:failed', data: { tracker: 'track_wh' } }) === null && op.successfulTrackerFromWebhook({ data: { tracker: { token: 't2', state: 'TRACKER_PAID' } } }) === 't2');
+    ok('webhook: an unknown session settles nothing', (await op.settleAttempt('track_unknown', 'webhook')).outcome === 'unknown');
+
+    // Wallet top-up.
+    const tuC = await mkUser();
+    ok('wallet top-up: amounts outside the limits are refused', (await op.startWalletTopup(tuC.id, 50).then(() => 'OK', (e: any) => e.code)) === 'INVALID_TOPUP_AMOUNT');
+    const tu = await op.startWalletTopup(tuC.id, 1500);
+    const tuRes = await op.settleAttempt(tu.tracker, 'return');
+    const tuTx = await prisma.walletTransaction.findFirst({ where: { referenceId: tu.tracker } });
+    ok('wallet top-up: a confirmed top-up credits the wallet once', tuRes.outcome === 'paid' && Number((await prisma.wallet.findUnique({ where: { userId: tuC.id } }))!.balance) === 1500 && tuTx?.transactionType === 'topup' && (await op.settleAttempt(tu.tracker, 'webhook')).outcome === 'already_settled');
+    ok('wallet top-up: the customer returns to their wallet', op.landingUrlFor(tuRes, true) === 'https://app.test/wallet?topup=paid');
+
+    // Paying with the wallet at checkout: the order and the debit commit together.
+    const wC = await mkUser();
+    const wP = await mkProduct(seller.id, 10, 300);
+    const ordersBefore = await prisma.order.count({ where: { customerId: wC.id } });
+    const short = await code(order(wC.id, [{ productId: wP.id, quantity: 1 }], { paymentMethod: 'wallet' }));
+    ok('wallet checkout: without enough balance no order is placed and no stock is taken', short === 'INSUFFICIENT_BALANCE' && (await prisma.order.count({ where: { customerId: wC.id } })) === ordersBefore && (await prisma.product.findUnique({ where: { id: wP.id } }))!.stockQuantity === 10);
+    await prisma.$transaction((tx: any) => require('../src/services/wallet.service').creditWallet(tx, { userId: wC.id, amount: 1000, type: 'topup', description: 'test' }));
+    const wOrder: any = (await order(wC.id, [{ productId: wP.id, quantity: 1 }], { paymentMethod: 'wallet' })).order;
+    const wFresh = await prisma.order.findUnique({ where: { id: wOrder.id } });
+    ok('wallet checkout: with enough balance the order is placed already paid and the wallet debited', wFresh!.paymentStatus === 'paid' && Number((await prisma.wallet.findUnique({ where: { userId: wC.id } }))!.balance) === 1000 - Number(wFresh!.totalAmount));
+
+    // Abandoned sessions expire; a late confirmation still settles.
+    const abC = await mkUser();
+    const abOrd: any = (await order(abC.id, [{ productId: payP.id, quantity: 1 }], { paymentMethod: 'safepay' })).order;
+    const abStart: any = await paymentService.processPayment(abOrd.id, abC.id, 'safepay');
+    await prisma.paymentAttempt.update({ where: { tracker: abStart.paymentId }, data: { createdAt: new Date(Date.now() - 3 * 3600e3) } });
+    await op.expireAbandonedAttempts();
+    const expired = await prisma.paymentAttempt.findUnique({ where: { tracker: abStart.paymentId } });
+    ok('online payment: an abandoned session expires, and a late confirmation still settles it', expired?.status === 'expired' && (await op.settleAttempt(abStart.paymentId, 'webhook')).outcome === 'paid');
+
+    sfServer.close();
+    for (const k of ['SAFEPAY_PUBLIC_KEY', 'SAFEPAY_SECRET_KEY', 'SAFEPAY_WEBHOOK_SECRET', 'SAFEPAY_API_URL', 'SAFEPAY_CHECKOUT_URL']) delete process.env[k];
+  }
 
   // ---- catalog listing: community tiers, paging, computed filters (all in the database) ----
   const mkCommunity = (name: string, lat: number, lng: number, neighbours: string[] = []) =>

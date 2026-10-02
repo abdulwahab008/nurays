@@ -85,6 +85,12 @@ export function configProblems(env: NodeJS.ProcessEnv = process.env): string[] {
       problems.push('SMS is not configured: set TWILIO_ACCOUNT_SID / TWILIO_AUTH_TOKEN / TWILIO_PHONE_NUMBER, or set SMS_PROVIDER=none to run without phone OTP (phone sign-in and verification will be unavailable).');
     }
 
+    if (env.SAFEPAY_SECRET_KEY && env.SAFEPAY_PUBLIC_KEY && !/^https:\/\//.test((env.BASE_URL || '').trim())) {
+      problems.push('BASE_URL must be this API\'s public https:// URL when Safepay is configured: customers are sent back to it after paying.');
+    }
+    if (env.SAFEPAY_SECRET_KEY && env.SAFEPAY_PUBLIC_KEY && !(env.SAFEPAY_WEBHOOK_SECRET || '').trim()) {
+      problems.push('SAFEPAY_WEBHOOK_SECRET is required when Safepay is configured (Safepay dashboard > Developer > Endpoints): without the webhook, a payment whose customer closes the page before returning is never recorded.');
+    }
     if (env.SAFEPAY_SECRET_KEY && env.SAFEPAY_PUBLIC_KEY && !['true', 'false'].includes((env.SAFEPAY_SANDBOX || '').trim())) {
       problems.push('SAFEPAY_SANDBOX must be set explicitly to "false" (live payments) or "true" (sandbox) when Safepay keys are configured.');
     }

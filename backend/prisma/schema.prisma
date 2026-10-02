@@ -56,6 +56,7 @@ model User {
   activityLogs  UserActivityLog[]
   searchQueries SearchQuery[]
   wallet        Wallet?
+  paymentAttempts PaymentAttempt[]
   emailVerification EmailVerification?
 
   @@index([primaryCommunityId])
@@ -650,6 +651,7 @@ model Order {
   hubAllocations      HubBatchAllocation[]
   supportTickets      SupportTicket[]
   walletTransactions  WalletTransaction[]
+  paymentAttempts     PaymentAttempt[]
 
   @@unique([customerId, idempotencyKey])
   @@index([customerId, createdAt])
@@ -862,6 +864,33 @@ model WalletTransaction {
   @@index([orderId])
 
   @@map("wallet_transactions")
+}
+
+/// One online checkout session at the payment gateway (a Safepay "tracker"), for an order or a
+/// wallet top-up. The amount is fixed when the session starts. It is settled exactly once,
+/// by whichever confirmation arrives first: the customer's signed return or a verified webhook.
+model PaymentAttempt {
+  id         String    @id @default(uuid())
+  purpose    String // order | wallet_topup
+  orderId    String?   @map("order_id")
+  userId     String    @map("user_id")
+  gateway    String    @default("safepay")
+  tracker    String    @unique
+  amount     Decimal   @db.Decimal(10, 2)
+  status     String    @default("pending") // pending | paid | duplicate | expired
+  reference  String?
+  settledVia String?   @map("settled_via") // return | webhook
+  paidAt     DateTime? @map("paid_at")
+  createdAt  DateTime  @default(now()) @map("created_at")
+  updatedAt  DateTime  @updatedAt @map("updated_at")
+
+  order Order? @relation(fields: [orderId], references: [id], onDelete: SetNull)
+  user  User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([orderId])
+  @@index([userId, createdAt])
+  @@index([status, createdAt])
+  @@map("payment_attempts")
 }
 
 model SellerPayout {

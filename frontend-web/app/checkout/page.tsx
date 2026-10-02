@@ -33,6 +33,7 @@ import { DashboardLayout, CUSTOMER_SIDEBAR_ITEMS } from '@/components/layout/Das
 import { DatePicker } from '@/components/ui/DatePicker';
 import { ConfirmModal } from '@/components/ui/ConfirmModal';
 import { apiClient } from '@/lib/api-client';
+import { paymentService } from '@/lib/services/payment.service';
 
 interface CatalogPromotion {
   id: string;
@@ -68,7 +69,9 @@ export default function CheckoutPage() {
   const [cart, setCart] = useState<CartResponse | null>(null);
   const [addresses, setAddresses] = useState<Address[]>([]);
   const [selectedAddress, setSelectedAddress] = useState<string>('');
-  const [paymentMethod, setPaymentMethod] = useState<'cod' | 'bank' | 'jazzcash' | 'easypaisa'>('cod');
+  const [paymentMethod, setPaymentMethod] = useState<'cod' | 'safepay' | 'wallet' | 'bank' | 'jazzcash' | 'easypaisa'>('cod');
+  const [onlineAvailable, setOnlineAvailable] = useState(false);
+  const [walletBalance, setWalletBalance] = useState<number | null>(null);
   const [transactionRef, setTransactionRef] = useState<string>('');
   const [deliveryInstructions, setDeliveryInstructions] = useState<string>('');
   const [deliverySlot, setDeliverySlot] = useState({ date: '', time: 'evening' as 'morning' | 'afternoon' | 'evening' });
@@ -98,6 +101,15 @@ export default function CheckoutPage() {
       return;
     }
     loadData();
+    // Online payment and the wallet are offered only when they can actually be used.
+    paymentService
+      .getMethods()
+      .then((methods) => setOnlineAvailable(!!methods.find((m) => m.id === 'safepay')?.isAvailable))
+      .catch(() => setOnlineAvailable(false));
+    paymentService
+      .getWallet()
+      .then((w) => setWalletBalance(w.isLocked ? 0 : w.balance))
+      .catch(() => setWalletBalance(null));
   }, [isAuthenticated]);
 
   useEffect(() => {
@@ -349,7 +361,20 @@ export default function CheckoutPage() {
         sessionStorage.setItem('lastPlacedOrderId', orderId);
       }
 
-      showToast('Order placed successfully!', 'success');
+      if (paymentMethod === 'safepay') {
+        // Straight on to the payment page. If it can't be opened, the order page offers
+        // "Pay now" (the order waits for payment until the payment window closes).
+        try {
+          window.location.href = await paymentService.startOrderPayment(orderId);
+          return;
+        } catch (payErr: any) {
+          showToast(payErr.response?.data?.error?.message || 'Your order is placed, but the payment page could not be opened. Pay from your order page.', 'error', 8000);
+          router.push(`/orders/${orderId}?placed=1`);
+          return;
+        }
+      }
+
+      showToast(paymentMethod === 'wallet' ? 'Order placed and paid from your wallet.' : 'Order placed successfully!', 'success');
       router.push(`/orders/${orderId}?placed=1`);
     } catch (error: any) {
       if (!error.response) {
@@ -606,7 +631,7 @@ export default function CheckoutPage() {
                 </div>
                 <div>
                   <h2 className="text-sm font-bold text-slate-900 tracking-tight">3. Payment Method</h2>
-                  <p className="text-[11px] text-slate-500">Pay via Cash on Delivery or Direct Mobile/Bank Transfer</p>
+                  <p className="text-[11px] text-slate-500">Cash on delivery, online, your Nuray Wallet, or a transfer to the kitchen</p>
                 </div>
               </div>
 
@@ -648,6 +673,83 @@ export default function CheckoutPage() {
                     </div>
                   )}
                 </label>
+
+                {/* Online: card / JazzCash / EasyPaisa through Safepay */}
+                {onlineAvailable && (
+                  <label
+                    className={`block p-4 rounded-2xl border-2 cursor-pointer transition-all ${
+                      paymentMethod === 'safepay'
+                        ? 'border-[#FF5500] bg-orange-50/20 shadow-2xs'
+                        : 'border-slate-200/80 hover:border-slate-300 bg-white'
+                    }`}
+                  >
+                    <div className="flex items-center gap-3">
+                      <input
+                        type="radio"
+                        name="paymentMethod"
+                        value="safepay"
+                        checked={paymentMethod === 'safepay'}
+                        onChange={() => setPaymentMethod('safepay')}
+                        className="accent-[#FF5500] w-4 h-4 cursor-pointer"
+                      />
+                      <div className="w-8 h-8 rounded-xl bg-emerald-50 text-emerald-700 flex items-center justify-center shrink-0">
+                        <Smartphone className="w-4 h-4" />
+                      </div>
+                      <div className="flex-1">
+                        <span className="text-xs font-bold text-slate-900">Pay online</span>
+                        <p className="text-[11px] text-slate-500">Card, JazzCash or EasyPaisa on our payment provider&apos;s secure page</p>
+                      </div>
+                    </div>
+                    {paymentMethod === 'safepay' && (
+                      <div className="mt-3 ml-7 pt-2.5 border-t border-slate-200/60 text-[11px] text-slate-600 flex items-center gap-2">
+                        <ShieldCheck className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                        <span>After you place the order you&apos;ll go to the payment page. The kitchen starts once it&apos;s paid.</span>
+                      </div>
+                    )}
+                  </label>
+                )}
+
+                {/* Nuray Wallet */}
+                {walletBalance !== null && (
+                  <label
+                    className={`block p-4 rounded-2xl border-2 transition-all ${
+                      walletBalance < totalPayable
+                        ? 'border-slate-200/80 bg-slate-50 cursor-not-allowed opacity-70'
+                        : paymentMethod === 'wallet'
+                        ? 'border-[#FF5500] bg-orange-50/20 shadow-2xs cursor-pointer'
+                        : 'border-slate-200/80 hover:border-slate-300 bg-white cursor-pointer'
+                    }`}
+                  >
+                    <div className="flex items-center gap-3">
+                      <input
+                        type="radio"
+                        name="paymentMethod"
+                        value="wallet"
+                        disabled={walletBalance < totalPayable}
+                        checked={paymentMethod === 'wallet'}
+                        onChange={() => setPaymentMethod('wallet')}
+                        className="accent-[#FF5500] w-4 h-4 cursor-pointer disabled:cursor-not-allowed"
+                      />
+                      <div className="w-8 h-8 rounded-xl bg-slate-100 text-slate-700 flex items-center justify-center shrink-0">
+                        <Banknote className="w-4 h-4" />
+                      </div>
+                      <div className="flex-1">
+                        <span className="text-xs font-bold text-slate-900">Nuray Wallet</span>
+                        <p className="text-[11px] text-slate-500">
+                          Balance {formatPrice(walletBalance)}
+                          {walletBalance < totalPayable && (
+                            <>
+                              {' · not enough for this order. '}
+                              <Link href="/wallet" className="underline font-semibold">
+                                Top up
+                              </Link>
+                            </>
+                          )}
+                        </p>
+                      </div>
+                    </div>
+                  </label>
+                )}
 
                 {/* Method 2: Bank Transfer / Raast (IBFT) */}
                 <label
