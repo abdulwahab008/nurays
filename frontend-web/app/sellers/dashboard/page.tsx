@@ -502,7 +502,7 @@ function SellerDashboardContent() {
                     <div className="flex items-center justify-between">
                       <div className="flex-1">
                         <div className="flex items-center gap-2 mb-1">
-                          <h3 className="font-semibold text-gray-900" data-ltr>#{order.orderNumber}</h3>
+                          <h3 className="font-semibold text-gray-900"><span data-ltr>#{order.orderNumber}</span></h3>
                           <span className={`px-2.5 py-1 rounded-full text-xs font-medium ${getStatusColor(order.orderStatus)}`}>
                             {kitchenStatusLabel(order.orderStatus, t, tc)}
                           </span>

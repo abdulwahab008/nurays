@@ -203,7 +203,7 @@ export function CustomerOrderNotification() {
             {/* Body */}
             <div className="px-4 py-3">
               <p className="text-gray-500 text-xs mb-1">{t('notif.yourOrder')}</p>
-              <p className="text-gray-900 font-bold text-sm mb-3">#{n.orderNumber}</p>
+              <p className="text-gray-900 font-bold text-sm mb-3"><span data-ltr>#{n.orderNumber}</span></p>
 
               <div className="flex gap-2">
                 <button

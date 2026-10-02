@@ -410,7 +410,7 @@ export default function OrderChatModal({
                 <h3 className="font-black text-sm text-white truncate max-w-[200px] md:max-w-[260px]">
                   {t('chat.chatWith', { name: targetName })}
                 </h3>
-                <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-white/10 text-slate-300">
+                <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-white/10 text-slate-300" data-ltr>
                   #{orderNumber}
                 </span>
               </div>

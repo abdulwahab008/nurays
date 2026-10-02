@@ -902,7 +902,7 @@ function OrderDetailContent() {
             {/* Body */}
             <div className="px-6 py-5">
               <p className="text-gray-600 text-sm mb-4">
-                {t('detail.cancelConfirmBefore')}<strong>#{order.orderNumber}</strong>{t('detail.cancelConfirmAfter')}
+                {t('detail.cancelConfirmBefore')}<strong data-ltr>#{order.orderNumber}</strong>{t('detail.cancelConfirmAfter')}
               </p>
               <label className="block text-sm font-medium text-gray-700 mb-1">{t('detail.cancelReason')} <span className="text-red-500">*</span></label>
               <textarea
@@ -1142,7 +1142,7 @@ function OrderDetailContent() {
                     <span className="text-[11px] text-slate-500 font-medium">{t('receipt.kitchenInvoice')}</span>
                   </div>
                   <div className="text-end">
-                    <span className="font-mono font-bold text-sm text-slate-900 block">#{order.orderNumber}</span>
+                    <span className="font-mono font-bold text-sm text-slate-900 block"><span data-ltr>#{order.orderNumber}</span></span>
                     <span className="text-[11px] text-slate-400">{formatDate(order.createdAt || new Date().toISOString())}</span>
                   </div>
                 </div>
