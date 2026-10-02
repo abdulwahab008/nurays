@@ -32,6 +32,9 @@ services:
       # Local storage driver: keep uploads on a named volume so a rebuild doesn't wipe
       # them. For production, prefer STORAGE_DRIVER=s3 (see backend/.env.example).
       UPLOADS_DIR: /app/uploads
+      # Apply pending database migrations on start. For a database created before the
+      # migration baseline, run `npm run db:baseline` once first (see backend/prisma/README.md).
+      MIGRATE_ON_START: ${MIGRATE_ON_START:-false}
     volumes:
       - uploads:/app/uploads
     extra_hosts:

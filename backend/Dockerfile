@@ -52,4 +52,8 @@ EXPOSE 3001
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
     CMD node -e "fetch('http://localhost:3001/api/v1/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
 
-CMD ["node", "dist/index.js"]
+# MIGRATE_ON_START=true applies pending migrations (prisma migrate deploy) before starting.
+# Safe with several instances starting at once: Prisma serialises migrations with a database
+# lock. Otherwise run `npm run db:migrate` as a release step before rolling out a new image.
+# `exec` keeps node as PID 1 so it receives SIGTERM for the graceful shutdown.
+CMD ["sh", "-c", "if [ \"$MIGRATE_ON_START\" = \"true\" ]; then npx prisma migrate deploy || exit 1; fi; exec node dist/index.js"]
