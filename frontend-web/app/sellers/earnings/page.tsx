@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, type ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
 import { DashboardLayout, SELLER_SIDEBAR_ITEMS } from '@/components/layout/DashboardShell';
 import { Button } from '@/components/ui/button';
@@ -8,6 +8,9 @@ import { useToast } from '@/components/ui/toast';
 import { useAuthStore } from '@/lib/store/auth-store';
 import { apiClient } from '@/lib/api-client';
 import { formatPrice, formatDate } from '@/lib/utils';
+import { useT } from '@/lib/i18n';
+import { commonMessages } from '@/lib/i18n/messages/common';
+import { kitchenEarningsMessages } from '@/lib/i18n/messages/kitchen-earnings';
 
 const sidebarItems = SELLER_SIDEBAR_ITEMS;
 
@@ -45,6 +48,11 @@ const Icons = {
   ),
 };
 
+/** Puts React nodes where a translated sentence has {name} placeholders. */
+function withNodes(text: string, nodes: Record<string, ReactNode>) {
+  return text.split(/\{(\w+)\}/g).map((part, i) => (i % 2 === 1 ? <span key={i}>{nodes[part] ?? `{${part}}`}</span> : part));
+}
+
 interface EarningsData {
   todaySales: number;
   todayOrders: number;
@@ -72,6 +80,8 @@ export default function SellerEarningsPage() {
   const router = useRouter();
   const { isAuthenticated, user } = useAuthStore();
   const { showToast } = useToast();
+  const t = useT(kitchenEarningsMessages);
+  const tc = useT(commonMessages);
   const [loading, setLoading] = useState(true);
   const [earnings, setEarnings] = useState<EarningsData | null>(null);
   const [requestingPayout, setRequestingPayout] = useState(false);
@@ -87,7 +97,7 @@ export default function SellerEarningsPage() {
 
     if (user?.userType !== 'seller' && user?.user_type !== 'seller') {
       router.push('/dashboard');
-      showToast('Access denied. Seller privileges required.', 'error');
+      showToast(t('accessDenied'), 'error');
       return;
     }
 
@@ -121,7 +131,7 @@ export default function SellerEarningsPage() {
       }
     } catch (error: any) {
       console.error('Failed to load earnings:', error);
-      showToast('Failed to load earnings data', 'error');
+      showToast(t('loadFailed'), 'error');
     } finally {
       setLoading(false);
     }
@@ -129,11 +139,11 @@ export default function SellerEarningsPage() {
 
   const handleRequestPayout = async () => {
     if (!earnings || earnings.availableBalance <= 0) {
-      showToast('No available balance to withdraw', 'warning');
+      showToast(t('noBalance'), 'warning');
       return;
     }
     if (!accountNumber.trim()) {
-      showToast('Please enter the account number to receive the payout', 'warning');
+      showToast(t('enterAccount'), 'warning');
       return;
     }
 
@@ -145,13 +155,13 @@ export default function SellerEarningsPage() {
         accountNumber: accountNumber.trim(),
       });
       if (response.data.success) {
-        showToast('Payout request submitted successfully', 'success');
+        showToast(t('payoutSubmitted'), 'success');
         setShowPayoutForm(false);
         setAccountNumber('');
         loadEarnings();
       }
     } catch (error: any) {
-      showToast(error.response?.data?.error?.message || 'Failed to request payout', 'error');
+      showToast(error.response?.data?.error?.message || t('payoutFailed'), 'error');
     } finally {
       setRequestingPayout(false);
     }
@@ -173,8 +183,8 @@ export default function SellerEarningsPage() {
 
   return (
     <DashboardLayout
-      title="Earnings & Payouts"
-      subtitle="Track your earnings and request payouts"
+      title={t('title')}
+      subtitle={t('subtitle')}
       sidebarItems={sidebarItems}
       userType="seller"
     >
@@ -182,7 +192,7 @@ export default function SellerEarningsPage() {
         {loading ? (
           <div className="text-center py-16">
             <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-emerald-500 mx-auto mb-4"></div>
-            <p className="text-gray-500">Loading earnings...</p>
+            <p className="text-gray-500">{t('loading')}</p>
           </div>
         ) : earnings ? (
           <>
@@ -192,9 +202,9 @@ export default function SellerEarningsPage() {
               {/* Available Balance */}
               <div className="bg-white rounded-2xl p-5 border border-blue-100 shadow-xs flex items-center justify-between">
                 <div>
-                  <span className="text-xs font-semibold text-blue-600 block">Available to Withdraw</span>
+                  <span className="text-xs font-semibold text-blue-600 block">{t('available')}</span>
                   <span className="text-2xl font-black text-gray-900 mt-1 block">{formatPrice(earnings.availableBalance)}</span>
-                  <span className="text-[11px] text-gray-500 mt-1 block">Ready for immediate transfer</span>
+                  <span className="text-[11px] text-gray-500 mt-1 block">{t('availableHint')}</span>
                 </div>
                 <div className="w-12 h-12 bg-blue-50 text-blue-600 rounded-xl flex items-center justify-center">
                   {Icons.wallet}
@@ -204,9 +214,9 @@ export default function SellerEarningsPage() {
               {/* Pending Payout */}
               <div className="bg-white rounded-2xl p-5 border border-amber-100 shadow-xs flex items-center justify-between">
                 <div>
-                  <span className="text-xs font-semibold text-amber-600 block">Pending Settlement</span>
+                  <span className="text-xs font-semibold text-amber-600 block">{t('pendingSettlement')}</span>
                   <span className="text-2xl font-black text-gray-900 mt-1 block">{formatPrice(earnings.pendingPayout || earnings.pendingSettlement)}</span>
-                  <span className="text-[11px] text-gray-500 mt-1 block">In processing window</span>
+                  <span className="text-[11px] text-gray-500 mt-1 block">{t('pendingHint')}</span>
                 </div>
                 <div className="w-12 h-12 bg-amber-50 text-amber-600 rounded-xl flex items-center justify-center">
                   {Icons.pending}
@@ -216,9 +226,9 @@ export default function SellerEarningsPage() {
               {/* Total Earnings */}
               <div className="bg-white rounded-2xl p-5 border border-emerald-100 shadow-xs flex items-center justify-between">
                 <div>
-                  <span className="text-xs font-semibold text-emerald-600 block">Lifetime Earnings</span>
+                  <span className="text-xs font-semibold text-emerald-600 block">{t('lifetime')}</span>
                   <span className="text-2xl font-black text-gray-900 mt-1 block">{formatPrice(earnings.totalEarnings)}</span>
-                  <span className="text-[11px] text-gray-500 mt-1 block">Completed orders net sum</span>
+                  <span className="text-[11px] text-gray-500 mt-1 block">{t('lifetimeHint')}</span>
                 </div>
                 <div className="w-12 h-12 bg-emerald-50 text-emerald-600 rounded-xl flex items-center justify-center">
                   {Icons.earnings}
@@ -229,27 +239,27 @@ export default function SellerEarningsPage() {
             {/* Performance Overview */}
             <div className="mb-6">
               <h2 className="text-sm font-bold text-gray-900 mb-3">
-                Sales & Fee Breakdown
+                {t('breakdown')}
               </h2>
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                 <div className="bg-white p-4 rounded-xl border border-gray-100 shadow-xs">
-                  <span className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider block">Today's Sales</span>
+                  <span className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider block">{t('todaySales')}</span>
                   <span className="text-lg font-bold text-gray-900 mt-1 block">{formatPrice(earnings.todaySales)}</span>
                 </div>
 
                 <div className="bg-white p-4 rounded-xl border border-gray-100 shadow-xs">
-                  <span className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider block">Today's Orders</span>
+                  <span className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider block">{t('todayOrders')}</span>
                   <span className="text-lg font-bold text-gray-900 mt-1 block">{earnings.todayOrders}</span>
                 </div>
 
                 <div className="bg-white p-4 rounded-xl border border-gray-100 shadow-xs">
-                  <span className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider block">Gross Volume</span>
+                  <span className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider block">{t('grossVolume')}</span>
                   <span className="text-lg font-bold text-gray-900 mt-1 block">{formatPrice(earnings.grossSales)}</span>
                 </div>
 
                 <div className="bg-white p-4 rounded-xl border border-red-100 bg-red-50/20 shadow-xs">
-                  <span className="text-[11px] font-semibold text-red-600 uppercase tracking-wider block">Platform Fees</span>
-                  <span className="text-lg font-bold text-red-600 mt-1 block">-{formatPrice(earnings.platformFees)}</span>
+                  <span className="text-[11px] font-semibold text-red-600 uppercase tracking-wider block">{t('platformFees')}</span>
+                  <span className="text-lg font-bold text-red-600 mt-1 block" data-ltr>-{formatPrice(earnings.platformFees)}</span>
                 </div>
               </div>
             </div>
@@ -259,10 +269,10 @@ export default function SellerEarningsPage() {
               <div className="bg-gray-50 border border-gray-200 rounded-2xl p-5 mb-8 flex items-start gap-3">
                 <div className="w-9 h-9 rounded-full bg-gray-200 flex items-center justify-center flex-shrink-0 text-gray-600 font-bold">i</div>
                 <p className="text-sm text-gray-600">
-                  Customers who paid you directly (cash at your door, or a transfer into your own JazzCash, EasyPaisa or bank account) paid{' '}
-                  <span className="font-semibold text-gray-900">you</span>, so that money isn&apos;t part of your withdrawable balance.
-                  On those orders you owe <span className="font-semibold text-gray-900">{formatPrice(earnings.codCommissionOwed)}</span> to Nuray
-                  (commission, Nuray&apos;s delivery fee, tax and any refunds Nuray sent your customers). It is deducted from what Nuray owes you.
+                  {withNodes(t('codNote'), {
+                    you: <span className="font-semibold text-gray-900">{t('codNoteYou')}</span>,
+                    amount: <span className="font-semibold text-gray-900">{formatPrice(earnings.codCommissionOwed)}</span>,
+                  })}
                 </p>
               </div>
             )}
@@ -272,11 +282,11 @@ export default function SellerEarningsPage() {
               <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 mb-8">
                 <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                   <div>
-                    <h2 className="text-lg font-bold text-gray-900 mb-1">Request Payout</h2>
+                    <h2 className="text-lg font-bold text-gray-900 mb-1">{t('requestPayout')}</h2>
                     <p className="text-gray-500">
-                      Available for withdrawal: <span className="font-bold text-emerald-600">{formatPrice(earnings.availableBalance)}</span>
+                      {t('availableForWithdrawal')} <span className="font-bold text-emerald-600">{formatPrice(earnings.availableBalance)}</span>
                     </p>
-                    <p className="text-sm text-gray-400 mt-1">Payouts are processed within 3-5 business days via JazzCash/EasyPaisa</p>
+                    <p className="text-sm text-gray-400 mt-1">{t('processingTime')}</p>
                   </div>
                   {!showPayoutForm && (
                     <Button
@@ -285,7 +295,7 @@ export default function SellerEarningsPage() {
                       size="lg"
                     >
                       {Icons.withdraw}
-                      Request Payout
+                      {t('requestPayout')}
                     </Button>
                   )}
                 </div>
@@ -293,26 +303,27 @@ export default function SellerEarningsPage() {
                 {showPayoutForm && (
                   <div className="mt-5 pt-5 border-t border-gray-100 space-y-4">
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">Receive via</label>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">{t('receiveVia')}</label>
                       <select
                         value={payoutMethod}
                         onChange={(e) => setPayoutMethod(e.target.value as typeof payoutMethod)}
                         className="w-full md:w-64 px-4 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
                       >
-                        <option value="jazzcash">JazzCash</option>
-                        <option value="easypaisa">EasyPaisa</option>
-                        <option value="bank_transfer">Bank Transfer</option>
+                        <option value="jazzcash">{t('jazzcash')}</option>
+                        <option value="easypaisa">{t('easypaisa')}</option>
+                        <option value="bank_transfer">{t('bankTransfer')}</option>
                       </select>
                     </div>
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-2">
-                        {payoutMethod === 'bank_transfer' ? 'Bank account number' : 'Mobile wallet number'}
+                        {payoutMethod === 'bank_transfer' ? t('bankAccountNumber') : t('walletNumber')}
                       </label>
                       <input
                         type="text"
                         value={accountNumber}
                         onChange={(e) => setAccountNumber(e.target.value)}
-                        placeholder={payoutMethod === 'bank_transfer' ? 'e.g., PK00HABB0000000000000000' : 'e.g., 03001234567'}
+                        placeholder={t('example', { value: payoutMethod === 'bank_transfer' ? 'PK00HABB0000000000000000' : '03001234567' })}
+                        dir="ltr"
                         className="w-full md:w-80 px-4 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
                       />
                     </div>
@@ -325,10 +336,10 @@ export default function SellerEarningsPage() {
                         {requestingPayout ? (
                           <>
                             <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                            Submitting...
+                            {t('submitting')}
                           </>
                         ) : (
-                          'Confirm Request'
+                          t('confirmRequest')
                         )}
                       </Button>
                       <Button
@@ -336,7 +347,7 @@ export default function SellerEarningsPage() {
                         onClick={() => { setShowPayoutForm(false); setAccountNumber(''); }}
                         disabled={requestingPayout}
                       >
-                        Cancel
+                        {tc('cancel')}
                       </Button>
                     </div>
                   </div>
@@ -347,7 +358,7 @@ export default function SellerEarningsPage() {
             {/* Payout History - Enhanced */}
             <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
               <div className="px-6 py-4 bg-gradient-to-r from-gray-50 to-white border-b border-gray-100">
-                <h2 className="text-lg font-bold text-gray-900">Payout History</h2>
+                <h2 className="text-lg font-bold text-gray-900">{t('history')}</h2>
               </div>
               <div className="p-6">
                 {earnings.payouts.length === 0 ? (
@@ -355,8 +366,8 @@ export default function SellerEarningsPage() {
                     <div className="w-24 h-24 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
                       {Icons.history}
                     </div>
-                    <p className="text-gray-500 font-medium">No payout history yet</p>
-                    <p className="text-gray-400 text-sm mt-1">Your payout transactions will appear here</p>
+                    <p className="text-gray-500 font-medium">{t('noHistory')}</p>
+                    <p className="text-gray-400 text-sm mt-1">{t('noHistoryHint')}</p>
                   </div>
                 ) : (
                   <div className="space-y-3">
@@ -368,17 +379,19 @@ export default function SellerEarningsPage() {
                             <div>
                               <p className="font-bold text-gray-900 text-lg">{formatPrice(payout.netAmount)}</p>
                               <p className="text-sm text-gray-500 mt-1">
-                                Requested: {formatDate(payout.requestedAt)}
+                                {t('requested', { date: formatDate(payout.requestedAt) })}
                               </p>
                               {payout.processedAt && (
                                 <p className="text-sm text-gray-500">
-                                  Processed: {formatDate(payout.processedAt)}
+                                  {t('processed', { date: formatDate(payout.processedAt) })}
                                 </p>
                               )}
                             </div>
                             <span className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold ${statusConfig.bg} ${statusConfig.text}`}>
                               <span className={`w-1.5 h-1.5 rounded-full ${statusConfig.dot}`}></span>
-                              {payout.status.charAt(0).toUpperCase() + payout.status.slice(1)}
+                              {`payout.${payout.status}` in kitchenEarningsMessages.en
+                                ? t(`payout.${payout.status}` as keyof typeof kitchenEarningsMessages.en)
+                                : payout.status.charAt(0).toUpperCase() + payout.status.slice(1)}
                             </span>
                           </div>
                         </div>
@@ -394,8 +407,8 @@ export default function SellerEarningsPage() {
             <div className="w-24 h-24 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-6">
               {Icons.money}
             </div>
-            <h2 className="text-2xl font-bold text-gray-900 mb-2">No earnings data</h2>
-            <p className="text-gray-500">Start selling to see your earnings here</p>
+            <h2 className="text-2xl font-bold text-gray-900 mb-2">{t('noData')}</h2>
+            <p className="text-gray-500">{t('noDataHint')}</p>
           </div>
         )}
       </div>

@@ -7,6 +7,8 @@ import { useSocket } from '@/lib/hooks/use-socket';
 import { apiClient } from '@/lib/api-client';
 import { formatPrice } from '@/lib/utils';
 import { useToast } from '@/components/ui/toast';
+import { useT } from '@/lib/i18n';
+import { kitchenOrderMessages } from '@/lib/i18n/messages/kitchen-orders';
 
 interface NewOrderData {
   orderId: string;
@@ -86,6 +88,7 @@ export function SellerNewOrderNotification() {
   const router = useRouter();
   const pathname = usePathname();
   const { showToast } = useToast();
+  const t = useT(kitchenOrderMessages);
 
   // Exactly ONE active incoming order popup at a time.
   const [activeOrder, setActiveOrder] = useState<NewOrderData | null>(null);
@@ -199,14 +202,14 @@ export function SellerNewOrderNotification() {
     try {
       const res = await apiClient.post(`/seller/orders/${orderId}/accept`);
       if (res.data?.success) {
-        showToast(`Order #${orderNumber} accepted! Started kitchen preparation.`, 'success');
+        showToast(t('alert.acceptedToast', { number: `\u2066#${orderNumber}\u2069` }), 'success');
         if (typeof window !== 'undefined') {
           window.dispatchEvent(new CustomEvent('seller-orders-updated'));
           window.dispatchEvent(new CustomEvent('seller-order-status-changed', { detail: { orderId, status: 'accepted' } }));
         }
       }
     } catch (err: any) {
-      showToast(err.response?.data?.error?.message || 'Failed to accept order', 'error');
+      showToast(err.response?.data?.error?.message || t('acceptFailed'), 'error');
     } finally {
       setIsProcessing(false);
     }
@@ -227,14 +230,14 @@ export function SellerNewOrderNotification() {
         reason: 'Too busy / High kitchen load',
       });
       if (res.data?.success) {
-        showToast(`Order #${orderNumber} declined.`, 'info');
+        showToast(t('alert.declinedToast', { number: `\u2066#${orderNumber}\u2069` }), 'info');
         if (typeof window !== 'undefined') {
           window.dispatchEvent(new CustomEvent('seller-orders-updated'));
           window.dispatchEvent(new CustomEvent('seller-order-status-changed', { detail: { orderId, status: 'rejected' } }));
         }
       }
     } catch (err: any) {
-      showToast(err.response?.data?.error?.message || 'Failed to reject order', 'error');
+      showToast(err.response?.data?.error?.message || t('rejectFailed'), 'error');
     } finally {
       setIsProcessing(false);
     }
@@ -250,7 +253,7 @@ export function SellerNewOrderNotification() {
   if (!isSeller || !isSellerPage || !activeOrder) return null;
 
   return (
-    <div className="fixed top-4 right-4 z-[9999] flex flex-col gap-3 pointer-events-none">
+    <div className="fixed top-4 end-4 z-[9999] flex flex-col gap-3 pointer-events-none">
       <div
         id={`seller-alert-order-${activeOrder.orderId}`}
         className="pointer-events-auto w-[380px] bg-white rounded-3xl shadow-2xl border-2 border-emerald-400 overflow-hidden ring-4 ring-emerald-500/10"
@@ -265,17 +268,18 @@ export function SellerNewOrderNotification() {
             </span>
             <div>
               <span className="text-white font-black text-xs tracking-wider uppercase block">
-                ⚡ INCOMING NEW ORDER!
+                {t('alert.incoming')}
               </span>
               <span className="text-[10px] text-emerald-100 font-medium">
-                🔔 Rings every 10s until accepted or rejected
+                {t('alert.rings')}
               </span>
             </div>
           </div>
           <button
             onClick={handleDismiss}
             className="text-white/80 hover:text-white hover:bg-white/20 p-1 rounded-full transition-colors"
-            title="Dismiss alert"
+            title={t('alert.dismissAlert')}
+            aria-label={t('alert.dismissAlert')}
           >
             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
@@ -288,13 +292,13 @@ export function SellerNewOrderNotification() {
           <div className="flex items-center justify-between">
             <div>
               <span className="text-gray-400 text-[11px] font-bold uppercase tracking-wider block">
-                Order Ticket
+                {t('alert.ticket')}
               </span>
-              <span className="text-gray-900 font-black text-base">#{activeOrder.orderNumber}</span>
+              <span className="text-gray-900 font-black text-base" data-ltr>#{activeOrder.orderNumber}</span>
             </div>
-            <div className="text-right">
+            <div className="text-end">
               <span className="text-gray-400 text-[11px] font-bold uppercase tracking-wider block">
-                Amount
+                {t('alert.amount')}
               </span>
               <span className="text-emerald-600 font-black text-lg">
                 {typeof activeOrder.totalAmount === 'number'
@@ -310,7 +314,7 @@ export function SellerNewOrderNotification() {
               {activeOrder.items.map((item, i) => (
                 <div key={i} className="flex items-center justify-between text-xs text-gray-700">
                   <span className="truncate max-w-[220px] font-semibold">{item.productName}</span>
-                  <span className="font-extrabold text-emerald-700 ml-2 shrink-0 bg-emerald-50 px-2 py-0.5 rounded-md">
+                  <span className="font-extrabold text-emerald-700 ms-2 shrink-0 bg-emerald-50 px-2 py-0.5 rounded-md">
                     × {item.quantity}
                   </span>
                 </div>
@@ -332,7 +336,7 @@ export function SellerNewOrderNotification() {
                 ) : (
                   <span>✓</span>
                 )}
-                <span>Accept &amp; Prepare</span>
+                <span>{t('alert.acceptPrepare')}</span>
               </button>
 
               <button
@@ -341,7 +345,7 @@ export function SellerNewOrderNotification() {
                 disabled={isProcessing}
                 className="bg-red-50 hover:bg-red-100 text-red-600 border border-red-200 active:scale-95 text-xs font-bold py-2.5 px-3 rounded-xl transition-all"
               >
-                Reject
+                {t('reject')}
               </button>
             </div>
 
@@ -353,13 +357,13 @@ export function SellerNewOrderNotification() {
                 }}
                 className="flex-1 bg-slate-100 hover:bg-slate-200 active:scale-95 text-slate-700 text-xs font-extrabold py-2 px-3 rounded-xl transition-all text-center"
               >
-                View in Kitchen Orders
+                {t('alert.viewInOrders')}
               </button>
               <button
                 onClick={handleDismiss}
                 className="text-gray-400 hover:text-gray-600 text-xs font-medium px-2 py-2"
               >
-                Dismiss
+                {t('alert.dismiss')}
               </button>
             </div>
           </div>

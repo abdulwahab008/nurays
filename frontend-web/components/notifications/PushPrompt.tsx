@@ -5,6 +5,8 @@ import Link from 'next/link';
 import { Bell } from 'lucide-react';
 import { enablePush, getPushState, PushState } from '@/lib/push';
 import { useToast } from '@/components/ui/toast';
+import { useT } from '@/lib/i18n';
+import { kitchenOrderMessages } from '@/lib/i18n/messages/kitchen-orders';
 
 const DISMISS_KEY = 'nuray-push-prompt-dismissed';
 
@@ -14,6 +16,7 @@ const DISMISS_KEY = 'nuray-push-prompt-dismissed';
  */
 export default function PushPrompt({ text }: { text: string }) {
   const { showToast } = useToast();
+  const t = useT(kitchenOrderMessages);
   const [state, setState] = useState<PushState | null>(null);
   const [dismissed, setDismissed] = useState(true);
   const [busy, setBusy] = useState(false);
@@ -40,10 +43,10 @@ export default function PushPrompt({ text }: { text: string }) {
       setBusy(true);
       const next = await enablePush();
       setState(next);
-      if (next === 'on') showToast('Alerts are on for this device', 'success');
-      else if (next === 'denied') showToast('Notifications are blocked for this site in your browser', 'warning');
+      if (next === 'on') showToast(t('push.enabled'), 'success');
+      else if (next === 'denied') showToast(t('push.blocked'), 'warning');
     } catch {
-      showToast('Could not turn on alerts. Try again from notification settings.', 'error');
+      showToast(t('push.failed'), 'error');
     } finally {
       setBusy(false);
     }
@@ -67,16 +70,16 @@ export default function PushPrompt({ text }: { text: string }) {
         <p className="text-sm text-slate-800">
           {text}{' '}
           <Link href="/notifications/settings" className="underline text-slate-600">
-            Settings
+            {t('push.settings')}
           </Link>
         </p>
       </div>
       <div className="flex gap-2">
         <button type="button" disabled={busy} onClick={turnOn} className="px-4 py-2 rounded-xl bg-[#FF5500] text-white text-sm font-bold disabled:opacity-50">
-          {busy ? 'One moment…' : 'Turn on alerts'}
+          {busy ? t('push.oneMoment') : t('push.turnOn')}
         </button>
         <button type="button" onClick={dismiss} className="px-3 py-2 rounded-xl text-sm text-slate-600 hover:text-slate-900">
-          Not now
+          {t('push.notNow')}
         </button>
       </div>
     </div>

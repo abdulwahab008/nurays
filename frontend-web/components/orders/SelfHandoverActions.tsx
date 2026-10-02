@@ -3,6 +3,9 @@
 import { useState } from 'react';
 import { apiClient } from '@/lib/api-client';
 import { useToast } from '@/components/ui/toast';
+import { useT } from '@/lib/i18n';
+import { commonMessages } from '@/lib/i18n/messages/common';
+import { kitchenOrderMessages } from '@/lib/i18n/messages/kitchen-orders';
 
 interface Props {
   orderId: string;
@@ -20,6 +23,8 @@ interface Props {
  */
 export default function SelfHandoverActions({ orderId, orderStatus, deliveryType, onChanged }: Props) {
   const { showToast } = useToast();
+  const t = useT(kitchenOrderMessages);
+  const tc = useT(commonMessages);
   const [busy, setBusy] = useState<string | null>(null);
   const [mode, setMode] = useState<'idle' | 'deliver' | 'fail'>('idle');
   const [code, setCode] = useState('');
@@ -36,7 +41,7 @@ export default function SelfHandoverActions({ orderId, orderStatus, deliveryType
       setReason('');
       onChanged();
     } catch (err: any) {
-      showToast(err.response?.data?.error?.message || 'Could not update the order', 'error');
+      showToast(err.response?.data?.error?.message || t('couldNotUpdate'), 'error');
     } finally {
       setBusy(null);
     }
@@ -47,7 +52,7 @@ export default function SelfHandoverActions({ orderId, orderStatus, deliveryType
   return (
     <div className="p-4 bg-indigo-50 rounded-2xl border border-indigo-200 space-y-3">
       <p className="text-sm font-bold text-indigo-900">
-        {isPickup ? 'The customer collects this order from your kitchen' : 'You deliver this order yourself'}
+        {isPickup ? t('handover.pickupTitle') : t('handover.deliverTitle')}
       </p>
 
       {mode === 'idle' && (
@@ -56,10 +61,10 @@ export default function SelfHandoverActions({ orderId, orderStatus, deliveryType
             <button
               type="button"
               disabled={!!busy}
-              onClick={() => call('dispatch', {}, 'Marked as out for delivery. The customer has been told.')}
+              onClick={() => call('dispatch', {}, t('handover.dispatched'))}
               className="px-4 py-2 rounded-lg bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700 disabled:opacity-50"
             >
-              {busy === 'dispatch' ? 'Updating…' : 'Out for delivery'}
+              {busy === 'dispatch' ? t('handover.updating') : t('handover.outForDelivery')}
             </button>
           )}
           <button
@@ -68,7 +73,7 @@ export default function SelfHandoverActions({ orderId, orderStatus, deliveryType
             onClick={() => setMode('deliver')}
             className="px-4 py-2 rounded-lg bg-emerald-600 text-white text-sm font-semibold hover:bg-emerald-700 disabled:opacity-50"
           >
-            {isPickup ? 'Customer collected it' : 'Delivered'}
+            {isPickup ? t('handover.collected') : t('handover.delivered')}
           </button>
           {!isPickup && (
             <button
@@ -77,7 +82,7 @@ export default function SelfHandoverActions({ orderId, orderStatus, deliveryType
               onClick={() => setMode('fail')}
               className="px-4 py-2 rounded-lg border border-red-300 text-red-700 text-sm font-semibold hover:bg-red-50 disabled:opacity-50"
             >
-              Delivery failed
+              {t('handover.deliveryFailed')}
             </button>
           )}
         </div>
@@ -88,11 +93,11 @@ export default function SelfHandoverActions({ orderId, orderStatus, deliveryType
           className="space-y-2"
           onSubmit={(e) => {
             e.preventDefault();
-            call('deliver', { handoverCode: code.trim() }, 'Order completed.');
+            call('deliver', { handoverCode: code.trim() }, t('handover.completed'));
           }}
         >
           <label className="block text-xs font-semibold text-indigo-900" htmlFor={`code-${orderId}`}>
-            Ask the customer for the 4-digit code on their order screen
+            {t('handover.askCode')}
           </label>
           <div className="flex gap-2">
             <input
@@ -101,6 +106,7 @@ export default function SelfHandoverActions({ orderId, orderStatus, deliveryType
               pattern="\d{4}"
               maxLength={4}
               autoComplete="one-time-code"
+              dir="ltr"
               value={code}
               onChange={(e) => setCode(e.target.value.replace(/\D/g, '').slice(0, 4))}
               className="w-28 h-10 rounded-lg border border-indigo-300 px-3 text-center font-mono text-lg tracking-widest"
@@ -112,10 +118,10 @@ export default function SelfHandoverActions({ orderId, orderStatus, deliveryType
               disabled={!!busy || code.length !== 4}
               className="px-4 rounded-lg bg-emerald-600 text-white text-sm font-semibold hover:bg-emerald-700 disabled:opacity-50"
             >
-              {busy === 'deliver' ? 'Checking…' : 'Confirm'}
+              {busy === 'deliver' ? t('handover.checking') : tc('confirm')}
             </button>
             <button type="button" onClick={() => setMode('idle')} className="px-3 text-sm text-gray-600 underline">
-              Cancel
+              {tc('cancel')}
             </button>
           </div>
         </form>
@@ -126,11 +132,11 @@ export default function SelfHandoverActions({ orderId, orderStatus, deliveryType
           className="space-y-2"
           onSubmit={(e) => {
             e.preventDefault();
-            call('delivery-failed', { reason: reason.trim() }, 'Reported. Nuray support will follow up with the customer.');
+            call('delivery-failed', { reason: reason.trim() }, t('handover.reported'));
           }}
         >
           <label className="block text-xs font-semibold text-red-800" htmlFor={`reason-${orderId}`}>
-            What happened? (customer unreachable, wrong address, refused…)
+            {t('handover.whatHappened')}
           </label>
           <div className="flex gap-2">
             <input
@@ -147,10 +153,10 @@ export default function SelfHandoverActions({ orderId, orderStatus, deliveryType
               disabled={!!busy || reason.trim().length < 3}
               className="px-4 rounded-lg bg-red-600 text-white text-sm font-semibold hover:bg-red-700 disabled:opacity-50"
             >
-              {busy === 'delivery-failed' ? 'Sending…' : 'Report'}
+              {busy === 'delivery-failed' ? t('handover.sending') : t('handover.report')}
             </button>
             <button type="button" onClick={() => setMode('idle')} className="px-3 text-sm text-gray-600 underline">
-              Cancel
+              {tc('cancel')}
             </button>
           </div>
         </form>

@@ -12,16 +12,20 @@ import { apiClient } from '@/lib/api-client';
 import { formatPrice, formatDate } from '@/lib/utils';
 import OrderChatModal from '@/components/orders/OrderChatModal';
 import SelfHandoverActions from '@/components/orders/SelfHandoverActions';
+import { useT } from '@/lib/i18n';
+import { commonMessages } from '@/lib/i18n/messages/common';
+import { kitchenOrderMessages, paymentMethodLabel, paymentStatusLabel } from '@/lib/i18n/messages/kitchen-orders';
 
 const sidebarItems = SELLER_SIDEBAR_ITEMS;
 
+// `label` is what the API receives (kept in English for support/admin); `key` is what the kitchen sees.
 const REJECTION_REASONS = [
-  { id: 'item_unavailable', label: 'Item unavailable' },
-  { id: 'too_busy', label: 'Too busy / High kitchen load' },
-  { id: 'unable_to_prepare', label: 'Unable to prepare in time' },
-  { id: 'temporary_issue', label: 'Temporary kitchen or utility issue' },
-  { id: 'other', label: 'Other reason' },
-];
+  { id: 'item_unavailable', label: 'Item unavailable', key: 'reason.item_unavailable' },
+  { id: 'too_busy', label: 'Too busy / High kitchen load', key: 'reason.too_busy' },
+  { id: 'unable_to_prepare', label: 'Unable to prepare in time', key: 'reason.unable_to_prepare' },
+  { id: 'temporary_issue', label: 'Temporary kitchen or utility issue', key: 'reason.temporary_issue' },
+  { id: 'other', label: 'Other reason', key: 'reason.other' },
+] as const;
 
 interface OrderProduct {
   id: string;
@@ -78,6 +82,8 @@ export default function SellerOrdersPage() {
   const router = useRouter();
   const { isAuthenticated, user } = useAuthStore();
   const { showToast } = useToast();
+  const t = useT(kitchenOrderMessages);
+  const tc = useT(commonMessages);
   const [loading, setLoading] = useState(true);
   const [orderTickets, setOrderTickets] = useState<OrderTicket[]>([]);
   const [filter, setFilter] = useState<string>('all');
@@ -119,11 +125,11 @@ export default function SellerOrdersPage() {
       }
     } catch (error: any) {
       console.error('Failed to load orders:', error);
-      if (!silent) showToast('Failed to load orders', 'error');
+      if (!silent) showToast(t('list.loadFailed'), 'error');
     } finally {
       if (!silent) setLoading(false);
     }
-  }, [showToast]);
+  }, [showToast, t]);
 
   useEffect(() => {
     if (!isAuthenticated) {
@@ -133,7 +139,7 @@ export default function SellerOrdersPage() {
     const role = user?.userType || user?.user_type;
     if (role !== 'seller' && role !== 'admin') {
       router.push('/dashboard');
-      showToast('Access denied. Kitchen account required.', 'error');
+      showToast(t('accessDenied'), 'error');
       return;
     }
     loadOrders();
@@ -164,14 +170,14 @@ export default function SellerOrdersPage() {
       if (res.data?.success) {
         showToast(
           confirmed
-            ? 'Payment verified! Order marked as PAID.'
-            : 'Payment marked as disputed.',
+            ? t('list.paymentVerified')
+            : t('list.paymentDisputed'),
           confirmed ? 'success' : 'info'
         );
         loadOrders(true);
       }
     } catch (err: any) {
-      showToast(err.response?.data?.error?.message || 'Failed to update payment status', 'error');
+      showToast(err.response?.data?.error?.message || t('list.paymentUpdateFailed'), 'error');
     } finally {
       setActionLoadingId(null);
     }
@@ -182,14 +188,14 @@ export default function SellerOrdersPage() {
       setActionLoadingId(orderId);
       const res = await apiClient.post(`/seller/orders/${orderId}/accept`);
       if (res.data.success) {
-        showToast('Order accepted! Started preparation.', 'success');
+        showToast(t('list.accepted'), 'success');
         if (typeof window !== 'undefined') {
           window.dispatchEvent(new CustomEvent('seller-order-status-changed', { detail: { orderId, status: 'accepted' } }));
         }
         loadOrders(true);
       }
     } catch (error: any) {
-      showToast(error.response?.data?.error?.message || 'Failed to accept order', 'error');
+      showToast(error.response?.data?.error?.message || t('acceptFailed'), 'error');
     } finally {
       setActionLoadingId(null);
     }
@@ -200,11 +206,11 @@ export default function SellerOrdersPage() {
       setActionLoadingId(orderId);
       const res = await apiClient.post(`/seller/orders/${orderId}/ready`);
       if (res.data.success) {
-        showToast('Order marked Ready for Pickup! Rider notified.', 'success');
+        showToast(t('list.markedReady'), 'success');
         loadOrders(true);
       }
     } catch (error: any) {
-      showToast(error.response?.data?.error?.message || 'Failed to mark ready', 'error');
+      showToast(error.response?.data?.error?.message || t('list.markReadyFailed'), 'error');
     } finally {
       setActionLoadingId(null);
     }
@@ -236,7 +242,7 @@ export default function SellerOrdersPage() {
         reason: finalReason,
       });
       if (res.data.success) {
-        showToast('Order rejected. Customer notified.', 'info');
+        showToast(t('list.rejected'), 'info');
         if (typeof window !== 'undefined') {
           window.dispatchEvent(new CustomEvent('seller-order-status-changed', { detail: { orderId: targetOrderId, status: 'rejected' } }));
         }
@@ -244,7 +250,7 @@ export default function SellerOrdersPage() {
         loadOrders(true);
       }
     } catch (error: any) {
-      showToast(error.response?.data?.error?.message || 'Failed to reject order', 'error');
+      showToast(error.response?.data?.error?.message || t('rejectFailed'), 'error');
     } finally {
       setIsSubmittingReject(false);
     }
@@ -254,41 +260,41 @@ export default function SellerOrdersPage() {
     const s = status.toLowerCase();
     switch (s) {
       case 'pending':
-        return { bg: 'bg-amber-100 text-amber-900 border-amber-300', dot: 'bg-amber-500', label: 'New Order' };
+        return { bg: 'bg-amber-100 text-amber-900 border-amber-300', dot: 'bg-amber-500', label: t('badge.pending') };
       case 'confirmed':
-        return { bg: 'bg-blue-100 text-blue-900 border-blue-300', dot: 'bg-blue-500', label: 'Confirmed' };
+        return { bg: 'bg-blue-100 text-blue-900 border-blue-300', dot: 'bg-blue-500', label: t('badge.confirmed') };
       case 'preparing':
-        return { bg: 'bg-purple-100 text-purple-900 border-purple-300', dot: 'bg-purple-500', label: 'Preparing' };
+        return { bg: 'bg-purple-100 text-purple-900 border-purple-300', dot: 'bg-purple-500', label: t('badge.preparing') };
       case 'ready':
-        return { bg: 'bg-indigo-100 text-indigo-900 border-indigo-300', dot: 'bg-indigo-500', label: 'Ready for Pickup' };
+        return { bg: 'bg-indigo-100 text-indigo-900 border-indigo-300', dot: 'bg-indigo-500', label: t('badge.ready') };
       case 'dispatched':
       case 'in_transit':
-        return { bg: 'bg-orange-100 text-orange-900 border-orange-300', dot: 'bg-orange-500', label: 'On The Way' };
+        return { bg: 'bg-orange-100 text-orange-900 border-orange-300', dot: 'bg-orange-500', label: t('badge.onTheWay') };
       case 'delivered':
       case 'completed':
-        return { bg: 'bg-emerald-100 text-emerald-900 border-emerald-300', dot: 'bg-emerald-500', label: 'Completed' };
+        return { bg: 'bg-emerald-100 text-emerald-900 border-emerald-300', dot: 'bg-emerald-500', label: t('badge.completed') };
       case 'cancelled':
-        return { bg: 'bg-red-100 text-red-900 border-red-300', dot: 'bg-red-500', label: 'Cancelled / Rejected' };
+        return { bg: 'bg-red-100 text-red-900 border-red-300', dot: 'bg-red-500', label: t('badge.cancelled') };
       default:
         return { bg: 'bg-gray-100 text-gray-800 border-gray-300', dot: 'bg-gray-500', label: status };
     }
   };
 
   const filterTabs = [
-    { id: 'all', label: 'All Orders' },
-    { id: 'pending', label: 'New / Pending' },
-    { id: 'preparing', label: 'In Kitchen / Preparing' },
-    { id: 'ready', label: 'Ready for Pickup' },
-    { id: 'delivered', label: 'Completed' },
-    { id: 'cancelled', label: 'Rejected / Cancelled' },
+    { id: 'all', label: t('tab.all') },
+    { id: 'pending', label: t('tab.pending') },
+    { id: 'preparing', label: t('tab.preparing') },
+    { id: 'ready', label: t('tab.ready') },
+    { id: 'delivered', label: t('tab.delivered') },
+    { id: 'cancelled', label: t('tab.cancelled') },
   ];
 
   if (!isAuthenticated) return null;
 
   return (
     <DashboardLayout
-      title="Orders"
-      subtitle="Manage incoming and active orders"
+      title={t('list.title')}
+      subtitle={t('list.subtitle')}
       sidebarItems={sidebarItems}
       userType="seller"
     >
@@ -322,7 +328,7 @@ export default function SellerOrdersPage() {
             <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
             </svg>
-            Refresh
+            {t('list.refresh')}
           </Button>
         </div>
 
@@ -330,18 +336,18 @@ export default function SellerOrdersPage() {
         {loading ? (
           <div className="text-center py-20 bg-white rounded-3xl border border-gray-100">
             <div className="w-12 h-12 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-            <p className="text-gray-600 font-medium">Syncing kitchen order tickets...</p>
+            <p className="text-gray-600 font-medium">{t('list.syncing')}</p>
           </div>
         ) : orderTickets.length === 0 ? (
           <div className="bg-white rounded-3xl p-16 text-center border border-gray-100 shadow-sm">
             <div className="w-20 h-20 bg-emerald-50 text-emerald-600 rounded-full flex items-center justify-center mx-auto mb-4 text-3xl">
               🍳
             </div>
-            <h3 className="text-xl font-bold text-gray-900 mb-1">No Orders Found</h3>
+            <h3 className="text-xl font-bold text-gray-900 mb-1">{t('list.emptyTitle')}</h3>
             <p className="text-gray-500 text-sm max-w-md mx-auto">
               {filter === 'all'
-                ? 'Your kitchen is ready! Incoming customer orders from your community will appear here in real time.'
-                : `No orders matching filter "${filter}".`}
+                ? t('list.emptyAll')
+                : t('list.emptyFiltered', { filter: filterTabs.find((tab) => tab.id === filter)?.label ?? filter })}
             </p>
           </div>
         ) : (
@@ -369,7 +375,7 @@ export default function SellerOrdersPage() {
                         <div className="flex items-center gap-2">
                           <span className="font-extrabold text-lg text-gray-900 tracking-tight">
                             <Link href={`/sellers/orders/${ord.id}`} className="hover:underline">
-                              Order #{ord.orderNumber || ord.id.slice(0, 8)}
+                              {t('orderLabel')} <span data-ltr>#{ord.orderNumber || ord.id.slice(0, 8)}</span>
                             </Link>
                           </span>
                           <span
@@ -382,16 +388,16 @@ export default function SellerOrdersPage() {
                         <div className="text-xs text-gray-500 mt-1 flex items-center gap-3">
                           <span>🕒 {formatDate(ord.createdAt)}</span>
                           <span>•</span>
-                          <span className="font-medium text-gray-700">Prep: ~{maxPrepTime} min</span>
+                          <span className="font-medium text-gray-700">{t('list.prep', { min: maxPrepTime })}</span>
                         </div>
                       </div>
 
-                      <div className="text-right">
+                      <div className="text-end">
                         <span className="text-lg font-black text-emerald-600 block">
                           {formatPrice(ord.totalAmount)}
                         </span>
                         <span className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider">
-                          {ord.paymentMethod?.replace('_', ' ')} • {ord.paymentStatus}
+                          {paymentMethodLabel(ord.paymentMethod, tc)} • {paymentStatusLabel(ord.paymentStatus, t)}
                         </span>
                       </div>
                     </div>
@@ -402,27 +408,27 @@ export default function SellerOrdersPage() {
                         <span className="w-6 h-6 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center font-bold">
                           👤
                         </span>
-                        <span className="font-semibold text-gray-900">{ord.customerName || 'Customer'}</span>
+                        <span className="font-semibold text-gray-900">{ord.customerName || t('customer')}</span>
                         {ord.customerPhone && (
-                          <span className="text-gray-500">({ord.customerPhone})</span>
+                          <span className="text-gray-500" data-ltr>({ord.customerPhone})</span>
                         )}
 
                         {/* Two-Way Chat Button */}
                         <button
                           id={`chat-customer-btn-${ord.id}`}
                           onClick={() => setChatTicket(ticket)}
-                          className="ml-2 inline-flex items-center gap-1.5 px-3 py-1 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-[11px] font-black transition-all shadow-xs"
-                          title="Open live chat with customer"
+                          className="ms-2 inline-flex items-center gap-1.5 px-3 py-1 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-[11px] font-black transition-all shadow-xs"
+                          title={t('list.chatTitle')}
                         >
                           <span>💬</span>
-                          <span>Chat with Customer</span>
+                          <span>{t('list.chat')}</span>
                         </button>
                       </div>
 
                       <div className="flex items-center gap-1.5 text-gray-700 font-medium">
                         <span className="text-emerald-600">📍</span>
                         <span>
-                          {ord.deliveryAddress?.area || 'Community Delivery'}
+                          {ord.deliveryAddress?.area || t('list.communityDelivery')}
                           {ord.deliveryAddress?.addressLine1 ? `, ${ord.deliveryAddress.addressLine1}` : ''}
                         </span>
                       </div>
@@ -435,14 +441,14 @@ export default function SellerOrdersPage() {
                           <span className="text-xl">💸</span>
                           <div>
                             <div className="flex items-center gap-2 flex-wrap">
-                              <span className="font-black text-amber-950">Customer Submitted Payment Proof</span>
+                              <span className="font-black text-amber-950">{t('list.proofTitle')}</span>
                               <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-amber-200 text-amber-900">
-                                Action Required
+                                {t('list.actionRequired')}
                               </span>
                             </div>
                             <p className="text-[11px] text-amber-800 mt-0.5">
-                              Method: <strong className="text-amber-950 font-bold">{ord.paymentSenderAccount || ord.paymentMethod || 'Direct Wallet'}</strong>
-                              {ord.paymentReferenceNumber && ` • Ref: ${ord.paymentReferenceNumber}`}
+                              {t('list.method')} <strong className="text-amber-950 font-bold">{ord.paymentSenderAccount || ord.paymentMethod || t('list.directWallet')}</strong>
+                              {ord.paymentReferenceNumber && ` • ${t('list.ref', { ref: ord.paymentReferenceNumber })}`}
                             </p>
                             {ord.paymentProofUrl && (
                               <a
@@ -451,7 +457,7 @@ export default function SellerOrdersPage() {
                                 rel="noreferrer"
                                 className="text-emerald-700 hover:underline font-bold text-[11px] inline-flex items-center gap-1 mt-1"
                               >
-                                <span>🧾 View Uploaded Screenshot ↗</span>
+                                <span>{t('list.viewScreenshot')}</span>
                               </a>
                             )}
                           </div>
@@ -464,7 +470,7 @@ export default function SellerOrdersPage() {
                             className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white font-extrabold text-xs rounded-xl shadow-xs transition-all flex items-center gap-1"
                           >
                             <span>✓</span>
-                            <span>Confirm Paid</span>
+                            <span>{t('list.confirmPaid')}</span>
                           </button>
                           <button
                             id={`dispute-payment-btn-${ord.id}`}
@@ -472,7 +478,7 @@ export default function SellerOrdersPage() {
                             disabled={actionLoadingId === `pay-${ord.id}`}
                             className="px-3 py-2 bg-white hover:bg-red-50 text-red-600 border border-red-200 font-bold text-xs rounded-xl transition-all"
                           >
-                            <span>Dispute</span>
+                            <span>{t('list.dispute')}</span>
                           </button>
                         </div>
                       </div>
@@ -481,7 +487,7 @@ export default function SellerOrdersPage() {
                     {/* Special Delivery Instructions / Notes */}
                     {(ord.deliveryInstructions || ord.notes) && (
                       <div className="px-5 py-2.5 bg-amber-50/70 border-b border-amber-100 text-xs text-amber-900 flex items-start gap-2">
-                        <span className="font-bold">📝 Note:</span>
+                        <span className="font-bold">{t('list.note')}</span>
                         <span>{ord.deliveryInstructions || ord.notes}</span>
                       </div>
                     )}
@@ -489,7 +495,7 @@ export default function SellerOrdersPage() {
                     {/* Rejection / Cancellation Banner */}
                     {ord.orderStatus === 'cancelled' && ord.cancellationReason && (
                       <div className="px-5 py-2.5 bg-red-50 border-b border-red-100 text-xs text-red-800 flex items-start gap-2">
-                        <span className="font-bold">🚫 Reason:</span>
+                        <span className="font-bold">{t('list.reason')}</span>
                         <span>{ord.cancellationReason}</span>
                       </div>
                     )}
@@ -512,10 +518,10 @@ export default function SellerOrdersPage() {
                             </div>
                             <div>
                               <p className="font-bold text-sm text-gray-900">
-                                {item.quantity} × {item.product?.name || 'Food Item'}
+                                {item.quantity} × {item.product?.name || t('list.foodItem')}
                               </p>
                               <p className="text-xs text-gray-500">
-                                Prep: {item.product?.preparationTime || 15} mins • {formatPrice(item.unitPrice)} each
+                                {t('list.itemPrep', { min: item.product?.preparationTime || 15, price: formatPrice(item.unitPrice) })}
                               </p>
                             </div>
                           </div>
@@ -533,8 +539,8 @@ export default function SellerOrdersPage() {
                     {ord.orderStatus === 'pending' && (
                       <div className="space-y-3">
                         <div className="p-3 bg-amber-50 rounded-2xl border border-amber-200 text-xs text-amber-900 flex items-center justify-between">
-                          <span className="font-medium">⚡ New order awaiting kitchen confirmation</span>
-                          <span className="font-bold">Est. Prep: ~{maxPrepTime} min</span>
+                          <span className="font-medium">{t('list.awaiting')}</span>
+                          <span className="font-bold">{t('list.estPrep', { min: maxPrepTime })}</span>
                         </div>
                         <div className="flex items-center gap-3">
                           <Button
@@ -548,7 +554,7 @@ export default function SellerOrdersPage() {
                             ) : (
                               <span>✓</span>
                             )}
-                            Accept & Start Preparing
+                            {t('list.acceptStart')}
                           </Button>
 
                           <Button
@@ -558,7 +564,7 @@ export default function SellerOrdersPage() {
                             disabled={isActionBusy}
                             className="border-red-200 text-red-600 hover:bg-red-50 font-bold px-4 py-3 rounded-2xl"
                           >
-                            Reject
+                            {t('reject')}
                           </Button>
                         </div>
                       </div>
@@ -570,10 +576,10 @@ export default function SellerOrdersPage() {
                         <div className="p-3.5 bg-purple-50 rounded-2xl border border-purple-200 text-xs text-purple-900 flex items-center justify-between">
                           <div className="flex items-center gap-2">
                             <span className="animate-pulse text-base">👨‍🍳</span>
-                            <span className="font-semibold">Currently cooking in kitchen</span>
+                            <span className="font-semibold">{t('list.cooking')}</span>
                           </div>
                           <span className="font-extrabold bg-purple-200/80 px-2.5 py-1 rounded-lg">
-                            Target: ~{maxPrepTime} mins
+                            {t('list.target', { min: maxPrepTime })}
                           </span>
                         </div>
 
@@ -588,7 +594,7 @@ export default function SellerOrdersPage() {
                           ) : (
                             <span className="text-base">🛎️</span>
                           )}
-                          Mark Ready for Pickup
+                          {t('list.markReady')}
                         </Button>
                       </div>
                     )}
@@ -607,10 +613,10 @@ export default function SellerOrdersPage() {
                     {ord.orderStatus === 'ready' && !ord.sellerHandsOver && (
                       <div className="p-4 bg-indigo-50 rounded-2xl border border-indigo-200 text-center">
                         <p className="text-sm font-bold text-indigo-900 mb-1 flex items-center justify-center gap-2">
-                          <span>📦</span> Ready on Kitchen Counter
+                          <span>📦</span> {t('list.readyCounter')}
                         </p>
                         <p className="text-xs text-indigo-700">
-                          A Nuray rider has been assigned and is on the way to pick it up.
+                          {t('list.riderAssigned')}
                         </p>
                       </div>
                     )}
@@ -619,10 +625,10 @@ export default function SellerOrdersPage() {
                     {(ord.orderStatus === 'dispatched' || ord.orderStatus === 'in_transit') && !ord.sellerHandsOver && (
                       <div className="p-4 bg-orange-50 rounded-2xl border border-orange-200 text-center">
                         <p className="text-sm font-bold text-orange-900 mb-1 flex items-center justify-center gap-2">
-                          <span>🛵</span> Rider On The Way
+                          <span>🛵</span> {t('list.riderOnWay')}
                         </p>
                         <p className="text-xs text-orange-700">
-                          Order picked up and is en-route to customer community.
+                          {t('list.enRoute')}
                         </p>
                       </div>
                     )}
@@ -631,17 +637,17 @@ export default function SellerOrdersPage() {
                     {(ord.orderStatus === 'delivered' || ord.orderStatus === 'completed') && (
                       <div className="p-4 bg-emerald-50 rounded-2xl border border-emerald-200 flex items-center justify-between">
                         <div>
-                          <p className="text-sm font-bold text-emerald-900">Delivered Successfully</p>
-                          <p className="text-xs text-emerald-700">Settlement credited to your seller wallet</p>
+                          <p className="text-sm font-bold text-emerald-900">{t('list.deliveredTitle')}</p>
+                          <p className="text-xs text-emerald-700">{t('list.settlement')}</p>
                         </div>
-                        <span className="text-emerald-700 font-extrabold text-sm">✓ Completed</span>
+                        <span className="text-emerald-700 font-extrabold text-sm">{t('list.completedCheck')}</span>
                       </div>
                     )}
 
                     {/* State: Cancelled */}
                     {ord.orderStatus === 'cancelled' && (
                       <div className="p-3.5 bg-red-50 rounded-2xl border border-red-200 text-center">
-                        <p className="text-xs font-bold text-red-900">Order Closed / Cancelled</p>
+                        <p className="text-xs font-bold text-red-900">{t('list.closed')}</p>
                       </div>
                     )}
                   </div>
@@ -660,10 +666,10 @@ export default function SellerOrdersPage() {
               disabled={page === 1}
               size="sm"
             >
-              Previous
+              {t('list.previous')}
             </Button>
             <span className="text-xs font-semibold text-gray-600">
-              Page {page} of {totalPages}
+              {t('list.pageOf', { page, total: totalPages })}
             </span>
             <Button
               variant="outline"
@@ -671,7 +677,7 @@ export default function SellerOrdersPage() {
               disabled={page === totalPages}
               size="sm"
             >
-              Next
+              {tc('next')}
             </Button>
           </div>
         )}
@@ -685,11 +691,12 @@ export default function SellerOrdersPage() {
             >
               <div className="flex items-center justify-between border-b border-gray-100 pb-4">
                 <div>
-                  <h3 className="text-lg font-bold text-gray-900">Reject Order #{rejectingOrder.order.orderNumber}</h3>
-                  <p className="text-xs text-gray-500 mt-0.5">Please select the reason for declining this order</p>
+                  <h3 className="text-lg font-bold text-gray-900">{t('list.rejectTitle')} <span data-ltr>#{rejectingOrder.order.orderNumber}</span></h3>
+                  <p className="text-xs text-gray-500 mt-0.5">{t('list.rejectHint')}</p>
                 </div>
                 <button
                   onClick={closeRejectModal}
+                  aria-label={tc('close')}
                   className="w-8 h-8 rounded-full bg-gray-100 hover:bg-gray-200 text-gray-500 flex items-center justify-center text-sm"
                 >
                   ✕
@@ -715,7 +722,7 @@ export default function SellerOrdersPage() {
                       onChange={() => setSelectedReason(r.id)}
                       className="text-red-600 focus:ring-red-500 h-4 w-4"
                     />
-                    <span className="text-sm">{r.label}</span>
+                    <span className="text-sm">{t(r.key)}</span>
                   </label>
                 ))}
               </div>
@@ -723,12 +730,12 @@ export default function SellerOrdersPage() {
               {/* Optional Custom Note */}
               <div>
                 <label className="block text-xs font-semibold text-gray-700 mb-1.5">
-                  Additional Note (Optional)
+                  {t('list.additionalNote')}
                 </label>
                 <textarea
                   value={customReasonText}
                   onChange={(e) => setCustomReasonText(e.target.value)}
-                  placeholder="e.g., ran out of ingredients, closing kitchen early..."
+                  placeholder={t('list.notePlaceholder')}
                   rows={2}
                   className="w-full text-xs p-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-red-500 focus:border-transparent outline-none"
                 />
@@ -742,7 +749,7 @@ export default function SellerOrdersPage() {
                   disabled={isSubmittingReject}
                   className="flex-1 bg-red-600 hover:bg-red-700 text-white font-bold py-3 rounded-xl shadow-md"
                 >
-                  {isSubmittingReject ? 'Rejecting...' : 'Confirm Reject'}
+                  {isSubmittingReject ? t('list.rejecting') : t('list.confirmReject')}
                 </Button>
                 <Button
                   variant="outline"
@@ -750,7 +757,7 @@ export default function SellerOrdersPage() {
                   disabled={isSubmittingReject}
                   className="py-3 px-5 rounded-xl border-gray-300"
                 >
-                  Back
+                  {tc('back')}
                 </Button>
               </div>
             </div>
@@ -763,7 +770,7 @@ export default function SellerOrdersPage() {
             orderId={chatTicket.order.id}
             orderNumber={chatTicket.order.orderNumber}
             customerName={chatTicket.order.customerName}
-            sellerName="Your Kitchen"
+            sellerName={t('list.yourKitchen')}
             currentRole="seller"
             isOpen={!!chatTicket}
             onClose={() => setChatTicket(null)}
