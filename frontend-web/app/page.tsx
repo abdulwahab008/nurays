@@ -31,7 +31,7 @@ import {
 import { useAuthStore } from '@/lib/store/auth-store';
 import { useCartStore } from '@/lib/store/cart-store';
 import { useToast } from '@/components/ui/toast';
-import { BrandLockup } from '@/components/ui/Mark';
+import { BrandLockup, Mark } from '@/components/ui/Mark';
 import { CoverImage } from '@/components/ui/CoverImage';
 import { displayRating, formatPrice } from '@/lib/utils';
 import { SlideOverCartDrawer } from '@/components/marketplace/SlideOverCartDrawer';
@@ -749,8 +749,10 @@ export default function Home() {
               </svg>
             </button>
 
-            <Link href="/" className="hover:opacity-95 transition-opacity">
-              <BrandLockup markSize={32} wordSize={22} />
+            <Link href="/" className="hover:opacity-95 transition-opacity" aria-label="Nuray">
+              {/* Just the mark on small phones, so the header's buttons fit (Urdu labels run longer). */}
+              <span className="sm:hidden"><Mark size={32} /></span>
+              <span className="hidden sm:inline"><BrandLockup markSize={32} wordSize={22} /></span>
             </Link>
           </div>
 
@@ -904,7 +906,7 @@ export default function Home() {
               <div className="flex items-center gap-1.5">
                 <Link
                   href="/login"
-                  className="h-10 inline-flex items-center px-3 rounded-xl text-xs font-semibold text-slate-700 hover:bg-slate-100 transition-colors"
+                  className="h-10 hidden sm:inline-flex items-center px-3 rounded-xl text-xs font-semibold text-slate-700 hover:bg-slate-100 transition-colors"
                 >
                   {t('signIn')}
                 </Link>

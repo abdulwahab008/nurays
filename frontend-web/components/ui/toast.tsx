@@ -57,7 +57,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
 
 function ToastContainer({ toasts, removeToast }: { toasts: Toast[]; removeToast: (id: string) => void }) {
   return (
-    <div className="fixed top-4 end-4 z-50 flex flex-col gap-2 max-w-md w-full">
+    <div className="fixed top-4 end-4 z-50 flex flex-col gap-2 max-w-md w-[calc(100%-2rem)]">
       {toasts.map((toast) => (
         <ToastItem key={toast.id} toast={toast} onRemove={removeToast} />
       ))}
