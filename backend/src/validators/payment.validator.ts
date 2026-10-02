@@ -3,14 +3,7 @@ import { z } from 'zod';
 export const processPaymentSchema = z.object({
   orderId: z.string().uuid('Invalid order ID'),
   paymentMethod: z.enum(['jazzcash', 'easypaisa', 'bank', 'card', 'cod', 'wallet', 'safepay']),
-  paymentDetails: z
-    .object({
-      accountNumber: z.string().optional(),
-      cardNumber: z.string().optional(),
-      cvv: z.string().optional(),
-      expiryDate: z.string().optional(),
-    })
-    .optional(),
+  // Card details are entered on the payment provider's page, never sent to this API.
 });
 
 export const verifyPaymentSchema = z.object({
@@ -18,3 +11,6 @@ export const verifyPaymentSchema = z.object({
   transactionId: z.string().optional(),
 });
 
+export const walletTopupSchema = z.object({
+  amount: z.number().positive('Enter an amount'),
+});

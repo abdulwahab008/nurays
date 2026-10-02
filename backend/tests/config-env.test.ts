@@ -55,10 +55,14 @@ describe('startup configuration', () => {
     expect(smsProvider({ ...noTwilio, SMS_PROVIDER: 'none' })).toBe('none');
   });
 
-  it('requires an explicit Safepay mode when Safepay keys are set', () => {
+  it('requires an explicit Safepay mode, a return URL and the webhook secret when Safepay keys are set', () => {
     const withKeys = { ...goodProd, SAFEPAY_PUBLIC_KEY: 'pk', SAFEPAY_SECRET_KEY: 'sk' };
-    expect(configProblems(withKeys).join(' ')).toMatch(/SAFEPAY_SANDBOX/);
-    expect(configProblems({ ...withKeys, SAFEPAY_SANDBOX: 'false' })).toEqual([]);
+    const problems = configProblems(withKeys).join(' ');
+    expect(problems).toMatch(/SAFEPAY_SANDBOX/);
+    expect(problems).toMatch(/BASE_URL/);
+    expect(problems).toMatch(/SAFEPAY_WEBHOOK_SECRET/);
+    expect(configProblems({ ...withKeys, SAFEPAY_SANDBOX: 'false', BASE_URL: 'http://api.example.pk', SAFEPAY_WEBHOOK_SECRET: 'wh' }).join(' ')).toMatch(/https/);
+    expect(configProblems({ ...withKeys, SAFEPAY_SANDBOX: 'false', BASE_URL: 'https://api.example.pk', SAFEPAY_WEBHOOK_SECRET: 'wh' })).toEqual([]);
   });
 
   it('requires a persistent directory for local uploads in production', () => {

@@ -1,172 +1,92 @@
 'use client';
 
-import { Suspense, useEffect, useState } from 'react';
-import { useRouter, useSearchParams } from 'next/navigation';
-import { apiClient } from '@/lib/api-client';
+import { Suspense, useState } from 'react';
+import Link from 'next/link';
+import { useSearchParams } from 'next/navigation';
+import { paymentService } from '@/lib/services/payment.service';
 
 /**
- * Safepay redirects the customer back to this page after payment.
- * Query params from Safepay: ?tracker={token}&order_id={orderId}&status=...
- * We verify with our backend and then redirect to the order detail page.
+ * Where a customer lands when an online payment didn't go through: they cancelled on the
+ * payment page, or the confirmation couldn't be verified. A successful payment goes straight
+ * to the order page instead (the server confirms it before redirecting).
  */
-type Status = 'verifying' | 'success' | 'pending' | 'failed' | 'cancelled';
-
 export default function PaymentReturnPage() {
   return (
-    <Suspense
-      fallback={
-        <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
-          <div className="w-16 h-16 rounded-full border-4 border-green-200 border-t-green-600 animate-spin mx-auto mb-4" />
-        </div>
-      }
-    >
+    <Suspense fallback={null}>
       <PaymentReturnContent />
     </Suspense>
   );
 }
 
+const COPY: Record<string, { title: string; text: string; tone: string }> = {
+  cancelled: {
+    title: 'Payment cancelled',
+    text: 'Nothing was charged. Your order is waiting for payment: you can try again now.',
+    tone: 'bg-amber-100 text-amber-700',
+  },
+  failed: {
+    title: "We couldn't confirm your payment",
+    text: 'If money left your account, your order will show it as paid as soon as the payment provider confirms it. Otherwise, try again.',
+    tone: 'bg-red-100 text-red-700',
+  },
+  unknown: {
+    title: "We couldn't match this payment",
+    text: 'Check your orders and your Nuray Wallet. If money left your account and you can\'t see it, contact support.',
+    tone: 'bg-slate-100 text-slate-700',
+  },
+};
+
 function PaymentReturnContent() {
-  const router        = useRouter();
-  const searchParams  = useSearchParams();
-  const [status, setStatus] = useState<Status>('verifying');
-  const [message, setMessage] = useState('Verifying your payment...');
-  const [orderIdState, setOrderIdState] = useState<string | null>(null);
+  const searchParams = useSearchParams();
+  const orderId = searchParams.get('order') ?? searchParams.get('order_id');
+  const result = searchParams.get('result') ?? (orderId ? 'failed' : 'unknown');
+  const copy = COPY[result] ?? COPY.unknown;
+  const [opening, setOpening] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    const tracker = searchParams.get('tracker') ?? searchParams.get('beacon');
-    const orderId = searchParams.get('order_id') ?? searchParams.get('orderId');
-    const sfStatus = searchParams.get('status') ?? '';
-    setOrderIdState(orderId);
-
-    // Handle explicit cancel from Safepay
-    if (sfStatus === 'cancelled' || sfStatus === 'cancel') {
-      setStatus('cancelled');
-      setMessage('Payment was cancelled. You can try again from checkout.');
-      return;
+  const retry = async () => {
+    if (!orderId) return;
+    try {
+      setOpening(true);
+      setError(null);
+      window.location.href = await paymentService.startOrderPayment(orderId);
+    } catch (err: any) {
+      setError(err.response?.data?.error?.message || 'The payment page could not be opened. Please try again from your order.');
+      setOpening(false);
     }
-
-    if (!orderId) {
-      setStatus('failed');
-      setMessage('Invalid return URL — order ID missing.');
-      return;
-    }
-
-    const verify = async () => {
-      if (!tracker) {
-        // No tracker — we can't ask the backend to verify. Show pending and
-        // let the customer check their order; webhook may still confirm.
-        setStatus('pending');
-        setMessage('Your payment is being processed. Check your order shortly.');
-        return;
-      }
-
-      try {
-        const res = await apiClient.post<{
-          success: boolean;
-          data?: { paymentStatus?: string };
-        }>('/payments/verify', { paymentId: tracker, transactionId: tracker });
-
-        const paymentStatus = res.data?.data?.paymentStatus;
-
-        if (paymentStatus === 'completed') {
-          setStatus('success');
-          setMessage('Payment successful! Redirecting to your order...');
-          setTimeout(() => router.push(`/orders/${orderId}?placed=1`), 1500);
-        } else {
-          // Backend responded but payment isn't confirmed yet — webhook may
-          // still arrive. Don't claim success.
-          setStatus('pending');
-          setMessage(
-            'Your payment is being processed. You can view your order — we\'ll update its status as soon as the payment clears.',
-          );
-        }
-      } catch {
-        setStatus('failed');
-        setMessage(
-          'We couldn\'t verify your payment. If money was deducted, it will appear on your order shortly — otherwise please try again.',
-        );
-      }
-    };
-
-    verify();
-  }, []);
-
-  const icons: Record<Status, React.ReactNode> = {
-    verifying: (
-      <div className="w-16 h-16 rounded-full border-4 border-green-200 border-t-green-600 animate-spin mx-auto mb-4" />
-    ),
-    success: (
-      <div className="w-16 h-16 rounded-full bg-green-100 flex items-center justify-center mx-auto mb-4">
-        <svg className="w-8 h-8 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-          <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-        </svg>
-      </div>
-    ),
-    pending: (
-      <div className="w-16 h-16 rounded-full bg-amber-100 flex items-center justify-center mx-auto mb-4">
-        <svg className="w-8 h-8 text-amber-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-          <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-        </svg>
-      </div>
-    ),
-    failed: (
-      <div className="w-16 h-16 rounded-full bg-red-100 flex items-center justify-center mx-auto mb-4">
-        <svg className="w-8 h-8 text-red-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-          <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-        </svg>
-      </div>
-    ),
-    cancelled: (
-      <div className="w-16 h-16 rounded-full bg-yellow-100 flex items-center justify-center mx-auto mb-4">
-        <svg className="w-8 h-8 text-yellow-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-          <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
-        </svg>
-      </div>
-    ),
-  };
-
-  const heading: Record<Status, string> = {
-    verifying: 'Verifying Payment',
-    success: 'Payment Successful',
-    pending: 'Payment Pending',
-    failed: 'Payment Failed',
-    cancelled: 'Payment Cancelled',
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
-      <div className="bg-white rounded-2xl shadow-lg p-10 max-w-sm w-full text-center">
-        {icons[status]}
-        <h1 className="text-xl font-bold text-gray-900 mb-2">{heading[status]}</h1>
-        <p className="text-gray-500 text-sm">{message}</p>
-
-        {status === 'pending' && orderIdState && (
-          <button
-            onClick={() => router.push(`/orders/${orderIdState}`)}
-            className="mt-6 px-6 py-2.5 bg-amber-500 hover:bg-amber-600 text-white font-semibold rounded-xl transition-all"
-          >
-            View Order
-          </button>
-        )}
-
-        {(status === 'failed' || status === 'cancelled') && (
-          <div className="mt-6 flex gap-3 justify-center">
+    <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
+      <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-8 max-w-md w-full text-center">
+        <div className={`w-14 h-14 rounded-full flex items-center justify-center mx-auto mb-4 text-2xl font-black ${copy.tone}`}>!</div>
+        <h1 className="text-xl font-bold text-slate-900">{copy.title}</h1>
+        <p className="mt-2 text-sm text-slate-600">{copy.text}</p>
+        {error && <p className="mt-3 text-sm font-medium text-red-700">{error}</p>}
+        <div className="mt-6 flex flex-col gap-2">
+          {orderId && result !== 'unknown' && (
             <button
-              onClick={() => router.push('/checkout')}
-              className="px-6 py-2.5 bg-green-600 hover:bg-green-700 text-white font-semibold rounded-xl transition-all"
+              type="button"
+              disabled={opening}
+              onClick={retry}
+              className="w-full py-2.5 rounded-xl bg-[#FF5500] text-white text-sm font-bold hover:bg-[#e04400] disabled:opacity-50"
             >
-              Back to Checkout
+              {opening ? 'Opening the payment page…' : 'Try paying again'}
             </button>
-            {orderIdState && (
-              <button
-                onClick={() => router.push(`/orders/${orderIdState}`)}
-                className="px-6 py-2.5 border border-gray-300 text-gray-700 hover:bg-gray-50 font-semibold rounded-xl transition-all"
-              >
-                View Order
-              </button>
-            )}
-          </div>
-        )}
+          )}
+          {orderId ? (
+            <Link href={`/orders/${orderId}`} className="w-full py-2.5 rounded-xl border border-slate-300 text-sm font-semibold text-slate-700 hover:bg-slate-50">
+              View order
+            </Link>
+          ) : (
+            <Link href="/orders" className="w-full py-2.5 rounded-xl border border-slate-300 text-sm font-semibold text-slate-700 hover:bg-slate-50">
+              My orders
+            </Link>
+          )}
+          <Link href="/wallet" className="text-xs text-slate-500 underline mt-1">
+            Nuray Wallet
+          </Link>
+        </div>
       </div>
     </div>
   );
