@@ -66,9 +66,9 @@ async function main() {
 
   // ---- 3. customer cancel restocks once; seller-cancelled item not double restocked ----
   p = await mkProduct(seller.id, 10);
-  const pB = await mkProduct(sellerB.id, 10);
+  const pB = await mkProduct(seller.id, 10);
   const o1: any = (await order(cust.id, [{ productId: p.id, quantity: 3 }, { productId: pB.id, quantity: 2 }])).order;
-  const itemA = await prisma.orderItem.findFirst({ where: { orderId: o1.id, sellerId: seller.id } });
+  const itemA = await prisma.orderItem.findFirst({ where: { orderId: o1.id, productId: p.id } });
   const sellerUser = await prisma.seller.findUnique({ where: { id: seller.id } });
   await sellerOrderService.cancelOrderItem(itemA!.id, sellerUser!.userId, 'oos');
   await orderService.cancelOrder(o1.id, cust.id, 'changed mind');
@@ -113,11 +113,12 @@ async function main() {
   const onlyB = await code(order(cust.id, [{ productId: pB2.id, quantity: 1 }], { promotionCode: 'sellera50' }));
   ok('seller promo code refused on another seller\'s order (case-insensitive lookup)', onlyB === 'PROMO_NOT_APPLICABLE', onlyB);
   const scoped = await prisma.promotion.create({ data: { code: 'ONLYP', name: 'p', discountType: 'percentage', discountValue: 50, applicableProductIds: [p.id], validFrom: new Date(Date.now() - 1e6), validUntil: new Date(Date.now() + 1e9), usageLimitPerUser: 5 } as any });
-  const o4: any = (await order(cust.id, [{ productId: p.id, quantity: 1 }, { productId: pB2.id, quantity: 1 }], { promotionCode: 'onlyp' })).order;
+  const pSame = await mkProduct(seller.id, 5, 1000);
+  const o4: any = (await order(cust.id, [{ productId: p.id, quantity: 1 }, { productId: pSame.id, quantity: 1 }], { promotionCode: 'onlyp' })).order;
   const pcode = o4.discountAmount;
   const o4items = await prisma.orderItem.findMany({ where: { orderId: o4.id } });
   const o4p = o4items.find((i) => i.productId === p.id)!;
-  const o4b = o4items.find((i) => i.productId === pB2.id)!;
+  const o4b = o4items.find((i) => i.productId === pSame.id)!;
   ok('product-scoped promo discounts only the matching item', Math.abs(Number(pcode) - Number(o4p.totalPrice) / 2) < 0.01 && Number(o4p.promoDiscount) === Number(pcode) && Number(o4b.promoDiscount) === 0, `discount=${pcode} p=${o4p.promoDiscount} b=${o4b.promoDiscount}`);
 
   // ---- 9. promo usage released on cancel ----
@@ -159,19 +160,18 @@ async function main() {
   const stored = await prisma.orderMessage.findUnique({ where: { id: msg.id } });
   ok('customer cannot post as seller', stored?.senderRole === 'customer', stored?.senderRole);
 
-  // ---- 14. multi-seller reject leaves other kitchen's items ----
+  // ---- 14. one kitchen per order; no ordering from your own kitchen ----
   p = await mkProduct(seller.id, 5); const pB3 = await mkProduct(sellerB.id, 5);
-  const o5: any = (await order(cust.id, [{ productId: p.id, quantity: 1 }, { productId: pB3.id, quantity: 1 }])).order;
-  await sellerOrderService.rejectOrder(o5.id, sellerRow!.userId, 'closed');
-  const after = await prisma.order.findUnique({ where: { id: o5.id }, include: { items: true } });
-  ok('one seller rejecting does not cancel the other seller\'s items', after!.orderStatus !== 'cancelled' && after!.items.filter((i) => i.status === 'cancelled').length === 1);
+  const mixed = await code(order(cust.id, [{ productId: p.id, quantity: 1 }, { productId: pB3.id, quantity: 1 }]));
+  ok('an order mixing two kitchens is refused', mixed === 'MULTI_SELLER_ORDER', mixed);
+  ok('a seller cannot order from their own kitchen', (await code(order(sellerRow!.userId, [{ productId: p.id, quantity: 1 }]))) === 'SELF_ORDER');
 
   // ---- 15. payout race ----
   const sp = await mkSeller();
   await prisma.sellerPayoutSchedule.create({ data: { sellerId: sp.id, minimumPayoutAmount: 1, payoutMethod: 'bank_transfer' } as any });
   const prod = await mkProduct(sp.id, 5, 1000);
-  const po: any = (await order(cust.id, [{ productId: prod.id, quantity: 1 }], { paymentMethod: 'bank' })).order;
-  await prisma.order.update({ where: { id: po.id }, data: { orderStatus: 'delivered', paymentStatus: 'paid' } });
+  const po: any = (await order(cust.id, [{ productId: prod.id, quantity: 1 }], { paymentMethod: 'wallet' })).order;
+  await prisma.order.update({ where: { id: po.id }, data: { orderStatus: 'delivered', paymentStatus: 'paid', paidAt: new Date() } });
   const earned = Number((await prisma.orderItem.findFirst({ where: { orderId: po.id } }))!.sellerPayout);
   const reqs = await Promise.all([1, 2, 3].map(() => (require('../src/services/seller.service').default).requestPayout(sp.id, { amount: earned, payoutMethod: 'bank_transfer', accountNumber: '1' }).then(() => 'OK', (e: any) => e.code)));
   ok('concurrent payout requests cannot exceed earnings', reqs.filter((r) => r === 'OK').length === 1, `${reqs} earned=${earned}`);
@@ -208,16 +208,16 @@ async function main() {
   await orderService.cancelOrder(unpaid.id, rc.id, 'x');
   ok('cancelling an unpaid (COD) order creates no refund', (await prisma.refund.count({ where: { orderId: unpaid.id } })) === 0);
 
-  // multi-seller: one kitchen cancels its item of a paid order -> partial refund; the rest on full cancel
-  const rpB = await mkProduct(sellerB.id, 20, 300);
+  // the kitchen cancels one item of a paid order -> partial refund; the rest on full cancel
+  const rpB = await mkProduct(seller.id, 20, 300);
   const split: any = (await order(rc.id, [{ productId: rp.id, quantity: 1 }, { productId: rpB.id, quantity: 1 }], { paymentMethod: 'bank' })).order;
   await prisma.order.update({ where: { id: split.id }, data: { paymentStatus: 'paid' } });
-  const itemB = await prisma.orderItem.findFirst({ where: { orderId: split.id, sellerId: sellerB.id } });
-  await sellerOrderService.cancelOrderItem(itemB!.id, (await prisma.seller.findUnique({ where: { id: sellerB.id } }))!.userId, 'oos');
+  const itemB = await prisma.orderItem.findFirst({ where: { orderId: split.id, productId: rpB.id } });
+  await sellerOrderService.cancelOrderItem(itemB!.id, sellerRow!.userId, 'oos');
   const part = await prisma.refund.findMany({ where: { orderId: split.id } });
   const splitTotal = Number(split.totalAmount), splitDelivery = Number(split.deliveryFee), splitSub = Number(split.subtotal);
-  const expectPartial = Math.round((300 / splitSub) * (splitTotal - splitDelivery) * 100) / 100;
-  ok('one seller cancelling its item refunds that item\'s share only',
+  const expectPartial = Math.round((Number(itemB!.totalPrice) / splitSub) * (splitTotal - splitDelivery) * 100) / 100;
+  ok('cancelling one item refunds that item\'s share only',
     part.length === 1 && Math.abs(Number(part[0].amount) - expectPartial) < 0.02 && (await prisma.order.findUnique({ where: { id: split.id } }))!.paymentStatus === 'paid',
     `refund=${part[0]?.amount} expected=${expectPartial}`);
   await adminOrderService.cancelOrder(split.id, admin.id, 'cancel the rest please');
@@ -246,15 +246,19 @@ async function main() {
   const homeOrder = (items: any[], pm: string) =>
     orderService.createOrder(dc.id, { items, deliveryType: 'home_delivery', deliveryAddressId: addr.id, paymentMethod: pm } as any) as Promise<any>;
 
-  const sdo = await homeOrder([{ productId: sp1.id, quantity: 1 }, { productId: sp2.id, quantity: 1 }], 'bank');
+  // Online (wallet) money is held by the platform, which owes each seller their share.
+  const sdo = await homeOrder([{ productId: sp1.id, quantity: 1 }], 'wallet');
+  const pdo = await homeOrder([{ productId: sp2.id, quantity: 1 }], 'wallet');
   const bd: any[] = (sdo.deliveryFeeBreakdown as any) || [];
-  ok('order records who each delivery fee belongs to',
-    Number(sdo.deliveryFee) === 160 && bd.length === 2 && bd.find((b) => b.sellerId === selfS.id)?.provider === 'self' && bd.find((b) => b.sellerId === platS.id)?.provider === 'platform',
-    JSON.stringify(bd));
+  const bdP: any[] = (pdo.deliveryFeeBreakdown as any) || [];
+  ok('orders record who delivers and who each delivery fee belongs to',
+    Number(sdo.deliveryFee) === 100 && bd[0]?.provider === 'self' && sdo.deliveryProvider === 'self' &&
+      Number(pdo.deliveryFee) === 60 && bdP[0]?.provider === 'platform' && pdo.deliveryProvider === 'platform',
+    `${JSON.stringify(bd)} ${sdo.deliveryProvider} / ${JSON.stringify(bdP)} ${pdo.deliveryProvider}`);
 
-  await prisma.order.update({ where: { id: sdo.id }, data: { orderStatus: 'delivered', paymentStatus: 'paid' } });
-  const selfItem = await prisma.orderItem.findFirst({ where: { orderId: sdo.id, sellerId: selfS.id } });
-  const platItem = await prisma.orderItem.findFirst({ where: { orderId: sdo.id, sellerId: platS.id } });
+  for (const o of [sdo, pdo]) await prisma.order.update({ where: { id: o.id }, data: { orderStatus: 'delivered', paymentStatus: 'paid', paidAt: new Date() } });
+  const selfItem = await prisma.orderItem.findFirst({ where: { orderId: sdo.id } });
+  const platItem = await prisma.orderItem.findFirst({ where: { orderId: pdo.id } });
   const selfGoods = Number(selfItem!.sellerPayout), platGoods = Number(platItem!.sellerPayout);
 
   const payReq = (sid: string, amount: number) => sellerService.requestPayout(sid, { amount, payoutMethod: 'bank_transfer', accountNumber: '1' }).then(() => 'OK', (e: any) => e.code);
@@ -266,34 +270,101 @@ async function main() {
   ok('dashboard earnings include the self-delivery fee', Math.abs(dash.overview.totalEarnings - (selfGoods + 100)) < 0.01, `total=${dash.overview.totalEarnings} expected=${selfGoods + 100}`);
 
   await ledgerService.recordOrderCompletion(sdo.id);
-  const led = await prisma.ledgerEntry.findMany({ where: { orderId: sdo.id } });
-  const platRev = led.find((e) => e.transactionType === 'delivery_fee');
-  const sellerFee = led.find((e) => e.transactionType === 'seller_delivery_fee');
+  await ledgerService.recordOrderCompletion(pdo.id);
+  const ledS = await prisma.ledgerEntry.findMany({ where: { orderId: sdo.id } });
+  const ledP = await prisma.ledgerEntry.findMany({ where: { orderId: pdo.id } });
+  const sellerFee = ledS.find((e) => e.transactionType === 'seller_delivery_fee');
+  const platRev = ledP.find((e) => e.transactionType === 'delivery_fee');
   ok('ledger: platform revenue is only the platform-delivered fee; the self fee is payable to the seller',
-    Number(platRev?.amount) === 60 && Number(sellerFee?.amount) === 100 && sellerFee?.sellerId === selfS.id,
+    Number(platRev?.amount) === 60 && !ledS.some((e) => e.transactionType === 'delivery_fee') && Number(sellerFee?.amount) === 100 && sellerFee?.sellerId === selfS.id,
     `platform=${platRev?.amount} seller=${sellerFee?.amount}`);
 
-  // COD: the seller was handed the fee at the door, so it is not payable again
+  // COD at the seller's own door: they hold everything, and owe the platform everything that isn't theirs
   const spC = await mkProduct(selfS.id, 20, 300);
   const codOrder = await homeOrder([{ productId: spC.id, quantity: 1 }], 'cod');
-  await prisma.order.update({ where: { id: codOrder.id }, data: { orderStatus: 'delivered', paymentStatus: 'paid' } });
+  await prisma.order.update({ where: { id: codOrder.id }, data: { orderStatus: 'delivered', paymentStatus: 'paid', paidAt: new Date() } });
   const codGoods = Number((await prisma.orderItem.findFirst({ where: { orderId: codOrder.id } }))!.sellerPayout);
   const dash2: any = await sellerService.getSellerDashboard(selfS.id);
-  ok('COD self-delivery fee counts as earned but is not withdrawable (already paid at the door)',
-    Math.abs(dash2.overview.totalEarnings - (selfGoods + 100 + codGoods + 100)) < 0.01 && dash2.overview.availableForPayout === 0,
-    `total=${dash2.overview.totalEarnings} available=${dash2.overview.availableForPayout}`);
+  const codOwed = Number(codOrder.totalAmount) - codGoods - 100;
+  ok('COD self-delivery counts as earned but is not withdrawable; the seller owes commission + tax on it',
+    Math.abs(dash2.overview.totalEarnings - (selfGoods + 100 + codGoods + 100)) < 0.01 && dash2.overview.availableForPayout === 0 && Math.abs(dash2.overview.codCommissionOwed - codOwed) < 0.01,
+    `total=${dash2.overview.totalEarnings} available=${dash2.overview.availableForPayout} owed=${dash2.overview.codCommissionOwed} expected=${codOwed}`);
 
-  // cancelling the self seller's item on a paid multi-seller order refunds its share + its delivery fee
+  // cancelling a self-delivery order's only item refunds everything, delivery fee included
   const sp1b = await mkProduct(selfS.id, 20, 500);
-  const sp2b = await mkProduct(platS.id, 20, 400);
-  const mo = await homeOrder([{ productId: sp1b.id, quantity: 1 }, { productId: sp2b.id, quantity: 1 }], 'bank');
+  const mo = await homeOrder([{ productId: sp1b.id, quantity: 1 }], 'bank');
   await prisma.order.update({ where: { id: mo.id }, data: { paymentStatus: 'paid' } });
-  const moItem = await prisma.orderItem.findFirst({ where: { orderId: mo.id, sellerId: selfS.id } });
+  const moItem = await prisma.orderItem.findFirst({ where: { orderId: mo.id } });
   await sellerOrderService.cancelOrderItem(moItem!.id, (await prisma.seller.findUnique({ where: { id: selfS.id } }))!.userId, 'oos');
   const mr = await prisma.refund.findFirst({ where: { orderId: mo.id } });
-  const moSub = Number(mo.subtotal), moTot = Number(mo.totalAmount), moDel = Number(mo.deliveryFee);
-  const expectRefund = Math.round(((500 / moSub) * (moTot - moDel) + 100) * 100) / 100;
-  ok('cancelling a seller\'s last item also refunds that seller\'s delivery fee', Math.abs(Number(mr?.amount) - expectRefund) < 0.02, `refund=${mr?.amount} expected=${expectRefund}`);
+  ok('cancelling the last item refunds the whole order, delivery fee included', Math.abs(Number(mr?.amount) - Number(mo.totalAmount)) < 0.02, `refund=${mr?.amount} total=${mo.totalAmount}`);
+
+  // ---- 17b. who holds the money decides the payout ----
+  const cs = await mkSeller({ commissionRate: 10 });
+  const csUser = (await prisma.seller.findUnique({ where: { id: cs.id } }))!.userId;
+  await prisma.sellerPayoutSchedule.create({ data: { sellerId: cs.id, minimumPayoutAmount: 1, payoutMethod: 'bank_transfer' } as any });
+  const csProd = await mkProduct(cs.id, 50, 1000);
+  const custC = await mkUser();
+  const csOrder = (pm: string) => order(custC.id, [{ productId: csProd.id, quantity: 1 }], { paymentMethod: pm }).then((r: any) => r.order);
+  const csBal = () => require('../src/services/seller-balance.service').computeSellerBalance(prisma, cs.id);
+
+  // a transfer straight into the seller's account: not withdrawable; seller owes commission + tax
+  const tr: any = await csOrder('bank');
+  await orderService.submitManualPayment(tr.id, custC.id, { referenceNumber: 'TID-' + uniq() });
+  await orderService.confirmManualPayment(tr.id, csUser, true);
+  const trRow = await prisma.order.findUnique({ where: { id: tr.id } });
+  ok('a confirmed transfer is recorded as collected by the seller', trRow!.paymentCollectedBy === 'seller', String(trRow!.paymentCollectedBy));
+  await prisma.order.update({ where: { id: tr.id }, data: { orderStatus: 'delivered' } });
+  let b = await csBal();
+  // 1000 goods, 10% commission -> seller keeps 900; customer paid 1000 + 5% tax = 1050
+  ok('money a seller collected themselves is never paid out again (they owe commission + tax)',
+    b.platformOwesSeller === 0 && Math.abs(b.sellerOwesPlatform - 150) < 0.01 && b.available === -150,
+    JSON.stringify(b));
+  ok('so a payout request against it is refused', (await payReq(cs.id, 1)) === 'INSUFFICIENT_BALANCE');
+
+  // platform-collected (wallet) money: the platform owes the seller their share, netted against the above
+  const wo: any = await csOrder('wallet');
+  await prisma.order.update({ where: { id: wo.id }, data: { orderStatus: 'delivered', paymentStatus: 'paid', paymentCollectedBy: 'platform', paidAt: new Date() } });
+  b = await csBal();
+  ok('platform-held money is owed to the seller, minus what they owe on money they collected', b.platformOwesSeller === 900 && b.available === 750, JSON.stringify(b));
+  ok('the seller can withdraw exactly the net', (await payReq(cs.id, 750.01)) === 'INSUFFICIENT_BALANCE' && (await payReq(cs.id, 750)) === 'OK');
+
+  // cash taken by a Nuray rider: the platform owes the seller their share
+  const ro: any = await csOrder('cod');
+  await prisma.order.update({ where: { id: ro.id }, data: { orderStatus: 'delivered', paymentStatus: 'paid', paymentCollectedBy: 'rider', paidAt: new Date() } });
+  b = await csBal();
+  ok('rider-collected cash is owed to the seller in full', b.platformOwesSeller === 1800 && b.available === 900, JSON.stringify(b));
+
+  // a transfer the platform refunded after the seller kept it: the seller owes it back
+  const tr2: any = await csOrder('bank');
+  await orderService.submitManualPayment(tr2.id, custC.id, { referenceNumber: 'TID-' + uniq() });
+  await orderService.confirmManualPayment(tr2.id, csUser, true);
+  await orderService.cancelOrder(tr2.id, custC.id, 'changed mind');
+  const tr2Refund = await prisma.refund.findFirst({ where: { orderId: tr2.id } });
+  await completeRefund(tr2Refund!.id, admin.id, 'TXN-' + uniq());
+  b = await csBal();
+  ok('a refund the platform sent on money the seller kept is recovered from the seller', Math.abs(b.sellerOwesPlatform - (150 + 1050)) < 0.01 && Math.abs(b.available - (900 - 1050)) < 0.01, JSON.stringify(b));
+
+  // the seller funds their own deal; the platform funds its own code
+  const promoTag = uniq();
+  const deal = await prisma.promotion.create({ data: { sellerId: cs.id, code: 'CSHALF' + promoTag, name: 'half', discountType: 'percentage', discountValue: 50, validFrom: new Date(Date.now() - 1e6), validUntil: new Date(Date.now() + 1e9), usageLimitPerUser: 9 } as any });
+  const sp50: any = (await order(custC.id, [{ productId: csProd.id, quantity: 1 }], { paymentMethod: 'cod' })).order;
+  const sp50Item = await prisma.orderItem.findFirst({ where: { orderId: sp50.id } });
+  ok('a seller-funded deal cuts the seller\'s share (commission on what the customer pays)', Number(sp50Item!.sellerPayout) === 450 && Number(sp50Item!.commissionAmount) === 50, `payout=${sp50Item!.sellerPayout} commission=${sp50Item!.commissionAmount}`);
+  await prisma.promotion.update({ where: { id: deal.id }, data: { isActive: false } });
+  await prisma.promotion.create({ data: { code: 'PLHALF' + promoTag, name: 'half', discountType: 'percentage', discountValue: 50, validFrom: new Date(Date.now() - 1e6), validUntil: new Date(Date.now() + 1e9), usageLimitPerUser: 9 } as any });
+  const pl50: any = (await order(custC.id, [{ productId: csProd.id, quantity: 1 }], { paymentMethod: 'cod', promotionCode: 'PLHALF' + promoTag })).order;
+  const pl50Item = await prisma.orderItem.findFirst({ where: { orderId: pl50.id } });
+  ok('a platform-funded code leaves the seller\'s share untouched', Number(pl50Item!.sellerPayout) === 900, `payout=${pl50Item!.sellerPayout}`);
+
+  // only the party that hands the order over can mark it delivered
+  const platformDelivered = await homeOrder([{ productId: sp2.id, quantity: 1 }], 'cod');
+  const pdItem = await prisma.orderItem.findFirst({ where: { orderId: platformDelivered.id } });
+  await prisma.orderItem.update({ where: { id: pdItem!.id }, data: { status: 'dispatched' } });
+  ok('a seller cannot mark a Nuray-rider delivery as delivered', (await code(sellerOrderService.updateOrderItemStatus(pdItem!.id, (await prisma.seller.findUnique({ where: { id: platS.id } }))!.userId, 'delivered'))) === 'PLATFORM_DELIVERY');
+  const unpaidTransfer: any = await csOrder('bank');
+  await prisma.order.update({ where: { id: unpaidTransfer.id }, data: { orderStatus: 'preparing' } });
+  ok('an order cannot be marked ready before its transfer is confirmed', (await code(sellerOrderService.markOrderReady(unpaidTransfer.id, csUser))) === 'PAYMENT_NOT_CONFIRMED');
 
   // ---- 18. schema integrity ----
   const cc = await mkUser();
@@ -517,24 +588,25 @@ async function main() {
 
   // ---- 23. review round: money ----
   const rc2 = await mkUser();
-  const rcSellerA = await mkSeller(); const rcSellerB = await mkSeller();
-  const pa2 = await mkProduct(rcSellerA.id, 20, 100); const pb2 = await mkProduct(rcSellerB.id, 20, 100);
-  const uB = (await prisma.seller.findUnique({ where: { id: rcSellerB.id } }))!.userId;
-  await prisma.sellerPayoutSchedule.create({ data: { sellerId: rcSellerB.id, minimumPayoutAmount: 1, payoutMethod: 'bank_transfer' } as any });
+  const rcSellerA = await mkSeller();
+  const pa2 = await mkProduct(rcSellerA.id, 20, 100); const pb2 = await mkProduct(rcSellerA.id, 20, 100);
+  const uA = (await prisma.seller.findUnique({ where: { id: rcSellerA.id } }))!.userId;
 
-  // (1) a seller whose items were rejected earns nothing even though the order is delivered by the other seller
+  // (1) a cancelled item earns nothing even though the rest of the order is delivered
   const two: any = (await order(rc2.id, [{ productId: pa2.id, quantity: 1 }, { productId: pb2.id, quantity: 1 }], { paymentMethod: 'bank' })).order;
-  await prisma.order.update({ where: { id: two.id }, data: { paymentStatus: 'paid' } });
-  await sellerOrderService.rejectOrder(two.id, uB, 'closed');
+  await prisma.order.update({ where: { id: two.id }, data: { paymentStatus: 'paid', paidAt: new Date() } });
+  const twoB = await prisma.orderItem.findFirst({ where: { orderId: two.id, productId: pb2.id } });
+  await sellerOrderService.cancelOrderItem(twoB!.id, uA, 'out of stock');
   await prisma.order.update({ where: { id: two.id }, data: { orderStatus: 'delivered' } });
-  const dashB: any = await sellerService.getSellerDashboard(rcSellerB.id);
-  ok('a seller whose items were rejected earns nothing from the delivered order', dashB.overview.totalEarnings === 0 && dashB.overview.availableForPayout === 0, `earnings=${dashB.overview.totalEarnings}`);
+  const dashA: any = await sellerService.getSellerDashboard(rcSellerA.id);
+  const liveA = Number((await prisma.orderItem.findFirst({ where: { orderId: two.id, productId: pa2.id } }))!.sellerPayout);
+  ok('a cancelled item earns nothing from the delivered order', Math.abs(dashA.overview.totalEarnings - liveA) < 0.01, `earnings=${dashA.overview.totalEarnings} live=${liveA}`);
   await ledgerService.recordOrderCompletion(two.id);
   const ledA = await prisma.ledgerEntry.findMany({ where: { orderId: two.id } });
   const refundedSum = (await prisma.refund.findMany({ where: { orderId: two.id } })).reduce((a, r) => a + Number(r.amount), 0);
   const custPay = Number(ledA.find((e) => e.transactionType === 'customer_payment')!.amount);
   const earn = Number(ledA.find((e) => e.transactionType === 'seller_earning')!.amount);
-  ok('ledger counts only live items and the net the customer paid', Math.abs(custPay - (Number(two.totalAmount) - refundedSum)) < 0.02 && earn === Number((await prisma.orderItem.findFirst({ where: { orderId: two.id, sellerId: rcSellerA.id } }))!.sellerPayout), `custPay=${custPay} earn=${earn}`);
+  ok('ledger counts only live items and the net the customer paid', Math.abs(custPay - (Number(two.totalAmount) - refundedSum)) < 0.02 && earn === liveA, `custPay=${custPay} earn=${earn}`);
   const ledgerAgain = await Promise.all([ledgerService.recordOrderCompletion(two.id), ledgerService.recordOrderCompletion(two.id)]);
   ok('ledger posts once even if called twice', ledgerAgain.every((l: any) => !l.recorded) && (await prisma.ledgerEntry.count({ where: { orderId: two.id } })) === ledA.length);
 
@@ -560,20 +632,21 @@ async function main() {
 
   // (4) partial cancel of an UNPAID order shrinks what the customer owes
   const unpaid2: any = (await order(rc2.id, [{ productId: pa2.id, quantity: 1 }, { productId: pb2.id, quantity: 1 }], { paymentMethod: 'bank' })).order;
-  await sellerOrderService.rejectOrder(unpaid2.id, uB, 'closed');
+  const unpaid2B = await prisma.orderItem.findFirst({ where: { orderId: unpaid2.id, productId: pb2.id } });
+  await sellerOrderService.cancelOrderItem(unpaid2B!.id, uA, 'out of stock');
   const shr = (await prisma.order.findUnique({ where: { id: unpaid2.id } }))!;
-  ok('rejecting one seller\'s items on an unpaid order re-prices it to what is left', Math.abs(Number(shr.totalAmount) - 105) < 0.02 && Number(shr.subtotal) === 100, `total=${shr.totalAmount} subtotal=${shr.subtotal}`);
+  ok('cancelling one item of an unpaid order re-prices it to what is left', Math.abs(Number(shr.totalAmount) - 105) < 0.02 && Number(shr.subtotal) === 100, `total=${shr.totalAmount} subtotal=${shr.subtotal}`);
 
   // (6) seller-scoped promo: refund exactly what was paid for the item
   const spP = await prisma.promotion.create({ data: { code: 'SC' + uniq(), name: 's', discountType: 'percentage', discountValue: 50, applicableProductIds: [pa2.id], validFrom: new Date(Date.now() - 1e6), validUntil: new Date(Date.now() + 1e9), usageLimitPerUser: 9 } as any });
   const promoO: any = (await order(rc2.id, [{ productId: pa2.id, quantity: 1 }, { productId: pb2.id, quantity: 1 }], { paymentMethod: 'bank', promotionCode: spP.code })).order;
   await prisma.order.update({ where: { id: promoO.id }, data: { paymentStatus: 'paid' } });
-  const shares = (await prisma.orderItem.findMany({ where: { orderId: promoO.id } })).map((i) => `${i.sellerId === rcSellerA.id ? 'A' : 'B'}:${i.promoDiscount}`).sort().join();
-  const itemBo = await prisma.orderItem.findFirst({ where: { orderId: promoO.id, sellerId: rcSellerB.id } });
-  await sellerOrderService.cancelOrderItem(itemBo!.id, uB, 'oos');
+  const shares = (await prisma.orderItem.findMany({ where: { orderId: promoO.id } })).map((i) => `${i.productId === pa2.id ? 'A' : 'B'}:${i.promoDiscount}`).sort().join();
+  const itemBo = await prisma.orderItem.findFirst({ where: { orderId: promoO.id, productId: pb2.id } });
+  await sellerOrderService.cancelOrderItem(itemBo!.id, uA, 'oos');
   const pRef = await prisma.refund.findFirst({ where: { orderId: promoO.id } });
   ok('item discount shares are recorded (only the eligible item carries one)', /A:\d+(\.\d+)?,B:0/.test(shares) && !/A:0(\.00)?,/.test(shares), shares);
-  ok('cancelling the NON-discounted seller refunds its full price + GST (not a pro-rata of the discounted total)', Math.abs(Number(pRef!.amount) - 105) < 0.02, `refund=${pRef?.amount}`);
+  ok('cancelling the NON-discounted item refunds its full price + GST (not a pro-rata of the discounted total)', Math.abs(Number(pRef!.amount) - 105) < 0.02, `refund=${pRef?.amount}`);
 
   // (8) refunded orders cannot be delivered; live orders cannot be "refunded" without cancelling
   const live: any = (await order(rc2.id, [{ productId: pa2.id, quantity: 1 }], { paymentMethod: 'bank' })).order;
@@ -585,8 +658,8 @@ async function main() {
   // (9) payout can't be both completed and failed
   const poSeller = await mkSeller(); const poProd = await mkProduct(poSeller.id, 5, 1000);
   await prisma.sellerPayoutSchedule.create({ data: { sellerId: poSeller.id, minimumPayoutAmount: 1, payoutMethod: 'bank_transfer' } as any });
-  const poO: any = (await order(rc2.id, [{ productId: poProd.id, quantity: 1 }], { paymentMethod: 'bank' })).order;
-  await prisma.order.update({ where: { id: poO.id }, data: { orderStatus: 'delivered', paymentStatus: 'paid' } });
+  const poO: any = (await order(rc2.id, [{ productId: poProd.id, quantity: 1 }], { paymentMethod: 'wallet' })).order;
+  await prisma.order.update({ where: { id: poO.id }, data: { orderStatus: 'delivered', paymentStatus: 'paid', paidAt: new Date() } });
   const poGoods = Number((await prisma.orderItem.findFirst({ where: { orderId: poO.id } }))!.sellerPayout);
   await sellerService.requestPayout(poSeller.id, { amount: poGoods, payoutMethod: 'bank_transfer', accountNumber: '1' });
   const payoutRow = await prisma.sellerPayout.findFirst({ where: { sellerId: poSeller.id } });

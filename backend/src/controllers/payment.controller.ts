@@ -135,6 +135,7 @@ export const safepayWebhook = async (req: Request, res: Response) => {
         where: { id: orderId, paymentStatus: { in: PAYABLE_STATUSES } },
         data: {
           paymentStatus: 'paid',
+          paymentCollectedBy: 'platform',
           paidAt: new Date(),
           paymentTransactionId: token,
         },

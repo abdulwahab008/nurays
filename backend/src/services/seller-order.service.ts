@@ -1,3 +1,4 @@
+import { codCollectorOf, deliveryProviderOf } from '../utils/paymentCustody';
 import prisma from '../config/database';
 import { AppError } from '../middleware/errorHandler';
 import realtimeOrderService from './realtime-order.service';
@@ -349,6 +350,30 @@ export class SellerOrderService {
     if (status === 'delivered' && ['refund_pending', 'refunded'].includes(orderItem.order.paymentStatus)) {
       throw new AppError('This order has been refunded and cannot be marked delivered', 400, 'ORDER_REFUNDED');
     }
+    // Handing the order over is the seller's step only when they deliver it themselves
+    // (or the customer collects it from them). A Nuray rider's delivery is completed by
+    // the rider with the customer's code; a seller marking it delivered would release
+    // earnings for food that may never have arrived.
+    if (['dispatched', 'in_transit', 'delivered', 'delivery_failed'].includes(status)) {
+      const sellerHandsOver =
+        orderItem.order.deliveryType === 'self_pickup' ||
+        deliveryProviderOf(orderItem.order, seller.deliveryProvider) === 'self';
+      if (!sellerHandsOver) {
+        throw new AppError(
+          'A Nuray rider delivers this order. It is marked delivered when the rider hands it over.',
+          403,
+          'PLATFORM_DELIVERY'
+        );
+      }
+    }
+    // Online and transfer payments must be confirmed before the food leaves the kitchen.
+    if (['ready', 'dispatched'].includes(status) && orderItem.order.paymentMethod !== 'cod' && orderItem.order.paymentStatus !== 'paid') {
+      throw new AppError(
+        "The customer's payment hasn't been confirmed yet. Confirm (or dispute) the transfer before handing the order over.",
+        409,
+        'PAYMENT_NOT_CONFIRMED'
+      );
+    }
     if (!ALLOWED_TRANSITIONS[orderItem.status]?.includes(status)) {
       throw new AppError(
         `Cannot move an item from "${orderItem.status}" to "${status}"`,
@@ -427,7 +452,7 @@ export class SellerOrderService {
           data: {
             orderStatus: derivedOrderStatus,
             ...(derivedOrderStatus === 'delivered' ? { deliveredAt: new Date() } : {}),
-            ...(isCodPayment ? { paymentStatus: 'paid', paidAt: new Date() } : {}),
+            ...(isCodPayment ? { paymentStatus: 'paid', paymentCollectedBy: codCollectorOf(orderItem.order), paidAt: new Date() } : {}),
           },
         });
         if (applied.count > 0) {
@@ -920,6 +945,14 @@ export class SellerOrderService {
     if (!['confirmed', 'preparing'].includes(order.orderStatus)) {
       throw new AppError(`Cannot mark ready an order with status: ${order.orderStatus}`, 400, 'INVALID_STATUS');
     }
+    // Online and transfer payments must be confirmed before the food is handed over.
+    if (order.paymentMethod !== 'cod' && order.paymentStatus !== 'paid') {
+      throw new AppError(
+        "The customer's payment hasn't been confirmed yet. Confirm (or dispute) the transfer before marking the order ready.",
+        409,
+        'PAYMENT_NOT_CONFIRMED'
+      );
+    }
 
     await prisma.$transaction(async (tx) => {
       const claimed = await tx.order.updateMany({
@@ -944,6 +977,14 @@ export class SellerOrderService {
         },
       });
     });
+
+    // Make sure a rider job exists (idempotent). Accepting normally creates it, but if that
+    // failed, a ready order with no job could never be picked up.
+    try {
+      await riderService.ensureDeliveryForOrder(order.id, 0);
+    } catch (err) {
+      console.warn('Rider dispatch warning during markOrderReady:', err);
+    }
 
     await realtimeOrderService.emitOrderStatusUpdate(order.id, 'ready', sellerUserId);
 

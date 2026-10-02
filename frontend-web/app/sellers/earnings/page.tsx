@@ -254,13 +254,15 @@ export default function SellerEarningsPage() {
               </div>
             </div>
 
-            {/* Cash-on-delivery note */}
+            {/* Money the seller collected themselves */}
             {earnings.codCommissionOwed > 0 && (
               <div className="bg-gray-50 border border-gray-200 rounded-2xl p-5 mb-8 flex items-start gap-3">
                 <div className="w-9 h-9 rounded-full bg-gray-200 flex items-center justify-center flex-shrink-0 text-gray-600 font-bold">i</div>
                 <p className="text-sm text-gray-600">
-                  Customers who paid cash on delivery paid <span className="font-semibold text-gray-900">you</span> directly — that money isn't part of your withdrawable balance.
-                  You owe <span className="font-semibold text-gray-900">{formatPrice(earnings.codCommissionOwed)}</span> in platform commission on those cash orders, which we deduct from your next online-order payout automatically.
+                  Customers who paid you directly (cash at your door, or a transfer into your own JazzCash, EasyPaisa or bank account) paid{' '}
+                  <span className="font-semibold text-gray-900">you</span>, so that money isn&apos;t part of your withdrawable balance.
+                  On those orders you owe <span className="font-semibold text-gray-900">{formatPrice(earnings.codCommissionOwed)}</span> to Nuray
+                  (commission, Nuray&apos;s delivery fee, tax and any refunds Nuray sent your customers). It is deducted from what Nuray owes you.
                 </p>
               </div>
             )}

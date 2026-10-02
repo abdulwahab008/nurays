@@ -14,6 +14,8 @@ import { getDeliveryFeeForSeller } from '../utils/deliveryFee';
 import { createStockAlert } from './stock-alert.service';
 import promotionService from './promotion.service';
 import { isAcceptingOrders, validateOrderTiming } from './availability.service';
+import { SELLER_DIRECT_METHODS } from '../utils/paymentCustody';
+import ledgerService from './ledger.service';
 
 export class OrderService {
   /**
@@ -253,6 +255,24 @@ export class OrderService {
       });
     }
 
+    // One kitchen per order. The cart already enforces it; the API must too: a manual
+    // transfer goes to one seller's account, and payouts, refunds and delivery are all
+    // settled per order.
+    if (sellersInOrder.size > 1) {
+      throw new AppError(
+        'An order can only contain items from one kitchen. Please place a separate order for each kitchen.',
+        400,
+        'MULTI_SELLER_ORDER'
+      );
+    }
+    // A seller ordering from their own kitchen could confirm a transfer that never
+    // happened, mark it delivered and draw a payout (or leave themselves reviews).
+    for (const seller of sellersInOrder.values()) {
+      if (seller.userId === customerId) {
+        throw new AppError("You can't place an order with your own kitchen", 400, 'SELF_ORDER');
+      }
+    }
+
     // Every seller in the order must currently be accepting orders — schedule,
     // manual override, order cutoff, daily cap, and pre-order-only are all
     // enforced here rather than trusting whatever the browsing page displayed.
@@ -444,11 +464,29 @@ export class OrderService {
             const shares = allocateDiscount(eligibleItems.map((i) => ({ total: i.totalPrice })), discountAmount);
             eligibleItems.forEach((i, idx) => {
               i.promoDiscount = shares[idx];
+              // A seller's own code is funded by the seller: their share (and the commission
+              // on it) is worked out on what the customer actually pays for the item. A
+              // platform code is funded by the platform, so the seller's share is unchanged.
+              if (promotion.sellerId) {
+                const net = i.totalPrice - i.promoDiscount;
+                i.commissionAmount = net * (Number(i.commissionRate) / 100);
+                i.sellerPayout = net - i.commissionAmount;
+              }
             });
           }
         }
       }
     }
+
+    // Who delivers (snapshotted, so a seller changing their setting later doesn't move
+    // existing orders): hub stock always goes with a platform rider.
+    const onlySeller = sellersInOrder.values().next().value;
+    const deliveryProvider =
+      data.deliveryType !== 'home_delivery'
+        ? null
+        : orderItems.some((i) => i.fulfillmentType === 'hub') || onlySeller?.deliveryProvider !== 'self'
+          ? 'platform'
+          : 'self';
 
     // Calculate tax (5% GST for Pakistan)
     const taxAmount = (subtotal - discountAmount) * GST_RATE;
@@ -466,6 +504,7 @@ export class OrderService {
           subtotal,
           deliveryFee,
           deliveryFeeBreakdown: deliveryFeeBreakdown as any,
+          deliveryProvider,
           discountAmount,
           taxAmount,
           totalAmount,
@@ -1256,7 +1295,7 @@ export class OrderService {
     if (order.items[0]?.sellerId !== seller.id) {
       throw new AppError('Only the seller receiving this payment can confirm it', 403, 'NOT_PAYEE');
     }
-    if (['cancelled', 'refunded'].includes(order.orderStatus) || ['cod', 'wallet'].includes(order.paymentMethod)) {
+    if (['cancelled', 'refunded'].includes(order.orderStatus) || !SELLER_DIRECT_METHODS.includes(order.paymentMethod)) {
       throw new AppError('This order has no manual payment to confirm', 400, 'NOT_MANUAL_PAYMENT');
     }
 
@@ -1269,6 +1308,8 @@ export class OrderService {
       where: { id: orderId, paymentStatus: 'payment_submitted' },
       data: {
         paymentStatus: newPaymentStatus,
+        // The transfer went into the seller's own account.
+        paymentCollectedBy: confirmed ? 'seller' : undefined,
         paymentConfirmedBy: confirmed ? 'seller' : undefined,
         paymentConfirmedAt: confirmed ? new Date() : undefined,
         paidAt: confirmed ? new Date() : undefined,
@@ -1294,6 +1335,14 @@ export class OrderService {
         changedBy: sellerUserId,
       },
     });
+
+    // A transfer confirmed after the order was already delivered posts its ledger
+    // entries now (they're only posted once the money is actually in).
+    if (confirmed && ['delivered', 'completed'].includes(updated.orderStatus)) {
+      await ledgerService.recordOrderCompletion(orderId).catch((err) =>
+        console.error(`Ledger posting failed for order ${orderId}:`, err)
+      );
+    }
 
     await realtimeOrderService.emitOrderStatusUpdate(orderId, order.orderStatus, sellerUserId);
 
