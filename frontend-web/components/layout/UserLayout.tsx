@@ -3,12 +3,15 @@
 import { ReactNode } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import Link from 'next/link';
+import { LanguageSwitcher } from '@/components/i18n/LanguageSwitcher';
 import { DashboardSidebar } from './DashboardSidebar';
 import { ADMIN_SIDEBAR_ITEMS } from './DashboardShell';
 import { DashboardNavbar } from './DashboardNavbar';
 import { useAuthStore } from '@/lib/store/auth-store';
 import { useEffect, useState } from 'react';
 import { BrandLockup } from '@/components/ui/Mark';
+import { useT } from '@/lib/i18n';
+import { shellMessages } from '@/lib/i18n/messages/shell';
 
 interface SidebarItem {
   name: string;
@@ -27,6 +30,7 @@ export function UserLayout({ children, showSidebar = true, showNavbar = true }: 
   const { user, isAuthenticated } = useAuthStore();
   const pathname = usePathname();
   const router = useRouter();
+  const t = useT(shellMessages);
   const [mounted, setMounted] = useState(false);
 
   // Wait for hydration to complete
@@ -112,42 +116,43 @@ export function UserLayout({ children, showSidebar = true, showNavbar = true }: 
               </Link>
               <div className="hidden md:flex items-center gap-7">
                 <Link href="/products" className={linkClass}>
-                  Today's plates
+                  {t('todaysPlates')}
                 </Link>
                 <Link href="/products?productType=frozen" className={linkClass}>
-                  Pantry
+                  {t('pantry')}
                 </Link>
                 <Link href="/products?productType=fresh" className={linkClass}>
-                  Fresh
+                  {t('fresh')}
                 </Link>
                 {isAuthenticated && (
                   <Link href={dashboardPath} className={linkClass}>
-                    Dashboard
+                    {t('dashboard')}
                   </Link>
                 )}
               </div>
               <div className="flex items-center gap-2">
+                <LanguageSwitcher />
                 {isAuthenticated ? (
                   <>
                     <Link href="/orders" className={`${linkClass} px-3 py-2`}>
-                      Orders
+                      {t('orders')}
                     </Link>
                     <Link href="/cart" className={`${linkClass} px-3 py-2`}>
-                      Bag
+                      {t('bag')}
                     </Link>
                     <Link href="/profile" className={`${linkClass} px-3 py-2`}>
-                      You
+                      {t('you')}
                     </Link>
                   </>
                 ) : (
                   <>
                     <Link href="/login" className={`${linkClass} px-3 py-2`}>
-                      Sign in
+                      {t('signInLower')}
                     </Link>
                     <Link href="/register">
                       <button className="h-10 px-5 rounded-full text-[13px] font-medium tracking-tight transition-colors"
                         style={{ background: 'var(--ink-900)', color: 'var(--cream-50)' }}>
-                        Join Nuray
+                        {t('joinNuray')}
                       </button>
                     </Link>
                   </>
@@ -167,7 +172,7 @@ export function UserLayout({ children, showSidebar = true, showNavbar = true }: 
       {showNavbar && <DashboardNavbar title="Nuray" />}
       <div className="flex pt-16">
         {showSidebar && <DashboardSidebar items={getSidebarItems()} userType={userType as 'customer' | 'seller' | 'admin' | 'rider'} />}
-        <main className={`flex-1 ${showSidebar ? 'ml-64' : ''} p-6`}>
+        <main className={`flex-1 ${showSidebar ? 'ms-64' : ''} p-6`}>
           {children}
         </main>
       </div>
