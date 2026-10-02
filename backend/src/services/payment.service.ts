@@ -17,47 +17,46 @@ export class PaymentService {
     const safepayReady = configured.includes('safepay');
     return [
       {
-        id: 'jazzcash',
-        name: 'JazzCash',
-        icon: 'https://example.com/icons/jazzcash.png',
-        isAvailable: safepayReady,
-        description: 'Pay via JazzCash mobile wallet',
-      },
-      {
-        id: 'easypaisa',
-        name: 'EasyPaisa',
-        icon: 'https://example.com/icons/easypaisa.png',
-        isAvailable: safepayReady,
-        description: 'Pay via EasyPaisa mobile wallet',
-      },
-      {
-        id: 'bank',
-        name: 'Bank Transfer / IBFT',
-        icon: 'https://example.com/icons/bank.png',
-        isAvailable: configured.includes('bank'),
-        description: 'Pay via bank account (IBFT / 1LINK)',
-      },
-      {
-        id: 'card',
-        name: 'Credit/Debit Card',
-        icon: 'https://example.com/icons/card.png',
-        isAvailable: safepayReady,
-        description: 'Pay via credit or debit card',
-      },
-      {
         id: 'cod',
         name: 'Cash on Delivery',
-        icon: 'https://example.com/icons/cod.png',
+        kind: 'cash',
         isAvailable: true,
-        description: 'Pay cash when order is delivered',
-        extraFee: 50,
+        description: 'Pay cash when the order arrives (or when you collect it)',
+      },
+      {
+        id: 'safepay',
+        name: 'Card or mobile wallet (online)',
+        kind: 'online',
+        isAvailable: safepayReady,
+        description: 'Pay online by card, JazzCash or EasyPaisa through a secure hosted checkout',
       },
       {
         id: 'wallet',
         name: 'Nuray Wallet',
-        icon: 'https://example.com/icons/wallet.png',
+        kind: 'wallet',
         isAvailable: true,
         description: 'Pay from your wallet balance',
+      },
+      {
+        id: 'jazzcash',
+        name: 'JazzCash transfer to the kitchen',
+        kind: 'manual_transfer',
+        isAvailable: true,
+        description: "Send the amount to the kitchen's own JazzCash account, then upload the receipt",
+      },
+      {
+        id: 'easypaisa',
+        name: 'EasyPaisa transfer to the kitchen',
+        kind: 'manual_transfer',
+        isAvailable: true,
+        description: "Send the amount to the kitchen's own EasyPaisa account, then upload the receipt",
+      },
+      {
+        id: 'bank',
+        name: 'Bank transfer to the kitchen',
+        kind: 'manual_transfer',
+        isAvailable: true,
+        description: "Transfer to the kitchen's own bank account (IBFT / Raast), then upload the receipt",
       },
     ];
   }
@@ -131,13 +130,35 @@ export class PaymentService {
       };
     }
 
-    // Gateway: route jazzcash / easypaisa / card / safepay all through Safepay if it's configured
-    // because Safepay is an aggregator that handles all these methods on one hosted page.
+    // Online: card / wallet payments go through Safepay's hosted checkout (the customer
+    // picks card, JazzCash or EasyPaisa there). The order is recorded as 'safepay' so it is
+    // never mistaken for a transfer into the kitchen's own account.
     const safepayMethods = ['jazzcash', 'easypaisa', 'card', 'safepay'];
-    const gatewayMethod = safepayMethods.includes(paymentMethod) ? 'safepay' : paymentMethod;
-    const gateway = getGateway(gatewayMethod);
+    const safepay = getGateway('safepay');
+    const bankAggregator = getGateway('bank');
+    const gatewayMethod =
+      safepayMethods.includes(paymentMethod) && safepay?.isConfigured()
+        ? 'safepay'
+        : paymentMethod === 'bank' && bankAggregator?.isConfigured()
+          ? 'bank'
+          : null;
+    const gateway = gatewayMethod ? getGateway(gatewayMethod) : null;
 
-    if (gateway?.isConfigured()) {
+    if (!gateway || !gatewayMethod) {
+      // Never hand out a fake payment page. Without an online gateway, JazzCash /
+      // EasyPaisa / bank are transfers into the kitchen's own account, done from the
+      // order page (payment details + receipt upload).
+      if (['jazzcash', 'easypaisa', 'bank'].includes(paymentMethod)) {
+        throw new AppError(
+          "Pay this order by transfer to the kitchen's account from the order page, then upload the receipt.",
+          400,
+          'MANUAL_TRANSFER_METHOD'
+        );
+      }
+      throw new AppError('Online payment is not available right now', 503, 'GATEWAY_UNAVAILABLE');
+    }
+
+    {
       const returnUrl = `${FRONTEND_URL}/payment/return?order_id=${orderId}`;
       const cancelUrl = `${FRONTEND_URL}/checkout?cancel=1`;
       const amountPkr = Math.round(Number(order.totalAmount));
@@ -163,7 +184,7 @@ export class PaymentService {
       await prisma.order.update({
         where: { id: orderId },
         data: {
-          paymentMethod: paymentMethod,
+          paymentMethod: gatewayMethod,
           paymentTransactionId: result.paymentId,
         },
       });
@@ -177,23 +198,6 @@ export class PaymentService {
         gateway: gatewayMethod,
       };
     }
-
-    // Fallback: no gateway configured - return placeholder URL (dev only)
-    const paymentId = `PAY-${Date.now()}-${orderId.substring(0, 8)}`;
-    const redirectUrl = this.generatePaymentUrl(paymentMethod, orderId, paymentId);
-
-    await prisma.order.update({
-      where: { id: orderId },
-      data: { paymentMethod: paymentMethod },
-    });
-
-    return {
-      paymentId,
-      status: 'pending',
-      redirectUrl,
-      expiresAt: new Date(Date.now() + 15 * 60 * 1000).toISOString(),
-      gateway: paymentMethod,
-    };
   }
 
   /**
@@ -312,7 +316,8 @@ export class PaymentService {
       });
     }
     if (!order) {
-      const orderIdMatch = paymentId.match(/PAY-\d+-(.+)/);
+      // Anchored: the id must be exactly a PAY-* id, not merely contain one.
+      const orderIdMatch = paymentId.match(/^PAY-\d+-([0-9a-f-]{36})$/i);
       if (orderIdMatch) {
         order = await prisma.order.findUnique({ where: { id: orderIdMatch[1] } });
       }
@@ -337,8 +342,17 @@ export class PaymentService {
     }
 
     // 2. Re-verify with the appropriate gateway. Failing closed: if we can't
-    // confirm with the gateway, we refuse to mark the order paid.
-    const paymentTxId = order.paymentTransactionId || paymentId;
+    // confirm with the gateway, we refuse to mark the order paid. Only the payment
+    // id WE issued for this order when the payment was started is ever sent to a
+    // gateway; a caller-supplied id would let them pick which gateway is asked.
+    if (!order.paymentTransactionId) {
+      throw new AppError(
+        'No online payment was started for this order',
+        400,
+        'VERIFY_PENDING',
+      );
+    }
+    const paymentTxId = order.paymentTransactionId;
     const legacyMatch = paymentTxId.match(/^(JC|EP|BANK)-/);
     let gatewayKey: 'jazzcash' | 'easypaisa' | 'bank' | 'safepay' | null = null;
     if (legacyMatch) {
@@ -383,8 +397,13 @@ export class PaymentService {
       );
     }
 
-    // 3. Amount check. Gateway must have collected at least the order total.
-    if (verifyResult.amountPkr !== undefined) {
+    // 3. Amount check. The gateway must report the amount it collected, and it must
+    // cover the order total; a gateway that doesn't say how much was paid can't be
+    // trusted to mark the order paid.
+    if (verifyResult.amountPkr === undefined || verifyResult.amountPkr === null || Number.isNaN(Number(verifyResult.amountPkr))) {
+      throw new AppError('The payment gateway did not confirm the amount paid', 502, 'VERIFY_NO_AMOUNT');
+    }
+    {
       const expected = Math.round(Number(order.totalAmount));
       if (Number(verifyResult.amountPkr) < expected) {
         console.error(
@@ -511,14 +530,6 @@ export class PaymentService {
         createdAt: tx.createdAt,
       })),
     };
-  }
-
-  /**
-   * Generate payment URL (mock implementation)
-   */
-  private generatePaymentUrl(paymentMethod: string, orderId: string, paymentId: string): string {
-    const baseUrl = process.env.PAYMENT_GATEWAY_URL || 'https://payment-gateway.example.com';
-    return `${baseUrl}/pay/${paymentMethod}?order=${orderId}&payment=${paymentId}`;
   }
 }
 
