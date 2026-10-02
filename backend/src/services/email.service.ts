@@ -1,4 +1,5 @@
 import nodemailer from 'nodemailer';
+import type { Mail } from 'nodemailer';
 import { AppError } from '../middleware/errorHandler';
 
 interface EmailOptions {
@@ -9,7 +10,7 @@ interface EmailOptions {
 }
 
 class EmailService {
-  private transporter: nodemailer.Transporter | null = null;
+  private transporter: Mail | null = null;
   private initialized = false;
 
   constructor() {
