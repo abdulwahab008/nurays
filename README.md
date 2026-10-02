@@ -270,10 +270,16 @@ Socket.IO. The full reference is [`docs/API_DOCUMENTATION.md`](docs/API_DOCUMENT
 
 ## More documentation
 
-- [Architecture](docs/ARCHITECTURE.md), [system flows](docs/SYSTEM_FLOWS_AND_PROCESSES.md), [database schema](docs/DATABASE_SCHEMA.sql)
-- [Account credentials and access](docs/ACCOUNT_CREDENTIALS.md), [end-to-end testing guide](docs/E2E_TESTING_GUIDE.md)
-- [Deployment guide](docs/DEPLOYMENT_GUIDE.md), [hub operations manual](docs/HUB_OPERATIONS_MANUAL.md)
-- [Payment gateway integration](docs/PAYMENT_GATEWAY_INTEGRATION.md), [security and compliance](docs/SECURITY_AND_COMPLIANCE.md)
+All documentation is indexed in [`docs/README.md`](docs/README.md):
 
-Some of these documents were written early in the project and may describe plans (mobile apps, other cities) that are
-not built; the code and this README are the source of truth.
+- [Architecture](docs/ARCHITECTURE.md), [system flows](docs/SYSTEM_FLOWS_AND_PROCESSES.md), [business rules](docs/BUSINESS_RULES.md)
+  (totals, commission, delivery prices, rider pay, ranking)
+- [Admin guide](docs/ADMIN_GUIDE.md), [hub operations](docs/HUB_OPERATIONS_MANUAL.md)
+- [API reference](docs/API_DOCUMENTATION.md), [real-time events](docs/REALTIME_ORDER_MANAGEMENT.md),
+  [database schema](docs/DATABASE_SCHEMA.sql)
+- [Deployment](docs/DEPLOYMENT_GUIDE.md), [security](docs/SECURITY_AND_COMPLIANCE.md),
+  [payments](docs/PAYMENT_GATEWAY_INTEGRATION.md), [Google sign-in](docs/GOOGLE_OAUTH_SETUP.md)
+- [Testing strategy](docs/TESTING_STRATEGY.md), [manual test checklist](docs/E2E_TESTING_GUIDE.md),
+  [accounts](docs/ACCOUNT_CREDENTIALS.md), [developer onboarding](docs/DEVELOPER_ONBOARDING.md)
+
+Older planning documents and change logs are kept in [`docs/archive/`](docs/archive/) for reference only.
