@@ -544,6 +544,21 @@ async function main() {
   const lockRuns = await Promise.all([runExclusive('verify-lock', slow), runExclusive('verify-lock', slow)]);
   ok('a scheduled job runs on only one worker at a time', runs === 1 && lockRuns.filter(Boolean).length === 1, `runs=${runs} ${lockRuns}`);
 
+  // ---- 17h. a retried checkout never places a second order ----
+  const idC = await mkUser();
+  const idP = await mkProduct(seller.id, 30, 100);
+  const place = (key?: string) => orderService.createOrder(idC.id, { items: [{ productId: idP.id, quantity: 1 }], deliveryType: 'self_pickup', paymentMethod: 'cod' } as any, { idempotencyKey: key }) as Promise<any>;
+  const k1 = 'chk-' + uniq();
+  const first: any = await place(k1);
+  const again: any = await place(k1);
+  ok('the same checkout key twice returns the same order', first.id === again.id);
+  const k2 = 'chk-' + uniq();
+  const racers: any[] = await Promise.all([place(k2), place(k2), place(k2)]);
+  ok('three simultaneous submits of one checkout make one order', new Set(racers.map((o) => o.id)).size === 1);
+  const stockNow = (await prisma.product.findUnique({ where: { id: idP.id } }))!.stockQuantity;
+  ok('and stock is taken once per order', stockNow === 30 - 2, `stock=${stockNow}`);
+  ok('a new checkout (new key) is a new order', (await place('chk-' + uniq())).id !== first.id);
+
   // ---- 18. schema integrity ----
   const cc = await mkUser();
   const cp = await mkProduct(seller.id, 50, 100);
