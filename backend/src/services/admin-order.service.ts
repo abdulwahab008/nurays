@@ -1,5 +1,6 @@
 import { codCollectorOf } from '../utils/paymentCustody';
 import { presentFile } from '../storage';
+import { cancelOpenDelivery, notifyDeliveryCancelled, CancelledDelivery } from './delivery-lifecycle.service';
 import prisma from '../config/database';
 import { AppError } from '../middleware/errorHandler';
 import realtimeOrderService from './realtime-order.service';
@@ -390,7 +391,8 @@ export class AdminOrderService {
   /**
    * Cancel order (admin)
    */
-  async cancelOrder(orderId: string, adminId: string, reason: string) {
+  async cancelOrder(orderId: string, adminId: string | null, reason: string, opts: { by?: 'admin' | 'system' } = {}) {
+    const by = opts.by ?? 'admin';
     const order = await prisma.order.findUnique({
       where: { id: orderId },
       include: {
@@ -415,6 +417,7 @@ export class AdminOrderService {
 
     // Cancel order and restore stock
     let refundIssued = null as IssuedRefund | null;
+    let cancelledDelivery = null as CancelledDelivery | null;
     const cancelledOrder = await prisma.$transaction(async (tx) => {
       // Claim the cancellation: only one of any concurrent cancel/accept/ready
       // transitions can move the order out of a cancellable status. Without this
@@ -424,12 +427,13 @@ export class AdminOrderService {
         data: {
           orderStatus: 'cancelled',
           cancellationReason: reason,
-          cancelledBy: 'admin',
+          cancelledBy: by,
         },
       });
       if (claimed.count === 0) {
         throw new AppError('Order can no longer be cancelled', 409, 'ORDER_NOT_CANCELLABLE');
       }
+      cancelledDelivery = await cancelOpenDelivery(tx, orderId, reason);
       const updatedOrder = await tx.order.findUniqueOrThrow({ where: { id: orderId } });
 
       // Items already cancelled (e.g. by their seller) were restocked when that
@@ -478,12 +482,12 @@ export class AdminOrderService {
       await releasePromotionUsage(tx, orderId);
 
       // Hub units this order took go back into the batches they came from.
-      await releaseHubAllocations(tx, orderId, { reason: `Order ${order.orderNumber} cancelled by admin`, performedBy: adminId });
+      await releaseHubAllocations(tx, orderId, { reason: `Order ${order.orderNumber} cancelled by ${by}`, performedBy: adminId ?? 'System' });
 
       // If the customer had already paid, the money is owed back: refund it now
       // (wallet) or queue it for the admin to send (everything else).
       refundIssued = await issueRefund(tx, orderId, {
-        reason: `Order cancelled by admin: ${reason}`,
+        reason: `Order cancelled by ${by}: ${reason}`,
         createdBy: adminId,
       });
 
@@ -492,7 +496,7 @@ export class AdminOrderService {
         data: {
           orderId,
           status: 'cancelled',
-          notes: `Cancelled by admin. Reason: ${reason}`,
+          notes: by === 'system' ? `Cancelled automatically. ${reason}` : `Cancelled by admin. Reason: ${reason}`,
           changedBy: adminId,
         },
       });
@@ -501,7 +505,8 @@ export class AdminOrderService {
     });
 
     // Emit order status update
-    await realtimeOrderService.emitOrderStatusUpdate(cancelledOrder.id, 'cancelled', adminId);
+    await realtimeOrderService.emitOrderStatusUpdate(cancelledOrder.id, 'cancelled', adminId ?? 'system');
+    notifyDeliveryCancelled(cancelledDelivery);
 
     return {
       orderId: cancelledOrder.id,

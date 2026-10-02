@@ -17,6 +17,7 @@ import { isAcceptingOrders, validateOrderTiming } from './availability.service';
 import { SELLER_DIRECT_METHODS } from '../utils/paymentCustody';
 import ledgerService from './ledger.service';
 import { newHandoverCode } from './handover.service';
+import { cancelOpenDelivery, notifyDeliveryCancelled, CancelledDelivery } from './delivery-lifecycle.service';
 
 export class OrderService {
   /**
@@ -1003,6 +1004,7 @@ export class OrderService {
 
     // Cancel order and restore stock
     let refundIssued = null as IssuedRefund | null;
+    let cancelledDelivery = null as CancelledDelivery | null;
     const cancelledOrder = await prisma.$transaction(async (tx) => {
       // Claim the cancellation: the "still pending" check above ran before this
       // transaction, so a seller accepting at the same instant (or a second
@@ -1016,6 +1018,7 @@ export class OrderService {
           cancelledBy: 'customer',
         },
       });
+      if (claimed.count > 0) cancelledDelivery = await cancelOpenDelivery(tx, orderId, `Cancelled by the customer: ${reason}`);
       if (claimed.count === 0) {
         throw new AppError('Order can no longer be cancelled', 409, 'ORDER_NOT_CANCELLABLE');
       }
@@ -1090,6 +1093,7 @@ export class OrderService {
 
     // Emit order status update
     await realtimeOrderService.emitOrderStatusUpdate(cancelledOrder.id, 'cancelled', userId);
+    notifyDeliveryCancelled(cancelledDelivery);
 
     return {
       orderId: cancelledOrder.id,

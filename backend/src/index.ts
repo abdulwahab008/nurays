@@ -12,6 +12,8 @@ import socketManager from './config/socket';
 import { fileRoutes } from './storage/serve';
 import { checkAndCreateStockAlerts } from './services/stock-alert.service';
 import hubService from './services/hub.service';
+import { scheduleJob } from './jobs/scheduler';
+import { sweepStaleOrders, purgeExpiredSecrets } from './services/order-maintenance.service';
 import { errorHandler } from './middleware/errorHandler';
 import { notFoundHandler } from './middleware/notFoundHandler';
 import healthRoutes from './routes/health.routes';
@@ -133,21 +135,18 @@ httpServer.listen(PORT, () => {
   console.log(`🔗 API Base URL: http://localhost:${PORT}/api/${API_VERSION}`);
   console.log(`🔌 WebSocket server initialized`);
 
+  // Background jobs. Each run holds a Postgres advisory lock, so with several app
+  // instances only one runs a given job at a time (jobs/scheduler.ts).
   // Safety-net sweep for stock alerts an order-time check might have missed
-  // (e.g. a threshold lowered after the fact). Real-time alerting on order
-  // creation (order.service.ts) is the primary path; this just catches up.
-  // ponytail: setInterval is the whole scheduler — swap for a real job queue
-  // if more background jobs show up.
-  checkAndCreateStockAlerts().catch((err) => console.error('Stock alert sweep failed:', err));
-  setInterval(() => {
-    checkAndCreateStockAlerts().catch((err) => console.error('Stock alert sweep failed:', err));
-  }, 6 * 60 * 60 * 1000);
-
-  // Hub batches past their expiry stop showing as available (hourly).
-  const sweepHubExpiry = () =>
-    hubService.expireStaleBatches().catch((err) => console.error('Hub expiry sweep failed:', err));
-  sweepHubExpiry();
-  setInterval(sweepHubExpiry, 60 * 60 * 1000);
+  // (e.g. a threshold lowered after the fact); real-time alerting on order creation
+  // is the primary path.
+  scheduleJob('stock-alerts', 6 * 60 * 60 * 1000, () => checkAndCreateStockAlerts());
+  // Hub batches past their expiry stop showing as available.
+  scheduleJob('hub-expiry', 60 * 60 * 1000, () => hubService.expireStaleBatches());
+  // Orders nobody is moving forward release their stock and the customer's money.
+  scheduleJob('stale-orders', 2 * 60 * 1000, () => sweepStaleOrders());
+  // Old one-time codes and used / expired reset tokens.
+  scheduleJob('purge-expired-secrets', 6 * 60 * 60 * 1000, () => purgeExpiredSecrets());
 });
 
 export default app;
