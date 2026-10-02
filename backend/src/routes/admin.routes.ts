@@ -14,7 +14,9 @@ import {
   updateSettings,
   getPendingRiders,
   approveRejectRider,
+  getAuditLogs,
 } from '../controllers/admin.controller';
+import { auditWrites } from '../middleware/audit';
 import { adminGetTickets, adminGetTicketDetail, adminReplyToTicket } from '../controllers/support.controller';
 import { authenticate, authorize } from '../middleware/auth.middleware';
 import { validate } from '../middleware/validation.middleware';
@@ -34,6 +36,9 @@ const router = Router();
 // All routes require admin authentication
 router.use(authenticate);
 router.use(authorize('admin'));
+router.use(auditWrites('admin'));
+
+router.get('/audit-logs', getAuditLogs);
 
 // Get pending sellers
 router.get('/pending-sellers', getPendingSellers);

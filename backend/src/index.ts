@@ -2,12 +2,16 @@
 // import time and need it populated.
 import 'dotenv/config';
 import './config/check-env';
+// Error tracking starts before everything else so startup errors are reported too.
+import { initSentry, reportError, flushSentry } from './config/sentry';
+import { logger, routeConsoleToLogger } from './utils/logger';
+initSentry();
+routeConsoleToLogger();
 
 import express from 'express';
 import { createServer } from 'http';
 import cors from 'cors';
 import helmet from 'helmet';
-import morgan from 'morgan';
 import socketManager from './config/socket';
 import { fileRoutes } from './storage/serve';
 import { checkAndCreateStockAlerts } from './services/stock-alert.service';
@@ -19,6 +23,7 @@ import prisma from './config/database';
 import { closeRedis } from './config/redis';
 import { markShuttingDown, isShuttingDown } from './utils/lifecycle';
 import { apiLimiter } from './middleware/rateLimiter';
+import { requestId, httpLogger } from './middleware/requestContext';
 import { isProduction } from './config/env';
 import { sweepStaleOrders, purgeExpiredSecrets } from './services/order-maintenance.service';
 import { errorHandler } from './middleware/errorHandler';
@@ -73,9 +78,12 @@ app.use(cors({
   origin: process.env.CORS_ORIGIN || 'http://localhost:3000',
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'Idempotency-Key'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'Idempotency-Key', 'X-Request-Id'],
+  exposedHeaders: ['X-Request-Id'],
 }));
-app.use(morgan('combined')); // Logging
+// Request id on every log line and error response, then one log line per request.
+app.use(requestId);
+app.use(httpLogger);
 
 // Parse JSON. For webhook routes we also capture the raw Buffer so HMAC
 // signature checks can verify the exact bytes Safepay sent.
@@ -170,7 +178,7 @@ const SHUTDOWN_GRACE_MS = Number(process.env.SHUTDOWN_GRACE_MS) || 25_000;
 // routing here first (its health-check interval or so).
 const SHUTDOWN_DRAIN_MS = Number(process.env.SHUTDOWN_DRAIN_MS ?? (isProduction() ? 5_000 : 0));
 
-async function shutdown(signal: string) {
+async function shutdown(signal: string, exitCode = 0) {
   if (isShuttingDown()) return;
   markShuttingDown();
   console.log(`${signal} received: shutting down`);
@@ -188,10 +196,22 @@ async function shutdown(signal: string) {
   await socketManager.close().catch((err) => console.error('Closing sockets failed:', err));
   await httpClosed;
   await stopWorkers().catch((err) => console.error('Stopping job workers failed:', err));
-  await Promise.allSettled([prisma.$disconnect(), closeRedis()]);
+  await Promise.allSettled([prisma.$disconnect(), closeRedis(), flushSentry()]);
   console.log('Shutdown complete');
-  process.exit(0);
+  process.exit(exitCode);
 }
+
+// A forgotten .catch() on a background promise must not take the server down: log and report it.
+process.on('unhandledRejection', (reason) => {
+  logger.error({ err: reason }, 'Unhandled promise rejection');
+  reportError(reason, { kind: 'unhandledRejection' });
+});
+// After an uncaught exception the process state is unknown: report it, then shut down cleanly.
+process.on('uncaughtException', (err) => {
+  logger.fatal({ err }, 'Uncaught exception');
+  reportError(err, { kind: 'uncaughtException' });
+  void shutdown('uncaughtException', 1);
+});
 
 process.on('SIGTERM', () => void shutdown('SIGTERM'));
 process.on('SIGINT', () => void shutdown('SIGINT'));

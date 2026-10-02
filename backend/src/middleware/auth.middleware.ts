@@ -2,6 +2,7 @@ import { Request, Response, NextFunction } from 'express';
 import { verifyToken, isTokenRevoked, JWTPayload } from '../utils/jwt';
 import { AppError } from './errorHandler';
 import prisma from '../config/database';
+import { setLogUser } from '../utils/logger';
 
 // Extend Express Request to include user
 declare global {
@@ -62,6 +63,7 @@ export const authenticate = async (
       userType: user.userType,
       id: payload.userId,
     };
+    setLogUser(payload.userId);
 
     next();
   } catch (error) {
@@ -99,6 +101,7 @@ export const optionalAuthenticate = async (
           userType: user.userType,
           id: payload.userId,
         };
+        setLogUser(payload.userId);
       }
     }
 
