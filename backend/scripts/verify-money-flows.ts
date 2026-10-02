@@ -366,6 +366,21 @@ async function main() {
   await prisma.order.update({ where: { id: unpaidTransfer.id }, data: { orderStatus: 'preparing' } });
   ok('an order cannot be marked ready before its transfer is confirmed', (await code(sellerOrderService.markOrderReady(unpaidTransfer.id, csUser))) === 'PAYMENT_NOT_CONFIRMED');
 
+  // ---- 17c. payment gateways fail closed ----
+  const gwC = await mkUser();
+  const gwP = await mkProduct(seller.id, 20, 100);
+  const gwO: any = (await order(gwC.id, [{ productId: gwP.id, quantity: 1 }], { paymentMethod: 'jazzcash' })).order;
+  const vcode = (pid: string) => paymentService.verifyPayment(pid, gwC.id).then(() => 'OK', (e: any) => e.code);
+  ok('a crafted JC-PAY-* id cannot pick a gateway and mark an order paid', (await vcode(`JC-PAY-1-${gwO.id}`)) !== 'OK');
+  ok('verifying an order with no online payment started is refused', (await vcode(`PAY-1-${gwO.id}`)) === 'VERIFY_PENDING');
+  ok('the order is still unpaid', (await prisma.order.findUnique({ where: { id: gwO.id } }))!.paymentStatus === 'pending');
+  const { jazzcashGateway, easypaisaGateway } = require('../src/gateways');
+  const jcv = await jazzcashGateway.verifyPayment({ paymentId: 'anything' });
+  const epv = await easypaisaGateway.verifyPayment({ paymentId: 'anything' });
+  ok('the unfinished JazzCash / EasyPaisa adapters never report a payment as completed', !jcv.success && jcv.status === 'failed' && !epv.success && epv.status === 'failed' && !jazzcashGateway.isConfigured());
+  ok('without an online gateway, JazzCash means a transfer to the kitchen (no fake payment page)', (await paymentService.processPayment(gwO.id, gwC.id, 'jazzcash').then(() => 'OK', (e: any) => e.code)) === 'MANUAL_TRANSFER_METHOD');
+  ok('card payment without a configured gateway is refused, not faked', (await paymentService.processPayment(gwO.id, gwC.id, 'card').then(() => 'OK', (e: any) => e.code)) === 'GATEWAY_UNAVAILABLE');
+
   // ---- 18. schema integrity ----
   const cc = await mkUser();
   const cp = await mkProduct(seller.id, 50, 100);
