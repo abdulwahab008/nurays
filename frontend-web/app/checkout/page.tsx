@@ -437,7 +437,7 @@ export default function CheckoutPage() {
                 </span>
               </div>
               <p className="text-[11px] text-slate-500">
-                Freshly prepared home-cooked food. Delivered in hygienic insulated packaging.
+                Home-cooked by this kitchen. An order comes from one kitchen at a time.
               </p>
             </div>
           </div>
@@ -644,7 +644,7 @@ export default function CheckoutPage() {
                   {paymentMethod === 'cod' && (
                     <div className="mt-3 ml-7 pt-2.5 border-t border-slate-200/60 text-[11px] text-slate-600 flex items-center gap-2">
                       <ShieldCheck className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-                      <span>Riders carry change for notes up to Rs 5,000. Inspect food before paying.</span>
+                      <span>Keep the exact amount ready, and check your order before you pay.</span>
                     </div>
                   )}
                 </label>
@@ -1126,14 +1126,14 @@ export default function CheckoutPage() {
                 </div>
 
                 <div className="flex justify-between text-slate-500 text-[11px]">
-                  <span>Sindh/Punjab Sales Tax (5% GST)</span>
+                  <span>Sales tax (5%)</span>
                   <span>{formatPrice(gstAmount)}</span>
                 </div>
 
                 <div className="pt-3 border-t border-slate-200/80 flex items-baseline justify-between">
                   <div>
                     <span className="text-sm font-black text-slate-900 block">Total Payable</span>
-                    <span className="text-[10px] text-slate-400">Includes packaging &amp; local tax</span>
+                    <span className="text-[10px] text-slate-400">Includes delivery and tax</span>
                   </div>
                   <span className="text-xl font-black text-[#FF5500]">{formatPrice(totalPayable)}</span>
                 </div>
@@ -1159,10 +1159,17 @@ export default function CheckoutPage() {
                 )}
               </Button>
 
-              <div className="flex items-center justify-center gap-2 text-[11px] text-slate-400">
-                <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
-                <span>Verified Clean Food · 100% Halal Domestic Batches</span>
-              </div>
+              <p className="text-center text-[11px] leading-relaxed text-slate-500">
+                By placing this order you agree to the{' '}
+                <Link href="/terms" target="_blank" className="font-semibold text-slate-700 underline hover:text-[#FF5500]">
+                  Terms of Service
+                </Link>{' '}
+                and the{' '}
+                <Link href="/refund-policy" target="_blank" className="font-semibold text-slate-700 underline hover:text-[#FF5500]">
+                  Refund &amp; Cancellation Policy
+                </Link>
+                .
+              </p>
             </div>
           </div>
         </div>
