@@ -25,6 +25,7 @@ import productService from '../src/services/product.service';
 import ledgerService from '../src/services/ledger.service';
 import sellerService from '../src/services/seller.service';
 import sellerOrderService from '../src/services/seller-order.service';
+import reviewService from '../src/services/review.service';
 
 let pass = 0, fail = 0;
 const ok = (name: string, cond: boolean, extra = '') => { cond ? pass++ : fail++; console.log(`${cond ? 'PASS' : 'FAIL'}  ${name}${extra ? '  [' + extra + ']' : ''}`); };
@@ -987,6 +988,22 @@ async function main() {
   ok('catalog: no 500-dish ceiling: the 510th dish is on page 26 and counted', bigLast.pagination.total === 510 && bigLast.products.length === 10, `total=${bigLast.pagination.total} last=${bigLast.products.length}`);
   const searchHit: any = await productService.getProducts({ search: `bulk ${bigRun} 50`, limit: 50 } as any);
   ok('catalog: search still matches inside names', searchHit.products.length >= 1 && searchHit.products.every((x: any) => x.name.toLowerCase().includes(`bulk ${bigRun} 50`)));
+
+  // ---- kitchen rating: one vote per order, however many dishes were reviewed ----
+  const rk = await mkSeller();
+  const rkDishes = await Promise.all([1, 2, 3].map(() => mkProduct(rk.id, 10)));
+  const bigOrder: any = (await order(cust.id, rkDishes.map((d) => ({ productId: d.id, quantity: 1 })))).order;
+  const smallOrder: any = (await order(cust.id, [{ productId: rkDishes[0].id, quantity: 1 }])).order;
+  await prisma.order.updateMany({ where: { id: { in: [bigOrder.id, smallOrder.id] } }, data: { orderStatus: 'delivered' } });
+  const rateItems = async (o: any, sellerRating: number) => {
+    for (const it of await prisma.orderItem.findMany({ where: { orderId: o.id } })) {
+      await reviewService.addReview(cust.id, { orderId: o.id, orderItemId: it.id, productRating: 4, sellerRating });
+    }
+  };
+  await rateItems(bigOrder, 5);
+  await rateItems(smallOrder, 1);
+  const rkAfter = await prisma.seller.findUnique({ where: { id: rk.id } });
+  ok('a kitchen rating counts each order once (3-dish order rated 5 + 1-dish order rated 1 = 3.0 from 2 orders)', Number(rkAfter!.ratingAverage) === 3 && rkAfter!.totalReviews === 2, `${rkAfter!.ratingAverage} from ${rkAfter!.totalReviews}`);
 
   // OTP SMS cap per number
   const capPhone = pn();

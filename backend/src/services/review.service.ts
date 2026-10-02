@@ -223,23 +223,25 @@ export class ReviewService {
   }
 
   /**
-   * Update seller rating
+   * Update seller rating. Reviews are per order item, but a customer rates the kitchen once
+   * per order, so each order counts once: an order with five dishes must not weigh five times
+   * as much as an order with one. totalReviews is the number of reviewed orders.
    */
   private async updateSellerRating(sellerId: string) {
-    const avgRating = await prisma.review.aggregate({
-      where: {
-        sellerId,
-        isApproved: true,
-      },
-      _avg: { sellerRating: true },
-      _count: true,
-    });
+    const [row] = await prisma.$queryRaw<Array<{ avg: number | null; orders: number }>>`
+      SELECT AVG(order_rating)::float AS avg, COUNT(*)::int AS orders
+      FROM (
+        SELECT AVG(seller_rating) AS order_rating
+        FROM reviews
+        WHERE seller_id = ${sellerId} AND is_approved = true AND seller_rating IS NOT NULL
+        GROUP BY order_id
+      ) per_order`;
 
     await prisma.seller.update({
       where: { id: sellerId },
       data: {
-        ratingAverage: avgRating._avg.sellerRating || 0,
-        totalReviews: avgRating._count,
+        ratingAverage: Math.round((row?.avg ?? 0) * 100) / 100,
+        totalReviews: row?.orders ?? 0,
       },
     });
   }
