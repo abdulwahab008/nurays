@@ -294,7 +294,8 @@ export const getPublicSellers = async (req: Request, res: Response) => {
     // Real rating only: 0 with no reviews (the UI shows "New"), never a made-up 4.8.
     ratingAverage: Number(s.ratingAverage) || 0,
     totalReviews: s.totalReviews || s._count.reviews || 0,
-    minPrepTimeMinutes: s.minPrepTimeMinutes || 25,
+    // null when the kitchen hasn't set one: the UI shows nothing rather than a guess.
+    minPrepTimeMinutes: s.minPrepTimeMinutes ?? null,
     minOrderAmountForDelivery: s.minOrderAmountForDelivery != null ? Number(s.minOrderAmountForDelivery) : null,
     freeDeliveryThreshold: s.freeDeliveryThreshold != null ? Number(s.freeDeliveryThreshold) : null,
     deliveryFeeType: s.deliveryFeeType || null,
@@ -438,7 +439,7 @@ export const getPublicSellerById = async (req: Request, res: Response) => {
     coverImageUrl: seller.coverImageUrl,
     ratingAverage: Number(seller.ratingAverage) || 0,
     totalReviews: seller.totalReviews || seller.reviews.length || 0,
-    minPrepTimeMinutes: seller.minPrepTimeMinutes || 25,
+    minPrepTimeMinutes: seller.minPrepTimeMinutes ?? null,
     minOrderAmountForDelivery: seller.minOrderAmountForDelivery != null ? Number(seller.minOrderAmountForDelivery) : null,
     freeDeliveryThreshold: seller.freeDeliveryThreshold != null ? Number(seller.freeDeliveryThreshold) : null,
     deliveryFeeType: seller.deliveryFeeType || null,
@@ -486,7 +487,7 @@ export const getPublicSellerById = async (req: Request, res: Response) => {
     })),
     reviews: seller.reviews.map((r) => ({
       id: r.id,
-      rating: r.sellerRating || r.productRating || 5,
+      rating: r.sellerRating ?? r.productRating ?? null,
       comment: r.comment,
       createdAt: r.createdAt,
       author: r.customer?.profile?.fullName || 'Verified Buyer',
