@@ -1,10 +1,10 @@
 import prisma from '../config/database';
-import type { PlatformDeliveryPricing } from '../utils/deliveryFee';
+import { communityPairKey, type PlatformDeliveryPricing } from '../utils/deliveryFee';
 
 /**
  * Nuray's delivery prices (see platformDeliveryFee in utils/deliveryFee.ts): each community's
- * fixed fees, edited on the admin Communities page, and the per-km settings on the admin
- * Settings page. Kept for a minute, and dropped as soon as an admin changes either.
+ * fixed fees and the prices between pairs of communities, edited on the admin Communities page,
+ * and the per-km settings on the admin Settings page. Kept for a minute, and dropped as soon as an admin changes either.
  */
 
 export const DELIVERY_SETTING_DEFAULTS = {
@@ -24,9 +24,10 @@ const num = (v: unknown, fallback: number) => (v != null && Number.isFinite(Numb
 
 export async function getPlatformDeliveryPricing(): Promise<PlatformDeliveryPricing> {
   if (cached && Date.now() - cached.at < 60_000) return cached.value;
-  const [settings, communities] = await Promise.all([
+  const [settings, communities, pairs] = await Promise.all([
     prisma.systemSetting.findMany({ where: { key: { in: Object.keys(DELIVERY_SETTING_DEFAULTS) } } }),
     prisma.community.findMany({ select: { id: true, centerLatitude: true, centerLongitude: true, deliveryBaseFee: true, crossCommunityBaseFee: true } }),
+    prisma.communityPairFee.findMany({ select: { communityAId: true, communityBId: true, fee: true } }),
   ]);
   const s = Object.fromEntries(settings.map((r) => [r.key, r.value])) as Record<string, unknown>;
   const value: PlatformDeliveryPricing = {
@@ -45,6 +46,7 @@ export async function getPlatformDeliveryPricing(): Promise<PlatformDeliveryPric
         },
       ])
     ),
+    pairFees: new Map(pairs.map((p) => [communityPairKey(p.communityAId, p.communityBId), Number(p.fee)])),
   };
   cached = { at: Date.now(), value };
   return value;

@@ -34,6 +34,8 @@ interface CommunityRow {
   suggestedFee: number;
   /** What customers there pay when a Nuray rider delivers (null: too far for Nuray riders). */
   nurayFee: number | null;
+  /** A set price (own community, or an admin's price for this pair) rather than a distance estimate. */
+  nurayFeeIsFixed?: boolean;
   terms: CommunityTerms | null;
 }
 
@@ -456,7 +458,7 @@ export default function SellerDeliveryPage() {
                               <span className="text-xs font-bold text-slate-900">
                                 {c.nurayFee == null
                                   ? 'Too far for Nuray riders'
-                                  : c.isHome
+                                  : c.nurayFeeIsFixed
                                     ? `Rs ${c.nurayFee} (fixed)`
                                     : `about Rs ${c.nurayFee} (by distance)`}
                               </span>

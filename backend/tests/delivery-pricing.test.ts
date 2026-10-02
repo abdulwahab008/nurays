@@ -2,7 +2,7 @@
  * Nuray's delivery prices (fixed within a community, by distance to others) and
  * whole-rupee order totals.
  */
-import { getDeliveryFeeForSeller, platformDeliveryFee, PlatformDeliveryPricing } from '../src/utils/deliveryFee';
+import { communityPairKey, getDeliveryFeeForSeller, platformDeliveryFee, PlatformDeliveryPricing } from '../src/utils/deliveryFee';
 import { priceOrder } from '../src/utils/pricing';
 
 const pricing: PlatformDeliveryPricing = {
@@ -33,6 +33,19 @@ describe('Nuray delivery fee', () => {
     const r = platformDeliveryFee('askari', { communityId: 'dha' }, null, pricing);
     expect(r.distanceKm).toBeCloseTo(5, 0);
     expect(r.fee).toBe(200); // 150 + ~2 km * 20 = ~190 -> 200
+  });
+
+  it("an admin's price for a pair of communities replaces the distance formula, both ways", () => {
+    const withPair = { ...pricing, pairFees: new Map([[communityPairKey('dha', 'askari'), 175]]) };
+    expect(platformDeliveryFee('askari', { communityId: 'dha' }, 6.2, withPair)).toMatchObject({ fee: 175, pricing: 'community_pair' });
+    expect(platformDeliveryFee('dha', { communityId: 'askari' }, 6.2, withPair).fee).toBe(175);
+    // other trips are unaffected, and within a community its own fee still applies
+    expect(platformDeliveryFee('askari', { communityId: 'askari' }, 1, withPair).fee).toBe(100);
+  });
+
+  it('a pair price also covers a trip longer than the usual limit', () => {
+    const withPair = { ...pricing, pairFees: new Map([[communityPairKey('askari', 'far'), 400]]) };
+    expect(platformDeliveryFee('askari', { communityId: 'far' }, null, withPair)).toMatchObject({ deliverable: true, fee: 400 });
   });
 
   it('nothing beyond the maximum distance', () => {

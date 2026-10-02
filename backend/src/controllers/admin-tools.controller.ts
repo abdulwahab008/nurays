@@ -1,7 +1,7 @@
 import { Request, Response } from 'express';
 import { AppError } from '../middleware/errorHandler';
 import { listUsers, setUserStatus, setRiderStatus, makeHubManager, removeHubManager, listHubManagers } from '../services/admin-people.service';
-import { listCommunitiesForAdmin, createCommunity, updateCommunity, listHubsForAdmin, createHub, updateHub } from '../services/admin-places.service';
+import { listCommunitiesForAdmin, createCommunity, updateCommunity, listHubsForAdmin, createHub, updateHub, listPairFees, setPairFee, deletePairFee } from '../services/admin-places.service';
 import hubService from '../services/hub.service';
 import promotionService from '../services/promotion.service';
 import realtimeOrderService from '../services/realtime-order.service';
@@ -65,6 +65,19 @@ export const postCommunity = async (req: Request, res: Response) => {
 
 export const patchCommunity = async (req: Request, res: Response) => {
   res.status(200).json({ success: true, data: await updateCommunity(req.params.id, req.body), message: 'Community updated' });
+};
+
+export const getPairFees = async (_req: Request, res: Response) => {
+  res.status(200).json({ success: true, data: await listPairFees() });
+};
+
+export const putPairFee = async (req: Request, res: Response) => {
+  const { communityAId, communityBId, fee } = req.body;
+  res.status(200).json({ success: true, data: await setPairFee(communityAId, communityBId, fee, req.user!.id), message: 'Price saved' });
+};
+
+export const removePairFee = async (req: Request, res: Response) => {
+  res.status(200).json({ success: true, data: await deletePairFee(req.params.id), message: 'Price removed' });
 };
 
 export const getHubsAdmin = async (_req: Request, res: Response) => {

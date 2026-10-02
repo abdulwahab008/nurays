@@ -93,13 +93,14 @@ export interface DeliveryFeeResult {
   reason: string | null;
   distanceKm: number | null;
   /** How a Nuray-rider fee was priced (absent when the kitchen delivers itself). */
-  pricing?: 'same_community' | 'cross_community' | 'distance';
+  pricing?: 'same_community' | 'community_pair' | 'cross_community' | 'distance';
 }
 
 /**
  * Nuray's own delivery prices, set by admins (used whenever a Nuray rider delivers):
  *  - within a community: that community's fixed fee (Community.deliveryBaseFee);
- *  - to another community: the kitchen's community's base fee for other communities
+ *  - between two communities an admin priced as a pair (CommunityPairFee): that price, both ways;
+ *  - to any other community: the kitchen's community's base fee for other communities
  *    (Community.crossCommunityBaseFee) plus perKm for every km beyond includedKm, rounded up
  *    to Rs 10; nothing beyond maxKm. Distance is kitchen to customer, or community centre to
  *    community centre when either location isn't known.
@@ -111,7 +112,12 @@ export interface PlatformDeliveryPricing {
   /** When the kitchen's community isn't known. */
   fallbackBaseFee: number;
   communities: Map<string, { centerLat: number; centerLng: number; sameCommunityFee: number; crossCommunityBaseFee: number }>;
+  /** Admin-set prices between two communities, keyed by communityPairKey(a, b). */
+  pairFees?: Map<string, number>;
 }
+
+/** The same key whichever way round the two communities are given. */
+export const communityPairKey = (a: string, b: string) => (a < b ? `${a}|${b}` : `${b}|${a}`);
 
 export function platformDeliveryFee(
   sellerCommunityId: string | null | undefined,
@@ -123,6 +129,11 @@ export function platformDeliveryFee(
   const buyer = address.communityId ? pricing.communities.get(address.communityId) : undefined;
   if (home && sellerCommunityId === address.communityId) {
     return { deliverable: true, fee: home.sameCommunityFee, reason: null, distanceKm, pricing: 'same_community' };
+  }
+  // An admin's price for this pair of communities wins over the distance formula (and its limit).
+  const pairFee = sellerCommunityId && address.communityId ? pricing.pairFees?.get(communityPairKey(sellerCommunityId, address.communityId)) : undefined;
+  if (pairFee != null) {
+    return { deliverable: true, fee: pairFee, reason: null, distanceKm, pricing: 'community_pair' };
   }
   const km = distanceKm ?? (home && buyer ? haversineKm(home.centerLat, home.centerLng, buyer.centerLat, buyer.centerLng) : null);
   if (km != null && km > pricing.maxKm) {
