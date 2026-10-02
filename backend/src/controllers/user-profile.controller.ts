@@ -71,3 +71,19 @@ export const addAddress = async (req: Request, res: Response) => {
   });
 };
 
+
+export const updateAddress = async (req: Request, res: Response) => {
+  if (!req.user) {
+    throw new AppError('Authentication required', 401, 'AUTH_REQUIRED');
+  }
+  const address = await userProfileService.updateAddress(req.user.userId, req.params.id, req.body);
+  res.status(200).json({ success: true, data: address, message: 'Address updated' });
+};
+
+export const deleteAddress = async (req: Request, res: Response) => {
+  if (!req.user) {
+    throw new AppError('Authentication required', 401, 'AUTH_REQUIRED');
+  }
+  await userProfileService.deleteAddress(req.user.userId, req.params.id);
+  res.status(200).json({ success: true, message: 'Address deleted' });
+};

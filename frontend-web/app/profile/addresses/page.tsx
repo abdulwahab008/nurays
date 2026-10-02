@@ -333,6 +333,11 @@ export default function AddressesPage() {
         postalCode: formData.postalCode,
         landmark: formData.landmark,
         isDefault: formData.isDefault,
+        // The map pin decides which community (and so which kitchens and fees) the
+        // address belongs to; the server works the community out from it.
+        ...(formData.latitude && formData.longitude
+          ? { latitude: parseFloat(formData.latitude), longitude: parseFloat(formData.longitude) }
+          : {}),
       };
 
       if (editingAddress) {
@@ -383,8 +388,8 @@ export default function AddressesPage() {
       landmark: address.landmark || '',
       isDefault: address.isDefault || false,
       deliveryInstructions: '',
-      latitude: '',
-      longitude: '',
+      latitude: address.coordinates ? String(address.coordinates.latitude) : '',
+      longitude: address.coordinates ? String(address.coordinates.longitude) : '',
     });
     setEditingAddress(address);
     setShowAddForm(true);

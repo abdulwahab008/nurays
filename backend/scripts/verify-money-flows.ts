@@ -468,6 +468,23 @@ async function main() {
   const pfView: any = await orderService.getOrderDetails(pfO.id, pfC.id);
   ok('the order shows the receipt as a short-lived signed link, never the stored reference', typeof pfView.paymentProofUrl === 'string' && pfView.paymentProofUrl.startsWith('/files/x/proofs/') && /[?&]sig=/.test(pfView.paymentProofUrl), pfView.paymentProofUrl);
 
+  // ---- 17f. addresses: edit, set default, delete ----
+  const adU = await mkUser(); const adOther = await mkUser();
+  const a1: any = await userProfileService.addAddress(adU.id, { addressLine1: 'House 10 Street 1', area: 'Clifton', city: 'Karachi' } as any);
+  const a2: any = await userProfileService.addAddress(adU.id, { addressLine1: 'House 20 Street 2', area: 'Gulshan', city: 'Karachi' } as any);
+  ok('the first address is the default, a later one is not', a1.isDefault === true && a2.isDefault === false);
+  await userProfileService.updateAddress(adU.id, a2.id, { isDefault: true });
+  const defaults = await prisma.userAddress.findMany({ where: { userId: adU.id, isDefault: true } });
+  ok('making another address the default leaves exactly one default', defaults.length === 1 && defaults[0].id === a2.id);
+  const edited: any = await userProfileService.updateAddress(adU.id, a1.id, { landmark: 'Near the park', latitude: 24.81, longitude: 67.03 });
+  ok('an address can be edited, pin included', edited.landmark === 'Near the park' && edited.coordinates?.latitude === 24.81);
+  ok("someone else's address can't be edited or deleted",
+    (await code(userProfileService.updateAddress(adOther.id, a1.id, { landmark: 'x' }))) === 'ADDRESS_NOT_FOUND' &&
+    (await code(userProfileService.deleteAddress(adOther.id, a1.id))) === 'ADDRESS_NOT_FOUND');
+  await userProfileService.deleteAddress(adU.id, a2.id);
+  const remaining = await prisma.userAddress.findMany({ where: { userId: adU.id } });
+  ok('deleting the default makes the remaining address the default', remaining.length === 1 && remaining[0].isDefault === true);
+
   // ---- 18. schema integrity ----
   const cc = await mkUser();
   const cp = await mkProduct(seller.id, 50, 100);
