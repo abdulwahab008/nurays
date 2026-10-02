@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, type ReactNode } from 'react';
+import { useState, useEffect, useMemo, type ReactNode } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import { isAxiosError } from 'axios';
@@ -16,6 +16,9 @@ import { useCartStore } from '@/lib/store/cart-store';
 import { ConfirmModal } from '@/components/ui/ConfirmModal';
 import { DashboardLayout, CUSTOMER_SIDEBAR_ITEMS } from '@/components/layout/DashboardShell';
 import { CommunitySelector } from '@/components/community/CommunitySelector';
+import { useT } from '@/lib/i18n';
+import { browseMessages, businessTypeKey, productTypeKey, type BrowseT } from '@/lib/i18n/messages/browse';
+import { kitchenMessages, kitchenKey, type KitchenT } from '@/lib/i18n/messages/kitchen';
 import {
   Star,
   Clock,
@@ -93,33 +96,8 @@ type LoadState = 'loading' | 'ready' | 'not_found' | 'error';
 // Kitchens set their hours in Pakistan time.
 const PKT = 'Asia/Karachi';
 
-const BUSINESS_TYPE_LABEL: Record<string, string> = {
-  home_kitchen: 'Home Kitchen',
-  restaurant: 'Restaurant',
-  bakery: 'Bakery',
-  cafe: 'Café',
-  cloud_kitchen: 'Cloud Kitchen',
-};
-
-const PRODUCT_TYPE_LABEL: Record<string, string> = {
-  frozen: 'Frozen',
-  fresh: 'Fresh Cook',
-  ready_to_eat: 'Ready to Eat',
-  ready_to_cook: 'Ready to Cook',
-};
-
-const CLOSED_STATUS_TEXT: Partial<Record<PublicSellerAvailability['status'], string>> = {
-  busy: 'Busy Right Now',
-  vacation: 'On Vacation',
-  holiday: 'Closed for Holiday',
-  preorder_only: 'Pre-Orders Only',
-};
-
-const CLOSED_PHRASE: Partial<Record<PublicSellerAvailability['status'], string>> = {
-  busy: 'busy right now',
-  vacation: 'on vacation',
-  holiday: 'closed for a holiday',
-};
+// Labels: kitchen and dish types are browseMessages `biz.*` / `type.*`; closed statuses are
+// kitchenMessages `status.*` (badge) and `isClosed.*` (banner sentence).
 
 function positiveAmount(value: number | null | undefined): number | null {
   const n = Number(value);
@@ -132,25 +110,25 @@ function nonNegativeAmount(value: number | null | undefined): number | null {
 }
 
 /** { day: "today" | "tomorrow" | "Mon, Oct 5", time: "7:00 PM" } in Pakistan time; null for a missing/invalid date. */
-function whenParts(iso: string | null | undefined): { day: string; time: string } | null {
+function whenParts(iso: string | null | undefined, tk: KitchenT): { day: string; time: string; isToday: boolean } | null {
   if (!iso) return null;
   const date = new Date(iso);
   if (Number.isNaN(date.getTime())) return null;
   const dayKey = (d: Date) => d.toLocaleDateString('en-CA', { timeZone: PKT });
   const now = Date.now();
-  const day =
-    dayKey(date) === dayKey(new Date(now))
-      ? 'today'
-      : dayKey(date) === dayKey(new Date(now + 86400000))
-      ? 'tomorrow'
-      : date.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', timeZone: PKT });
+  const isToday = dayKey(date) === dayKey(new Date(now));
+  const day = isToday
+    ? tk('today')
+    : dayKey(date) === dayKey(new Date(now + 86400000))
+    ? tk('tomorrow')
+    : date.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', timeZone: PKT });
   const time = date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true, timeZone: PKT });
-  return { day, time };
+  return { day, time, isToday };
 }
 
-function formatWhen(iso: string | null | undefined): string | null {
-  const parts = whenParts(iso);
-  return parts ? `${parts.day} at ${parts.time}` : null;
+function formatWhen(iso: string | null | undefined, tk: KitchenT): string | null {
+  const parts = whenParts(iso, tk);
+  return parts ? tk('dayAt', { day: parts.day, time: parts.time }) : null;
 }
 
 /** "18:00" -> "6:00 PM" */
@@ -163,40 +141,46 @@ function formatCutoff(hhmm: string): string | null {
 }
 
 /** Closing time when open, next opening when closed, else today's order cutoff — whatever the API gave. */
-function describeHours(availability: PublicSellerAvailability | null, orderCutoffTime?: string | null): string | null {
+function describeHours(
+  availability: PublicSellerAvailability | null,
+  orderCutoffTime: string | null | undefined,
+  tk: KitchenT,
+): string | null {
   if (availability?.isOpen) {
-    const closes = whenParts(availability.closesAt);
-    if (closes) return closes.day === 'today' ? `Closes at ${closes.time}` : `Closes ${closes.day} at ${closes.time}`;
+    const closes = whenParts(availability.closesAt, tk);
+    if (closes) return closes.isToday ? tk('closesAt', { time: closes.time }) : tk('closesDayAt', { day: closes.day, time: closes.time });
   } else if (availability) {
-    const opens = formatWhen(availability.opensAt || availability.nextOpenAt);
-    return opens ? `Opens ${opens}` : null;
+    const opens = formatWhen(availability.opensAt || availability.nextOpenAt, tk);
+    return opens ? tk('opensWhen', { when: opens }) : null;
   }
   const cutoff = orderCutoffTime ? formatCutoff(orderCutoffTime) : null;
-  return cutoff ? `Order cutoff ${cutoff}` : null;
+  return cutoff ? tk('orderCutoff', { time: cutoff }) : null;
 }
 
 /** The kitchen's own delivery terms. Without any, the fee depends on the address and is worked out at checkout. */
-function describeDeliveryFee(s: PublicSeller): string {
+function describeDeliveryFee(s: PublicSeller, tk: KitchenT): string {
   const freeOver = positiveAmount(s.freeDeliveryThreshold);
   const fixedFee = s.deliveryFeeType === 'fixed' ? nonNegativeAmount(s.deliveryFeeFixed) : null;
-  const freeOverNote = freeOver != null ? ` (free over ${formatPrice(freeOver)})` : '';
-  if (fixedFee === 0) return 'Free delivery';
-  if (fixedFee != null) return `${formatPrice(fixedFee)} delivery${freeOverNote}`;
-  if (s.deliveryFeeType === 'distance') return `Delivery fee by distance${freeOverNote}`;
-  if (freeOver != null) return `Free delivery over ${formatPrice(freeOver)}`;
-  return 'Delivery fee at checkout';
+  const freeOverNote = freeOver != null ? tk('freeOverNote', { amount: formatPrice(freeOver) }) : '';
+  if (fixedFee === 0) return tk('freeDelivery');
+  if (fixedFee != null) return `${tk('amountDelivery', { amount: formatPrice(fixedFee) })}${freeOverNote}`;
+  if (s.deliveryFeeType === 'distance') return `${tk('feeByDistanceLong')}${freeOverNote}`;
+  if (freeOver != null) return tk('freeDeliveryOver', { amount: formatPrice(freeOver) });
+  return tk('feeAtCheckout');
 }
 
-function toKitchenProfile(s: PublicSeller): KitchenProfile {
+function toKitchenProfile(s: PublicSeller, tb: BrowseT, tk: KitchenT): KitchenProfile {
   const availability = s.availability ?? null;
   const reviewCount = Number(s.totalReviews) || (s.reviews?.length ?? 0);
   const rating = displayRating(s.ratingAverage, reviewCount);
-  const typeLabel = BUSINESS_TYPE_LABEL[s.businessType ?? ''] ?? 'Kitchen';
+  const businessKey = businessTypeKey(s.businessType);
+  const typeLabel = businessKey ? tb(businessKey) : tk('kitchenFallback');
   const isVerified = s.isVerified === true || s.verificationStatus === 'approved';
 
   let statusText: string | null = null;
   if (availability) {
-    statusText = availability.isOpen ? 'Open Now' : CLOSED_STATUS_TEXT[availability.status] ?? 'Closed';
+    const closedKey = kitchenKey('status', availability.status);
+    statusText = availability.isOpen ? tk('statusOpen') : closedKey ? tk(closedKey) : tk('closed');
   }
 
   return {
@@ -208,31 +192,32 @@ function toKitchenProfile(s: PublicSeller): KitchenProfile {
     rating,
     ratingValue: rating ? Number(s.ratingAverage) : 0,
     reviewCount,
-    deliveryFee: describeDeliveryFee(s),
+    deliveryFee: describeDeliveryFee(s, tk),
     minOrder: positiveAmount(s.minOrderAmountForDelivery),
     availability,
     isClosed: availability != null && !availability.isOpen,
     preOrderOnly: s.preOrderOnly === true || availability?.status === 'preorder_only',
     statusText,
-    hoursText: describeHours(availability, s.orderCutoffTime),
+    hoursText: describeHours(availability, s.orderCutoffTime, tk),
     opensAtText:
-      availability && !availability.isOpen ? formatWhen(availability.opensAt || availability.nextOpenAt) : null,
+      availability && !availability.isOpen ? formatWhen(availability.opensAt || availability.nextOpenAt, tk) : null,
     coverPhoto: s.coverImageUrl || null,
     chefAvatar: s.chef?.avatar || null,
-    verifiedLabel: isVerified ? `Verified ${typeLabel}` : typeLabel,
+    verifiedLabel: isVerified ? tk('verifiedType', { type: typeLabel }) : typeLabel,
     storeNotice: s.storeNotice || null,
     reviews: (s.reviews ?? []).map((r) => ({
       id: r.id,
       rating: Number(r.rating) || 0,
       comment: r.comment,
       createdAt: r.createdAt,
-      author: r.author || 'Verified Buyer',
+      author: r.author || tk('verifiedBuyer'),
       avatar: r.avatar || null,
     })),
     dishes: (s.products ?? []).map((p) => {
       const price = Number(p.price);
       const originalPrice = p.originalPrice != null ? Number(p.originalPrice) : null;
       const prepMinutes = positiveAmount(p.preparationTime);
+      const typeKey = productTypeKey(p.productType);
       return {
         id: p.id,
         name: p.name,
@@ -241,9 +226,9 @@ function toKitchenProfile(s: PublicSeller): KitchenProfile {
         price,
         originalPrice: originalPrice != null && originalPrice > price ? originalPrice : null,
         isFrozen: p.productType === 'frozen',
-        typeLabel: PRODUCT_TYPE_LABEL[p.productType] ?? (p.productType ? p.productType.replace(/_/g, ' ') : 'Dish'),
+        typeLabel: typeKey ? tb(typeKey) : p.productType ? p.productType.replace(/_/g, ' ') : tk('dish'),
         photo: p.images?.[0] || null,
-        prepTime: prepMinutes != null ? `${prepMinutes} min prep` : null,
+        prepTime: prepMinutes != null ? tb('minPrep', { min: prepMinutes }) : null,
       };
     }),
   };
@@ -253,7 +238,11 @@ export default function KitchenStorefrontPage() {
   const params = useParams();
   const { showToast } = useToast();
   const { isAuthenticated } = useAuthStore();
-  const [kitchen, setKitchen] = useState<KitchenProfile | null>(null);
+  const tb = useT(browseMessages);
+  const tk = useT(kitchenMessages);
+  // The API's seller; the page's text is built from it in the current language.
+  const [seller, setSeller] = useState<PublicSeller | null>(null);
+  const kitchen = useMemo(() => (seller ? toKitchenProfile(seller, tb, tk) : null), [seller, tb, tk]);
   const [loadState, setLoadState] = useState<LoadState>('loading');
   const [reloadKey, setReloadKey] = useState(0);
   const [activeCategory, setActiveCategory] = useState('all');
@@ -286,16 +275,16 @@ export default function KitchenStorefrontPage() {
         if (cancelled) return;
         const sellerData = res.data?.data;
         if (sellerData) {
-          setKitchen(toKitchenProfile(sellerData));
+          setSeller(sellerData);
           setLoadState('ready');
         } else {
-          setKitchen(null);
+          setSeller(null);
           setLoadState('not_found');
         }
       })
       .catch((err: unknown) => {
         if (cancelled) return;
-        setKitchen(null);
+        setSeller(null);
         if (isAxiosError(err) && err.response?.status === 404) {
           setLoadState('not_found');
         } else {
@@ -316,7 +305,7 @@ export default function KitchenStorefrontPage() {
 
   const handleAddToCart = async (dish: KitchenDish) => {
     if (kitchen && kitchen.isClosed && !kitchen.preOrderOnly) {
-      showToast(`${kitchen.name} is currently closed and not accepting orders right now.`, 'error');
+      showToast(tk('toastClosed', { name: kitchen.name }), 'error');
       return;
     }
 
@@ -328,7 +317,7 @@ export default function KitchenStorefrontPage() {
     setCartTotal((t) => t + dish.price);
 
     if (kitchen?.preOrderOnly) {
-      showToast(`${kitchen.name} takes pre-orders only. Choose a delivery date at checkout.`, 'info');
+      showToast(tk('toastPreorderOnly', { name: kitchen.name }), 'info');
     }
 
     // Add to global client cart store
@@ -338,7 +327,7 @@ export default function KitchenStorefrontPage() {
       productName: dish.name,
       productImage: dish.photo ?? undefined,
       sellerId: kitchen?.id || 'unknown',
-      sellerName: kitchen?.name || 'Home Kitchen',
+      sellerName: kitchen?.name || tb('homeKitchen'),
       quantity: 1,
       unitPrice: dish.price,
       stockType: dish.isFrozen ? 'hub' : 'direct',
@@ -367,7 +356,7 @@ export default function KitchenStorefrontPage() {
 
           setConflictModal({
             isOpen: true,
-            existingKitchenName: details?.existingSeller?.name || 'another home kitchen',
+            existingKitchenName: details?.existingSeller?.name || tk('anotherHomeKitchen'),
             dish,
           });
           return;
@@ -377,7 +366,7 @@ export default function KitchenStorefrontPage() {
       }
     }
 
-    showToast(`Added ${dish.name} to your tray`, 'success');
+    showToast(tk('toastAddedTray', { name: dish.name }), 'success');
   };
 
   const handleConfirmSwitchKitchen = async () => {
@@ -398,7 +387,7 @@ export default function KitchenStorefrontPage() {
         productName: dish.name,
         productImage: dish.photo ?? undefined,
         sellerId: kitchen?.id || 'unknown',
-        sellerName: kitchen?.name || 'Home Kitchen',
+        sellerName: kitchen?.name || tb('homeKitchen'),
         quantity: 1,
         unitPrice: dish.price,
         stockType: dish.isFrozen ? 'hub' : 'direct',
@@ -407,10 +396,10 @@ export default function KitchenStorefrontPage() {
       setAddedItems({ [dish.id]: 1 });
       setCartCount(1);
       setCartTotal(dish.price);
-      showToast(`Tray updated with dishes from ${kitchen?.name}!`, 'success');
+      showToast(tk('toastTrayUpdated', { name: kitchen?.name }), 'success');
       setConflictModal({ isOpen: false, existingKitchenName: '', dish: null });
     } catch {
-      showToast('Failed to replace cart items', 'error');
+      showToast(tb('toastReplaceItemsFailed'), 'error');
     } finally {
       setSwitchingKitchen(false);
     }
@@ -470,14 +459,14 @@ export default function KitchenStorefrontPage() {
             href="/products"
             className="text-xs font-semibold text-slate-700 hover:text-[#FF5500] px-3 py-1.5"
           >
-            Browse Marketplace
+            {tk('browseMarketplace')}
           </Link>
           <Link
             href="/cart"
             className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-xl bg-[#0C1016] text-white text-xs font-bold shadow-xs hover:bg-black transition-colors"
           >
             <ShoppingBag className="w-3.5 h-3.5" />
-            <span>Cart</span>
+            <span>{tk('cart')}</span>
             {cartCount > 0 && (
               <span className="w-4 h-4 rounded-full bg-[#FF5500] text-white flex items-center justify-center text-[10px] font-bold">
                 {cartCount}
@@ -488,13 +477,13 @@ export default function KitchenStorefrontPage() {
             href="/login"
             className="text-xs font-semibold text-slate-700 hover:text-[#FF5500] px-2 py-1.5"
           >
-            Sign In
+            {tk('signIn')}
           </Link>
           <Link
             href="/register"
             className="px-3.5 py-1.5 rounded-xl bg-[#FF5500] hover:bg-[#e04400] text-white text-xs font-bold transition-colors shadow-2xs"
           >
-            Join
+            {tk('join')}
           </Link>
         </div>
       </div>
@@ -522,22 +511,22 @@ export default function KitchenStorefrontPage() {
 
   if (pageState === 'not_found') {
     return renderStatePage(
-      'Kitchen not found',
-      'This kitchen isn’t listed on Nuray',
+      tk('notFound'),
+      tk('notFoundSub'),
       <div className="text-center py-14 px-6 bg-white rounded-3xl border border-slate-200 shadow-xs max-w-md mx-auto my-12">
         <div className="w-12 h-12 rounded-2xl bg-orange-50 text-[#FF5500] flex items-center justify-center mx-auto mb-4">
           <ChefHat className="w-6 h-6" />
         </div>
-        <h1 className="font-bold text-slate-900 text-base">Kitchen not found</h1>
+        <h1 className="font-bold text-slate-900 text-base">{tk('notFound')}</h1>
         <p className="text-xs text-slate-500 mt-1.5 leading-relaxed">
-          This kitchen doesn&apos;t exist, or it isn&apos;t listed on Nuray right now.
+          {tk('notFoundBody')}
         </p>
         <Link
           href="/kitchens"
           className="inline-flex items-center gap-1.5 mt-5 px-4 py-2 rounded-xl bg-slate-900 text-white text-xs font-semibold hover:bg-black transition-colors"
         >
-          <ArrowLeft className="w-3.5 h-3.5" />
-          <span>Browse all kitchens</span>
+          <ArrowLeft className="rtl:-scale-x-100 w-3.5 h-3.5" />
+          <span>{tk('browseAllKitchens')}</span>
         </Link>
       </div>
     );
@@ -545,8 +534,8 @@ export default function KitchenStorefrontPage() {
 
   if (pageState === 'error') {
     return renderStatePage(
-      'Couldn’t load kitchen',
-      'Something went wrong while loading this kitchen',
+      tk('errorTitle'),
+      tk('errorSub'),
       <div
         role="alert"
         className="text-center py-14 px-6 bg-white rounded-3xl border border-slate-200 shadow-xs max-w-md mx-auto my-12"
@@ -554,22 +543,22 @@ export default function KitchenStorefrontPage() {
         <div className="w-12 h-12 rounded-2xl bg-orange-50 text-[#FF5500] flex items-center justify-center mx-auto mb-4">
           <ChefHat className="w-6 h-6" />
         </div>
-        <h1 className="font-bold text-slate-900 text-base">We couldn&apos;t load this kitchen</h1>
+        <h1 className="font-bold text-slate-900 text-base">{tk('errorHeading')}</h1>
         <p className="text-xs text-slate-500 mt-1.5 leading-relaxed">
-          Something went wrong while fetching this kitchen. Check your connection and try again.
+          {tk('errorBody')}
         </p>
         <div className="mt-5 flex items-center justify-center gap-2">
           <button
             onClick={retryLoad}
             className="px-4 py-2 rounded-xl bg-slate-900 text-white text-xs font-semibold hover:bg-black transition-colors"
           >
-            Try Again
+            {tk('tryAgain')}
           </button>
           <Link
             href="/kitchens"
             className="px-4 py-2 rounded-xl bg-white border border-slate-200 text-slate-700 text-xs font-semibold hover:bg-slate-50 transition-colors"
           >
-            All Kitchens
+            {tk('allKitchens')}
           </Link>
         </div>
       </div>
@@ -580,15 +569,15 @@ export default function KitchenStorefrontPage() {
     if (isAuthenticated) {
       return (
         <DashboardLayout
-          title="Loading Kitchen..."
-          subtitle="Fetching the kitchen's menu"
+          title={tk('loadingTitle')}
+          subtitle={tk('loadingSub')}
           sidebarItems={CUSTOMER_SIDEBAR_ITEMS}
           userType="customer"
         >
           <div className="text-center py-20 bg-white rounded-3xl border border-slate-200 shadow-xs max-w-md mx-auto my-8">
             <div className="w-12 h-12 border-3 border-[#FF5500] border-t-transparent rounded-full animate-spin mx-auto mb-4" />
-            <p className="font-bold text-slate-800 text-sm">Loading home kitchen storefront...</p>
-            <p className="text-xs text-slate-500 mt-1">Fetching the menu and reviews</p>
+            <p className="font-bold text-slate-800 text-sm">{tk('loadingStorefront')}</p>
+            <p className="text-xs text-slate-500 mt-1">{tk('fetchingMenu')}</p>
           </div>
         </DashboardLayout>
       );
@@ -597,8 +586,8 @@ export default function KitchenStorefrontPage() {
       <div className="min-h-screen bg-[#F8FAFC] text-slate-900 flex items-center justify-center">
         <div className="text-center p-8 bg-white rounded-3xl border border-slate-200 shadow-sm max-w-sm">
           <div className="w-12 h-12 border-3 border-[#FF5500] border-t-transparent rounded-full animate-spin mx-auto mb-4" />
-          <p className="font-bold text-slate-800 text-sm">Loading home kitchen storefront...</p>
-          <p className="text-xs text-slate-500 mt-1">Fetching the menu and reviews</p>
+          <p className="font-bold text-slate-800 text-sm">{tk('loadingStorefront')}</p>
+          <p className="text-xs text-slate-500 mt-1">{tk('fetchingMenu')}</p>
         </div>
       </div>
     );
@@ -643,7 +632,7 @@ export default function KitchenStorefrontPage() {
                   eager
                   className="w-16 h-16 sm:w-20 sm:h-20 rounded-2xl ring-3 ring-white shadow-md"
                 />
-                <div className="absolute -bottom-1.5 -right-1.5 bg-[#FF5500] text-white text-xs font-bold p-1 rounded-full shadow-xs">
+                <div className="absolute -bottom-1.5 -end-1.5 bg-[#FF5500] text-white text-xs font-bold p-1 rounded-full shadow-xs">
                   <Check className="w-3 h-3 text-white" />
                 </div>
               </div>
@@ -674,7 +663,7 @@ export default function KitchenStorefrontPage() {
                   )}
                   {kitchen.preOrderOnly && kitchen.availability?.status !== 'preorder_only' && (
                     <span className="px-2.5 py-0.5 rounded-full bg-orange-100 text-[#FF5500] text-[10px] font-bold">
-                      Pre-orders only
+                      {tb('preOrdersOnly')}
                     </span>
                   )}
                 </div>
@@ -683,7 +672,7 @@ export default function KitchenStorefrontPage() {
                   {kitchen.name}
                 </h1>
                 <p className="text-xs font-bold text-[#FF5500] mt-0.5">
-                  Operated by {kitchen.chefName}
+                  {tk('operatedBy', { name: kitchen.chefName })}
                 </p>
                 {kitchen.area && (
                   <p className="text-xs text-slate-500 mt-1 flex items-center gap-1">
@@ -701,24 +690,24 @@ export default function KitchenStorefrontPage() {
             </div>
 
             {/* Quick Metrics */}
-            <div className="flex flex-wrap md:flex-col gap-2.5 w-full md:w-auto border-t md:border-t-0 md:border-l border-slate-100 pt-3 md:pt-0 md:pl-6">
+            <div className="flex flex-wrap md:flex-col gap-2.5 w-full md:w-auto border-t md:border-t-0 md:border-s border-slate-100 pt-3 md:pt-0 md:ps-6">
               <a
                 href="#customer-reviews"
                 className="flex items-center gap-1.5 bg-amber-50 hover:bg-amber-100/80 px-2.5 py-1 rounded-xl border border-amber-200/80 transition-colors cursor-pointer"
-                title={kitchen.rating ? 'View customer reviews' : 'No reviews yet'}
+                title={kitchen.rating ? tk('viewReviews') : tk('noReviews')}
               >
                 {kitchen.rating ? (
                   <>
                     <Star className="w-3.5 h-3.5 fill-amber-500 text-amber-500" />
                     <span className="text-amber-800 font-bold text-xs">{kitchen.rating}</span>
                     <span className="text-[11px] text-amber-700 font-medium">
-                      ({kitchen.reviewCount} {kitchen.reviewCount === 1 ? 'review' : 'reviews'})
+                      {tk(kitchen.reviewCount === 1 ? 'reviewsParenOne' : 'reviewsParenMany', { count: kitchen.reviewCount })}
                     </span>
                   </>
                 ) : (
                   <>
-                    <span className="text-amber-800 font-bold text-xs">New</span>
-                    <span className="text-[11px] text-amber-700 font-medium">No reviews yet</span>
+                    <span className="text-amber-800 font-bold text-xs">{tk('new')}</span>
+                    <span className="text-[11px] text-amber-700 font-medium">{tk('noReviews')}</span>
                   </>
                 )}
               </a>
@@ -729,7 +718,7 @@ export default function KitchenStorefrontPage() {
                 </span>
               </div>
               <div className="text-[11px] font-semibold text-slate-600 bg-slate-50 px-2.5 py-1 rounded-xl border border-slate-200/60">
-                {kitchen.minOrder != null ? `Min. Order: ${formatPrice(kitchen.minOrder)}` : 'No Minimum Order'}
+                {kitchen.minOrder != null ? tk('minOrderLabel', { amount: formatPrice(kitchen.minOrder) }) : tk('noMinimum')}
               </div>
             </div>
           </div>
@@ -757,31 +746,32 @@ export default function KitchenStorefrontPage() {
               <div>
                 <div className="flex items-center gap-2 flex-wrap mb-1">
                   <span className="px-2.5 py-0.5 rounded-full bg-red-100 text-red-800 text-[10px] font-bold uppercase tracking-wider">
-                    Closed for Instant Orders
+                    {tk('closedInstant')}
                   </span>
                   {kitchen.preOrderOnly && (
                     <span className="px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-[10px] font-bold uppercase tracking-wider">
-                      Accepting Pre-Orders
+                      {tk('acceptingPreOrders')}
                     </span>
                   )}
                 </div>
                 <h4 className="font-extrabold text-slate-900 text-sm">
                   {kitchen.preOrderOnly
-                    ? `${kitchen.name} is taking pre-orders`
-                    : `${kitchen.name} is ${CLOSED_PHRASE[kitchen.availability?.status ?? 'closed'] ?? 'closed right now'}`}
+                    ? tk('takingPreorders', { name: kitchen.name })
+                    : (() => {
+                        const closedKey = kitchenKey('isClosed', kitchen.availability?.status);
+                        return tk(closedKey ?? 'isClosedNow', { name: kitchen.name });
+                      })()}
                 </h4>
                 <p className="text-xs text-slate-600 mt-0.5 leading-relaxed max-w-2xl">
                   {kitchen.preOrderOnly
-                    ? `Instant delivery isn't available right now, but you can add dishes to your tray and choose a future delivery date at checkout.${
-                        kitchen.opensAtText ? ` The kitchen opens ${kitchen.opensAtText}.` : ''
-                      }`
-                    : `Ordering is paused while the kitchen is closed. You can still browse the menu${
-                        kitchen.opensAtText ? ` and order when it opens ${kitchen.opensAtText}.` : ' and check back later.'
-                      }`}
+                    ? `${tk('preorderBody')}${kitchen.opensAtText ? tk('preorderOpens', { when: kitchen.opensAtText }) : ''}`
+                    : kitchen.opensAtText
+                    ? tk('pausedWithOpen', { when: kitchen.opensAtText })
+                    : tk('pausedNoOpen')}
                 </p>
                 {kitchen.availability?.isManualOverride && kitchen.availability.reason && (
                   <p className="text-xs font-medium text-amber-900 mt-1">
-                    Note from the kitchen: {kitchen.availability.reason}
+                    {tk('kitchenNote', { reason: kitchen.availability.reason })}
                   </p>
                 )}
               </div>
@@ -792,7 +782,7 @@ export default function KitchenStorefrontPage() {
                 href="/products?openNow=true&view=kitchens"
                 className="px-4 py-2.5 rounded-xl bg-white border border-slate-300 hover:bg-slate-50 text-slate-800 text-xs font-bold transition-colors shadow-2xs whitespace-nowrap"
               >
-                Browse Open Kitchens Delivering Now
+                {tk('browseOpenNow')}
               </Link>
             </div>
           </div>
@@ -807,7 +797,7 @@ export default function KitchenStorefrontPage() {
               <Bell className="w-4 h-4" />
             </div>
             <div>
-              <h4 className="text-xs font-bold text-amber-950 uppercase tracking-wider">Notice from Chef</h4>
+              <h4 className="text-xs font-bold text-amber-950 uppercase tracking-wider">{tk('noticeFromChef')}</h4>
               <p className="text-xs font-medium text-amber-900 mt-0.5">{kitchen.storeNotice}</p>
             </div>
           </div>
@@ -827,7 +817,7 @@ export default function KitchenStorefrontPage() {
               }`}
             >
               <UtensilsCrossed className="w-3.5 h-3.5" />
-              <span>Full Kitchen Menu ({kitchen.dishes.length})</span>
+              <span>{tk('fullMenu', { count: kitchen.dishes.length })}</span>
             </button>
             <button
               onClick={() => setActiveCategory('fresh')}
@@ -838,7 +828,7 @@ export default function KitchenStorefrontPage() {
               }`}
             >
               <Flame className="w-3.5 h-3.5" />
-              <span>Fresh Hot Specials</span>
+              <span>{tk('freshSpecials')}</span>
             </button>
             <button
               onClick={() => setActiveCategory('frozen')}
@@ -849,7 +839,7 @@ export default function KitchenStorefrontPage() {
               }`}
             >
               <Snowflake className="w-3.5 h-3.5" />
-              <span>Frozen Pantry Packs</span>
+              <span>{tk('frozenPantry')}</span>
             </button>
           </div>
         </div>
@@ -860,13 +850,13 @@ export default function KitchenStorefrontPage() {
         {kitchen.dishes.length === 0 ? (
           <div className="text-center py-14 px-6 bg-white rounded-2xl border border-dashed border-slate-200">
             <UtensilsCrossed className="w-8 h-8 text-slate-300 mx-auto mb-2" />
-            <p className="text-sm font-bold text-slate-700">This kitchen hasn&apos;t added any dishes yet</p>
-            <p className="text-xs text-slate-400 mt-1">Check back soon, or browse other kitchens in the meantime.</p>
+            <p className="text-sm font-bold text-slate-700">{tk('noDishes')}</p>
+            <p className="text-xs text-slate-400 mt-1">{tk('noDishesBody')}</p>
             <Link
               href="/kitchens"
               className="inline-flex items-center gap-1.5 mt-4 px-4 py-2 rounded-xl bg-slate-900 text-white text-xs font-semibold hover:bg-black transition-colors"
             >
-              Browse Kitchens
+              {tb('browseKitchens')}
             </Link>
           </div>
         ) : (
@@ -875,25 +865,25 @@ export default function KitchenStorefrontPage() {
               <div>
                 <h2 className="text-xl sm:text-2xl font-black text-slate-950">
                   {activeCategory === 'all'
-                    ? "Chef's Current Menu"
+                    ? tk('currentMenu')
                     : activeCategory === 'fresh'
-                    ? 'Freshly Prepared Meals'
-                    : 'Frozen Packs'}
+                    ? tk('freshMeals')
+                    : tk('frozenPacks')}
                 </h2>
                 <p className="text-xs text-slate-500 mt-0.5">
-                  Prepared by {kitchen.chefName}
+                  {tk('preparedBy', { name: kitchen.chefName })}
                 </p>
               </div>
               <span className="text-xs font-semibold text-slate-400">
-                {filteredDishes.length} {filteredDishes.length === 1 ? 'dish' : 'dishes'}
+                {tk(filteredDishes.length === 1 ? 'dishOne' : 'dishMany', { count: filteredDishes.length })}
               </span>
             </div>
 
             {filteredDishes.length === 0 ? (
               <p className="text-center text-xs text-slate-500 py-10 bg-white rounded-2xl border border-slate-200/80">
                 {activeCategory === 'frozen'
-                  ? 'This kitchen has no frozen packs on its menu.'
-                  : 'This kitchen has no freshly prepared meals on its menu.'}
+                  ? tk('noFrozen')
+                  : tk('noFresh')}
               </p>
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
@@ -913,12 +903,12 @@ export default function KitchenStorefrontPage() {
                           className="w-full h-full group-hover:scale-105 transition-transform"
                         />
                         {dish.originalPrice != null && (
-                          <span className="absolute top-2 left-2 px-2 py-0.5 rounded-md bg-black/75 text-white text-[9px] font-bold tracking-wide backdrop-blur-xs">
-                            Special Deal
+                          <span className="absolute top-2 start-2 px-2 py-0.5 rounded-md bg-black/75 text-white text-[9px] font-bold tracking-wide backdrop-blur-xs">
+                            {tk('specialDeal')}
                           </span>
                         )}
                         <span
-                          className={`absolute bottom-2 left-2 px-2 py-0.5 rounded-md text-[10px] font-bold flex items-center gap-1 ${
+                          className={`absolute bottom-2 start-2 px-2 py-0.5 rounded-md text-[10px] font-bold flex items-center gap-1 ${
                             dish.isFrozen
                               ? 'bg-cyan-600 text-white'
                               : 'bg-[#FF5500] text-white'
@@ -969,7 +959,7 @@ export default function KitchenStorefrontPage() {
 
                           {orderingBlocked ? (
                             <span className="px-3 py-1.5 rounded-xl bg-slate-100 text-slate-400 text-xs font-semibold border border-slate-200 cursor-not-allowed">
-                              Closed
+                              {tk('closed')}
                             </span>
                           ) : count === 0 ? (
                             <button
@@ -983,10 +973,10 @@ export default function KitchenStorefrontPage() {
                               {kitchen.preOrderOnly ? (
                                 <>
                                   <Clock className="w-3.5 h-3.5" />
-                                  <span>Pre-Order</span>
+                                  <span>{tk('preOrder')}</span>
                                 </>
                               ) : (
-                                '+ Add to Cart'
+                                tk('addToCart')
                               )}
                             </button>
                           ) : (
@@ -1026,18 +1016,18 @@ export default function KitchenStorefrontPage() {
             <div>
               <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-amber-100 text-amber-900 text-[10px] font-bold uppercase tracking-wider mb-1">
                 <MessageSquare className="w-3 h-3 text-amber-600" />
-                <span>Verified Buyer Feedback</span>
+                <span>{tk('verifiedFeedback')}</span>
               </div>
               <h2 className="text-xl sm:text-2xl font-black text-slate-950">
-                Customer Reviews &amp; Ratings
+                {tk('reviewsTitle')}
               </h2>
               <p className="text-xs text-slate-500 mt-0.5">
-                Authentic opinions from food lovers who ordered from {kitchen.chefName}
+                {tk('reviewsSub', { name: kitchen.chefName })}
               </p>
             </div>
 
             <div className="flex items-center gap-3 bg-amber-50/70 border border-amber-200/60 rounded-2xl px-4 py-2.5 self-start sm:self-auto">
-              <div className="text-3xl font-black text-amber-900">{kitchen.rating ?? 'New'}</div>
+              <div className="text-3xl font-black text-amber-900">{kitchen.rating ?? tk('new')}</div>
               <div>
                 <div className="flex items-center gap-0.5">
                   {[1, 2, 3, 4, 5].map((s) => (
@@ -1053,8 +1043,8 @@ export default function KitchenStorefrontPage() {
                 </div>
                 <span className="text-[11px] text-amber-800 font-semibold mt-0.5 block">
                   {kitchen.reviewCount > 0
-                    ? `${kitchen.reviewCount} verified ${kitchen.reviewCount === 1 ? 'review' : 'reviews'}`
-                    : 'No reviews yet'}
+                    ? tk(kitchen.reviewCount === 1 ? 'verifiedReviewsOne' : 'verifiedReviewsMany', { count: kitchen.reviewCount })
+                    : tk('noReviews')}
                 </span>
               </div>
             </div>
@@ -1081,7 +1071,7 @@ export default function KitchenStorefrontPage() {
                             </span>
                             <span className="text-[10px] text-emerald-700 font-semibold inline-flex items-center gap-0.5">
                               <Check className="w-2.5 h-2.5" />
-                              <span>Verified Customer</span>
+                              <span>{tk('verifiedCustomer')}</span>
                             </span>
                           </div>
                         </div>
@@ -1105,7 +1095,7 @@ export default function KitchenStorefrontPage() {
                           &ldquo;{rev.comment}&rdquo;
                         </p>
                       ) : (
-                        <p className="text-xs text-slate-400 mt-2">Rated without a written comment</p>
+                        <p className="text-xs text-slate-400 mt-2">{tk('noComment')}</p>
                       )}
                     </div>
 
@@ -1122,9 +1112,9 @@ export default function KitchenStorefrontPage() {
             ) : (
               <div className="text-center py-10 text-slate-500 bg-slate-50/50 rounded-2xl border border-dashed border-slate-200">
                 <ChefHat className="w-8 h-8 text-slate-300 mx-auto mb-2" />
-                <p className="text-sm font-bold text-slate-700">No reviews yet for this kitchen</p>
+                <p className="text-sm font-bold text-slate-700">{tk('noReviewsKitchen')}</p>
                 <p className="text-xs text-slate-400 mt-1">
-                  Order from {kitchen.name} today and be the first to share your dining experience!
+                  {tk('beFirstKitchen', { name: kitchen.name })}
                 </p>
               </div>
             )}
@@ -1142,7 +1132,7 @@ export default function KitchenStorefrontPage() {
               </div>
               <div>
                 <div className="text-[11px] text-slate-400 font-medium">
-                  {kitchen.preOrderOnly ? 'Pre-Order Total' : 'Total Order'}
+                  {kitchen.preOrderOnly ? tk('preOrderTotal') : tk('totalOrder')}
                 </div>
                 <div className="text-sm font-bold text-white">{formatPrice(cartTotal)}</div>
               </div>
@@ -1155,15 +1145,15 @@ export default function KitchenStorefrontPage() {
                   disabled
                   className="px-4 py-2 rounded-xl bg-slate-800 text-slate-400 text-xs font-bold border border-slate-700 cursor-not-allowed"
                 >
-                  Checkout Disabled (Kitchen Closed)
+                  {tk('checkoutDisabled')}
                 </button>
               ) : (
                 <Link
                   href="/cart"
                   className="inline-flex items-center gap-1 px-4 py-2 rounded-xl bg-[#FF5500] hover:bg-[#ff6a1a] text-white text-xs font-bold transition-colors shadow-sm"
                 >
-                  <span>{kitchen.preOrderOnly ? 'Schedule Pre-Order' : 'Review & Checkout'}</span>
-                  <ChevronRight className="w-3.5 h-3.5" />
+                  <span>{kitchen.preOrderOnly ? tk('schedulePreOrder') : tk('reviewCheckout')}</span>
+                  <ChevronRight className="rtl:-scale-x-100 w-3.5 h-3.5" />
                 </Link>
               )}
             </div>
@@ -1174,10 +1164,10 @@ export default function KitchenStorefrontPage() {
       {/* Styled Modern Modal for Single Kitchen Batch Switching */}
       <ConfirmModal
         isOpen={conflictModal.isOpen}
-        title="Start Order from This Kitchen?"
-        message={`Your tray currently contains dishes from ${conflictModal.existingKitchenName}. Nuray ensures direct, single-kitchen artisanal batches for guaranteed freshness. Would you like to clear your existing tray and start a new order with ${kitchen.name}?`}
-        confirmText="Clear Tray & Add Dish"
-        cancelText="Keep Existing Tray"
+        title={tk('switchTitle')}
+        message={tk('switchMessage', { existing: conflictModal.existingKitchenName, name: kitchen.name })}
+        confirmText={tk('clearTray')}
+        cancelText={tk('keepTray')}
         variant="warning"
         loading={switchingKitchen}
         onConfirm={handleConfirmSwitchKitchen}
@@ -1201,14 +1191,14 @@ export default function KitchenStorefrontPage() {
               href="/products"
               className="inline-flex items-center gap-1.5 text-xs font-bold text-slate-600 hover:text-[#FF5500] transition-colors py-1.5 px-3 rounded-xl bg-white border border-slate-200 shadow-2xs hover:border-slate-300"
             >
-              <ArrowLeft className="w-3.5 h-3.5" />
-              <span>Back to Kitchens &amp; Menus</span>
+              <ArrowLeft className="rtl:-scale-x-100 w-3.5 h-3.5" />
+              <span>{tk('backToKitchensMenus')}</span>
             </Link>
             <Link
               href="/kitchens"
               className="text-xs font-semibold text-slate-500 hover:text-[#FF5500] transition-colors"
             >
-              View All Kitchens Directory →
+              {tk('viewDirectory')}
             </Link>
           </div>
 
