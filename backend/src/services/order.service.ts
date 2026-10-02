@@ -10,7 +10,7 @@ import { issueRefund, IssuedRefund } from './refund.service';
 import { allocateHubStock, releaseHubAllocations } from './hub-allocation.service';
 import { DeliveryFeeShare } from '../utils/deliveryEarnings';
 import { isStoredFile, isPrivateRef, storedFileOwner, presentFile } from '../storage';
-import { getDeliveryFeeForSeller } from '../utils/deliveryFee';
+import { getDeliveryFeeForSeller, haversineKm } from '../utils/deliveryFee';
 import { createStockAlert } from './stock-alert.service';
 import promotionService from './promotion.service';
 import { isAcceptingOrders, validateOrderTiming } from './availability.service';
@@ -19,6 +19,48 @@ import ledgerService from './ledger.service';
 import { newHandoverCode } from './handover.service';
 import { cancelOpenDelivery, notifyDeliveryCancelled, CancelledDelivery } from './delivery-lifecycle.service';
 import { debitWallet } from './wallet.service';
+
+// Once the food has left the kitchen, the customer can see where the rider is.
+const ON_THE_WAY_STATUSES = ['picked_up', 'in_transit', 'arrived_at_customer'];
+
+/**
+ * What a party to an order sees of its delivery. The rider's pay is between the rider and
+ * the platform. The rider's position is shown only while the food is on its way (never
+ * afterwards), and only to the customer, the rider and admins.
+ */
+function presentDelivery<
+  D extends {
+    status: string;
+    riderFee: unknown;
+    riderBonus: unknown;
+    riderLatitude: unknown;
+    riderLongitude: unknown;
+    riderLocationAt: Date | null;
+    deliveryLatitude: unknown;
+    deliveryLongitude: unknown;
+    rider: Record<string, unknown> | null;
+  },
+>(delivery: D, viewer: { canSeePay: boolean; canSeeLocation: boolean; riderFirstName: string | null }) {
+  const { riderFee, riderBonus, riderLatitude, riderLongitude, riderLocationAt, ...rest } = delivery;
+  const live = viewer.canSeeLocation && ON_THE_WAY_STATUSES.includes(delivery.status) && riderLatitude != null && riderLongitude != null;
+  const doorKnown = delivery.deliveryLatitude != null && delivery.deliveryLongitude != null;
+  return {
+    ...rest,
+    rider: delivery.rider ? { ...delivery.rider, name: viewer.riderFirstName } : null,
+    ...(viewer.canSeePay ? { riderFee: riderFee != null ? Number(riderFee) : null, riderBonus: riderBonus != null ? Number(riderBonus) : null } : {}),
+    riderLocation: live
+      ? {
+          latitude: Number(riderLatitude),
+          longitude: Number(riderLongitude),
+          updatedAt: riderLocationAt,
+          // How far the rider is from the door, when the door's location is known.
+          distanceKm: doorKnown
+            ? Math.round(haversineKm(Number(riderLatitude), Number(riderLongitude), Number(delivery.deliveryLatitude), Number(delivery.deliveryLongitude)) * 10) / 10
+            : null,
+        }
+      : null,
+  };
+}
 
 export class OrderService {
   /**
@@ -947,6 +989,7 @@ export class OrderService {
     });
 
     const isAdmin = user?.userType === 'admin';
+    const viewerRider = await prisma.rider.findUnique({ where: { userId }, select: { id: true } });
 
     const order = await prisma.order.findFirst({
       where: {
@@ -1024,8 +1067,24 @@ export class OrderService {
         ? await prisma.order.findUnique({ where: { id: order.id }, select: { handoverCode: true } })
         : null;
 
+    const isOrderRider = !!viewerRider && order.delivery?.riderId === viewerRider.id;
+    // The customer is told their rider's first name.
+    const riderUserId = order.delivery?.riderId
+      ? (await prisma.rider.findUnique({ where: { id: order.delivery.riderId }, select: { userId: true } }))?.userId
+      : null;
+    const riderFullName = riderUserId
+      ? (await prisma.userProfile.findUnique({ where: { userId: riderUserId }, select: { fullName: true } }))?.fullName
+      : null;
+
     return {
       ...order,
+      delivery: order.delivery
+        ? presentDelivery(order.delivery, {
+            canSeePay: isAdmin || isOrderRider,
+            canSeeLocation: isAdmin || isOrderRider || order.customerId === userId,
+            riderFirstName: riderFullName?.trim().split(/\s+/)[0] || null,
+          })
+        : null,
       ...(handover ? { handoverCode: handover.handoverCode } : {}),
       // The receipt is private: the viewer (already checked above) gets a short-lived link.
       paymentProofUrl: await presentFile(order.paymentProofUrl),

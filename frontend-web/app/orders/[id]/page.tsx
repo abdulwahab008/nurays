@@ -17,6 +17,10 @@ import ManualPaymentCard from '@/components/orders/ManualPaymentCard';
 import OnlinePaymentCard from '@/components/orders/OnlinePaymentCard';
 import OrderChatModal from '@/components/orders/OrderChatModal';
 import TriPartiteReviewModal from '@/components/orders/TriPartiteReviewModal';
+import dynamic from 'next/dynamic';
+
+// Leaflet touches the DOM on import: load the map in the browser only.
+const RiderLiveMap = dynamic(() => import('@/components/orders/RiderLiveMap'), { ssr: false });
 
 function playCancelSound() {
   if (typeof window === 'undefined') return;
@@ -90,6 +94,10 @@ interface OrderDetail {
       phone: string;
       vehicle?: string;
     };
+    /** The rider's last position, sent only while the food is on its way. */
+    riderLocation?: { latitude: number; longitude: number; updatedAt?: string | null; distanceKm?: number | null } | null;
+    /** The delivery address on the map, when its location is known. */
+    destination?: { latitude: number; longitude: number } | null;
   };
   timeline: Array<{
     status: string;
@@ -97,7 +105,19 @@ interface OrderDetail {
   }>;
 }
 
-/** Map backend order (Prisma shape) to OrderDetail for the UI */
+/** "Updated just now / 2 min ago / 1 h ago", kept current while on screen. */
+function UpdatedAgo({ iso }: { iso: string }) {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const timer = setInterval(() => setNow(Date.now()), 15_000);
+    return () => clearInterval(timer);
+  }, []);
+  const seconds = Math.max(0, Math.round((now - new Date(iso).getTime()) / 1000));
+  const minutes = Math.round(seconds / 60);
+  const label = seconds < 45 ? 'just now' : minutes < 60 ? `${minutes} min ago` : `${Math.round(minutes / 60)} h ago`;
+  return <>Updated {label}</>;
+}
+
 /** How the customer paid, in words. */
 function paymentChannelLabel(method?: string, senderAccount?: string | null): string {
   const m = (method ?? '').toLowerCase();
@@ -192,11 +212,16 @@ function mapOrderToDetail(raw: any): OrderDetail {
       // Only the customer is ever sent the handover code.
       otp: raw.handoverCode ?? undefined,
       arrivedAtCustomer: raw.delivery?.arrivedAtCustomer ?? undefined,
+      riderLocation: raw.delivery?.riderLocation ?? null,
+      destination:
+        addr?.latitude != null && addr?.longitude != null
+          ? { latitude: Number(addr.latitude), longitude: Number(addr.longitude) }
+          : null,
       rider:
         raw.delivery?.rider ?
           {
-            name: (raw.delivery.rider as any).user?.profile?.fullName ?? (raw.delivery.rider as any).name ?? 'Rider',
-            phone: (raw.delivery.rider as any).user?.phone ?? (raw.delivery.rider as any).phone ?? '',
+            name: (raw.delivery.rider as any).name ?? 'Your rider',
+            phone: '',
             vehicle: [(raw.delivery.rider as any).vehicleType, (raw.delivery.rider as any).vehicleNumber].filter(Boolean).join(' - '),
           }
         : undefined,
@@ -438,6 +463,15 @@ function OrderDetailContent() {
     return raw;
   })();
   const orderStatus = effectiveStatus;
+
+  // The rider's position: the latest live update, else the last one the order came with.
+  // Shown only while the food is on its way.
+  const onTheWay = ['dispatched', 'in_transit'].includes(effectiveStatus);
+  const liveRider: { latitude: number; longitude: number; updatedAt?: string | null; distanceKm?: number | null } | null = !onTheWay
+    ? null
+    : trackingData?.location
+      ? { ...trackingData.location, updatedAt: trackingData.updatedAt, distanceKm: trackingData.distanceKm ?? null }
+      : order.delivery?.riderLocation ?? null;
   const canCancel = orderStatus === 'pending';
 
   return (
@@ -689,24 +723,23 @@ function OrderDetailContent() {
               </div>
             </div>
 
-            {/* Real-time Tracking */}
-            {trackingData && (
-              <div className="bg-white rounded-lg shadow-sm p-6">
-                <h2 className="text-xl font-bold text-gray-900 mb-4">Live Tracking</h2>
-                {trackingData.location && (
-                  <div className="space-y-2">
-                    <p>
-                      <span className="font-semibold">Distance:</span>{' '}
-                      {trackingData.distanceKm?.toFixed(1)} km
-                    </p>
-                    {trackingData.estimatedArrival && (
-                      <p>
-                        <span className="font-semibold">ETA:</span>{' '}
-                        {formatDateTime(trackingData.estimatedArrival)}
-                      </p>
-                    )}
-                  </div>
-                )}
+            {/* Where the rider is, while the food is on its way */}
+            {liveRider && (
+              <div className="bg-white rounded-lg shadow-sm p-6" data-testid="rider-live-tracking">
+                <div className="flex items-center justify-between gap-3 mb-3 flex-wrap">
+                  <h2 className="text-xl font-bold text-gray-900 flex items-center gap-2">
+                    <span className="inline-flex h-2.5 w-2.5 rounded-full bg-emerald-500 animate-pulse" />
+                    Your order is on its way
+                  </h2>
+                  <p className="text-xs text-gray-500">
+                    {typeof liveRider.distanceKm === 'number' && <span className="font-semibold text-gray-800">{liveRider.distanceKm.toFixed(1)} km away · </span>}
+                    {liveRider.updatedAt ? <UpdatedAgo iso={liveRider.updatedAt} /> : 'Live'}
+                  </p>
+                </div>
+                <RiderLiveMap
+                  rider={{ latitude: liveRider.latitude, longitude: liveRider.longitude }}
+                  destination={order.delivery?.destination ?? null}
+                />
               </div>
             )}
 

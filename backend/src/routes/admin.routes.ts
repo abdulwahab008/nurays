@@ -16,6 +16,14 @@ import {
   approveRejectRider,
   getAuditLogs,
 } from '../controllers/admin.controller';
+import {
+  getRidersMoney,
+  getRiderMoney,
+  createRiderSettlement,
+  createRiderPayout,
+  createRiderAdjustment,
+  updateRiderCashLimit,
+} from '../controllers/admin-rider.controller';
 import { auditWrites } from '../middleware/audit';
 import { adminGetTickets, adminGetTicketDetail, adminReplyToTicket } from '../controllers/support.controller';
 import { authenticate, authorize } from '../middleware/auth.middleware';
@@ -28,6 +36,10 @@ import {
   failPayoutSchema,
   updateSettingsSchema,
   approveRejectRiderSchema,
+  riderCashMovementSchema,
+  riderSettlementSchema,
+  riderAdjustmentSchema,
+  riderCashLimitSchema,
 } from '../validators/admin.validator';
 import { adminReplySchema } from '../validators/support.validator';
 
@@ -61,6 +73,14 @@ router.get('/pending-riders', getPendingRiders);
 // Approve/reject rider
 router.post('/riders/:id/approve', validate(approveRejectRiderSchema), approveRejectRider);
 router.post('/riders/:id/reject', validate(approveRejectRiderSchema), approveRejectRider);
+
+// Rider money: cash they carry, what they're owed, and settling up
+router.get('/riders/money', getRidersMoney);
+router.get('/riders/:id/money', getRiderMoney);
+router.post('/riders/:id/settlements', validate(riderSettlementSchema), createRiderSettlement);
+router.post('/riders/:id/payouts', validate(riderCashMovementSchema), createRiderPayout);
+router.post('/riders/:id/adjustments', validate(riderAdjustmentSchema), createRiderAdjustment);
+router.patch('/riders/:id/cash-limit', validate(riderCashLimitSchema), updateRiderCashLimit);
 
 // List products for moderation
 router.get('/products', getProductsForModeration);

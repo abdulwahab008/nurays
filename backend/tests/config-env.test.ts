@@ -70,6 +70,12 @@ describe('startup configuration', () => {
     expect(configProblems({ ...goodProd, STORAGE_DRIVER: 'local', UPLOADS_DIR: '/data/uploads' })).toEqual([]);
   });
 
+  it('refuses a rider cash limit that is not an amount above zero', () => {
+    expect(configProblems({ ...goodProd, RIDER_CASH_LIMIT: 'ten thousand' }).join(' ')).toMatch(/RIDER_CASH_LIMIT/);
+    expect(configProblems({ ...goodProd, RIDER_CASH_LIMIT: '0' }).join(' ')).toMatch(/RIDER_CASH_LIMIT/);
+    expect(configProblems({ ...goodProd, RIDER_CASH_LIMIT: '15000' })).toEqual([]);
+  });
+
   it('is relaxed in development', () => {
     expect(configProblems({ NODE_ENV: 'development', DATABASE_URL: 'postgresql://x', JWT_SECRET: 'x'.repeat(10) + 'abcdefghijklmnopqrstuvwxyz' } as any)).toEqual([]);
     expect(emailProvider({ NODE_ENV: 'development' } as any)).toBe('ethereal');

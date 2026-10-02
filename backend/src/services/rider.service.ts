@@ -5,6 +5,7 @@ import realtimeOrderService from './realtime-order.service';
 import ledgerService from './ledger.service';
 import { haversineKm, calculateDeliveryFeeCorridor } from '../utils/deliveryFee';
 import { newHandoverCode, verifyHandoverCode } from './handover.service';
+import { cashLimitOf, listRiderEntries, postDeliveryEntries, riderEarningsSummary, riderMoney } from './rider-ledger.service';
 
 // Delivery.status lifecycle:
 // pending (unclaimed) -> assigned (claimed) -> arrived_at_pickup -> picked_up -> in_transit -> arrived_at_customer -> delivered (with OTP).
@@ -37,6 +38,51 @@ type DeliveryWithOrder = Omit<
   'deliveryOtp'
 >;
 
+// Jobs a rider is working on. They share their location while on one of these.
+const ACTIVE_STATUSES = ['assigned', 'arrived_at_pickup', 'picked_up', 'in_transit', 'arrived_at_customer'];
+// Once the food has left the kitchen, the customer can see where it is.
+const ON_THE_WAY_STATUSES = ['picked_up', 'in_transit', 'arrived_at_customer'];
+const GEOFENCE_KM = 0.15; // 150 m
+// A phone reporting every second is stored (and passed on to the customer) at most this often.
+const LOCATION_MIN_INTERVAL_MS = 3_000;
+
+const DELIVERY_INCLUDE = { order: { select: { orderNumber: true, totalAmount: true, paymentMethod: true, orderStatus: true } } } as const;
+
+const num = (v: unknown): number | null => (v != null && Number.isFinite(Number(v)) ? Number(v) : null);
+
+/** A job's two ends, or nulls where a location isn't known (never a made-up one). */
+function endsOf(d: { pickupLatitude?: unknown; pickupLongitude?: unknown; deliveryLatitude?: unknown; deliveryLongitude?: unknown }) {
+  return {
+    pickupLat: num(d.pickupLatitude),
+    pickupLng: num(d.pickupLongitude),
+    deliveryLat: num(d.deliveryLatitude),
+    deliveryLng: num(d.deliveryLongitude),
+  };
+}
+
+/** Cash the rider will take at the door on jobs they already have (unpaid cash orders). */
+function cashToCollect(jobs: Array<{ order: { paymentMethod: string; paymentStatus: string; totalAmount: unknown } }>) {
+  return jobs.reduce((sum, d) => sum + (d.order.paymentMethod === 'cod' && d.order.paymentStatus !== 'paid' ? Number(d.order.totalAmount) : 0), 0);
+}
+
+const PAYMENT_INCLUDE = { order: { select: { paymentMethod: true, paymentStatus: true, totalAmount: true } } } as const;
+
+const ROUTE_BONUS = 100;
+
+/**
+ * Route bonus for taking a second job along the way: pickups within 1.5 km and drop-offs
+ * within 2.5 km of the rider's one active job. Needs both jobs' locations.
+ */
+function routeMatch(active: Parameters<typeof endsOf>[0] | null, candidate: Parameters<typeof endsOf>[0]) {
+  if (!active) return null;
+  const a = endsOf(active);
+  const c = endsOf(candidate);
+  if ([a.pickupLat, a.pickupLng, a.deliveryLat, a.deliveryLng, c.pickupLat, c.pickupLng, c.deliveryLat, c.deliveryLng].some((v) => v == null)) return null;
+  const pickupGapKm = haversineKm(a.pickupLat!, a.pickupLng!, c.pickupLat!, c.pickupLng!);
+  const dropoffGapKm = haversineKm(a.deliveryLat!, a.deliveryLng!, c.deliveryLat!, c.deliveryLng!);
+  return pickupGapKm <= 1.5 && dropoffGapKm <= 2.5 ? { bonus: ROUTE_BONUS, corridorDistanceKm: Math.round(pickupGapKm * 10) / 10 } : null;
+}
+
 function formatDelivery(delivery: DeliveryWithOrder & {
   arrivedAtPickup?: Date | null;
   arrivedAtCustomer?: Date | null;
@@ -46,16 +92,15 @@ function formatDelivery(delivery: DeliveryWithOrder & {
   pickupLongitude?: any;
   deliveryLatitude?: any;
   deliveryLongitude?: any;
+  riderFee?: any;
+  riderBonus?: any;
   isRouteMatch?: boolean;
   batchBonus?: number;
   corridorDistanceKm?: number;
   riderAskFee?: number | null;
+  exceedsCashLimit?: boolean;
 }) {
-  const pickupLat = delivery.pickupLatitude != null ? Number(delivery.pickupLatitude) : 24.8607;
-  const pickupLng = delivery.pickupLongitude != null ? Number(delivery.pickupLongitude) : 67.0011;
-  const deliveryLat = delivery.deliveryLatitude != null ? Number(delivery.deliveryLatitude) : 24.8715;
-  const deliveryLng = delivery.deliveryLongitude != null ? Number(delivery.deliveryLongitude) : 67.0594;
-
+  const { pickupLat, pickupLng, deliveryLat, deliveryLng } = endsOf(delivery);
   const corridor = calculateDeliveryFeeCorridor(pickupLat, pickupLng, deliveryLat, deliveryLng);
 
   return {
@@ -89,6 +134,11 @@ function formatDelivery(delivery: DeliveryWithOrder & {
     batchBonus: delivery.batchBonus ?? 0,
     corridorDistanceKm: delivery.corridorDistanceKm ?? corridor.distanceKm,
     riderAskFee: delivery.riderAskFee ?? null,
+    // Fixed when the job is claimed: what this rider is paid for it.
+    riderFee: num(delivery.riderFee),
+    riderBonus: num(delivery.riderBonus),
+    // A cash order that would take the rider past their cash limit.
+    exceedsCashLimit: Boolean(delivery.exceedsCashLimit),
   };
 }
 
@@ -136,10 +186,11 @@ export class RiderService {
     const estimatedReadyAt = new Date(Date.now() + estimatedPrepMinutes * 60 * 1000);
 
     const pickupSeller = (order.items.find((i) => i.status !== 'cancelled' && (i.fulfillmentType === 'hub' || i.seller?.deliveryProvider !== 'self')) ?? order.items[0])?.seller;
-    const pickupLat = pickupSeller?.latitude ? Number(pickupSeller.latitude) : 24.8607;
-    const pickupLng = pickupSeller?.longitude ? Number(pickupSeller.longitude) : 67.0011;
-    const deliveryLat = order.deliveryAddress?.latitude ? Number(order.deliveryAddress.latitude) : 24.8715;
-    const deliveryLng = order.deliveryAddress?.longitude ? Number(order.deliveryAddress.longitude) : 67.0594;
+    // Unknown locations stay unknown (null): a guessed point would misprice the job.
+    const pickupLat = num(pickupSeller?.latitude);
+    const pickupLng = num(pickupSeller?.longitude);
+    const deliveryLat = num(order.deliveryAddress?.latitude);
+    const deliveryLng = num(order.deliveryAddress?.longitude);
 
     try {
       const created = await prisma.delivery.create({
@@ -186,52 +237,33 @@ export class RiderService {
     const activeDeliveries = await prisma.delivery.findMany({
       where: {
         riderId: rider.id,
-        status: { in: ['assigned', 'arrived_at_pickup', 'picked_up', 'in_transit', 'arrived_at_customer'] },
+        status: { in: ACTIVE_STATUSES },
       },
+      include: PAYMENT_INCLUDE,
     });
 
     const deliveries = await prisma.delivery.findMany({
       // Only jobs for orders still going somewhere.
       where: { riderId: null, status: 'pending', order: { orderStatus: { notIn: ['cancelled', 'refunded', 'delivered', 'completed'] } } },
-      include: { order: { select: { orderNumber: true, totalAmount: true, paymentMethod: true, orderStatus: true } } },
+      include: DELIVERY_INCLUDE,
       orderBy: { createdAt: 'asc' },
     });
 
-    // If rider has exactly 1 active order, look for corridor matches for their 2nd slot!
+    // With exactly one active job, jobs along the same route earn a bonus.
     const activeOne = activeDeliveries.length === 1 ? activeDeliveries[0] : null;
+    // Cash in hand plus cash still to collect on jobs already taken, against the limit.
+    const cashCommitted = (await riderMoney(prisma, rider.id)).cashHeld + cashToCollect(activeDeliveries);
+    const cashLimit = cashLimitOf(rider);
 
     const enriched = deliveries.map((d) => {
-      let isRouteMatch = false;
-      let batchBonus = 0;
-      let corridorDistanceKm: number | undefined;
-
-      if (activeOne) {
-        const actPickupLat = activeOne.pickupLatitude ? Number(activeOne.pickupLatitude) : 24.8607;
-        const actPickupLng = activeOne.pickupLongitude ? Number(activeOne.pickupLongitude) : 67.0011;
-        const actDropLat = activeOne.deliveryLatitude ? Number(activeOne.deliveryLatitude) : 24.8715;
-        const actDropLng = activeOne.deliveryLongitude ? Number(activeOne.deliveryLongitude) : 67.0594;
-
-        const candPickupLat = d.pickupLatitude ? Number(d.pickupLatitude) : 24.8607;
-        const candPickupLng = d.pickupLongitude ? Number(d.pickupLongitude) : 67.0011;
-        const candDropLat = d.deliveryLatitude ? Number(d.deliveryLatitude) : 24.8715;
-        const candDropLng = d.deliveryLongitude ? Number(d.deliveryLongitude) : 67.0594;
-
-        const pickupGapKm = haversineKm(actPickupLat, actPickupLng, candPickupLat, candPickupLng);
-        const dropoffGapKm = haversineKm(actDropLat, actDropLng, candDropLat, candDropLng);
-
-        // Corridor Matching: Pickups within 1.5km AND Dropoffs within 2.5km
-        if (pickupGapKm <= 1.5 && dropoffGapKm <= 2.5) {
-          isRouteMatch = true;
-          batchBonus = 100; // Extra Rs 100 bonus for delivering along the same route
-          corridorDistanceKm = Math.round(pickupGapKm * 10) / 10;
-        }
-      }
-
+      const match = routeMatch(activeOne, d);
+      const cashOrder = d.order.paymentMethod === 'cod';
       return formatDelivery({
         ...d,
-        isRouteMatch,
-        batchBonus,
-        corridorDistanceKm,
+        isRouteMatch: !!match,
+        batchBonus: match?.bonus ?? 0,
+        corridorDistanceKm: match?.corridorDistanceKm,
+        exceedsCashLimit: cashOrder && cashCommitted + Number(d.order.totalAmount) > cashLimit,
       });
     });
 
@@ -243,7 +275,7 @@ export class RiderService {
     const rider = await this.requireRider(userId);
     const deliveries = await prisma.delivery.findMany({
       where: { riderId: rider.id },
-      include: { order: { select: { orderNumber: true, totalAmount: true, paymentMethod: true, orderStatus: true } } },
+      include: DELIVERY_INCLUDE,
       orderBy: { createdAt: 'desc' },
     });
     return deliveries.map(formatDelivery);
@@ -252,36 +284,17 @@ export class RiderService {
   async claimDelivery(userId: string, deliveryId: string, askFee?: number) {
     const rider = await this.requireRider(userId);
 
-    // Rule 1: Enforce hard concurrency limit of 2 active orders max
-    const activeCount = await prisma.delivery.count({
-      where: {
-        riderId: rider.id,
-        status: { in: ['assigned', 'arrived_at_pickup', 'picked_up', 'in_transit', 'arrived_at_customer'] },
-      },
-    });
-
-    if (activeCount >= 2) {
-      throw new AppError(
-        'Rider capacity limit reached (maximum 2 active orders). Deliver an ongoing run before claiming new orders.',
-        409,
-        'RIDER_CAPACITY_REACHED'
-      );
-    }
-
     const delivery = await prisma.delivery.findUnique({ where: { id: deliveryId } });
     if (!delivery) {
       throw new AppError('Delivery not found', 404, 'DELIVERY_NOT_FOUND');
     }
 
-    // Rule 2: Validate inDrive-style bid corridor if rider submitted a custom ask fee
+    // The rider's pay for this job: the standard fee, or their own ask within the allowed
+    // range (inDrive style), fixed now so the job's price can't change under them.
+    const ends = endsOf(delivery);
+    const corridor = calculateDeliveryFeeCorridor(ends.pickupLat, ends.pickupLng, ends.deliveryLat, ends.deliveryLng);
     let validatedAskFee: number | undefined;
     if (askFee != null && Number(askFee) > 0) {
-      const pLat = delivery.pickupLatitude ? Number(delivery.pickupLatitude) : 24.8607;
-      const pLng = delivery.pickupLongitude ? Number(delivery.pickupLongitude) : 67.0011;
-      const dLat = delivery.deliveryLatitude ? Number(delivery.deliveryLatitude) : 24.8715;
-      const dLng = delivery.deliveryLongitude ? Number(delivery.deliveryLongitude) : 67.0594;
-      const corridor = calculateDeliveryFeeCorridor(pLat, pLng, dLat, dLng);
-
       const numericAsk = Number(askFee);
       if (numericAsk < corridor.minFloor || numericAsk > corridor.maxCeiling) {
         throw new AppError(
@@ -293,30 +306,66 @@ export class RiderService {
       validatedAskFee = numericAsk;
     }
 
-    const liveOrder = await prisma.order.findFirst({
-      where: { id: delivery.orderId, orderStatus: { notIn: ['cancelled', 'refunded', 'delivered', 'completed'] } },
-      select: { id: true },
-    });
-    if (!liveOrder || delivery.status !== 'pending') {
-      throw new AppError('This job is no longer available', 409, 'DELIVERY_UNAVAILABLE');
-    }
+    // One claim at a time per rider (their row locked), so two quick claims can't both pass
+    // the two-job and cash limits.
+    await prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT id FROM riders WHERE id = ${rider.id} FOR UPDATE`;
 
-    const claim = await prisma.delivery.updateMany({
-      where: { id: deliveryId, riderId: null, status: 'pending' },
-      data: {
-        riderId: rider.id,
-        status: 'assigned',
-        ...(validatedAskFee ? { deliveryNotes: `Agreed delivery fee: Rs ${validatedAskFee}` } : {}),
-      },
+      // At most two jobs at once.
+      const active = await tx.delivery.findMany({ where: { riderId: rider.id, status: { in: ACTIVE_STATUSES } }, include: PAYMENT_INCLUDE });
+      if (active.length >= 2) {
+        throw new AppError(
+          'Rider capacity limit reached (maximum 2 active orders). Deliver an ongoing run before claiming new orders.',
+          409,
+          'RIDER_CAPACITY_REACHED'
+        );
+      }
+
+      const liveOrder = await tx.order.findFirst({
+        where: { id: delivery.orderId, orderStatus: { notIn: ['cancelled', 'refunded', 'delivered', 'completed'] } },
+        select: { id: true, paymentMethod: true, paymentStatus: true, totalAmount: true },
+      });
+      if (!liveOrder || delivery.status !== 'pending') {
+        throw new AppError('This job is no longer available', 409, 'DELIVERY_UNAVAILABLE');
+      }
+
+      // No more customer cash than the rider's limit, counting what they hold and what they'll
+      // collect on the jobs they already have. Prepaid jobs are always fine.
+      if (liveOrder.paymentMethod === 'cod' && liveOrder.paymentStatus !== 'paid') {
+        const { cashHeld } = await riderMoney(tx, rider.id);
+        const toCollect = cashToCollect(active);
+        const limit = cashLimitOf(rider);
+        if (cashHeld + toCollect + Number(liveOrder.totalAmount) > limit) {
+          const carrying = toCollect > 0
+            ? `You're carrying Rs ${cashHeld.toLocaleString()} in cash and will collect Rs ${toCollect.toLocaleString()} on your current jobs`
+            : `You're carrying Rs ${cashHeld.toLocaleString()} in cash`;
+          throw new AppError(
+            `${carrying} (limit Rs ${limit.toLocaleString()}). Hand in your cash before taking more cash orders; prepaid orders are still open to you.`,
+            409,
+            'CASH_LIMIT_REACHED'
+          );
+        }
+      }
+
+      const bonus = routeMatch(active.length === 1 ? active[0] : null, delivery)?.bonus ?? 0;
+      const claim = await tx.delivery.updateMany({
+        where: { id: deliveryId, riderId: null, status: 'pending' },
+        data: {
+          riderId: rider.id,
+          status: 'assigned',
+          riderFee: validatedAskFee ?? corridor.standardFee,
+          riderBonus: bonus,
+        },
+      });
+      if (claim.count === 0) {
+        throw new AppError('Delivery already claimed by another rider', 409, 'ALREADY_CLAIMED');
+      }
     });
-    if (claim.count === 0) {
-      throw new AppError('Delivery already claimed by another rider', 409, 'ALREADY_CLAIMED');
-    }
     void realtimeOrderService.emitDeliveryClaimed(deliveryId, delivery.orderId);
 
     const updated = await prisma.delivery.findUniqueOrThrow({
       where: { id: deliveryId },
-      include: { order: { select: { orderNumber: true, totalAmount: true, paymentMethod: true, orderStatus: true } } },
+      include: DELIVERY_INCLUDE,
     });
     return formatDelivery({ ...updated, riderAskFee: validatedAskFee });
   }
@@ -365,7 +414,7 @@ export class RiderService {
 
       const order = await tx.order.findUniqueOrThrow({
         where: { id: delivery.orderId },
-        select: { orderStatus: true, paymentStatus: true, paymentMethod: true },
+        select: { orderStatus: true, paymentStatus: true, paymentMethod: true, totalAmount: true, orderNumber: true },
       });
       if (['cancelled', 'refunded', 'completed'].includes(order.orderStatus)) {
         throw new AppError(
@@ -409,9 +458,10 @@ export class RiderService {
         throw new AppError('This delivery was just updated; refresh and try again', 409, 'DELIVERY_STATUS_CONFLICT');
       }
 
+      // Cash the rider takes at the door: an unpaid cash order being delivered.
+      const isCodPayment = order.paymentMethod === 'cod' && order.paymentStatus !== 'paid';
       const newOrderStatus = ORDER_STATUS_FOR_DELIVERY_STATUS[status] ?? null;
       if (newOrderStatus && newOrderStatus !== order.orderStatus) {
-        const isCodPayment = order.paymentMethod === 'cod' && order.paymentStatus !== 'paid';
         await tx.order.update({
           where: { id: delivery.orderId },
           data: {
@@ -439,12 +489,26 @@ export class RiderService {
         });
       }
       if (status === 'delivered') {
+        // An order an admin already marked delivered still gets its cash recorded.
+        if (isCodPayment && newOrderStatus === order.orderStatus) {
+          await tx.order.update({ where: { id: delivery.orderId }, data: { paymentStatus: 'paid', paymentCollectedBy: 'rider', paidAt: now } });
+        }
         await tx.rider.update({ where: { id: rider.id }, data: { totalDeliveries: { increment: 1 } } });
+        // The rider's pay for the job, and the cash they now carry if they took it at the door.
+        await postDeliveryEntries(tx, {
+          riderId: rider.id,
+          deliveryId,
+          orderId: delivery.orderId,
+          orderNumber: order.orderNumber,
+          fee: Number(delivery.riderFee ?? 0),
+          bonus: Number(delivery.riderBonus ?? 0),
+          cashCollected: isCodPayment ? Number(order.totalAmount) : 0,
+        });
       }
 
       const updated = await tx.delivery.findUniqueOrThrow({
         where: { id: deliveryId },
-        include: { order: { select: { orderNumber: true, totalAmount: true, paymentMethod: true, orderStatus: true } } },
+        include: DELIVERY_INCLUDE,
       });
       return { updated, newOrderStatus, orderId: delivery.orderId };
     });
@@ -471,20 +535,7 @@ export class RiderService {
       include: { profile: true },
     });
 
-    // Calculate cash in hand (COD orders delivered by this rider)
-    const codDeliveries = await prisma.delivery.findMany({
-      where: {
-        riderId: rider.id,
-        status: 'delivered',
-        order: { paymentMethod: 'cod' },
-      },
-      include: { order: { select: { totalAmount: true } } },
-    });
-
-    const cashInHand = codDeliveries.reduce(
-      (sum, d) => sum + (d.order?.totalAmount ? Number(d.order.totalAmount) : 0),
-      0
-    );
+    const { cashHeld, balance } = await riderMoney(prisma, rider.id);
 
     return {
       id: rider.id,
@@ -497,9 +548,22 @@ export class RiderService {
       ratingAverage: Number(rider.ratingAverage) || 0,
       totalDeliveries: rider.totalDeliveries,
       isAvailable: rider.isAvailable,
-      cashInHand,
-      floatingLimit: 10000,
+      cashInHand: cashHeld,
+      floatingLimit: cashLimitOf(rider),
+      balance,
     };
+  }
+
+  /**
+   * The rider's money: what the platform owes them, cash they carry against their limit,
+   * recent earnings, and every entry behind it. Open to a suspended rider too: they may
+   * still be owed money or still hold cash.
+   */
+  async getRiderEarnings(userId: string, page = 1) {
+    const rider = await prisma.rider.findUnique({ where: { userId } });
+    if (!rider) throw new AppError('Rider profile not found', 404, 'RIDER_NOT_FOUND');
+    const [summary, history] = await Promise.all([riderEarningsSummary(rider), listRiderEntries(rider.id, page)]);
+    return { ...summary, ...history };
   }
 
   async toggleDutyStatus(userId: string, isAvailable?: boolean) {
@@ -513,68 +577,72 @@ export class RiderService {
   }
 
   /**
-   * Update rider GPS location and evaluate geofences.
-   * Automatically triggers:
-   * - 'arrived_at_pickup' when rider enters kitchen geofence (<= 150m) and status is 'assigned'
-   * - 'arrived_at_customer' when rider enters customer doorstep geofence (<= 150m) and status is 'in_transit'
+   * The rider's phone reports where they are while on a job. The position is kept on the job
+   * (the customer sees it once the food is on its way) and checked against the two ends:
+   * coming within 150 m of the kitchen, or of the customer's door, moves the job on by itself.
+   * An end whose location isn't known is never guessed, so nothing is triggered for it.
    */
   async updateRiderLocation(userId: string, deliveryId: string, latitude: number, longitude: number) {
+    if (!Number.isFinite(latitude) || !Number.isFinite(longitude) || Math.abs(latitude) > 90 || Math.abs(longitude) > 180) {
+      throw new AppError('Valid numeric latitude and longitude are required', 400, 'INVALID_COORDINATES');
+    }
     const rider = await this.requireRider(userId);
-    const delivery = await prisma.delivery.findUnique({
-      where: { id: deliveryId },
-      include: { order: { select: { orderNumber: true, totalAmount: true, paymentMethod: true, orderStatus: true } } },
-    });
+    const delivery = await prisma.delivery.findUnique({ where: { id: deliveryId }, include: DELIVERY_INCLUDE });
     if (!delivery) {
       throw new AppError('Delivery not found', 404, 'DELIVERY_NOT_FOUND');
     }
     if (delivery.riderId !== rider.id) {
       throw new AppError('This delivery is not assigned to you', 403, 'ACCESS_DENIED');
     }
+    if (!ACTIVE_STATUSES.includes(delivery.status)) {
+      throw new AppError('This job is finished, so its location is no longer shared', 409, 'DELIVERY_NOT_ACTIVE');
+    }
 
-    const pickupLat = delivery.pickupLatitude ? Number(delivery.pickupLatitude) : 24.8607;
-    const pickupLng = delivery.pickupLongitude ? Number(delivery.pickupLongitude) : 67.0011;
-    const dropoffLat = delivery.deliveryLatitude ? Number(delivery.deliveryLatitude) : 24.8715;
-    const dropoffLng = delivery.deliveryLongitude ? Number(delivery.deliveryLongitude) : 67.0594;
+    const { pickupLat, pickupLng, deliveryLat, deliveryLng } = endsOf(delivery);
+    const kmTo = (lat: number | null, lng: number | null) => (lat != null && lng != null ? haversineKm(latitude, longitude, lat, lng) : null);
+    const toPickupKm = kmTo(pickupLat, pickupLng);
+    const toDropoffKm = kmTo(deliveryLat, deliveryLng);
 
-    const distanceToPickupKm = haversineKm(latitude, longitude, pickupLat, pickupLng);
-    const distanceToDeliveryKm = haversineKm(latitude, longitude, dropoffLat, dropoffLng);
-
-    const distanceToPickupMeters = Math.round(distanceToPickupKm * 1000);
-    const distanceToDeliveryMeters = Math.round(distanceToDeliveryKm * 1000);
-
-    const GEOFENCE_THRESHOLD_KM = 0.15; // 150 meters
+    const now = new Date();
+    const store = !delivery.riderLocationAt || now.getTime() - delivery.riderLocationAt.getTime() >= LOCATION_MIN_INTERVAL_MS;
+    if (store) {
+      await prisma.delivery.update({
+        where: { id: deliveryId },
+        data: { riderLatitude: latitude, riderLongitude: longitude, riderLocationAt: now },
+      });
+    }
 
     let autoTriggeredStatus: string | null = null;
-    let updatedDelivery = delivery;
+    if (delivery.status === 'assigned' && toPickupKm != null && toPickupKm <= GEOFENCE_KM) autoTriggeredStatus = 'arrived_at_pickup';
+    else if (delivery.status === 'in_transit' && toDropoffKm != null && toDropoffKm <= GEOFENCE_KM) autoTriggeredStatus = 'arrived_at_customer';
 
-    // Auto-Event 1: If assigned and rider enters kitchen geofence (<= 150m)
-    if (delivery.status === 'assigned' && distanceToPickupKm <= GEOFENCE_THRESHOLD_KM) {
-      autoTriggeredStatus = 'arrived_at_pickup';
-      await this.updateDeliveryStatus(userId, deliveryId, 'arrived_at_pickup');
-      const refreshed = await prisma.delivery.findUniqueOrThrow({
-        where: { id: deliveryId },
-        include: { order: { select: { orderNumber: true, totalAmount: true, paymentMethod: true, orderStatus: true } } },
-      });
-      updatedDelivery = refreshed;
+    let current = delivery;
+    if (autoTriggeredStatus) {
+      try {
+        await this.updateDeliveryStatus(userId, deliveryId, autoTriggeredStatus);
+      } catch (err) {
+        // The rider's own tap (or a cancel) got there first: nothing left to trigger.
+        const raced = err instanceof AppError && ['DELIVERY_STATUS_CONFLICT', 'INVALID_TRANSITION', 'DELIVERY_CANCELLED', 'ORDER_ALREADY_TERMINAL'].includes(err.code);
+        if (!raced) throw err;
+        autoTriggeredStatus = null;
+      }
+      current = await prisma.delivery.findUniqueOrThrow({ where: { id: deliveryId }, include: DELIVERY_INCLUDE });
     }
-    // Auto-Event 2: If in_transit and rider enters customer geofence (<= 150m)
-    else if (delivery.status === 'in_transit' && distanceToDeliveryKm <= GEOFENCE_THRESHOLD_KM) {
-      autoTriggeredStatus = 'arrived_at_customer';
-      await this.updateDeliveryStatus(userId, deliveryId, 'arrived_at_customer');
-      const refreshed = await prisma.delivery.findUniqueOrThrow({
-        where: { id: deliveryId },
-        include: { order: { select: { orderNumber: true, totalAmount: true, paymentMethod: true, orderStatus: true } } },
-      });
-      updatedDelivery = refreshed;
+
+    if (store && ON_THE_WAY_STATUSES.includes(current.status)) {
+      const distanceKm = toDropoffKm != null ? Math.round(toDropoffKm * 10) / 10 : undefined;
+      realtimeOrderService
+        .emitDeliveryTrackingUpdate(current.orderId, { latitude, longitude }, distanceKm)
+        .catch((err) => console.error('Delivery tracking update failed:', err));
     }
 
     return {
-      delivery: formatDelivery(updatedDelivery),
+      delivery: formatDelivery(current),
       currentLocation: { latitude, longitude },
-      distanceToPickupMeters,
-      distanceToDeliveryMeters,
-      isInsidePickupGeofence: distanceToPickupKm <= GEOFENCE_THRESHOLD_KM,
-      isInsideDeliveryGeofence: distanceToDeliveryKm <= GEOFENCE_THRESHOLD_KM,
+      distanceToPickupMeters: toPickupKm != null ? Math.round(toPickupKm * 1000) : null,
+      distanceToDeliveryMeters: toDropoffKm != null ? Math.round(toDropoffKm * 1000) : null,
+      isInsidePickupGeofence: toPickupKm != null && toPickupKm <= GEOFENCE_KM,
+      isInsideDeliveryGeofence: toDropoffKm != null && toDropoffKm <= GEOFENCE_KM,
       autoTriggeredStatus,
     };
   }

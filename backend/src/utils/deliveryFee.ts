@@ -315,25 +315,28 @@ export interface DeliveryFeeCorridor {
   standardFee: number;
   minFloor: number;
   maxCeiling: number;
-  distanceKm: number;
+  /** Null when either end's location isn't known (the fee is then the city's base rate). */
+  distanceKm: number | null;
 }
 
 /**
- * Calculates inDrive-style bounded delivery fee corridor with floor and ceiling caps.
+ * The rider's pay for a job: a standard fee (city base rate + Rs 20 per km) and the range a
+ * rider may ask for instead (inDrive style: floor protects the rider, ceiling the platform).
+ * Without both locations no distance is guessed: the standard fee is the base rate.
  */
 export function calculateDeliveryFeeCorridor(
-  pickupLat: number,
-  pickupLng: number,
-  deliveryLat: number,
-  deliveryLng: number,
+  pickupLat: number | null,
+  pickupLng: number | null,
+  deliveryLat: number | null,
+  deliveryLng: number | null,
   city?: string | null
 ): DeliveryFeeCorridor {
-  const distKm = Math.round(haversineKm(pickupLat, pickupLng, deliveryLat, deliveryLng) * 10) / 10;
+  const known = [pickupLat, pickupLng, deliveryLat, deliveryLng].every((v) => v != null && Number.isFinite(v));
+  const distKm = known ? Math.round(haversineKm(pickupLat!, pickupLng!, deliveryLat!, deliveryLng!) * 10) / 10 : null;
   const baseRate = platformDefaultFee(city);
-  const distanceSurcharge = Math.round(distKm * 20); // Rs 20 per km
+  const distanceSurcharge = distKm != null ? Math.round(distKm * 20) : 0; // Rs 20 per km
   const standardFee = Math.max(120, baseRate + distanceSurcharge);
 
-  // InDrive-style bounded price corridor:
   // Floor (85% or Rs 100 min) - protects rider
   const minFloor = Math.max(100, Math.round(standardFee * 0.85));
   // Ceiling (+Rs 120 or 140% max) - protects customer from price gouging

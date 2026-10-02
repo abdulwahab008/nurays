@@ -418,6 +418,85 @@ async function main() {
     (await prisma.order.findUnique({ where: { id: hoOrder.id } }))!.paymentCollectedBy === 'rider');
   ok('a second "delivered" tap cannot double count', (await rcode(hoCode!)) !== 'OK' && (await prisma.rider.findUnique({ where: { userId: riderUser.id } }))!.totalDeliveries === 1);
 
+  // ---- 17d-2. the rider's money: pay fixed at claim, cash taken at the door, settling up ----
+  const { riderMoney, recordSettlement, recordPayout, listRidersWithMoney, setCashLimit } = require('../src/services/rider-ledger.service');
+  const hoRider = (await prisma.rider.findUnique({ where: { userId: riderUser.id } }))!;
+  const hoFee = Number((await prisma.delivery.findUnique({ where: { id: hoDelivery!.id } }))!.riderFee);
+  const hoTotal = Number(hoOrder.totalAmount);
+  const hoEntries = await prisma.riderLedgerEntry.findMany({ where: { riderId: hoRider.id }, orderBy: { type: 'asc' } });
+  ok("delivering a cash order books the rider's fee and the cash taken at the door, once",
+    hoFee > 0 && hoEntries.length === 2 &&
+      hoEntries.some((e) => e.type === 'delivery_fee' && Number(e.amount) === hoFee) &&
+      hoEntries.some((e) => e.type === 'cod_collected' && Number(e.amount) === -hoTotal),
+    hoEntries.map((e) => `${e.type}:${e.amount}`).join(','));
+  let rm = await riderMoney(prisma, hoRider.id);
+  ok('the rider holds the order total and is owed their fee', rm.cashHeld === hoTotal && rm.unpaid === hoFee && rm.balance === Math.round((hoFee - hoTotal) * 100) / 100, JSON.stringify(rm));
+  const earnings: any = await riderService.getRiderEarnings(riderUser.id);
+  ok("the rider's earnings show today's fee and the cash they hold", earnings.earnedToday === hoFee && earnings.deliveriesToday === 1 && earnings.cashHeld === hoTotal && earnings.entries.length === 2);
+  const adminList: any = await listRidersWithMoney({ search: riderUser.phone.slice(-6), filter: 'holding_cash' });
+  ok('the admin list finds the rider by phone, holding the cash', adminList.riders.length === 1 && adminList.riders[0].cashHeld === hoTotal && adminList.totals.cashHeld >= hoTotal, JSON.stringify(adminList.riders[0] ?? null));
+  ok('a settlement for more cash than the rider holds is refused', (await code(recordSettlement(hoRider.id, admin.id, { cashHandedIn: hoTotal + 1 }))) === 'DEPOSIT_EXCEEDS_CASH');
+  ok('a rider cannot keep more pay than they are owed', (await code(recordSettlement(hoRider.id, admin.id, { keptAsPay: hoFee + 1 }))) === 'PAYOUT_EXCEEDS_BALANCE');
+  const settleOnce = () => recordSettlement(hoRider.id, admin.id, { cashHandedIn: hoTotal - hoFee, keptAsPay: hoFee, reference: 'HUB-1' }).then(() => 'OK', (e: any) => e.code);
+  const settledBoth = await Promise.all([settleOnce(), settleOnce()]);
+  rm = await riderMoney(prisma, hoRider.id);
+  ok('two settlements at once: one goes through; the rider then holds nothing and is owed nothing',
+    settledBoth.filter((r) => r === 'OK').length === 1 && rm.cashHeld === 0 && rm.balance === 0 && rm.paidOut === hoFee, `${settledBoth} ${JSON.stringify(rm)}`);
+  ok('with nothing owed, a payout is refused', (await code(recordPayout(hoRider.id, admin.id, { amount: 1 }))) === 'PAYOUT_EXCEEDS_BALANCE');
+
+  // the cash limit: a cash order that would take the rider past it isn't theirs to take
+  const limOrder: any = await orderService.createOrder(hoCust.id, { items: [{ productId: hoProd.id, quantity: 1 }], deliveryType: 'home_delivery', deliveryAddressId: hoAddr.id, paymentMethod: 'cod' } as any);
+  await prisma.order.update({ where: { id: limOrder.id }, data: { orderStatus: 'ready' } });
+  await riderService.ensureDeliveryForOrder(limOrder.id, 0);
+  const limJob = (await prisma.delivery.findUnique({ where: { orderId: limOrder.id } }))!;
+  await setCashLimit(hoRider.id, 100);
+  const limPool: any[] = await riderService.getAvailableDeliveries(riderUser.id);
+  ok('a cash order over the limit is flagged in the pool', limPool.find((d) => d.id === limJob.id)?.exceedsCashLimit === true);
+  ok('and claiming it is refused', (await code(riderService.claimDelivery(riderUser.id, limJob.id))) === 'CASH_LIMIT_REACHED');
+  await setCashLimit(hoRider.id, null);
+  ok('back on the default limit it can be claimed', (await code(riderService.claimDelivery(riderUser.id, limJob.id))) === 'OK');
+
+  // where the rider is: shared with the customer while the food is on its way, never their pay
+  await riderService.updateDeliveryStatus(riderUser.id, limJob.id, 'picked_up');
+  const loc: any = await riderService.updateRiderLocation(riderUser.id, limJob.id, 31.5204, 74.3587);
+  ok('an unknown drop-off location never triggers an arrival', loc.autoTriggeredStatus === null && loc.distanceToDeliveryMeters === null);
+  const custView: any = await orderService.getOrderDetails(limOrder.id, hoCust.id);
+  const kitchenView: any = await orderService.getOrderDetails(limOrder.id, platUser);
+  const riderView: any = await orderService.getOrderDetails(limOrder.id, riderUser.id);
+  ok('the customer sees where the rider is, but not what the rider is paid',
+    custView.delivery?.riderLocation?.latitude === 31.5204 && !('riderFee' in custView.delivery) && !('riderLatitude' in custView.delivery), JSON.stringify(custView.delivery?.riderLocation ?? null));
+  ok('the kitchen sees neither', kitchenView.delivery?.riderLocation === null && !('riderFee' in kitchenView.delivery));
+  const limFee = Number((await prisma.delivery.findUnique({ where: { id: limJob.id } }))!.riderFee);
+  ok('the rider sees their own pay', limFee > 0 && riderView.delivery?.riderFee === limFee, `${riderView.delivery?.riderFee} vs ${limFee}`);
+  const limCode = (await prisma.order.findUnique({ where: { id: limOrder.id }, select: { handoverCode: true } }))!.handoverCode!;
+  await riderService.updateDeliveryStatus(riderUser.id, limJob.id, 'in_transit');
+  await riderService.updateDeliveryStatus(riderUser.id, limJob.id, 'delivered', undefined, limCode);
+  ok("after delivery the rider's position is no longer shown", (await orderService.getOrderDetails(limOrder.id, hoCust.id) as any).delivery?.riderLocation === null);
+  ok('a finished job takes no more positions', (await code(riderService.updateRiderLocation(riderUser.id, limJob.id, 31.52, 74.35))) === 'DELIVERY_NOT_ACTIVE');
+
+  // the rider's rating: the customer's delivery rating, one vote per order
+  const rateOrder = async (o: any, deliveryRating: number) => {
+    for (const it of await prisma.orderItem.findMany({ where: { orderId: o.id } })) {
+      await reviewService.addReview(hoCust.id, { orderId: o.id, orderItemId: it.id, productRating: 5, sellerRating: 5, deliveryRating });
+    }
+  };
+  await rateOrder(limOrder, 4);
+  await rateOrder(hoOrder, 2);
+  ok("customers' delivery ratings set the rider's rating (4 and 2 make 3.0)", Number((await prisma.rider.findUnique({ where: { id: hoRider.id } }))!.ratingAverage) === 3);
+
+  // two quick claims can't both slip under the cash limit (claims are taken one at a time)
+  const raceJobs = await Promise.all([1, 2].map(async () => {
+    const o: any = await orderService.createOrder(hoCust.id, { items: [{ productId: hoProd.id, quantity: 1 }], deliveryType: 'home_delivery', deliveryAddressId: hoAddr.id, paymentMethod: 'cod' } as any);
+    await prisma.order.update({ where: { id: o.id }, data: { orderStatus: 'ready' } });
+    await riderService.ensureDeliveryForOrder(o.id, 0);
+    return { job: (await prisma.delivery.findUnique({ where: { orderId: o.id } }))!, total: Number(o.totalAmount) };
+  }));
+  const heldNow = (await riderMoney(prisma, hoRider.id)).cashHeld;
+  await setCashLimit(hoRider.id, Math.round(heldNow + raceJobs[0].total * 1.5));
+  const raced = await Promise.all(raceJobs.map((r) => code(riderService.claimDelivery(riderUser.id, r.job.id))));
+  ok('two cash jobs claimed at once: only the one that fits under the limit is taken', raced.filter((r) => r === 'OK').length === 1 && raced.includes('CASH_LIMIT_REACHED'), raced.join(','));
+  await setCashLimit(hoRider.id, null);
+
   // brute force locks the code
   const bfOrder: any = await orderService.createOrder(hoCust.id, { items: [{ productId: hoProd.id, quantity: 1 }], deliveryType: 'home_delivery', deliveryAddressId: hoAddr.id, paymentMethod: 'cod' } as any);
   const { verifyHandoverCode } = require('../src/services/handover.service');

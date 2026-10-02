@@ -736,11 +736,15 @@ model Rider {
   // cannot see or claim any delivery until an admin sets this to "approved".
   verificationStatus String    @default("pending") @map("verification_status")
   rejectionReason    String?   @map("rejection_reason")
+  // Most cash-on-delivery money this rider may hold before depositing it (null = the default,
+  // RIDER_CASH_LIMIT). Cash orders aren't offered beyond it.
+  cashLimit          Decimal?  @map("cash_limit") @db.Decimal(10, 2)
   createdAt          DateTime  @default(now()) @map("created_at")
   updatedAt          DateTime  @updatedAt @map("updated_at")
 
   hub             HubCenter? @relation(fields: [hubId], references: [id], onDelete: SetNull)
   deliveries      Delivery[]
+  ledgerEntries   RiderLedgerEntry[]
 
   @@index([status, verificationStatus])
 
@@ -772,15 +776,49 @@ model Delivery {
   deliveryPhotoUrl      String?   @map("delivery_photo_url")
   customerSignature     String?   @map("customer_signature")
   deliveryNotes         String?   @map("delivery_notes")
+  // What the rider is paid for this job, fixed when they claim it, and any route bonus.
+  riderFee              Decimal?  @map("rider_fee") @db.Decimal(10, 2)
+  riderBonus            Decimal?  @map("rider_bonus") @db.Decimal(10, 2)
+  // The rider's last reported position while on this job.
+  riderLatitude         Decimal?  @map("rider_latitude") @db.Decimal(10, 8)
+  riderLongitude        Decimal?  @map("rider_longitude") @db.Decimal(11, 8)
+  riderLocationAt       DateTime? @map("rider_location_at")
   createdAt             DateTime  @default(now()) @map("created_at")
   updatedAt             DateTime  @updatedAt @map("updated_at")
 
   order                 Order     @relation(fields: [orderId], references: [id], onDelete: Cascade)
   rider                 Rider?    @relation(fields: [riderId], references: [id], onDelete: SetNull)
+  riderLedgerEntries    RiderLedgerEntry[]
 
   @@index([riderId, status])
 
   @@map("deliveries")
+}
+
+/// A rider's money with the platform, one signed entry per movement. The sum is what the
+/// platform owes the rider (negative: what the rider owes, e.g. cash still to deposit).
+///   delivery_fee +, bonus +, cod_collected - (cash taken at the door), cash_deposit + (handed
+///   in), payout - (paid to the rider), adjustment +/-.
+model RiderLedgerEntry {
+  id         String   @id @default(uuid())
+  riderId    String   @map("rider_id")
+  type       String
+  amount     Decimal  @db.Decimal(10, 2)
+  deliveryId String?  @map("delivery_id")
+  orderId    String?  @map("order_id")
+  reference  String?
+  note       String?
+  createdBy  String?  @map("created_by")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  rider    Rider     @relation(fields: [riderId], references: [id], onDelete: Cascade)
+  delivery Delivery? @relation(fields: [deliveryId], references: [id], onDelete: SetNull)
+
+  // Each delivery earns its fee, bonus and cash entry at most once.
+  @@unique([deliveryId, type])
+  @@index([riderId, createdAt])
+  @@index([riderId, type])
+  @@map("rider_ledger_entries")
 }
 
 // ============================================

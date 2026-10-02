@@ -38,6 +38,12 @@ export const getRiderProfile = async (req: Request, res: Response) => {
   res.status(200).json({ success: true, data: profile });
 };
 
+export const getRiderEarnings = async (req: Request, res: Response) => {
+  if (!req.user) throw new AppError('Authentication required', 401, 'AUTH_REQUIRED');
+  const earnings = await riderService.getRiderEarnings(req.user.userId, Number(req.query.page) || 1);
+  res.status(200).json({ success: true, data: earnings });
+};
+
 export const toggleDutyStatus = async (req: Request, res: Response) => {
   if (!req.user) throw new AppError('Authentication required', 401, 'AUTH_REQUIRED');
   const result = await riderService.toggleDutyStatus(req.user.userId, req.body.isAvailable);

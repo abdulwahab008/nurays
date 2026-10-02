@@ -100,6 +100,12 @@ export class ReviewService {
     // Update seller rating
     await this.updateSellerRating(orderItem.seller.id);
 
+    // And the rating of the Nuray rider who brought it, if one did.
+    if (data.deliveryRating != null) {
+      const delivery = await prisma.delivery.findUnique({ where: { orderId: data.orderId }, select: { riderId: true, status: true } });
+      if (delivery?.riderId && delivery.status === 'delivered') await this.updateRiderRating(delivery.riderId);
+    }
+
     return review;
   }
 
@@ -243,6 +249,24 @@ export class ReviewService {
         ratingAverage: Math.round((row?.avg ?? 0) * 100) / 100,
         totalReviews: row?.orders ?? 0,
       },
+    });
+  }
+
+  /** A rider's rating: the average delivery rating of the orders they delivered, each order once. */
+  private async updateRiderRating(riderId: string) {
+    const [row] = await prisma.$queryRaw<Array<{ avg: number | null }>>`
+      SELECT AVG(order_rating)::float AS avg
+      FROM (
+        SELECT AVG(r.delivery_rating) AS order_rating
+        FROM reviews r
+        JOIN deliveries d ON d."orderId" = r.order_id
+        WHERE d.rider_id = ${riderId} AND d.status = 'delivered' AND r.is_approved = true AND r.delivery_rating IS NOT NULL
+        GROUP BY r.order_id
+      ) per_order`;
+
+    await prisma.rider.update({
+      where: { id: riderId },
+      data: { ratingAverage: Math.round((row?.avg ?? 0) * 100) / 100 },
     });
   }
 }

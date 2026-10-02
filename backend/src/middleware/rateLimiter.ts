@@ -122,3 +122,11 @@ export const submissionLimiter = limiter('submission', {
   perUser: true,
   message: 'Too many submissions. Please try again later.',
 });
+
+// A rider's phone reporting its position while on a job: about one a second at most.
+export const locationLimiter = limiter('location', {
+  windowMs: MINUTE,
+  limit: isProduction() ? 90 : 10_000,
+  perUser: true,
+  message: 'Location updates are coming in too fast.',
+});
