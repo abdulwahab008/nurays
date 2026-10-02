@@ -1,5 +1,6 @@
 import { Prisma } from '@prisma/client';
 import prisma from '../config/database';
+import { searchRankedProductIds } from './ranking.service';
 import { AppError } from '../middleware/errorHandler';
 import { computeSellerAvailability, isAcceptingOrders } from './availability.service';
 import { getDeliveryFeeForSeller, haversineKm } from '../utils/deliveryFee';
@@ -273,6 +274,8 @@ export class ProductService {
     customerLng?: number;
     maxDistanceKm?: number;
     communityId?: string;
+    /** Only these dishes, in this order (recommendations, "order again"). */
+    rankedIds?: string[];
   }) {
     const page = Math.min(Math.max(Math.trunc(filters.page || 1), 1), MAX_PAGE);
     const limit = Math.min(Math.max(Math.trunc(filters.limit || 20), 1), 100);
@@ -354,13 +357,15 @@ export class ProductService {
       where.seller.createdAt = { gte: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000) };
     }
 
+    // Search: matching dishes ranked by relevance (typos tolerated, see ranking.service.ts).
+    // Without another sort chosen, results come in that order.
+    let rankedIds = filters.rankedIds;
     if (filters.search) {
-      where.OR = expandSearchTerms(filters.search).flatMap((term) => [
-        { name: { contains: term, mode: 'insensitive' } },
-        { nameUrdu: { contains: term, mode: 'insensitive' } },
-        { description: { contains: term, mode: 'insensitive' } },
-      ]);
+      const matches = await searchRankedProductIds(expandSearchTerms(filters.search));
+      if (filters.sort) where.id = { in: matches };
+      else rankedIds = rankedIds ? matches.filter((id) => rankedIds!.includes(id)) : matches;
     }
+    if (rankedIds) where.id = { in: rankedIds };
 
     const hasCustomerLocation = filters.customerLat != null && filters.customerLng != null;
     const targetCommunity = filters.communityId
@@ -391,19 +396,22 @@ export class ProductService {
 
     // Order. Every ordering ends with the id so pages never overlap or skip rows that tie.
     const sort = filters.sort;
+    // "Popular" is what's ordered now (trend score: recent orders, fading over days; see
+    // utils/ranking.ts), then all-time orders. Ratings use the review-count-aware score, so one
+    // 5-star review doesn't beat two hundred 4.8s.
     const orderBy: Prisma.ProductOrderByWithRelationInput[] =
-      sort === 'popular'
-        ? [{ totalOrders: 'desc' }, { ratingAverage: 'desc' }, { id: 'asc' }]
+      sort === 'popular' || sort === 'trending'
+        ? [{ trendScore: 'desc' }, { totalOrders: 'desc' }, { ratingScore: 'desc' }, { id: 'asc' }]
         : sort === 'price_low'
         ? [{ price: 'asc' }, { id: 'asc' }]
         : sort === 'price_high'
         ? [{ price: 'desc' }, { id: 'asc' }]
         : sort === 'rating'
-        ? [{ ratingAverage: 'desc' }, { totalReviews: 'desc' }, { id: 'asc' }]
+        ? [{ ratingScore: 'desc' }, { totalReviews: 'desc' }, { id: 'asc' }]
         : sort === 'newest' || !targetCommunity
         ? [{ createdAt: 'desc' }, { id: 'asc' }]
         : // Default order within a community: best rated first.
-          [{ ratingAverage: 'desc' }, { createdAt: 'desc' }, { id: 'asc' }];
+          [{ ratingScore: 'desc' }, { trendScore: 'desc' }, { createdAt: 'desc' }, { id: 'asc' }];
 
     const productInclude = {
       category: {
@@ -440,7 +448,7 @@ export class ProductService {
     // comes first, then its neighbours, then everywhere else. Each tier is its own query,
     // counted and paged by the database: the page is cut from the tiers in order.
     const tiers: Prisma.ProductWhereInput[] = [];
-    if (targetCommunity && (!sort || sort === 'popular')) {
+    if (!rankedIds && targetCommunity && (!sort || sort === 'popular')) {
       const neighbourIds = targetCommunity.neighborCommunityIds.filter((id) => id !== targetCommunity.id);
       tiers.push({ AND: [where, { seller: { communityId: targetCommunity.id } }] });
       if (neighbourIds.length > 0) tiers.push({ AND: [where, { seller: { communityId: { in: neighbourIds } } }] });
@@ -458,29 +466,45 @@ export class ProductService {
       tiers.push(where);
     }
 
-    const counts = await Promise.all(tiers.map((tierWhere) => prisma.product.count({ where: tierWhere })));
-    const total = counts.reduce((sum, n) => sum + n, 0);
-    const slices: Array<{ where: Prisma.ProductWhereInput; skip: number; take: number }> = [];
-    let offset = skip;
-    let remaining = limit;
-    tiers.forEach((tierWhere, i) => {
-      if (remaining <= 0) return;
-      if (offset >= counts[i]) {
-        offset -= counts[i];
-        return;
-      }
-      const take = Math.min(remaining, counts[i] - offset);
-      slices.push({ where: tierWhere, skip: offset, take });
-      remaining -= take;
-      offset = 0;
-    });
-    const products = (
-      await Promise.all(
-        slices.map((slice) =>
-          prisma.product.findMany({ where: slice.where, orderBy, include: productInclude, skip: slice.skip, take: slice.take })
+    let total: number;
+    let products: Array<Prisma.ProductGetPayload<{ include: typeof productInclude }>>;
+    if (rankedIds) {
+      // A given order: find which of the ranked dishes pass the filters, page through them in
+      // rank order, and load just that page.
+      const position = new Map(rankedIds.map((id, i) => [id, i]));
+      const passing = (await prisma.product.findMany({ where, select: { id: true } }))
+        .map((p) => p.id)
+        .sort((a, b) => position.get(a)! - position.get(b)!);
+      total = passing.length;
+      const pageIds = passing.slice(skip, skip + limit);
+      const rows = await prisma.product.findMany({ where: { id: { in: pageIds } }, include: productInclude });
+      const byId = new Map(rows.map((r) => [r.id, r]));
+      products = pageIds.map((id) => byId.get(id)!).filter(Boolean);
+    } else {
+      const counts = await Promise.all(tiers.map((tierWhere) => prisma.product.count({ where: tierWhere })));
+      total = counts.reduce((sum, n) => sum + n, 0);
+      const slices: Array<{ where: Prisma.ProductWhereInput; skip: number; take: number }> = [];
+      let offset = skip;
+      let remaining = limit;
+      tiers.forEach((tierWhere, i) => {
+        if (remaining <= 0) return;
+        if (offset >= counts[i]) {
+          offset -= counts[i];
+          return;
+        }
+        const take = Math.min(remaining, counts[i] - offset);
+        slices.push({ where: tierWhere, skip: offset, take });
+        remaining -= take;
+        offset = 0;
+      });
+      products = (
+        await Promise.all(
+          slices.map((slice) =>
+            prisma.product.findMany({ where: slice.where, orderBy, include: productInclude, skip: slice.skip, take: slice.take })
+          )
         )
-      )
-    ).flat();
+      ).flat();
+    }
 
     // Compute accepting-orders/delivery-fee/distance/ETA once per UNIQUE seller
     // in this page of results, not once per product, to avoid redundant work
@@ -532,6 +556,7 @@ export class ProductService {
         unitUrdu: product.unitUrdu,
         ratingAverage: Number(product.ratingAverage),
         totalReviews: product.totalReviews,
+        trendScore: Math.round(product.trendScore * 100) / 100,
         primaryImage: imageUrl ? (imageUrl.startsWith('http') ? imageUrl : `${baseUrl}${imageUrl}`) : null,
         category: product.category,
         community: sellerCommunity,

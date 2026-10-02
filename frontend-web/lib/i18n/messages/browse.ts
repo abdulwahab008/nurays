@@ -28,7 +28,7 @@ export const browseMessages = defineMessages({
     'sort.price_low': 'Price: Low to High',
     'sort.price_high': 'Price: High to Low',
     'sort.rating': 'Top Rated',
-    'sort.popular': 'Most Popular',
+    'sort.popular': 'Trending now',
     // Promotions
     pctOff: '{value}% off',
     amountOff: '{amount} off',
@@ -264,7 +264,7 @@ export const browseMessages = defineMessages({
     'sort.price_low': 'قیمت: کم سے زیادہ',
     'sort.price_high': 'قیمت: زیادہ سے کم',
     'sort.rating': 'سب سے زیادہ ریٹنگ',
-    'sort.popular': 'سب سے مقبول',
+    'sort.popular': 'ابھی مقبول',
     pctOff: '{value}% رعایت',
     amountOff: '{amount} رعایت',
     deal: 'ڈیل',

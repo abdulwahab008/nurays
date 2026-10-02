@@ -195,11 +195,31 @@ Frontend (`frontend-web/.env.local`, read at build time):
   for the customer, chat and notifications. With Redis, several backend instances share them.
 - **Background jobs** (emails, notification delivery) run on a BullMQ queue in Redis and are retried; without Redis
   they run in the process. Timed sweeps run on whichever instance gets a Postgres advisory lock: stale orders (every
-  2 minutes), abandoned online payments (15 minutes), hub batch expiry (hourly), stock alerts and expired codes
+  2 minutes), abandoned online payments and ranking scores (15 minutes), hub batch expiry (hourly), stock alerts and expired codes
   (every 6 hours).
 - **Notifications**: every event lands in the person's in-app list. Depending on the event it is also sent by push
   (to every device they switched on), email and SMS — SMS only for things that need acting on now, like a kitchen's new
   order. Each person chooses per kind and channel at `/notifications/settings`.
+
+## Ranking and recommendations
+
+The formulas are in `backend/src/utils/ranking.ts` (pure functions, unit-tested) and are fed real orders by
+`backend/src/services/ranking.service.ts`; a job recomputes the stored scores every 15 minutes.
+
+- **Trending** (kitchens and dishes): orders from the last 14 days, each counting 1 when placed and half as much every
+  3 days after. One customer's orders count 1, ½, ¼ and then nothing (no gaming by repeat orders), nothing trends on a
+  single customer, and cancelled, unpaid-online and a kitchen's own orders are ignored. Used by the home page's
+  "Trending kitchens", the "Popular / Trending now" sort and the popular dishes row.
+- **Top rated**: a Bayesian average (each rating starts as if it had 5 reviews at 4.0), so one 5★ review doesn't beat
+  two hundred 4.8s.
+- **Search**: name matches before description matches, names starting with the words first, Roman-Urdu/English
+  synonyms (kabab/kebab, keema/qeema), and typo tolerance through trigram similarity ("biryni" finds biryani) when
+  there are few exact matches.
+- **Recommended for you**: item-to-item collaborative filtering (people who ordered what you ordered also ordered…),
+  plus more from kitchens and kinds of food you order; trending dishes for new customers. **Order again**: your dishes,
+  often-and-recent first.
+- **Rider job order**: jobs on the way of the current one first, then closer pickups, longer-waiting orders and better
+  pay per km; cash jobs over the rider's cash limit last.
 
 ## Languages
 

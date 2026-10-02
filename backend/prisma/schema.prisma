@@ -158,6 +158,9 @@ model Seller {
   totalReviews      Int       @default(0) @map("total_reviews")
   totalOrders       Int       @default(0) @map("total_orders")
   totalSales        Decimal   @default(0) @map("total_sales") @db.Decimal(12, 2)
+  // Ranking scores, kept up to date by ranking.service.ts.
+  trendScore        Float     @default(0) @map("trend_score")
+  ratingScore       Float     @default(4) @map("rating_score")
   commissionRate    Decimal   @default(15.00) @map("commission_rate") @db.Decimal(5, 2)
   isVerified        Boolean   @default(false) @map("is_verified")
   isFeatured        Boolean   @default(false) @map("is_featured")
@@ -390,6 +393,11 @@ model Product {
   ratingAverage         Decimal   @default(0) @map("rating_average") @db.Decimal(3, 2)
   totalReviews          Int       @default(0) @map("total_reviews")
   totalOrders           Int       @default(0) @map("total_orders")
+  // Ranking scores, kept up to date by ranking.service.ts (see there for the formulas):
+  // demand over the last two weeks with recent orders counting most, and the rating
+  // pulled towards the average until there are enough reviews to trust it.
+  trendScore            Float     @default(0) @map("trend_score")
+  ratingScore           Float     @default(4) @map("rating_score")
   viewsCount            Int       @default(0) @map("views_count")
   isFeatured            Boolean   @default(false) @map("is_featured")
   isActive              Boolean   @default(true) @map("is_active")
@@ -414,6 +422,7 @@ model Product {
   @@index([categoryId])
   // The public catalog's filter, in its default (newest first) order.
   @@index([approvalStatus, isActive, createdAt(sort: Desc)])
+  @@index([trendScore(sort: Desc)])
   // Catalog search (case-insensitive "contains") on name, Urdu name and description.
   @@index([name(ops: raw("gin_trgm_ops"))], type: Gin, map: "products_name_trgm_idx")
   @@index([nameUrdu(ops: raw("gin_trgm_ops"))], type: Gin, map: "products_name_urdu_trgm_idx")

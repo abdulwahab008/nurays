@@ -36,6 +36,8 @@ export interface Delivery {
   maxAskFee?: number;
   // Unknown (null) when either end's location isn't known.
   distanceKm?: number | null;
+  /** Rider to pickup, when the server knows where the rider is. */
+  pickupDistanceKm?: number | null;
   // Batch corridor match
   isRouteMatch?: boolean;
   batchBonus?: number;
@@ -107,6 +109,30 @@ export const LEDGER_LABELS: Record<RiderLedgerType, string> = {
   adjustment: 'Adjustment',
 };
 
+let lastFix: { lat: number; lng: number; at: number } | null = null;
+
+/** The device's position, only if location is already allowed (never prompts), cached for a minute. */
+async function knownPosition(): Promise<{ lat: number; lng: number } | null> {
+  if (lastFix && Date.now() - lastFix.at < 60_000) return { lat: lastFix.lat, lng: lastFix.lng };
+  if (typeof navigator === 'undefined' || !navigator.geolocation || !navigator.permissions) return null;
+  try {
+    const permission = await navigator.permissions.query({ name: 'geolocation' as PermissionName });
+    if (permission.state !== 'granted') return null;
+  } catch {
+    return null;
+  }
+  return new Promise((resolve) =>
+    navigator.geolocation.getCurrentPosition(
+      (p) => {
+        lastFix = { lat: p.coords.latitude, lng: p.coords.longitude, at: Date.now() };
+        resolve({ lat: lastFix.lat, lng: lastFix.lng });
+      },
+      () => resolve(null),
+      { maximumAge: 60_000, timeout: 4_000, enableHighAccuracy: false }
+    )
+  );
+}
+
 export const riderService = {
   getRiderProfile: async () => {
     const response = await apiClient.get<ApiResponse<RiderProfile>>('/riders/me');
@@ -123,8 +149,10 @@ export const riderService = {
     return response.data;
   },
 
+  /** Open jobs, best for this rider first; sends the phone's position (if already allowed) so the closest pickups lead. */
   getAvailableDeliveries: async () => {
-    const response = await apiClient.get<ApiResponse<Delivery[]>>('/riders/deliveries/available');
+    const position = await knownPosition();
+    const response = await apiClient.get<ApiResponse<Delivery[]>>('/riders/deliveries/available', { params: position ?? {} });
     return response.data;
   },
 

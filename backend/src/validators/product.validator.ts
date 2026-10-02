@@ -13,7 +13,7 @@ export const getProductsQuerySchema = z.object({
   stockType: z.enum(['direct', 'hub', 'both']).optional(),
   productType: z.enum(['frozen', 'fresh', 'ready_to_eat', 'ready_to_cook']).optional(),
   search: z.string().optional(),
-  sort: z.enum(['popular', 'newest', 'price_low', 'price_high', 'rating']).optional(),
+  sort: z.enum(['popular', 'trending', 'newest', 'price_low', 'price_high', 'rating']).optional(),
   isActive: z.string().optional().transform((val) => (val === 'true' ? true : val === 'false' ? false : undefined)),
   mealCategory: z.string().optional(),
   openNow: z.string().optional().transform((val) => val === 'true'),
