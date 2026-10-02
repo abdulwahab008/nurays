@@ -3,6 +3,7 @@ import prisma from '../config/database';
 import { AppError } from '../middleware/errorHandler';
 import { presentFile } from '../storage';
 import { notify, notifySeller } from './notify.service';
+import { DELIVERY_SETTING_DEFAULTS, invalidateDeliveryPricing } from './delivery-pricing.service';
 
 /** Verification documents with short-lived links an admin can open. */
 async function presentDocuments(docs: Array<{ id: string; documentType: string; documentUrl: string; createdAt?: Date; uploadedAt?: Date }>) {
@@ -582,6 +583,8 @@ export class AdminService {
     supportPhone: '+92-300-1234567',
     commissionRate: 15,
     minPayoutAmount: 1000,
+    // Nuray rider delivery to other communities (see delivery-pricing.service.ts).
+    ...DELIVERY_SETTING_DEFAULTS,
   };
 
   async getSettings() {
@@ -600,6 +603,19 @@ export class AdminService {
 
   async updateSettings(data: Record<string, unknown>, adminId: string) {
     const keys = Object.keys(data).filter((k) => k in AdminService.SETTINGS_DEFAULTS);
+    const limits: Record<string, [number, number]> = {
+      deliveryPerKm: [0, 1000],
+      deliveryIncludedKm: [0, 100],
+      deliveryMaxKm: [1, 200],
+      deliveryFallbackFee: [0, 5000],
+    };
+    for (const key of keys) {
+      if (!(key in limits)) continue;
+      const v = Number(data[key]);
+      const [lo, hi] = limits[key];
+      if (!Number.isFinite(v) || v < lo || v > hi) throw new AppError(`${key} must be between ${lo} and ${hi}`, 400, 'INVALID_SETTING');
+      data[key] = v;
+    }
     await Promise.all(
       keys.map((key) =>
         prisma.systemSetting.upsert({
@@ -609,6 +625,7 @@ export class AdminService {
         })
       )
     );
+    if (keys.some((k) => k in DELIVERY_SETTING_DEFAULTS)) invalidateDeliveryPricing();
     return this.getSettings();
   }
 }

@@ -1,5 +1,6 @@
 import { Prisma } from '@prisma/client';
 import prisma from '../config/database';
+import { getPlatformDeliveryPricing } from './delivery-pricing.service';
 import { searchRankedProductIds } from './ranking.service';
 import { AppError } from '../middleware/errorHandler';
 import { computeSellerAvailability, isAcceptingOrders } from './availability.service';
@@ -45,6 +46,7 @@ const SELLER_ORDERING_SELECT = {
   primaryCommunityName: true,
   communityId: true,
   allowCrossCommunity: true,
+  deliveryProvider: true,
   communityDeliveries: SELLER_COMMUNITY_DELIVERY_SELECT.communityDeliveries,
   community: {
     select: {
@@ -174,7 +176,9 @@ async function computeCustomerFacingSellerInfo(
     seller as any,
     { latitude: customerLat, longitude: customerLng, communityId: customerCommunityId },
     seller.latitude != null ? Number(seller.latitude) : null,
-    seller.longitude != null ? Number(seller.longitude) : null
+    seller.longitude != null ? Number(seller.longitude) : null,
+    undefined,
+    { pricing: await getPlatformDeliveryPricing() }
   );
   const eta = estimateDeliveryMinutes(seller.minPrepTimeMinutes, feeResult.distanceKm);
   return {

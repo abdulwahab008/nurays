@@ -24,7 +24,7 @@ import {
 import { cartService, CartResponse } from '@/lib/services/cart.service';
 import { addressService, Address } from '@/lib/services/address.service';
 import { orderService } from '@/lib/services/order.service';
-import { calculateGst, formatPrice } from '@/lib/utils';
+import { formatPrice, orderTotals } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/toast';
 import { useAuthStore } from '@/lib/store/auth-store';
@@ -449,10 +449,9 @@ export default function CheckoutPage() {
   const promotionSavings = Math.max(0, cart.summary.subtotal - discountedSubtotal);
   const effectiveDeliveryFee = deliveryEstimate?.isFree ? 0 : (deliveryEstimate?.deliveryFee ?? 0);
   const promoDiscountAmount = appliedPromo?.discountAmount || 0;
-  // Exactly what the server charges (order.service.ts): 5% of the subtotal after all discounts,
-  // to the paisa, so the total here is the total the rider collects.
-  const gstAmount = calculateGst(Math.max(0, discountedSubtotal - promoDiscountAmount));
-  const totalPayable = Math.max(0, discountedSubtotal + effectiveDeliveryFee + gstAmount - promoDiscountAmount);
+  // Exactly what the server charges (priceOrder in order.service.ts): GST on the goods after
+  // all discounts, the total in whole rupees, so this is the amount the rider collects.
+  const { gst: gstAmount, total: totalPayable } = orderTotals(discountedSubtotal - promoDiscountAmount, effectiveDeliveryFee);
 
   return (
     <DashboardLayout title={t('checkoutTitle')} subtitle={t('reviewSubtitle')} sidebarItems={sidebarItems} userType="customer">

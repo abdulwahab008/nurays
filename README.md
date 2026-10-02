@@ -28,15 +28,22 @@ Gulshan-e-Iqbal, and every seller decides, community by community, whether they 
 - "Deliver to other communities" turns cross-community delivery on or off. Nearby communities are suggested.
 - A buyer's address is resolved to a community (chosen on the address, GPS position, or the area name). An address
   that matches no community cannot order from a seller with community rules until the buyer picks one.
-- The seller picks **who delivers**: the Nuray rider fleet (the delivery fee is platform revenue) or **self-delivery**
-  (the seller keeps the fee they charged; no rider job is created). Items fulfilled from a hub are always delivered by
-  the platform.
+- The seller picks **who delivers**: the Nuray rider fleet or **self-delivery** (the seller keeps the fee they
+  charged; no rider job is created). Items fulfilled from a hub are always delivered by the platform.
+- **Nuray's delivery prices** (when a Nuray rider delivers; the fee is platform revenue): within a community, the fixed
+  fee an admin sets for that community (admin → Communities); to another community, that community's base fee for
+  other communities plus a per-km rate beyond the included km, rounded up to Rs 10, up to a maximum distance (admin →
+  Settings → Nuray delivery prices). Distance is kitchen to customer, or community centre to centre when either location
+  is missing. The kitchen still chooses which communities it serves and its minimum order; its own fees and free-delivery
+  offers apply only to self-delivery.
 - In a multi-seller order, each seller's fee is stored in `Order.deliveryFeeBreakdown`, and the ledger splits platform
   and seller delivery money from it.
 
 ### Money, in short
 
-- Orders, stock and promo discounts are written inside database transactions with atomic stock decrements. Checkout
+- Orders, stock and promo discounts are written inside database transactions with atomic stock decrements.
+- Order totals are whole rupees (cash has no paisa): GST is 5% of the goods after discounts and takes the rounding,
+  always under Rs 0.50, so the customer, rider and kitchen see the same amount. Checkout
   sends an idempotency key, so a double tap never creates two orders.
 - **Who holds the money.** Online payments and wallet payments are collected by Nuray; the kitchen's share is paid out
   later (admin → Payouts). Bank/mobile transfers go straight to the kitchen, which confirms the receipt it was sent;

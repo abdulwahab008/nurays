@@ -76,6 +76,15 @@ export interface SellerDeliveryPolicy {
   community?: { crossCommunityEnabled?: boolean | null } | null;
   /** Per-community terms the seller has fixed. Non-empty => authoritative. */
   communityDeliveries?: CommunityDeliveryRule[] | null;
+  /** Who delivers: 'self' (the kitchen, on its own terms) or 'platform' (a Nuray rider, at Nuray's prices). */
+  deliveryProvider?: string | null;
+}
+
+export interface DeliveryFeeOptions {
+  /** Nuray's prices; required for a Nuray-rider fee (see platformDeliveryFee). */
+  pricing?: PlatformDeliveryPricing;
+  /** Delivered by a Nuray rider regardless of the kitchen's setting (stock from a hub). */
+  forcePlatform?: boolean;
 }
 
 export interface DeliveryFeeResult {
@@ -83,6 +92,51 @@ export interface DeliveryFeeResult {
   fee: number;
   reason: string | null;
   distanceKm: number | null;
+  /** How a Nuray-rider fee was priced (absent when the kitchen delivers itself). */
+  pricing?: 'same_community' | 'cross_community' | 'distance';
+}
+
+/**
+ * Nuray's own delivery prices, set by admins (used whenever a Nuray rider delivers):
+ *  - within a community: that community's fixed fee (Community.deliveryBaseFee);
+ *  - to another community: the kitchen's community's base fee for other communities
+ *    (Community.crossCommunityBaseFee) plus perKm for every km beyond includedKm, rounded up
+ *    to Rs 10; nothing beyond maxKm. Distance is kitchen to customer, or community centre to
+ *    community centre when either location isn't known.
+ */
+export interface PlatformDeliveryPricing {
+  perKm: number;
+  includedKm: number;
+  maxKm: number;
+  /** When the kitchen's community isn't known. */
+  fallbackBaseFee: number;
+  communities: Map<string, { centerLat: number; centerLng: number; sameCommunityFee: number; crossCommunityBaseFee: number }>;
+}
+
+export function platformDeliveryFee(
+  sellerCommunityId: string | null | undefined,
+  address: AddressForDelivery,
+  distanceKm: number | null,
+  pricing: PlatformDeliveryPricing
+): DeliveryFeeResult {
+  const home = sellerCommunityId ? pricing.communities.get(sellerCommunityId) : undefined;
+  const buyer = address.communityId ? pricing.communities.get(address.communityId) : undefined;
+  if (home && sellerCommunityId === address.communityId) {
+    return { deliverable: true, fee: home.sameCommunityFee, reason: null, distanceKm, pricing: 'same_community' };
+  }
+  const km = distanceKm ?? (home && buyer ? haversineKm(home.centerLat, home.centerLng, buyer.centerLat, buyer.centerLng) : null);
+  if (km != null && km > pricing.maxKm) {
+    return { deliverable: false, fee: 0, reason: `Nuray riders deliver up to ${pricing.maxKm} km from the kitchen`, distanceKm: km };
+  }
+  const base = home ? home.crossCommunityBaseFee : pricing.fallbackBaseFee;
+  const extra = km != null ? Math.max(0, km - pricing.includedKm) * pricing.perKm : 0;
+  return {
+    deliverable: true,
+    fee: Math.ceil((base + extra) / 10) * 10,
+    reason: null,
+    distanceKm: km,
+    pricing: buyer || home ? 'cross_community' : 'distance',
+  };
 }
 
 function addressInFreeDeliveryAreas(
@@ -228,7 +282,8 @@ export function getDeliveryFeeForSeller(
   address: AddressForDelivery,
   originLat?: number | null,
   originLng?: number | null,
-  subtotal?: number
+  subtotal?: number,
+  options: DeliveryFeeOptions = {}
 ): DeliveryFeeResult {
   const fromLat = originLat != null ? Number(originLat) : (seller.latitude != null ? Number(seller.latitude) : null);
   const fromLng = originLng != null ? Number(originLng) : (seller.longitude != null ? Number(seller.longitude) : null);
@@ -242,6 +297,25 @@ export function getDeliveryFeeForSeller(
   // Community rules come first: the buyer's community decides whether we
   // deliver at all and, once the seller has fixed per-community terms, what it costs.
   const communityResult = resolveCommunityDelivery(seller, address, distanceKm, subtotal);
+
+  // A Nuray rider delivers: the kitchen still decides where it delivers to and its minimum
+  // order, but the fee is Nuray's (fixed within a community, by distance to others). The
+  // kitchen's own fees and free-delivery offers apply only when it delivers itself.
+  const viaPlatform = options.forcePlatform || seller.deliveryProvider !== 'self';
+  if (viaPlatform && options.pricing) {
+    if (communityResult && !communityResult.deliverable) return communityResult;
+    const maxKmP = seller.maxDeliveryDistanceKm;
+    if (maxKmP != null && distanceKm != null && distanceKm > maxKmP) {
+      return { deliverable: false, fee: 0, reason: `Outside this seller's ${maxKmP}km delivery range`, distanceKm };
+    }
+    const hasCommunityRule = !!communityResult;
+    const minOrder = seller.minOrderAmountForDelivery != null ? Number(seller.minOrderAmountForDelivery) : null;
+    if (!hasCommunityRule && minOrder != null && subtotal != null && subtotal < minOrder) {
+      return { deliverable: false, fee: 0, reason: `Minimum order for delivery is Rs ${minOrder}`, distanceKm };
+    }
+    return platformDeliveryFee(seller.communityId, address, distanceKm, options.pricing);
+  }
+
   if (communityResult) return communityResult;
 
   const maxKm = seller.maxDeliveryDistanceKm;

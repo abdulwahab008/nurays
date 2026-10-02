@@ -1,4 +1,6 @@
 import prisma from '../config/database';
+import { getPlatformDeliveryPricing } from './delivery-pricing.service';
+import { platformDeliveryFee } from '../utils/deliveryFee';
 import { AppError } from '../middleware/errorHandler';
 import adminService from './admin.service';
 import { computeSellerAvailability } from './availability.service';
@@ -435,6 +437,7 @@ export class SellerService {
     });
     const ruleById = new Map(seller.communityDeliveries.map((r) => [r.communityId, r]));
     const neighborIds = new Set(seller.community?.neighborCommunityIds ?? []);
+    const pricing = await getPlatformDeliveryPricing();
 
     return {
       deliveryProvider: seller.deliveryProvider,
@@ -453,6 +456,12 @@ export class SellerService {
           isHome: c.id === seller.communityId,
           isNeighbor: neighborIds.has(c.id),
           suggestedFee: Number(c.id === seller.communityId ? c.deliveryBaseFee : c.crossCommunityBaseFee),
+          // What a customer there pays when a Nuray rider delivers (community centre to centre;
+          // the real fee uses the exact addresses). null: too far for Nuray riders.
+          nurayFee: (() => {
+            const r = platformDeliveryFee(seller.communityId, { communityId: c.id }, null, pricing);
+            return r.deliverable ? r.fee : null;
+          })(),
           terms: rule
             ? {
                 fee: Number(rule.fee),

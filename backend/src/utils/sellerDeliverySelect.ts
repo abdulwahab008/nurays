@@ -5,6 +5,7 @@
  */
 export const SELLER_COMMUNITY_DELIVERY_SELECT = {
   communityId: true,
+  deliveryProvider: true,
   allowCrossCommunity: true,
   community: { select: { crossCommunityEnabled: true } },
   communityDeliveries: {

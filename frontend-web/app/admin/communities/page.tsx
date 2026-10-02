@@ -50,7 +50,7 @@ const blank = (): FormState => ({
   areaDescription: '',
   center: null,
   radiusKm: '3',
-  deliveryBaseFee: '50',
+  deliveryBaseFee: '100',
   crossCommunityBaseFee: '150',
   crossCommunityEnabled: true,
   neighborCommunityIds: [],
@@ -182,11 +182,11 @@ export default function AdminCommunitiesPage() {
                   <input required type="number" min={0.2} max={50} step={0.1} value={form.radiusKm} onChange={(e) => setForm({ ...form, radiusKm: e.target.value })} className={field} />
                 </div>
                 <div>
-                  <label className={label}>Delivery fee (Rs)</label>
+                  <label className={label}>Nuray delivery within this community (Rs, fixed)</label>
                   <input required type="number" min={0} value={form.deliveryBaseFee} onChange={(e) => setForm({ ...form, deliveryBaseFee: e.target.value })} className={field} />
                 </div>
                 <div>
-                  <label className={label}>From a neighbour (Rs)</label>
+                  <label className={label}>From here to other communities: base fee (Rs, plus per km)</label>
                   <input required type="number" min={0} value={form.crossCommunityBaseFee} onChange={(e) => setForm({ ...form, crossCommunityBaseFee: e.target.value })} className={field} />
                 </div>
               </div>
@@ -251,7 +251,7 @@ export default function AdminCommunitiesPage() {
                 <tr>
                   <th className="px-4 py-3">Community</th>
                   <th className="px-4 py-3">Area</th>
-                  <th className="px-4 py-3">Delivery fee</th>
+                  <th className="px-4 py-3">Nuray delivery</th>
                   <th className="px-4 py-3">Kitchens / members</th>
                   <th className="px-4 py-3" />
                 </tr>
@@ -273,7 +273,7 @@ export default function AdminCommunitiesPage() {
                     </td>
                     <td className="px-4 py-3 text-gray-700">
                       {formatPrice(c.deliveryBaseFee)}
-                      <p className="text-xs text-gray-500">{c.crossCommunityEnabled ? `${formatPrice(c.crossCommunityBaseFee)} from a neighbour` : 'Own kitchens only'}</p>
+                      <p className="text-xs text-gray-500">{c.crossCommunityEnabled ? `to others: ${formatPrice(c.crossCommunityBaseFee)} + per km` : 'Own kitchens only'}</p>
                     </td>
                     <td className="px-4 py-3 text-gray-700">
                       {c.sellerCount} / {c.memberCount}

@@ -1319,7 +1319,8 @@ model Community {
   radiusKm              Float          @default(3.0) @map("radius_km")
   neighborCommunityIds  String[]       @default([]) @map("neighbor_community_ids")
   crossCommunityEnabled Boolean        @default(true) @map("cross_community_enabled")
-  deliveryBaseFee       Decimal        @default(50) @map("delivery_base_fee") @db.Decimal(10, 2)
+  // Nuray rider delivery within this community (fixed); to other communities: crossCommunityBaseFee + distance.
+  deliveryBaseFee       Decimal        @default(100) @map("delivery_base_fee") @db.Decimal(10, 2)
   crossCommunityBaseFee Decimal        @default(150) @map("cross_community_base_fee") @db.Decimal(10, 2)
   isActive              Boolean        @default(true) @map("is_active")
   createdAt             DateTime       @default(now()) @map("created_at")

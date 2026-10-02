@@ -1,5 +1,6 @@
 import { Prisma } from '@prisma/client';
 import prisma from '../config/database';
+import { invalidateDeliveryPricing } from './delivery-pricing.service';
 import { AppError } from '../middleware/errorHandler';
 
 /**
@@ -102,6 +103,7 @@ export async function createCommunity(data: CommunityInput) {
   if (data.slug?.trim() && (await prisma.community.findUnique({ where: { slug } }))) {
     throw new AppError('That web address is already used by another community', 409, 'SLUG_TAKEN');
   }
+  invalidateDeliveryPricing();
   const created = await prisma.community.create({
     data: {
       name: data.name.trim(),
@@ -111,7 +113,7 @@ export async function createCommunity(data: CommunityInput) {
       centerLatitude: data.centerLatitude,
       centerLongitude: data.centerLongitude,
       radiusKm: data.radiusKm ?? 3,
-      deliveryBaseFee: data.deliveryBaseFee ?? 50,
+      deliveryBaseFee: data.deliveryBaseFee ?? 100,
       crossCommunityBaseFee: data.crossCommunityBaseFee ?? 150,
       crossCommunityEnabled: data.crossCommunityEnabled ?? true,
       neighborCommunityIds: data.neighborCommunityIds ?? [],
@@ -149,6 +151,7 @@ export async function updateCommunity(id: string, data: CommunityInput) {
   };
   if (data2.name !== undefined && !String(data2.name)) throw new AppError('Name is required', 400, 'NAME_REQUIRED');
   await prisma.community.update({ where: { id }, data: data2 });
+  invalidateDeliveryPricing();
   return { id };
 }
 

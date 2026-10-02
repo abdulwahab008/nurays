@@ -122,7 +122,8 @@ export const setCommunityDeliverySchema = z.object({
     .array(
       z.object({
         communityId: z.string().min(1),
-        fee: z.number().min(0).max(100000),
+        // Only used when the kitchen delivers itself; with Nuray riders the fee is Nuray's.
+        fee: z.number().min(0).max(100000).optional().default(0),
         freeAbove: z.number().min(0).optional().nullable(),
         minOrderAmount: z.number().min(0).optional().nullable(),
         isEnabled: z.boolean().optional(),

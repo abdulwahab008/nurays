@@ -8,8 +8,17 @@ export function cn(...inputs: ClassValue[]) {
 // Must match the tax calculation in backend/src/services/order.service.ts (createOrder)
 export const GST_RATE = 0.05;
 
-export function calculateGst(subtotalAfterDiscount: number): number {
-  return Math.round(subtotalAfterDiscount * GST_RATE * 100) / 100;
+
+/**
+ * GST and total exactly as the server prices an order (backend utils/pricing.ts priceOrder):
+ * GST on the goods after discounts, the total rounded to whole rupees, GST taking the rounding.
+ */
+export function orderTotals(goodsAfterDiscount: number, deliveryFee: number): { gst: number; total: number } {
+  const goods = Math.max(0, goodsAfterDiscount);
+  const total = Math.round(goods + deliveryFee + goods * GST_RATE);
+  const gst = Math.round((total - goods - deliveryFee) * 100) / 100;
+  if (gst < 0) return { gst: 0, total: Math.round((goods + deliveryFee) * 100) / 100 };
+  return { gst, total };
 }
 
 export function formatPrice(price: number | string | undefined | null): string {

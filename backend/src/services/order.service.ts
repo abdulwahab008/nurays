@@ -1,11 +1,12 @@
 import { randomInt } from 'crypto';
 import prisma from '../config/database';
+import { getPlatformDeliveryPricing } from './delivery-pricing.service';
 import { AppError } from '../middleware/errorHandler';
 import realtimeOrderService from './realtime-order.service';
 import { SELLER_COMMUNITY_DELIVERY_SELECT } from '../utils/sellerDeliverySelect';
 import { communityService } from './community.service';
 import { eligibleSubtotalForPromotion, isItemEligibleForPromotion, releasePromotionUsage } from './promotion.service';
-import { GST_RATE, allocateDiscount } from '../utils/pricing';
+import { allocateDiscount, priceOrder } from '../utils/pricing';
 import { issueRefund, IssuedRefund } from './refund.service';
 import { allocateHubStock, releaseHubAllocations } from './hub-allocation.service';
 import { DeliveryFeeShare } from '../utils/deliveryEarnings';
@@ -412,7 +413,6 @@ export class OrderService {
           freeDeliveryThreshold: true,
           allowedPostalCodes: true,
           deliveryZones: true,
-          deliveryProvider: true,
           ...SELLER_COMMUNITY_DELIVERY_SELECT,
         },
       });
@@ -434,6 +434,7 @@ export class OrderService {
         communityId: resolvedCommunityId,
       communityUnresolved: !resolvedCommunityId,
       };
+      const pricing = await getPlatformDeliveryPricing();
       let total = 0;
       for (const seller of sellers) {
         const hubId = sellerToHubId.get(seller.id) ?? null;
@@ -443,7 +444,7 @@ export class OrderService {
         const sellerSubtotal = orderItems
           .filter((i) => i.sellerId === seller.id)
           .reduce((sum, i) => sum + i.totalPrice, 0);
-        const result = getDeliveryFeeForSeller(seller, addr, originLat, originLng, sellerSubtotal);
+        const result = getDeliveryFeeForSeller(seller, addr, originLat, originLng, sellerSubtotal, { pricing, forcePlatform: !!hub });
         if (!result.deliverable) {
           throw new AppError(`${seller.businessName}: ${result.reason}`, 400, 'ADDRESS_NOT_DELIVERABLE');
         }
@@ -555,11 +556,8 @@ export class OrderService {
           ? 'platform'
           : 'self';
 
-    // Calculate tax (5% GST for Pakistan)
-    const taxAmount = (subtotal - discountAmount) * GST_RATE;
-
-    // Calculate total
-    const totalAmount = subtotal + deliveryFee - discountAmount + taxAmount;
+    // 5% GST on the goods after discounts; the total in whole rupees (see priceOrder).
+    const { taxAmount, totalAmount } = priceOrder(subtotal - discountAmount, deliveryFee);
 
     // Create order with items in transaction (retried with a new number on a clash)
     let order: Awaited<ReturnType<typeof placeOrder>>;

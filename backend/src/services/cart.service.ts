@@ -1,4 +1,5 @@
 import prisma from '../config/database';
+import { getPlatformDeliveryPricing } from './delivery-pricing.service';
 import { AppError } from '../middleware/errorHandler';
 import { getDeliveryFeeForSeller } from '../utils/deliveryFee';
 import { SELLER_COMMUNITY_DELIVERY_SELECT } from '../utils/sellerDeliverySelect';
@@ -246,6 +247,7 @@ export class CartService {
         (sellerSubtotals.get(item.sellerId) ?? 0) + Number(item.priceSnapshot) * item.quantity
       );
     }
+    const pricing = await getPlatformDeliveryPricing();
     const sellerResults = new Map<string, ReturnType<typeof getDeliveryFeeForSeller>>();
     const undeliverable: string[] = [];
     for (const item of items) {
@@ -257,7 +259,8 @@ export class CartService {
         addr,
         originLat,
         originLng,
-        sellerSubtotals.get(item.sellerId)
+        sellerSubtotals.get(item.sellerId),
+        { pricing, forcePlatform: !!item.hub }
       );
       sellerResults.set(item.sellerId, result);
       if (!result.deliverable) undeliverable.push(`${item.seller.businessName}: ${result.reason}`);
