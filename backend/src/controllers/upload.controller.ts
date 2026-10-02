@@ -141,3 +141,15 @@ export const uploadAvatar = async (req: Request, res: Response) => {
   const stored = await storePublicImage('avatars', user.userId, file.buffer);
   res.status(200).json({ success: true, data: stored });
 };
+
+/**
+ * Upload a storefront cover photo (public, resized). Anyone applying to sell can upload one.
+ * POST /api/v1/upload/cover
+ */
+export const uploadCover = async (req: Request, res: Response) => {
+  const user = requireUser(req);
+  const file = req.file;
+  if (!file) throw new AppError('No image uploaded', 400, 'NO_FILE');
+  const stored = await storePublicImage('covers', user.userId, file.buffer);
+  res.status(200).json({ success: true, data: stored });
+};

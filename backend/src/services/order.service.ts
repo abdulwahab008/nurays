@@ -1497,6 +1497,48 @@ export class OrderService {
   }
 
   /**
+   * An admin settles a transfer the kitchen disputed (or hasn't confirmed yet) after checking
+   * the receipt with both sides: the money is in the kitchen's account after all. The order
+   * is then paid, with the money held by the kitchen.
+   */
+  async adminConfirmManualPayment(orderId: string, adminId: string, note?: string) {
+    const order = await prisma.order.findUnique({ where: { id: orderId }, select: { id: true, orderStatus: true, paymentMethod: true } });
+    if (!order) throw new AppError('Order not found', 404, 'ORDER_NOT_FOUND');
+    if (['cancelled', 'refunded'].includes(order.orderStatus) || !SELLER_DIRECT_METHODS.includes(order.paymentMethod)) {
+      throw new AppError('This order has no transfer to confirm', 400, 'NOT_MANUAL_PAYMENT');
+    }
+    const now = new Date();
+    // Only from a reported transfer: never over a refund or an already settled payment.
+    const applied = await prisma.order.updateMany({
+      where: { id: orderId, paymentStatus: { in: ['payment_submitted', 'disputed'] } },
+      data: {
+        paymentStatus: 'paid',
+        paymentCollectedBy: 'seller',
+        paymentConfirmedBy: 'admin',
+        paymentConfirmedAt: now,
+        paidAt: now,
+        paymentDisputeReason: null,
+      },
+    });
+    if (applied.count === 0) {
+      throw new AppError('Only a transfer the customer reported (and the kitchen confirmed or disputed) can be confirmed', 409, 'NO_PAYMENT_SUBMITTED');
+    }
+    await prisma.orderStatusHistory.create({
+      data: {
+        orderId,
+        status: order.orderStatus,
+        notes: `Payment confirmed by Nuray support${note?.trim() ? `: ${note.trim()}` : ''}`,
+        changedBy: adminId,
+      },
+    });
+    if (['delivered', 'completed'].includes(order.orderStatus)) {
+      await ledgerService.recordOrderCompletion(orderId).catch((err) => console.error(`Ledger posting failed for order ${orderId}:`, err));
+    }
+    await realtimeOrderService.emitOrderStatusUpdate(orderId, order.orderStatus, adminId);
+    return { orderId, paymentStatus: 'paid' };
+  }
+
+  /**
    * In-App Order Messages (Buyer ↔ Seller / Rider)
    */
   async getOrderMessages(orderId: string, userId: string, role?: string) {

@@ -780,7 +780,7 @@ async function main() {
   // access control
   const mgr1 = await mkUser('hub_manager'); const mgr2 = await mkUser('hub_manager');
   const acc = (u: any) => hubService.assertHubAccess(hub.id, { userId: u.id, userType: 'hub_manager' }).then(() => 'OK', (e: any) => e.code);
-  ok('an unassigned hub stays open to hub managers (legacy)', (await acc(mgr1)) === 'OK');
+  ok('a hub with no manager yet is run by admins only, not by any hub manager', (await acc(mgr1)) === 'HUB_ACCESS_DENIED');
   await hubService.assignManager(hub.id, mgr1.id);
   ok('once assigned, only that manager (or an admin) may operate the hub', (await acc(mgr1)) === 'OK' && (await acc(mgr2)) === 'HUB_ACCESS_DENIED' && (await hubService.assertHubAccess(hub.id, { userId: admin.id, userType: 'admin' }).then(() => 'OK', (e: any) => e.code)) === 'OK');
   ok('only an active hub-manager account can be assigned', (await hubService.assignManager(hub.id, cust.id).then(() => 'OK', (e: any) => e.code)) === 'INVALID_MANAGER');
@@ -1206,6 +1206,112 @@ async function main() {
   await rateItems(smallOrder, 1);
   const rkAfter = await prisma.seller.findUnique({ where: { id: rk.id } });
   ok('a kitchen rating counts each order once (3-dish order rated 5 + 1-dish order rated 1 = 3.0 from 2 orders)', Number(rkAfter!.ratingAverage) === 3 && rkAfter!.totalReviews === 2, `${rkAfter!.ratingAverage} from ${rkAfter!.totalReviews}`);
+
+  // ---- P3. admin tools: people, places, platform codes, disputes, documents ----
+  const people = require('../src/services/admin-people.service');
+  const places = require('../src/services/admin-places.service');
+  const promotionSvc = require('../src/services/promotion.service').default;
+  const { default: sellerSvc } = require('../src/services/seller.service');
+  const { communityService } = require('../src/services/community.service');
+
+  // accounts: suspending signs the person out and stops their kitchen / rider account too
+  const susSeller = await mkSeller();
+  const susUser = (await prisma.seller.findUnique({ where: { id: susSeller.id } }))!.userId;
+  ok('admins cannot suspend themselves or another admin', (await code(people.setUserStatus(admin.id, admin.id, 'suspended'))) === 'CANNOT_CHANGE_SELF' &&
+    (await code(people.setUserStatus(admin.id, (await mkUser('admin')).id, 'suspended'))) === 'CANNOT_CHANGE_ADMIN');
+  await people.setUserStatus(admin.id, susUser, 'suspended');
+  const susRow = await prisma.user.findUnique({ where: { id: susUser } });
+  ok('suspending an account signs it out everywhere and suspends its kitchen', susRow!.status === 'suspended' && !!susRow!.tokensValidAfter && (await prisma.seller.findUnique({ where: { id: susSeller.id } }))!.status === 'suspended');
+  await people.setUserStatus(admin.id, susUser, 'active');
+  ok('reactivating restores the account and the kitchen', (await prisma.user.findUnique({ where: { id: susUser } }))!.status === 'active' && (await prisma.seller.findUnique({ where: { id: susSeller.id } }))!.status === 'active');
+  const found: any = await people.listUsers({ search: susRow!.phone.slice(-7) });
+  ok('the users list finds an account by phone, with its kitchen', found.users.length === 1 && found.users[0].seller?.id === susSeller.id);
+
+  // a rider taken off the road: jobs not yet picked up go back to the pool
+  const offRiderUser = await mkUser('rider');
+  const offRider = await prisma.rider.create({ data: { userId: offRiderUser.id, city: 'Lahore', verificationStatus: 'approved', status: 'active' } as any });
+  const offOrder: any = await orderService.createOrder(hoCust.id, { items: [{ productId: hoProd.id, quantity: 1 }], deliveryType: 'home_delivery', deliveryAddressId: hoAddr.id, paymentMethod: 'cod' } as any);
+  await prisma.order.update({ where: { id: offOrder.id }, data: { orderStatus: 'ready' } });
+  await riderService.ensureDeliveryForOrder(offOrder.id, 0);
+  const offJob = (await prisma.delivery.findUnique({ where: { orderId: offOrder.id } }))!;
+  await riderService.claimDelivery(offRiderUser.id, offJob.id);
+  const offResult: any = await people.setRiderStatus(offRider.id, 'suspended');
+  const offJobAfter = (await prisma.delivery.findUnique({ where: { id: offJob.id } }))!;
+  ok('suspending a rider puts their not-yet-picked-up job back in the pool', offResult.releasedJobs.length === 1 && offJobAfter.status === 'pending' && offJobAfter.riderId === null && offJobAfter.riderFee === null);
+  ok('and the suspended rider can no longer claim jobs', (await code(riderService.claimDelivery(offRiderUser.id, offJob.id))) === 'RIDER_SUSPENDED');
+
+  // hub managers
+  const hmUser = await mkUser();
+  ok('a seller account cannot be made a hub manager', (await code(people.makeHubManager(susRow!.email!))) === 'ROLE_NOT_ALLOWED');
+  await people.makeHubManager(hmUser.email!);
+  ok('a customer account becomes a hub manager (signed out to pick up the role)', (await prisma.user.findUnique({ where: { id: hmUser.id } }))!.userType === 'hub_manager');
+  const newHub: any = await places.createHub({ name: 'Test hub ' + uniq(), code: 'th ' + uniq().slice(-5), city: 'Lahore', area: 'DHA', address: '1 Main Boulevard', latitude: 31.47, longitude: 74.4, capacityCubicFeet: 500 });
+  ok('hub codes are stored upper-case and must be unique', /^TH-/.test(newHub.code) && (await code(places.createHub({ name: 'Dup', code: newHub.code.toLowerCase(), city: 'L', area: 'A', address: 'Somewhere 1', latitude: 31, longitude: 74, capacityCubicFeet: 1 }))) === 'HUB_CODE_TAKEN');
+  await hubService.assignManager(newHub.id, hmUser.id);
+  ok("the hub manager's console lists the hub they run", (await places.hubsManagedBy(hmUser.id)).some((h: any) => h.id === newHub.id));
+  await people.removeHubManager(hmUser.id);
+  ok('removing the role takes them off their hubs and back to a customer account',
+    (await prisma.user.findUnique({ where: { id: hmUser.id } }))!.userType === 'customer' && (await prisma.hubCenter.findUnique({ where: { id: newHub.id } }))!.managerId === null);
+  await places.updateHub(newHub.id, { status: 'maintenance' });
+  ok('a hub can be put into maintenance (no longer platListed for buyers)', !(await hubService.getHubCenters({})).some((h: any) => h.id === newHub.id));
+
+  // communities
+  const commName = 'Model Town ' + uniq();
+  const comm: any = await places.createCommunity({ name: commName, city: 'Lahore', centerLatitude: 31.48, centerLongitude: 74.32, radiusKm: 2 });
+  const comm2: any = await places.createCommunity({ name: commName, city: 'Lahore', centerLatitude: 31.5, centerLongitude: 74.33 });
+  ok('communities get a unique web address from their name', comm.slug !== comm2.slug && comm2.slug.startsWith(comm.slug));
+  ok('neighbours must be real communities', (await code(places.updateCommunity(comm.id, { neighborCommunityIds: ['00000000-0000-4000-8000-000000000000'] }))) === 'INVALID_NEIGHBORS');
+  await places.updateCommunity(comm2.id, { isActive: false });
+  ok('a switched-off community is no longer offered to buyers', !(await communityService.getAllCommunities()).some((c: any) => c.id === comm2.id));
+
+  // platform promo codes: Nuray pays, on any kitchen's order
+  const platCode = 'NURAY' + uniq().slice(-6);
+  await promotionSvc.createPlatform({ name: 'Launch', code: platCode, discountType: 'fixed', discountValue: 50, minOrderAmount: 0, usageLimitPerUser: 5, validFrom: new Date(Date.now() - 1e6), validUntil: new Date(Date.now() + 1e9) });
+  const pcOrder: any = (await order(cust.id, [{ productId: (await mkProduct(sellerB.id, 5, 400)).id, quantity: 1 }], { promotionCode: platCode })).order;
+  const platformList: any[] = await promotionSvc.listPlatform();
+  const platListed = platformList.find((p) => p.code === platCode);
+  ok('a platform code works on any kitchen and its use is counted', Number(pcOrder.discountAmount) === 50 && platListed?.timesUsed === 1 && platListed?.discountGiven === 50, JSON.stringify(platListed && { used: platListed.timesUsed, given: platListed.discountGiven }));
+  ok('a used code cannot be deleted (switch it off instead)', (await code(promotionSvc.deletePlatform(platListed.id))) === 'PROMOTION_IN_USE');
+  await promotionSvc.updatePlatform(platListed.id, { isActive: false });
+  ok('switched off, it is refused at checkout', (await code(promotionSvc.validatePromotionCode(cust.id, platCode, 1000))) === 'PROMO_INACTIVE');
+  const sellerPromo = await prisma.promotion.findFirst({ where: { sellerId: { not: null } } });
+  ok("admins can't edit a kitchen's own code through the platform tools", (await code(promotionSvc.updatePlatform(sellerPromo!.id, { isActive: false }))) === 'FORBIDDEN');
+
+  // a disputed transfer, settled by support
+  const dsp: any = await csOrder('bank');
+  await orderService.submitManualPayment(dsp.id, custC.id, { referenceNumber: 'TID-' + uniq() });
+  await orderService.confirmManualPayment(dsp.id, csUser, false, 'Not in my account');
+  ok('(setup) the kitchen disputed the transfer', (await prisma.order.findUnique({ where: { id: dsp.id } }))!.paymentStatus === 'disputed');
+  await orderService.adminConfirmManualPayment(dsp.id, admin.id, 'Bank statement checked with the kitchen');
+  const dspRow = (await prisma.order.findUnique({ where: { id: dsp.id } }))!;
+  ok('support confirms it: paid, held by the kitchen, confirmed by Nuray', dspRow.paymentStatus === 'paid' && dspRow.paymentCollectedBy === 'seller' && dspRow.paymentConfirmedBy === 'admin' && !dspRow.paymentDisputeReason);
+  ok('it cannot be confirmed twice, nor a cash order', (await code(orderService.adminConfirmManualPayment(dsp.id, admin.id))) === 'NO_PAYMENT_SUBMITTED' &&
+    (await code(orderService.adminConfirmManualPayment(offOrder.id, admin.id))) === 'NOT_MANUAL_PAYMENT');
+
+  // documents: real uploads only, shown to admins
+  const applicant = await mkUser();
+  const docRef = (owner: string) => `private:x/docs/${owner}/${require('crypto').randomUUID()}.jpg`;
+  const sellerApp = (extra: any) => sellerSvc.registerAsSeller(applicant.id, { businessName: 'Doc Kitchen ' + uniq(), ...extra });
+  ok('a seller application needs both sides of the CNIC', (await code(sellerApp({}))) === 'CNIC_REQUIRED');
+  ok('a link from elsewhere is not accepted as a document', (await code(sellerApp({ cnicFrontUrl: 'https://images.unsplash.com/photo-1589829545856', cnicBackUrl: docRef(applicant.id) }))) === 'INVALID_DOCUMENT');
+  ok("someone else's upload is not accepted either", (await code(sellerApp({ cnicFrontUrl: docRef(cust.id), cnicBackUrl: docRef(applicant.id) }))) === 'INVALID_DOCUMENT');
+  const front = docRef(applicant.id);
+  await sellerApp({ cnicFrontUrl: front, cnicBackUrl: docRef(applicant.id), kitchenPhotoUrls: [docRef(applicant.id)] });
+  const pendingList: any[] = await adminService.getPendingSellers();
+  const mine = pendingList.find((x) => x.user.id === applicant.id);
+  ok('admins see the documents with private, short-lived links', mine?.documents.length === 3 && mine.documents.every((d: any) => typeof d.url === 'string' && !d.url.startsWith('private:')), JSON.stringify(mine?.documents?.map((d: any) => d.type)));
+
+  const riderApplicant = await mkUser('rider');
+  const appRider = await prisma.rider.create({ data: { userId: riderApplicant.id, city: 'Lahore', verificationStatus: 'pending', status: 'active' } as any });
+  ok("a rider application can't be approved without the vehicle and documents", (await code(adminService.approveRejectRider(appRider.id, true))) === 'APPLICATION_INCOMPLETE');
+  const riderApp = (extra: any) => riderService.submitApplication(riderApplicant.id, { city: 'Lahore', vehicleType: 'motorcycle', vehicleNumber: 'lea 1234', ...extra });
+  ok('the rider must upload CNIC and licence photos', (await code(riderApp({ cnicFrontUrl: docRef(riderApplicant.id) }))) === 'DOCUMENTS_REQUIRED');
+  await riderApp({ cnicFrontUrl: docRef(riderApplicant.id), cnicBackUrl: docRef(riderApplicant.id), licenseUrl: docRef(riderApplicant.id) });
+  const pendingRiders: any[] = await adminService.getPendingRiders();
+  const appRow = pendingRiders.find((r) => r.id === appRider.id);
+  ok('admins see the complete rider application with its documents', appRow?.applicationComplete === true && appRow.documents.length === 3 && appRow.vehicleNumber === 'LEA 1234');
+  ok('and can approve it', (await code(adminService.approveRejectRider(appRider.id, true))) === 'OK');
+  ok('an approved rider changes details through support, not by re-applying', (await code(riderApp({}))) === 'ALREADY_APPROVED');
 
   // OTP SMS cap per number
   const capPhone = pn();

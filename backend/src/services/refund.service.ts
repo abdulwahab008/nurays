@@ -338,13 +338,32 @@ export async function listRefunds(filters: { status?: string; page?: number; lim
       skip: (page - 1) * limit,
       take: limit,
       include: {
-        order: { select: { orderNumber: true, paymentMethod: true, totalAmount: true, customerId: true } },
+        order: {
+          select: {
+            orderNumber: true,
+            paymentMethod: true,
+            totalAmount: true,
+            customerId: true,
+            // Where the money came from, so a manual refund can go back the same way.
+            paymentSenderAccount: true,
+            paymentReferenceNumber: true,
+            customer: { select: { phone: true, email: true, profile: { select: { fullName: true } } } },
+          },
+        },
       },
     }),
     prisma.refund.count({ where }),
   ]);
   return {
-    refunds: rows.map((r) => ({ ...r, amount: Number(r.amount), order: { ...r.order, totalAmount: Number(r.order.totalAmount) } })),
+    refunds: rows.map((r) => {
+      const { customer, ...order } = r.order;
+      return {
+        ...r,
+        amount: Number(r.amount),
+        order: { ...order, totalAmount: Number(order.totalAmount) },
+        customer: customer ? { name: customer.profile?.fullName ?? null, phone: customer.phone, email: customer.email } : null,
+      };
+    }),
     pagination: { page, limit, total, totalPages: Math.ceil(total / limit) },
   };
 }

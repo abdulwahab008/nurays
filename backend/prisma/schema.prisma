@@ -745,6 +745,7 @@ model Rider {
   hub             HubCenter? @relation(fields: [hubId], references: [id], onDelete: SetNull)
   deliveries      Delivery[]
   ledgerEntries   RiderLedgerEntry[]
+  documents       RiderDocument[]
 
   @@index([status, verificationStatus])
 
@@ -793,6 +794,20 @@ model Delivery {
   @@index([riderId, status])
 
   @@map("deliveries")
+}
+
+/// A rider's verification documents: private files only admins (and the rider) can open.
+model RiderDocument {
+  id           String   @id @default(uuid())
+  riderId      String   @map("rider_id")
+  documentType String   @map("document_type") // cnic_front, cnic_back, license
+  documentUrl  String   @map("document_url")
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  rider        Rider    @relation(fields: [riderId], references: [id], onDelete: Cascade)
+
+  @@index([riderId])
+  @@map("rider_documents")
 }
 
 /// A rider's money with the platform, one signed entry per movement. The sum is what the

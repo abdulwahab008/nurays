@@ -3,23 +3,12 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { DashboardLayout } from '@/components/layout/DashboardShell';
+import { DashboardLayout, ADMIN_SIDEBAR_ITEMS } from '@/components/layout/DashboardShell';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/toast';
 import { useAuthStore } from '@/lib/store/auth-store';
 import { apiClient } from '@/lib/api-client';
 
-const adminSidebarItems = [
-  { name: 'Dashboard', href: '/admin', icon: '📊' },
-  { name: 'Users', href: '/admin/users', icon: '👥' },
-  { name: 'Sellers', href: '/admin/sellers', icon: '🏪' },
-  { name: 'Categories', href: '/admin/categories', icon: '📁' },
-  { name: 'Products', href: '/admin/products', icon: '🍽️' },
-  { name: 'Orders', href: '/admin/orders', icon: '📦' },
-  { name: 'Hubs', href: '/admin/hubs', icon: '🏭' },
-  { name: 'Reports', href: '/admin/reports', icon: '📈' },
-  { name: 'Settings', href: '/admin/settings', icon: '⚙️' },
-];
 
 // Icons
 const Icons = {
@@ -618,7 +607,7 @@ export default function AdminCategoriesPage() {
     <DashboardLayout
       title="Category Management"
       subtitle="Organize products into categories for easy navigation"
-      sidebarItems={adminSidebarItems}
+      sidebarItems={ADMIN_SIDEBAR_ITEMS}
       userType="admin"
     >
       <div className="max-w-6xl mx-auto">

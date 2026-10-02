@@ -118,6 +118,26 @@ export default function AdminRiderMoneyPage() {
   }
 
   const { rider } = data;
+
+  const changeStanding = async (status: 'active' | 'suspended') => {
+    if (status === 'suspended' && !window.confirm('Suspend this rider? Jobs they have not picked up go back to the pool, and they cannot take new ones.')) return;
+    try {
+      setBusy('standing');
+      const res = await apiClient.post(`/admin/riders/${riderId}/status`, { status });
+      const withFood: Array<{ orderId: string }> = res.data.data.jobsWithFood ?? [];
+      showToast(
+        status === 'suspended'
+          ? `Rider suspended${res.data.data.releasedJobs?.length ? `; ${res.data.data.releasedJobs.length} job(s) back in the pool` : ''}${withFood.length ? `. ${withFood.length} delivery still has food on board: resolve it from the order.` : ''}`
+          : 'Rider reactivated',
+        withFood.length ? 'warning' : 'success'
+      );
+      await load();
+    } catch (error) {
+      showToast(apiErrorMessage(error, 'That did not go through'), 'error');
+    } finally {
+      setBusy(null);
+    }
+  };
   const suggestedKeep = round2(Math.max(0, Math.min(data.cashHeld, data.unpaid)));
   const settleTotal = round2(toAmount(handedIn) + toAmount(kept));
   const settleValid =
@@ -140,6 +160,17 @@ export default function AdminRiderMoneyPage() {
               {rider.status}
             </span>
             {rider.isAvailable && rider.status === 'active' && <span className="px-2 py-1 rounded text-xs font-semibold bg-blue-100 text-blue-800">On duty</span>}
+            {rider.verificationStatus === 'approved' && (
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={busy !== null}
+                onClick={() => changeStanding(rider.status === 'active' ? 'suspended' : 'active')}
+                className={rider.status === 'active' ? 'border-red-200 text-red-700' : ''}
+              >
+                {rider.status === 'active' ? 'Suspend rider' : 'Reactivate rider'}
+              </Button>
+            )}
           </div>
           <p className="text-sm text-gray-600 mt-1">
             {rider.phone || '—'} · {rider.city}

@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/toast';
 import { apiClient, apiErrorMessage } from '@/lib/api-client';
 import { formatPrice, formatDateTime } from '@/lib/utils';
+import DocumentList from '@/components/admin/DocumentList';
 
 interface PendingRider {
   id: string;
@@ -15,6 +16,8 @@ interface PendingRider {
   vehicleType: string | null;
   vehicleNumber: string | null;
   licenseNumber: string | null;
+  documents: Array<{ id: string; type: string; url: string | null }>;
+  applicationComplete: boolean;
   user: {
     id: string;
     phone: string;
@@ -358,14 +361,24 @@ function Applications() {
                       </span>
                     </div>
                     <div>
+                      <span className="text-gray-500">Licence no.:</span> <span className="font-medium">{rider.licenseNumber || 'Not provided'}</span>
+                    </div>
+                    <div>
                       <span className="text-gray-500">Applied:</span> <span className="font-medium">{new Date(rider.createdAt).toLocaleDateString()}</span>
                     </div>
                   </div>
+                  <DocumentList documents={rider.documents} />
+                  {!rider.applicationComplete && (
+                    <p className="mt-3 text-xs font-medium text-amber-700">
+                      Waiting for the rider to send their vehicle details and CNIC / licence photos (they do this from their rider app).
+                    </p>
+                  )}
                 </div>
                 <div className="flex gap-2">
                   <Button
                     onClick={() => handleApprove(rider.id)}
-                    disabled={busyId === rider.id}
+                    disabled={busyId === rider.id || !rider.applicationComplete}
+                    title={rider.applicationComplete ? undefined : 'The application is not complete yet'}
                     className="bg-green-600 hover:bg-green-700 text-white"
                   >
                     {busyId === rider.id ? 'Working...' : 'Approve'}
@@ -382,3 +395,4 @@ function Applications() {
     </div>
   );
 }
+

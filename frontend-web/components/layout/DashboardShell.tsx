@@ -67,12 +67,70 @@ export const SELLER_SIDEBAR_ITEMS: SidebarItem[] = [
   { name: 'Settings', href: '/sellers/settings', icon: 'settings' },
 ];
 
+/** Every admin page, one menu for all of them. */
+export const ADMIN_SIDEBAR_ITEMS: SidebarItem[] = [
+  { name: 'Dashboard', href: '/admin/dashboard', icon: 'dashboard' },
+  {
+    name: 'Orders',
+    href: '/admin/orders',
+    icon: 'orders',
+    subItems: [
+      { name: 'All orders', href: '/admin/orders' },
+      { name: 'Transfers to check', href: '/admin/orders?paymentStatus=disputed' },
+      { name: 'Refunds', href: '/admin/refunds' },
+    ],
+  },
+  {
+    name: 'Kitchens',
+    href: '/admin/sellers',
+    icon: 'kitchens',
+    subItems: [
+      { name: 'All kitchens', href: '/admin/sellers' },
+      { name: 'Applications', href: '/admin/pending-sellers' },
+      { name: 'Dishes', href: '/admin/products' },
+      { name: 'Categories', href: '/admin/categories' },
+      { name: 'Category requests', href: '/admin/category-requests' },
+    ],
+  },
+  {
+    name: 'Riders',
+    href: '/admin/riders',
+    icon: 'delivery',
+    subItems: [
+      { name: 'Riders & cash', href: '/admin/riders' },
+      { name: 'Applications', href: '/admin/riders?tab=applications' },
+    ],
+  },
+  { name: 'People', href: '/admin/users', icon: 'profile' },
+  {
+    name: 'Hubs',
+    href: '/admin/hubs',
+    icon: 'coldchain',
+    subItems: [
+      { name: 'Operations', href: '/admin/hubs' },
+      { name: 'Hubs & managers', href: '/admin/hubs/manage' },
+    ],
+  },
+  { name: 'Communities', href: '/admin/communities', icon: 'addresses' },
+  { name: 'Promo codes', href: '/admin/promotions', icon: 'promotions' },
+  { name: 'Payouts', href: '/admin/payouts', icon: 'earnings' },
+  { name: 'Support', href: '/admin/support', icon: 'support' },
+  { name: 'Analytics', href: '/admin/analytics', icon: 'analytics' },
+  { name: 'Audit log', href: '/admin/audit-log', icon: 'inventory' },
+  { name: 'Settings', href: '/admin/settings', icon: 'settings' },
+];
+
+export const HUB_MANAGER_SIDEBAR_ITEMS: SidebarItem[] = [
+  { name: 'My hubs', href: '/hub', icon: 'coldchain' },
+  { name: 'Help & Support', href: '/support', icon: 'support' },
+];
+
 interface DashboardShellProps {
   children: ReactNode;
   title: string;
   subtitle?: string;
   sidebarItems: SidebarItem[];
-  userType: 'customer' | 'seller' | 'admin' | 'rider';
+  userType: 'customer' | 'seller' | 'admin' | 'rider' | 'hub_manager';
 }
 
 export function DashboardShell({

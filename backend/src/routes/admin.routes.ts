@@ -24,6 +24,26 @@ import {
   createRiderAdjustment,
   updateRiderCashLimit,
 } from '../controllers/admin-rider.controller';
+import {
+  getUsers,
+  updateUserStatus,
+  updateRiderStatus,
+  getHubManagers,
+  addHubManager,
+  deleteHubManager,
+  getCommunitiesAdmin,
+  postCommunity,
+  patchCommunity,
+  getHubsAdmin,
+  postHub,
+  patchHub,
+  putHubManager,
+  getPlatformPromotions,
+  postPlatformPromotion,
+  patchPlatformPromotion,
+  deletePlatformPromotion,
+} from '../controllers/admin-tools.controller';
+import { createPromotionSchema, updatePromotionSchema } from '../validators/promotion.validator';
 import { auditWrites } from '../middleware/audit';
 import { adminGetTickets, adminGetTicketDetail, adminReplyToTicket } from '../controllers/support.controller';
 import { authenticate, authorize } from '../middleware/auth.middleware';
@@ -40,6 +60,13 @@ import {
   riderSettlementSchema,
   riderAdjustmentSchema,
   riderCashLimitSchema,
+  accountStatusSchema,
+  hubManagerSchema,
+  createCommunitySchema,
+  updateCommunitySchema,
+  createHubSchema,
+  updateHubSchema,
+  assignHubManagerSchema,
 } from '../validators/admin.validator';
 import { adminReplySchema } from '../validators/support.validator';
 
@@ -81,6 +108,30 @@ router.post('/riders/:id/settlements', validate(riderSettlementSchema), createRi
 router.post('/riders/:id/payouts', validate(riderCashMovementSchema), createRiderPayout);
 router.post('/riders/:id/adjustments', validate(riderAdjustmentSchema), createRiderAdjustment);
 router.patch('/riders/:id/cash-limit', validate(riderCashLimitSchema), updateRiderCashLimit);
+
+router.post('/riders/:id/status', validate(accountStatusSchema), updateRiderStatus);
+
+// People: every account, and the hub-manager role
+router.get('/users', getUsers);
+router.post('/users/:id/status', validate(accountStatusSchema), updateUserStatus);
+router.get('/hub-managers', getHubManagers);
+router.post('/hub-managers', validate(hubManagerSchema), addHubManager);
+router.delete('/hub-managers/:id', deleteHubManager);
+
+// Places: communities and hubs
+router.get('/communities', getCommunitiesAdmin);
+router.post('/communities', validate(createCommunitySchema), postCommunity);
+router.patch('/communities/:id', validate(updateCommunitySchema), patchCommunity);
+router.get('/hubs', getHubsAdmin);
+router.post('/hubs', validate(createHubSchema), postHub);
+router.patch('/hubs/:id', validate(updateHubSchema), patchHub);
+router.put('/hubs/:id/manager', validate(assignHubManagerSchema), putHubManager);
+
+// Platform promo codes (Nuray pays the discount)
+router.get('/promotions', getPlatformPromotions);
+router.post('/promotions', validate(createPromotionSchema), postPlatformPromotion);
+router.patch('/promotions/:id', validate(updatePromotionSchema), patchPlatformPromotion);
+router.delete('/promotions/:id', deletePlatformPromotion);
 
 // List products for moderation
 router.get('/products', getProductsForModeration);

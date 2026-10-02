@@ -37,7 +37,7 @@ interface NavbarNotification {
 interface DashboardNavbarProps {
   title: string;
   subtitle?: string;
-  userType?: 'customer' | 'seller' | 'admin' | 'rider';
+  userType?: 'customer' | 'seller' | 'admin' | 'rider' | 'hub_manager';
   onMenuToggle?: () => void;
   drawerOpen?: boolean;
 }
@@ -76,7 +76,8 @@ export function DashboardNavbar({ title, subtitle, userType = 'customer', onMenu
   const isRider = pathname.startsWith('/riders') || (userType === 'rider' && !pathname.startsWith('/sellers') && !pathname.startsWith('/admin'));
   const isSeller = pathname.startsWith('/sellers') || (userType === 'seller' && !pathname.startsWith('/riders') && !pathname.startsWith('/admin'));
   const isAdmin = pathname.startsWith('/admin') || (userType === 'admin' && !pathname.startsWith('/sellers') && !pathname.startsWith('/riders'));
-  const isCustomer = !isRider && !isSeller && !isAdmin;
+  const isHubManager = !isAdmin && (pathname === '/hub' || pathname.startsWith('/hub/') || userType === 'hub_manager');
+  const isCustomer = !isRider && !isSeller && !isAdmin && !isHubManager;
 
   // Actual user account role (for quick studio switch links)
   const userRole = user?.userType || user?.user_type;
@@ -89,6 +90,7 @@ export function DashboardNavbar({ title, subtitle, userType = 'customer', onMenu
     if (isRider) return '/riders/dashboard';
     if (isSeller) return '/sellers/dashboard';
     if (isAdmin) return '/admin/dashboard';
+    if (isHubManager) return '/hub';
     if (isUserSeller) return '/sellers/dashboard';
     if (isUserRider) return '/riders/dashboard';
     if (isUserAdmin) return '/admin/dashboard';
@@ -289,7 +291,7 @@ export function DashboardNavbar({ title, subtitle, userType = 'customer', onMenu
             <div className="hidden sm:block leading-tight">
               <Wordmark size={22} />
               <p className="eyebrow mt-0.5">
-                {isSeller ? 'Seller studio' : isAdmin ? 'Admin console' : isRider ? 'Rider fleet' : 'Customer'}
+                {isSeller ? 'Seller studio' : isAdmin ? 'Admin console' : isRider ? 'Rider fleet' : isHubManager ? 'Hub console' : 'Customer'}
               </p>
             </div>
           </Link>
@@ -557,7 +559,7 @@ export function DashboardNavbar({ title, subtitle, userType = 'customer', onMenu
                         color: isSeller ? 'var(--ink-700)' : isAdmin ? 'var(--gold-700)' : isRider ? '#065F46' : 'var(--forest-700)',
                       }}
                     >
-                      {isSeller ? 'Seller' : isAdmin ? 'Admin' : isRider ? 'Rider Fleet' : 'Customer'}
+                      {isSeller ? 'Seller' : isAdmin ? 'Admin' : isRider ? 'Rider Fleet' : isHubManager ? 'Hub manager' : 'Customer'}
                     </span>
                   </div>
                   <p className="text-xs text-gray-500 truncate mt-0.5">{user?.email}</p>

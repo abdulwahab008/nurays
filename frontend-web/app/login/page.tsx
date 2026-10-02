@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { homeFor } from '@/lib/utils';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { NurayButton as Button } from '@/components/ui/NurayButton';
@@ -138,10 +139,7 @@ export default function LoginPage() {
         router.push(acc.targetUrl);
       } else {
         const userType = response.data.user?.userType || response.data.user?.user_type;
-        if (userType === 'admin') router.push('/admin/dashboard');
-        else if (userType === 'seller') router.push('/sellers/dashboard');
-        else if (userType === 'rider') router.push('/riders/dashboard');
-        else router.push('/dashboard');
+        router.push(homeFor(userType));
       }
     } catch (err: any) {
       setError(err.response?.data?.error?.message || err.message || 'Quick login failed');
@@ -179,15 +177,7 @@ export default function LoginPage() {
           router.push('/verify-email-pending');
         } else {
           const userType = response.data.user?.userType || response.data.user?.user_type;
-          if (userType === 'admin') {
-            router.push('/admin/dashboard');
-          } else if (userType === 'seller') {
-            router.push('/sellers/dashboard');
-          } else if (userType === 'rider') {
-            router.push('/riders/dashboard');
-          } else {
-            router.push('/dashboard');
-          }
+          router.push(homeFor(userType));
         }
       }
     } catch (err: any) {
@@ -231,15 +221,7 @@ export default function LoginPage() {
       setUser(response.data.user);
       
       const userType = response.data.user?.userType || response.data.user?.user_type;
-      if (userType === 'admin') {
-        router.push('/admin/dashboard');
-      } else if (userType === 'seller') {
-        router.push('/sellers/dashboard');
-      } else if (userType === 'rider') {
-        router.push('/riders/dashboard');
-      } else {
-        router.push('/dashboard');
-      }
+      router.push(homeFor(userType));
     } catch (err: any) {
       const errorMessage = err.response?.data?.error?.message || err.response?.data?.message || 'OTP verification failed';
       const errorCode = err.response?.data?.error?.code;
@@ -270,15 +252,7 @@ export default function LoginPage() {
         router.push('/verify-email-pending');
       } else {
         const userType = response.data.user?.userType || response.data.user?.user_type;
-        if (userType === 'admin') {
-          router.push('/admin/dashboard');
-        } else if (userType === 'seller') {
-          router.push('/sellers/dashboard');
-        } else if (userType === 'rider') {
-          router.push('/riders/dashboard');
-        } else {
-          router.push('/dashboard');
-        }
+        router.push(homeFor(userType));
       }
     } catch (err: any) {
       const errorMessage = err.response?.data?.error?.message || err.response?.data?.message || 'Login failed';

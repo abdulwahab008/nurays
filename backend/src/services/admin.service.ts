@@ -1,6 +1,16 @@
 import { Prisma } from '@prisma/client';
 import prisma from '../config/database';
 import { AppError } from '../middleware/errorHandler';
+import { presentFile } from '../storage';
+
+/** Verification documents with short-lived links an admin can open. */
+async function presentDocuments(docs: Array<{ id: string; documentType: string; documentUrl: string; createdAt?: Date; uploadedAt?: Date }>) {
+  return Promise.all(
+    docs.map(async (d) => ({ id: d.id, type: d.documentType, url: await presentFile(d.documentUrl), uploadedAt: d.createdAt ?? d.uploadedAt ?? null }))
+  );
+}
+
+const RIDER_REQUIRED_DOCUMENTS = ['cnic_front', 'cnic_back', 'license'];
 
 export class AdminService {
   /**
@@ -12,6 +22,7 @@ export class AdminService {
         verificationStatus: 'pending',
       },
       include: {
+        documents: true,
         user: {
           include: {
             profile: {
@@ -26,13 +37,17 @@ export class AdminService {
       orderBy: { createdAt: 'asc' },
     });
 
-    return sellers.map((seller) => ({
+    return Promise.all(sellers.map(async (seller) => ({
       id: seller.id,
       businessName: seller.businessName,
       businessNameUrdu: seller.businessNameUrdu,
       description: seller.description,
       kitchenVideoUrl: seller.kitchenVideoUrl,
       coverImageUrl: seller.coverImageUrl,
+      primaryCommunityName: seller.primaryCommunityName,
+      latitude: seller.latitude != null ? Number(seller.latitude) : null,
+      longitude: seller.longitude != null ? Number(seller.longitude) : null,
+      documents: await presentDocuments(seller.documents),
       user: {
         id: seller.user.id,
         phone: seller.user.phone,
@@ -45,7 +60,7 @@ export class AdminService {
           : null,
       },
       createdAt: seller.createdAt,
-    }));
+    })));
   }
 
   /**
@@ -107,6 +122,7 @@ export class AdminService {
     const seller = await prisma.seller.findUnique({
       where: { id: sellerId },
       include: {
+        documents: true,
         user: {
           include: {
             profile: {
@@ -143,6 +159,7 @@ export class AdminService {
       createdAt: seller.createdAt,
       updatedAt: seller.updatedAt,
       productCount,
+      documents: await presentDocuments(seller.documents),
       user: {
         id: seller.user.id,
         email: seller.user.email,
@@ -273,6 +290,7 @@ export class AdminService {
     const riders = await prisma.rider.findMany({
       where: { verificationStatus: 'pending' },
       orderBy: { createdAt: 'asc' },
+      include: { documents: true },
     });
 
     // Rider has no `user` relation in the schema (only a scalar userId), so
@@ -284,14 +302,18 @@ export class AdminService {
     });
     const userById = new Map(users.map((u) => [u.id, u]));
 
-    return riders.map((rider) => {
+    return Promise.all(riders.map(async (rider) => {
       const user = userById.get(rider.userId);
+      const types = new Set(rider.documents.map((d) => d.documentType));
       return {
         id: rider.id,
         city: rider.city,
         vehicleType: rider.vehicleType,
         vehicleNumber: rider.vehicleNumber,
         licenseNumber: rider.licenseNumber,
+        documents: await presentDocuments(rider.documents),
+        // Vehicle and every required document: only then can it be approved.
+        applicationComplete: !!rider.vehicleType && !!rider.vehicleNumber && RIDER_REQUIRED_DOCUMENTS.every((t) => types.has(t)),
         user: user
           ? {
               id: user.id,
@@ -304,7 +326,7 @@ export class AdminService {
           : null,
         createdAt: rider.createdAt,
       };
-    });
+    }));
   }
 
   /**
@@ -318,6 +340,13 @@ export class AdminService {
     }
     if (rider.verificationStatus !== 'pending') {
       throw new AppError(`Rider already ${rider.verificationStatus}`, 400, 'RIDER_ALREADY_PROCESSED');
+    }
+    // Approval needs the rider's vehicle and documents on file.
+    if (approved) {
+      const types = new Set((await prisma.riderDocument.findMany({ where: { riderId }, select: { documentType: true } })).map((d) => d.documentType));
+      if (!rider.vehicleType || !rider.vehicleNumber || !RIDER_REQUIRED_DOCUMENTS.every((t) => types.has(t))) {
+        throw new AppError("This rider hasn't sent their vehicle details and CNIC / licence photos yet", 409, 'APPLICATION_INCOMPLETE');
+      }
     }
 
     const updated = await prisma.rider.update({

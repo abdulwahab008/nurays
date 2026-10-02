@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { DashboardLayout } from '@/components/layout/DashboardShell';
+import { DashboardLayout, ADMIN_SIDEBAR_ITEMS } from '@/components/layout/DashboardShell';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/toast';
 import { useAuthStore } from '@/lib/store/auth-store';
@@ -50,16 +50,6 @@ export default function AdminDashboardPage() {
   const [processingId, setProcessingId] = useState<string | null>(null);
   const [pendingCategoryRequests, setPendingCategoryRequests] = useState(0);
 
-  const sidebarItems = [
-    { name: 'Dashboard', href: '/admin/dashboard', icon: '' },
-    { name: 'Pending Sellers', href: '/admin/pending-sellers', icon: '', badge: 0 },
-    { name: 'Category Requests', href: '/admin/category-requests', icon: '', badge: 0 },
-    { name: 'All Sellers', href: '/admin/sellers', icon: '' },
-    { name: 'Orders', href: '/admin/orders', icon: '' },
-    { name: 'Products', href: '/admin/products', icon: '' },
-    { name: 'Analytics', href: '/admin/analytics', icon: '' },
-    { name: 'Settings', href: '/admin/settings', icon: '' },
-  ];
 
   useEffect(() => {
     if (!isAuthenticated) {
@@ -86,8 +76,6 @@ export default function AdminDashboardPage() {
       if (sellersResponse.data.success) {
         const sellers = sellersResponse.data.data || [];
         setPendingSellers(sellers);
-        // Update badge count
-        sidebarItems[1].badge = sellers.length;
       }
 
       // Load pending category requests count
@@ -96,7 +84,6 @@ export default function AdminDashboardPage() {
         if (categoryRequestsResponse.data.success) {
           const count = categoryRequestsResponse.data.data?.count || 0;
           setPendingCategoryRequests(count);
-          sidebarItems[2].badge = count;
         }
       } catch (error) {
         console.log('Category requests endpoint not available');
@@ -147,7 +134,7 @@ export default function AdminDashboardPage() {
     <DashboardLayout
       title="Admin Dashboard"
       subtitle="Platform overview and management"
-      sidebarItems={sidebarItems}
+      sidebarItems={ADMIN_SIDEBAR_ITEMS}
       userType="admin"
     >
       {/* Platform Stats */}

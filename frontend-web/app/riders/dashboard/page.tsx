@@ -12,6 +12,7 @@ import { apiClient } from '@/lib/api-client';
 import { useLiveRefresh } from '@/lib/hooks/use-live-refresh';
 import { useRiderLocation, LocationSharing } from '@/lib/hooks/use-rider-location';
 import Link from 'next/link';
+import RiderApplicationForm from '@/components/riders/RiderApplicationForm';
 
 const ROAD_STEPS = [
   { id: 'assigned', label: 'Claimed', icon: '📋' },
@@ -74,7 +75,7 @@ export default function RiderDashboardPage() {
   const [reportNotes, setReportNotes] = useState('');
   const [reporting, setReporting] = useState(false);
 
-  const [blockedReason, setBlockedReason] = useState<{ title: string; message: string } | null>(null);
+  const [blockedReason, setBlockedReason] = useState<{ title: string; message: string; code: string } | null>(null);
 
   const loadAll = useCallback(async (silent = false) => {
     try {
@@ -107,6 +108,7 @@ export default function RiderDashboardPage() {
         setBlockedReason({
           title: code === 'RIDER_NOT_APPROVED' ? 'Application Under Review' : 'Account Inactive',
           message: error.response?.data?.error?.message || 'Contact fleet support for assistance.',
+          code,
         });
       } else if (!silent) {
         showToast(error.response?.data?.error?.message || 'Failed to load deliveries', 'error');
@@ -397,6 +399,8 @@ export default function RiderDashboardPage() {
             <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-emerald-600 mx-auto mb-4" />
             <h3 className="text-lg font-bold text-slate-800">Connecting to Fleet Mission Control...</h3>
           </div>
+        ) : blockedReason && (blockedReason.code === 'RIDER_NOT_APPROVED' || blockedReason.code === 'RIDER_REJECTED') ? (
+          <RiderApplicationForm />
         ) : blockedReason ? (
           <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-12 text-center">
             <div className="w-16 h-16 bg-amber-100 rounded-full flex items-center justify-center mx-auto mb-4 text-3xl">

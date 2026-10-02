@@ -90,3 +90,19 @@ export function displayRating(rating: number | string | null | undefined, review
   if (reviewCount != null && reviewCount <= 0) return null;
   return r.toFixed(1);
 }
+
+/** Where each kind of account lands after signing in. */
+export function homeFor(userType?: string | null): string {
+  switch (userType) {
+    case 'admin':
+      return '/admin/dashboard';
+    case 'seller':
+      return '/sellers/dashboard';
+    case 'rider':
+      return '/riders/dashboard';
+    case 'hub_manager':
+      return '/hub';
+    default:
+      return '/dashboard';
+  }
+}
