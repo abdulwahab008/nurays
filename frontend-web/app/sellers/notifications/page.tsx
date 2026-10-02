@@ -1,5 +1,7 @@
 'use client';
 
+import Link from 'next/link';
+
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { DashboardLayout, SELLER_SIDEBAR_ITEMS } from '@/components/layout/DashboardShell';
@@ -205,16 +207,21 @@ export default function SellerNotificationsPage() {
                 )}
               </button>
             </div>
-            {unreadCount > 0 && (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={handleMarkAllAsRead}
-                className="text-blue-600 border-blue-200 hover:bg-blue-50"
-              >
-                Mark all as read
-              </Button>
-            )}
+            <div className="flex items-center gap-2">
+              <Link href="/notifications/settings" className="text-sm font-medium text-slate-600 hover:text-slate-900 underline">
+                Alert settings
+              </Link>
+              {unreadCount > 0 && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleMarkAllAsRead}
+                  className="text-blue-600 border-blue-200 hover:bg-blue-50"
+                >
+                  Mark all as read
+                </Button>
+              )}
+            </div>
           </div>
         </div>
 

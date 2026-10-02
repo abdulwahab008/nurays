@@ -47,6 +47,8 @@ const order = async (cust: string, items: any[], extra: any = {}) => ({
   order: await orderService.createOrder(cust, { items, deliveryType: 'self_pickup', paymentMethod: 'cod', ...extra } as any),
 });
 
+const realtimeOrderServiceForVerify = () => require('../src/services/realtime-order.service').default;
+
 async function main() {
   const cust = await mkUser();
   const seller = await mkSeller();
@@ -1312,6 +1314,27 @@ async function main() {
   ok('admins see the complete rider application with its documents', appRow?.applicationComplete === true && appRow.documents.length === 3 && appRow.vehicleNumber === 'LEA 1234');
   ok('and can approve it', (await code(adminService.approveRejectRider(appRider.id, true))) === 'OK');
   ok('an approved rider changes details through support, not by re-applying', (await code(riderApp({}))) === 'ALREADY_APPROVED');
+
+  // ---- P4. notifications: one per event, kitchens hear about cancellations, preferences ----
+  const notifySvc = require('../src/services/notify.service');
+  const pushSvc = require('../src/services/push.service');
+  const nCust = await mkUser();
+  const nAddr = await prisma.userAddress.create({ data: { userId: nCust.id, addressLine1: 'House 9 Street', area: 'X', city: 'Lahore' } });
+  const nOrder: any = await orderService.createOrder(nCust.id, { items: [{ productId: hoProd.id, quantity: 1 }], deliveryType: 'home_delivery', deliveryAddressId: nAddr.id, paymentMethod: 'cod' } as any);
+  const kitchenNew = await prisma.notification.findMany({ where: { userId: platUser, dedupeKey: `order:${nOrder.id}:new:${platUser}` } });
+  ok('the kitchen gets one new-order notification', kitchenNew.length === 1);
+  await realtimeOrderServiceForVerify().emitNewOrderNotification(nOrder.id);
+  ok('firing the same event again sends nothing new', (await prisma.notification.count({ where: { dedupeKey: `order:${nOrder.id}:new:${platUser}` } })) === 1);
+  await orderService.cancelOrder(nOrder.id, nCust.id, 'changed my mind');
+  ok('the kitchen hears that the customer cancelled', (await prisma.notification.count({ where: { userId: platUser, dedupeKey: `order:${nOrder.id}:cancelled:${platUser}` } })) === 1);
+  ok('the customer gets their own cancellation in the app', (await prisma.notification.count({ where: { userId: nCust.id, dedupeKey: `order:${nOrder.id}:cancelled:customer` } })) === 1);
+  await notifySvc.updatePreferences(nCust.id, { orders: { sms: false }, bogus: { push: false } });
+  const prefs = (await notifySvc.getPreferences(nCust.id)).preferences;
+  ok('preferences save what was changed and keep the rest', prefs.orders.sms === false && prefs.orders.push === true && prefs.payments.sms === true);
+  await pushSvc.saveSubscription(nCust.id, { endpoint: 'https://push.example.test/abc', keys: { p256dh: 'p'.repeat(20), auth: 'a'.repeat(12) } });
+  await pushSvc.saveSubscription(cust.id, { endpoint: 'https://push.example.test/abc', keys: { p256dh: 'p'.repeat(20), auth: 'a'.repeat(12) } });
+  ok('a device that changes hands belongs to its new owner only', (await prisma.pushSubscription.findMany({ where: { endpoint: 'https://push.example.test/abc' } })).map((x: any) => x.userId).join() === cust.id);
+  ok('a push endpoint must be https', (await code(pushSvc.saveSubscription(cust.id, { endpoint: 'http://evil.test/x', keys: { p256dh: 'p'.repeat(20), auth: 'a'.repeat(12) } }))) === 'INVALID_SUBSCRIPTION');
 
   // OTP SMS cap per number
   const capPhone = pn();

@@ -173,11 +173,16 @@ export default function NotificationsPage() {
             Unread ({unreadCount})
           </button>
         </div>
-        {unreadCount > 0 && (
-          <Button variant="outline" onClick={markAllAsRead} className="text-sm">
-            <CheckCheck className="w-4 h-4 mr-2" /> Mark all as read
-          </Button>
-        )}
+        <div className="flex items-center gap-2">
+          <Link href="/notifications/settings" className="text-sm font-medium text-slate-600 hover:text-slate-900 underline">
+            Settings
+          </Link>
+          {unreadCount > 0 && (
+            <Button variant="outline" onClick={markAllAsRead} className="text-sm">
+              <CheckCheck className="w-4 h-4 mr-2" /> Mark all as read
+            </Button>
+          )}
+        </div>
       </div>
 
       {/* Notifications List */}

@@ -2,6 +2,7 @@ import { Prisma } from '@prisma/client';
 import prisma from '../config/database';
 import { AppError } from '../middleware/errorHandler';
 import { presentFile } from '../storage';
+import { notify } from './notify.service';
 
 /** Verification documents with short-lived links an admin can open. */
 async function presentDocuments(docs: Array<{ id: string; documentType: string; documentUrl: string; createdAt?: Date; uploadedAt?: Date }>) {
@@ -11,6 +12,21 @@ async function presentDocuments(docs: Array<{ id: string; documentType: string; 
 }
 
 const RIDER_REQUIRED_DOCUMENTS = ['cnic_front', 'cnic_back', 'license'];
+
+async function notifySellerOfPayout(sellerId: string, n: { title: string; message: string; dedupeKey: string }) {
+  const seller = await prisma.seller.findUnique({ where: { id: sellerId }, select: { userId: true } });
+  if (!seller) return;
+  await notify({
+    userId: seller.userId,
+    category: 'payments',
+    type: 'payout',
+    title: n.title,
+    message: n.message,
+    actionUrl: '/sellers/earnings',
+    channels: ['push', 'email'],
+    dedupeKey: n.dedupeKey,
+  });
+}
 
 export class AdminService {
   /**
@@ -511,6 +527,11 @@ export class AdminService {
     if (claimed.count === 0) {
       throw new AppError('Payout is no longer pending', 409, 'PAYOUT_NOT_PENDING');
     }
+    await notifySellerOfPayout(payout.sellerId, {
+      title: 'Payout sent',
+      message: `We sent your payout of Rs ${Number(payout.netAmount ?? payout.amount).toLocaleString()}${transactionId ? ` (transaction ${transactionId})` : ''}.`,
+      dedupeKey: `payout:${payoutId}:completed`,
+    });
 
     return { payoutId, status: 'completed' };
   }
@@ -538,6 +559,11 @@ export class AdminService {
     if (claimed.count === 0) {
       throw new AppError('Payout is no longer pending', 409, 'PAYOUT_NOT_PENDING');
     }
+    await notifySellerOfPayout(payout.sellerId, {
+      title: "Your payout didn't go through",
+      message: `Your payout of Rs ${Number(payout.netAmount ?? payout.amount).toLocaleString()} could not be sent: ${reason}. The amount is back in your balance; check your payout details and request it again.`,
+      dedupeKey: `payout:${payoutId}:failed`,
+    });
 
     return { payoutId, status: 'failed' };
   }

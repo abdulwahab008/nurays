@@ -1,5 +1,6 @@
 'use client';
 
+import PushPrompt from '@/components/notifications/PushPrompt';
 import { useState, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
@@ -317,6 +318,9 @@ function SellerDashboardContent() {
         sidebarItems={sidebarItems}
         userType="seller"
       >
+        {dashboard?.verificationStatus === 'approved' && (
+          <PushPrompt text="Get an alert on this phone or computer the moment a new order comes in, even when Nuray isn't open." />
+        )}
         {/* Verification Status / Rejection Banner */}
         {dashboard && dashboard.verificationStatus === 'rejected' && (
           <div className="mb-6 bg-rose-50 border border-rose-200 rounded-2xl p-5 shadow-sm flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">

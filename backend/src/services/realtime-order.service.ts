@@ -1,19 +1,32 @@
 import prisma from '../config/database';
 import socketManager from '../config/socket';
-import notificationService from './notification.service';
 import { AppError } from '../middleware/errorHandler';
+import { notify, notifyMany } from './notify.service';
+import type { DeliveryChannel } from '../jobs/notify.jobs';
 
-const ORDER_STATUS_MESSAGES: Record<string, { title: string; message: (orderNumber: string) => string }> = {
-  confirmed: { title: 'Order confirmed', message: (n) => `Your order #${n} has been confirmed by the seller.` },
-  preparing: { title: 'Order being prepared', message: (n) => `Your order #${n} is being prepared.` },
-  ready: { title: 'Order ready', message: (n) => `Your order #${n} is ready for dispatch.` },
-  dispatched: { title: 'Order dispatched', message: (n) => `Your order #${n} has been dispatched.` },
-  in_transit: { title: 'Order on the way', message: (n) => `Your order #${n} is on its way!` },
-  delivered: { title: 'Order delivered', message: (n) => `Your order #${n} has been delivered. Enjoy!` },
-  delivery_failed: { title: 'Delivery unsuccessful', message: (n) => `We couldn't deliver order #${n}. Our team will reach out shortly.` },
-  completed: { title: 'Order completed', message: (n) => `Your order #${n} is complete. Thanks for ordering!` },
-  cancelled: { title: 'Order cancelled', message: (n) => `Your order #${n} has been cancelled.` },
-  refunded: { title: 'Order refunded', message: (n) => `Your order #${n} has been refunded.` },
+// What each order status tells the customer, and which channels besides the app it is worth.
+const ORDER_STATUS_MESSAGES: Record<
+  string,
+  { title: string; message: (orderNumber: string, pickup: boolean) => string; channels: (pickup: boolean) => DeliveryChannel[] }
+> = {
+  confirmed: { title: 'Order confirmed', message: (n) => `The kitchen accepted your order #${n}.`, channels: () => ['push'] },
+  preparing: { title: 'Order being prepared', message: (n) => `Your order #${n} is being prepared.`, channels: () => [] },
+  ready: {
+    title: 'Order ready',
+    message: (n, pickup) => (pickup ? `Your order #${n} is ready for you to collect.` : `Your order #${n} is packed and waiting for its rider.`),
+    channels: (pickup) => (pickup ? ['push'] : []),
+  },
+  dispatched: { title: 'Order picked up', message: (n) => `Your order #${n} has left the kitchen.`, channels: () => ['push'] },
+  in_transit: { title: 'Order on the way', message: (n) => `Your order #${n} is on its way!`, channels: () => ['push'] },
+  delivered: { title: 'Order delivered', message: (n) => `Your order #${n} has been delivered. Enjoy!`, channels: () => ['push', 'email'] },
+  delivery_failed: {
+    title: 'Delivery unsuccessful',
+    message: (n) => `We couldn't deliver order #${n}. Our team will reach out shortly.`,
+    channels: () => ['push', 'email', 'sms'],
+  },
+  completed: { title: 'Order completed', message: (n) => `Your order #${n} is complete. Thanks for ordering!`, channels: () => [] },
+  cancelled: { title: 'Order cancelled', message: (n) => `Your order #${n} has been cancelled.`, channels: () => ['push', 'email', 'sms'] },
+  refunded: { title: 'Order refunded', message: (n) => `Your order #${n} has been refunded.`, channels: () => ['push', 'email'] },
 };
 
 /**
@@ -21,12 +34,15 @@ const ORDER_STATUS_MESSAGES: Record<string, { title: string; message: (orderNumb
  * kitchens and its rider. Each client then reloads what it shows, so payloads stay small and
  * never carry anything a party may not see (signed file links, the handover code).
  */
-async function orderAudience(orderId: string): Promise<{ rooms: string[]; customerId: string | null; orderNumber: string } | null> {
+async function orderAudience(
+  orderId: string
+): Promise<{ rooms: string[]; customerId: string | null; orderNumber: string; deliveryType: string; sellerUserIds: string[] } | null> {
   const order = await prisma.order.findUnique({
     where: { id: orderId },
     select: {
       customerId: true,
       orderNumber: true,
+      deliveryType: true,
       items: { select: { seller: { select: { userId: true } } } },
       delivery: { select: { rider: { select: { userId: true } } } },
     },
@@ -36,7 +52,8 @@ async function orderAudience(orderId: string): Promise<{ rooms: string[]; custom
   if (order.customerId) rooms.push(`user:${order.customerId}`);
   for (const item of order.items) if (item.seller.userId) rooms.push(`user:${item.seller.userId}`);
   if (order.delivery?.rider?.userId) rooms.push(`user:${order.delivery.rider.userId}`);
-  return { rooms, customerId: order.customerId, orderNumber: order.orderNumber };
+  const sellerUserIds = [...new Set(order.items.map((i) => i.seller.userId).filter(Boolean))];
+  return { rooms, customerId: order.customerId, orderNumber: order.orderNumber, deliveryType: order.deliveryType, sellerUserIds };
 }
 
 export class RealtimeOrderService {
@@ -60,19 +77,40 @@ export class RealtimeOrderService {
     // The order's room, customer, kitchens, rider and admins, each connection once.
     socketManager.emitToRooms([...audience.rooms, 'role:admin'], 'order:status:update', orderData);
 
-    if (audience.customerId) {
-      const statusMessage = ORDER_STATUS_MESSAGES[status];
-      if (statusMessage) {
-        notificationService
-          .createNotification(audience.customerId, {
-            type: 'order',
-            title: statusMessage.title,
-            message: statusMessage.message(audience.orderNumber),
-            actionUrl: `/orders/${orderId}`,
-            data: { orderId, orderNumber: audience.orderNumber, status },
-          })
-          .catch((err) => console.error('Failed to create customer notification:', err));
-      }
+    // The customer hears about each status once (this also runs when only the payment changed).
+    const statusMessage = ORDER_STATUS_MESSAGES[status];
+    if (audience.customerId && statusMessage) {
+      const pickup = audience.deliveryType !== 'home_delivery';
+      await notify({
+        userId: audience.customerId,
+        category: 'orders',
+        type: 'order',
+        title: statusMessage.title,
+        message: statusMessage.message(audience.orderNumber, pickup),
+        actionUrl: `/orders/${orderId}`,
+        data: { orderId, orderNumber: audience.orderNumber, status },
+        // A change the customer made themselves (cancelling) needs no alert.
+        channels: changedBy === audience.customerId ? [] : statusMessage.channels(pickup),
+        dedupeKey: `order:${orderId}:${status}:customer`,
+      });
+    }
+
+    // Kitchens hear about a cancellation they didn't make themselves.
+    if (status === 'cancelled') {
+      const by = changedBy === audience.customerId ? 'the customer' : changedBy === 'system' ? 'automatically' : 'Nuray support';
+      await notifyMany(
+        audience.sellerUserIds.filter((id) => id !== changedBy),
+        (sellerUserId) => ({
+          category: 'orders',
+          type: 'order',
+          title: `Order #${audience.orderNumber} cancelled`,
+          message: by === 'automatically' ? `Order #${audience.orderNumber} was cancelled automatically. Don't prepare it.` : `Order #${audience.orderNumber} was cancelled by ${by}. Don't prepare it.`,
+          actionUrl: `/sellers/orders/${orderId}`,
+          data: { orderId, orderNumber: audience.orderNumber, status },
+          channels: ['push', 'email'],
+          dedupeKey: `order:${orderId}:cancelled:${sellerUserId}`,
+        })
+      );
     }
   }
 
@@ -186,18 +224,24 @@ export class RealtimeOrderService {
 
     const totalAmountFormatted = `Rs ${Number(order.totalAmount).toLocaleString()}`;
 
-    // Confirm to the customer that their order was placed
+    // Confirm to the customer that their order was placed (by email too, as a record).
     if (order.customerId) {
-      notificationService
-        .createNotification(order.customerId, {
-          type: 'order',
-          title: 'Order placed',
-          message: `Your order #${order.orderNumber} (${totalAmountFormatted}) has been placed.`,
-          actionUrl: `/orders/${order.id}`,
-          data: { orderId: order.id, orderNumber: order.orderNumber },
-        })
-        .catch((err) => console.error('Failed to create customer order-placed notification:', err));
+      await notify({
+        userId: order.customerId,
+        category: 'orders',
+        type: 'order',
+        title: 'Order placed',
+        message: `Your order #${order.orderNumber} (${totalAmountFormatted}) has been placed.`,
+        actionUrl: `/orders/${order.id}`,
+        data: { orderId: order.id, orderNumber: order.orderNumber },
+        channels: ['email'],
+        dedupeKey: `order:${order.id}:placed`,
+      });
     }
+
+    // An order waiting for its online payment is only worth an alert once it is paid
+    // (see online-payment.service): a kitchen shouldn't start on an unpaid order.
+    const awaitingOnlinePayment = ['safepay', 'card'].includes(order.paymentMethod) && order.paymentStatus !== 'paid';
 
     // Emit to each seller and create a persistent notification for the Notifications page
     sellerOrders.forEach((items, sellerUserId) => {
@@ -210,17 +254,23 @@ export class RealtimeOrderService {
       };
 
       socketManager.emitToUser(sellerUserId, 'order:new', payload);
-
-      notificationService
-        .createNotification(sellerUserId, {
-          type: 'order',
-          title: 'New order received',
-          message: `New order #${order.orderNumber} — ${totalAmountFormatted}. Please confirm within 30 minutes.`,
-          actionUrl: `/sellers/orders/${order.id}`,
-          data: { orderId: order.id, orderNumber: order.orderNumber },
-        })
-        .catch((err) => console.error('Failed to create seller notification:', err));
     });
+    for (const sellerUserId of sellerOrders.keys()) {
+      await notify({
+        userId: sellerUserId,
+        category: 'orders',
+        type: 'order',
+        title: awaitingOnlinePayment ? 'New order (awaiting payment)' : 'New order received',
+        message: awaitingOnlinePayment
+          ? `Order #${order.orderNumber} (${totalAmountFormatted}) is waiting for the customer's online payment. Don't start it yet.`
+          : `New order #${order.orderNumber}: ${totalAmountFormatted}. Please accept it within 30 minutes.`,
+        actionUrl: `/sellers/orders/${order.id}`,
+        data: { orderId: order.id, orderNumber: order.orderNumber },
+        // A kitchen must act fast on a new order: push, email and a text message.
+        channels: awaitingOnlinePayment ? [] : ['push', 'email', 'sms'],
+        dedupeKey: `order:${order.id}:new:${sellerUserId}`,
+      });
+    }
 
     // Emit to admins
     socketManager.emitToRole('admin', 'order:new', {

@@ -1,6 +1,7 @@
 import { Prisma } from '@prisma/client';
 import prisma from '../config/database';
 import { AppError } from '../middleware/errorHandler';
+import { notify } from './notify.service';
 
 /**
  * A rider's money with the platform (see RiderLedgerEntry in schema.prisma). Entries are
@@ -101,6 +102,26 @@ export async function recordSettlement(
   adminId: string,
   input: { cashHandedIn?: number; keptAsPay?: number; reference?: string; note?: string }
 ) {
+  const result = await recordSettlementEntries(riderId, adminId, input);
+  const parts = [
+    result.cashHandedIn > 0 ? `Rs ${result.cashHandedIn.toLocaleString()} handed in` : null,
+    result.keptAsPay > 0 ? `Rs ${result.keptAsPay.toLocaleString()} kept as your pay` : null,
+  ].filter(Boolean);
+  await notifyRider(riderId, 'Settlement recorded', `${parts.join(', ')}. You now hold Rs ${result.cashHeld.toLocaleString()} in cash.`);
+  return result;
+}
+
+async function notifyRider(riderId: string, title: string, message: string) {
+  const rider = await prisma.rider.findUnique({ where: { id: riderId }, select: { userId: true } });
+  if (!rider) return;
+  await notify({ userId: rider.userId, category: 'payments', type: 'payout', title, message, actionUrl: '/riders/earnings', channels: ['push'] });
+}
+
+async function recordSettlementEntries(
+  riderId: string,
+  adminId: string,
+  input: { cashHandedIn?: number; keptAsPay?: number; reference?: string; note?: string }
+) {
   const handedIn = nonNegativeAmount(input.cashHandedIn);
   const kept = nonNegativeAmount(input.keptAsPay);
   if (handedIn + kept <= 0) throw new AppError('Enter the cash handed in, or the pay kept from it', 400, 'INVALID_AMOUNT');
@@ -134,6 +155,12 @@ export async function recordSettlement(
 
 /** An admin records money paid to the rider. Never more than the platform owes them. */
 export async function recordPayout(riderId: string, adminId: string, input: { amount: number; reference?: string; note?: string }) {
+  const entry = await recordPayoutEntry(riderId, adminId, input);
+  await notifyRider(riderId, 'Payment sent', `Nuray sent you Rs ${(-Number(entry.amount)).toLocaleString()}${entry.reference ? ` (reference ${entry.reference})` : ''}.`);
+  return entry;
+}
+
+async function recordPayoutEntry(riderId: string, adminId: string, input: { amount: number; reference?: string; note?: string }) {
   const amount = positiveAmount(input.amount);
   return prisma.$transaction(async (tx) => {
     await lockRider(tx, riderId);

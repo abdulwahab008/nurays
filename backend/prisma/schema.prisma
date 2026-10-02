@@ -36,10 +36,13 @@ model User {
   // Sessions issued before this instant are void (set on password reset, Google takeover of an
   // unverified account, phone eviction). Without it a 30-day refresh token outlives all of those.
   tokensValidAfter DateTime? @map("tokens_valid_after")
+  // Which notifications reach this person by push, email and SMS, per kind (null: defaults).
+  notificationPreferences Json? @map("notification_preferences")
   createdAt     DateTime  @default(now()) @map("created_at")
   updatedAt     DateTime  @updatedAt @map("updated_at")
 
   profile       UserProfile?
+  pushSubscriptions PushSubscription[]
   primaryCommunity Community? @relation(fields: [primaryCommunityId], references: [id], onDelete: SetNull)
   addresses     UserAddress[]
   managedHubs   HubCenter[] @relation("HubManager")
@@ -1041,6 +1044,23 @@ model PromotionUsage {
 // NOTIFICATIONS
 // ============================================
 
+/// A browser or phone that receives web push notifications for a user.
+model PushSubscription {
+  id         String    @id @default(uuid())
+  userId     String    @map("user_id")
+  endpoint   String    @unique
+  p256dh     String
+  auth       String
+  userAgent  String?   @map("user_agent")
+  createdAt  DateTime  @default(now()) @map("created_at")
+  lastUsedAt DateTime? @map("last_used_at")
+
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("push_subscriptions")
+}
+
 model Notification {
   id        String   @id @default(uuid())
   userId    String   @map("user_id")
@@ -1052,6 +1072,8 @@ model Notification {
   isRead    Boolean  @default(false) @map("is_read")
   readAt    DateTime? @map("read_at")
   channel   String   @default("push")
+  // One notification per event (e.g. "order X confirmed, for its customer"), however often it fires.
+  dedupeKey String?  @unique @map("dedupe_key")
   createdAt DateTime @default(now()) @map("created_at")
 
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)

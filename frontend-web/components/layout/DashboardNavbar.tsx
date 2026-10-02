@@ -6,6 +6,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useAuthStore } from '@/lib/store/auth-store';
 import { useCartStore } from '@/lib/store/cart-store';
 import { apiClient } from '@/lib/api-client';
+import { useSocket } from '@/lib/hooks/use-socket';
 import { Mark, Wordmark } from '@/components/ui/Mark';
 import { CommunitySelector } from '@/components/community/CommunitySelector';
 import {
@@ -115,6 +116,17 @@ export function DashboardNavbar({ title, subtitle, userType = 'customer', onMenu
       });
     return () => { cancelled = true; };
   }, [user?.id]);
+
+  // A new notification arrives live: the bell counts it straight away.
+  const { socket } = useSocket();
+  useEffect(() => {
+    if (!socket) return;
+    const onNew = () => setNotificationUnreadCount((n) => n + 1);
+    socket.on('notification:new', onNew);
+    return () => {
+      socket.off('notification:new', onNew);
+    };
+  }, [socket]);
 
   // Click outside listener for notification panel
   useEffect(() => {
@@ -421,7 +433,7 @@ export function DashboardNavbar({ title, subtitle, userType = 'customer', onMenu
             >
               <Bell className="w-5 h-5" />
               {notificationUnreadCount > 0 && (
-                <span className="absolute top-2 right-2 w-2 h-2 bg-red-500 rounded-full" aria-hidden="true" />
+                <span className="absolute top-2 right-2 w-2 h-2 bg-red-500 rounded-full" aria-hidden="true" data-testid="bell-unread" />
               )}
             </button>
 

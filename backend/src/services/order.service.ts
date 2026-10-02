@@ -19,6 +19,17 @@ import ledgerService from './ledger.service';
 import { newHandoverCode } from './handover.service';
 import { cancelOpenDelivery, notifyDeliveryCancelled, CancelledDelivery } from './delivery-lifecycle.service';
 import { debitWallet } from './wallet.service';
+import { notify } from './notify.service';
+
+/** The kitchen a customer pays directly by transfer (the first item's seller). */
+async function payeeSellerUserId(orderId: string): Promise<string | null> {
+  const item = await prisma.orderItem.findFirst({
+    where: { orderId },
+    orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+    select: { seller: { select: { userId: true } } },
+  });
+  return item?.seller.userId ?? null;
+}
 
 // Once the food has left the kitchen, the customer can see where the rider is.
 const ON_THE_WAY_STATUSES = ['picked_up', 'in_transit', 'arrived_at_customer'];
@@ -1396,6 +1407,20 @@ export class OrderService {
 
     // Notify via realtime
     await realtimeOrderService.emitOrderStatusUpdate(orderId, order.orderStatus, userId);
+    // The kitchen the money went to checks its account.
+    const payee = await payeeSellerUserId(orderId);
+    if (payee) {
+      await notify({
+        userId: payee,
+        category: 'payments',
+        type: 'payment',
+        title: `Check a payment: order #${updated.orderNumber}`,
+        message: `The customer says they sent Rs ${Number(updated.totalAmount).toLocaleString()} (reference ${data.referenceNumber}). Confirm it once it's in your account.`,
+        actionUrl: `/sellers/orders/${orderId}`,
+        data: { orderId },
+        channels: ['push', 'email'],
+      });
+    }
 
     return {
       success: true,
@@ -1487,6 +1512,31 @@ export class OrderService {
     }
 
     await realtimeOrderService.emitOrderStatusUpdate(orderId, order.orderStatus, sellerUserId);
+    if (updated.customerId) {
+      await notify(
+        confirmed
+          ? {
+              userId: updated.customerId,
+              category: 'payments',
+              type: 'payment',
+              title: 'Payment confirmed',
+              message: `The kitchen confirmed your payment for order #${updated.orderNumber}.`,
+              actionUrl: `/orders/${orderId}`,
+              data: { orderId },
+              channels: ['push'],
+            }
+          : {
+              userId: updated.customerId,
+              category: 'payments',
+              type: 'payment',
+              title: "The kitchen couldn't find your payment",
+              message: `For order #${updated.orderNumber}: "${disputeReason || 'Payment not received'}". Check the transfer and send the receipt again, or contact support.`,
+              actionUrl: `/orders/${orderId}`,
+              data: { orderId },
+              channels: ['push', 'email', 'sms'],
+            }
+      );
+    }
 
     return {
       success: true,
@@ -1535,6 +1585,32 @@ export class OrderService {
       await ledgerService.recordOrderCompletion(orderId).catch((err) => console.error(`Ledger posting failed for order ${orderId}:`, err));
     }
     await realtimeOrderService.emitOrderStatusUpdate(orderId, order.orderStatus, adminId);
+    const settled = await prisma.order.findUnique({ where: { id: orderId }, select: { orderNumber: true, customerId: true } });
+    if (settled?.customerId) {
+      await notify({
+        userId: settled.customerId,
+        category: 'payments',
+        type: 'payment',
+        title: 'Payment confirmed',
+        message: `Nuray support confirmed your payment for order #${settled.orderNumber}.`,
+        actionUrl: `/orders/${orderId}`,
+        data: { orderId },
+        channels: ['push', 'email'],
+      });
+    }
+    const payee = await payeeSellerUserId(orderId);
+    if (payee && settled) {
+      await notify({
+        userId: payee,
+        category: 'payments',
+        type: 'payment',
+        title: `Payment confirmed: order #${settled.orderNumber}`,
+        message: `Nuray support checked the transfer for order #${settled.orderNumber}: it reached your account, so the order is paid.`,
+        actionUrl: `/sellers/orders/${orderId}`,
+        data: { orderId },
+        channels: ['push', 'email'],
+      });
+    }
     return { orderId, paymentStatus: 'paid' };
   }
 
