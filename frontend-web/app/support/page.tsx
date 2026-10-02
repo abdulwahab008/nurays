@@ -8,9 +8,7 @@ import {
   CreditCard,
   Truck,
   Snowflake,
-  Phone,
   MessageCircle,
-  Mail,
   HelpCircle,
   Ticket,
   ChevronDown,
@@ -55,7 +53,7 @@ export default function SupportPage() {
         },
         {
           q: 'What if my order is delayed?',
-          a: 'If your order is delayed beyond the estimated delivery time, please contact us through the contact form below or reach out to our WhatsApp support.',
+          a: 'If your order is delayed beyond the estimated delivery time, message the kitchen from your order page, or send us a message from the Contact Us tab.',
         },
       ],
     },
@@ -132,7 +130,7 @@ export default function SupportPage() {
         subject: formData.subject.trim(),
         description: formData.message.trim(),
       });
-      showToast('Your message has been sent! We will respond within 24 hours.', 'success');
+      showToast('Your message has been sent! You can follow replies under My Tickets.', 'success');
       setFormData({ subject: '', message: '', category: 'general' });
       setActiveTab('tickets');
     } catch (error: any) {
@@ -140,6 +138,12 @@ export default function SupportPage() {
     } finally {
       setSubmitting(false);
     }
+  };
+
+  // There is no public support phone or email to show: support runs through tickets.
+  const openContactForm = () => {
+    setActiveTab('contact');
+    document.getElementById('support-tabs')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   };
 
   useEffect(() => {
@@ -156,44 +160,44 @@ export default function SupportPage() {
       sidebarItems={sidebarItems}
       userType="customer"
     >
-      {/* Quick Contact Cards */}
+      {/* Quick Contact Cards: the in-app support channels */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
         <div className="bg-gradient-to-br from-green-50 to-white rounded-2xl p-6 border border-green-100">
           <div className="w-12 h-12 bg-green-500 rounded-xl flex items-center justify-center mb-4 text-white shadow-xs">
-            <Phone className="w-6 h-6" />
+            <Send className="w-6 h-6" />
           </div>
-          <h3 className="font-semibold text-gray-900 mb-1">Phone Support</h3>
-          <p className="text-sm text-gray-500 mb-3">Mon-Sat, 9 AM - 9 PM</p>
-          <a href="tel:+923001234567" className="text-green-600 font-medium hover:underline">
-            +92 300 123 4567
-          </a>
+          <h3 className="font-semibold text-gray-900 mb-1">Message Support</h3>
+          <p className="text-sm text-gray-500 mb-3">Open a support ticket</p>
+          <button type="button" onClick={openContactForm} className="text-green-600 font-medium hover:underline cursor-pointer">
+            Send us a message
+          </button>
         </div>
 
         <div className="bg-gradient-to-br from-blue-50 to-white rounded-2xl p-6 border border-blue-100">
           <div className="w-12 h-12 bg-blue-500 rounded-xl flex items-center justify-center mb-4 text-white shadow-xs">
             <MessageCircle className="w-6 h-6" />
           </div>
-          <h3 className="font-semibold text-gray-900 mb-1">WhatsApp</h3>
-          <p className="text-sm text-gray-500 mb-3">Quick responses</p>
-          <a href="https://wa.me/923001234567" target="_blank" className="text-blue-600 font-medium hover:underline">
-            Chat on WhatsApp
-          </a>
+          <h3 className="font-semibold text-gray-900 mb-1">Chat with Your Kitchen</h3>
+          <p className="text-sm text-gray-500 mb-3">Questions about a current order</p>
+          <Link href="/orders" className="text-blue-600 font-medium hover:underline">
+            Open My Orders
+          </Link>
         </div>
 
         <div className="bg-gradient-to-br from-purple-50 to-white rounded-2xl p-6 border border-purple-100">
           <div className="w-12 h-12 bg-purple-500 rounded-xl flex items-center justify-center mb-4 text-white shadow-xs">
-            <Mail className="w-6 h-6" />
+            <Ticket className="w-6 h-6" />
           </div>
-          <h3 className="font-semibold text-gray-900 mb-1">Email</h3>
-          <p className="text-sm text-gray-500 mb-3">Response in 24 hours</p>
-          <a href="mailto:support@nuray.pk" className="text-purple-600 font-medium hover:underline">
-            support@nuray.pk
-          </a>
+          <h3 className="font-semibold text-gray-900 mb-1">My Tickets</h3>
+          <p className="text-sm text-gray-500 mb-3">Follow replies from our team</p>
+          <button type="button" onClick={() => setActiveTab('tickets')} className="text-purple-600 font-medium hover:underline cursor-pointer">
+            View my tickets
+          </button>
         </div>
       </div>
 
       {/* Tab Navigation */}
-      <div className="flex gap-2 mb-6">
+      <div id="support-tabs" className="flex gap-2 mb-6 scroll-mt-24">
         <button
           onClick={() => setActiveTab('faq')}
           className={`px-6 py-2.5 rounded-xl font-bold text-xs transition-all cursor-pointer flex items-center gap-2 ${
@@ -335,13 +339,15 @@ export default function SupportPage() {
         <div className="flex items-center justify-between flex-wrap gap-4 relative z-10">
           <div>
             <h3 className="text-xl font-black tracking-tight mb-1">Still need help?</h3>
-            <p className="text-slate-300 text-xs sm:text-sm">Our Karachi support team is available 9 AM - 9 PM daily</p>
+            <p className="text-slate-300 text-xs sm:text-sm">Send our support team a message and follow the replies under My Tickets.</p>
           </div>
-          <a href="https://wa.me/923001234567" target="_blank" rel="noopener noreferrer">
-            <Button className="flame-btn px-6 py-3 text-xs font-black shadow-md rounded-2xl flex items-center gap-2">
-              <MessageCircle className="w-4 h-4" /> Chat with us on WhatsApp
-            </Button>
-          </a>
+          <Button
+            type="button"
+            onClick={openContactForm}
+            className="flame-btn px-6 py-3 text-xs font-black shadow-md rounded-2xl flex items-center gap-2"
+          >
+            <Send className="w-4 h-4" /> Send us a message
+          </Button>
         </div>
       </div>
     </DashboardLayout>

@@ -832,6 +832,8 @@ function OrderDetailContent() {
       <TriPartiteReviewModal
         orderId={order.id}
         orderNumber={order.orderNumber}
+        items={order.items}
+        deliveryType={order.delivery?.type}
         sellerName={order.sellerName || order.items[0]?.sellerName || 'Home Kitchen'}
         riderName={order.delivery?.rider?.name || 'Delivery Partner'}
         isOpen={showReviewModal}
@@ -993,7 +995,7 @@ function OrderDetailContent() {
         {/* Footer & Watermark */}
         <div className="border-t border-slate-200 pt-4 text-center text-[10px] text-slate-500 space-y-1">
           <p className="font-extrabold text-slate-700">Thank you for supporting domestic home kitchens across Karachi!</p>
-          <p>For order queries or delivery assistance, WhatsApp: +92 300 0000000 • Email: support@nurayfood.pk</p>
+          <p>For order queries or delivery assistance, open a support ticket under Help &amp; Support in your Nuray account.</p>
           <p className="text-[9px] text-slate-400">Computer-generated receipt issued by Nuray Food &amp; Frost platform. No physical signature required.</p>
         </div>
       </div>
