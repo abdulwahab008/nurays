@@ -763,6 +763,11 @@ export default function RiderDashboardPage() {
                               <p className="flex items-start gap-1.5">
                                 <span className="font-bold text-slate-800">{t('pickupLabel')}</span>
                                 <span className="truncate">{d.pickupAddress}</span>
+                                {d.pickupDistanceKm != null && (
+                                  <span className="shrink-0 px-1.5 rounded bg-sky-50 text-sky-800 font-bold text-[10px]">
+                                    {t('kmAway', { km: d.pickupDistanceKm })}
+                                  </span>
+                                )}
                               </p>
                               <p className="flex items-start gap-1.5">
                                 <span className="font-bold text-slate-800">{t('deliverLabel')}</span>

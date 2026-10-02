@@ -25,6 +25,7 @@ import ledgerService from '../src/services/ledger.service';
 import sellerService from '../src/services/seller.service';
 import sellerOrderService from '../src/services/seller-order.service';
 import reviewService from '../src/services/review.service';
+import '../src/middleware/auth.middleware'; // brings in the Request.user type, for calling a controller directly
 
 let pass = 0, fail = 0;
 const ok = (name: string, cond: boolean, extra = '') => { cond ? pass++ : fail++; console.log(`${cond ? 'PASS' : 'FAIL'}  ${name}${extra ? '  [' + extra + ']' : ''}`); };
@@ -1161,13 +1162,14 @@ async function main() {
   const kNear = await mkSeller({ communityId: nearC.id, latitude: 24.95, longitude: 67.15, scheduleMode: '24_7' });
   const kFar = await mkSeller({ communityId: farC.id, latitude: 25.5, longitude: 68.0, scheduleMode: '24_7' });
   const kClosed = await mkSeller({ latitude: 24.912, longitude: 67.112, scheduleMode: '24_7', availabilityOverride: 'closed' });
-  const catProduct = (sellerId: string, rating: number, extra: any = {}) => prisma.product.create({ data: { sellerId, categoryId: cat.id, name: 'Dish ' + uniq(), slug: 'd-' + uniq(), price: 100, unit: 'pc', stockQuantity: 5, stockType: 'direct', approvalStatus: 'approved', isActive: true, ratingAverage: rating, ...extra } as any });
+  const catProduct = (sellerId: string, rating: number, extra: any = {}) => prisma.product.create({ data: { sellerId, categoryId: cat.id, name: 'Dish ' + uniq(), slug: 'd-' + uniq(), price: 100, unit: 'pc', stockQuantity: 5, stockType: 'direct', approvalStatus: 'approved', isActive: true, ratingAverage: rating, totalReviews: 10, ...extra } as any });
   for (const r of [3, 5, 4, 3, 5, 4, 3]) await catProduct(kHome.id, r);
   for (let i = 0; i < 5; i++) await catProduct(kNear.id, 5);
   for (let i = 0; i < 4; i++) await catProduct(kFar.id, 5);
   for (let i = 0; i < 3; i++) await catProduct(kClosed.id, 5);
   await catProduct(kHome.id, 5, { isActive: false });
   await catProduct(kHome.id, 5, { approvalStatus: 'pending' });
+  await require('../src/services/ranking.service').refreshRatingScores(); // as the scheduled job does
   const listCat = (page: number, extra: any = {}) => productService.getProducts({ categoryId: cat.id, communityId: homeC.id, page, limit: 4, ...extra } as any);
   const catPages = await Promise.all([1, 2, 3, 4, 5, 6].map((pg) => listCat(pg)));
   const catIds = catPages.flatMap((r: any) => r.products.map((x: any) => x.id));
@@ -1335,6 +1337,94 @@ async function main() {
   await pushSvc.saveSubscription(cust.id, { endpoint: 'https://push.example.test/abc', keys: { p256dh: 'p'.repeat(20), auth: 'a'.repeat(12) } });
   ok('a device that changes hands belongs to its new owner only', (await prisma.pushSubscription.findMany({ where: { endpoint: 'https://push.example.test/abc' } })).map((x: any) => x.userId).join() === cust.id);
   ok('a push endpoint must be https', (await code(pushSvc.saveSubscription(cust.id, { endpoint: 'http://evil.test/x', keys: { p256dh: 'p'.repeat(20), auth: 'a'.repeat(12) } }))) === 'INVALID_SUBSCRIPTION');
+
+  // ---- R. ranking: trending, trustworthy ratings, search, recommendations, rider job order ----
+  {
+    const ranking = require('../src/services/ranking.service');
+    const riderSvcR = require('../src/services/rider.service').default;
+    const custs = await Promise.all(Array.from({ length: 6 }, () => mkUser()));
+    const approved = () => mkSeller({ isVerified: true, verificationStatus: 'approved' });
+    const kNow = await approved(), kOld = await approved(), kSpam = await approved(), kSelf = await approved(), kCancel = await approved();
+    const [pNow, pOld, pSpam, pSelf, pCancel] = await Promise.all([kNow, kOld, kSpam, kSelf, kCancel].map((k) => mkProduct(k.id, 500)));
+    const placeAt = async (customerId: string, productId: string, daysAgo = 0) => {
+      const o: any = await orderService.createOrder(customerId, { items: [{ productId, quantity: 1 }], deliveryType: 'self_pickup', paymentMethod: 'cod' } as any);
+      if (daysAgo) await prisma.order.update({ where: { id: o.id }, data: { createdAt: new Date(Date.now() - daysAgo * 86400_000) } });
+      return o;
+    };
+    for (const c of custs.slice(0, 3)) await placeAt(c.id, pNow.id);           // 3 customers today
+    for (const c of custs.slice(0, 5)) await placeAt(c.id, pOld.id, 12);       // 5 customers 12 days ago
+    for (let i = 0; i < 6; i++) await placeAt(custs[0].id, pSpam.id);          // one customer, 6 orders
+    // The kitchen ordering from itself (checkout refuses it; the ranking ignores it anyway).
+    for (let i = 0; i < 3; i++) {
+      const o = await placeAt(custs[4].id, pSelf.id);
+      await prisma.order.update({ where: { id: o.id }, data: { customerId: kSelf.userId } });
+    }
+    await placeAt(custs[1].id, pSelf.id);
+    for (const c of custs.slice(0, 3)) {                                       // 3 orders, all cancelled
+      const o = await placeAt(c.id, pCancel.id);
+      await orderService.cancelOrder(o.id, c.id, 'changed my mind');
+    }
+    await ranking.recomputeTrendScores();
+    const trend = async (id: string) => (await prisma.seller.findUnique({ where: { id } }))!.trendScore;
+    const [tNow, tOld, tSpam, tSelf, tCancel] = await Promise.all([kNow, kOld, kSpam, kSelf, kCancel].map((k) => trend(k.id)));
+    ok('a kitchen busy today trends above one that was busier 12 days ago', tNow > tOld && tOld > 0, `${tNow.toFixed(2)} > ${tOld.toFixed(2)}`);
+    ok("one customer's six orders don't make a kitchen trend", tSpam === 0);
+    ok("a kitchen's own orders don't count", tSelf === 0);
+    ok("cancelled orders don't count", tCancel === 0);
+
+    const trendingList = await productService.getProducts({ sort: 'trending', limit: 100 });
+    const pos = (id: string) => trendingList.products.findIndex((x: any) => x.id === id);
+    ok('trending dishes list the busy-now dish first', pos(pNow.id) >= 0 && pos(pNow.id) < pos(pOld.id));
+
+    const sellersRes: any = {};
+    await require('../src/controllers/seller.controller').getPublicSellers({ query: { sort: 'trending', limit: '50' } } as any, { status: () => ({ json: (b: any) => Object.assign(sellersRes, b) }) } as any);
+    const sIds = (sellersRes.data ?? []).map((x: any) => x.id);
+    ok('trending kitchens: only real recent demand, busiest now first', sIds.includes(kNow.id) && sIds.indexOf(kNow.id) < sIds.indexOf(kOld.id) && !sIds.includes(kSpam.id) && !sIds.includes(kCancel.id));
+
+    // Ratings: one 5-star review vs two hundred 4.8s.
+    const kRate = await mkSeller({ verificationStatus: 'approved', isVerified: true });
+    const pFew = await mkProduct(kRate.id, 5), pMany = await mkProduct(kRate.id, 5);
+    await prisma.product.update({ where: { id: pFew.id }, data: { ratingAverage: 5, totalReviews: 1 } });
+    await prisma.product.update({ where: { id: pMany.id }, data: { ratingAverage: 4.8, totalReviews: 200 } });
+    await ranking.refreshRatingScores({ productId: pFew.id });
+    await ranking.refreshRatingScores({ productId: pMany.id });
+    const byRating = await productService.getProducts({ sellerId: kRate.id, sort: 'rating', limit: 10 });
+    ok('"top rated" puts 200 reviews at 4.8 above one review at 5', byRating.products[0]?.id === pMany.id);
+
+    // Search: relevance and typos.
+    const word = 'zarq' + Array.from({ length: 5 }, () => 'bcdfghjklmnpqrstvwxz'[Math.floor(Math.random() * 20)]).join('') + 'ani';
+    const kSearch = await mkSeller();
+    const inDesc = await prisma.product.create({ data: { sellerId: kSearch.id, name: 'Plain rice ' + uniq(), description: `goes well with ${word}`, slug: 's-' + uniq(), price: 100, unit: 'pc', stockQuantity: 5, stockType: 'direct', approvalStatus: 'approved', isActive: true } as any });
+    const inName = await prisma.product.create({ data: { sellerId: kSearch.id, name: `${word} biryani`, slug: 's-' + uniq(), price: 100, unit: 'pc', stockQuantity: 5, stockType: 'direct', approvalStatus: 'approved', isActive: true } as any });
+    const found = (await productService.getProducts({ search: word, limit: 10 })).products.map((x: any) => x.id);
+    ok('search puts a name match above a description match', found[0] === inName.id && found.includes(inDesc.id));
+    const typo = word.slice(0, 4) + word.slice(5);
+    const typoFound = (await productService.getProducts({ search: typo, limit: 10 })).products.map((x: any) => x.id);
+    ok('search still finds it with a typo', typoFound.includes(inName.id), `${typo} for ${word}`);
+    ok('search with another sort still filters by the match', (await productService.getProducts({ search: word, sort: 'price_low', limit: 10 })).products.every((x: any) => [inName.id, inDesc.id].includes(x.id)));
+
+    // Recommendations: people who ordered what you ordered also ordered...
+    const kRec = await mkSeller(), kRec2 = await mkSeller();
+    const pA = await mkProduct(kRec.id, 100), pB = await mkProduct(kRec2.id, 100);
+    const me = await mkUser(), o1 = await mkUser(), o2 = await mkUser();
+    for (const u of [o1, o2]) { await placeAt(u.id, pA.id); await placeAt(u.id, pB.id); }
+    await placeAt(me.id, pA.id);
+    const recs = await ranking.recommendedProducts(me.id, 12);
+    const recB = recs.find((r: any) => r.productId === pB.id);
+    ok('recommended: what similar customers ordered, and not what I already have', recB?.reason === 'similar_customers' && !recs.some((r: any) => r.productId === pA.id), JSON.stringify(recs.slice(0, 3)));
+    ok('order again: my dish is there', (await ranking.orderAgainProductIds(me.id)).includes(pA.id));
+    ok('a visitor with no history still gets something (trending)', (await ranking.recommendedProducts(null, 5)).length > 0);
+
+    // Rider job order: the closer pickup first.
+    const rUser = await mkUser('rider');
+    await prisma.rider.create({ data: { userId: rUser.id, city: 'Lahore', verificationStatus: 'approved', status: 'active' } as any });
+    const near = await placeAt(custs[2].id, pNow.id), far = await placeAt(custs[3].id, pNow.id);
+    await prisma.delivery.create({ data: { orderId: far.id, pickupAddress: 'far', deliveryAddress: 'x', pickupLatitude: 31.62, pickupLongitude: 74.46, deliveryLatitude: 31.63, deliveryLongitude: 74.47, status: 'pending' } as any });
+    await prisma.delivery.create({ data: { orderId: near.id, pickupAddress: 'near', deliveryAddress: 'x', pickupLatitude: 31.521, pickupLongitude: 74.351, deliveryLatitude: 31.53, deliveryLongitude: 74.36, status: 'pending' } as any });
+    const pool: any[] = await riderSvcR.getAvailableDeliveries(rUser.id, { lat: 31.52, lng: 74.35 });
+    const iNear = pool.findIndex((d) => d.orderId === near.id), iFar = pool.findIndex((d) => d.orderId === far.id);
+    ok('riders see the closer pickup first, with its distance', iNear >= 0 && iNear < iFar && pool[iNear].pickupDistanceKm < 1 && pool[iFar].pickupDistanceKm > 10, `${pool[iNear]?.pickupDistanceKm} / ${pool[iFar]?.pickupDistanceKm} km`);
+  }
 
   // OTP SMS cap per number
   const capPhone = pn();

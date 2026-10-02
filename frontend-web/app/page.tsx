@@ -400,6 +400,10 @@ export default function Home() {
   const [kitchensState, setKitchensState] = useState<LoadState>('loading');
   const [kitchensAttempt, setKitchensAttempt] = useState(0);
   const [products, setProducts] = useState<Product[]>([]);
+  // Kitchens people are ordering from right now, and personal dish lists (signed in).
+  const [trendingSellers, setTrendingSellers] = useState<PublicSeller[]>([]);
+  const [recommended, setRecommended] = useState<Array<Product & { recommendationReason?: string }>>([]);
+  const [orderAgain, setOrderAgain] = useState<Product[]>([]);
   const [dishesState, setDishesState] = useState<LoadState>('loading');
   const [dishesAttempt, setDishesAttempt] = useState(0);
   const [stats, setStats] = useState<PublicStats | null>(null);
@@ -489,6 +493,48 @@ export default function Home() {
     };
   }, [isAuthenticated]);
 
+  // Trending kitchens: only ones with real recent orders (the section hides when there are none).
+  useEffect(() => {
+    let cancelled = false;
+    apiClient
+      .get<ApiResponse<PublicSeller[]>>('/sellers', { params: { sort: 'trending', limit: 10 } })
+      .then((res) => {
+        if (!cancelled) setTrendingSellers(res.data?.data ?? []);
+      })
+      .catch(() => {
+        // The section just stays hidden.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // "Order again" and "Recommended for you" for a signed-in customer.
+  useEffect(() => {
+    if (!isAuthenticated) {
+      setRecommended([]);
+      setOrderAgain([]);
+      return;
+    }
+    let cancelled = false;
+    type DishList = ApiResponse<{ products: Array<Product & { recommendationReason?: string }> }>;
+    apiClient
+      .get<DishList>('/products/order-again', { params: { limit: 6 } })
+      .then((res) => {
+        if (!cancelled) setOrderAgain(res.data?.data?.products ?? []);
+      })
+      .catch(() => undefined);
+    apiClient
+      .get<DishList>('/products/recommended', { params: { limit: 6 } })
+      .then((res) => {
+        if (!cancelled) setRecommended(res.data?.data?.products ?? []);
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, [isAuthenticated]);
+
   useEffect(() => {
     if (isAuthenticated && user) {
       const userType = user.userType || user.user_type;
@@ -501,6 +547,86 @@ export default function Home() {
   // Mapped at render so the labels follow the chosen language.
   const kitchens = useMemo(() => sellers.map((s) => toHomeKitchen(s, t, locale)), [sellers, t, locale]);
   const dishes = useMemo(() => products.map((p) => toHomeDish(p, t)), [products, t]);
+  const trendingKitchens = useMemo(() => trendingSellers.map((s) => toHomeKitchen(s, t, locale)), [trendingSellers, t, locale]);
+  const recommendedDishes = useMemo(
+    () => recommended.map((p) => ({ dish: toHomeDish(p, t), reason: p.recommendationReason })),
+    [recommended, t]
+  );
+  const orderAgainDishes = useMemo(() => orderAgain.map((p) => toHomeDish(p, t)), [orderAgain, t]);
+
+  /** One dish card (popular, order again, recommended). `note` is a small line above the name. */
+  const renderDishCard = (dish: HomeDish, note?: string) => (
+    <div
+      key={dish.id}
+      className="group bg-white rounded-2xl border border-slate-200/80 shadow-2xs hover:shadow-md hover:border-slate-300 transition-all flex flex-col justify-between overflow-hidden"
+    >
+      {/* Dish Photo */}
+      <div className="relative aspect-square overflow-hidden bg-slate-100">
+        <CoverImage
+          src={dish.photo}
+          alt={dish.name}
+          label={dish.name}
+          size="md"
+          className="w-full h-full group-hover:scale-105 transition-transform duration-300"
+        />
+
+        {/* Product Type Tag (as set by the kitchen) */}
+        {dish.typeLabel && (
+          <span
+            className={`absolute top-2 start-2 px-1.5 py-0.5 rounded-md text-white text-[9px] font-bold flex items-center gap-0.5 ${
+              dish.isFrozen ? 'bg-cyan-600' : 'bg-[#FF5500]'
+            }`}
+          >
+            {dish.isFrozen ? <Snowflake className="w-2.5 h-2.5" /> : <Flame className="w-2.5 h-2.5" />}
+            <span>{dish.typeLabel}</span>
+          </span>
+        )}
+
+        {/* Direct Add to Cart Button */}
+        <button
+          onClick={(e) => handleAddDishToCart(dish, e)}
+          className="absolute bottom-2 end-2 w-8 h-8 rounded-full bg-[#FF5500] hover:bg-[#e04400] text-white shadow-md flex items-center justify-center font-bold text-sm transition-transform active:scale-95"
+          title={t('addToTray')}
+          aria-label={t('addNameToTray', { name: dish.name })}
+        >
+          <Plus className="w-4 h-4" />
+        </button>
+      </div>
+
+      {/* Dish Info */}
+      <div className="p-3 flex-1 flex flex-col justify-between">
+        <div>
+          {note && <p className="text-[10px] font-bold text-[#FF5500] truncate mb-0.5">{note}</p>}
+            <p className="text-[10px] font-semibold text-slate-500 truncate flex items-center gap-1">
+            <ChefHat className="w-3 h-3 text-slate-400" />
+            <span>{dish.kitchenName}</span>
+          </p>
+          <h4 className="text-xs font-bold text-slate-900 leading-snug line-clamp-2 mt-0.5 group-hover:text-[#FF5500] transition-colors">
+            {dish.name}
+          </h4>
+        </div>
+
+        <div className="mt-2.5 pt-2 border-t border-slate-100 flex items-center justify-between">
+          <div>
+            <span className="text-xs font-bold text-slate-950 block">
+              {formatPrice(dish.price)}
+            </span>
+            {dish.originalPrice != null && (
+              <span className="text-[10px] text-slate-400 line-through">
+                {formatPrice(dish.originalPrice)}
+              </span>
+            )}
+          </div>
+          {dish.rating && (
+            <span className="text-[10px] font-bold bg-amber-50 text-amber-800 px-1.5 py-0.5 rounded flex items-center gap-0.5 border border-amber-200/60">
+              <Star className="w-2.5 h-2.5 fill-amber-500 text-amber-500" />
+              <span>{dish.rating}</span>
+            </span>
+          )}
+        </div>
+      </div>
+    </div>
+  );
 
   const retryKitchens = () => {
     setKitchensState('loading');
@@ -1055,6 +1181,42 @@ export default function Home() {
       </section>
 
       {/* ============================================================
+          TRENDING KITCHENS — most ordered from right now (recent orders count most;
+          see backend utils/ranking.ts). Hidden until there is real recent demand.
+          ============================================================ */}
+      {trendingKitchens.length > 0 && (
+        <section className="max-w-[1440px] mx-auto px-4 sm:px-8 pt-6" data-testid="trending-kitchens">
+          <div className="mb-3">
+            <h3 className="text-lg sm:text-xl font-bold text-slate-900 tracking-tight flex items-center gap-1.5">
+              <Flame className="w-5 h-5 text-[#FF5500]" />
+              {t('trendingKitchens')}
+            </h3>
+            <p className="text-xs text-slate-500 font-medium mt-0.5">{t('trendingKitchensSub')}</p>
+          </div>
+          <div className="flex items-stretch gap-3 overflow-x-auto scrollbar-none py-1 px-0.5">
+            {trendingKitchens.map((k, i) => (
+              <Link
+                key={k.id}
+                href={k.href}
+                className="flex-shrink-0 w-56 flex items-center gap-3 p-2.5 rounded-2xl bg-white border border-slate-200/80 hover:border-[#FF5500] shadow-2xs transition-colors group"
+              >
+                <span className="w-6 text-center text-lg font-black text-[#FF5500]">{i + 1}</span>
+                <div className="relative w-12 h-12 rounded-full overflow-hidden border border-slate-200 flex-shrink-0">
+                  <CoverImage src={k.avatar || k.coverPhoto} alt={k.name} label={k.name} size="sm" className="w-full h-full" />
+                </div>
+                <div className="min-w-0">
+                  <span className="block text-sm font-bold text-slate-900 truncate group-hover:text-[#FF5500]">{k.name}</span>
+                  <span className="block text-[11px] text-slate-500 truncate">
+                    {[k.rating ? `★ ${k.rating}` : null, k.statusLabel].filter(Boolean).join(' · ')}
+                  </span>
+                </div>
+              </Link>
+            ))}
+          </div>
+        </section>
+      )}
+
+      {/* ============================================================
           "KITCHENS ON NURAY" (Compact Avatar Row)
           Hidden when there is nothing to show; the grid below explains why.
           ============================================================ */}
@@ -1351,7 +1513,30 @@ export default function Home() {
       </section>
 
       {/* ============================================================
-          POPULAR DISHES (Compact Grid) — sorted by real order counts
+          ORDER AGAIN / RECOMMENDED FOR YOU — signed-in customers only
+          ============================================================ */}
+      {orderAgainDishes.length > 0 && (
+        <section className="max-w-[1440px] mx-auto px-4 sm:px-8 pt-8" data-testid="order-again">
+          <h2 className="text-xl sm:text-2xl font-bold text-slate-900 tracking-tight mb-4">{t('orderAgain')}</h2>
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3.5 sm:gap-4">
+            {orderAgainDishes.map((dish) => renderDishCard(dish))}
+          </div>
+        </section>
+      )}
+      {recommendedDishes.length > 0 && (
+        <section className="max-w-[1440px] mx-auto px-4 sm:px-8 pt-8" data-testid="recommended">
+          <h2 className="text-xl sm:text-2xl font-bold text-slate-900 tracking-tight">{t('recommendedForYou')}</h2>
+          <p className="text-xs text-slate-500 font-medium mt-0.5 mb-4">{t('recommendedForYouSub')}</p>
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3.5 sm:gap-4">
+            {recommendedDishes.map(({ dish, reason }) =>
+              renderDishCard(dish, reason === 'similar_customers' ? t('reasonSimilar') : reason === 'kitchen_you_like' ? t('reasonKitchen') : reason === 'category_you_like' ? t('reasonCategory') : t('reasonTrending'))
+            )}
+          </div>
+        </section>
+      )}
+
+      {/* ============================================================
+          POPULAR DISHES (Compact Grid) — what people are ordering now (trend score)
           ============================================================ */}
       <section className="max-w-[1440px] mx-auto px-4 sm:px-8 py-8">
         <div className="flex items-center justify-between mb-5">
@@ -1398,77 +1583,7 @@ export default function Home() {
         ) : (
           /* Dishes Grid */
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3.5 sm:gap-4">
-            {dishes.map((dish) => (
-              <div
-                key={dish.id}
-                className="group bg-white rounded-2xl border border-slate-200/80 shadow-2xs hover:shadow-md hover:border-slate-300 transition-all flex flex-col justify-between overflow-hidden"
-              >
-                {/* Dish Photo */}
-                <div className="relative aspect-square overflow-hidden bg-slate-100">
-                  <CoverImage
-                    src={dish.photo}
-                    alt={dish.name}
-                    label={dish.name}
-                    size="md"
-                    className="w-full h-full group-hover:scale-105 transition-transform duration-300"
-                  />
-
-                  {/* Product Type Tag (as set by the kitchen) */}
-                  {dish.typeLabel && (
-                    <span
-                      className={`absolute top-2 start-2 px-1.5 py-0.5 rounded-md text-white text-[9px] font-bold flex items-center gap-0.5 ${
-                        dish.isFrozen ? 'bg-cyan-600' : 'bg-[#FF5500]'
-                      }`}
-                    >
-                      {dish.isFrozen ? <Snowflake className="w-2.5 h-2.5" /> : <Flame className="w-2.5 h-2.5" />}
-                      <span>{dish.typeLabel}</span>
-                    </span>
-                  )}
-
-                  {/* Direct Add to Cart Button */}
-                  <button
-                    onClick={(e) => handleAddDishToCart(dish, e)}
-                    className="absolute bottom-2 end-2 w-8 h-8 rounded-full bg-[#FF5500] hover:bg-[#e04400] text-white shadow-md flex items-center justify-center font-bold text-sm transition-transform active:scale-95"
-                    title={t('addToTray')}
-                    aria-label={t('addNameToTray', { name: dish.name })}
-                  >
-                    <Plus className="w-4 h-4" />
-                  </button>
-                </div>
-
-                {/* Dish Info */}
-                <div className="p-3 flex-1 flex flex-col justify-between">
-                  <div>
-                    <p className="text-[10px] font-semibold text-slate-500 truncate flex items-center gap-1">
-                      <ChefHat className="w-3 h-3 text-slate-400" />
-                      <span>{dish.kitchenName}</span>
-                    </p>
-                    <h4 className="text-xs font-bold text-slate-900 leading-snug line-clamp-2 mt-0.5 group-hover:text-[#FF5500] transition-colors">
-                      {dish.name}
-                    </h4>
-                  </div>
-
-                  <div className="mt-2.5 pt-2 border-t border-slate-100 flex items-center justify-between">
-                    <div>
-                      <span className="text-xs font-bold text-slate-950 block">
-                        {formatPrice(dish.price)}
-                      </span>
-                      {dish.originalPrice != null && (
-                        <span className="text-[10px] text-slate-400 line-through">
-                          {formatPrice(dish.originalPrice)}
-                        </span>
-                      )}
-                    </div>
-                    {dish.rating && (
-                      <span className="text-[10px] font-bold bg-amber-50 text-amber-800 px-1.5 py-0.5 rounded flex items-center gap-0.5 border border-amber-200/60">
-                        <Star className="w-2.5 h-2.5 fill-amber-500 text-amber-500" />
-                        <span>{dish.rating}</span>
-                      </span>
-                    )}
-                  </div>
-                </div>
-              </div>
-            ))}
+            {dishes.map((dish) => renderDishCard(dish))}
           </div>
         )}
       </section>

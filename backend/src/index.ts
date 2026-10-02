@@ -16,6 +16,7 @@ import socketManager from './config/socket';
 import { fileRoutes } from './storage/serve';
 import { checkAndCreateStockAlerts } from './services/stock-alert.service';
 import hubService from './services/hub.service';
+import { recomputeRankings } from './services/ranking.service';
 import { scheduleJob, stopScheduler } from './jobs/scheduler';
 import { startWorkers, stopWorkers } from './jobs/queue';
 import './jobs/email.jobs';
@@ -157,6 +158,9 @@ httpServer.listen(PORT, () => {
   scheduleJob('purge-expired-secrets', 6 * 60 * 60 * 1000, () => purgeExpiredSecrets());
   // Online checkout sessions nobody completed (a late payment confirmation still settles).
   scheduleJob('expire-payment-attempts', 15 * 60 * 1000, () => expireAbandonedAttempts());
+  // Trending and rating scores the listings sort by (recent orders fade over days, so this
+  // keeps them current even when nobody orders).
+  scheduleJob('ranking-scores', 15 * 60 * 1000, () => recomputeRankings());
 
   // Background jobs (emails, notifications). With Redis every instance takes queued jobs.
   startWorkers();

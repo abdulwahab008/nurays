@@ -1,4 +1,5 @@
 import prisma from '../config/database';
+import { refreshRatingScores } from './ranking.service';
 import { AppError } from '../middleware/errorHandler';
 
 export class ReviewService {
@@ -226,6 +227,7 @@ export class ReviewService {
         totalReviews: avgRating._count,
       },
     });
+    await refreshRatingScores({ productId });
   }
 
   /**
@@ -250,6 +252,7 @@ export class ReviewService {
         totalReviews: row?.orders ?? 0,
       },
     });
+    await refreshRatingScores({ sellerId });
   }
 
   /** A rider's rating: the average delivery rating of the orders they delivered, each order once. */

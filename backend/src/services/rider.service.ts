@@ -4,6 +4,7 @@ import { AppError } from '../middleware/errorHandler';
 import realtimeOrderService from './realtime-order.service';
 import ledgerService from './ledger.service';
 import { haversineKm, calculateDeliveryFeeCorridor } from '../utils/deliveryFee';
+import { jobScore } from '../utils/ranking';
 import { newHandoverCode, verifyHandoverCode } from './handover.service';
 import { cashLimitOf, listRiderEntries, postDeliveryEntries, riderEarningsSummary, riderMoney } from './rider-ledger.service';
 import { assertOwnDocument } from '../utils/documents';
@@ -232,7 +233,13 @@ export class RiderService {
     return rider;
   }
 
-  async getAvailableDeliveries(userId: string) {
+  /**
+   * Open jobs, best first for this rider (see jobScore in utils/ranking.ts): on the way of
+   * the job they carry, close to where they are, waiting longest, paying best per km.
+   * `position` is where the rider's phone says they are; without it, their last shared
+   * location from the past 30 minutes is used.
+   */
+  async getAvailableDeliveries(userId: string, position?: { lat: number; lng: number }) {
     const rider = await this.requireRider(userId);
 
     // Find rider's current active orders to evaluate batching opportunities
@@ -257,20 +264,40 @@ export class RiderService {
     const cashCommitted = (await riderMoney(prisma, rider.id)).cashHeld + cashToCollect(activeDeliveries);
     const cashLimit = cashLimitOf(rider);
 
-    const enriched = deliveries.map((d) => {
+    let here = position ?? null;
+    if (!here) {
+      const recent = activeDeliveries
+        .filter((d) => d.riderLatitude != null && d.riderLongitude != null && d.riderLocationAt && Date.now() - d.riderLocationAt.getTime() < 30 * 60_000)
+        .sort((a, b) => b.riderLocationAt!.getTime() - a.riderLocationAt!.getTime())[0];
+      if (recent) here = { lat: Number(recent.riderLatitude), lng: Number(recent.riderLongitude) };
+    }
+
+    const now = Date.now();
+    const ranked = deliveries.map((d) => {
       const match = routeMatch(activeOne, d);
       const cashOrder = d.order.paymentMethod === 'cod';
-      return formatDelivery({
+      const job = formatDelivery({
         ...d,
         isRouteMatch: !!match,
         batchBonus: match?.bonus ?? 0,
         corridorDistanceKm: match?.corridorDistanceKm,
         exceedsCashLimit: cashOrder && cashCommitted + Number(d.order.totalAmount) > cashLimit,
       });
+      const pickupDistanceKm =
+        here && job.pickupLatitude != null && job.pickupLongitude != null
+          ? Math.round(haversineKm(here.lat, here.lng, job.pickupLatitude, job.pickupLongitude) * 10) / 10
+          : null;
+      const score = jobScore({
+        routeMatch: job.isRouteMatch,
+        pickupDistanceKm,
+        waitingMinutes: (now - new Date(job.createdAt).getTime()) / 60_000,
+        riderFee: job.standardFee + job.batchBonus,
+        tripKm: job.distanceKm ?? null,
+        exceedsCashLimit: job.exceedsCashLimit,
+      });
+      return { job: { ...job, pickupDistanceKm }, score };
     });
-
-    // Sort matching corridor runs to the top of available pool
-    return enriched.sort((a, b) => (b.isRouteMatch ? 1 : 0) - (a.isRouteMatch ? 1 : 0));
+    return ranked.sort((a, b) => b.score - a.score).map((r) => r.job);
   }
 
   async getMyDeliveries(userId: string) {

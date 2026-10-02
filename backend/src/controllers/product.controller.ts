@@ -1,4 +1,5 @@
 import { Request, Response } from 'express';
+import { orderAgainProductIds, recommendedProducts } from '../services/ranking.service';
 import productService from '../services/product.service';
 import { AppError } from '../middleware/errorHandler';
 
@@ -41,6 +42,38 @@ export const getProducts = async (req: Request, res: Response) => {
     success: true,
     data: result,
   });
+};
+
+/** Location and community from the query, for delivery fees and ETAs on the cards. */
+function cardContext(req: Request) {
+  const num = (v: unknown) => (v != null && v !== '' && Number.isFinite(Number(v)) ? Number(v) : undefined);
+  return {
+    customerLat: num(req.query.customerLat),
+    customerLng: num(req.query.customerLng),
+    communityId: typeof req.query.communityId === 'string' ? req.query.communityId : undefined,
+  };
+}
+
+const listLimit = (req: Request) => Math.min(Math.max(Math.trunc(Number(req.query.limit) || 12), 1), 24);
+
+/** "Recommended for you" (trending dishes for visitors and new customers). */
+export const getRecommendedProducts = async (req: Request, res: Response) => {
+  const limit = listLimit(req);
+  const picks = await recommendedProducts(req.user?.id ?? null, limit);
+  const result = await productService.getProducts({ ...cardContext(req), rankedIds: picks.map((p) => p.productId), limit });
+  const reasons = new Map(picks.map((p) => [p.productId, p.reason]));
+  res.status(200).json({
+    success: true,
+    data: { products: result.products.map((p) => ({ ...p, recommendationReason: reasons.get(p.id) ?? 'trending' })) },
+  });
+};
+
+/** "Order again": the signed-in customer's dishes, often-and-recent first. */
+export const getOrderAgainProducts = async (req: Request, res: Response) => {
+  const limit = listLimit(req);
+  const ids = await orderAgainProductIds(req.user!.id, limit);
+  const result = await productService.getProducts({ ...cardContext(req), rankedIds: ids, limit });
+  res.status(200).json({ success: true, data: { products: result.products } });
 };
 
 export const getProduct = async (req: Request, res: Response) => {

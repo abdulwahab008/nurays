@@ -4,7 +4,11 @@ import riderService from '../services/rider.service';
 
 export const getAvailableDeliveries = async (req: Request, res: Response) => {
   if (!req.user) throw new AppError('Authentication required', 401, 'AUTH_REQUIRED');
-  const deliveries = await riderService.getAvailableDeliveries(req.user.userId);
+  // Optional current position (?lat=&lng=) so the closest pickups come first.
+  const lat = Number(req.query.lat);
+  const lng = Number(req.query.lng);
+  const position = req.query.lat != null && Number.isFinite(lat) && Number.isFinite(lng) && Math.abs(lat) <= 90 && Math.abs(lng) <= 180 ? { lat, lng } : undefined;
+  const deliveries = await riderService.getAvailableDeliveries(req.user.userId, position);
   res.status(200).json({ success: true, data: deliveries });
 };
 
