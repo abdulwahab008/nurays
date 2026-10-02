@@ -45,6 +45,9 @@ import {
   X,
   Plus,
 } from 'lucide-react';
+import { useT } from '@/lib/i18n';
+import { commonMessages } from '@/lib/i18n/messages/common';
+import { browseMessages, productTypeKey, type BrowseT } from '@/lib/i18n/messages/browse';
 
 interface CatalogPromotion {
   id: string;
@@ -80,12 +83,12 @@ interface Category {
 }
 
 const productTypeOptions = [
-  { value: 'all', label: 'All Items' },
-  { value: 'fresh', label: 'Fresh Cook', icon: Flame },
-  { value: 'frozen', label: 'Frozen', icon: Snowflake },
-  { value: 'ready_to_eat', label: 'Ready to Eat', icon: Clock },
-  { value: 'ready_to_cook', label: 'Ready to Cook', icon: UtensilsCrossed },
-];
+  { value: 'all', labelKey: 'type.all' },
+  { value: 'fresh', labelKey: 'type.fresh', icon: Flame },
+  { value: 'frozen', labelKey: 'type.frozen', icon: Snowflake },
+  { value: 'ready_to_eat', labelKey: 'type.ready_to_eat', icon: Clock },
+  { value: 'ready_to_cook', labelKey: 'type.ready_to_cook', icon: UtensilsCrossed },
+] as const;
 
 const businessTypeOptions = [
   { value: '', label: 'Any Kitchen Type' },
@@ -102,27 +105,28 @@ const maxDistanceOptions = [
   { value: '20', label: 'Within 20 km' },
 ];
 
-const PRODUCT_TYPE_BADGES: Record<string, { label: string; icon: typeof Flame; className: string }> = {
-  frozen: { label: 'Frozen', icon: Snowflake, className: 'bg-sky-600/95 shadow-sky-600/30' },
-  fresh: { label: 'Fresh Cook', icon: Flame, className: 'bg-[#FF5500]/95 shadow-orange-500/30' },
-  ready_to_eat: { label: 'Ready to Eat', icon: Clock, className: 'bg-[#FF5500]/95 shadow-orange-500/30' },
-  ready_to_cook: { label: 'Ready to Cook', icon: UtensilsCrossed, className: 'bg-[#FF5500]/95 shadow-orange-500/30' },
+// Labels come from browseMessages (`type.<productType>`).
+const PRODUCT_TYPE_BADGES: Record<string, { icon: typeof Flame; className: string }> = {
+  frozen: { icon: Snowflake, className: 'bg-sky-600/95 shadow-sky-600/30' },
+  fresh: { icon: Flame, className: 'bg-[#FF5500]/95 shadow-orange-500/30' },
+  ready_to_eat: { icon: Clock, className: 'bg-[#FF5500]/95 shadow-orange-500/30' },
+  ready_to_cook: { icon: UtensilsCrossed, className: 'bg-[#FF5500]/95 shadow-orange-500/30' },
 };
 
 /** The API's delivery-time estimate, shown only when this kitchen actually delivers to the buyer. */
-function deliveryEtaLabel(p: Product): string | null {
+function deliveryEtaLabel(p: Product, t: BrowseT): string | null {
   if (!p.delivery?.deliverable) return null;
   const min = p.estimatedDeliveryMinMinutes ?? p.delivery.estimatedMinMinutes;
   const max = p.estimatedDeliveryMaxMinutes ?? p.delivery.estimatedMaxMinutes;
   if (min == null || max == null) return null;
-  return `${min}-${max} min`;
+  return t('etaMin', { min, max });
 }
 
 /** The API's delivery fee. Nothing when the API didn't compute one (no area or address known). */
-function deliveryFeeLabel(p: Product): string | null {
+function deliveryFeeLabel(p: Product, t: BrowseT): string | null {
   if (!p.delivery) return null;
-  if (!p.delivery.deliverable) return 'Delivery not available here';
-  return p.delivery.fee === 0 ? 'Free delivery' : `Rs ${p.delivery.fee} delivery`;
+  if (!p.delivery.deliverable) return t('deliveryNotHere');
+  return p.delivery.fee === 0 ? t('freeDelivery') : t('feeDelivery', { fee: p.delivery.fee });
 }
 
 function ProductsContent() {
@@ -131,6 +135,8 @@ function ProductsContent() {
   const { isAuthenticated, user, logout } = useAuthStore();
   const { showToast } = useToast();
   const { items: cartItems } = useCartStore();
+  const t = useT(browseMessages);
+  const tc = useT(commonMessages);
 
   const [userDropdownOpen, setUserDropdownOpen] = useState(false);
 
@@ -201,12 +207,12 @@ function ProductsContent() {
       .then((detail) => {
         if (cancelled) return;
         if (detail) setCommunityDetail(detail);
-        else setCommunityError("We couldn't load kitchens for this area.");
+        else setCommunityError('loadKitchensError');
       })
       .catch((err) => {
         if (cancelled) return;
         console.warn('Failed to load community kitchens:', err?.message || err);
-        setCommunityError("We couldn't load kitchens for this area.");
+        setCommunityError('loadKitchensError');
       })
       .finally(() => {
         if (!cancelled) setCommunityKitchensLoading(false);
@@ -218,11 +224,11 @@ function ProductsContent() {
   }, [selectedCommunity?.id, selectedCommunity?.slug, communityReloadKey]);
 
   const sortOptions = [
-    { value: 'newest', label: 'Newest First' },
-    { value: 'price_low', label: 'Price: Low to High' },
-    { value: 'price_high', label: 'Price: High to Low' },
-    { value: 'rating', label: 'Top Rated' },
-    { value: 'popular', label: 'Most Popular' },
+    { value: 'newest', label: t('sort.newest') },
+    { value: 'price_low', label: t('sort.price_low') },
+    { value: 'price_high', label: t('sort.price_high') },
+    { value: 'rating', label: t('sort.rating') },
+    { value: 'popular', label: t('sort.popular') },
   ];
 
   // Load categories from API
@@ -340,7 +346,7 @@ function ProductsContent() {
       setProducts([]);
       setTotalProducts(0);
       setPromotionsByProductId({});
-      setError("We couldn't load dishes right now. Check your connection and try again.");
+      setError('loadDishesError');
     } finally {
       if (isCurrent()) setLoading(false);
     }
@@ -369,13 +375,13 @@ function ProductsContent() {
         quantity: 1,
         stockType: product.productType === 'frozen' ? 'hub' : 'direct',
       });
-      showToast(`Added ${product.name} to your cart!`, 'success');
+      showToast(t('toastAdded', { name: product.name }), 'success');
     } catch (err: any) {
       if (err?.response?.status === 409 || err?.response?.data?.error?.code === 'CART_SELLER_MISMATCH') {
         const details = err?.response?.data?.error?.details;
         setCartConflict({
-          existingSellerName: details?.existingSeller?.name || 'Previous Kitchen',
-          newSellerName: details?.newSeller?.name || product.seller?.businessName || 'New Kitchen',
+          existingSellerName: details?.existingSeller?.name || t('previousKitchen'),
+          newSellerName: details?.newSeller?.name || product.seller?.businessName || t('newKitchen'),
           onConfirmClearAndAdd: async () => {
             try {
               await cartService.addToCart({
@@ -385,15 +391,15 @@ function ProductsContent() {
                 clearAndAdd: true,
               });
               setCartConflict(null);
-              showToast(`Cart updated with dishes from ${product.seller?.businessName}!`, 'success');
+              showToast(t('toastCartUpdated', { kitchen: product.seller?.businessName }), 'success');
             } catch {
-              showToast('Failed to replace cart items', 'error');
+              showToast(t('toastReplaceItemsFailed'), 'error');
             }
           },
           onCancel: () => setCartConflict(null),
         });
       } else {
-        const msg = err?.response?.data?.error?.message || err?.message || 'Failed to add dish';
+        const msg = err?.response?.data?.error?.message || err?.message || t('toastAddDishFailed');
         showToast(msg, 'error');
       }
     } finally {
@@ -417,9 +423,9 @@ function ProductsContent() {
         else next.delete(sellerId);
         return next;
       });
-      showToast(isFav ? `Saved ${sellerName} to your favorite kitchens!` : `Removed ${sellerName} from favorites`, 'info');
+      showToast(isFav ? t('toastSavedFavKitchens', { name: sellerName }) : t('toastRemovedFav', { name: sellerName }), 'info');
     } catch {
-      showToast('Failed to update favorite', 'error');
+      showToast(t('toastFavFailed'), 'error');
     }
   };
 
@@ -436,7 +442,7 @@ function ProductsContent() {
   // kitchen's own community name; nothing when neither is known.
   const formatDeliveryDistance = (p: Product): string | null => {
     if (p.delivery?.distanceKm != null && p.delivery.distanceKm >= 0 && p.delivery.distanceKm <= 35) {
-      return `${p.delivery.distanceKm.toFixed(1)} km away`;
+      return t('kmAway', { km: p.delivery.distanceKm.toFixed(1) });
     }
     return p.community?.name || null;
   };
@@ -470,17 +476,17 @@ function ProductsContent() {
       <div className="flex items-center justify-between flex-wrap gap-2 pt-1">
         <div>
           <h1 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight">
-            {viewMode === 'kitchens' ? 'Home Kitchens & Local Chefs' : 'Authentic Homemade Dishes'}
+            {viewMode === 'kitchens' ? t('titleKitchens') : t('titleDishes')}
           </h1>
           <p className="text-xs text-slate-500 font-medium mt-0.5 flex items-center gap-1.5">
-            <span>{selectedCommunity ? 'Delivering to' : 'Choose your area to see kitchens near you'}</span>
+            <span>{selectedCommunity ? t('deliveringTo') : t('chooseAreaHint')}</span>
             <button
               type="button"
               onClick={openSelectorModal}
               className="font-bold text-[#FF5500] hover:underline inline-flex items-center gap-1 cursor-pointer"
             >
               <MapPin className="w-3 h-3 text-[#FF5500]" />
-              <span>{selectedCommunity?.name || 'Select area'}</span>
+              <span>{selectedCommunity?.name || t('selectArea')}</span>
             </button>
             {selectedCommunity?.city && (
               <>
@@ -498,13 +504,13 @@ function ProductsContent() {
         <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-2.5">
           {/* Clean Search Input */}
           <form onSubmit={handleSearch} className="flex-1 relative flex items-center">
-            <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+            <Search className="w-4 h-4 text-slate-400 absolute start-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
             <input
               type="text"
-              placeholder="Search dishes, home chefs, biryani, kebabs..."
+              placeholder={t('searchPlaceholder')}
               value={searchInput}
               onChange={(e) => setSearchInput(e.target.value)}
-              className="w-full pl-10 pr-20 py-2 border border-slate-200 rounded-xl text-xs sm:text-sm font-medium focus:ring-2 focus:ring-slate-900 focus:border-transparent bg-slate-50/70 focus:bg-white transition-all h-10"
+              className="w-full ps-10 pe-20 py-2 border border-slate-200 rounded-xl text-xs sm:text-sm font-medium focus:ring-2 focus:ring-slate-900 focus:border-transparent bg-slate-50/70 focus:bg-white transition-all h-10"
             />
             {searchInput && (
               <button
@@ -514,17 +520,17 @@ function ProductsContent() {
                   setSearchQuery('');
                   setPage(1);
                 }}
-                className="absolute right-12 top-1/2 -translate-y-1/2 p-1 text-slate-400 hover:text-slate-600 rounded-full cursor-pointer"
-                title="Clear search"
+                className="absolute end-12 top-1/2 -translate-y-1/2 p-1 text-slate-400 hover:text-slate-600 rounded-full cursor-pointer"
+                title={t('clearSearch')}
               >
                 <X className="w-3.5 h-3.5" />
               </button>
             )}
             <button
               type="submit"
-              className="absolute right-1.5 top-1/2 -translate-y-1/2 px-3 py-1.5 bg-slate-900 hover:bg-black text-white text-xs font-bold rounded-lg shadow-2xs transition-all active:scale-95 cursor-pointer"
+              className="absolute end-1.5 top-1/2 -translate-y-1/2 px-3 py-1.5 bg-slate-900 hover:bg-black text-white text-xs font-bold rounded-lg shadow-2xs transition-all active:scale-95 cursor-pointer"
             >
-              Search
+              {tc('search')}
             </button>
           </form>
 
@@ -540,7 +546,7 @@ function ProductsContent() {
               }`}
             >
               <ChefHat className="w-3.5 h-3.5" />
-              <span>Kitchens</span>
+              <span>{t('viewKitchens')}</span>
               {activeCommunityDetail && (
                 <span
                   className={`px-1.5 py-0.2 rounded-full text-[10px] font-bold ${
@@ -561,7 +567,7 @@ function ProductsContent() {
               }`}
             >
               <UtensilsCrossed className="w-3.5 h-3.5" />
-              <span>Dishes</span>
+              <span>{t('viewDishes')}</span>
               {!loading && !error && (
                 <span
                   className={`px-1.5 py-0.2 rounded-full text-[10px] font-bold ${
@@ -611,7 +617,7 @@ function ProductsContent() {
                       : 'bg-slate-100/80 text-slate-600 hover:bg-slate-200 hover:text-slate-900'
                   }`}
                 >
-                  {type.label}
+                  {t(type.labelKey)}
                 </button>
               );
             })}
@@ -630,7 +636,7 @@ function ProductsContent() {
               }`}
             >
               <span className={`w-1.5 h-1.5 rounded-full ${openNow ? 'bg-white' : 'bg-emerald-500'}`} />
-              <span>Open Now</span>
+              <span>{t('openNow')}</span>
             </button>
 
             <button
@@ -644,7 +650,7 @@ function ProductsContent() {
                   : 'bg-slate-100/80 text-slate-600 hover:bg-slate-200 hover:text-slate-900'
               }`}
             >
-              Free Delivery
+              {t('freeDeliveryChip')}
             </button>
 
             <button
@@ -658,7 +664,7 @@ function ProductsContent() {
                   : 'bg-slate-100/80 text-slate-600 hover:bg-slate-200 hover:text-slate-900'
               }`}
             >
-              ⚡ Under 45 min
+              {t('under45')}
             </button>
           </div>
 
@@ -668,7 +674,7 @@ function ProductsContent() {
               className="text-xs font-bold text-red-600 hover:text-red-700 flex items-center gap-1 transition-colors cursor-pointer py-1 px-2"
             >
               <X className="w-3.5 h-3.5" />
-              <span>Reset filters</span>
+              <span>{t('resetFilters')}</span>
             </button>
           )}
         </div>
@@ -696,20 +702,20 @@ function ProductsContent() {
               <MapPin className="w-7 h-7 text-[#FF5500]" />
             </div>
             <h3 className="text-lg font-bold text-slate-900 mb-2">
-              {communitiesError ? "We couldn't load areas" : 'Choose your area'}
+              {communitiesError ? t('areasLoadError') : t('chooseYourArea')}
             </h3>
             <p className="text-xs sm:text-sm text-slate-500 max-w-md mx-auto mb-5 leading-relaxed">
               {communitiesError
-                ? 'Check your connection and try again.'
-                : 'Pick your community to see the verified home kitchens there.'}
+                ? t('checkConnection')
+                : t('pickCommunity')}
             </p>
             {communitiesError ? (
               <Button onClick={() => loadCommunities()} className="flame-btn rounded-xl">
-                Retry
+                {t('retry')}
               </Button>
             ) : (
               <Button onClick={openSelectorModal} className="flame-btn rounded-xl">
-                Choose Community
+                {t('chooseCommunity')}
               </Button>
             )}
           </div>
@@ -718,7 +724,7 @@ function ProductsContent() {
 
       const allKitchens = activeCommunityDetail?.sellers || [];
       const kitchens = openNow ? allKitchens.filter((k) => k.isOpen !== false) : allKitchens;
-      const communityName = selectedCommunity.name || activeCommunityDetail?.name || 'your area';
+      const communityName = selectedCommunity.name || activeCommunityDetail?.name || t('yourArea');
 
       return (
         <div>
@@ -726,18 +732,18 @@ function ProductsContent() {
             <div>
               <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-orange-100 text-[#FF5500] text-[10px] font-bold uppercase tracking-wider mb-1">
                 <MapPin className="w-3 h-3 text-[#FF5500]" />
-                <span>Hyperlocal Society: {communityName}</span>
+                <span>{t('hyperlocal', { name: communityName })}</span>
               </div>
               <h2 className="text-xl font-bold text-slate-900 tracking-tight">
-                Verified Domestic Home Kitchens
+                {t('verifiedDomestic')}
               </h2>
               <p className="text-xs text-slate-500 mt-0.5">
-                Independent verified home chefs cooking family recipes in small batches.
+                {t('independentChefs')}
               </p>
             </div>
             {activeCommunityDetail && (
               <span className="text-xs font-semibold px-3 py-1.5 rounded-xl bg-slate-100 text-slate-700 border border-slate-200">
-                Showing {kitchens.length} Home {kitchens.length === 1 ? 'Kitchen' : 'Kitchens'} in {communityName}
+                {t(kitchens.length === 1 ? 'showingKitchensOne' : 'showingKitchensMany', { count: kitchens.length, area: communityName })}
               </span>
             )}
           </div>
@@ -746,14 +752,14 @@ function ProductsContent() {
             kitchenSkeleton
           ) : communityError ? (
             <div className="bg-red-50 border border-red-200 rounded-2xl p-6 text-center">
-              <h3 className="text-base font-bold text-red-800 mb-1.5">{communityError}</h3>
-              <p className="text-red-600 text-xs mb-3">Check your connection and try again.</p>
+              <h3 className="text-base font-bold text-red-800 mb-1.5">{t('loadKitchensError')}</h3>
+              <p className="text-red-600 text-xs mb-3">{t('checkConnection')}</p>
               <Button
                 onClick={() => setCommunityReloadKey((n) => n + 1)}
                 variant="outline"
                 className="border-red-300 text-red-700 text-xs"
               >
-                Retry
+                {t('retry')}
               </Button>
             </div>
           ) : kitchens.length === 0 ? (
@@ -763,19 +769,19 @@ function ProductsContent() {
               </div>
               <h3 className="text-lg font-bold text-slate-900 mb-2">
                 {allKitchens.length > 0
-                  ? `No kitchens in ${communityName} are open right now`
-                  : `No home kitchens in ${communityName} yet`}
+                  ? t('noneOpenIn', { area: communityName })
+                  : t('noneYetIn', { area: communityName })}
               </h3>
               <p className="text-xs sm:text-sm text-slate-500 max-w-md mx-auto mb-5 leading-relaxed">
                 {allKitchens.length > 0
-                  ? 'Turn off the Open Now filter to see every kitchen here.'
-                  : `No verified home kitchens have joined ${communityName} yet. You can browse a nearby community or switch your area.`}
+                  ? t('turnOffOpenNow')
+                  : t('noneJoined', { area: communityName })}
               </p>
 
               {activeCommunityDetail?.neighbors && activeCommunityDetail.neighbors.length > 0 && (
                 <div className="flex flex-col items-center gap-2 mb-5">
                   <span className="text-xs font-bold text-slate-600 uppercase tracking-wider">
-                    Nearby communities:
+                    {t('nearbyCommunities')}
                   </span>
                   <div className="flex items-center justify-center gap-2 flex-wrap">
                     {activeCommunityDetail.neighbors.map((n) => (
@@ -788,8 +794,8 @@ function ProductsContent() {
                         }}
                         className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl bg-orange-50 hover:bg-orange-100 text-[#FF5500] text-xs font-bold border border-orange-200 transition-colors shadow-2xs"
                       >
-                        <span>Browse {n.name} Kitchens</span>
-                        <ChevronRight className="w-3.5 h-3.5" />
+                        <span>{t('browseNamedKitchens', { name: n.name })}</span>
+                        <ChevronRight className="rtl:-scale-x-100 w-3.5 h-3.5" />
                       </button>
                     ))}
                   </div>
@@ -797,7 +803,7 @@ function ProductsContent() {
               )}
 
               <Button onClick={openSelectorModal} className="flame-btn rounded-xl">
-                Switch Community
+                {t('switchCommunity')}
               </Button>
             </div>
           ) : (
@@ -808,7 +814,7 @@ function ProductsContent() {
                 const displayChef =
                   k.chefName && k.chefName.toLowerCase() !== k.businessName.toLowerCase()
                     ? k.chefName
-                    : 'Verified Home Chef';
+                    : t('verifiedHomeChef');
 
                 return (
                   <Link
@@ -841,26 +847,30 @@ function ProductsContent() {
 
                       {/* Clean Top Status */}
                       {isClosed ? (
-                        <span className="absolute top-3 left-3 px-2.5 py-1 rounded-full text-white text-[10px] font-bold bg-black/80 backdrop-blur-md inline-flex items-center gap-1.5 shadow-2xs">
+                        <span className="absolute top-3 start-3 px-2.5 py-1 rounded-full text-white text-[10px] font-bold bg-black/80 backdrop-blur-md inline-flex items-center gap-1.5 shadow-2xs">
                           <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />
                           <span>
                             {k.acceptsPreOrders
-                              ? `Closed • Pre-order${k.opensAt ? ` (${k.opensAt})` : ''}`
-                              : `Closed${k.opensAt ? ` • Opens ${k.opensAt}` : ''}`}
+                              ? k.opensAt
+                                ? t('closedPreorderAt', { time: k.opensAt })
+                                : t('closedPreorder')
+                              : k.opensAt
+                              ? t('closedOpens', { time: k.opensAt })
+                              : t('closed')}
                           </span>
                         </span>
                       ) : (
-                        <span className="absolute top-3 left-3 px-2.5 py-1 rounded-full text-white text-[10px] font-bold bg-black/50 backdrop-blur-md inline-flex items-center gap-1 shadow-2xs">
+                        <span className="absolute top-3 start-3 px-2.5 py-1 rounded-full text-white text-[10px] font-bold bg-black/50 backdrop-blur-md inline-flex items-center gap-1 shadow-2xs">
                           <ChefHat className="w-3 h-3 text-[#FF5500]" />
-                          <span>Home Kitchen</span>
+                          <span>{t('homeKitchen')}</span>
                         </span>
                       )}
 
                       {/* Favorite Button */}
                       <button
                         onClick={(e) => handleToggleFavorite(e, k.id, k.businessName)}
-                        className="absolute top-3 right-3 w-8 h-8 rounded-full bg-white/90 hover:bg-white backdrop-blur-xs flex items-center justify-center text-slate-700 transition-all active:scale-90 shadow-xs z-10"
-                        title="Save to Favorite Kitchens"
+                        className="absolute top-3 end-3 w-8 h-8 rounded-full bg-white/90 hover:bg-white backdrop-blur-xs flex items-center justify-center text-slate-700 transition-all active:scale-90 shadow-xs z-10"
+                        title={t('saveFavKitchens')}
                       >
                         <Heart
                           className={`w-4 h-4 transition-colors ${
@@ -875,16 +885,16 @@ function ProductsContent() {
                           the kitchen's delivery terms and the buyer's address, so they are shown
                           on the dish cards and menu, not guessed here. */}
                       {k.minPrepTimeMinutes ? (
-                        <div className="absolute bottom-2.5 left-3 flex items-center gap-1.5 text-white text-xs font-semibold drop-shadow-sm">
+                        <div className="absolute bottom-2.5 start-3 flex items-center gap-1.5 text-white text-xs font-semibold drop-shadow-sm">
                           <span className="flex items-center gap-1">
                             <Clock className="w-3.5 h-3.5 text-amber-300" />
-                            <span>{k.minPrepTimeMinutes} min prep</span>
+                            <span>{t('minPrep', { min: k.minPrepTimeMinutes })}</span>
                           </span>
                         </div>
                       ) : null}
 
                       {/* Bottom Right: Star Rating (or "New" until the kitchen has reviews) */}
-                      <span className="absolute bottom-2.5 right-3 px-2 py-0.5 rounded-lg bg-black/65 backdrop-blur-md text-white text-xs font-bold flex items-center gap-1 shadow-2xs">
+                      <span className="absolute bottom-2.5 end-3 px-2 py-0.5 rounded-lg bg-black/65 backdrop-blur-md text-white text-xs font-bold flex items-center gap-1 shadow-2xs">
                         {rating ? (
                           <>
                             <Star className="w-3 h-3 fill-amber-400 text-amber-400" />
@@ -894,7 +904,7 @@ function ProductsContent() {
                             ) : null}
                           </>
                         ) : (
-                          <span>New</span>
+                          <span>{t('new')}</span>
                         )}
                       </span>
                     </div>
@@ -939,11 +949,11 @@ function ProductsContent() {
                           <div className="mt-3 pt-2.5 border-t border-slate-100 flex items-center justify-between text-xs">
                             <div className="flex items-center gap-1.5 text-slate-600 truncate min-w-0">
                               <span className="px-1.5 py-0.5 rounded-md bg-amber-50 text-amber-800 font-bold text-[10px] uppercase tracking-wider shrink-0">
-                                On the menu
+                                {t('onTheMenu')}
                               </span>
                               <span className="font-semibold text-slate-800 truncate">{k.products[0].name}</span>
                             </div>
-                            <span className="font-black text-slate-900 shrink-0 ml-2">Rs {k.products[0].price}</span>
+                            <span className="font-black text-slate-900 shrink-0 ms-2">Rs {k.products[0].price}</span>
                           </div>
                         )}
                       </div>
@@ -957,11 +967,11 @@ function ProductsContent() {
                               : 'text-emerald-700 bg-emerald-50'
                           }`}
                         >
-                          {isClosed ? (k.acceptsPreOrders ? 'Pre-Order Slot' : 'Kitchen Closed') : 'Domestic Kitchen'}
+                          {isClosed ? (k.acceptsPreOrders ? t('preOrderSlot') : t('kitchenClosed')) : t('domesticKitchen')}
                         </span>
                         <span className="font-bold text-[#FF5500] inline-flex items-center gap-1 group-hover:translate-x-1 transition-transform">
-                          <span>{isClosed ? (k.acceptsPreOrders ? 'Check Pre-Order' : 'View Schedule') : 'View Menu'}</span>
-                          <ChevronRight className="w-3.5 h-3.5" />
+                          <span>{isClosed ? (k.acceptsPreOrders ? t('checkPreOrder') : t('viewSchedule')) : t('viewMenu')}</span>
+                          <ChevronRight className="rtl:-scale-x-100 w-3.5 h-3.5" />
                         </span>
                       </div>
                     </div>
@@ -978,10 +988,10 @@ function ProductsContent() {
     if (error) {
       return (
         <div className="bg-red-50 border border-red-200 rounded-2xl p-6 text-center">
-          <h3 className="text-base font-bold text-red-800 mb-1.5">Couldn&apos;t load dishes</h3>
-          <p className="text-red-600 text-xs mb-3">{error}</p>
+          <h3 className="text-base font-bold text-red-800 mb-1.5">{t('couldntLoadDishes')}</h3>
+          <p className="text-red-600 text-xs mb-3">{t('loadDishesError')}</p>
           <Button onClick={() => loadProducts()} variant="outline" className="border-red-300 text-red-700 text-xs">
-            Retry
+            {t('retry')}
           </Button>
         </div>
       );
@@ -992,7 +1002,7 @@ function ProductsContent() {
         <div className="text-center py-16">
           <div className="w-10 h-10 border-3 border-[#FF5500] border-t-transparent rounded-full animate-spin mx-auto mb-3" />
           <p className="text-slate-500 font-semibold text-xs">
-            Loading dishes{selectedCommunity ? ` in ${selectedCommunity.name}` : ''}...
+            {selectedCommunity ? t('loadingDishesIn', { area: selectedCommunity.name }) : t('loadingDishes')}
           </p>
         </div>
       );
@@ -1004,29 +1014,31 @@ function ProductsContent() {
         <div className="bg-white rounded-2xl border border-slate-200 p-10 text-center shadow-xs">
           <h2 className="text-xl font-bold text-slate-900 mb-1.5">
             {hasFilters
-              ? 'No dishes match these filters in your area'
-              : `No dishes listed${selectedCommunity ? ` in ${selectedCommunity.name}` : ''} yet`}
+              ? t('noDishesMatch')
+              : selectedCommunity
+              ? t('noDishesListedIn', { area: selectedCommunity.name })
+              : t('noDishesListed')}
           </h2>
           <p className="text-slate-500 text-xs mb-5 max-w-md mx-auto">
             {hasFilters
-              ? 'Clear the filters or try a different search.'
-              : "Kitchens here haven't listed any dishes yet. Check back soon or choose another area."}
+              ? t('clearFiltersHint')
+              : t('noDishesHint')}
           </p>
           <div className="flex gap-3 justify-center flex-wrap">
             {hasFilters ? (
               <Button onClick={handleClearAllFilters} variant="outline" className="text-xs font-semibold">
-                Clear filters
+                {t('clearFilters')}
               </Button>
             ) : (
               <Button onClick={openSelectorModal} variant="outline" className="text-xs font-semibold">
-                Change area
+                {t('changeArea')}
               </Button>
             )}
             <button
               onClick={() => setViewMode('kitchens')}
               className="flame-btn px-4 py-2 text-xs font-bold rounded-xl"
             >
-              Browse Kitchens
+              {t('browseKitchens')}
             </button>
           </div>
         </div>
@@ -1037,18 +1049,19 @@ function ProductsContent() {
       <>
         <div className="flex items-center justify-between mb-4">
           <p className="text-xs font-semibold text-slate-500">
-            Found {totalProducts} {totalProducts === 1 ? 'dish' : 'dishes'}
+            {t(totalProducts === 1 ? 'foundDishOne' : 'foundDishMany', { count: totalProducts })}
           </p>
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
           {products.map((product) => {
             const rating = displayRating(product.ratingAverage, product.totalReviews);
-            const eta = deliveryEtaLabel(product);
-            const feeLabel = deliveryFeeLabel(product);
+            const eta = deliveryEtaLabel(product, t);
+            const feeLabel = deliveryFeeLabel(product, t);
             const distanceLabel = formatDeliveryDistance(product);
             const typeBadge = product.productType ? PRODUCT_TYPE_BADGES[product.productType] : undefined;
             const TypeIcon = typeBadge?.icon;
+            const typeLabelKey = productTypeKey(product.productType);
 
             return (
               <Link
@@ -1066,18 +1079,18 @@ function ProductsContent() {
                   />
 
                   {/* Product type tag (Fresh Cook / Frozen / Ready to Eat / Ready to Cook), from the API */}
-                  {typeBadge && TypeIcon && (
+                  {typeBadge && TypeIcon && typeLabelKey && (
                     <span
-                      className={`absolute top-2.5 left-2.5 px-2.5 py-1 rounded-full text-white text-[10px] font-bold ${typeBadge.className} shadow-xs z-10 flex items-center gap-1 backdrop-blur-xs`}
+                      className={`absolute top-2.5 start-2.5 px-2.5 py-1 rounded-full text-white text-[10px] font-bold ${typeBadge.className} shadow-xs z-10 flex items-center gap-1 backdrop-blur-xs`}
                     >
                       <TypeIcon className="w-3 h-3" />
-                      <span>{typeBadge.label}</span>
+                      <span>{t(typeLabelKey)}</span>
                     </span>
                   )}
 
                   {/* Estimated delivery (API estimate; only when the kitchen delivers to the buyer) */}
                   {eta && (
-                    <span className="absolute bottom-2.5 left-2.5 px-2 py-0.5 rounded-lg bg-black/65 backdrop-blur-md text-white text-[10px] font-semibold flex items-center gap-1 z-10">
+                    <span className="absolute bottom-2.5 start-2.5 px-2 py-0.5 rounded-lg bg-black/65 backdrop-blur-md text-white text-[10px] font-semibold flex items-center gap-1 z-10">
                       <Clock className="w-3 h-3 text-amber-300" />
                       <span>{eta}</span>
                     </span>
@@ -1087,8 +1100,8 @@ function ProductsContent() {
                   {product.seller?.id && (
                     <button
                       onClick={(e) => handleToggleFavorite(e, product.seller.id, product.seller.businessName)}
-                      className="absolute top-2.5 right-2.5 w-7 h-7 rounded-full bg-white/90 hover:bg-white backdrop-blur-xs flex items-center justify-center text-slate-700 transition-transform active:scale-90 shadow-xs z-10"
-                      title="Save to Favorite Kitchens"
+                      className="absolute top-2.5 end-2.5 w-7 h-7 rounded-full bg-white/90 hover:bg-white backdrop-blur-xs flex items-center justify-center text-slate-700 transition-transform active:scale-90 shadow-xs z-10"
+                      title={t('saveFavKitchens')}
                     >
                       <Heart
                         className={`w-3.5 h-3.5 transition-colors ${
@@ -1108,14 +1121,14 @@ function ProductsContent() {
                       <div className="flex items-center gap-1.5 min-w-0">
                         <ChefHat className="w-3.5 h-3.5 text-[#FF5500] shrink-0" />
                         <span className="text-[11px] font-bold text-slate-700 truncate">
-                          {product.seller?.businessName || 'Home Kitchen'}
+                          {product.seller?.businessName || t('homeKitchen')}
                         </span>
                       </div>
 
                       {product.isSameCommunity ? (
                         <span className="shrink-0 px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200/80 text-[10px] font-bold flex items-center gap-1">
                           <Home className="w-2.5 h-2.5" />
-                          <span>In Your Area</span>
+                          <span>{t('inYourArea')}</span>
                         </span>
                       ) : distanceLabel ? (
                         <span className="shrink-0 px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 text-[10px] font-medium">
@@ -1136,7 +1149,7 @@ function ProductsContent() {
                             <span title={product.delivery?.reason || undefined}>{feeLabel}</span>
                           </>
                         )}
-                        {product.unit && <span>{feeLabel ? '• ' : ''}per {product.unit}</span>}
+                        {product.unit && <span>{feeLabel ? '• ' : ''}{t('perUnit', { unit: product.unit })}</span>}
                       </div>
                     )}
                   </div>
@@ -1167,7 +1180,7 @@ function ProductsContent() {
                             ) : null}
                           </>
                         ) : (
-                          <span className="text-slate-500">New</span>
+                          <span className="text-slate-500">{t('new')}</span>
                         )}
                       </div>
                     </div>
@@ -1176,7 +1189,7 @@ function ProductsContent() {
                       type="button"
                       onClick={(e) => handleQuickAddToCart(e, product)}
                       disabled={addingProductId === product.id}
-                      title="Add to cart"
+                      title={t('addToCart')}
                       className="flex items-center gap-1 px-3 py-1.5 rounded-xl bg-orange-50 hover:bg-[#FF5500] text-[#FF5500] hover:text-white border border-orange-200/80 hover:border-transparent font-bold text-xs transition-all active:scale-95 shadow-2xs cursor-pointer"
                     >
                       {addingProductId === product.id ? (
@@ -1184,7 +1197,7 @@ function ProductsContent() {
                       ) : (
                         <>
                           <Plus className="w-3.5 h-3.5" />
-                          <span>Add</span>
+                          <span>{tc('add')}</span>
                         </>
                       )}
                     </button>
@@ -1205,10 +1218,10 @@ function ProductsContent() {
               size="sm"
               className="rounded-xl text-xs font-semibold"
             >
-              ← Previous
+              {t('prevPage')}
             </Button>
             <span className="px-3 py-1.5 text-xs font-medium text-slate-600">
-              Page {page} of {totalPages}
+              {t('pageOf', { page, total: totalPages })}
             </span>
             <Button
               variant="outline"
@@ -1217,7 +1230,7 @@ function ProductsContent() {
               size="sm"
               className="rounded-xl text-xs font-semibold"
             >
-              Next →
+              {t('nextPage')}
             </Button>
           </div>
         )}
@@ -1228,8 +1241,8 @@ function ProductsContent() {
   if (isAuthenticated) {
     return (
       <DashboardLayout
-        title="Kitchens & Menus"
-        subtitle="Explore authentic domestic home cooks, generational family recipes & artisanal frozen packs"
+        title={t('dashTitle')}
+        subtitle={t('dashSubtitle')}
         sidebarItems={CUSTOMER_SIDEBAR_ITEMS}
         userType="customer"
       >
@@ -1241,7 +1254,7 @@ function ProductsContent() {
         <ClosedKitchenModal
           isOpen={!!closedKitchenModalData}
           onClose={() => setClosedKitchenModalData(null)}
-          kitchenName={closedKitchenModalData?.businessName || 'Home Kitchen'}
+          kitchenName={closedKitchenModalData?.businessName || t('homeKitchen')}
           chefName={closedKitchenModalData?.chefName}
           avatar={closedKitchenModalData?.avatar}
           opensAt={closedKitchenModalData?.opensAt}
@@ -1285,7 +1298,7 @@ function ProductsContent() {
             >
               <ShoppingBag className="w-4 h-4 text-slate-700" />
               {cartItems.length > 0 && (
-                <span className="absolute -top-1 -right-1 w-4 h-4 bg-[#FF5500] text-white rounded-full text-[9px] font-bold flex items-center justify-center shadow-xs">
+                <span className="absolute -top-1 -end-1 w-4 h-4 bg-[#FF5500] text-white rounded-full text-[9px] font-bold flex items-center justify-center shadow-xs">
                   {cartItems.length}
                 </span>
               )}
@@ -1294,10 +1307,10 @@ function ProductsContent() {
               href="/login"
               className="h-9 inline-flex items-center px-3.5 rounded-xl text-xs font-semibold text-slate-700 hover:bg-slate-100 transition-colors"
             >
-              Sign In
+              {t('signInCaps')}
             </Link>
             <Link href="/register">
-              <span className="flame-btn h-9 px-4 text-xs font-bold rounded-xl">Join Nuray</span>
+              <span className="flame-btn h-9 px-4 text-xs font-bold rounded-xl">{t('joinNuray')}</span>
             </Link>
           </div>
         </div>
@@ -1308,13 +1321,13 @@ function ProductsContent() {
         <div className="mb-6">
           <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-orange-100 text-[#FF5500] text-[10px] font-bold uppercase tracking-wider mb-2">
             <ChefHat className="w-3 h-3 text-[#FF5500]" />
-            <span>MULTI-VENDOR FOOD CATALOG</span>
+            <span>{t('catalogBadge')}</span>
           </div>
           <h1 className="text-2xl sm:text-3xl font-bold text-slate-900 tracking-tight">
-            {selectedCommunity?.city ? `${selectedCommunity.city} ` : ''}Home Kitchens &amp; Menus
+            {selectedCommunity?.city ? t('publicTitleCity', { city: selectedCommunity.city }) : t('publicTitle')}
           </h1>
           <p className="mt-1 text-slate-500 text-xs sm:text-sm max-w-2xl">
-            Not a single restaurant. Explore verified home cooks in your area, family recipes, and frozen specialties.
+            {t('publicSubtitle')}
           </p>
         </div>
 
@@ -1326,7 +1339,7 @@ function ProductsContent() {
         <ClosedKitchenModal
           isOpen={!!closedKitchenModalData}
           onClose={() => setClosedKitchenModalData(null)}
-          kitchenName={closedKitchenModalData?.businessName || 'Home Kitchen'}
+          kitchenName={closedKitchenModalData?.businessName || t('homeKitchen')}
           chefName={closedKitchenModalData?.chefName}
           avatar={closedKitchenModalData?.avatar}
           opensAt={closedKitchenModalData?.opensAt}
@@ -1351,13 +1364,14 @@ function ProductsContent() {
 }
 
 export default function ProductsPage() {
+  const t = useT(browseMessages);
   return (
     <Suspense
       fallback={
         <div className="min-h-screen bg-[#F8FAFC] flex items-center justify-center">
           <div className="text-center">
             <div className="w-10 h-10 border-3 border-[#FF5500] border-t-transparent rounded-full animate-spin mx-auto mb-3" />
-            <p className="text-xs font-black text-slate-700">Loading Home Kitchens &amp; Menus...</p>
+            <p className="text-xs font-black text-slate-700">{t('loadingFallback')}</p>
           </div>
         </div>
       }
