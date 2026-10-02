@@ -1,6 +1,6 @@
 import axios, { AxiosInstance, AxiosError, AxiosRequestConfig, InternalAxiosRequestConfig } from 'axios';
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api/v1';
+import { API_BASE_URL } from './config';
 
 // Endpoints that must never trigger a refresh-token retry. /auth/refresh
 // itself is the obvious one; logging in/out shouldn't retry either.
