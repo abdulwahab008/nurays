@@ -485,6 +485,65 @@ async function main() {
   const remaining = await prisma.userAddress.findMany({ where: { userId: adU.id } });
   ok('deleting the default makes the remaining address the default', remaining.length === 1 && remaining[0].isDefault === true);
 
+  // ---- 17g. cancelled orders close their rider job; stale orders are swept ----
+  const { sweepStaleOrders } = require('../src/services/order-maintenance.service');
+  const { runExclusive } = require('../src/jobs/scheduler');
+  const swCust = await mkUser();
+  const swAddr = await prisma.userAddress.create({ data: { userId: swCust.id, addressLine1: 'House 3 Street', area: 'X', city: 'Lahore' } });
+  const swProd = await mkProduct(platS.id, 50, 200);
+  const homeO = () => orderService.createOrder(swCust.id, { items: [{ productId: swProd.id, quantity: 1 }], deliveryType: 'home_delivery', deliveryAddressId: swAddr.id, paymentMethod: 'cod' } as any) as Promise<any>;
+
+  const jobO = await homeO();
+  await sellerOrderService.acceptOrder(jobO.id, platUser);
+  const job = await prisma.delivery.findUnique({ where: { orderId: jobO.id } });
+  ok('(setup) accepting creates a rider job', !!job && job.status === 'pending');
+  const jobRider = await mkUser('rider');
+  await prisma.rider.create({ data: { userId: jobRider.id, city: 'Lahore', verificationStatus: 'approved', status: 'active' } as any });
+  await riderService.claimDelivery(jobRider.id, job!.id);
+  await adminOrderService.cancelOrder(jobO.id, admin.id, 'customer called to cancel');
+  const jobAfter = await prisma.delivery.findUnique({ where: { orderId: jobO.id } });
+  ok('cancelling an order closes its rider job', jobAfter!.status === 'cancelled', jobAfter!.status);
+  const pool: any[] = await riderService.getAvailableDeliveries(jobRider.id);
+  ok("the cancelled job doesn't count against the rider's two-job limit", (await prisma.delivery.count({ where: { riderId: (await prisma.rider.findUnique({ where: { userId: jobRider.id } }))!.id, status: { in: ['assigned', 'arrived_at_pickup', 'picked_up', 'in_transit', 'arrived_at_customer'] } } })) === 0 && !pool.some((d: any) => d.orderId === jobO.id));
+
+  const rejO = await homeO();
+  await sellerOrderService.acceptOrder(rejO.id, platUser);
+  await sellerOrderService.rejectOrder(rejO.id, platUser, 'ran out');
+  ok('a kitchen rejecting an accepted order closes its rider job too', (await prisma.delivery.findUnique({ where: { orderId: rejO.id } }))!.status === 'cancelled');
+
+  // the sweep
+  const stockBefore = (await prisma.product.findUnique({ where: { id: swProd.id } }))!.stockQuantity;
+  const old = new Date(Date.now() - 31 * 60 * 1000);
+  const staleO = await homeO();
+  await prisma.order.update({ where: { id: staleO.id }, data: { createdAt: old } });
+  const unpaidT: any = (await order(swCust.id, [{ productId: swProd.id, quantity: 1 }], { paymentMethod: 'bank' })).order;
+  await sellerOrderService.acceptOrder(unpaidT.id, platUser);
+  await prisma.order.update({ where: { id: unpaidT.id }, data: { createdAt: new Date(Date.now() - 61 * 60 * 1000) } });
+  const freshO = await homeO();
+  const sub6: any = (await order(swCust.id, [{ productId: swProd.id, quantity: 1 }], { paymentMethod: 'bank' })).order;
+  await orderService.submitManualPayment(sub6.id, swCust.id, { referenceNumber: 'TID-' + uniq() });
+  await sellerOrderService.acceptOrder(sub6.id, platUser);
+  await prisma.order.update({ where: { id: sub6.id }, data: { paymentSubmittedAt: new Date(Date.now() - 7 * 3600 * 1000) } });
+  const sweep1: any = await sweepStaleOrders();
+  const st = async (id: string) => (await prisma.order.findUnique({ where: { id } }))!;
+  ok('an order the kitchen never accepted is cancelled automatically', (await st(staleO.id)).orderStatus === 'cancelled' && (await st(staleO.id)).cancelledBy === 'system');
+  ok('an accepted transfer order that was never paid is cancelled', (await st(unpaidT.id)).orderStatus === 'cancelled');
+  ok('a fresh order is left alone', (await st(freshO.id)).orderStatus === 'pending');
+  // four orders were placed after stockBefore; the two swept ones gave their unit back
+  const stockAfterSweep = (await prisma.product.findUnique({ where: { id: swProd.id } }))!.stockQuantity;
+  ok('stock comes back for the swept orders', stockAfterSweep === stockBefore - 2, `before=${stockBefore} after=${stockAfterSweep}`);
+  const esc = await prisma.orderStatusHistory.count({ where: { orderId: sub6.id, notes: { contains: 'Escalated to admins' } } });
+  const adminNotes = await prisma.notification.count({ where: { userId: admin.id, type: 'payment_unconfirmed' } });
+  await sweepStaleOrders();
+  ok('an unconfirmed reported transfer is escalated to admins once, not cancelled', esc === 1 && adminNotes >= 1 && (await st(sub6.id)).orderStatus !== 'cancelled' &&
+    (await prisma.orderStatusHistory.count({ where: { orderId: sub6.id, notes: { contains: 'Escalated to admins' } } })) === 1, JSON.stringify(sweep1));
+
+  // one runner at a time
+  let runs = 0;
+  const slow = () => new Promise<void>((r) => setTimeout(() => { runs++; r(); }, 300));
+  const lockRuns = await Promise.all([runExclusive('verify-lock', slow), runExclusive('verify-lock', slow)]);
+  ok('a scheduled job runs on only one worker at a time', runs === 1 && lockRuns.filter(Boolean).length === 1, `runs=${runs} ${lockRuns}`);
+
   // ---- 18. schema integrity ----
   const cc = await mkUser();
   const cp = await mkProduct(seller.id, 50, 100);

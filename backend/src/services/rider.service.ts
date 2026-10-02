@@ -190,7 +190,8 @@ export class RiderService {
     });
 
     const deliveries = await prisma.delivery.findMany({
-      where: { riderId: null, status: 'pending' },
+      // Only jobs for orders still going somewhere.
+      where: { riderId: null, status: 'pending', order: { orderStatus: { notIn: ['cancelled', 'refunded', 'delivered', 'completed'] } } },
       include: { order: { select: { orderNumber: true, totalAmount: true, paymentMethod: true, orderStatus: true } } },
       orderBy: { createdAt: 'asc' },
     });
@@ -291,8 +292,16 @@ export class RiderService {
       validatedAskFee = numericAsk;
     }
 
+    const liveOrder = await prisma.order.findFirst({
+      where: { id: delivery.orderId, orderStatus: { notIn: ['cancelled', 'refunded', 'delivered', 'completed'] } },
+      select: { id: true },
+    });
+    if (!liveOrder || delivery.status !== 'pending') {
+      throw new AppError('This job is no longer available', 409, 'DELIVERY_UNAVAILABLE');
+    }
+
     const claim = await prisma.delivery.updateMany({
-      where: { id: deliveryId, riderId: null },
+      where: { id: deliveryId, riderId: null, status: 'pending' },
       data: {
         riderId: rider.id,
         status: 'assigned',

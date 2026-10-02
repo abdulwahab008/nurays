@@ -1,6 +1,7 @@
 import { codCollectorOf, deliveryProviderOf } from '../utils/paymentCustody';
 import { verifyHandoverCode } from './handover.service';
 import { presentFile } from '../storage';
+import { cancelOpenDelivery, notifyDeliveryCancelled, CancelledDelivery } from './delivery-lifecycle.service';
 import prisma from '../config/database';
 import { AppError } from '../middleware/errorHandler';
 import realtimeOrderService from './realtime-order.service';
@@ -637,12 +638,14 @@ export class SellerOrderService {
         orderFullyCancelled: allCancelled,
       });
 
+      let cancelledDelivery: CancelledDelivery | null = null;
       if (allCancelled) {
         await tx.order.update({
           where: { id: orderItem.orderId },
           data: { orderStatus: 'cancelled' },
         });
         await releasePromotionUsage(tx, orderItem.orderId);
+        cancelledDelivery = await cancelOpenDelivery(tx, orderItem.orderId, 'All items cancelled by the kitchen');
         await tx.orderStatusHistory.create({
           data: {
             orderId: orderItem.orderId,
@@ -653,11 +656,12 @@ export class SellerOrderService {
         });
       }
 
-      return { updatedItem, allCancelled };
+      return { updatedItem, allCancelled, cancelledDelivery };
     });
 
     if (result.allCancelled) {
       await realtimeOrderService.emitOrderStatusUpdate(orderItem.orderId, 'cancelled', sellerId);
+      notifyDeliveryCancelled(result.cancelledDelivery);
     }
     await realtimeOrderService.emitOrderItemStatusUpdate(orderItemId, 'cancelled', seller.id);
 
@@ -811,7 +815,7 @@ export class SellerOrderService {
 
     const rejectionNote = reason?.trim() || 'Kitchen unavailable';
 
-    const fullyCancelled = await prisma.$transaction(async (tx) => {
+    const outcome = await prisma.$transaction(async (tx) => {
       // Lock the order row FIRST. Customer/admin cancels take the order lock and then touch the
       // items; taking item locks first here would deadlock against them (Postgres aborts one with
       // a 500). One lock order everywhere: order, then items.
@@ -880,8 +884,10 @@ export class SellerOrderService {
         where: { orderId: order.id, status: { notIn: ['cancelled'] } },
       });
       const allGone = stillLive === 0;
+      let cancelledDelivery: CancelledDelivery | null = null;
 
       if (allGone) {
+        cancelledDelivery = await cancelOpenDelivery(tx, order.id, `Rejected by kitchen: ${rejectionNote}`);
         await tx.order.updateMany({
           where: { id: order.id, orderStatus: { in: ['pending', 'confirmed', 'preparing', 'ready'] } },
           data: {
@@ -912,12 +918,14 @@ export class SellerOrderService {
         },
       });
 
-      return allGone;
+      return { allGone, cancelledDelivery };
     });
 
-    if (fullyCancelled) {
+    if (outcome.allGone) {
       await realtimeOrderService.emitOrderStatusUpdate(order.id, 'cancelled', sellerUserId);
+      notifyDeliveryCancelled(outcome.cancelledDelivery);
     }
+    const fullyCancelled = outcome.allGone;
 
     return {
       orderId: order.id,
