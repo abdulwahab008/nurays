@@ -110,8 +110,19 @@ export class OrderService {
       paymentMethod: string;
       promotionCode?: string;
       deliveryInstructions?: string;
-    }
+    },
+    opts: { idempotencyKey?: string } = {}
   ) {
+    // A retried checkout (same Idempotency-Key) gets the order it already placed.
+    const idempotencyKey = opts.idempotencyKey || null;
+    if (idempotencyKey) {
+      const existing = await prisma.order.findUnique({
+        where: { customerId_idempotencyKey: { customerId, idempotencyKey } },
+        select: { id: true },
+      });
+      if (existing) return this.loadPlacedOrder(existing.id);
+    }
+
     // Verify customer exists
     const customer = await prisma.user.findUnique({
       where: { id: customerId },
@@ -497,12 +508,14 @@ export class OrderService {
     const totalAmount = subtotal + deliveryFee - discountAmount + taxAmount;
 
     // Create order with items in transaction (retried with a new number on a clash)
-    const order = await this.withOrderNumber((orderNumber) => prisma.$transaction(async (tx) => {
+    let order: Awaited<ReturnType<typeof placeOrder>>;
+    const placeOrder = () => this.withOrderNumber((orderNumber) => prisma.$transaction(async (tx) => {
       // Create order
       const newOrder = await tx.order.create({
         data: {
           orderNumber,
           customerId,
+          idempotencyKey,
           handoverCode: newHandoverCode(),
           subtotal,
           deliveryFee,
@@ -713,13 +726,43 @@ export class OrderService {
 
       return { order: newOrder, items: createdItems, updatedProducts };
     }));
+    try {
+      order = await placeOrder();
+    } catch (err: any) {
+      // The same checkout submitted twice at once: the other request placed it.
+      const target = String(err?.meta?.target ?? '');
+      if (idempotencyKey && err?.code === 'P2002' && /idempotency/i.test(target)) {
+        const existing = await prisma.order.findUnique({
+          where: { customerId_idempotencyKey: { customerId, idempotencyKey } },
+          select: { id: true },
+        });
+        if (existing) return this.loadPlacedOrder(existing.id);
+      }
+      throw err;
+    }
 
-    // Emit new order notification
-    await realtimeOrderService.emitNewOrderNotification(order.order.id);
+    // The order is committed: nothing after this point may fail the request (a client
+    // that saw an error would retry and, without a key, place it twice).
+    try {
+      await realtimeOrderService.emitNewOrderNotification(order.order.id);
+    } catch (err) {
+      console.error(`New-order notification failed for ${order.order.id}:`, err);
+    }
 
-    // Fire low-stock / out-of-stock alerts for any product this order just depleted.
-    // Done outside the transaction since it's not order-critical and sends email.
-    for (const p of order.updatedProducts) {
+    // Low-stock / out-of-stock alerts (may send email): in the background, never
+    // holding up the customer's checkout.
+    void this.raiseStockAlerts(order.updatedProducts).catch((err) =>
+      console.error('Stock alerts after order failed:', err)
+    );
+
+    return this.loadPlacedOrder(order.order.id);
+  }
+
+  /** Low-stock / out-of-stock alerts for products an order just depleted. */
+  private async raiseStockAlerts(
+    updatedProducts: Array<{ id: string; sellerId: string; variantId: string | null; stockQuantity: number; stockThreshold: number | null }>
+  ) {
+    for (const p of updatedProducts) {
       let threshold = p.stockThreshold ?? 10;
       if (p.stockThreshold == null) {
         const seller = await prisma.seller.findUnique({
@@ -749,9 +792,12 @@ export class OrderService {
       }
     }
 
-    // Get full order with relations
+  }
+
+  /** The placed order with what the checkout response needs. */
+  private async loadPlacedOrder(orderId: string) {
     const fullOrder = await prisma.order.findUnique({
-      where: { id: order.order.id },
+      where: { id: orderId },
       include: {
         items: {
           include: {

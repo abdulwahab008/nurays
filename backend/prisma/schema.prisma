@@ -610,6 +610,9 @@ model Order {
   // Prisma client omits it from every query unless explicitly selected (config/database.ts).
   handoverCode        String?   @map("handover_code")
   handoverAttempts    Int       @default(0) @map("handover_attempts")
+  // One checkout attempt = one key (Idempotency-Key header): a retry after a timeout
+  // returns the order already placed instead of creating a duplicate.
+  idempotencyKey      String?   @map("idempotency_key")
   deliveryAddressId   String?   @map("delivery_address_id")
   deliveryAddressSnapshot Json? @map("delivery_address_snapshot")
   hubId               String?   @map("hub_id")
@@ -639,6 +642,7 @@ model Order {
   supportTickets      SupportTicket[]
   walletTransactions  WalletTransaction[]
 
+  @@unique([customerId, idempotencyKey])
   @@index([customerId, createdAt])
   @@index([orderStatus])
   @@index([paymentStatus])

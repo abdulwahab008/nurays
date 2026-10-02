@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import {
@@ -76,6 +76,7 @@ export default function CheckoutPage() {
   const [appliedPromo, setAppliedPromo] = useState<{ code: string; discountAmount: number } | null>(null);
   const [promoValidating, setPromoValidating] = useState(false);
   const [loading, setLoading] = useState(true);
+  const checkoutKeyRef = useRef<{ key: string; signature: string } | null>(null);
   const [processing, setProcessing] = useState(false);
   const [updatingItemId, setUpdatingItemId] = useState<string | null>(null);
   const [copiedField, setCopiedField] = useState<string | null>(null);
@@ -315,7 +316,17 @@ export default function CheckoutPage() {
         deliveryInstructions: finalInstructions || undefined,
       };
 
-      const response = await orderService.createOrder(orderData);
+      // One key per checkout attempt, reused if this same order is retried, so a
+      // timeout followed by "Place order" again can never create two orders.
+      const signature = JSON.stringify(orderData);
+      if (!checkoutKeyRef.current || checkoutKeyRef.current.signature !== signature) {
+        checkoutKeyRef.current = {
+          key: typeof crypto !== 'undefined' && 'randomUUID' in crypto ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+          signature,
+        };
+      }
+      const response = await orderService.createOrder(orderData, checkoutKeyRef.current.key);
+      checkoutKeyRef.current = null;
 
       // Clear cart. The order already exists at this point, so a failure here
       // must not surface as "failed to place order" (the customer would retry
@@ -341,7 +352,15 @@ export default function CheckoutPage() {
       showToast('Order placed successfully!', 'success');
       router.push(`/orders/${orderId}?placed=1`);
     } catch (error: any) {
-      showToast(error.response?.data?.error?.message || 'Failed to place order. Please try again.', 'error');
+      if (!error.response) {
+        // No answer (timeout / connection lost): the order may or may not exist. Keep the
+        // key so pressing "Place order" again returns the same order, never a duplicate.
+        showToast("We couldn't confirm your order (connection problem). Press Place order again; you won't be charged twice.", 'error');
+      } else {
+        // The server refused it, so nothing was placed: a new attempt gets a new key.
+        checkoutKeyRef.current = null;
+        showToast(error.response?.data?.error?.message || 'Failed to place order. Please try again.', 'error');
+      }
     } finally {
       setProcessing(false);
     }

@@ -8,7 +8,12 @@ export const createOrder = async (req: Request, res: Response) => {
     throw new AppError('Authentication required', 401, 'AUTH_REQUIRED');
   }
 
-  const order = await orderService.createOrder(req.user.userId, req.body);
+  // One key per checkout attempt (the client reuses it when it retries).
+  const rawKey = req.get('Idempotency-Key') ?? req.body?.idempotencyKey;
+  if (rawKey !== undefined && (typeof rawKey !== 'string' || !/^[A-Za-z0-9_-]{8,100}$/.test(rawKey))) {
+    throw new AppError('Invalid Idempotency-Key', 400, 'INVALID_IDEMPOTENCY_KEY');
+  }
+  const order = await orderService.createOrder(req.user.userId, req.body, { idempotencyKey: rawKey });
 
   if (!order) {
     throw new AppError('Failed to create order', 500, 'ORDER_CREATION_FAILED');
