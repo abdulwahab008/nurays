@@ -1064,7 +1064,7 @@ export default function AddProductPage() {
                     onChange={(e) => setFormData({ ...formData, price: e.target.value })}
                     placeholder="299"
                     min="0"
-                    step="10"
+                    step="any"
                     className="w-full ps-14 pe-4 py-3 text-xl font-bold border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 transition-all group-hover:border-gray-300"
                   />
                   {formData.price && parseFloat(formData.price) > 0 && (
@@ -1089,7 +1089,7 @@ export default function AddProductPage() {
                     onChange={(e) => setFormData({ ...formData, originalPrice: e.target.value })}
                     placeholder="350"
                     min="0"
-                    step="10"
+                    step="any"
                     className="w-full ps-14 pe-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
                   />
                 </div>
@@ -1122,7 +1122,7 @@ export default function AddProductPage() {
                     onChange={(e) => setFormData({ ...formData, costPrice: e.target.value })}
                     placeholder="180"
                     min="0"
-                    step="10"
+                    step="any"
                     className="w-full ps-14 pe-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all"
                   />
                 </div>
@@ -1175,7 +1175,7 @@ export default function AddProductPage() {
                     onChange={(e) => setFormData({ ...formData, stockQuantity: e.target.value })}
                     placeholder="50"
                     min="1"
-                    step="5"
+                    step="1"
                     className="w-full px-4 py-3 text-lg font-semibold border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
                   />
                   {formData.stockQuantity && parseInt(formData.stockQuantity) > 0 && (

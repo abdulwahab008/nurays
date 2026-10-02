@@ -24,7 +24,7 @@ import {
 import { cartService, CartResponse } from '@/lib/services/cart.service';
 import { addressService, Address } from '@/lib/services/address.service';
 import { orderService } from '@/lib/services/order.service';
-import { formatPrice } from '@/lib/utils';
+import { calculateGst, formatPrice } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/toast';
 import { useAuthStore } from '@/lib/store/auth-store';
@@ -448,8 +448,10 @@ export default function CheckoutPage() {
   }, 0);
   const promotionSavings = Math.max(0, cart.summary.subtotal - discountedSubtotal);
   const effectiveDeliveryFee = deliveryEstimate?.isFree ? 0 : (deliveryEstimate?.deliveryFee ?? 0);
-  const gstAmount = Math.round(discountedSubtotal * 0.05);
   const promoDiscountAmount = appliedPromo?.discountAmount || 0;
+  // Exactly what the server charges (order.service.ts): 5% of the subtotal after all discounts,
+  // to the paisa, so the total here is the total the rider collects.
+  const gstAmount = calculateGst(Math.max(0, discountedSubtotal - promoDiscountAmount));
   const totalPayable = Math.max(0, discountedSubtotal + effectiveDeliveryFee + gstAmount - promoDiscountAmount);
 
   return (

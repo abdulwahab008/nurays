@@ -146,6 +146,40 @@ export function SellerNewOrderNotification() {
     };
   }, [isSeller, isSellerPage, onNewOrder, pathname]);
 
+  // An order may already be waiting when the kitchen opens the app (from a push notification,
+  // after a refresh, or a dropped connection): show it too, not only orders arriving live.
+  const checkedWaitingRef = useRef(false);
+  useEffect(() => {
+    if (!isSeller || !isSellerPage || checkedWaitingRef.current) return;
+    checkedWaitingRef.current = true;
+    type Waiting = { order: { id: string; orderNumber: string; totalAmount: number; createdAt: string; orderStatus: string; paymentMethod: string; paymentStatus: string }; items: { product: { name: string } | null; quantity: number }[] };
+    apiClient
+      .get<{ data: { orders: Waiting[] } }>('/seller/orders', { params: { status: 'pending', limit: 5 } })
+      .then((res) => {
+        const waiting = (res.data?.data?.orders ?? []).find(
+          (o) =>
+            !handledOrderIdsRef.current.has(o.order.id) &&
+            o.order.orderStatus === 'pending' &&
+            // An online checkout not paid yet isn't the kitchen's to accept.
+            !(o.order.paymentMethod === 'online' && o.order.paymentStatus !== 'paid')
+        );
+        if (!waiting) return;
+        setActiveOrder((current) =>
+          current ?? {
+            orderId: waiting.order.id,
+            orderNumber: waiting.order.orderNumber,
+            totalAmount: waiting.order.totalAmount,
+            createdAt: waiting.order.createdAt,
+            items: waiting.items.map((i) => ({ productName: i.product?.name ?? '', quantity: i.quantity })),
+          }
+        );
+        playNewOrderSound();
+      })
+      .catch(() => {
+        // The orders page still lists it.
+      });
+  }, [isSeller, isSellerPage]);
+
   // 10-Second Repeating Bell Audio Loop:
   // Rings every 10 seconds while the order card is showing, UNLESS the chef accepts or rejects it!
   useEffect(() => {

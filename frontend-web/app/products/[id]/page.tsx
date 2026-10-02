@@ -563,7 +563,9 @@ export default function ProductDetailPage() {
           )}
           <div className="flex flex-wrap items-center gap-2">
             <span className="inline-flex items-center gap-1.5 bg-gray-100 text-gray-700 px-3 py-1.5 rounded-lg text-sm font-medium">
-              {product.ratingAverage.toFixed(1)} · {t('reviewsCount', { count: product.totalReviews })}
+              {product.totalReviews > 0
+                ? `★ ${product.ratingAverage.toFixed(1)} · ${t('reviewsCount', { count: product.totalReviews })}`
+                : t('new')}
             </span>
             {(product.stock.hub + product.stock.direct) > 0 && (
               <span className="inline-flex items-center bg-gray-100 text-gray-700 px-3 py-1.5 rounded-lg text-sm font-medium">
@@ -700,7 +702,7 @@ export default function ProductDetailPage() {
               </button>
               <div className="text-end">
                 <p className="text-[10px] text-gray-400 font-bold uppercase">{t('rating')}</p>
-                <p className="font-black text-sm text-gray-900">★ {(product.seller?.rating ?? 0).toFixed(1)}</p>
+                <p className="font-black text-sm text-gray-900">{product.seller?.rating ? `★ ${product.seller.rating.toFixed(1)}` : t('new')}</p>
               </div>
             </div>
           </div>

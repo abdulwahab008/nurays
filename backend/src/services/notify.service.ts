@@ -153,6 +153,13 @@ export async function notify(input: NotifyInput): Promise<string | null> {
   }
 }
 
+/** Tell a kitchen's owner about their listing (dish or category moderation): in the app and by push. */
+export async function notifySeller(sellerId: string, n: { title: string; message: string; actionUrl?: string; dedupeKey?: string }) {
+  const seller = await prisma.seller.findUnique({ where: { id: sellerId }, select: { userId: true } }).catch(() => null);
+  if (!seller) return null;
+  return notify({ userId: seller.userId, category: 'orders', type: 'listing', channels: ['push'], ...n });
+}
+
 /** The same notification to several people (e.g. every kitchen on an order). */
 export async function notifyMany(userIds: Iterable<string>, build: (userId: string) => Omit<NotifyInput, 'userId'>) {
   for (const userId of new Set(userIds)) await notify({ userId, ...build(userId) });

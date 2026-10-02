@@ -2,7 +2,7 @@ import { Prisma } from '@prisma/client';
 import prisma from '../config/database';
 import { AppError } from '../middleware/errorHandler';
 import { presentFile } from '../storage';
-import { notify } from './notify.service';
+import { notify, notifySeller } from './notify.service';
 
 /** Verification documents with short-lived links an admin can open. */
 async function presentDocuments(docs: Array<{ id: string; documentType: string; documentUrl: string; createdAt?: Date; uploadedAt?: Date }>) {
@@ -290,6 +290,10 @@ export class AdminService {
         rejectionReason: approved ? null : reason || 'Product rejected',
       },
     });
+
+    await notifySeller(product.sellerId, approved
+      ? { title: 'Dish approved', message: `"${product.name}" is live. Customers can order it now.`, actionUrl: `/products/${product.id}`, dedupeKey: `product:${product.id}:approved:${Date.now()}` }
+      : { title: 'Dish not approved', message: `"${product.name}" wasn't approved: ${reason || 'Product rejected'}`, actionUrl: `/sellers/products/${product.id}/edit`, dedupeKey: `product:${product.id}:rejected:${Date.now()}` });
 
     return {
       productId: updatedProduct.id,
