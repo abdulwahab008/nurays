@@ -13,22 +13,25 @@ import { useLiveRefresh } from '@/lib/hooks/use-live-refresh';
 import { useRiderLocation, LocationSharing } from '@/lib/hooks/use-rider-location';
 import Link from 'next/link';
 import RiderApplicationForm from '@/components/riders/RiderApplicationForm';
+import { useT } from '@/lib/i18n';
+import { commonMessages } from '@/lib/i18n/messages/common';
+import { riderMessages, riderKeyFor, type RiderMessageKey } from '@/lib/i18n/messages/rider';
 
-const ROAD_STEPS = [
-  { id: 'assigned', label: 'Claimed', icon: '📋' },
-  { id: 'arrived_at_pickup', label: 'At Kitchen', icon: '🍳' },
-  { id: 'picked_up', label: 'Cold-Packed', icon: '❄️' },
-  { id: 'in_transit', label: 'In Transit', icon: '🛵' },
-  { id: 'arrived_at_customer', label: 'At Doorstep', icon: '📍' },
-  { id: 'delivered', label: 'Delivered', icon: '✅' },
+const ROAD_STEPS: { id: string; labelKey: RiderMessageKey; icon: string }[] = [
+  { id: 'assigned', labelKey: 'step.assigned', icon: '📋' },
+  { id: 'arrived_at_pickup', labelKey: 'step.arrived_at_pickup', icon: '🍳' },
+  { id: 'picked_up', labelKey: 'step.picked_up', icon: '❄️' },
+  { id: 'in_transit', labelKey: 'step.in_transit', icon: '🛵' },
+  { id: 'arrived_at_customer', labelKey: 'step.arrived_at_customer', icon: '📍' },
+  { id: 'delivered', labelKey: 'step.delivered', icon: '✅' },
 ];
 
-const SHARING_BADGE: Record<LocationSharing, { label: string; tone: string; dot: string }> = {
-  sharing: { label: 'Sharing your location', tone: 'text-emerald-400', dot: 'bg-emerald-400 animate-ping' },
-  waiting: { label: 'Finding your location…', tone: 'text-slate-300', dot: 'bg-slate-400 animate-pulse' },
-  denied: { label: 'Location blocked: allow it for this site', tone: 'text-amber-300', dot: 'bg-amber-400' },
-  unavailable: { label: 'Location unavailable', tone: 'text-amber-300', dot: 'bg-amber-400' },
-  off: { label: 'Location shared only during a job', tone: 'text-slate-400', dot: 'bg-slate-500' },
+const SHARING_BADGE: Record<LocationSharing, { labelKey: RiderMessageKey; tone: string; dot: string }> = {
+  sharing: { labelKey: 'loc.sharing', tone: 'text-emerald-400', dot: 'bg-emerald-400 animate-ping' },
+  waiting: { labelKey: 'loc.waiting', tone: 'text-slate-300', dot: 'bg-slate-400 animate-pulse' },
+  denied: { labelKey: 'loc.denied', tone: 'text-amber-300', dot: 'bg-amber-400' },
+  unavailable: { labelKey: 'loc.unavailable', tone: 'text-amber-300', dot: 'bg-amber-400' },
+  off: { labelKey: 'loc.off', tone: 'text-slate-400', dot: 'bg-slate-500' },
 };
 
 const TABS = ['active', 'available', 'history'] as const;
@@ -49,6 +52,8 @@ export default function RiderDashboardPage() {
   const router = useRouter();
   const { isAuthenticated, user } = useAuthStore();
   const { showToast } = useToast();
+  const t = useT(riderMessages);
+  const tc = useT(commonMessages);
 
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<'active' | 'available' | 'history'>('active');
@@ -75,7 +80,8 @@ export default function RiderDashboardPage() {
   const [reportNotes, setReportNotes] = useState('');
   const [reporting, setReporting] = useState(false);
 
-  const [blockedReason, setBlockedReason] = useState<{ title: string; message: string; code: string } | null>(null);
+  // title is a message key; message is the server's words (or null for our default text).
+  const [blockedReason, setBlockedReason] = useState<{ title: RiderMessageKey; message: string | null; code: string } | null>(null);
 
   const loadAll = useCallback(async (silent = false) => {
     try {
@@ -106,17 +112,17 @@ export default function RiderDashboardPage() {
       const code = error.response?.data?.error?.code;
       if (code && (code === 'RIDER_NOT_APPROVED' || code === 'RIDER_REJECTED' || code === 'RIDER_SUSPENDED')) {
         setBlockedReason({
-          title: code === 'RIDER_NOT_APPROVED' ? 'Application Under Review' : 'Account Inactive',
-          message: error.response?.data?.error?.message || 'Contact fleet support for assistance.',
+          title: code === 'RIDER_NOT_APPROVED' ? 'blockedUnderReview' : 'blockedInactive',
+          message: error.response?.data?.error?.message || null,
           code,
         });
       } else if (!silent) {
-        showToast(error.response?.data?.error?.message || 'Failed to load deliveries', 'error');
+        showToast(error.response?.data?.error?.message || t('loadFailed'), 'error');
       }
     } finally {
       if (!silent) setLoading(false);
     }
-  }, [showToast, activeTab]);
+  }, [showToast, activeTab, t]);
 
   const isRider = user?.user_type === 'rider' || user?.userType === 'rider';
 
@@ -141,7 +147,7 @@ export default function RiderDashboardPage() {
     if (!user) return;
     if (!isRider) {
       router.push('/products');
-      showToast('Access denied. Rider fleet account required.', 'error');
+      showToast(t('accessDenied'), 'error');
       return;
     }
     loadAll();
@@ -177,11 +183,11 @@ export default function RiderDashboardPage() {
         setProfile({ ...profile, isAvailable: res.data.isAvailable });
       }
       showToast(
-        res.data.isAvailable ? '🟢 You are now ON DUTY' : '⚪ You are now OFF DUTY',
+        res.data.isAvailable ? t('nowOnDuty') : t('nowOffDuty'),
         'success'
       );
     } catch (error: any) {
-      showToast(error.response?.data?.error?.message || 'Failed to toggle duty status', 'error');
+      showToast(error.response?.data?.error?.message || t('toggleDutyFailed'), 'error');
     } finally {
       setTogglingDuty(false);
     }
@@ -194,14 +200,14 @@ export default function RiderDashboardPage() {
       await riderService.claimDelivery(deliveryId, askFee);
       showToast(
         askFee
-          ? `Run claimed with custom rate of Rs ${askFee}! Route loaded in Active Runs.`
-          : 'Run claimed! Route is now loaded in Active Runs.',
+          ? t('claimedCustom', { fee: askFee })
+          : t('claimed'),
         'success'
       );
       setActiveTab('active');
       loadAll(true);
     } catch (error: any) {
-      showToast(error.response?.data?.error?.message || 'Failed to claim delivery', 'error');
+      showToast(error.response?.data?.error?.message || t('claimFailed'), 'error');
     } finally {
       setBusyId(null);
     }
@@ -213,16 +219,16 @@ export default function RiderDashboardPage() {
       setBusyId(delivery.id);
       if (delivery.status === 'assigned') {
         await riderService.updateDeliveryStatus(delivery.id, 'arrived_at_pickup');
-        showToast('📍 Marked arrived at kitchen!', 'info');
+        showToast(t('toastArrivedKitchen'), 'info');
       } else if (delivery.status === 'arrived_at_pickup') {
         await riderService.updateDeliveryStatus(delivery.id, 'picked_up');
-        showToast('❄️ Order picked up from kitchen & packed in cold-box!', 'success');
+        showToast(t('toastPickedUp'), 'success');
       } else if (delivery.status === 'picked_up') {
         await riderService.updateDeliveryStatus(delivery.id, 'in_transit');
-        showToast('🛵 Departed on route to customer doorstep!', 'info');
+        showToast(t('toastDeparted'), 'info');
       } else if (delivery.status === 'in_transit') {
         await riderService.updateDeliveryStatus(delivery.id, 'arrived_at_customer');
-        showToast('📍 Arrived at doorstep! Please ask customer for verification PIN.', 'info');
+        showToast(t('toastArrivedDoor'), 'info');
         setPinModalDelivery(delivery);
         setPinDigits(['', '', '', '']);
         setTimeout(() => pinInputRefs[0].current?.focus(), 150);
@@ -233,7 +239,7 @@ export default function RiderDashboardPage() {
       }
       loadAll(true);
     } catch (error: any) {
-      showToast(error.response?.data?.error?.message || 'Status update failed', 'error');
+      showToast(error.response?.data?.error?.message || t('statusUpdateFailed'), 'error');
     } finally {
       setBusyId(null);
     }
@@ -262,7 +268,7 @@ export default function RiderDashboardPage() {
   const handleVerifyPinSubmit = async () => {
     const fullPin = pinDigits.join('');
     if (fullPin.length !== 4) {
-      showToast('Please enter all 4 digits of the customer PIN', 'error');
+      showToast(t('pinIncomplete'), 'error');
       return;
     }
     if (!pinModalDelivery) return;
@@ -275,12 +281,12 @@ export default function RiderDashboardPage() {
         undefined,
         fullPin
       );
-      showToast('🎉 Handover confirmed! Order delivered and payment recorded.', 'success');
+      showToast(t('handoverDone'), 'success');
       setPinModalDelivery(null);
       setActiveTab('history');
       loadAll(true);
     } catch (error: any) {
-      showToast(error.response?.data?.error?.message || 'Invalid PIN code. Handshake failed.', 'error');
+      showToast(error.response?.data?.error?.message || t('pinInvalid'), 'error');
     } finally {
       setVerifyingPin(false);
     }
@@ -297,12 +303,12 @@ export default function RiderDashboardPage() {
         'delivery_failed',
         combinedReason
       );
-      showToast('Issue reported to dispatch center', 'warning');
+      showToast(t('issueReported'), 'warning');
       setReportModalDelivery(null);
       setReportNotes('');
       loadAll(true);
     } catch (error: any) {
-      showToast(error.response?.data?.error?.message || 'Failed to report issue', 'error');
+      showToast(error.response?.data?.error?.message || t('issueReportFailed'), 'error');
     } finally {
       setReporting(false);
     }
@@ -322,12 +328,12 @@ export default function RiderDashboardPage() {
   const vehicleLabel =
     [profile?.vehicleType, profile?.vehicleNumber ? `(${profile.vehicleNumber})` : null]
       .filter(Boolean)
-      .join(' ') || 'Not set';
+      .join(' ') || t('notSet');
 
   return (
     <DashboardLayout
-      title="Rider Fleet Command"
-      subtitle="Cold-Chain Logistics & Real-Time Delivery Cockpit"
+      title={t('title')}
+      subtitle={t('subtitle')}
       sidebarItems={RIDER_SIDEBAR_ITEMS}
       userType="rider"
     >
@@ -342,14 +348,14 @@ export default function RiderDashboardPage() {
             <div>
               <div className="flex items-center gap-2 flex-wrap">
                 <h2 className="font-black text-lg text-white">
-                  {profile?.name || (user as any)?.profile?.fullName || 'Name not set'}
+                  {profile?.name || (user as any)?.profile?.fullName || t('nameNotSet')}
                 </h2>
                 <span className="px-2 py-0.5 rounded text-[11px] font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
-                  ⭐ {riderRating ? `${riderRating} Fleet Score` : 'New'}
+                  ⭐ {riderRating ? t('fleetScore', { rating: riderRating }) : t('newRider')}
                 </span>
               </div>
               <p className="text-xs text-slate-400 mt-0.5">
-                Vehicle: <strong className="text-slate-200">{vehicleLabel}</strong> • City: <strong className="text-slate-200">{profile?.city || 'Not set'}</strong>
+                {t('vehicleLabel')} <strong className="text-slate-200">{vehicleLabel}</strong> • {t('cityLabel')} <strong className="text-slate-200">{profile?.city || t('notSet')}</strong>
               </p>
             </div>
           </div>
@@ -358,7 +364,7 @@ export default function RiderDashboardPage() {
             {/* Location sharing, only while on a job */}
             <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-slate-800/80 border border-slate-700 text-xs" data-testid="location-sharing">
               <span className={`w-2 h-2 rounded-full ${SHARING_BADGE[locationSharing].dot}`} />
-              <span className={`font-semibold ${SHARING_BADGE[locationSharing].tone}`}>{SHARING_BADGE[locationSharing].label}</span>
+              <span className={`font-semibold ${SHARING_BADGE[locationSharing].tone}`}>{t(SHARING_BADGE[locationSharing].labelKey)}</span>
             </div>
 
             {/* Capacity Limit Indicator */}
@@ -370,7 +376,7 @@ export default function RiderDashboardPage() {
               }`}
             >
               <span>🛵</span>
-              <span>Capacity: {activeDeliveries.length} / 2 Active</span>
+              <span>{t('capacity', { count: activeDeliveries.length })}</span>
             </div>
 
             {/* Duty Status Switch */}
@@ -388,7 +394,7 @@ export default function RiderDashboardPage() {
                   profile?.isAvailable !== false ? 'bg-emerald-400' : 'bg-slate-500'
                 }`}
               />
-              {profile?.isAvailable !== false ? 'ON DUTY' : 'OFF DUTY'}
+              {profile?.isAvailable !== false ? t('onDuty') : t('offDuty')}
             </button>
           </div>
         </div>
@@ -397,7 +403,7 @@ export default function RiderDashboardPage() {
         {loading && !profile && mine.length === 0 ? (
           <div className="bg-white rounded-2xl p-16 text-center shadow-sm border border-slate-200">
             <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-emerald-600 mx-auto mb-4" />
-            <h3 className="text-lg font-bold text-slate-800">Connecting to Fleet Mission Control...</h3>
+            <h3 className="text-lg font-bold text-slate-800">{t('connecting')}</h3>
           </div>
         ) : blockedReason && (blockedReason.code === 'RIDER_NOT_APPROVED' || blockedReason.code === 'RIDER_REJECTED') ? (
           <RiderApplicationForm />
@@ -406,8 +412,8 @@ export default function RiderDashboardPage() {
             <div className="w-16 h-16 bg-amber-100 rounded-full flex items-center justify-center mx-auto mb-4 text-3xl">
               ⏳
             </div>
-            <h2 className="text-xl font-bold text-slate-900 mb-2">{blockedReason.title}</h2>
-            <p className="text-slate-600 max-w-md mx-auto">{blockedReason.message}</p>
+            <h2 className="text-xl font-bold text-slate-900 mb-2">{t(blockedReason.title)}</h2>
+            <p className="text-slate-600 max-w-md mx-auto">{blockedReason.message ?? t('blockedContactSupport')}</p>
           </div>
         ) : (
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
@@ -425,7 +431,7 @@ export default function RiderDashboardPage() {
                       : 'text-slate-600 hover:bg-slate-100'
                   }`}
                 >
-                  <span>🛵 Active Run</span>
+                  <span>{t('tabActive')}</span>
                   {activeDeliveries.length > 0 && (
                     <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-emerald-500 text-white animate-pulse">
                       {activeDeliveries.length}
@@ -441,7 +447,7 @@ export default function RiderDashboardPage() {
                       : 'text-slate-600 hover:bg-slate-100'
                   }`}
                 >
-                  <span>📡 Available Pool</span>
+                  <span>{t('tabAvailable')}</span>
                   <span className={`px-2 py-0.5 rounded-full text-[10px] font-black ${
                     activeTab === 'available' ? 'bg-amber-400 text-slate-900' : 'bg-slate-200 text-slate-700'
                   }`}>
@@ -457,7 +463,7 @@ export default function RiderDashboardPage() {
                       : 'text-slate-600 hover:bg-slate-100'
                   }`}
                 >
-                  <span>📜 Completed Runs</span>
+                  <span>{t('tabHistory')}</span>
                   <span className="text-[11px] text-slate-400 font-bold">
                     ({completedDeliveries.length})
                   </span>
@@ -472,16 +478,16 @@ export default function RiderDashboardPage() {
                       <div className="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-3 text-3xl">
                         🛵
                       </div>
-                      <h3 className="font-bold text-slate-800 text-base">No active run in progress</h3>
+                      <h3 className="font-bold text-slate-800 text-base">{t('noActiveTitle')}</h3>
                       <p className="text-slate-500 text-xs max-w-sm mx-auto mt-1 mb-5">
-                        Your route is clear. Claim an incoming order from the Available Pool to start delivering.
+                        {t('noActiveBody')}
                       </p>
                       <div className="flex justify-center gap-3">
                         <Button
                           onClick={() => setActiveTab('available')}
                           className="bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold"
                         >
-                          View Available Runs ({available.length})
+                          {t('viewAvailable', { count: available.length })}
                         </Button>
                       </div>
                     </div>
@@ -504,22 +510,25 @@ export default function RiderDashboardPage() {
                               <div>
                                 <div className="flex items-center gap-2">
                                   <span className="font-black text-base tracking-wide text-white">
-                                    Order #{delivery.orderNumber || delivery.orderId.slice(0, 8)}
+                                    {t('orderNo', { number: delivery.orderNumber || delivery.orderId.slice(0, 8) })}
                                   </span>
                                   <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 uppercase">
-                                    {delivery.status.replace(/_/g, ' ')}
+                                    {(() => {
+                                      const k = riderKeyFor('dstatus', delivery.status);
+                                      return k ? t(k) : delivery.status.replace(/_/g, ' ');
+                                    })()}
                                   </span>
                                 </div>
                               </div>
 
                               <div className="flex items-center gap-3 flex-wrap">
                                 <span className="text-[11px] font-bold text-slate-400">
-                                  {delivery.paymentMethod === 'cod' ? '💵 Collect:' : '💳 Prepaid:'}{' '}
+                                  {delivery.paymentMethod === 'cod' ? t('collect') : t('prepaid')}{' '}
                                   <span className="text-sm font-black text-emerald-400">{formatPrice(delivery.totalAmount || 0)}</span>
                                 </span>
                                 {delivery.riderFee != null && (
                                   <span className="text-[11px] font-bold text-slate-400">
-                                    You earn:{' '}
+                                    {t('youEarn')}{' '}
                                     <span className="text-sm font-black text-white">{formatPrice(delivery.riderFee + (delivery.riderBonus ?? 0))}</span>
                                   </span>
                                 )}
@@ -529,9 +538,9 @@ export default function RiderDashboardPage() {
                             {/* COMPACT 5-STEP JOURNEY ROADMAP */}
                             <div className="bg-slate-50/70 border-b border-slate-200 px-5 py-3.5">
                               <div className="relative">
-                                <div className="absolute top-3.5 left-4 right-4 h-1 bg-slate-200 -z-0 rounded-full" />
+                                <div className="absolute top-3.5 start-4 end-4 h-1 bg-slate-200 -z-0 rounded-full" />
                                 <div
-                                  className="absolute top-3.5 left-4 h-1 bg-emerald-500 -z-0 rounded-full transition-all duration-500"
+                                  className="absolute top-3.5 start-4 h-1 bg-emerald-500 -z-0 rounded-full transition-all duration-500"
                                   style={{
                                     width: `${Math.min(100, (currentStepIdx / 4) * 100)}%`,
                                   }}
@@ -564,7 +573,7 @@ export default function RiderDashboardPage() {
                                               : 'text-slate-400'
                                           }`}
                                         >
-                                          {step.label}
+                                          {t(step.labelKey)}
                                         </span>
                                       </div>
                                     );
@@ -579,10 +588,10 @@ export default function RiderDashboardPage() {
                                 <div className="flex items-start gap-2.5">
                                   <span className="text-xl">🏪</span>
                                   <div>
-                                    <span className="text-[10px] uppercase font-bold text-blue-900 block">Pickup (Kitchen)</span>
+                                    <span className="text-[10px] uppercase font-bold text-blue-900 block">{t('pickupKitchen')}</span>
                                     <p className="text-xs font-bold text-slate-800 mt-0.5">{delivery.pickupAddress}</p>
                                     <span className="inline-block text-[10px] text-blue-700 mt-1 font-medium bg-blue-100/70 px-2 py-0.5 rounded">
-                                      Prep Verification & Dispatch
+                                      {t('prepVerify')}
                                     </span>
                                   </div>
                                 </div>
@@ -592,7 +601,7 @@ export default function RiderDashboardPage() {
                                   rel="noopener noreferrer"
                                   className="px-2.5 py-1 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-[11px] font-bold shadow-xs whitespace-nowrap transition-all flex items-center gap-1"
                                 >
-                                  🗺️ Maps
+                                  {t('maps')}
                                 </a>
                               </div>
 
@@ -600,10 +609,10 @@ export default function RiderDashboardPage() {
                                 <div className="flex items-start gap-2.5">
                                   <span className="text-xl">📍</span>
                                   <div>
-                                    <span className="text-[10px] uppercase font-bold text-emerald-900 block">Dropoff (Customer)</span>
+                                    <span className="text-[10px] uppercase font-bold text-emerald-900 block">{t('dropoffCustomer')}</span>
                                     <p className="text-xs font-bold text-slate-800 mt-0.5">{delivery.deliveryAddress}</p>
                                     <span className="inline-block text-[10px] text-emerald-700 mt-1 font-medium bg-emerald-100/70 px-2 py-0.5 rounded">
-                                      Doorstep Handover (PIN Required)
+                                      {t('doorstepPin')}
                                     </span>
                                   </div>
                                 </div>
@@ -613,7 +622,7 @@ export default function RiderDashboardPage() {
                                   rel="noopener noreferrer"
                                   className="px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-[11px] font-bold shadow-xs whitespace-nowrap transition-all flex items-center gap-1"
                                 >
-                                  🗺️ Maps
+                                  {t('maps')}
                                 </a>
                               </div>
                             </div>
@@ -627,7 +636,7 @@ export default function RiderDashboardPage() {
                                 disabled={busyId === delivery.id}
                                 className="border-red-200 text-red-600 hover:bg-red-50 text-xs font-semibold"
                               >
-                                Report Issue
+                                {t('reportIssue')}
                               </Button>
 
                               <Button
@@ -646,17 +655,17 @@ export default function RiderDashboardPage() {
                                 }`}
                               >
                                 {busyId === delivery.id ? (
-                                  'Processing...'
+                                  t('processing')
                                 ) : delivery.status === 'assigned' ? (
-                                  '📍 Mark Arrived at Kitchen'
+                                  t('actArrivedKitchen')
                                 ) : delivery.status === 'arrived_at_pickup' ? (
-                                  '❄️ Pick Up & Pack Cold-Box'
+                                  t('actPickUp')
                                 ) : delivery.status === 'picked_up' ? (
-                                  '🛵 Depart & Start Transit'
+                                  t('actDepart')
                                 ) : delivery.status === 'in_transit' ? (
-                                  '📍 Mark Arrived at Doorstep'
+                                  t('actArrivedDoor')
                                 ) : (
-                                  '🤝 Verify Handover PIN'
+                                  t('actVerifyPin')
                                 )}
                               </Button>
                             </div>
@@ -678,15 +687,15 @@ export default function RiderDashboardPage() {
                         <span className="text-2xl">🔒</span>
                         <div>
                           <h4 className="text-xs font-black text-amber-900 uppercase tracking-wide">
-                            Maximum Capacity Limit Reached (2 / 2 Active Orders)
+                            {t('capFullTitle')}
                           </h4>
                           <p className="text-xs text-amber-800/80 mt-0.5">
-                            To protect food temperature and safety, you cannot claim a 3rd order. Complete one of your ongoing runs to unlock new orders.
+                            {t('capFullBody')}
                           </p>
                         </div>
                       </div>
                       <span className="text-xs font-black px-3 py-1.5 rounded-xl bg-amber-600 text-white whitespace-nowrap shadow-xs">
-                        2 / 2 Capacity Full
+                        {t('capFullBadge')}
                       </span>
                     </div>
                   ) : activeDeliveries.length === 1 ? (
@@ -695,15 +704,15 @@ export default function RiderDashboardPage() {
                         <span className="text-2xl">⚡</span>
                         <div>
                           <h4 className="text-xs font-black text-emerald-900 uppercase tracking-wide">
-                            Corridor Route Matching Active (1 / 2 Active Orders)
+                            {t('routeMatchTitle')}
                           </h4>
                           <p className="text-xs text-emerald-800/80 mt-0.5">
-                            Orders along your existing pickup and dropoff corridor are highlighted below with a <strong>+Rs 100 Batch Bonus</strong>!
+                            {t('routeMatchBody1')}<strong>{t('routeMatchBonus')}</strong>{t('routeMatchBody2')}
                           </p>
                         </div>
                       </div>
                       <span className="text-xs font-black px-3 py-1.5 rounded-xl bg-emerald-700 text-white whitespace-nowrap shadow-xs">
-                        1 Slot Available
+                        {t('slotAvailable')}
                       </span>
                     </div>
                   ) : null}
@@ -716,9 +725,9 @@ export default function RiderDashboardPage() {
                           📡
                         </div>
                       </div>
-                      <h3 className="font-bold text-slate-800 text-base">Scanning for ready orders...</h3>
+                      <h3 className="font-bold text-slate-800 text-base">{t('scanningTitle')}</h3>
                       <p className="text-slate-500 text-xs max-w-sm mx-auto mt-1 mb-2">
-                        All runs currently claimed. When kitchens confirm food preparation, available delivery runs will appear here automatically.
+                        {t('scanningBody')}
                       </p>
                     </div>
                   ) : (
@@ -736,32 +745,32 @@ export default function RiderDashboardPage() {
                           <div>
                             <div className="flex items-center justify-between mb-2 gap-1.5">
                               <span className="font-black text-slate-900 text-sm">
-                                Order #{d.orderNumber || d.orderId.slice(0, 8)}
+                                {t('orderNo', { number: d.orderNumber || d.orderId.slice(0, 8) })}
                               </span>
                               <div className="flex items-center gap-1.5 flex-wrap">
                                 {d.isRouteMatch && (
                                   <span className="px-2 py-0.5 rounded text-[10px] font-black bg-emerald-600 text-white shadow-xs animate-pulse">
-                                    ⚡ Route Match (+Rs {d.batchBonus})
+                                    {t('routeMatch', { bonus: d.batchBonus })}
                                   </span>
                                 )}
                                 <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-800">
-                                  Ready
+                                  {tc('status.ready')}
                                 </span>
                               </div>
                             </div>
 
                             <div className="space-y-1.5 text-xs text-slate-600 mb-2.5">
                               <p className="flex items-start gap-1.5">
-                                <span className="font-bold text-slate-800">Pickup:</span>
+                                <span className="font-bold text-slate-800">{t('pickupLabel')}</span>
                                 <span className="truncate">{d.pickupAddress}</span>
                               </p>
                               <p className="flex items-start gap-1.5">
-                                <span className="font-bold text-slate-800">Deliver:</span>
+                                <span className="font-bold text-slate-800">{t('deliverLabel')}</span>
                                 <span className="truncate">{d.deliveryAddress}</span>
                               </p>
                               {d.totalAmount && (
                                 <p className="flex items-center gap-1.5">
-                                  <span className="font-bold text-slate-800">Order Value:</span>
+                                  <span className="font-bold text-slate-800">{t('orderValue')}</span>
                                   <span className="font-black text-emerald-700">{formatPrice(d.totalAmount)}</span>
                                   <span className="text-slate-400 text-[11px]">({d.paymentMethod?.toUpperCase() || 'COD'})</span>
                                 </p>
@@ -771,20 +780,20 @@ export default function RiderDashboardPage() {
                             {/* Bounded inDrive-Style Price Corridor Badge */}
                             <div className="bg-slate-50 border border-slate-200/80 rounded-xl p-2.5 mb-3 text-[11px] space-y-1">
                               <div className="flex items-center justify-between">
-                                <span className="text-slate-600 font-semibold">Standard Delivery Payout:</span>
+                                <span className="text-slate-600 font-semibold">{t('standardPayout')}</span>
                                 <span className="font-black text-emerald-700">
                                   Rs {d.standardFee}
                                   {d.isRouteMatch && (
-                                    <span className="text-[10px] text-emerald-600 font-bold ml-1">
-                                      (+Rs {d.batchBonus} bonus)
+                                    <span className="text-[10px] text-emerald-600 font-bold ms-1">
+                                      {t('bonusSuffix', { bonus: d.batchBonus })}
                                     </span>
                                   )}
                                 </span>
                               </div>
                               <div className="flex items-center justify-between text-[10px] text-slate-500">
-                                <span>inDrive Regulated Corridor:</span>
+                                <span>{t('corridor')}</span>
                                 <span className="font-medium text-slate-700">
-                                  Rs {d.minAskFee} – Rs {d.maxAskFee} cap
+                                  {t('corridorRange', { min: d.minAskFee, max: d.maxAskFee })}
                                 </span>
                               </div>
                             </div>
@@ -796,12 +805,11 @@ export default function RiderDashboardPage() {
                               disabled
                               className="w-full bg-slate-200 text-slate-400 font-bold text-xs py-2 rounded-xl"
                             >
-                              🔒 At Capacity (2/2 Orders Active)
+                              {t('atCapacity')}
                             </Button>
                           ) : d.exceedsCashLimit ? (
                             <div className="rounded-xl bg-amber-50 border border-amber-200 p-2.5 text-[11px] text-amber-900" data-testid="cash-limit-blocked">
-                              <strong>Cash limit reached.</strong> This is a cash order and would take you over your limit of{' '}
-                              {formatPrice(floatingLimit)}. Hand in your cash to take cash orders again; prepaid orders are still open to you.
+                              <strong>{t('cashLimitTitle')}</strong> {t('cashLimitBody', { limit: formatPrice(floatingLimit) })}
                             </div>
                           ) : (
                             <div className="flex gap-2 items-center">
@@ -811,10 +819,10 @@ export default function RiderDashboardPage() {
                                 className="flex-1 bg-slate-900 hover:bg-emerald-600 text-white font-bold text-xs py-2 rounded-xl transition-colors shadow-xs"
                               >
                                 {busyId === d.id
-                                  ? 'Claiming...'
+                                  ? t('claiming')
                                   : d.isRouteMatch
-                                  ? `Claim Batched (+Rs ${d.batchBonus})`
-                                  : `Claim (Rs ${d.standardFee})`}
+                                  ? t('claimBatched', { bonus: d.batchBonus })
+                                  : t('claim', { fee: d.standardFee })}
                               </Button>
                               {(d.maxAskFee ?? 0) > (d.standardFee ?? 0) && (
                                 <Button
@@ -822,9 +830,9 @@ export default function RiderDashboardPage() {
                                   onClick={() => handleClaim(d.id, d.maxAskFee)}
                                   disabled={busyId === d.id}
                                   className="border-cyan-300 text-cyan-800 hover:bg-cyan-50 font-bold text-[11px] py-2 px-2.5 rounded-xl whitespace-nowrap"
-                                  title="Ask the highest fee allowed for this distance"
+                                  title={t('askMaxTitle')}
                                 >
-                                  Ask Rs {d.maxAskFee}
+                                  {t('askFee', { fee: d.maxAskFee })}
                                 </Button>
                               )}
                             </div>
@@ -840,15 +848,15 @@ export default function RiderDashboardPage() {
               {activeTab === 'history' && (
                 <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-sm">
                   <div className="p-4 bg-slate-50 border-b border-slate-200 flex items-center justify-between">
-                    <h3 className="font-black text-sm text-slate-900">Delivered orders</h3>
+                    <h3 className="font-black text-sm text-slate-900">{t('deliveredOrders')}</h3>
                     <span className="text-xs font-bold text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-full border border-emerald-200">
-                      {completedDeliveries.length} Successful Deliveries
+                      {t('successfulCount', { count: completedDeliveries.length })}
                     </span>
                   </div>
 
                   {completedDeliveries.length === 0 ? (
                     <div className="p-10 text-center text-slate-500 text-xs">
-                      No deliveries completed yet.
+                      {t('noCompleted')}
                     </div>
                   ) : (
                     <div className="divide-y divide-slate-100">
@@ -859,16 +867,16 @@ export default function RiderDashboardPage() {
                         >
                           <div>
                             <span className="font-bold text-slate-900 text-sm">
-                              Order #{d.orderNumber || d.orderId.slice(0, 8)}
+                              {t('orderNo', { number: d.orderNumber || d.orderId.slice(0, 8) })}
                             </span>
                             <p className="text-slate-500 mt-0.5">{d.deliveryAddress}</p>
                           </div>
-                          <div className="text-right">
+                          <div className="text-end">
                             <span className="inline-flex items-center gap-1 font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full text-[11px] border border-emerald-200">
-                              ✓ PIN Verified
+                              {t('pinVerified')}
                             </span>
                             {d.riderFee != null && (
-                              <p className="font-bold text-slate-900 mt-1">You earned {formatPrice(d.riderFee + (d.riderBonus ?? 0))}</p>
+                              <p className="font-bold text-slate-900 mt-1">{t('youEarned', { amount: formatPrice(d.riderFee + (d.riderBonus ?? 0)) })}</p>
                             )}
                           </div>
                         </div>
@@ -886,7 +894,7 @@ export default function RiderDashboardPage() {
               {/* COD CASH IN HAND & SETTLEMENT */}
               <div className="bg-white rounded-2xl p-5 shadow-sm border border-slate-200" id="cash" data-testid="rider-cash-card">
                 <div className="flex items-center justify-between mb-2">
-                  <h3 className="font-black text-sm text-slate-900">Cash in hand</h3>
+                  <h3 className="font-black text-sm text-slate-900">{t('cashInHand')}</h3>
                   <span
                     className={`text-[11px] font-bold px-2 py-0.5 rounded-full border ${
                       cashPercent >= 100
@@ -896,13 +904,13 @@ export default function RiderDashboardPage() {
                         : 'text-emerald-600 bg-emerald-50 border-emerald-200'
                     }`}
                   >
-                    {cashPercent >= 100 ? 'Limit reached' : cashPercent > 80 ? 'Near limit' : 'Within limit'}
+                    {cashPercent >= 100 ? t('limitReached') : cashPercent > 80 ? t('nearLimit') : t('withinLimit')}
                   </span>
                 </div>
 
                 <div className="my-3">
                   <span className="text-2xl font-black text-slate-900">{formatPrice(cashInHand)}</span>
-                  <span className="text-xs text-slate-400 ml-2">/ {formatPrice(floatingLimit)} limit</span>
+                  <span className="text-xs text-slate-400 ms-2">{t('limitSuffix', { limit: formatPrice(floatingLimit) })}</span>
                 </div>
 
                 <div className="w-full bg-slate-100 h-2.5 rounded-full overflow-hidden mb-2">
@@ -915,32 +923,31 @@ export default function RiderDashboardPage() {
                 </div>
 
                 <p className="text-[11px] text-slate-500">
-                  Cash you collected at the door and haven&apos;t handed in yet. At the limit, cash orders stop being offered to you
-                  until you hand cash in at a hub.
+                  {t('cashExplain')}
                 </p>
                 <div className="mt-3 pt-3 border-t border-slate-100 flex items-center justify-between text-xs">
                   <span className="text-slate-500">
-                    {(profile?.balance ?? 0) >= 0 ? 'Nuray owes you' : 'You owe Nuray'}{' '}
+                    {(profile?.balance ?? 0) >= 0 ? t('nurayOwesYou') : t('youOweNuray')}{' '}
                     <strong className="text-slate-900">{formatPrice(Math.abs(profile?.balance ?? 0))}</strong>
                   </span>
                   <Link href="/riders/earnings" className="font-bold text-emerald-700 hover:underline">
-                    Earnings →
+                    {t('earningsLink')}
                   </Link>
                 </div>
               </div>
 
               {/* FLEET DIAGNOSTICS */}
               <div className="bg-white rounded-2xl p-5 shadow-sm border border-slate-200 space-y-3">
-                <h3 className="font-black text-sm text-slate-900">Shift Diagnostics</h3>
+                <h3 className="font-black text-sm text-slate-900">{t('shiftDiagnostics')}</h3>
 
                 <div className="grid grid-cols-2 gap-2 text-xs">
                   <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-100">
-                    <span className="text-slate-400 block text-[10px] font-bold uppercase">Runs Delivered</span>
+                    <span className="text-slate-400 block text-[10px] font-bold uppercase">{t('runsDelivered')}</span>
                     <span className="text-base font-black text-slate-800">{completedDeliveries.length}</span>
                   </div>
 
                   <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-100">
-                    <span className="text-slate-400 block text-[10px] font-bold uppercase">Active Now</span>
+                    <span className="text-slate-400 block text-[10px] font-bold uppercase">{t('activeNow')}</span>
                     <span className="text-base font-black text-slate-800">{activeDeliveries.length}</span>
                   </div>
                 </div>
@@ -950,20 +957,20 @@ export default function RiderDashboardPage() {
               <div className="bg-gradient-to-br from-slate-900 to-slate-800 text-white rounded-2xl p-5 shadow-sm border border-slate-700 space-y-3">
                 <div className="flex items-center gap-2">
                   <span className="text-lg">❄️</span>
-                  <h3 className="font-black text-sm text-white">Cold-Chain Protocol</h3>
+                  <h3 className="font-black text-sm text-white">{t('coldChain')}</h3>
                 </div>
                 <ul className="text-xs text-slate-300 space-y-2">
                   <li className="flex items-start gap-2">
                     <span className="text-cyan-400 font-bold">•</span>
-                    <span>Maintain insulated delivery box tightly sealed at ≤ -18°C.</span>
+                    <span>{t('coldChain1')}</span>
                   </li>
                   <li className="flex items-start gap-2">
                     <span className="text-emerald-400 font-bold">•</span>
-                    <span>Always verify customer 4-digit PIN before handing over frozen items.</span>
+                    <span>{t('coldChain2')}</span>
                   </li>
                   <li className="flex items-start gap-2">
                     <span className="text-amber-400 font-bold">•</span>
-                    <span>Report uncontactable customer or temperature breach via Report Issue.</span>
+                    <span>{t('coldChain3')}</span>
                   </li>
                 </ul>
                 <div className="pt-2 border-t border-slate-700/80">
@@ -971,7 +978,7 @@ export default function RiderDashboardPage() {
                     href="/support"
                     className="block text-center py-2 px-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-bold text-slate-200 transition-colors border border-slate-600"
                   >
-                    📞 Fleet SOS & Support
+                    {t('sos')}
                   </a>
                 </div>
               </div>
@@ -994,8 +1001,8 @@ export default function RiderDashboardPage() {
                     🤝
                   </span>
                   <div>
-                    <h3 className="font-black text-lg">Customer Handover PIN</h3>
-                    <p className="text-xs text-emerald-100">Fraud-prevention doorstep verification</p>
+                    <h3 className="font-black text-lg">{t('pinTitle')}</h3>
+                    <p className="text-xs text-emerald-100">{t('pinSubtitle')}</p>
                   </div>
                 </div>
                 <button
@@ -1010,12 +1017,12 @@ export default function RiderDashboardPage() {
             <div className="p-6 space-y-5">
               <div className="text-center">
                 <p className="text-sm text-slate-600">
-                  Ask customer for their <strong>4-digit delivery PIN</strong> displayed on their order screen:
+                  {t('pinAsk1')}<strong>{t('pinAskBold')}</strong>{t('pinAsk2')}
                 </p>
               </div>
 
               {/* 4 Digit Boxes */}
-              <div className="flex justify-center gap-3">
+              <div className="flex justify-center gap-3" dir="ltr">
                 {pinDigits.map((digit, idx) => (
                   <input
                     key={idx}
@@ -1035,7 +1042,7 @@ export default function RiderDashboardPage() {
               {pinModalDelivery.paymentMethod === 'cod' && !!pinModalDelivery.totalAmount && (
                 <div className="bg-amber-50 border border-amber-200 rounded-2xl p-3.5 flex items-center justify-between">
                   <span className="text-xs font-semibold text-amber-900">
-                    💵 Collect Cash on Delivery:
+                    {t('codReminder')}
                   </span>
                   <span className="text-base font-black text-amber-700">
                     {formatPrice(pinModalDelivery.totalAmount)}
@@ -1050,14 +1057,14 @@ export default function RiderDashboardPage() {
                   disabled={verifyingPin || pinDigits.some((d) => !d)}
                   className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3 rounded-xl shadow-lg shadow-emerald-500/20"
                 >
-                  {verifyingPin ? 'Verifying PIN...' : 'Confirm Handover & Deliver'}
+                  {verifyingPin ? t('verifyingPin') : t('confirmHandover')}
                 </Button>
                 <Button
                   variant="outline"
                   onClick={() => setPinModalDelivery(null)}
                   className="rounded-xl border-slate-200 text-slate-600"
                 >
-                  Cancel
+                  {tc('cancel')}
                 </Button>
               </div>
             </div>
@@ -1070,32 +1077,32 @@ export default function RiderDashboardPage() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4">
           <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden border border-slate-200">
             <div className="bg-red-600 px-6 py-4 text-white">
-              <h3 className="font-bold text-lg">Report Delivery Problem</h3>
-              <p className="text-xs text-red-100">Order #{reportModalDelivery.orderNumber}</p>
+              <h3 className="font-bold text-lg">{t('reportTitle')}</h3>
+              <p className="text-xs text-red-100">{t('orderNo', { number: reportModalDelivery.orderNumber })}</p>
             </div>
             <div className="p-6 space-y-4">
               <div>
-                <label className="block text-xs font-bold text-slate-700 mb-2">Reason</label>
+                <label className="block text-xs font-bold text-slate-700 mb-2">{t('reason')}</label>
                 <select
                   value={reportReason}
                   onChange={(e) => setReportReason(e.target.value)}
                   className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-500"
                 >
-                  <option value="Customer unreachable">Customer unreachable / phone switched off</option>
-                  <option value="Incorrect address">Wrong address / house not found</option>
-                  <option value="Customer refused package">Customer refused delivery</option>
-                  <option value="Cold-chain temperature issue">Cold-chain breach / thaw suspected</option>
-                  <option value="Road accident / emergency">Vehicle breakdown / road emergency</option>
+                  <option value="Customer unreachable">{t('reason.unreachable')}</option>
+                  <option value="Incorrect address">{t('reason.address')}</option>
+                  <option value="Customer refused package">{t('reason.refused')}</option>
+                  <option value="Cold-chain temperature issue">{t('reason.coldChain')}</option>
+                  <option value="Road accident / emergency">{t('reason.accident')}</option>
                 </select>
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">Additional Notes</label>
+                <label className="block text-xs font-bold text-slate-700 mb-1">{t('additionalNotes')}</label>
                 <textarea
                   value={reportNotes}
                   onChange={(e) => setReportNotes(e.target.value)}
                   rows={3}
-                  placeholder="Provide any helpful details for dispatch resolution..."
+                  placeholder={t('notesPlaceholder')}
                   className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-500"
                 />
               </div>
@@ -1107,14 +1114,14 @@ export default function RiderDashboardPage() {
                   disabled={reporting}
                   className="flex-1 rounded-xl font-bold"
                 >
-                  {reporting ? 'Reporting...' : 'Submit Issue'}
+                  {reporting ? t('reporting') : t('submitIssue')}
                 </Button>
                 <Button
                   variant="outline"
                   onClick={() => setReportModalDelivery(null)}
                   className="rounded-xl"
                 >
-                  Cancel
+                  {tc('cancel')}
                 </Button>
               </div>
             </div>

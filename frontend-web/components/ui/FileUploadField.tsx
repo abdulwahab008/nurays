@@ -2,6 +2,9 @@
 
 import { useRef, useState } from 'react';
 import { apiClient, apiErrorMessage } from '@/lib/api-client';
+import { useT } from '@/lib/i18n';
+import { commonMessages } from '@/lib/i18n/messages/common';
+import { joinMessages } from '@/lib/i18n/messages/join';
 
 type Kind = 'document' | 'cover';
 
@@ -30,6 +33,8 @@ interface Props {
  * the stored reference, never a link typed in by hand.
  */
 export default function FileUploadField({ kind, label, hint, value, onChange, required, onFileText, testId }: Props) {
+  const t = useT(joinMessages);
+  const tc = useT(commonMessages);
   const inputRef = useRef<HTMLInputElement>(null);
   const [preview, setPreview] = useState<string | null>(null);
   const [fileName, setFileName] = useState<string | null>(null);
@@ -53,7 +58,7 @@ export default function FileUploadField({ kind, label, hint, value, onChange, re
       onChange(kind === 'document' ? data?.ref ?? data?.url ?? null : data?.url ?? null);
     } catch (err) {
       if (mine !== attempt.current) return;
-      setError(apiErrorMessage(err, 'Upload failed. Please try again.'));
+      setError(apiErrorMessage(err, t('upload.failed')));
       setPreview(null);
       setFileName(null);
       onChange(null);
@@ -87,9 +92,9 @@ export default function FileUploadField({ kind, label, hint, value, onChange, re
         )}
         <div className="flex-1 min-w-0">
           <p className="text-sm font-semibold text-slate-800 truncate">
-            {uploading ? 'Uploading…' : value ? fileName ?? 'Uploaded' : onFileText ?? 'No file chosen'}
+            {uploading ? t('upload.uploading') : value ? fileName ?? t('upload.uploaded') : onFileText ?? t('upload.noFile')}
           </p>
-          <p className="text-xs text-slate-500">{error ?? hint ?? (kind === 'document' ? 'Photo or PDF, up to 10 MB. Only Nuray staff can see it.' : 'A photo, up to 8 MB.')}</p>
+          <p className="text-xs text-slate-500">{error ?? hint ?? (kind === 'document' ? t('upload.docHint') : t('upload.coverHint'))}</p>
         </div>
         <div className="flex gap-2">
           <button
@@ -98,11 +103,11 @@ export default function FileUploadField({ kind, label, hint, value, onChange, re
             disabled={uploading}
             className="px-3 py-1.5 rounded-lg bg-white border border-slate-300 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
           >
-            {value || onFileText ? 'Replace' : 'Choose file'}
+            {value || onFileText ? t('upload.replace') : t('upload.choose')}
           </button>
           {value && (
             <button type="button" onClick={clear} className="px-2 py-1.5 rounded-lg text-xs text-slate-500 hover:text-slate-800">
-              Remove
+              {tc('remove')}
             </button>
           )}
         </div>
