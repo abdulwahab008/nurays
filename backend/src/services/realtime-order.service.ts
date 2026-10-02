@@ -16,123 +16,127 @@ const ORDER_STATUS_MESSAGES: Record<string, { title: string; message: (orderNumb
   refunded: { title: 'Order refunded', message: (n) => `Your order #${n} has been refunded.` },
 };
 
+/**
+ * Socket rooms of everyone party to an order: whoever has its page open, the customer, its
+ * kitchens and its rider. Each client then reloads what it shows, so payloads stay small and
+ * never carry anything a party may not see (signed file links, the handover code).
+ */
+async function orderAudience(orderId: string): Promise<{ rooms: string[]; customerId: string | null; orderNumber: string } | null> {
+  const order = await prisma.order.findUnique({
+    where: { id: orderId },
+    select: {
+      customerId: true,
+      orderNumber: true,
+      items: { select: { seller: { select: { userId: true } } } },
+      delivery: { select: { rider: { select: { userId: true } } } },
+    },
+  });
+  if (!order) return null;
+  const rooms = [`order:${orderId}`];
+  if (order.customerId) rooms.push(`user:${order.customerId}`);
+  for (const item of order.items) if (item.seller.userId) rooms.push(`user:${item.seller.userId}`);
+  if (order.delivery?.rider?.userId) rooms.push(`user:${order.delivery.rider.userId}`);
+  return { rooms, customerId: order.customerId, orderNumber: order.orderNumber };
+}
+
 export class RealtimeOrderService {
   /**
    * Emit order status update to relevant parties
    */
   async emitOrderStatusUpdate(orderId: string, status: string, changedBy?: string) {
-    const order = await prisma.order.findUnique({
-      where: { id: orderId },
-      include: {
-        customer: {
-          select: {
-            id: true,
-          },
-        },
-        items: {
-          include: {
-            seller: {
-              select: {
-                userId: true,
-              },
-            },
-          },
-        },
-      },
-    });
-
-    if (!order) {
+    const audience = await orderAudience(orderId);
+    if (!audience) {
       return;
     }
 
     const orderData = {
-      orderId: order.id,
-      orderNumber: order.orderNumber,
+      orderId,
+      orderNumber: audience.orderNumber,
       status,
       updatedAt: new Date().toISOString(),
       changedBy,
     };
 
-    // Emit to order room (all users tracking this order)
-    socketManager.emitToOrder(orderId, 'order:status:update', orderData);
+    // The order's room, customer, kitchens, rider and admins, each connection once.
+    socketManager.emitToRooms([...audience.rooms, 'role:admin'], 'order:status:update', orderData);
 
-    // Emit to customer
-    if (order.customerId) {
-      socketManager.emitToUser(order.customerId, 'order:status:update', orderData);
-
+    if (audience.customerId) {
       const statusMessage = ORDER_STATUS_MESSAGES[status];
       if (statusMessage) {
         notificationService
-          .createNotification(order.customerId, {
+          .createNotification(audience.customerId, {
             type: 'order',
             title: statusMessage.title,
-            message: statusMessage.message(order.orderNumber),
-            actionUrl: `/orders/${order.id}`,
-            data: { orderId: order.id, orderNumber: order.orderNumber, status },
+            message: statusMessage.message(audience.orderNumber),
+            actionUrl: `/orders/${orderId}`,
+            data: { orderId, orderNumber: audience.orderNumber, status },
           })
           .catch((err) => console.error('Failed to create customer notification:', err));
       }
     }
-
-    // Emit to all sellers in this order
-    const sellerUserIds = new Set(
-      order.items.map((item) => item.seller.userId).filter((id): id is string => !!id)
-    );
-    sellerUserIds.forEach((sellerUserId) => {
-      socketManager.emitToUser(sellerUserId, 'order:status:update', orderData);
-    });
-
-    // Emit to admins
-    socketManager.emitToRole('admin', 'order:status:update', orderData);
   }
 
   /**
    * Emit order item status update
    */
-  async emitOrderItemStatusUpdate(orderItemId: string, status: string, sellerId: string) {
+  async emitOrderItemStatusUpdate(orderItemId: string, status: string, _sellerId?: string) {
     const orderItem = await prisma.orderItem.findUnique({
       where: { id: orderItemId },
-      include: {
-        order: {
-          include: {
-            customer: {
-              select: {
-                id: true,
-              },
-            },
-          },
-        },
-      },
+      select: { id: true, orderId: true },
     });
-
     if (!orderItem) {
       return;
     }
-
-    const itemData = {
-      orderItemId: orderItem.id,
-      orderId: orderItem.orderId,
-      orderNumber: orderItem.order.orderNumber,
-      status,
-      updatedAt: new Date().toISOString(),
-    };
-
-    // Emit to order room
-    socketManager.emitToOrder(orderItem.orderId, 'order:item:status:update', itemData);
-
-    // Emit to customer
-    if (orderItem.order.customerId) {
-      socketManager.emitToUser(orderItem.order.customerId, 'order:item:status:update', itemData);
+    const audience = await orderAudience(orderItem.orderId);
+    if (!audience) {
+      return;
     }
 
-    // Emit to seller
-    const seller = await prisma.seller.findUnique({
-      where: { id: sellerId },
-      select: { userId: true },
+    socketManager.emitToRooms(audience.rooms, 'order:item:status:update', {
+      orderItemId: orderItem.id,
+      orderId: orderItem.orderId,
+      orderNumber: audience.orderNumber,
+      status,
+      updatedAt: new Date().toISOString(),
     });
+  }
 
-    if (seller?.userId) {
-      socketManager.emitToUser(seller.userId, 'order:item:status:update', itemData);
+  // The emitters below are best-effort and never throw: a lost live update is caught up by
+  // the client's reload on reconnect, never worth failing the action that caused it.
+
+  /** A new chat message on an order: its parties reload the conversation. */
+  async emitOrderMessage(orderId: string, messageId: string, senderId: string, senderRole: string) {
+    try {
+      const audience = await orderAudience(orderId);
+      if (audience) socketManager.emitToRooms(audience.rooms, 'order:message', { orderId, messageId, senderId, senderRole });
+    } catch (err) {
+      console.error('order:message event failed:', err);
+    }
+  }
+
+  /** Someone read an order's messages: the senders' read ticks update. */
+  async emitMessagesRead(orderId: string, readerId: string) {
+    try {
+      const audience = await orderAudience(orderId);
+      if (audience) socketManager.emitToRooms(audience.rooms, 'order:messages:read', { orderId, readerId });
+    } catch (err) {
+      console.error('order:messages:read event failed:', err);
+    }
+  }
+
+  /** A delivery job joined the open pool: riders reload their list of available jobs. */
+  emitDeliveryPosted(deliveryId: string, orderId: string) {
+    socketManager.emitToRole('rider', 'delivery:new', { deliveryId, orderId });
+  }
+
+  /** A rider took a job: it leaves every other rider's list, and the order's parties reload. */
+  async emitDeliveryClaimed(deliveryId: string, orderId: string) {
+    try {
+      socketManager.emitToRole('rider', 'delivery:removed', { deliveryId, orderId, reason: 'claimed' });
+      const audience = await orderAudience(orderId);
+      if (audience) socketManager.emitToRooms(audience.rooms, 'delivery:assigned', { deliveryId, orderId });
+    } catch (err) {
+      console.error('delivery:assigned event failed:', err);
     }
   }
 
@@ -329,18 +333,16 @@ export class RealtimeOrderService {
       updatedAt: new Date().toISOString(),
     };
 
-    // Emit to order room
-    socketManager.emitToOrder(orderId, 'order:delivery:tracking', trackingData);
-
-    // Emit to customer
+    // The order's room and the customer (who may only have their orders list open), once each.
     const order = await prisma.order.findUnique({
       where: { id: orderId },
       select: { customerId: true },
     });
-
-    if (order?.customerId) {
-      socketManager.emitToUser(order.customerId, 'order:delivery:tracking', trackingData);
-    }
+    socketManager.emitToRooms(
+      [`order:${orderId}`, ...(order?.customerId ? [`user:${order.customerId}`] : [])],
+      'order:delivery:tracking',
+      trackingData
+    );
   }
 }
 

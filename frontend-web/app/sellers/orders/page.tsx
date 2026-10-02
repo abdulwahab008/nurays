@@ -7,7 +7,7 @@ import { DashboardLayout, SELLER_SIDEBAR_ITEMS } from '@/components/layout/Dashb
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/toast';
 import { useAuthStore } from '@/lib/store/auth-store';
-import { useSocket } from '@/lib/hooks/use-socket';
+import { useLiveRefresh } from '@/lib/hooks/use-live-refresh';
 import { apiClient } from '@/lib/api-client';
 import { formatPrice, formatDate } from '@/lib/utils';
 import OrderChatModal from '@/components/orders/OrderChatModal';
@@ -94,8 +94,6 @@ export default function SellerOrdersPage() {
   // Chat with Customer Modal State
   const [chatTicket, setChatTicket] = useState<OrderTicket | null>(null);
 
-  const { onNewOrder } = useSocket();
-  const mountedRef = useRef(false);
 
   const filterRef = useRef(filter);
   const pageRef = useRef(page);
@@ -141,17 +139,12 @@ export default function SellerOrdersPage() {
     loadOrders();
   }, [isAuthenticated, user, filter, page, router, loadOrders]);
 
-  useEffect(() => {
-    if (!onNewOrder) return;
-    mountedRef.current = true;
-    const unsubscribe = onNewOrder(() => {
-      if (mountedRef.current) loadOrders(true);
-    });
-    return () => {
-      mountedRef.current = false;
-      unsubscribe?.();
-    };
-  }, [onNewOrder, loadOrders]);
+  // New orders, status and payment changes, and riders taking jobs arrive as live events;
+  // a slow timer covers anything that sends none.
+  useLiveRefresh(() => loadOrders(true), {
+    events: ['order:new', 'order:status:update', 'order:item:status:update', 'delivery:assigned'],
+    enabled: isAuthenticated,
+  });
 
   // Sync when notifications modal accepts/rejects order
   useEffect(() => {
@@ -160,14 +153,6 @@ export default function SellerOrdersPage() {
     return () => window.removeEventListener('seller-orders-updated', handleRemoteUpdate);
   }, [loadOrders]);
 
-  // Automated live polling loop every 3 seconds for active kitchen updates
-  useEffect(() => {
-    if (!isAuthenticated) return;
-    const interval = setInterval(() => {
-      loadOrders(true);
-    }, 3000);
-    return () => clearInterval(interval);
-  }, [isAuthenticated, loadOrders]);
 
   const handleConfirmPayment = async (orderId: string, confirmed: boolean) => {
     try {

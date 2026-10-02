@@ -10,6 +10,7 @@ import { apiClient } from '@/lib/api-client';
 import { formatPrice, formatDateTime, imageVariant } from '@/lib/utils';
 import SelfHandoverActions from '@/components/orders/SelfHandoverActions';
 import OrderChatModal from '@/components/orders/OrderChatModal';
+import { useLiveRefresh } from '@/lib/hooks/use-live-refresh';
 
 interface SellerOrderDetail {
   id: string;
@@ -96,6 +97,15 @@ export default function SellerOrderDetailPage() {
     }
     load();
   }, [isAuthenticated, user, router, load]);
+
+  // Payment receipts, cancellations, riders taking the job and chat-free status changes
+  // arrive as live events; stop once the order is finished.
+  const finished = ['delivered', 'completed', 'cancelled', 'refunded'].includes(order?.orderStatus ?? '');
+  useLiveRefresh(load, {
+    events: ['order:status:update', 'order:item:status:update', 'delivery:assigned'],
+    match: (data) => data?.orderId === orderId,
+    enabled: isAuthenticated && !!order && !finished,
+  });
 
   const act = async (key: string, path: string, body: object, ok: string) => {
     try {

@@ -1,53 +1,30 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
-import { io, Socket } from 'socket.io-client';
+import { useCallback, useEffect, useReducer } from 'react';
+import type { Socket } from 'socket.io-client';
 import { useAuthStore } from '../store/auth-store';
-import { apiClient } from '../api-client';
-import { socketUrl } from '../config';
+import { acquireSocket, currentSocket, onSocketChange, releaseSocket } from '../realtime/socket';
 
+/**
+ * Live updates over the tab's shared realtime connection (lib/realtime/socket.ts).
+ *
+ * The returned functions are stable for a given connection and change when it is replaced
+ * (a new access token, a different user), so effects that depend on them re-subscribe to
+ * the live connection instead of staying attached to a closed one.
+ */
 export function useSocket() {
-  // The socket is state, not just a ref: it is replaced whenever the access token
-  // changes, and consumers must re-run their subscriptions when that happens.
-  // (A ref changes silently, so listeners stayed attached to a dead socket and
-  // live updates stopped after the first token refresh.)
-  const [socket, setSocket] = useState<Socket | null>(null);
   const { isAuthenticated } = useAuthStore();
-  // Bumped whenever the access token changes (auth:tokens-changed event)
-  // to force this effect to re-run and reconnect with the fresh token.
-  const [tokenVersion, setTokenVersion] = useState(0);
+  const [, rerender] = useReducer((n: number) => n + 1, 0);
+
+  useEffect(() => onSocketChange(rerender), []);
 
   useEffect(() => {
-    const handler = () => setTokenVersion((v) => v + 1);
-    window.addEventListener('auth:tokens-changed', handler);
-    return () => window.removeEventListener('auth:tokens-changed', handler);
-  }, []);
+    if (isAuthenticated) acquireSocket();
+    else releaseSocket();
+  }, [isAuthenticated]);
 
-  useEffect(() => {
-    if (!isAuthenticated) return;
-
-    const token = apiClient.getAccessToken();
-    if (!token) return;
-
-    const next = io(socketUrl(), {
-      auth: { token },
-      transports: ['websocket', 'polling'],
-    });
-
-    next.on('connect_error', () => {
-      // Connection failed (e.g. WS server not running). Fail silently so the app still works.
-      if (process.env.NODE_ENV === 'development') {
-        console.warn('WebSocket unavailable — real-time updates disabled. Order page still works.');
-      }
-    });
-
-    setSocket(next);
-
-    return () => {
-      next.disconnect();
-      setSocket((current) => (current === next ? null : current));
-    };
-  }, [isAuthenticated, tokenVersion]);
+  const socket: Socket | null = isAuthenticated ? currentSocket() : null;
+  const connected = !!socket?.connected;
 
   /**
    * Join an order's room and keep it joined: the server forgets room membership
@@ -58,7 +35,7 @@ export function useSocket() {
     (orderId: string) => {
       if (!socket) return undefined;
       const join = () => socket.emit('join:order', orderId);
-      join();
+      if (socket.connected) join();
       socket.on('connect', join);
       return () => {
         socket.off('connect', join);
@@ -76,6 +53,7 @@ export function useSocket() {
   );
 
   const subscribe = useCallback(
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (event: string, callback: (data: any) => void) => {
       if (!socket) return undefined;
       socket.on(event, callback);
@@ -86,16 +64,12 @@ export function useSocket() {
     [socket]
   );
 
-  // Stable per socket, so effects that depend on them re-run exactly when the socket changes.
-  const onOrderStatusUpdate = useCallback(
-    (callback: (data: any) => void) => subscribe('order:status:update', callback),
-    [subscribe]
-  );
-  const onDeliveryTracking = useCallback(
-    (callback: (data: any) => void) => subscribe('order:delivery:tracking', callback),
-    [subscribe]
-  );
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const onOrderStatusUpdate = useCallback((callback: (data: any) => void) => subscribe('order:status:update', callback), [subscribe]);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const onDeliveryTracking = useCallback((callback: (data: any) => void) => subscribe('order:delivery:tracking', callback), [subscribe]);
   const onNewOrder = useCallback(
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (callback: (data: { orderId: string; orderNumber: string; totalAmount: number; items?: any[]; createdAt: string }) => void) =>
       subscribe('order:new', callback),
     [subscribe]
@@ -108,6 +82,8 @@ export function useSocket() {
 
   return {
     socket,
+    connected,
+    subscribe,
     joinOrderRoom,
     leaveOrderRoom,
     onOrderStatusUpdate,

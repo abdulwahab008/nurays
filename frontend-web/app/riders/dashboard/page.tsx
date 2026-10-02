@@ -8,6 +8,8 @@ import { useToast } from '@/components/ui/toast';
 import { useAuthStore } from '@/lib/store/auth-store';
 import { riderService, Delivery, RiderProfile } from '@/lib/services/rider.service';
 import { formatPrice, displayRating } from '@/lib/utils';
+import { apiClient } from '@/lib/api-client';
+import { useLiveRefresh } from '@/lib/hooks/use-live-refresh';
 
 const ROAD_STEPS = [
   { id: 'assigned', label: 'Claimed', icon: '📋' },
@@ -99,28 +101,33 @@ export default function RiderDashboardPage() {
     }
   }, [showToast, activeTab]);
 
-  // Auth guard and initial load
+  const isRider = user?.user_type === 'rider' || user?.userType === 'rider';
+
+  // Auth guard and initial load. The saved session can load a moment after the first
+  // render, so a stored token means "wait for it", not "send to login".
   useEffect(() => {
-    if (!isAuthenticated) {
+    if (!isAuthenticated && !apiClient.getAccessToken()) {
       router.push('/login');
       return;
     }
-    if (user?.user_type !== 'rider' && user?.userType !== 'rider') {
+    if (!user) return;
+    if (!isRider) {
       router.push('/products');
       showToast('Access denied. Rider fleet account required.', 'error');
       return;
     }
     loadAll();
-  }, [isAuthenticated, user, router, loadAll, showToast]);
+    // loadAll changes with the active tab; reloading on every tab switch isn't wanted.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isAuthenticated, user, isRider, router, showToast]);
 
-  // Automated 3-second live polling loop for real-time fleet telemetry
-  useEffect(() => {
-    if (!isAuthenticated) return;
-    const interval = setInterval(() => {
-      loadAll(true);
-    }, 3000);
-    return () => clearInterval(interval);
-  }, [isAuthenticated, loadAll]);
+  // New jobs, jobs taken by other riders or cancelled, and status changes on this rider's
+  // orders (e.g. the kitchen marking food ready) arrive as live events.
+  useLiveRefresh(() => loadAll(true), {
+    events: ['delivery:new', 'delivery:removed', 'delivery:cancelled', 'delivery:assigned', 'order:status:update'],
+    enabled: isAuthenticated && isRider && !blockedReason,
+    intervalMs: 30_000,
+  });
 
   const activeDeliveries = mine.filter(
     (d) => d.status !== 'delivered' && d.status !== 'delivery_failed'
