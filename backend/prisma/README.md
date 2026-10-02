@@ -1,7 +1,7 @@
 # Database schema and migrations
 
 `schema.prisma` is the data model. `migrations/` holds the SQL that builds and changes the
-database; it starts with `20261002400000_baseline`, the complete schema at the time the
+database; it starts with `0_baseline`, the complete schema at the time the
 migration history was rebuilt. Every later change is a new migration after it.
 
 ## New database
