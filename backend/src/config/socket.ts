@@ -152,6 +152,16 @@ class SocketManager {
     this.io?.in(`user:${userId}`).socketsLeave(`order:${orderId}`);
   }
 
+  /**
+   * One event to everyone in any of these rooms. A connection in several of them (a customer
+   * who is in the order's room and their own user room) receives it once, not once per room.
+   */
+  emitToRooms(rooms: string[], event: string, data: any) {
+    if (this.io && rooms.length > 0) {
+      this.io.to(Array.from(new Set(rooms))).emit(event, data);
+    }
+  }
+
   emitToUser(userId: string, event: string, data: any) {
     if (this.io) {
       this.io.to(`user:${userId}`).emit(event, data);

@@ -143,6 +143,7 @@ class ApiClient {
     sessionStorage.removeItem('tab_isolated');
     localStorage.removeItem('access_token');
     localStorage.removeItem('refresh_token');
+    window.dispatchEvent(new CustomEvent('auth:tokens-changed'));
   }
 
   setToken(token: string, isolated = false): void {
@@ -153,6 +154,7 @@ class ApiClient {
     } else {
       localStorage.setItem('access_token', token);
     }
+    window.dispatchEvent(new CustomEvent('auth:tokens-changed'));
   }
 
   setTokens(accessToken: string, refreshToken: string, isolated = false): void {

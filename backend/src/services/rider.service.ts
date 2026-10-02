@@ -142,7 +142,7 @@ export class RiderService {
     const deliveryLng = order.deliveryAddress?.longitude ? Number(order.deliveryAddress.longitude) : 67.0594;
 
     try {
-      await prisma.delivery.create({
+      const created = await prisma.delivery.create({
         data: {
           orderId,
           pickupAddress: pickupSeller?.businessName ?? 'Seller pickup',
@@ -155,6 +155,7 @@ export class RiderService {
           estimatedReadyAt,
         },
       });
+      realtimeOrderService.emitDeliveryPosted(created.id, orderId);
     } catch (err) {
       const isDuplicate = err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002';
       if (!isDuplicate) throw err;
@@ -311,6 +312,7 @@ export class RiderService {
     if (claim.count === 0) {
       throw new AppError('Delivery already claimed by another rider', 409, 'ALREADY_CLAIMED');
     }
+    void realtimeOrderService.emitDeliveryClaimed(deliveryId, delivery.orderId);
 
     const updated = await prisma.delivery.findUniqueOrThrow({
       where: { id: deliveryId },

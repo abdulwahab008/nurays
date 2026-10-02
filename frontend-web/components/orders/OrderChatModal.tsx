@@ -5,6 +5,7 @@ import { Send, X, ShieldCheck, Mic, Square, Trash2, Play, Pause, Check, CheckChe
 import { apiClient } from '@/lib/api-client';
 import { orderService, OrderMessage } from '@/lib/services/order.service';
 import { useToast } from '@/components/ui/toast';
+import { useLiveRefresh } from '@/lib/hooks/use-live-refresh';
 
 interface OrderChatModalProps {
   orderId: string;
@@ -242,14 +243,16 @@ export default function OrderChatModal({
   useEffect(() => {
     if (!isOpen) return;
     loadMessages();
-
-    // Poll for new messages & read updates every 3 seconds while modal is open
-    const interval = setInterval(() => {
-      loadMessages(true);
-    }, 3000);
-
-    return () => clearInterval(interval);
   }, [isOpen, loadMessages]);
+
+  // New messages and read receipts arrive as live events while the chat is open.
+  useLiveRefresh(() => loadMessages(true), {
+    events: ['order:message', 'order:messages:read'],
+    match: (data) => data?.orderId === orderId,
+    intervalMs: 30_000,
+    offlineMs: 5_000,
+    enabled: isOpen,
+  });
 
   useEffect(() => {
     if (messages.length > 0) {

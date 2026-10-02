@@ -1463,7 +1463,7 @@ export class OrderService {
     void role;
     const readCondition = { senderId: { not: userId } };
 
-    await prisma.orderMessage.updateMany({
+    const markedRead = await prisma.orderMessage.updateMany({
       where: {
         orderId,
         ...readCondition,
@@ -1474,6 +1474,7 @@ export class OrderService {
         readAt: new Date(),
       },
     });
+    if (markedRead.count > 0) void realtimeOrderService.emitMessagesRead(orderId, userId);
 
     const messages = await prisma.orderMessage.findMany({
       where: { orderId },
@@ -1609,6 +1610,8 @@ export class OrderService {
         },
       },
     });
+
+    void realtimeOrderService.emitOrderMessage(orderId, orderMsg.id, userId, effectiveRole);
 
     return {
       id: orderMsg.id,

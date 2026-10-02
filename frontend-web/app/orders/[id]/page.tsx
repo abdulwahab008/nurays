@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/toast';
 import { useAuthStore } from '@/lib/store/auth-store';
 import { useSocket } from '@/lib/hooks/use-socket';
+import { useLiveRefresh } from '@/lib/hooks/use-live-refresh';
 import { DashboardLayout, CUSTOMER_SIDEBAR_ITEMS } from '@/components/layout/DashboardShell';
 import WriteReviewForm from '@/components/products/WriteReviewForm';
 import { apiClient } from '@/lib/api-client';
@@ -283,24 +284,24 @@ function OrderDetailContent() {
     }
   };
 
-  // Safety-net polling (every 3 seconds) for portals that update the order without
-  // a socket event. Reads the latest status from a ref instead of calling setState
-  // with a side effect in the updater (updaters must be pure — StrictMode runs
-  // them twice, which fired two requests per tick), and never starts a request
-  // while the previous one is still in flight.
-  const statusRef = useRef('');
-  statusRef.current = order?.status || order?.orderStatus || '';
-
-  useEffect(() => {
-    if (!isAuthenticated || !params.id) return;
-    const terminal = ['delivered', 'completed', 'cancelled', 'refunded', 'delivery_failed'];
-    const interval = setInterval(() => {
-      if (!statusRef.current || terminal.includes(statusRef.current)) return;
-      if (inFlightRef.current) return;
-      loadOrder(true);
-    }, 3000);
-    return () => clearInterval(interval);
-  }, [isAuthenticated, params.id]);
+  // Reload when anything about this order changes (status, an item, payment, a rider taking
+  // the job), on reconnect, and when the tab comes back; a slow timer covers changes that
+  // send no event. Stops once the order can no longer change. Never overlaps a load.
+  const currentStatus = order?.status || order?.orderStatus || '';
+  useLiveRefresh(
+    () => {
+      if (!inFlightRef.current) loadOrder(true);
+    },
+    {
+      events: ['order:status:update', 'order:item:status:update', 'delivery:assigned'],
+      match: (data) => data?.orderId === params.id,
+      enabled:
+        isAuthenticated &&
+        !!params.id &&
+        !!currentStatus &&
+        !['delivered', 'completed', 'cancelled', 'refunded', 'delivery_failed'].includes(currentStatus),
+    }
+  );
 
   const handleCancelOrder = async () => {
     if (!cancelReason.trim()) return;
