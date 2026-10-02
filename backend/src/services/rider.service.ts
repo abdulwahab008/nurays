@@ -6,6 +6,8 @@ import ledgerService from './ledger.service';
 import { haversineKm, calculateDeliveryFeeCorridor } from '../utils/deliveryFee';
 import { newHandoverCode, verifyHandoverCode } from './handover.service';
 import { cashLimitOf, listRiderEntries, postDeliveryEntries, riderEarningsSummary, riderMoney } from './rider-ledger.service';
+import { assertOwnDocument } from '../utils/documents';
+import { presentFile } from '../storage';
 
 // Delivery.status lifecycle:
 // pending (unclaimed) -> assigned (claimed) -> arrived_at_pickup -> picked_up -> in_transit -> arrived_at_customer -> delivered (with OTP).
@@ -564,6 +566,67 @@ export class RiderService {
     if (!rider) throw new AppError('Rider profile not found', 404, 'RIDER_NOT_FOUND');
     const [summary, history] = await Promise.all([riderEarningsSummary(rider), listRiderEntries(rider.id, page)]);
     return { ...summary, ...history };
+  }
+
+  /** The rider's own application: their details, documents on file and where it stands. */
+  async getMyApplication(userId: string) {
+    const rider = await prisma.rider.findUnique({ where: { userId }, include: { documents: { orderBy: { createdAt: 'desc' } } } });
+    if (!rider) throw new AppError('Rider profile not found', 404, 'RIDER_NOT_FOUND');
+    return {
+      verificationStatus: rider.verificationStatus,
+      rejectionReason: rider.rejectionReason,
+      status: rider.status,
+      city: rider.city,
+      vehicleType: rider.vehicleType,
+      vehicleNumber: rider.vehicleNumber,
+      licenseNumber: rider.licenseNumber,
+      documents: await Promise.all(rider.documents.map(async (d) => ({ type: d.documentType, url: await presentFile(d.documentUrl), uploadedAt: d.createdAt }))),
+    };
+  }
+
+  /**
+   * A rider sends (or, after a rejection, sends again) their application: vehicle and photos
+   * of both sides of their CNIC and their driving licence, uploaded here. It goes back to the
+   * admins for review. An approved rider changes details through support instead.
+   */
+  async submitApplication(
+    userId: string,
+    data: { city: string; vehicleType: string; vehicleNumber: string; licenseNumber?: string; cnicFrontUrl?: string; cnicBackUrl?: string; licenseUrl?: string }
+  ) {
+    const rider = await prisma.rider.findUnique({ where: { userId }, include: { documents: { select: { documentType: true } } } });
+    if (!rider) throw new AppError('Rider profile not found', 404, 'RIDER_NOT_FOUND');
+    if (rider.verificationStatus === 'approved') {
+      throw new AppError('Your account is already approved. Contact support to change your details.', 409, 'ALREADY_APPROVED');
+    }
+    const docs: Record<string, string | null> = {
+      cnic_front: data.cnicFrontUrl ? assertOwnDocument(data.cnicFrontUrl, userId, 'front of your CNIC') : null,
+      cnic_back: data.cnicBackUrl ? assertOwnDocument(data.cnicBackUrl, userId, 'back of your CNIC') : null,
+      license: data.licenseUrl ? assertOwnDocument(data.licenseUrl, userId, 'photo of your driving licence') : null,
+    };
+    const onFile = new Set(rider.documents.map((d) => d.documentType));
+    if (Object.entries(docs).some(([type, url]) => !url && !onFile.has(type))) {
+      throw new AppError('Please upload photos of both sides of your CNIC and of your driving licence.', 400, 'DOCUMENTS_REQUIRED');
+    }
+
+    await prisma.$transaction(async (tx) => {
+      for (const [documentType, documentUrl] of Object.entries(docs)) {
+        if (!documentUrl) continue;
+        await tx.riderDocument.deleteMany({ where: { riderId: rider.id, documentType } });
+        await tx.riderDocument.create({ data: { riderId: rider.id, documentType, documentUrl } });
+      }
+      await tx.rider.update({
+        where: { id: rider.id },
+        data: {
+          city: data.city.trim(),
+          vehicleType: data.vehicleType,
+          vehicleNumber: data.vehicleNumber.trim().toUpperCase(),
+          licenseNumber: data.licenseNumber?.trim() || null,
+          verificationStatus: 'pending',
+          rejectionReason: null,
+        },
+      });
+    });
+    return this.getMyApplication(userId);
   }
 
   async toggleDutyStatus(userId: string, isAvailable?: boolean) {

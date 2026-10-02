@@ -22,7 +22,7 @@ export interface SidebarItem {
 
 interface DashboardSidebarProps {
   items: SidebarItem[];
-  userType: 'customer' | 'seller' | 'admin' | 'rider';
+  userType: 'customer' | 'seller' | 'admin' | 'rider' | 'hub_manager';
 }
 
 // Clean SVG icons for each menu item (semantic keys & backwards-compatible emoji keys)
@@ -296,6 +296,8 @@ function DashboardSidebarContent({ items, userType }: DashboardSidebarProps) {
     ? 'seller'
     : pathname.startsWith('/admin')
     ? 'admin'
+    : pathname === '/hub' || pathname.startsWith('/hub/')
+    ? 'hub_manager'
     : userType;
 
   const getUserTypeLabel = () => {
@@ -303,6 +305,7 @@ function DashboardSidebarContent({ items, userType }: DashboardSidebarProps) {
       case 'admin': return 'Administrator';
       case 'seller': return 'Seller';
       case 'rider': return 'Rider Fleet';
+      case 'hub_manager': return 'Hub manager';
       default: return 'Customer';
     }
   };

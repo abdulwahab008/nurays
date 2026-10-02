@@ -8,17 +8,16 @@ import { useToast } from '@/components/ui/toast';
 import { useAuthStore } from '@/lib/store/auth-store';
 import { apiClient } from '@/lib/api-client';
 import LocationMap from '@/components/ui/LocationMap';
+import FileUploadField from '@/components/ui/FileUploadField';
 
-const COMMUNITIES = [
-  'Askari 11, Karachi',
-  'DHA Phase 5, Karachi',
-  'Bahria Town, Karachi',
-  'Gulshan-e-Iqbal, Karachi',
-  'Clifton, Karachi',
-  'PECHS, Karachi',
-  'Askari 10, Lahore',
-  'DHA Phase 6, Lahore',
-];
+interface CommunityOption {
+  id: string;
+  name: string;
+  city: string;
+  centerLatitude: number;
+  centerLongitude: number;
+}
+
 
 const BUSINESS_TYPES = [
   { id: 'home_kitchen', title: 'Home Kitchen', desc: 'Homemade traditional recipes cooked in home kitchen' },
@@ -60,12 +59,13 @@ export default function SellerRegisterPage() {
     phone: '',
     email: '',
     description: '',
-    primaryCommunityName: 'Askari 11, Karachi',
+    communityId: '',
+    primaryCommunityName: '',
     houseOrUnitNumber: '',
     address: '',
-    latitude: 24.9125,
-    longitude: 67.115,
-    mealCategories: ['Biryani', 'Burgers'],
+    latitude: null as number | null,
+    longitude: null as number | null,
+    mealCategories: [] as string[],
     deliveryModes: ['delivery', 'pickup'],
     bankAccountName: '',
     bankAccountNumber: '',
@@ -74,13 +74,21 @@ export default function SellerRegisterPage() {
     easypaisaNumber: '',
     coverImageUrl: '',
     kitchenVideoUrl: '',
-    cnicFrontUrl: '',
-    cnicBackUrl: '',
-    kitchenPhotoUrls: [] as string[],
+    cnicFrontUrl: null as string | null,
+    cnicBackUrl: null as string | null,
+    kitchenPhotoUrls: [null, null] as Array<string | null>,
     agreeToTerms: false,
   });
 
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [communities, setCommunities] = useState<CommunityOption[]>([]);
+
+  useEffect(() => {
+    apiClient
+      .get('/communities')
+      .then((res) => setCommunities(res.data.data || []))
+      .catch(() => setCommunities([]));
+  }, []);
 
   useEffect(() => {
     const token = typeof window !== 'undefined' ? (sessionStorage.getItem('access_token') || localStorage.getItem('access_token')) : null;
@@ -105,7 +113,8 @@ export default function SellerRegisterPage() {
           businessNameUrdu: seller.businessNameUrdu || '',
           businessType: seller.businessType || 'home_kitchen',
           description: seller.description || '',
-          primaryCommunityName: seller.primaryCommunityName || 'Askari 11, Karachi',
+          primaryCommunityName: seller.primaryCommunityName || '',
+          communityId: seller.communityId || '',
           coverImageUrl: seller.coverImageUrl || '',
           kitchenVideoUrl: seller.kitchenVideoUrl || '',
         }));
@@ -153,10 +162,8 @@ export default function SellerRegisterPage() {
           showToast('📍 GPS coordinates detected successfully!', 'success');
         },
         () => {
-          // Fallback to Askari 11 Karachi
-          setFormData(prev => ({ ...prev, latitude: 24.9125, longitude: 67.115 }));
           setDetectingGps(false);
-          showToast('GPS access denied. Defaulted to Askari 11 Karachi.', 'info');
+          showToast("Location access was blocked. Click your kitchen's spot on the map instead.", 'info');
         }
       );
     } else {
@@ -165,6 +172,10 @@ export default function SellerRegisterPage() {
     }
   };
 
+  const isApproved = sellerInfo?.verificationStatus === 'approved' || sellerInfo?.verificationStatus === 'verified';
+  const isPending = sellerInfo?.verificationStatus === 'pending';
+  const isRejected = sellerInfo?.verificationStatus === 'rejected';
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const newErrors: Record<string, string> = {};
@@ -172,8 +183,14 @@ export default function SellerRegisterPage() {
     if (!formData.businessName.trim() || formData.businessName.length < 3) {
       newErrors.businessName = 'Business name must be at least 3 characters';
     }
-    if (!formData.primaryCommunityName) {
-      newErrors.primaryCommunityName = 'Please select a serving community';
+    if (!formData.communityId) {
+      newErrors.primaryCommunityName = 'Please select your community';
+    }
+    if (formData.latitude == null || formData.longitude == null) {
+      newErrors.location = "Pick your kitchen's location on the map";
+    }
+    if (!isRejected && (!formData.cnicFrontUrl || !formData.cnicBackUrl)) {
+      newErrors.cnic = 'Upload photos of both sides of your CNIC';
     }
     if (!formData.agreeToTerms && (!sellerInfo || sellerInfo.verificationStatus === 'rejected')) {
       newErrors.agreeToTerms = 'You must agree to the Terms & Conditions';
@@ -187,14 +204,16 @@ export default function SellerRegisterPage() {
 
     try {
       setLoading(true);
+      // Only real uploads: nothing is filled in on the applicant's behalf.
       const payload = {
         ...formData,
-        coverImageUrl: formData.coverImageUrl || 'https://images.unsplash.com/photo-1555396273-367ea4eb4db5?w=800&q=80',
-        cnicFrontUrl: formData.cnicFrontUrl || 'https://images.unsplash.com/photo-1589829545856-d10d557cf95f?w=600&q=80',
-        cnicBackUrl: formData.cnicBackUrl || 'https://images.unsplash.com/photo-1589829545856-d10d557cf95f?w=600&q=80',
-        kitchenPhotoUrls: formData.kitchenPhotoUrls.length > 0 
-          ? formData.kitchenPhotoUrls 
-          : ['https://images.unsplash.com/photo-1556910103-1c02745aae4d?w=800&q=80'],
+        latitude: formData.latitude ?? undefined,
+        longitude: formData.longitude ?? undefined,
+        communityId: formData.communityId || undefined,
+        coverImageUrl: formData.coverImageUrl || undefined,
+        cnicFrontUrl: formData.cnicFrontUrl || undefined,
+        cnicBackUrl: formData.cnicBackUrl || undefined,
+        kitchenPhotoUrls: formData.kitchenPhotoUrls.filter((u): u is string => !!u),
       };
 
       const response = await apiClient.post('/sellers/register', payload);
@@ -210,9 +229,6 @@ export default function SellerRegisterPage() {
     }
   };
 
-  const isApproved = sellerInfo?.verificationStatus === 'approved' || sellerInfo?.verificationStatus === 'verified';
-  const isPending = sellerInfo?.verificationStatus === 'pending';
-  const isRejected = sellerInfo?.verificationStatus === 'rejected';
 
   return (
     <div className="min-h-screen bg-slate-50 py-10 px-4 sm:px-6 lg:px-8">
@@ -406,15 +422,27 @@ export default function SellerRegisterPage() {
                   </label>
                   <select
                     id="community-select"
-                    name="primaryCommunityName"
-                    value={formData.primaryCommunityName}
-                    onChange={handleInputChange}
+                    name="communityId"
+                    value={formData.communityId}
+                    onChange={(e) => {
+                      const c = communities.find((x) => x.id === e.target.value);
+                      setFormData((prev) => ({ ...prev, communityId: e.target.value, primaryCommunityName: c ? `${c.name}, ${c.city}` : '' }));
+                      setErrors((prev) => {
+                        const n = { ...prev };
+                        delete n.primaryCommunityName;
+                        return n;
+                      });
+                    }}
                     className="w-full px-4 py-3 rounded-xl border border-slate-200 bg-slate-50 text-slate-900 font-medium text-sm focus:outline-none focus:ring-2 focus:ring-orange-500 transition-all"
                   >
-                    {COMMUNITIES.map(comm => (
-                      <option key={comm} value={comm}>{comm}</option>
+                    <option value="">{communities.length ? 'Choose your community' : 'Loading communities…'}</option>
+                    {communities.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.name}, {c.city}
+                      </option>
                     ))}
                   </select>
+                  {errors.primaryCommunityName && <p className="text-rose-500 text-xs font-medium mt-1">{errors.primaryCommunityName}</p>}
                 </div>
 
                 <div>
@@ -440,12 +468,16 @@ export default function SellerRegisterPage() {
                     Kitchen Location on Map
                   </label>
                   <span className="font-mono text-xs text-slate-500 font-medium">
-                    {formData.latitude?.toFixed(4)}, {formData.longitude?.toFixed(4)}
+                    {formData.latitude != null && formData.longitude != null ? `${formData.latitude.toFixed(4)}, ${formData.longitude.toFixed(4)}` : 'Not picked yet'}
                   </span>
                 </div>
                 <LocationMap
-                  center={{ lat: formData.latitude || 24.9125, lng: formData.longitude || 67.115 }}
-                  markerPosition={formData.latitude ? { lat: formData.latitude, lng: formData.longitude } : null}
+                  center={(() => {
+                    if (formData.latitude != null && formData.longitude != null) return { lat: formData.latitude, lng: formData.longitude };
+                    const c = communities.find((x) => x.id === formData.communityId);
+                    return c ? { lat: c.centerLatitude, lng: c.centerLongitude } : { lat: 31.5204, lng: 74.3587 };
+                  })()}
+                  markerPosition={formData.latitude != null && formData.longitude != null ? { lat: formData.latitude, lng: formData.longitude } : null}
                   height="260px"
                   onLocationSelect={(coords) => {
                     setFormData(prev => ({
@@ -454,8 +486,18 @@ export default function SellerRegisterPage() {
                       longitude: Number(coords.lng.toFixed(6)),
                       address: coords.address || prev.address,
                     }));
+                    setErrors((prev) => {
+                      const n = { ...prev };
+                      delete n.location;
+                      return n;
+                    });
                   }}
                 />
+                {errors.location ? (
+                  <p className="text-rose-500 text-xs font-medium">{errors.location}</p>
+                ) : (
+                  <p className="text-xs text-slate-500">Click your kitchen&apos;s exact spot (or drag the pin). Riders and delivery fees use it.</p>
+                )}
               </div>
             </div>
 
@@ -582,37 +624,54 @@ export default function SellerRegisterPage() {
                 Identity &amp; Kitchen Hygiene Proofs
               </h2>
 
+              <p className="text-xs text-slate-500">
+                Photos of your CNIC and kitchen are seen only by Nuray&apos;s verification team.
+                {isRejected ? ' Upload new ones only if you were asked to.' : ''}
+              </p>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
-                    CNIC Front Image URL
-                  </label>
-                  <input
-                    id="cnic-front-input"
-                    type="text"
-                    name="cnicFrontUrl"
-                    value={formData.cnicFrontUrl}
-                    onChange={handleInputChange}
-                    placeholder="https://example.com/cnic-front.jpg"
-                    className="w-full px-4 py-3 rounded-xl border border-slate-200 bg-slate-50 text-slate-900 font-medium text-sm focus:outline-none focus:ring-2 focus:ring-orange-500 transition-all"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
-                    Kitchen Photo URL
-                  </label>
-                  <input
-                    id="kitchen-photo-input"
-                    type="text"
-                    name="coverImageUrl"
-                    value={formData.coverImageUrl}
-                    onChange={handleInputChange}
-                    placeholder="https://example.com/kitchen.jpg"
-                    className="w-full px-4 py-3 rounded-xl border border-slate-200 bg-slate-50 text-slate-900 font-medium text-sm focus:outline-none focus:ring-2 focus:ring-orange-500 transition-all"
-                  />
-                </div>
+                <FileUploadField
+                  kind="document"
+                  label="CNIC front"
+                  required={!isRejected}
+                  value={formData.cnicFrontUrl}
+                  onChange={(v) => setFormData((prev) => ({ ...prev, cnicFrontUrl: v }))}
+                  onFileText={isRejected ? 'On file from your last application' : undefined}
+                  testId="cnic-front-upload"
+                />
+                <FileUploadField
+                  kind="document"
+                  label="CNIC back"
+                  required={!isRejected}
+                  value={formData.cnicBackUrl}
+                  onChange={(v) => setFormData((prev) => ({ ...prev, cnicBackUrl: v }))}
+                  onFileText={isRejected ? 'On file from your last application' : undefined}
+                  testId="cnic-back-upload"
+                />
               </div>
+              {errors.cnic && <p className="text-rose-500 text-xs font-medium">{errors.cnic}</p>}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {formData.kitchenPhotoUrls.map((url, i) => (
+                  <FileUploadField
+                    key={i}
+                    kind="document"
+                    label={`Kitchen photo ${i + 1}`}
+                    hint={i === 0 ? 'Where you cook and store food' : 'Optional'}
+                    value={url}
+                    onChange={(v) =>
+                      setFormData((prev) => ({ ...prev, kitchenPhotoUrls: prev.kitchenPhotoUrls.map((x, j) => (j === i ? v : x)) }))
+                    }
+                    testId={`kitchen-photo-${i + 1}`}
+                  />
+                ))}
+              </div>
+              <FileUploadField
+                kind="cover"
+                label="Storefront cover photo (optional)"
+                hint="Shown at the top of your kitchen page. You can add it later."
+                value={formData.coverImageUrl || null}
+                onChange={(v) => setFormData((prev) => ({ ...prev, coverImageUrl: v ?? '' }))}
+                testId="cover-upload"
+              />
             </div>
 
             {/* Section 6: Terms Acceptance & Submit */}

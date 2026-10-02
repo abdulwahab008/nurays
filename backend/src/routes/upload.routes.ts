@@ -6,6 +6,7 @@ import {
   uploadChatMedia,
   uploadDocument,
   uploadAvatar,
+  uploadCover,
 } from '../controllers/upload.controller';
 import { imageUpload, singleFileUpload, documentUpload } from '../services/upload.service';
 import { authenticate, authorize } from '../middleware/auth.middleware';
@@ -31,5 +32,8 @@ router.post('/documents', uploadLimiter, documentUpload.single('file'), uploadDo
 
 // Profile photo
 router.post('/avatar', uploadLimiter, imageUpload.single('avatar'), uploadAvatar);
+
+// Storefront cover photo (sellers and people applying to sell)
+router.post('/cover', uploadLimiter, imageUpload.single('cover'), uploadCover);
 
 export default router;

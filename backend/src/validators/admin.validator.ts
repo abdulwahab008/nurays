@@ -62,3 +62,44 @@ export const riderAdjustmentSchema = z.object({
 export const riderCashLimitSchema = z.object({
   cashLimit: z.number().finite().min(0).max(1_000_000).nullable(),
 });
+
+// People
+export const accountStatusSchema = z.object({ status: z.enum(['active', 'suspended']) });
+export const hubManagerSchema = z.object({ identifier: z.string().trim().min(3, 'Enter an email address or phone number').max(120) });
+
+// Places
+const lat = z.number().finite().min(-90).max(90);
+const lng = z.number().finite().min(-180).max(180);
+const communityFields = {
+  name: z.string().trim().min(2).max(80),
+  slug: z.string().trim().max(60),
+  city: z.string().trim().min(2).max(60),
+  areaDescription: z.string().trim().max(300).nullable(),
+  centerLatitude: lat,
+  centerLongitude: lng,
+  radiusKm: z.number().finite().min(0.2).max(50),
+  deliveryBaseFee: z.number().finite().min(0).max(5000),
+  crossCommunityBaseFee: z.number().finite().min(0).max(5000),
+  crossCommunityEnabled: z.boolean(),
+  neighborCommunityIds: z.array(z.string().uuid()).max(50),
+  isActive: z.boolean(),
+};
+export const createCommunitySchema = z.object(communityFields).partial().required({ name: true, city: true, centerLatitude: true, centerLongitude: true });
+export const updateCommunitySchema = z.object(communityFields).partial();
+
+const hubFields = {
+  name: z.string().trim().min(2).max(80),
+  code: z.string().trim().min(2).max(20),
+  city: z.string().trim().min(2).max(60),
+  area: z.string().trim().min(2).max(80),
+  address: z.string().trim().min(5).max(300),
+  latitude: lat,
+  longitude: lng,
+  capacityCubicFeet: z.number().int().min(1).max(1_000_000),
+  freezerUnits: z.number().int().min(1).max(500),
+  contactPhone: z.string().trim().max(20).nullable(),
+  status: z.enum(['active', 'inactive', 'maintenance']),
+};
+export const createHubSchema = z.object(hubFields).partial().required({ name: true, code: true, city: true, area: true, address: true, latitude: true, longitude: true, capacityCubicFeet: true });
+export const updateHubSchema = z.object(hubFields).partial();
+export const assignHubManagerSchema = z.object({ managerId: z.string().uuid().nullable() });

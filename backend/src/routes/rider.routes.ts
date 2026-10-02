@@ -8,11 +8,14 @@ import {
   getRiderProfile,
   toggleDutyStatus,
   getRiderEarnings,
+  getMyApplication,
+  submitApplication,
 } from '../controllers/rider.controller';
 import { authenticate, authorize } from '../middleware/auth.middleware';
 import { validate } from '../middleware/validation.middleware';
 import { locationLimiter } from '../middleware/rateLimiter';
-import { updateDeliveryStatusSchema } from '../validators/rider.validator';
+import { updateDeliveryStatusSchema, riderApplicationSchema } from '../validators/rider.validator';
+import { submissionLimiter } from '../middleware/rateLimiter';
 
 const router = Router();
 
@@ -21,6 +24,8 @@ router.use(authorize('rider'));
 
 router.get('/me', getRiderProfile);
 router.get('/me/earnings', getRiderEarnings);
+router.get('/me/application', getMyApplication);
+router.put('/me/application', submissionLimiter, validate(riderApplicationSchema), submitApplication);
 router.patch('/duty-status', toggleDutyStatus);
 router.get('/deliveries/available', getAvailableDeliveries);
 router.get('/deliveries/mine', getMyDeliveries);

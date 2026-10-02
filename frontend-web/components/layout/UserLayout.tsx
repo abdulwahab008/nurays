@@ -4,6 +4,7 @@ import { ReactNode } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { DashboardSidebar } from './DashboardSidebar';
+import { ADMIN_SIDEBAR_ITEMS } from './DashboardShell';
 import { DashboardNavbar } from './DashboardNavbar';
 import { useAuthStore } from '@/lib/store/auth-store';
 import { useEffect, useState } from 'react';
@@ -58,18 +59,7 @@ export function UserLayout({ children, showSidebar = true, showNavbar = true }: 
     { name: 'Dashboard', href: '/riders/dashboard', icon: '📊' },
   ];
 
-  const adminSidebarItems: SidebarItem[] = [
-    { name: 'Dashboard', href: '/admin/dashboard', icon: '📊' },
-    { name: 'Pending Sellers', href: '/admin/pending-sellers', icon: '👥' },
-    { name: 'All Sellers', href: '/admin/sellers', icon: '🏪' },
-    { name: 'Riders', href: '/admin/riders', icon: '🛵' },
-    { name: 'Orders', href: '/admin/orders', icon: '📦' },
-    { name: 'Products', href: '/admin/products', icon: '🍽️' },
-    { name: 'Payouts', href: '/admin/payouts', icon: '💸' },
-    { name: 'Support', href: '/admin/support', icon: '🎫' },
-    { name: 'Analytics', href: '/admin/analytics', icon: '📈' },
-    { name: 'Settings', href: '/admin/settings', icon: '⚙️' },
-  ];
+  const adminSidebarItems = ADMIN_SIDEBAR_ITEMS;
 
   // Get appropriate sidebar items based on user type
   const getSidebarItems = (): SidebarItem[] => {

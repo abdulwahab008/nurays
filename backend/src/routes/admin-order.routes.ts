@@ -11,6 +11,7 @@ import {
   dismissRefund,
   getPlatformAnalytics,
   getOrderStatistics,
+  confirmTransfer,
 } from '../controllers/admin-order.controller';
 import { validate, validateQuery } from '../middleware/validation.middleware';
 import {
@@ -22,6 +23,7 @@ import {
   dismissRefundSchema,
   listRefundsQuerySchema,
   getAnalyticsQuerySchema,
+  confirmTransferSchema,
 } from '../validators/admin-order.validator';
 import { authenticate, authorize } from '../middleware/auth.middleware';
 import { auditWrites } from '../middleware/audit';
@@ -56,6 +58,9 @@ router.post('/orders/:id/retry-delivery', retryDelivery);
 
 // Process refund
 router.post('/orders/:id/refund', validate(processRefundSchema), processRefund);
+
+// A disputed (or unconfirmed) transfer to the kitchen, confirmed by support after checking
+router.post('/orders/:id/confirm-payment', validate(confirmTransferSchema), confirmTransfer);
 
 // Refund queue: refunds owed to customers, and confirming a manual one was sent
 router.get('/refunds', validateQuery(listRefundsQuerySchema), listRefunds);

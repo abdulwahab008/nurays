@@ -3,6 +3,7 @@ import { AppError } from '../middleware/errorHandler';
 import adminService from './admin.service';
 import { computeSellerAvailability } from './availability.service';
 import { computeSellerBalance } from './seller-balance.service';
+import { assertOwnDocument, assertOwnPublicImage } from '../utils/documents';
 
 /** Shared shape for the business-operations fields — read by getSellerProfile, written by updateSellerProfile. */
 function formatBusinessOperationsFields(seller: {
@@ -55,6 +56,17 @@ function formatBusinessOperationsFields(seller: {
   };
 }
 
+/** A seller's documents of each given type are replaced by the new ones (null: left as they are). */
+async function replaceSellerDocuments(sellerId: string, docs: Record<string, string[] | null>) {
+  for (const [documentType, urls] of Object.entries(docs)) {
+    if (!urls) continue;
+    await prisma.$transaction([
+      prisma.sellerDocument.deleteMany({ where: { sellerId, documentType } }),
+      prisma.sellerDocument.createMany({ data: urls.map((documentUrl) => ({ sellerId, documentType, documentUrl })) }),
+    ]);
+  }
+}
+
 export class SellerService {
   /**
    * Register as seller
@@ -91,61 +103,64 @@ export class SellerService {
       where: { userId },
     });
 
-    if (existingSeller) {
-      // If previously rejected, permit re-submitting application with fixed details
-      if (existingSeller.verificationStatus === 'rejected') {
-        const updated = await prisma.seller.update({
-          where: { id: existingSeller.id },
-          data: {
-            businessName: data.businessName,
-            businessNameUrdu: data.businessNameUrdu,
-            businessType: data.businessType || existingSeller.businessType || 'home_kitchen',
-            description: data.description,
-            kitchenVideoUrl: data.kitchenVideoUrl,
-            coverImageUrl: data.coverImageUrl,
-            communityId: data.communityId,
-            primaryCommunityName: data.primaryCommunityName,
-            latitude: data.latitude !== undefined ? data.latitude : existingSeller.latitude,
-            longitude: data.longitude !== undefined ? data.longitude : existingSeller.longitude,
-            mealCategories: data.mealCategories || existingSeller.mealCategories,
-            deliveryModes: data.deliveryModes || existingSeller.deliveryModes,
-            bankAccountName: data.bankAccountName,
-            bankAccountNumber: data.bankAccountNumber,
-            bankName: data.bankName,
-            jazzcashNumber: data.jazzcashNumber,
-            easypaisaNumber: data.easypaisaNumber,
-            verificationStatus: 'pending',
-            rejectionReason: null,
-          },
-        });
-
-        // Add documents if provided
-        if (data.cnicFrontUrl) {
-          await prisma.sellerDocument.create({
-            data: { sellerId: updated.id, documentType: 'cnic_front', documentUrl: data.cnicFrontUrl },
-          });
-        }
-        if (data.cnicBackUrl) {
-          await prisma.sellerDocument.create({
-            data: { sellerId: updated.id, documentType: 'cnic_back', documentUrl: data.cnicBackUrl },
-          });
-        }
-        if (data.kitchenPhotoUrls && data.kitchenPhotoUrls.length > 0) {
-          for (const url of data.kitchenPhotoUrls) {
-            await prisma.sellerDocument.create({
-              data: { sellerId: updated.id, documentType: 'kitchen_photo', documentUrl: url },
-            });
-          }
-        }
-
-        return {
-          sellerId: updated.id,
-          verificationStatus: updated.verificationStatus,
-          message: 'Application resubmitted for review',
-        };
-      }
-
+    // Only a rejected application can be sent again.
+    if (existingSeller && existingSeller.verificationStatus !== 'rejected') {
       throw new AppError('Seller account already exists', 400, 'SELLER_ALREADY_EXISTS');
+    }
+
+    // Identity documents and photos must be files this user uploaded here, never links from
+    // elsewhere. A first application needs both sides of the CNIC; a resubmission keeps the
+    // ones already on file unless new ones are sent.
+    const cnicFront = data.cnicFrontUrl ? assertOwnDocument(data.cnicFrontUrl, userId, 'front of your CNIC') : null;
+    const cnicBack = data.cnicBackUrl ? assertOwnDocument(data.cnicBackUrl, userId, 'back of your CNIC') : null;
+    const kitchenPhotos = (data.kitchenPhotoUrls ?? []).slice(0, 6).map((url) => assertOwnDocument(url, userId, 'kitchen photo'));
+    const coverImageUrl =
+      data.coverImageUrl && data.coverImageUrl !== existingSeller?.coverImageUrl
+        ? assertOwnPublicImage(data.coverImageUrl, userId, 'covers', 'cover photo')
+        : data.coverImageUrl || existingSeller?.coverImageUrl || undefined;
+    const cnicOnFile = existingSeller
+      ? await prisma.sellerDocument.count({ where: { sellerId: existingSeller.id, documentType: { in: ['cnic_front', 'cnic_back'] } } })
+      : 0;
+    if ((!cnicFront || !cnicBack) && cnicOnFile < 2) {
+      throw new AppError('Please upload photos of both sides of your CNIC.', 400, 'CNIC_REQUIRED');
+    }
+    const saveDocuments = (sellerId: string) =>
+      replaceSellerDocuments(sellerId, { cnic_front: cnicFront ? [cnicFront] : null, cnic_back: cnicBack ? [cnicBack] : null, kitchen_photo: kitchenPhotos.length ? kitchenPhotos : null });
+
+    if (existingSeller) {
+      // Previously rejected: the application is sent again with the details fixed.
+      const updated = await prisma.seller.update({
+        where: { id: existingSeller.id },
+        data: {
+          businessName: data.businessName,
+          businessNameUrdu: data.businessNameUrdu,
+          businessType: data.businessType || existingSeller.businessType || 'home_kitchen',
+          description: data.description,
+          kitchenVideoUrl: data.kitchenVideoUrl,
+          coverImageUrl,
+          communityId: data.communityId,
+          primaryCommunityName: data.primaryCommunityName,
+          latitude: data.latitude !== undefined ? data.latitude : existingSeller.latitude,
+          longitude: data.longitude !== undefined ? data.longitude : existingSeller.longitude,
+          mealCategories: data.mealCategories || existingSeller.mealCategories,
+          deliveryModes: data.deliveryModes || existingSeller.deliveryModes,
+          bankAccountName: data.bankAccountName,
+          bankAccountNumber: data.bankAccountNumber,
+          bankName: data.bankName,
+          jazzcashNumber: data.jazzcashNumber,
+          easypaisaNumber: data.easypaisaNumber,
+          verificationStatus: 'pending',
+          rejectionReason: null,
+        },
+      });
+
+      await saveDocuments(updated.id);
+
+      return {
+        sellerId: updated.id,
+        verificationStatus: updated.verificationStatus,
+        message: 'Application resubmitted for review',
+      };
     }
 
     // Check if user exists
@@ -173,7 +188,7 @@ export class SellerService {
         businessType: data.businessType || 'home_kitchen',
         description: data.description,
         kitchenVideoUrl: data.kitchenVideoUrl,
-        coverImageUrl: data.coverImageUrl,
+        coverImageUrl,
         communityId: data.communityId,
         primaryCommunityName: data.primaryCommunityName,
         latitude: data.latitude,
@@ -190,24 +205,7 @@ export class SellerService {
       },
     });
 
-    // Store uploaded documents
-    if (data.cnicFrontUrl) {
-      await prisma.sellerDocument.create({
-        data: { sellerId: seller.id, documentType: 'cnic_front', documentUrl: data.cnicFrontUrl },
-      });
-    }
-    if (data.cnicBackUrl) {
-      await prisma.sellerDocument.create({
-        data: { sellerId: seller.id, documentType: 'cnic_back', documentUrl: data.cnicBackUrl },
-      });
-    }
-    if (data.kitchenPhotoUrls && data.kitchenPhotoUrls.length > 0) {
-      for (const url of data.kitchenPhotoUrls) {
-        await prisma.sellerDocument.create({
-          data: { sellerId: seller.id, documentType: 'kitchen_photo', documentUrl: url },
-        });
-      }
-    }
+    await saveDocuments(seller.id);
 
     // Update user type to seller (if not already)
     if (user.userType !== 'seller') {
