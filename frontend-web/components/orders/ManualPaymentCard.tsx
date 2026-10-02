@@ -6,6 +6,10 @@ import { orderService, SellerPaymentDetails, SellerPaymentAccount } from '@/lib/
 import { apiClient } from '@/lib/api-client';
 import { formatPrice } from '@/lib/utils';
 import { useToast } from '@/components/ui/toast';
+import { useT } from '@/lib/i18n';
+import { commonMessages } from '@/lib/i18n/messages/common';
+import { paymentsMessages } from '@/lib/i18n/messages/payments';
+import { richText } from '@/lib/i18n/messages/checkout';
 
 interface ManualPaymentCardProps {
   orderId: string;
@@ -28,6 +32,8 @@ export default function ManualPaymentCard({
   paymentSenderAccount,
   onPaymentSubmitted,
 }: ManualPaymentCardProps) {
+  const t = useT(paymentsMessages);
+  const tc = useT(commonMessages);
   const [details, setDetails] = useState<SellerPaymentDetails | null>(null);
   const [loading, setLoading] = useState(true);
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
@@ -82,7 +88,7 @@ export default function ManualPaymentCard({
   const copyToClipboard = (text: string, key: string) => {
     navigator.clipboard.writeText(text);
     setCopiedKey(key);
-    showToast('Copied to clipboard!', 'success');
+    showToast(t('copiedClipboard'), 'success');
     setTimeout(() => setCopiedKey(null), 2500);
   };
 
@@ -91,12 +97,12 @@ export default function ManualPaymentCard({
     if (!file) return;
 
     if (!file.type.startsWith('image/')) {
-      showToast('Please select a valid image file (PNG, JPG, JPEG, WebP)', 'warning');
+      showToast(t('invalidImage'), 'warning');
       return;
     }
 
     if (file.size > 10 * 1024 * 1024) {
-      showToast('Image file size must be under 10MB', 'warning');
+      showToast(t('imageTooBig'), 'warning');
       return;
     }
 
@@ -128,7 +134,7 @@ export default function ManualPaymentCard({
       if (token !== uploadToken.current) return;
       setScreenshotFile(null);
       setScreenshotPreview(null);
-      showToast('Could not upload the screenshot. Please try again, or enter the reference number instead.', 'error');
+      showToast(t('uploadFailed'), 'error');
     } finally {
       if (token === uploadToken.current) setUploadingImage(false);
     }
@@ -155,7 +161,7 @@ export default function ManualPaymentCard({
     const cleanTid = transactionId.trim();
 
     if (!cleanTid && !activeProofUrl) {
-      showToast('Please either upload a payment screenshot or enter the reference number.', 'warning');
+      showToast(t('needProof'), 'warning');
       return;
     }
 
@@ -175,7 +181,7 @@ export default function ManualPaymentCard({
           : `Payment sent to kitchen via ${resolvedMethod}`,
       });
 
-      showToast('Payment proof submitted! The home chef will verify your transfer.', 'success');
+      showToast(t('proofSubmittedToast'), 'success');
       setLocalTid(referenceToSave);
       setLocalMethod(resolvedMethod);
       setLocalProofUrl(activeProofUrl || null);
@@ -183,7 +189,7 @@ export default function ManualPaymentCard({
       setShowSubmitModal(false);
       onPaymentSubmitted();
     } catch (err: any) {
-      const msg = err.response?.data?.error?.message || 'Failed to submit payment proof';
+      const msg = err.response?.data?.error?.message || t('submitFailed');
       showToast(msg, 'error');
     } finally {
       setSubmitting(false);
@@ -212,9 +218,9 @@ export default function ManualPaymentCard({
           <CheckCircle2 className="w-5 h-5" />
         </div>
         <div>
-          <h4 className="font-black text-sm text-emerald-950">Payment Confirmed &amp; Verified</h4>
+          <h4 className="font-black text-sm text-emerald-950">{t('paidTitle')}</h4>
           <p className="text-xs text-emerald-800 font-medium mt-0.5">
-            The kitchen has confirmed receipt of {formatPrice(totalAmount)}. Your fresh domestic order is being prepared.
+            {t('paidText', { amount: formatPrice(totalAmount) })}
           </p>
         </div>
       </div>
@@ -236,14 +242,14 @@ export default function ManualPaymentCard({
           <div className="flex-1">
             <div className="flex items-center gap-2 flex-wrap">
               <h4 className="font-black text-base text-amber-950">
-                Payment Proof Submitted
+                {t('proofSubmitted')}
               </h4>
               <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black bg-amber-200 text-amber-900">
-                Awaiting Kitchen Verification
+                {t('awaitingVerification')}
               </span>
             </div>
             <p className="text-xs text-amber-800 font-medium mt-1 leading-relaxed">
-              We notified the home chef. They are verifying your mobile wallet / bank transfer receipt and will confirm your order immediately.
+              {t('notifiedText')}
             </p>
           </div>
         </div>
@@ -253,10 +259,10 @@ export default function ManualPaymentCard({
           <div className="flex items-center justify-between flex-wrap gap-2">
             <div>
               <span className="text-[10px] uppercase font-bold text-slate-400 block tracking-wider">
-                Payment Reference / Method
+                {t('refMethod')}
               </span>
               <span className="font-semibold text-xs text-slate-800">
-                {tidToDisplay || (methodToDisplay ? `Transferred via ${methodToDisplay}` : 'Receipt Attached')}
+                {tidToDisplay ? <span data-ltr>{tidToDisplay}</span> : methodToDisplay ? t('transferredVia', { method: methodToDisplay }) : t('receiptAttached')}
               </span>
             </div>
 
@@ -264,10 +270,10 @@ export default function ManualPaymentCard({
               <button
                 onClick={() => copyToClipboard(tidToDisplay, 'tid')}
                 className="p-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 transition-colors text-xs font-bold flex items-center gap-1"
-                title="Copy reference"
+                title={t('copyReference')}
               >
                 {copiedKey === 'tid' ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
-                <span>Copy</span>
+                <span>{t('copy')}</span>
               </button>
             )}
           </div>
@@ -277,20 +283,20 @@ export default function ManualPaymentCard({
               <div className="w-14 h-14 rounded-xl border border-slate-200 overflow-hidden bg-slate-50 flex items-center justify-center flex-shrink-0">
                 <img
                   src={proofToDisplay}
-                  alt="Payment Receipt"
+                  alt={t('receiptAlt')}
                   className="w-full h-full object-cover cursor-pointer hover:opacity-90"
                   onClick={() => window.open(proofToDisplay, '_blank')}
                 />
               </div>
               <div className="text-xs">
-                <span className="font-bold text-slate-800 block">Payment Screenshot Attached</span>
+                <span className="font-bold text-slate-800 block">{t('screenshotAttached')}</span>
                 <a
                   href={proofToDisplay}
                   target="_blank"
                   rel="noreferrer"
                   className="text-[#FF5500] hover:underline font-bold text-[11px]"
                 >
-                  View full receipt image ↗
+                  {t('viewReceipt')}
                 </a>
               </div>
             </div>
@@ -307,13 +313,13 @@ export default function ManualPaymentCard({
       <div className="flex items-start justify-between gap-4">
         <div>
           <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-orange-100 text-[#FF5500] text-[10px] font-black uppercase tracking-wider mb-1.5">
-            ⚡ Direct Kitchen Payment
+            {t('directBadge')}
           </div>
           <h3 className="text-lg font-black text-slate-900">
-            Pay Directly to {details?.sellerName || 'Kitchen'}
+            {t('payDirectlyTo', { name: details?.sellerName || t('kitchen') })}
           </h3>
           <p className="text-xs text-slate-500 font-medium mt-0.5">
-            Transfer exact amount of <span className="font-black text-slate-900">{formatPrice(totalAmount)}</span> using JazzCash, EasyPaisa, or Bank Alfalah / Raast.
+            {richText(t('transferExact'), { amount: <span className="font-black text-slate-900">{formatPrice(totalAmount)}</span> })}
           </p>
         </div>
 
@@ -326,7 +332,7 @@ export default function ManualPaymentCard({
       {loading ? (
         <div className="p-8 text-center text-slate-400">
           <div className="w-6 h-6 border-2 border-[#FF5500] border-t-transparent rounded-full animate-spin mx-auto mb-2" />
-          <span className="text-xs font-bold">Fetching kitchen payment accounts...</span>
+          <span className="text-xs font-bold">{t('fetchingAccounts')}</span>
         </div>
       ) : details?.accounts && details.accounts.length > 0 ? (
         <div className="space-y-3">
@@ -349,7 +355,7 @@ export default function ManualPaymentCard({
                       </span>
                     )}
                   </div>
-                  <div className="font-mono font-black text-sm text-slate-900 tracking-wider">
+                  <div className="font-mono font-black text-sm text-slate-900 tracking-wider" data-ltr>
                     {acc.accountNumber}
                   </div>
                 </div>
@@ -361,12 +367,12 @@ export default function ManualPaymentCard({
                   {copiedKey === `acc-${idx}` ? (
                     <>
                       <Check className="w-3.5 h-3.5 text-emerald-600" />
-                      <span className="text-emerald-700">Copied</span>
+                      <span className="text-emerald-700">{t('copied')}</span>
                     </>
                   ) : (
                     <>
                       <Copy className="w-3.5 h-3.5 text-slate-500" />
-                      <span>Copy</span>
+                      <span>{t('copy')}</span>
                     </>
                   )}
                 </button>
@@ -376,9 +382,9 @@ export default function ManualPaymentCard({
         </div>
       ) : (
         <div className="bg-slate-50 rounded-2xl p-4 border border-slate-200/80 text-xs text-slate-600">
-          <p className="font-bold text-slate-900">Direct Kitchen Transfer</p>
+          <p className="font-bold text-slate-900">{t('directTransfer')}</p>
           <p className="text-[11px] text-slate-500 mt-1">
-            Please transfer {formatPrice(totalAmount)} to the chef using JazzCash, EasyPaisa, or direct bank transfer.
+            {t('pleaseTransfer', { amount: formatPrice(totalAmount) })}
           </p>
         </div>
       )}
@@ -388,7 +394,7 @@ export default function ManualPaymentCard({
         onClick={() => setShowSubmitModal(true)}
         className="w-full py-3.5 px-4 rounded-2xl font-black text-xs text-white bg-[#FF5500] hover:bg-[#e04400] active:scale-[0.98] transition-all shadow-md flex items-center justify-center gap-2"
       >
-        <span>✓ I Have Paid — Submit Proof / Screenshot</span>
+        <span>{t('iHavePaid')}</span>
       </button>
 
       {/* Redesigned Submit Payment Proof Modal */}
@@ -400,14 +406,15 @@ export default function ManualPaymentCard({
               <div className="flex items-center gap-2.5">
                 <span className="text-xl">🧾</span>
                 <div>
-                  <h3 className="font-black text-sm">Submit Payment Proof</h3>
+                  <h3 className="font-black text-sm">{t('submitProof')}</h3>
                   <p className="text-[11px] text-slate-400">
-                    Order total: <strong className="text-white">{formatPrice(totalAmount)}</strong>
+                    {richText(t('orderTotal'), { amount: <strong className="text-white">{formatPrice(totalAmount)}</strong> })}
                   </p>
                 </div>
               </div>
               <button
                 onClick={() => setShowSubmitModal(false)}
+                aria-label={tc('close')}
                 className="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center text-sm transition-colors"
               >
                 ✕
@@ -419,7 +426,7 @@ export default function ManualPaymentCard({
               {/* Account Selection */}
               <div>
                 <label className="block text-xs font-black text-slate-900 mb-2">
-                  1. Which account did you send payment to? <span className="text-[#FF5500]">*</span>
+                  {t('whichAccount')} <span className="text-[#FF5500]">*</span>
                 </label>
                 {details?.accounts && details.accounts.length > 0 ? (
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
@@ -431,7 +438,7 @@ export default function ManualPaymentCard({
                           key={i}
                           type="button"
                           onClick={() => setSelectedProvider(acc.provider)}
-                          className={`p-3 rounded-2xl border text-left transition-all flex items-center gap-2.5 ${
+                          className={`p-3 rounded-2xl border text-start transition-all flex items-center gap-2.5 ${
                             isSelected
                               ? 'border-[#FF5500] bg-orange-50/50 shadow-xs ring-1 ring-[#FF5500]'
                               : 'border-slate-200 bg-white hover:bg-slate-50 text-slate-700'
@@ -442,7 +449,7 @@ export default function ManualPaymentCard({
                             <span className="font-black text-xs text-slate-900 block truncate">
                               {acc.provider}
                             </span>
-                            <span className="text-[10px] text-slate-500 font-mono block truncate">
+                            <span className="text-[10px] text-slate-500 font-mono block truncate" data-ltr>
                               {acc.accountNumber}
                             </span>
                           </div>
@@ -457,7 +464,7 @@ export default function ManualPaymentCard({
                   </div>
                 ) : (
                   <div className="p-3 bg-slate-50 rounded-xl text-xs text-slate-600 font-semibold border border-slate-200">
-                    Transferred to {details?.sellerName || 'Kitchen'}
+                    {t('transferredTo', { name: details?.sellerName || t('kitchen') })}
                   </div>
                 )}
               </div>
@@ -465,9 +472,9 @@ export default function ManualPaymentCard({
               {/* Screenshot Upload Dropzone */}
               <div>
                 <label className="block text-xs font-black text-slate-900 mb-1.5 flex items-center justify-between">
-                  <span>2. Payment Screenshot / Receipt Photo</span>
+                  <span>{t('screenshotLabel')}</span>
                   <span className="text-[10px] font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-md">
-                    Recommended
+                    {t('recommended')}
                   </span>
                 </label>
 
@@ -489,10 +496,10 @@ export default function ManualPaymentCard({
                     </div>
                     <div>
                       <p className="text-xs font-black text-slate-800 group-hover:text-[#FF5500] transition-colors">
-                        Click or tap to upload payment screenshot
+                        {t('tapToUpload')}
                       </p>
                       <p className="text-[10px] text-slate-400 mt-0.5">
-                        Supports PNG, JPG, WebP from your mobile banking app or SMS receipt
+                        {t('supportsFormats')}
                       </p>
                     </div>
                   </div>
@@ -501,7 +508,7 @@ export default function ManualPaymentCard({
                     <div className="w-16 h-16 rounded-xl border border-slate-200 overflow-hidden bg-white flex-shrink-0 flex items-center justify-center">
                       <img
                         src={screenshotPreview}
-                        alt="Preview"
+                        alt={t('previewAlt')}
                         className="w-full h-full object-cover"
                       />
                     </div>
@@ -513,12 +520,12 @@ export default function ManualPaymentCard({
                         {uploadingImage ? (
                           <>
                             <span className="w-2.5 h-2.5 border-2 border-emerald-600 border-t-transparent rounded-full animate-spin" />
-                            <span>Uploading screenshot...</span>
+                            <span>{t('uploadingScreenshot')}</span>
                           </>
                         ) : (
                           <>
                             <span>✓</span>
-                            <span>Screenshot attached ready</span>
+                            <span>{t('screenshotReady')}</span>
                           </>
                         )}
                       </p>
@@ -527,7 +534,7 @@ export default function ManualPaymentCard({
                       type="button"
                       onClick={removeScreenshot}
                       className="w-7 h-7 rounded-full bg-slate-200 hover:bg-red-100 hover:text-red-600 text-slate-600 flex items-center justify-center text-xs transition-colors flex-shrink-0"
-                      title="Remove image"
+                      title={t('removeImage')}
                     >
                       ✕
                     </button>
@@ -538,13 +545,14 @@ export default function ManualPaymentCard({
               {/* TID / Reference Number (Optional if screenshot is attached) */}
               <div>
                 <label className="block text-xs font-black text-slate-900 mb-1">
-                  3. Transaction ID / Reference # <span className="text-slate-400 font-normal">(Optional if screenshot attached)</span>
+                  {t('tidLabel')} <span className="text-slate-400 font-normal">{t('optionalIfScreenshot')}</span>
                 </label>
                 <input
                   type="text"
                   value={transactionId}
                   onChange={(e) => setTransactionId(e.target.value)}
-                  placeholder="e.g. 19284729103 or FT26259..."
+                  placeholder={t('tidPlaceholder')}
+                  dir="ltr"
                   className="w-full px-4 py-2.5 border border-slate-200 rounded-xl text-xs font-bold font-mono focus:ring-2 focus:ring-[#FF5500] focus:border-transparent bg-slate-50 focus:bg-white"
                 />
               </div>
@@ -553,25 +561,26 @@ export default function ManualPaymentCard({
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block text-[11px] font-bold text-slate-700 mb-1">
-                    Sender Name <span className="text-slate-400 font-normal">(Optional)</span>
+                    {t('senderName')} <span className="text-slate-400 font-normal">{t('optional')}</span>
                   </label>
                   <input
                     type="text"
                     value={senderName}
                     onChange={(e) => setSenderName(e.target.value)}
-                    placeholder="e.g. Muhammad Ali"
+                    placeholder={t('senderNamePlaceholder')}
                     className="w-full px-3 py-2 border border-slate-200 rounded-xl text-xs font-semibold focus:ring-2 focus:ring-[#FF5500] bg-slate-50 focus:bg-white"
                   />
                 </div>
                 <div>
                   <label className="block text-[11px] font-bold text-slate-700 mb-1">
-                    Sender Mobile # <span className="text-slate-400 font-normal">(Optional)</span>
+                    {t('senderMobile')} <span className="text-slate-400 font-normal">{t('optional')}</span>
                   </label>
                   <input
                     type="text"
                     value={senderAccount}
                     onChange={(e) => setSenderAccount(e.target.value)}
-                    placeholder="e.g. 03001234567"
+                    placeholder={t('senderMobilePlaceholder')}
+                    dir="ltr"
                     className="w-full px-3 py-2 border border-slate-200 rounded-xl text-xs font-semibold focus:ring-2 focus:ring-[#FF5500] bg-slate-50 focus:bg-white"
                   />
                 </div>
@@ -587,10 +596,10 @@ export default function ManualPaymentCard({
                   {submitting ? (
                     <>
                       <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                      <span>Submitting...</span>
+                      <span>{t('submitting')}</span>
                     </>
                   ) : (
-                    <span>✓ Submit Payment Verification</span>
+                    <span>{t('submitVerification')}</span>
                   )}
                 </button>
                 <button
@@ -598,7 +607,7 @@ export default function ManualPaymentCard({
                   onClick={() => setShowSubmitModal(false)}
                   className="py-3 px-4 rounded-2xl font-extrabold text-xs text-slate-600 bg-slate-100 hover:bg-slate-200 transition-colors"
                 >
-                  Cancel
+                  {tc('cancel')}
                 </button>
               </div>
             </form>
