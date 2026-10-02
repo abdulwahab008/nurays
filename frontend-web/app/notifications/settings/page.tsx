@@ -16,6 +16,10 @@ import { useAuthStore } from '@/lib/store/auth-store';
 import { useToast } from '@/components/ui/toast';
 import { apiClient, apiErrorMessage } from '@/lib/api-client';
 import { disablePush, enablePush, getPushState, PushState } from '@/lib/push';
+import { useT } from '@/lib/i18n';
+import { accountMessages } from '@/lib/i18n/messages/account';
+
+type AccountKey = keyof typeof accountMessages.en;
 
 type Channel = 'push' | 'email' | 'sms';
 type Category = 'orders' | 'payments' | 'deliveries';
@@ -26,36 +30,37 @@ interface Settings {
   channels: Record<Channel, { available: boolean; reason: string | null }>;
 }
 
-const CATEGORY_COPY: Record<string, Record<Category, { title: string; text: string }>> = {
+// Message keys (translated at render); an empty text means no description.
+const CATEGORY_COPY: Record<string, Record<Category, { title: AccountKey; text: AccountKey | '' }>> = {
   seller: {
-    orders: { title: 'Orders', text: 'New orders (accept them within 30 minutes) and cancellations.' },
-    payments: { title: 'Payments & payouts', text: 'Receipts to check, payments confirmed, payouts sent.' },
-    deliveries: { title: 'Deliveries', text: '' },
+    orders: { title: 'cat.orders', text: 'cat.sellerOrdersText' },
+    payments: { title: 'cat.paymentsPayouts', text: 'cat.sellerPaymentsText' },
+    deliveries: { title: 'cat.deliveries', text: '' },
   },
   rider: {
-    orders: { title: 'Orders', text: '' },
-    payments: { title: 'Money', text: 'Settlements and payments recorded for you.' },
-    deliveries: { title: 'Delivery jobs', text: 'A job you took being cancelled.' },
+    orders: { title: 'cat.orders', text: '' },
+    payments: { title: 'cat.money', text: 'cat.riderMoneyText' },
+    deliveries: { title: 'cat.deliveryJobs', text: 'cat.riderJobsText' },
   },
   default: {
-    orders: { title: 'Order updates', text: 'Accepted, on the way, delivered, or cancelled.' },
-    payments: { title: 'Payments & refunds', text: 'Payments received or questioned, refunds sent, wallet top-ups.' },
-    deliveries: { title: 'Deliveries', text: '' },
+    orders: { title: 'cat.orderUpdates', text: 'cat.customerOrdersText' },
+    payments: { title: 'cat.paymentsRefunds', text: 'cat.customerPaymentsText' },
+    deliveries: { title: 'cat.deliveries', text: '' },
   },
 };
 
-const CHANNELS: Array<{ id: Channel; label: string; icon: React.ReactNode }> = [
-  { id: 'push', label: 'Push', icon: <Smartphone className="w-4 h-4" /> },
-  { id: 'email', label: 'Email', icon: <Mail className="w-4 h-4" /> },
-  { id: 'sms', label: 'Text (SMS)', icon: <MessageSquare className="w-4 h-4" /> },
+const CHANNELS: Array<{ id: Channel; labelKey: AccountKey; icon: React.ReactNode }> = [
+  { id: 'push', labelKey: 'channel.push', icon: <Smartphone className="w-4 h-4" /> },
+  { id: 'email', labelKey: 'channel.email', icon: <Mail className="w-4 h-4" /> },
+  { id: 'sms', labelKey: 'channel.sms', icon: <MessageSquare className="w-4 h-4" /> },
 ];
 
-const PUSH_TEXT: Record<PushState, string> = {
-  on: 'On for this device.',
-  off: 'Off for this device.',
-  denied: "Blocked in this browser's settings. Allow notifications for this site there, then come back.",
-  unsupported: "This browser doesn't support push notifications. On iPhone, add Nuray to your home screen first.",
-  unavailable: "Push notifications aren't set up on Nuray's server yet.",
+const PUSH_TEXT: Record<PushState, AccountKey> = {
+  on: 'push.on',
+  off: 'push.off',
+  denied: 'push.denied',
+  unsupported: 'push.unsupported',
+  unavailable: 'push.unavailable',
 };
 
 /** Which notifications reach this person outside the app, and on which devices. */
@@ -63,6 +68,7 @@ export default function NotificationSettingsPage() {
   const router = useRouter();
   const { isAuthenticated, user } = useAuthStore();
   const { showToast } = useToast();
+  const t = useT(accountMessages);
   const [settings, setSettings] = useState<Settings | null>(null);
   const [pushState, setPushState] = useState<PushState | null>(null);
   const [busy, setBusy] = useState(false);
@@ -73,10 +79,10 @@ export default function NotificationSettingsPage() {
       const res = await apiClient.get('/notifications/preferences');
       setSettings(res.data.data);
     } catch (error) {
-      showToast(apiErrorMessage(error, 'Could not load your notification settings'), 'error');
+      showToast(apiErrorMessage(error, t('loadSettingsFailed')), 'error');
     }
     setPushState(await getPushState().catch(() => 'unsupported' as PushState));
-  }, [showToast]);
+  }, [showToast, t]);
 
   useEffect(() => {
     if (!isAuthenticated && !apiClient.getAccessToken()) {
@@ -94,7 +100,7 @@ export default function NotificationSettingsPage() {
       const res = await apiClient.put('/notifications/preferences', { preferences: { [category]: { [channel]: next } } });
       setSettings(res.data.data);
     } catch (error) {
-      showToast(apiErrorMessage(error, 'Could not save that'), 'error');
+      showToast(apiErrorMessage(error, t('couldNotSave')), 'error');
       load();
     }
   };
@@ -104,10 +110,10 @@ export default function NotificationSettingsPage() {
       setBusy(true);
       const state = on ? await enablePush() : await disablePush();
       setPushState(state);
-      if (on && state === 'on') showToast('Notifications are on for this device', 'success');
-      if (on && state === 'denied') showToast('Notifications are blocked for this site in your browser', 'warning');
+      if (on && state === 'on') showToast(t('pushOnToast'), 'success');
+      if (on && state === 'denied') showToast(t('pushBlockedToast'), 'warning');
     } catch (error) {
-      showToast(apiErrorMessage(error, 'Could not change notifications on this device'), 'error');
+      showToast(apiErrorMessage(error, t('pushChangeFailed')), 'error');
     } finally {
       setBusy(false);
     }
@@ -127,7 +133,7 @@ export default function NotificationSettingsPage() {
   const copy = CATEGORY_COPY[role] ?? CATEGORY_COPY.default;
 
   return (
-    <DashboardLayout title="Notification settings" subtitle="What reaches you outside the app" sidebarItems={sidebar} userType={layoutRole}>
+    <DashboardLayout title={t('notificationSettings')} subtitle={t('notificationSettingsSub')} sidebarItems={sidebar} userType={layoutRole}>
       <div className="max-w-3xl mx-auto space-y-5 pb-16">
         <div className="rounded-3xl border border-slate-200 bg-white p-5 sm:p-6" data-testid="push-device">
           <div className="flex items-start gap-3">
@@ -135,10 +141,10 @@ export default function NotificationSettingsPage() {
               <Bell className="w-5 h-5" />
             </div>
             <div className="flex-1">
-              <h2 className="text-sm font-bold text-slate-900">Push notifications on this device</h2>
-              <p className="text-xs text-slate-500 mt-1">{pushState ? PUSH_TEXT[pushState] : 'Checking…'}</p>
+              <h2 className="text-sm font-bold text-slate-900">{t('pushOnDevice')}</h2>
+              <p className="text-xs text-slate-500 mt-1">{pushState ? t(PUSH_TEXT[pushState]) : t('checking')}</p>
               {role === 'seller' && pushState === 'off' && (
-                <p className="text-xs text-amber-700 mt-1">Turn this on on the phone or computer you take orders on, so you never miss a new order.</p>
+                <p className="text-xs text-amber-700 mt-1">{t('sellerPushHint')}</p>
               )}
             </div>
             {(pushState === 'off' || pushState === 'on') && (
@@ -149,7 +155,7 @@ export default function NotificationSettingsPage() {
                 className={`px-4 py-2 rounded-xl text-sm font-bold disabled:opacity-50 ${pushState === 'on' ? 'border border-slate-300 text-slate-700' : 'bg-[#FF5500] text-white'}`}
                 data-testid="push-toggle"
               >
-                {busy ? 'One moment…' : pushState === 'on' ? 'Turn off' : 'Turn on'}
+                {busy ? t('oneMoment') : pushState === 'on' ? t('turnOff') : t('turnOn')}
               </button>
             )}
           </div>
@@ -160,24 +166,24 @@ export default function NotificationSettingsPage() {
         ) : (
           <div className="rounded-3xl border border-slate-200 bg-white overflow-hidden" data-testid="notification-preferences">
             <div className="px-5 sm:px-6 pt-5">
-              <h2 className="text-sm font-bold text-slate-900">What you hear about, and how</h2>
+              <h2 className="text-sm font-bold text-slate-900">{t('whatYouHear')}</h2>
               <p className="text-xs text-slate-500 mt-1">
-                Everything also appears under{' '}
+                {t('everythingAppearsUnder')}{' '}
                 <Link href={role === 'seller' ? '/sellers/notifications' : '/notifications'} className="underline">
-                  Notifications
+                  {t('notifications')}
                 </Link>
-                . Text messages are only sent for things that need you now.
+                {t('everythingAppearsSuffix')}
               </p>
             </div>
             <table className="w-full text-sm mt-4">
               <thead className="bg-slate-50 text-xs text-slate-500">
                 <tr>
-                  <th className="px-5 sm:px-6 py-2 text-left font-semibold">Kind</th>
+                  <th className="px-5 sm:px-6 py-2 text-start font-semibold">{t('kind')}</th>
                   {CHANNELS.map((c) => (
                     <th key={c.id} className="px-3 py-2 font-semibold">
                       <span className="inline-flex items-center gap-1">
                         {c.icon}
-                        {c.label}
+                        {t(c.labelKey)}
                       </span>
                     </th>
                   ))}
@@ -187,8 +193,8 @@ export default function NotificationSettingsPage() {
                 {settings.categories.map((category) => (
                   <tr key={category}>
                     <td className="px-5 sm:px-6 py-4">
-                      <p className="font-semibold text-slate-900">{copy[category].title}</p>
-                      <p className="text-xs text-slate-500">{copy[category].text}</p>
+                      <p className="font-semibold text-slate-900">{t(copy[category].title)}</p>
+                      <p className="text-xs text-slate-500">{copy[category].text ? t(copy[category].text) : ''}</p>
                     </td>
                     {CHANNELS.map((c) => {
                       const available = settings.channels[c.id].available;
@@ -199,7 +205,7 @@ export default function NotificationSettingsPage() {
                             type="button"
                             role="switch"
                             aria-checked={on && available}
-                            aria-label={`${copy[category].title}: ${c.label}`}
+                            aria-label={`${t(copy[category].title)}: ${t(c.labelKey)}`}
                             disabled={!available}
                             title={settings.channels[c.id].reason ?? undefined}
                             onClick={() => toggle(category, c.id)}
@@ -218,7 +224,7 @@ export default function NotificationSettingsPage() {
               <ul className="px-5 sm:px-6 py-4 border-t border-slate-100 text-xs text-slate-500 space-y-1">
                 {CHANNELS.filter((c) => !settings.channels[c.id].available).map((c) => (
                   <li key={c.id}>
-                    {c.label}: {settings.channels[c.id].reason}
+                    {t(c.labelKey)}: {settings.channels[c.id].reason}
                   </li>
                 ))}
               </ul>

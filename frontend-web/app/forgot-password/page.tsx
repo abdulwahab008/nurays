@@ -6,9 +6,12 @@ import { NurayButton as Button } from '@/components/ui/NurayButton';
 import { useToast } from '@/components/ui/toast';
 import { apiClient } from '@/lib/api-client';
 import { BrandLockup } from '@/components/ui/Mark';
+import { useT } from '@/lib/i18n';
+import { authMessages } from '@/lib/i18n/messages/auth';
 
 export default function ForgotPasswordPage() {
   const { showToast } = useToast();
+  const t = useT(authMessages);
   const [email, setEmail] = useState('');
   const [loading, setLoading] = useState(false);
   const [sent, setSent] = useState(false);
@@ -22,7 +25,7 @@ export default function ForgotPasswordPage() {
       // The server answers the same whether or not the account exists.
       setSent(true);
     } catch (err: any) {
-      showToast(err?.response?.data?.error?.message || 'Could not send the reset email. Please try again.', 'error');
+      showToast(err?.response?.data?.error?.message || t('errResetEmail'), 'error');
     } finally {
       setLoading(false);
     }
@@ -34,32 +37,33 @@ export default function ForgotPasswordPage() {
         <div className="mb-6 flex justify-center">
           <BrandLockup />
         </div>
-        <h1 className="text-xl font-bold text-slate-900 mb-1">Forgot your password?</h1>
+        <h1 className="text-xl font-bold text-slate-900 mb-1">{t('forgotTitle')}</h1>
         {sent ? (
           <>
             <p className="text-sm text-slate-600 mt-3">
-              If an account exists for <strong>{email}</strong>, we&apos;ve emailed a link to choose a new password. It expires in an hour.
+              {t('forgotSentPrefix')} <strong data-ltr>{email}</strong>{t('forgotSentSuffix')}
             </p>
             <Link href="/login" className="mt-6 inline-block text-sm font-semibold text-emerald-700 underline">
-              Back to login
+              {t('backToLogin')}
             </Link>
           </>
         ) : (
           <form onSubmit={handleSubmit} className="space-y-4 mt-3">
-            <p className="text-sm text-slate-600">Enter your email and we&apos;ll send you a reset link.</p>
+            <p className="text-sm text-slate-600">{t('forgotIntro')}</p>
             <input
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               placeholder="you@example.com"
+              dir="ltr"
               required
               className="w-full h-12 rounded-lg border border-slate-300 px-3 text-sm"
             />
             <Button type="submit" className="w-full h-12 text-sm font-bold" disabled={loading}>
-              {loading ? 'Sending…' : 'Send reset link'}
+              {loading ? t('sendingEllipsis') : t('sendResetLink')}
             </Button>
             <Link href="/login" className="block text-center text-sm text-slate-500 underline">
-              Back to login
+              {t('backToLogin')}
             </Link>
           </form>
         )}

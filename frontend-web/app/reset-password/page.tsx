@@ -7,11 +7,14 @@ import { NurayButton as Button } from '@/components/ui/NurayButton';
 import { useToast } from '@/components/ui/toast';
 import { apiClient } from '@/lib/api-client';
 import { BrandLockup } from '@/components/ui/Mark';
+import { useT } from '@/lib/i18n';
+import { authMessages } from '@/lib/i18n/messages/auth';
 
 function ResetForm() {
   const router = useRouter();
   const token = useSearchParams().get('token') ?? '';
   const { showToast } = useToast();
+  const t = useT(authMessages);
   const [password, setPassword] = useState('');
   const [confirm, setConfirm] = useState('');
   const [loading, setLoading] = useState(false);
@@ -19,20 +22,20 @@ function ResetForm() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (password.length < 6) {
-      showToast('Password must be at least 6 characters', 'warning');
+      showToast(t('passwordMin6'), 'warning');
       return;
     }
     if (password !== confirm) {
-      showToast('Passwords do not match', 'warning');
+      showToast(t('passwordsNoMatch'), 'warning');
       return;
     }
     setLoading(true);
     try {
       await apiClient.post('/auth/reset-password', { token, password });
-      showToast('Password updated. Please log in with your new password.', 'success');
+      showToast(t('passwordUpdated'), 'success');
       router.push('/login');
     } catch (err: any) {
-      showToast(err?.response?.data?.error?.message || 'This reset link is invalid or has expired.', 'error');
+      showToast(err?.response?.data?.error?.message || t('resetLinkInvalid'), 'error');
     } finally {
       setLoading(false);
     }
@@ -44,12 +47,12 @@ function ResetForm() {
         <div className="mb-6 flex justify-center">
           <BrandLockup />
         </div>
-        <h1 className="text-xl font-bold text-slate-900 mb-1">Choose a new password</h1>
+        <h1 className="text-xl font-bold text-slate-900 mb-1">{t('resetTitle')}</h1>
         {!token ? (
           <p className="text-sm text-slate-600 mt-3">
-            This link is missing its token.{' '}
+            {t('resetMissingToken')}{' '}
             <Link href="/forgot-password" className="underline text-emerald-700">
-              Request a new one
+              {t('requestNewOne')}
             </Link>
             .
           </p>
@@ -59,7 +62,7 @@ function ResetForm() {
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              placeholder="New password"
+              placeholder={t('newPassword')}
               required
               className="w-full h-12 rounded-lg border border-slate-300 px-3 text-sm"
             />
@@ -67,12 +70,12 @@ function ResetForm() {
               type="password"
               value={confirm}
               onChange={(e) => setConfirm(e.target.value)}
-              placeholder="Confirm new password"
+              placeholder={t('confirmNewPassword')}
               required
               className="w-full h-12 rounded-lg border border-slate-300 px-3 text-sm"
             />
             <Button type="submit" className="w-full h-12 text-sm font-bold" disabled={loading}>
-              {loading ? 'Saving…' : 'Update password'}
+              {loading ? t('saving') : t('updatePassword')}
             </Button>
           </form>
         )}

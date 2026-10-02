@@ -10,12 +10,15 @@ import { authService } from '@/lib/services/auth.service';
 import { useAuthStore } from '@/lib/store/auth-store';
 import { apiClient } from '@/lib/api-client';
 import { BrandLockup } from '@/components/ui/Mark';
+import { useT } from '@/lib/i18n';
+import { authMessages } from '@/lib/i18n/messages/auth';
 
 function RegisterForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { setUser } = useAuthStore();
   const { showToast } = useToast();
+  const t = useT(authMessages);
   const [formData, setFormData] = useState({
     email: '',
     password: '',
@@ -62,7 +65,7 @@ function RegisterForm() {
           setUser(response.data.user);
         }
         
-        showToast('Successfully signed in with Google!', 'success');
+        showToast(t('googleSuccess'), 'success');
         
         // Google OAuth users are always email verified, so skip email verification page
         // Only redirect to email verification if explicitly required AND not a Google OAuth user
@@ -82,7 +85,7 @@ function RegisterForm() {
         }
       }
     } catch (err: any) {
-      const errorMessage = err.response?.data?.error?.message || err.response?.data?.message || 'Google sign-in failed';
+      const errorMessage = err.response?.data?.error?.message || err.response?.data?.message || t('googleFailed');
       setError(errorMessage);
     } finally {
       setLoading(false);
@@ -95,23 +98,23 @@ function RegisterForm() {
 
     // Validation
     if (formData.password !== formData.confirmPassword) {
-      setError('Passwords do not match');
+      setError(t('passwordsNoMatch'));
       return;
     }
 
     if (formData.password.length < 6) {
-      setError('Password must be at least 6 characters');
+      setError(t('passwordMin6'));
       return;
     }
 
     // Validate business name for sellers
     if (formData.user_type === 'seller' && !formData.business_name.trim()) {
-      setError('Business name is required for sellers');
+      setError(t('errBusinessName'));
       return;
     }
 
     if (!formData.termsAccepted) {
-      setError('Please agree to the Terms of Service and Community Guidelines to proceed');
+      setError(t('errTerms'));
       return;
     }
 
@@ -149,11 +152,11 @@ function RegisterForm() {
         setError(''); // Clear any errors
         
         if (formData.user_type === 'seller') {
-          showToast('Seller account created! Your account is pending admin approval.', 'success');
+          showToast(t('toastSellerCreated'), 'success');
         } else if (formData.user_type === 'rider') {
-          showToast('Rider application submitted! It\'s pending admin approval.', 'success');
+          showToast(t('toastRiderSubmitted'), 'success');
         } else {
-          showToast('Registration successful! Welcome to Nuray!', 'success');
+          showToast(t('toastRegistered'), 'success');
         }
 
         // Redirect based on user type
@@ -175,17 +178,17 @@ function RegisterForm() {
           router.push('/dashboard');
         }
       } else {
-        throw new Error('Invalid response from server');
+        throw new Error(t('errInvalidResponse'));
       }
     } catch (err: any) {
-      const errorMessage = err.response?.data?.error?.message || err.response?.data?.message || 'Registration failed';
+      const errorMessage = err.response?.data?.error?.message || err.response?.data?.message || t('errRegistrationFailed');
       const errorCode = err.response?.data?.error?.code;
       
       // Provide more specific error messages
       if (errorCode === 'EMAIL_EXISTS' || errorMessage.includes('already registered')) {
-        setError('This email is already registered. Please login instead or use a different email.');
+        setError(t('errEmailExists'));
       } else if (errorCode === 'PHONE_EXISTS' || errorMessage.includes('Phone number already')) {
-        setError('This phone number is already registered. Please login instead or use a different phone number.');
+        setError(t('errPhoneExists'));
       } else if (errorCode === 'VALIDATION_ERROR') {
         const validationErrors = err.response?.data?.error?.details;
         if (validationErrors && Array.isArray(validationErrors)) {
@@ -215,16 +218,16 @@ function RegisterForm() {
             <BrandLockup markSize={44} wordSize={30} />
           </Link>
           <h1 className="text-2xl sm:text-3xl font-black text-slate-900 mt-6 tracking-tight">
-            Create Your Account
+            {t('createYourAccount')}
           </h1>
           <p className="mt-1 text-xs sm:text-sm text-slate-500 font-medium">
-            Join Pakistan's premier food &amp; cold-chain marketplace.
+            {t('registerSubtitle')}
           </p>
         </div>
 
         {/* User Type Selection */}
         <div className="mb-6">
-          <label className={labelClass}>I want to</label>
+          <label className={labelClass}>{t('iWantTo')}</label>
           <div className="flex gap-1 p-1 rounded-full bg-slate-100 border border-slate-200">
             <button
               type="button"
@@ -235,7 +238,7 @@ function RegisterForm() {
                   : 'text-slate-600 hover:text-slate-900'
               }`}
             >
-              Order Food
+              {t('orderFood')}
             </button>
             <button
               type="button"
@@ -246,7 +249,7 @@ function RegisterForm() {
                   : 'text-slate-600 hover:text-slate-900'
               }`}
             >
-              Cook &amp; Sell
+              {t('cookAndSell')}
             </button>
             <button
               type="button"
@@ -257,30 +260,30 @@ function RegisterForm() {
                   : 'text-slate-600 hover:text-slate-900'
               }`}
             >
-              Deliver / Ride
+              {t('deliverRide')}
             </button>
           </div>
           {formData.user_type === 'seller' && (
             <div className="mt-3 p-4 rounded-lg" style={{ background: 'var(--gold-50)', border: '1px solid var(--gold-200)' }}>
               <p className="text-sm" style={{ color: 'var(--ink-800)' }}>
-                <strong className="font-semibold">Seller registration:</strong> your account will be reviewed before going live.
+                <strong className="font-semibold">{t('sellerRegistration')}</strong> {t('sellerRegistrationBody')}
               </p>
-              <ul className="text-sm mt-2 ml-4 list-disc" style={{ color: 'var(--ink-700)' }}>
-                <li>Enter your kitchen name below</li>
-                <li>We'll visit, taste, and verify</li>
-                <li>Once approved, you can start listing dishes</li>
+              <ul className="text-sm mt-2 ms-4 list-disc" style={{ color: 'var(--ink-700)' }}>
+                <li>{t('sellerStep1')}</li>
+                <li>{t('sellerStep2')}</li>
+                <li>{t('sellerStep3')}</li>
               </ul>
             </div>
           )}
           {formData.user_type === 'rider' && (
             <div className="mt-3 p-4 rounded-lg" style={{ background: 'var(--gold-50)', border: '1px solid var(--gold-200)' }}>
               <p className="text-sm" style={{ color: 'var(--ink-800)' }}>
-                <strong className="font-semibold">Rider application:</strong> your account is reviewed before you can accept deliveries.
+                <strong className="font-semibold">{t('riderApplication')}</strong> {t('riderApplicationBody')}
               </p>
-              <ul className="text-sm mt-2 ml-4 list-disc" style={{ color: 'var(--ink-700)' }}>
-                <li>Submit your application below</li>
-                <li>Our team verifies your details</li>
-                <li>Once approved, you can start claiming deliveries</li>
+              <ul className="text-sm mt-2 ms-4 list-disc" style={{ color: 'var(--ink-700)' }}>
+                <li>{t('riderStep1')}</li>
+                <li>{t('riderStep2')}</li>
+                <li>{t('riderStep3')}</li>
               </ul>
             </div>
           )}
@@ -296,7 +299,7 @@ function RegisterForm() {
         <form onSubmit={handleRegister}>
           <div className="mb-4">
             <label htmlFor="email" className={labelClass}>
-              Email Address *
+              {t('emailRequired')}
             </label>
             <input
               type="email"
@@ -304,25 +307,26 @@ function RegisterForm() {
               value={formData.email}
               onChange={(e) => setFormData({ ...formData, email: e.target.value })}
               placeholder="your@email.com"
+              dir="ltr"
               required
               className={inputClass}
               style={inputStyle}
             />
             <p className={helperClass} style={helperStyle}>
-              We'll send a verification link to this email
+              {t('emailHelper')}
             </p>
           </div>
 
           <div className="mb-4">
             <label htmlFor="password" className={labelClass}>
-              Password *
+              {t('passwordRequired')}
             </label>
             <input
               type="password"
               id="password"
               value={formData.password}
               onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-              placeholder="At least 6 characters"
+              placeholder={t('atLeast6')}
               required
               minLength={6}
               className={inputClass}
@@ -346,14 +350,14 @@ function RegisterForm() {
 
           <div className="mb-4">
             <label htmlFor="confirmPassword" className={labelClass}>
-              Confirm Password *
+              {t('confirmPasswordRequired')}
             </label>
             <input
               type="password"
               id="confirmPassword"
               value={formData.confirmPassword}
               onChange={(e) => setFormData({ ...formData, confirmPassword: e.target.value })}
-              placeholder="Confirm your password"
+              placeholder={t('confirmYourPassword')}
               required
               minLength={6}
               className={inputClass}
@@ -363,7 +367,7 @@ function RegisterForm() {
 
           <div className="mb-4">
             <label htmlFor="full_name" className={labelClass}>
-              Full Name *
+              {t('fullNameRequired')}
             </label>
             <input
               type="text"
@@ -381,27 +385,27 @@ function RegisterForm() {
           {formData.user_type === 'seller' && (
             <div className="mb-4">
               <label htmlFor="business_name" className={labelClass}>
-                Business/Kitchen Name *
+                {t('businessNameRequired')}
               </label>
               <input
                 type="text"
                 id="business_name"
                 value={formData.business_name}
                 onChange={(e) => setFormData({ ...formData, business_name: e.target.value })}
-                placeholder="e.g., Ammi's Kitchen, Lahori Delights"
+                placeholder={t('businessNamePlaceholder')}
                 required
                 className={inputClass}
               style={inputStyle}
               />
               <p className={helperClass} style={helperStyle}>
-                This will be displayed to customers
+                {t('businessNameHelper')}
               </p>
             </div>
           )}
 
           <div className="mb-4">
             <label htmlFor="phone" className={labelClass}>
-              Phone Number <span className="text-gray-500 text-xs">(Optional but recommended)</span>
+              {t('phoneNumber')} <span className="text-gray-500 text-xs">{t('optionalRecommended')}</span>
             </label>
             <input
               type="tel"
@@ -417,11 +421,12 @@ function RegisterForm() {
                 }
               }}
               placeholder="+923001234567"
+              dir="ltr"
               className={inputClass}
               style={inputStyle}
             />
             <p className={helperClass} style={helperStyle}>
-              Verify your phone to enable quick OTP login. Without verification the number is only kept as a contact.
+              {t('phoneHelper')}
             </p>
             {formData.phone.trim().length >= 10 && (
               <div className="mt-2 flex flex-wrap items-center gap-2">
@@ -434,16 +439,16 @@ function RegisterForm() {
                     try {
                       await authService.registerSendPhoneOtp(formData.phone.trim());
                       setPhoneOtpSent(true);
-                      setPhoneOtpMessage('Code sent. Enter it below to verify this number.');
+                      setPhoneOtpMessage(t('codeSent'));
                     } catch (err: any) {
-                      setPhoneOtpMessage(err.response?.data?.error?.message || 'Could not send the code. Try again.');
+                      setPhoneOtpMessage(err.response?.data?.error?.message || t('codeSendFailed'));
                     } finally {
                       setSendingPhoneOtp(false);
                     }
                   }}
                   className="px-3 py-1.5 text-xs font-bold rounded-lg border border-gray-300 hover:bg-gray-50 disabled:opacity-50"
                 >
-                  {sendingPhoneOtp ? 'Sending…' : phoneOtpSent ? 'Resend code' : 'Send verification code'}
+                  {sendingPhoneOtp ? t('sendingEllipsis') : phoneOtpSent ? t('resendCode') : t('sendVerificationCode')}
                 </button>
                 {phoneOtpSent && (
                   <input
@@ -452,7 +457,8 @@ function RegisterForm() {
                     maxLength={6}
                     value={phoneOtp}
                     onChange={(e) => setPhoneOtp(e.target.value.replace(/\D/g, ''))}
-                    placeholder="6-digit code"
+                    placeholder={t('sixDigitCode')}
+                    dir="ltr"
                     className="w-32 px-3 py-1.5 text-sm border border-gray-300 rounded-lg"
                   />
                 )}
@@ -467,7 +473,7 @@ function RegisterForm() {
 
           <div className="mb-4">
             <label htmlFor="city" className={labelClass}>
-              City
+              {t('city')}
             </label>
             <input
               type="text"
@@ -482,7 +488,7 @@ function RegisterForm() {
 
           <div className="mb-4">
             <label htmlFor="community" className={labelClass}>
-              Hyperlocal Community *
+              {t('community')}
             </label>
             <select
               id="community"
@@ -499,23 +505,23 @@ function RegisterForm() {
               <option value="Bahria Town">Bahria Town Karachi</option>
               <option value="Gulshan-e-Iqbal">Gulshan-e-Iqbal</option>
               <option value="Clifton">Clifton (Blocks 1-9)</option>
-              <option value="Other">Other Community</option>
+              <option value="Other">{t('otherCommunity')}</option>
             </select>
             <p className={helperClass} style={helperStyle}>
-              Used to show your nearest home kitchens and fastest delivery riders
+              {t('communityHelper')}
             </p>
           </div>
 
           <div className="mb-4">
             <label htmlFor="house_apt" className={labelClass}>
-              House / Apartment / Street #
+              {t('houseApt')}
             </label>
             <input
               type="text"
               id="house_apt"
               value={formData.house_apt}
               onChange={(e) => setFormData({ ...formData, house_apt: e.target.value })}
-              placeholder="e.g. Apt 402, Block B, Street 7"
+              placeholder={t('houseAptPlaceholder')}
               className={inputClass}
               style={inputStyle}
             />
@@ -532,19 +538,19 @@ function RegisterForm() {
                 required
               />
               <span className="text-xs text-slate-600 leading-relaxed">
-                I agree to the{' '}
+                {t('agreeTo')}{' '}
                 <Link href="/terms" className="text-[#FF5500] font-semibold hover:underline">
-                  Terms of Service
+                  {t('termsOfService')}
                 </Link>
-                ,{' '}
+                {t('comma')}{' '}
                 <Link href="/privacy" className="text-[#FF5500] font-semibold hover:underline">
-                  Privacy Policy
+                  {t('privacyPolicy')}
                 </Link>
-                , and{' '}
+                {t('andWord')}{' '}
                 <span className="text-slate-900 font-semibold">
-                  Community Food Safety Guidelines
+                  {t('foodSafetyGuidelines')}
                 </span>
-                .
+                {t('agreeSuffix')}
               </span>
             </label>
           </div>
@@ -553,10 +559,10 @@ function RegisterForm() {
             {loading ? (
               <span className="flex items-center gap-2">
                 <span className="animate-spin">⏳</span>
-                Creating Account...
+                {t('creatingAccount')}
               </span>
             ) : (
-              'Create Account'
+              t('createAccount')
             )}
           </Button>
 
@@ -569,29 +575,34 @@ function RegisterForm() {
                 className="px-3 text-[11px] uppercase tracking-[0.18em] font-medium"
                 style={{ background: 'var(--paper-0)', color: 'var(--ink-500)' }}
               >
-                Or continue with
+                {t('orContinueWith')}
               </span>
             </div>
           </div>
 
-          <GoogleSignInButton onSuccess={handleGoogleSuccess} text="Continue with Google" />
+          <GoogleSignInButton onSuccess={handleGoogleSuccess} text={t('continueWithGoogle')} />
 
           <p className="text-xs text-center mt-4" style={{ color: 'var(--ink-500)' }}>
-            By creating an account, you agree to our Terms and Privacy Policy
+            {t('byCreating')}
           </p>
         </form>
 
         <div className="mt-6 text-center">
           <p className="text-sm" style={{ color: 'var(--ink-500)' }}>
-            Already have an account?{' '}
+            {t('haveAccount')}{' '}
             <Link href="/login" className="font-medium" style={{ color: 'var(--forest-700)' }}>
-              Sign in
+              {t('signInLink')}
             </Link>
           </p>
         </div>
       </div>
     </div>
   );
+}
+
+function RegisterFallback() {
+  const t = useT(authMessages);
+  return <p style={{ color: 'var(--ink-500)' }}>{t('loading')}</p>;
 }
 
 export default function RegisterPage() {
@@ -604,7 +615,7 @@ export default function RegisterPage() {
               className="animate-spin rounded-full h-16 w-16 border-b-2 mx-auto mb-4"
               style={{ borderColor: 'var(--forest-500)' }}
             />
-            <p style={{ color: 'var(--ink-500)' }}>Loading…</p>
+            <RegisterFallback />
           </div>
         </div>
       }
