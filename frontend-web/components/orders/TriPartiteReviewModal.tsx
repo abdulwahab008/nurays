@@ -5,6 +5,9 @@ import { Star, X, CheckCircle2, Award, Bike, Utensils } from 'lucide-react';
 import { isAxiosError } from 'axios';
 import { apiClient, ApiError } from '@/lib/api-client';
 import { useToast } from '@/components/ui/toast';
+import { useT } from '@/lib/i18n';
+import { commonMessages } from '@/lib/i18n/messages/common';
+import { ordersMessages } from '@/lib/i18n/messages/orders';
 
 /** An order line. The reviews API takes one review per order item. */
 interface ReviewableOrderItem {
@@ -34,8 +37,8 @@ export default function TriPartiteReviewModal({
   orderNumber,
   items,
   deliveryType,
-  sellerName = 'Home Kitchen',
-  riderName = 'Delivery Partner',
+  sellerName: sellerNameProp,
+  riderName: riderNameProp,
   isOpen,
   onClose,
   onReviewed,
@@ -48,6 +51,10 @@ export default function TriPartiteReviewModal({
   const [submitted, setSubmitted] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const { showToast } = useToast();
+  const t = useT(ordersMessages);
+  const tc = useT(commonMessages);
+  const sellerName = sellerNameProp ?? t('review.homeKitchen');
+  const riderName = riderNameProp ?? t('review.deliveryPartner');
 
   if (!isOpen) return null;
 
@@ -70,7 +77,7 @@ export default function TriPartiteReviewModal({
     e.preventDefault();
     if (submitting) return;
     if (reviewableItems.length === 0) {
-      setError('This order has no delivered items to review.');
+      setError(t('review.noItems'));
       return;
     }
 
@@ -100,7 +107,7 @@ export default function TriPartiteReviewModal({
             alreadyReviewedMessage = apiError.message || null;
           } else if (!failureMessage) {
             failureMessage =
-              apiError?.message || (err instanceof Error ? err.message : '') || 'Failed to submit your review';
+              apiError?.message || (err instanceof Error ? err.message : '') || t('review.failed');
           }
         }
       }
@@ -114,7 +121,7 @@ export default function TriPartiteReviewModal({
       const saved = created + alreadyReviewed;
       setError(
         saved > 0
-          ? `${failureMessage} (${saved} of ${reviewableItems.length} items are reviewed; submit again to retry the rest.)`
+          ? t('review.partial', { message: failureMessage, saved, total: reviewableItems.length })
           : failureMessage
       );
       return;
@@ -122,12 +129,12 @@ export default function TriPartiteReviewModal({
 
     if (created === 0) {
       // Every item already had a review: nothing new was saved.
-      setError(alreadyReviewedMessage || 'You have already reviewed this order.');
+      setError(alreadyReviewedMessage || t('review.already'));
       return;
     }
 
     setSubmitted(true);
-    showToast('Thank you for rating your experience!', 'success');
+    showToast(t('review.thanksToast'), 'success');
     setTimeout(() => onClose(), 2000);
   };
 
@@ -138,6 +145,7 @@ export default function TriPartiteReviewModal({
           key={star}
           type="button"
           onClick={() => onChange(star)}
+          aria-label={t('review.starAria', { count: star })}
           className="p-1 text-2xl transition-transform hover:scale-115 focus:outline-none"
         >
           <Star
@@ -149,7 +157,7 @@ export default function TriPartiteReviewModal({
           />
         </button>
       ))}
-      <span className="ml-2 text-xs font-black text-slate-700">{value} / 5</span>
+      <span className="ms-2 text-xs font-black text-slate-700">{value} / 5</span>
     </div>
   );
 
@@ -161,12 +169,13 @@ export default function TriPartiteReviewModal({
           <div className="flex items-center gap-2.5">
             <span className="text-xl">⭐</span>
             <div>
-              <h3 className="font-black text-sm text-white">Rate Your Experience</h3>
-              <p className="text-[10px] text-slate-400 font-medium">Order #{orderNumber}</p>
+              <h3 className="font-black text-sm text-white">{t('review.title')}</h3>
+              <p className="text-[10px] text-slate-400 font-medium">{t('review.orderNumber', { number: orderNumber })}</p>
             </div>
           </div>
           <button
             onClick={handleClose}
+            aria-label={t('review.close')}
             className="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center transition-colors"
           >
             <X className="w-4 h-4" />
@@ -178,16 +187,15 @@ export default function TriPartiteReviewModal({
             <div className="w-16 h-16 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center mx-auto shadow-sm">
               <CheckCircle2 className="w-10 h-10" />
             </div>
-            <h4 className="text-lg font-black text-slate-900">Review Submitted!</h4>
+            <h4 className="text-lg font-black text-slate-900">{t('review.submittedTitle')}</h4>
             <p className="text-xs text-slate-500 font-medium">
-              Your feedback supports community home chefs and riders across Karachi.
+              {t('review.submittedBody')}
             </p>
           </div>
         ) : (
           <form onSubmit={handleSubmit} className="p-6 space-y-5">
             <p className="text-xs text-slate-500 font-medium">
-              Help our local home kitchens improve by rating{' '}
-              {ratesDelivery ? 'food quality, packaging, and rider delivery' : 'food quality and packaging'}.
+              {ratesDelivery ? t('review.introWithDelivery') : t('review.introNoDelivery')}
             </p>
 
             {/* 1. Food Rating */}
@@ -195,13 +203,13 @@ export default function TriPartiteReviewModal({
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <Utensils className="w-4 h-4 text-[#FF5500]" />
-                  <span className="font-black text-xs text-slate-900">Food Quality &amp; Taste</span>
+                  <span className="font-black text-xs text-slate-900">{t('review.food')}</span>
                 </div>
               </div>
               {renderStars(foodRating, setFoodRating)}
               {reviewableItems.length > 0 && (
                 <p className="text-[10px] text-slate-500 font-medium">
-                  Applies to: {reviewableItems.map((item) => item.productName).join(', ')}
+                  {t('review.appliesTo', { items: reviewableItems.map((item) => item.productName).join(', ') })}
                 </p>
               )}
             </div>
@@ -211,7 +219,7 @@ export default function TriPartiteReviewModal({
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <Award className="w-4 h-4 text-purple-600" />
-                  <span className="font-black text-xs text-slate-900">Kitchen &amp; Packaging</span>
+                  <span className="font-black text-xs text-slate-900">{t('review.kitchen')}</span>
                 </div>
                 <span className="text-[10px] text-slate-400 font-bold">{sellerName}</span>
               </div>
@@ -224,7 +232,7 @@ export default function TriPartiteReviewModal({
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <Bike className="w-4 h-4 text-blue-600" />
-                    <span className="font-black text-xs text-slate-900">Delivery &amp; Rider Courtesy</span>
+                    <span className="font-black text-xs text-slate-900">{t('review.rider')}</span>
                   </div>
                   <span className="text-[10px] text-slate-400 font-bold">{riderName}</span>
                 </div>
@@ -235,13 +243,13 @@ export default function TriPartiteReviewModal({
             {/* Comments */}
             <div>
               <label className="block text-xs font-black text-slate-900 mb-1">
-                Tell us more about the dishes (Optional)
+                {t('review.commentLabel')}
               </label>
               <textarea
                 value={comment}
                 onChange={(e) => setComment(e.target.value)}
                 rows={3}
-                placeholder="How was the flavor, portion size, and presentation? Would you recommend this to neighbors?"
+                placeholder={t('review.commentPlaceholder')}
                 className="w-full px-3.5 py-2.5 border border-slate-200 rounded-2xl text-xs font-medium focus:ring-2 focus:ring-[#FF5500] focus:border-transparent bg-slate-50 focus:bg-white resize-none"
               />
             </div>
@@ -259,14 +267,14 @@ export default function TriPartiteReviewModal({
                 disabled={submitting}
                 className="flex-1 py-3 px-4 rounded-2xl font-black text-xs text-white bg-[#FF5500] hover:bg-[#e04400] disabled:opacity-50 transition-all shadow-md"
               >
-                {submitting ? 'Submitting...' : 'Submit Tri-Partite Review'}
+                {submitting ? t('review.submitting') : t('review.submit')}
               </button>
               <button
                 type="button"
                 onClick={handleClose}
                 className="py-3 px-4 rounded-2xl font-extrabold text-xs text-slate-600 bg-slate-100 hover:bg-slate-200 transition-colors"
               >
-                Cancel
+                {tc('cancel')}
               </button>
             </div>
           </form>

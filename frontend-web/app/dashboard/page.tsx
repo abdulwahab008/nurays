@@ -48,6 +48,11 @@ import {
   SlidersHorizontal,
   Layers,
 } from 'lucide-react';
+import { useT } from '@/lib/i18n';
+import { commonMessages, statusKey } from '@/lib/i18n/messages/common';
+import { dashboardMessages } from '@/lib/i18n/messages/dashboard';
+
+type DashboardT = ReturnType<typeof useT<typeof dashboardMessages.en>>;
 
 interface Order {
   id: string;
@@ -113,20 +118,21 @@ function toDashboardDish(p: ListedProduct): DashboardDish {
 }
 
 /** The kitchen's real number of listed dishes (the list response only carries a few of them). */
-function dishCountLabel(k: PublicSeller): string {
+function dishCountLabel(t: DashboardT, k: PublicSeller): string {
   const count = k.productCount ?? k.products?.length ?? 0;
-  return `${count} ${count === 1 ? 'dish' : 'dishes'}`;
+  return t(count === 1 ? 'dishCountOne' : 'dishCount', { count });
 }
 
 /** "20% off" when the kitchen lists a higher original price; nothing otherwise. */
 function DealBadge({ dish }: { dish: DashboardDish }) {
+  const t = useT(dashboardMessages);
   if (!dish.originalPrice) return null;
   const percentOff = Math.round((1 - dish.price / dish.originalPrice) * 100);
   if (percentOff <= 0) return null;
   return (
-    <span className="absolute top-2.5 left-2.5 px-2 py-0.5 rounded-lg text-white text-[10px] font-bold bg-[#FF5500] shadow-xs uppercase tracking-wider flex items-center gap-1">
+    <span className="absolute top-2.5 start-2.5 px-2 py-0.5 rounded-lg text-white text-[10px] font-bold bg-[#FF5500] shadow-xs uppercase tracking-wider flex items-center gap-1">
       <Tag className="w-3 h-3" />
-      <span>{percentOff}% off</span>
+      <span>{t('percentOff', { percent: percentOff })}</span>
     </span>
   );
 }
@@ -161,6 +167,8 @@ export default function CustomerDashboardPage() {
   const { selectedCommunity } = useCommunityStore();
   const { addItem: addCartItem, appliedPromoCode, setAppliedPromoCode } = useCartStore();
   const { showToast } = useToast();
+  const t = useT(dashboardMessages);
+  const tc = useT(commonMessages);
 
   // Strict RBAC: Route non-customer roles directly to their specialized dashboards
   useEffect(() => {
@@ -302,13 +310,13 @@ export default function CustomerDashboardPage() {
   const handleRandomize = () => {
     setIsRandomOrder(true);
     setShuffleNonce((prev) => prev + 1);
-    showToast('🎲 Random order applied! Shuffled kitchens & dishes', 'info');
+    showToast(t('toastShuffled'), 'info');
   };
 
   const handleResetOrder = () => {
     setIsRandomOrder(false);
     setShuffleNonce(0);
-    showToast('Restored default ranking order', 'info');
+    showToast(t('toastRestored'), 'info');
   };
 
   // Load active orders and verified kitchens
@@ -389,12 +397,12 @@ export default function CustomerDashboardPage() {
           const details = response?.data?.error?.details as { existingSeller?: { name?: string } } | undefined;
           setConflictModal({
             isOpen: true,
-            existingKitchenName: details?.existingSeller?.name || 'another kitchen',
+            existingKitchenName: details?.existingSeller?.name || t('anotherKitchen'),
             dish,
           });
           return;
         }
-        showToast(response?.data?.error?.message || `Could not add ${dish.name} to your tray`, 'error');
+        showToast(response?.data?.error?.message || t('addFailed', { name: dish.name }), 'error');
         return;
       }
     }
@@ -411,7 +419,7 @@ export default function CustomerDashboardPage() {
       stockType: dish.isFrozen ? 'hub' : 'direct',
       subtotal: dish.price,
     });
-    showToast(`Added ${dish.name} to tray`, 'success');
+    showToast(t('addedToTray', { name: dish.name }), 'success');
   };
 
   const handleConfirmSwitchKitchen = async () => {
@@ -438,10 +446,10 @@ export default function CustomerDashboardPage() {
         stockType: dish.isFrozen ? 'hub' : 'direct',
         subtotal: dish.price,
       });
-      showToast(`Tray updated with dishes from ${dish.kitchenName}!`, 'success');
+      showToast(t('trayUpdated', { kitchen: dish.kitchenName }), 'success');
       setConflictModal({ isOpen: false, existingKitchenName: '', dish: null });
     } catch {
-      showToast('Failed to replace tray items', 'error');
+      showToast(t('replaceFailed'), 'error');
     } finally {
       setSwitchingKitchen(false);
     }
@@ -451,11 +459,11 @@ export default function CustomerDashboardPage() {
 
   return (
     <DashboardLayout
-      title="Kitchens &amp; Menus"
+      title={t('title')}
       subtitle={
         currentCommunityName
-          ? `Verified home kitchens and their menus in ${currentCommunityName}`
-          : 'Verified home kitchens and their menus. Choose your area to see kitchens near you.'
+          ? t('subtitleIn', { community: currentCommunityName })
+          : t('subtitle')
       }
       sidebarItems={CUSTOMER_SIDEBAR_ITEMS}
       userType="customer"
@@ -473,19 +481,19 @@ export default function CustomerDashboardPage() {
                 <div>
                   <div className="flex items-center gap-2">
                     <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-                    <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-600">Active Delivery</span>
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-600">{t('activeDelivery')}</span>
                   </div>
-                  <p className="text-sm font-bold text-slate-900 mt-0.5">Order #{activeOrder.orderNumber}</p>
+                  <p className="text-sm font-bold text-slate-900 mt-0.5">{t('orderNumber', { number: activeOrder.orderNumber })}</p>
                   <p className="text-xs text-slate-500 font-medium">
-                    Status: <span className="capitalize font-semibold text-slate-800">{activeOrder.orderStatus.replace('_', ' ')}</span> · {activeOrder.itemsCount} items
+                    {t('statusLabel')} <span className="capitalize font-semibold text-slate-800">{statusKey(activeOrder.orderStatus) in commonMessages.en ? tc(statusKey(activeOrder.orderStatus)) : activeOrder.orderStatus.replace('_', ' ')}</span> · {t('itemsCount', { count: activeOrder.itemsCount })}
                   </p>
                 </div>
               </div>
-              <div className="text-right">
+              <div className="text-end">
                 <p className="text-base font-bold text-slate-900">{formatPrice(activeOrder.totalAmount)}</p>
                 <span className="text-xs font-bold text-[#FF5500] inline-flex items-center gap-1 mt-0.5">
-                  <span>Live Track</span>
-                  <ChevronRight className="w-3.5 h-3.5" />
+                  <span>{t('liveTrack')}</span>
+                  <ChevronRight className="rtl:-scale-x-100 w-3.5 h-3.5" />
                 </span>
               </div>
             </div>
@@ -498,13 +506,13 @@ export default function CustomerDashboardPage() {
             <div>
               <div className="inline-flex items-center gap-1.5 text-[11px] font-bold text-orange-600 uppercase tracking-wider mb-0.5">
                 <ChefHat className="w-3.5 h-3.5 text-[#FF5500]" />
-                <span>Handcrafted Recipes &amp; Provisions</span>
+                <span>{t('handcrafted')}</span>
               </div>
-              <h2 className="text-lg font-bold text-slate-900 tracking-tight">Explore by Cuisine</h2>
+              <h2 className="text-lg font-bold text-slate-900 tracking-tight">{t('exploreByCuisine')}</h2>
               <p className="text-xs text-slate-500 font-medium">
                 {selectedCuisine
-                  ? `Showing kitchens & signature dishes for "${selectedCuisineLabel}"`
-                  : 'Tap any cuisine below to filter rows, or switch views'}
+                  ? t('showingCuisine', { cuisine: selectedCuisineLabel })
+                  : t('tapCuisine')}
               </p>
             </div>
 
@@ -521,7 +529,7 @@ export default function CustomerDashboardPage() {
                 }`}
               >
                 <Layers className="w-3.5 h-3.5" />
-                <span>All Rows</span>
+                <span>{t('allRows')}</span>
               </button>
 
               {/* Top 10 */}
@@ -535,7 +543,7 @@ export default function CustomerDashboardPage() {
                 }`}
               >
                 <Trophy className="w-3.5 h-3.5" />
-                <span>Top 10</span>
+                <span>{t('top10')}</span>
               </button>
 
               {/* Kitchens */}
@@ -549,7 +557,7 @@ export default function CustomerDashboardPage() {
                 }`}
               >
                 <ChefHat className="w-3.5 h-3.5" />
-                <span>Kitchens</span>
+                <span>{t('kitchens')}</span>
               </button>
 
               {/* Random / Surprise Me */}
@@ -561,10 +569,10 @@ export default function CustomerDashboardPage() {
                     ? 'bg-violet-600 text-white shadow-xs'
                     : 'bg-violet-50 text-violet-700 border border-violet-200 hover:bg-violet-100'
                 }`}
-                title="Randomize dishes and kitchens order"
+                title={t('randomizeTitle')}
               >
                 <Dices className={`w-3.5 h-3.5 ${isRandomOrder ? 'animate-bounce' : ''}`} />
-                <span>{isRandomOrder ? 'Shuffled' : 'Surprise Me'}</span>
+                <span>{isRandomOrder ? t('shuffled') : t('surpriseMe')}</span>
               </button>
 
               {/* Clear Filter (when cuisine is active) */}
@@ -575,7 +583,7 @@ export default function CustomerDashboardPage() {
                   className="inline-flex items-center gap-1 text-xs font-bold text-slate-700 hover:text-slate-900 bg-slate-200/80 hover:bg-slate-300 px-3 py-1.5 rounded-xl transition-colors"
                 >
                   <X className="w-3.5 h-3.5" />
-                  <span>Clear Filter</span>
+                  <span>{t('clearFilter')}</span>
                 </button>
               )}
             </div>
@@ -604,13 +612,15 @@ export default function CustomerDashboardPage() {
                 <div>
                   <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-slate-100 text-slate-700 text-[10px] font-bold uppercase tracking-wider mb-1">
                     <ChefHat className="w-3.5 h-3.5 text-[#FF5500]" />
-                    <span>Verified Domestic Cooks</span>
+                    <span>{t('verifiedDomesticCooks')}</span>
                   </div>
                   <h2 className="text-xl font-black text-slate-900 tracking-tight">
-                    "{selectedCuisineLabel}" Kitchens{currentCommunityName ? ` in ${currentCommunityName}` : ''}
+                    {currentCommunityName
+                      ? t('cuisineKitchensIn', { cuisine: selectedCuisineLabel, community: currentCommunityName })
+                      : t('cuisineKitchens', { cuisine: selectedCuisineLabel })}
                   </h2>
                   <p className="text-xs text-slate-500 font-medium">
-                    Showing verified domestic kitchens specializing in {selectedCuisineLabel}
+                    {t('cuisineKitchensSub', { cuisine: selectedCuisineLabel })}
                   </p>
                 </div>
                 <div className="flex items-center gap-2">
@@ -618,17 +628,17 @@ export default function CustomerDashboardPage() {
                     type="button"
                     onClick={() => scrollRow(kitchensRowRef, -320)}
                     className="w-8 h-8 rounded-full border border-slate-200 hover:border-slate-400 bg-white flex items-center justify-center text-slate-700 shadow-2xs transition-colors"
-                    title="Scroll left"
+                    title={t('scrollLeft')}
                   >
-                    <ChevronLeft className="w-4 h-4" />
+                    <ChevronLeft className="rtl:-scale-x-100 w-4 h-4" />
                   </button>
                   <button
                     type="button"
                     onClick={() => scrollRow(kitchensRowRef, 320)}
                     className="w-8 h-8 rounded-full border border-slate-200 hover:border-slate-400 bg-white flex items-center justify-center text-slate-700 shadow-2xs transition-colors"
-                    title="Scroll right"
+                    title={t('scrollRight')}
                   >
-                    <ChevronRight className="w-4 h-4" />
+                    <ChevronRight className="rtl:-scale-x-100 w-4 h-4" />
                   </button>
                 </div>
               </div>
@@ -652,13 +662,13 @@ export default function CustomerDashboardPage() {
                           className="w-full h-full group-hover:scale-105 transition-transform duration-300"
                         />
                         <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent" />
-                        <span className="absolute bottom-2.5 left-2.5 px-2 py-0.5 rounded-md bg-emerald-600/90 text-white text-[10px] font-bold flex items-center gap-1">
+                        <span className="absolute bottom-2.5 start-2.5 px-2 py-0.5 rounded-md bg-emerald-600/90 text-white text-[10px] font-bold flex items-center gap-1">
                           <ShieldCheck className="w-3 h-3" />
-                          <span>Verified</span>
+                          <span>{t('verified')}</span>
                         </span>
-                        <span className="absolute bottom-2.5 right-2.5 px-2 py-0.5 rounded-md bg-black/75 text-white text-[11px] font-bold flex items-center gap-1">
+                        <span className="absolute bottom-2.5 end-2.5 px-2 py-0.5 rounded-md bg-black/75 text-white text-[11px] font-bold flex items-center gap-1">
                           <Star className="w-3 h-3 fill-amber-400 text-amber-400" />
-                          <span>{displayRating(k.ratingAverage, k.totalReviews) ?? 'New'}</span>
+                          <span>{displayRating(k.ratingAverage, k.totalReviews) ?? t('new')}</span>
                         </span>
                       </div>
 
@@ -686,22 +696,22 @@ export default function CustomerDashboardPage() {
                               <>
                                 <span className="flex items-center gap-1 font-semibold text-slate-700">
                                   <Clock className="w-3 h-3 text-slate-400" />
-                                  {k.minPrepTimeMinutes} min
+                                  {t('minutes', { count: k.minPrepTimeMinutes ?? 0 })}
                                 </span>
                                 <span>•</span>
                               </>
                             )}
-                            <span>{dishCountLabel(k)}</span>
+                            <span>{dishCountLabel(t, k)}</span>
                           </div>
                         </div>
 
                         <div className="mt-3.5 pt-2.5 border-t border-slate-100 flex items-center justify-between text-xs">
                           <span className="text-[11px] font-semibold text-slate-500 truncate">
-                            {k.mealCategories?.[0] || 'Home Cooked'}
+                            {k.mealCategories?.[0] || t('homeCooked')}
                           </span>
                           <span className="font-bold text-[#FF5500] inline-flex items-center gap-0.5 group-hover:translate-x-0.5 transition-transform shrink-0">
-                            <span>View Menu</span>
-                            <ChevronRight className="w-3.5 h-3.5" />
+                            <span>{t('viewMenu')}</span>
+                            <ChevronRight className="rtl:-scale-x-100 w-3.5 h-3.5" />
                           </span>
                         </div>
                       </div>
@@ -717,13 +727,13 @@ export default function CustomerDashboardPage() {
                 <div>
                   <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-orange-100 text-[#FF5500] text-[10px] font-bold uppercase tracking-wider mb-1">
                     <Flame className="w-3.5 h-3.5 text-[#FF5500]" />
-                    <span>Popular Dishes</span>
+                    <span>{t('popularDishes')}</span>
                   </div>
                   <h2 className="text-xl font-black text-slate-900 tracking-tight">
-                    &quot;{selectedCuisineLabel}&quot; Dishes
+                    {t('cuisineDishes', { cuisine: selectedCuisineLabel })}
                   </h2>
                   <p className="text-xs text-slate-500 font-medium">
-                    Popular {selectedCuisineLabel} dishes from kitchens on Nuray
+                    {t('cuisineDishesSub', { cuisine: selectedCuisineLabel })}
                   </p>
                 </div>
                 <div className="flex items-center gap-2">
@@ -731,17 +741,17 @@ export default function CustomerDashboardPage() {
                     type="button"
                     onClick={() => scrollRow(top10RowRef, -300)}
                     className="w-8 h-8 rounded-full border border-slate-200 hover:border-slate-400 bg-white flex items-center justify-center text-slate-700 shadow-2xs transition-colors"
-                    title="Scroll left"
+                    title={t('scrollLeft')}
                   >
-                    <ChevronLeft className="w-4 h-4" />
+                    <ChevronLeft className="rtl:-scale-x-100 w-4 h-4" />
                   </button>
                   <button
                     type="button"
                     onClick={() => scrollRow(top10RowRef, 300)}
                     className="w-8 h-8 rounded-full border border-slate-200 hover:border-slate-400 bg-white flex items-center justify-center text-slate-700 shadow-2xs transition-colors"
-                    title="Scroll right"
+                    title={t('scrollRight')}
                   >
-                    <ChevronRight className="w-4 h-4" />
+                    <ChevronRight className="rtl:-scale-x-100 w-4 h-4" />
                   </button>
                 </div>
               </div>
@@ -752,7 +762,7 @@ export default function CustomerDashboardPage() {
               >
                 {displayDishes.length === 0 && (
                   <p className="text-xs text-slate-500 font-medium py-6">
-                    {dishesLoading ? 'Loading dishes…' : `No ${selectedCuisineLabel} dishes are listed yet.`}
+                    {dishesLoading ? t('loadingDishes') : t('noCuisineDishes', { cuisine: selectedCuisineLabel })}
                   </p>
                 )}
                 {displayDishes.map((dish) => (
@@ -768,9 +778,9 @@ export default function CustomerDashboardPage() {
                         />
                         <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-transparent to-transparent" />
                         <DealBadge dish={dish} />
-                        <span className="absolute bottom-2.5 right-2.5 px-2 py-0.5 rounded-md bg-white/95 text-slate-900 text-[11px] font-bold flex items-center gap-1 shadow-2xs">
+                        <span className="absolute bottom-2.5 end-2.5 px-2 py-0.5 rounded-md bg-white/95 text-slate-900 text-[11px] font-bold flex items-center gap-1 shadow-2xs">
                           <Star className="w-3 h-3 fill-amber-500 text-amber-500" />
-                          <span>{dish.rating ?? 'New'}</span>
+                          <span>{dish.rating ?? t('new')}</span>
                         </span>
                       </div>
 
@@ -796,7 +806,7 @@ export default function CustomerDashboardPage() {
                             className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl bg-slate-900 hover:bg-[#FF5500] text-white text-xs font-bold transition-colors shadow-2xs active:scale-95"
                           >
                             <Plus className="w-3.5 h-3.5 stroke-[3]" />
-                            <span>Add</span>
+                            <span>{t('add')}</span>
                           </button>
                         </div>
                       </div>
@@ -818,22 +828,22 @@ export default function CustomerDashboardPage() {
                     <div className="flex items-center gap-2 mb-1">
                       <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-gradient-to-r from-amber-500 to-[#FF5500] text-white text-[10px] font-black uppercase tracking-wider shadow-xs">
                         <Trophy className="w-3 h-3" />
-                        <span>TOP 10</span>
+                        <span>{t('top10Badge')}</span>
                       </div>
                       {isRandomOrder && (
                         <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-violet-100 text-violet-700 text-[10px] font-bold">
                           <Dices className="w-3 h-3" />
-                          <span>Shuffled</span>
+                          <span>{t('shuffled')}</span>
                         </span>
                       )}
                     </div>
                     <h2 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight">
-                      Top 10 Popular Dishes
+                      {t('top10Title')}
                     </h2>
                     <p className="text-xs text-slate-500 font-medium mt-0.5">
                       {selectedCommunity?.name
-                        ? `Most popular dishes on Nuray, with kitchens in ${selectedCommunity.name} listed first`
-                        : 'Most popular dishes on Nuray'}
+                        ? t('top10SubIn', { community: selectedCommunity.name })
+                        : t('top10Sub')}
                     </p>
                   </div>
 
@@ -843,17 +853,17 @@ export default function CustomerDashboardPage() {
                       type="button"
                       onClick={() => scrollRow(top10RowRef, -380)}
                       className="w-8 h-8 sm:w-9 sm:h-9 rounded-full border border-slate-200 hover:border-slate-400 bg-white flex items-center justify-center text-slate-700 shadow-2xs transition-colors"
-                      title="Scroll left"
+                      title={t('scrollLeft')}
                     >
-                      <ChevronLeft className="w-4 h-4 sm:w-5 sm:h-5" />
+                      <ChevronLeft className="rtl:-scale-x-100 w-4 h-4 sm:w-5 sm:h-5" />
                     </button>
                     <button
                       type="button"
                       onClick={() => scrollRow(top10RowRef, 380)}
                       className="w-8 h-8 sm:w-9 sm:h-9 rounded-full border border-slate-200 hover:border-slate-400 bg-white flex items-center justify-center text-slate-700 shadow-2xs transition-colors"
-                      title="Scroll right"
+                      title={t('scrollRight')}
                     >
-                      <ChevronRight className="w-4 h-4 sm:w-5 sm:h-5" />
+                      <ChevronRight className="rtl:-scale-x-100 w-4 h-4 sm:w-5 sm:h-5" />
                     </button>
                   </div>
                 </div>
@@ -866,8 +876,8 @@ export default function CustomerDashboardPage() {
                   {top10Dishes.length === 0 && (
                     <p className="text-xs text-slate-500 font-medium py-6">
                       {dishesLoading
-                        ? 'Loading dishes…'
-                        : 'No dishes are listed yet. Browse the kitchens below to see their menus.'}
+                        ? t('loadingDishes')
+                        : t('noDishes')}
                     </p>
                   )}
                   {top10Dishes.map((dish, index) => (
@@ -877,7 +887,7 @@ export default function CustomerDashboardPage() {
                     >
                       {/* Giant Netflix Rank Numeral */}
                       <span
-                        className="text-8xl sm:text-9xl font-black italic tracking-tighter leading-none select-none text-slate-100 group-hover:text-orange-500/25 transition-all mr-[-28px] sm:mr-[-36px] z-0 drop-shadow-sm pointer-events-none"
+                        className="text-8xl sm:text-9xl font-black italic tracking-tighter leading-none select-none text-slate-100 group-hover:text-orange-500/25 transition-all me-[-28px] sm:me-[-36px] z-0 drop-shadow-sm pointer-events-none"
                         style={{
                           WebkitTextStroke: '3px #cbd5e1',
                           fontFamily: 'system-ui, -apple-system, sans-serif',
@@ -901,24 +911,24 @@ export default function CustomerDashboardPage() {
                           <DealBadge dish={dish} />
 
                           {(dish.isFrozen || dish.prepTimeMinutes) && (
-                            <span className="absolute bottom-2.5 left-2.5 px-2 py-0.5 rounded-md bg-black/70 backdrop-blur-xs text-white text-[10px] font-bold flex items-center gap-1">
+                            <span className="absolute bottom-2.5 start-2.5 px-2 py-0.5 rounded-md bg-black/70 backdrop-blur-xs text-white text-[10px] font-bold flex items-center gap-1">
                               {dish.isFrozen ? (
                                 <>
                                   <Snowflake className="w-3 h-3 text-cyan-400" />
-                                  <span>Frozen</span>
+                                  <span>{t('frozen')}</span>
                                 </>
                               ) : (
                                 <>
                                   <Clock className="w-3 h-3 text-amber-400" />
-                                  <span>{dish.prepTimeMinutes}m Cook</span>
+                                  <span>{t('cookMinutes', { count: dish.prepTimeMinutes })}</span>
                                 </>
                               )}
                             </span>
                           )}
 
-                          <span className="absolute bottom-2.5 right-2.5 px-2 py-0.5 rounded-md bg-white/95 text-slate-900 text-[11px] font-bold flex items-center gap-1 shadow-2xs">
+                          <span className="absolute bottom-2.5 end-2.5 px-2 py-0.5 rounded-md bg-white/95 text-slate-900 text-[11px] font-bold flex items-center gap-1 shadow-2xs">
                             <Star className="w-3 h-3 fill-amber-500 text-amber-500" />
-                            <span>{dish.rating ?? 'New'}</span>
+                            <span>{dish.rating ?? t('new')}</span>
                           </span>
                         </div>
 
@@ -941,7 +951,7 @@ export default function CustomerDashboardPage() {
                             <div>
                               <span className="text-base font-bold text-slate-900">{formatPrice(dish.price)}</span>
                               {dish.originalPrice && (
-                                <span className="text-xs text-slate-400 line-through ml-1 font-medium">
+                                <span className="text-xs text-slate-400 line-through ms-1 font-medium">
                                   {formatPrice(dish.originalPrice)}
                                 </span>
                               )}
@@ -953,7 +963,7 @@ export default function CustomerDashboardPage() {
                               className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl bg-slate-900 hover:bg-[#FF5500] text-white text-xs font-bold transition-colors shadow-2xs active:scale-95"
                             >
                               <Plus className="w-3.5 h-3.5 stroke-[3]" />
-                              <span>Add</span>
+                              <span>{t('add')}</span>
                             </button>
                           </div>
                         </div>
@@ -971,38 +981,40 @@ export default function CustomerDashboardPage() {
                   <div>
                     <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-slate-100 text-slate-700 text-[10px] font-bold uppercase tracking-wider mb-1">
                       <ChefHat className="w-3.5 h-3.5 text-[#FF5500]" />
-                      <span>Verified Home Cooks</span>
+                      <span>{t('verifiedHomeCooks')}</span>
                     </div>
                     <h2 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight">
-                      Verified Kitchens{currentCommunityName ? ` in ${currentCommunityName}` : ''}
+                      {currentCommunityName
+                        ? t('verifiedKitchensIn', { community: currentCommunityName })
+                        : t('verifiedKitchens')}
                     </h2>
                     <p className="text-xs text-slate-500 font-medium mt-0.5">
-                      Independent home cooks, each approved by Nuray before they can sell
+                      {t('verifiedKitchensSub')}
                     </p>
                   </div>
 
                   <div className="flex items-center gap-2">
                     <Link
                       href="/kitchens"
-                      className="hidden sm:inline-flex text-xs font-bold text-[#FF5500] hover:underline mr-2"
+                      className="hidden sm:inline-flex text-xs font-bold text-[#FF5500] hover:underline me-2"
                     >
-                      View All Kitchens →
+                      {t('viewAllKitchens')}
                     </Link>
                     <button
                       type="button"
                       onClick={() => scrollRow(kitchensRowRef, -320)}
                       className="w-8 h-8 rounded-full border border-slate-200 hover:border-slate-400 bg-white flex items-center justify-center text-slate-700 shadow-2xs transition-colors"
-                      title="Scroll left"
+                      title={t('scrollLeft')}
                     >
-                      <ChevronLeft className="w-4 h-4" />
+                      <ChevronLeft className="rtl:-scale-x-100 w-4 h-4" />
                     </button>
                     <button
                       type="button"
                       onClick={() => scrollRow(kitchensRowRef, 320)}
                       className="w-8 h-8 rounded-full border border-slate-200 hover:border-slate-400 bg-white flex items-center justify-center text-slate-700 shadow-2xs transition-colors"
-                      title="Scroll right"
+                      title={t('scrollRight')}
                     >
-                      <ChevronRight className="w-4 h-4" />
+                      <ChevronRight className="rtl:-scale-x-100 w-4 h-4" />
                     </button>
                   </div>
                 </div>
@@ -1026,13 +1038,13 @@ export default function CustomerDashboardPage() {
                             className="w-full h-full group-hover:scale-105 transition-transform duration-300"
                           />
                           <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent" />
-                          <span className="absolute bottom-2.5 left-2.5 px-2 py-0.5 rounded-md bg-emerald-600/90 text-white text-[10px] font-bold flex items-center gap-1">
+                          <span className="absolute bottom-2.5 start-2.5 px-2 py-0.5 rounded-md bg-emerald-600/90 text-white text-[10px] font-bold flex items-center gap-1">
                             <ShieldCheck className="w-3 h-3" />
-                            <span>Verified Domestic Cook</span>
+                            <span>{t('verifiedDomesticCook')}</span>
                           </span>
-                          <span className="absolute bottom-2.5 right-2.5 px-2 py-0.5 rounded-md bg-black/75 text-white text-[11px] font-bold flex items-center gap-1">
+                          <span className="absolute bottom-2.5 end-2.5 px-2 py-0.5 rounded-md bg-black/75 text-white text-[11px] font-bold flex items-center gap-1">
                             <Star className="w-3 h-3 fill-amber-400 text-amber-400" />
-                            <span>{displayRating(k.ratingAverage, k.totalReviews) ?? 'New'}</span>
+                            <span>{displayRating(k.ratingAverage, k.totalReviews) ?? t('new')}</span>
                           </span>
                         </div>
 
@@ -1060,22 +1072,22 @@ export default function CustomerDashboardPage() {
                                 <>
                                   <span className="flex items-center gap-1 font-semibold text-slate-700">
                                     <Clock className="w-3 h-3 text-slate-400" />
-                                    {k.minPrepTimeMinutes} min prep
+                                    {t('minPrep', { count: k.minPrepTimeMinutes ?? 0 })}
                                   </span>
                                   <span>•</span>
                                 </>
                               )}
-                              <span>{dishCountLabel(k)}</span>
+                              <span>{dishCountLabel(t, k)}</span>
                             </div>
                           </div>
 
                           <div className="mt-3.5 pt-2.5 border-t border-slate-100 flex items-center justify-between text-xs">
                             <span className="text-[11px] font-semibold text-slate-500 truncate">
-                              {k.mealCategories?.[0] || 'Home Cooked'}
+                              {k.mealCategories?.[0] || t('homeCooked')}
                             </span>
                             <span className="font-bold text-[#FF5500] inline-flex items-center gap-0.5 group-hover:translate-x-0.5 transition-transform shrink-0">
-                              <span>View Menu</span>
-                              <ChevronRight className="w-3.5 h-3.5" />
+                              <span>{t('viewMenu')}</span>
+                              <ChevronRight className="rtl:-scale-x-100 w-3.5 h-3.5" />
                             </span>
                           </div>
                         </div>
@@ -1093,13 +1105,13 @@ export default function CustomerDashboardPage() {
                   <div>
                     <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-amber-100 text-amber-800 text-[10px] font-bold uppercase tracking-wider mb-1">
                       <Sparkles className="w-3.5 h-3.5 text-[#FF5500]" />
-                      <span>Generational Recipes</span>
+                      <span>{t('generationalRecipes')}</span>
                     </div>
                     <h2 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight">
-                      Dum Biryani &amp; Degi Pulao Specials
+                      {t('biryaniTitle')}
                     </h2>
                     <p className="text-xs text-slate-500 font-medium mt-0.5">
-                      Slow-cooked dum pukht rice with saffron, brown onions and premium cuts
+                      {t('biryaniSub')}
                     </p>
                   </div>
 
@@ -1108,17 +1120,17 @@ export default function CustomerDashboardPage() {
                       type="button"
                       onClick={() => scrollRow(biryaniRowRef, -300)}
                       className="w-8 h-8 rounded-full border border-slate-200 hover:border-slate-400 bg-white flex items-center justify-center text-slate-700 shadow-2xs transition-colors"
-                      title="Scroll left"
+                      title={t('scrollLeft')}
                     >
-                      <ChevronLeft className="w-4 h-4" />
+                      <ChevronLeft className="rtl:-scale-x-100 w-4 h-4" />
                     </button>
                     <button
                       type="button"
                       onClick={() => scrollRow(biryaniRowRef, 300)}
                       className="w-8 h-8 rounded-full border border-slate-200 hover:border-slate-400 bg-white flex items-center justify-center text-slate-700 shadow-2xs transition-colors"
-                      title="Scroll right"
+                      title={t('scrollRight')}
                     >
-                      <ChevronRight className="w-4 h-4" />
+                      <ChevronRight className="rtl:-scale-x-100 w-4 h-4" />
                     </button>
                   </div>
                 </div>
@@ -1140,9 +1152,9 @@ export default function CustomerDashboardPage() {
                           />
                           <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-transparent to-transparent" />
                           <DealBadge dish={dish} />
-                          <span className="absolute bottom-2.5 right-2.5 px-2 py-0.5 rounded-md bg-white/95 text-slate-900 text-[11px] font-bold flex items-center gap-1 shadow-2xs">
+                          <span className="absolute bottom-2.5 end-2.5 px-2 py-0.5 rounded-md bg-white/95 text-slate-900 text-[11px] font-bold flex items-center gap-1 shadow-2xs">
                             <Star className="w-3 h-3 fill-amber-500 text-amber-500" />
-                            <span>{dish.rating ?? 'New'}</span>
+                            <span>{dish.rating ?? t('new')}</span>
                           </span>
                         </div>
 
@@ -1168,7 +1180,7 @@ export default function CustomerDashboardPage() {
                               className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl bg-slate-900 hover:bg-[#FF5500] text-white text-xs font-bold transition-colors shadow-2xs active:scale-95"
                             >
                               <Plus className="w-3.5 h-3.5 stroke-[3]" />
-                              <span>Add</span>
+                              <span>{t('add')}</span>
                             </button>
                           </div>
                         </div>
@@ -1186,13 +1198,13 @@ export default function CustomerDashboardPage() {
                   <div>
                     <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-red-100 text-red-700 text-[10px] font-bold uppercase tracking-wider mb-1">
                       <Flame className="w-3.5 h-3.5 text-red-600" />
-                      <span>Slow Braised · Live Off Deg</span>
+                      <span>{t('slowBraised')}</span>
                     </div>
                     <h2 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight">
-                      Royal Shahi Nihari &amp; Shinwari Karahi
+                      {t('nihariTitle')}
                     </h2>
                     <p className="text-xs text-slate-500 font-medium mt-0.5">
-                      12-hour simmered bone marrow gravies and live wok butter karahis
+                      {t('nihariSub')}
                     </p>
                   </div>
 
@@ -1201,17 +1213,17 @@ export default function CustomerDashboardPage() {
                       type="button"
                       onClick={() => scrollRow(slowPotRowRef, -300)}
                       className="w-8 h-8 rounded-full border border-slate-200 hover:border-slate-400 bg-white flex items-center justify-center text-slate-700 shadow-2xs transition-colors"
-                      title="Scroll left"
+                      title={t('scrollLeft')}
                     >
-                      <ChevronLeft className="w-4 h-4" />
+                      <ChevronLeft className="rtl:-scale-x-100 w-4 h-4" />
                     </button>
                     <button
                       type="button"
                       onClick={() => scrollRow(slowPotRowRef, 300)}
                       className="w-8 h-8 rounded-full border border-slate-200 hover:border-slate-400 bg-white flex items-center justify-center text-slate-700 shadow-2xs transition-colors"
-                      title="Scroll right"
+                      title={t('scrollRight')}
                     >
-                      <ChevronRight className="w-4 h-4" />
+                      <ChevronRight className="rtl:-scale-x-100 w-4 h-4" />
                     </button>
                   </div>
                 </div>
@@ -1233,9 +1245,9 @@ export default function CustomerDashboardPage() {
                           />
                           <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-transparent to-transparent" />
                           <DealBadge dish={dish} />
-                          <span className="absolute bottom-2.5 right-2.5 px-2 py-0.5 rounded-md bg-white/95 text-slate-900 text-[11px] font-bold flex items-center gap-1 shadow-2xs">
+                          <span className="absolute bottom-2.5 end-2.5 px-2 py-0.5 rounded-md bg-white/95 text-slate-900 text-[11px] font-bold flex items-center gap-1 shadow-2xs">
                             <Star className="w-3 h-3 fill-amber-500 text-amber-500" />
-                            <span>{dish.rating ?? 'New'}</span>
+                            <span>{dish.rating ?? t('new')}</span>
                           </span>
                         </div>
 
@@ -1261,7 +1273,7 @@ export default function CustomerDashboardPage() {
                               className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl bg-slate-900 hover:bg-[#FF5500] text-white text-xs font-bold transition-colors shadow-2xs active:scale-95"
                             >
                               <Plus className="w-3.5 h-3.5 stroke-[3]" />
-                              <span>Add</span>
+                              <span>{t('add')}</span>
                             </button>
                           </div>
                         </div>
@@ -1279,13 +1291,13 @@ export default function CustomerDashboardPage() {
                   <div>
                     <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-cyan-100 text-cyan-800 text-[10px] font-bold uppercase tracking-wider mb-1">
                       <Snowflake className="w-3.5 h-3.5 text-cyan-600" />
-                      <span>Artisanal Freezer Ready</span>
+                      <span>{t('freezerReady')}</span>
                     </div>
                     <h2 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight">
-                      Flash Frozen Savories &amp; Hand-Rolled Parathas
+                      {t('frozenTitle')}
                     </h2>
                     <p className="text-xs text-slate-500 font-medium mt-0.5">
-                      Stock your home freezer with artisanal cocktail samosas, spring rolls and ready-to-fry parathas
+                      {t('frozenSub')}
                     </p>
                   </div>
 
@@ -1294,17 +1306,17 @@ export default function CustomerDashboardPage() {
                       type="button"
                       onClick={() => scrollRow(frozenRowRef, -300)}
                       className="w-8 h-8 rounded-full border border-slate-200 hover:border-slate-400 bg-white flex items-center justify-center text-slate-700 shadow-2xs transition-colors"
-                      title="Scroll left"
+                      title={t('scrollLeft')}
                     >
-                      <ChevronLeft className="w-4 h-4" />
+                      <ChevronLeft className="rtl:-scale-x-100 w-4 h-4" />
                     </button>
                     <button
                       type="button"
                       onClick={() => scrollRow(frozenRowRef, 300)}
                       className="w-8 h-8 rounded-full border border-slate-200 hover:border-slate-400 bg-white flex items-center justify-center text-slate-700 shadow-2xs transition-colors"
-                      title="Scroll right"
+                      title={t('scrollRight')}
                     >
-                      <ChevronRight className="w-4 h-4" />
+                      <ChevronRight className="rtl:-scale-x-100 w-4 h-4" />
                     </button>
                   </div>
                 </div>
@@ -1326,16 +1338,16 @@ export default function CustomerDashboardPage() {
                           />
                           <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-transparent to-transparent" />
                           {dish.isFrozen ? (
-                            <span className="absolute top-2.5 left-2.5 px-2 py-0.5 rounded-lg text-white text-[10px] font-bold bg-cyan-600 shadow-xs uppercase tracking-wider flex items-center gap-1">
+                            <span className="absolute top-2.5 start-2.5 px-2 py-0.5 rounded-lg text-white text-[10px] font-bold bg-cyan-600 shadow-xs uppercase tracking-wider flex items-center gap-1">
                               <Snowflake className="w-3 h-3" />
-                              <span>Frozen</span>
+                              <span>{t('frozen')}</span>
                             </span>
                           ) : (
                             <DealBadge dish={dish} />
                           )}
-                          <span className="absolute bottom-2.5 right-2.5 px-2 py-0.5 rounded-md bg-white/95 text-slate-900 text-[11px] font-bold flex items-center gap-1 shadow-2xs">
+                          <span className="absolute bottom-2.5 end-2.5 px-2 py-0.5 rounded-md bg-white/95 text-slate-900 text-[11px] font-bold flex items-center gap-1 shadow-2xs">
                             <Star className="w-3 h-3 fill-amber-500 text-amber-500" />
-                            <span>{dish.rating ?? 'New'}</span>
+                            <span>{dish.rating ?? t('new')}</span>
                           </span>
                         </div>
 
@@ -1361,7 +1373,7 @@ export default function CustomerDashboardPage() {
                               className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl bg-slate-900 hover:bg-[#FF5500] text-white text-xs font-bold transition-colors shadow-2xs active:scale-95"
                             >
                               <Plus className="w-3.5 h-3.5 stroke-[3]" />
-                              <span>Add</span>
+                              <span>{t('add')}</span>
                             </button>
                           </div>
                         </div>
@@ -1379,10 +1391,10 @@ export default function CustomerDashboardPage() {
       {/* Styled Modern Modal for Single Kitchen Batch Switching */}
       <ConfirmModal
         isOpen={conflictModal.isOpen}
-        title="Start Order from This Kitchen?"
-        message={`Your tray currently contains dishes from ${conflictModal.existingKitchenName}. Nuray ensures direct, single-kitchen artisanal batches for guaranteed freshness. Would you like to clear your tray and start a new order with ${conflictModal.dish?.kitchenName}?`}
-        confirmText="Clear Tray & Add Dish"
-        cancelText="Keep Existing Tray"
+        title={t('switchTitle')}
+        message={t('switchMessage', { existing: conflictModal.existingKitchenName, kitchen: conflictModal.dish?.kitchenName ?? '' })}
+        confirmText={t('switchConfirm')}
+        cancelText={t('switchCancel')}
         variant="warning"
         loading={switchingKitchen}
         onConfirm={handleConfirmSwitchKitchen}

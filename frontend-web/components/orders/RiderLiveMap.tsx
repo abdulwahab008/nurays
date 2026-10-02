@@ -1,6 +1,8 @@
 'use client';
 
 import { useEffect, useRef } from 'react';
+import { useT } from '@/lib/i18n';
+import { ordersMessages } from '@/lib/i18n/messages/orders';
 
 interface Point {
   latitude: number;
@@ -25,6 +27,7 @@ const homeIconHtml = `
  * a customer who has panned or zoomed.
  */
 export default function RiderLiveMap({ rider, destination, height = '260px' }: Props) {
+  const t = useT(ordersMessages);
   const containerRef = useRef<HTMLDivElement>(null);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const mapRef = useRef<any>(null);
@@ -53,13 +56,13 @@ export default function RiderLiveMap({ rider, destination, height = '260px' }: P
 
       riderMarkerRef.current = L.marker([start.latitude, start.longitude], {
         icon: L.divIcon({ className: 'rider-live-pin', html: riderIconHtml, iconSize: [36, 36], iconAnchor: [18, 18] }),
-        title: 'Your rider',
+        title: t('map.yourRider'),
       }).addTo(map);
 
       if (destination) {
         L.marker([destination.latitude, destination.longitude], {
           icon: L.divIcon({ className: 'rider-live-home', html: homeIconHtml, iconSize: [30, 30], iconAnchor: [15, 15] }),
-          title: 'Delivery address',
+          title: t('map.deliveryAddress'),
         }).addTo(map);
         map.fitBounds(
           L.latLngBounds([start.latitude, start.longitude], [destination.latitude, destination.longitude]),
@@ -92,5 +95,5 @@ export default function RiderLiveMap({ rider, destination, height = '260px' }: P
     }
   }, [rider.latitude, rider.longitude]);
 
-  return <div ref={containerRef} style={{ height }} className="w-full rounded-xl overflow-hidden border border-slate-200 z-0" aria-label="Map showing your rider" />;
+  return <div ref={containerRef} style={{ height }} className="w-full rounded-xl overflow-hidden border border-slate-200 z-0" aria-label={t('map.aria')} />;
 }

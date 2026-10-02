@@ -18,6 +18,11 @@ import OnlinePaymentCard from '@/components/orders/OnlinePaymentCard';
 import OrderChatModal from '@/components/orders/OrderChatModal';
 import TriPartiteReviewModal from '@/components/orders/TriPartiteReviewModal';
 import dynamic from 'next/dynamic';
+import { useT } from '@/lib/i18n';
+import { commonMessages, statusKey } from '@/lib/i18n/messages/common';
+import { ordersMessages } from '@/lib/i18n/messages/orders';
+
+type OrdersT = ReturnType<typeof useT<typeof ordersMessages.en>>;
 
 // Leaflet touches the DOM on import: load the map in the browser only.
 const RiderLiveMap = dynamic(() => import('@/components/orders/RiderLiveMap'), { ssr: false });
@@ -107,6 +112,7 @@ interface OrderDetail {
 
 /** "Updated just now / 2 min ago / 1 h ago", kept current while on screen. */
 function UpdatedAgo({ iso }: { iso: string }) {
+  const t = useT(ordersMessages);
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
     const timer = setInterval(() => setNow(Date.now()), 15_000);
@@ -114,41 +120,46 @@ function UpdatedAgo({ iso }: { iso: string }) {
   }, []);
   const seconds = Math.max(0, Math.round((now - new Date(iso).getTime()) / 1000));
   const minutes = Math.round(seconds / 60);
-  const label = seconds < 45 ? 'just now' : minutes < 60 ? `${minutes} min ago` : `${Math.round(minutes / 60)} h ago`;
-  return <>Updated {label}</>;
+  const label =
+    seconds < 45
+      ? t('detail.justNow')
+      : minutes < 60
+        ? t('detail.minAgo', { count: minutes })
+        : t('detail.hoursAgo', { count: Math.round(minutes / 60) });
+  return <>{t('detail.updated', { when: label })}</>;
 }
 
 /** How the customer paid, in words. */
-function paymentChannelLabel(method?: string, senderAccount?: string | null): string {
+function paymentChannelLabel(t: OrdersT, method?: string, senderAccount?: string | null): string {
   const m = (method ?? '').toLowerCase();
-  const via = senderAccount ? ` (from ${senderAccount})` : '';
-  if (m === 'cod') return 'Cash on delivery';
-  if (m === 'wallet') return 'Nuray Wallet';
-  if (m === 'safepay' || m === 'card') return 'Paid online (card / mobile wallet)';
-  if (m === 'jazzcash') return `JazzCash transfer to the kitchen${via}`;
-  if (m === 'easypaisa') return `EasyPaisa transfer to the kitchen${via}`;
-  if (m === 'bank') return `Bank transfer to the kitchen${via}`;
-  return method ? method.toUpperCase() : 'Not recorded';
+  const via = senderAccount ? t('detail.payFrom', { account: senderAccount }) : '';
+  if (m === 'cod') return t('detail.channel.cod');
+  if (m === 'wallet') return t('detail.channel.wallet');
+  if (m === 'safepay' || m === 'card') return t('detail.channel.online');
+  if (m === 'jazzcash') return t('detail.channel.jazzcash', { via });
+  if (m === 'easypaisa') return t('detail.channel.easypaisa', { via });
+  if (m === 'bank') return t('detail.channel.bank', { via });
+  return method ? method.toUpperCase() : t('detail.channel.notRecorded');
 }
 
 /** Where the payment stands, in words. Only a transfer into the kitchen's account is confirmed by the kitchen. */
-function paymentStatusLabel(method?: string, status?: string): string {
+function paymentStatusLabel(t: OrdersT, method?: string, status?: string): string {
   const toKitchen = ['jazzcash', 'easypaisa', 'bank'].includes((method ?? '').toLowerCase());
   switch (status) {
     case 'paid':
-      return toKitchen ? 'Paid, confirmed by the kitchen' : 'Paid';
+      return toKitchen ? t('detail.payState.paidByKitchen') : t('detail.payState.paid');
     case 'payment_submitted':
-      return 'Receipt sent, waiting for the kitchen to confirm';
+      return t('detail.payState.submitted');
     case 'disputed':
-      return 'The kitchen could not find this payment';
+      return t('detail.payState.disputed');
     case 'refund_pending':
-      return 'Refund being sent';
+      return t('detail.payState.refundPending');
     case 'refunded':
-      return 'Refunded';
+      return t('detail.payState.refunded');
     case 'failed':
-      return 'Payment failed';
+      return t('detail.payState.failed');
     default:
-      return (method ?? '').toLowerCase() === 'cod' ? 'To be paid on delivery' : 'Not paid yet';
+      return (method ?? '').toLowerCase() === 'cod' ? t('detail.payState.onDelivery') : t('detail.payState.notPaid');
   }
 }
 
@@ -164,7 +175,7 @@ function mapOrderToDetail(raw: any): OrderDetail {
     raw.items?.[0]?.seller?.businessName ||
     raw.items?.[0]?.sellerName ||
     raw.seller?.businessName ||
-    'Home Kitchen';
+    '';
   return {
     id: raw.id,
     orderNumber: raw.orderNumber ?? '',
@@ -178,7 +189,7 @@ function mapOrderToDetail(raw: any): OrderDetail {
       : null,
     paymentProofUrl: raw.paymentProofUrl ?? null,
     paymentSenderAccount: raw.paymentSenderAccount ?? null,
-    customerName: raw.customer?.profile?.fullName || raw.deliveryAddress?.contactName || 'Valued Customer',
+    customerName: raw.customer?.profile?.fullName || raw.deliveryAddress?.contactName || '',
     customerPhone: raw.customer?.phone || raw.deliveryAddress?.contactPhone || '',
     createdAt: raw.createdAt ? new Date(raw.createdAt).toISOString() : new Date().toISOString(),
     sellerName,
@@ -220,7 +231,7 @@ function mapOrderToDetail(raw: any): OrderDetail {
       rider:
         raw.delivery?.rider ?
           {
-            name: (raw.delivery.rider as any).name ?? 'Your rider',
+            name: (raw.delivery.rider as any).name ?? '',
             phone: '',
             vehicle: [(raw.delivery.rider as any).vehicleType, (raw.delivery.rider as any).vehicleNumber].filter(Boolean).join(' - '),
           }
@@ -269,6 +280,14 @@ function OrderDetailContent() {
   const [showChatModal, setShowChatModal] = useState(false);
   const [showReviewModal, setShowReviewModal] = useState(false);
   const [showReceiptPreview, setShowReceiptPreview] = useState(false);
+  const t = useT(ordersMessages);
+  const tc = useT(commonMessages);
+  const statusText = (s: string) =>
+    statusKey(s) in commonMessages.en ? tc(statusKey(s)) : s.replace(/_/g, ' ');
+  const payStatusText = (s: string) => {
+    const key = `detail.payRaw.${s}` as keyof typeof ordersMessages.en;
+    return key in ordersMessages.en ? t(key) : s.replace(/_/g, ' ');
+  };
 
   useEffect(() => {
     const token = apiClient.getAccessToken();
@@ -301,7 +320,7 @@ function OrderDetailContent() {
       if (data.status === 'cancelled') {
         // Reload full order so timeline, canCancel, etc. are all in sync
         loadOrder();
-        showToast('Your order has been cancelled.', 'error', 10000);
+        showToast(t('detail.toastCancelledLive'), 'error', 10000);
         playCancelSound();
       }
     });
@@ -316,7 +335,7 @@ function OrderDetailContent() {
       unsubscribeStatus?.();
       unsubscribeTracking?.();
     };
-  }, [params.id, joinOrderRoom, onOrderStatusUpdate, onDeliveryTracking]);
+  }, [params.id, joinOrderRoom, onOrderStatusUpdate, onDeliveryTracking, t]);
 
   useEffect(() => {
     if (searchParams.get('placed') === '1') setShowPlacedBanner(true);
@@ -375,14 +394,14 @@ function OrderDetailContent() {
       const d = res?.data ?? {};
       const amt = Number(d.refundAmount ?? 0);
       if (amt > 0 && d.refundStatus === 'refunded_to_wallet') {
-        showToast(`Order cancelled. Rs ${amt.toLocaleString()} has been refunded to your wallet.`, 'success', 8000);
+        showToast(t('detail.toastRefundWallet', { amount: `Rs ${amt.toLocaleString()}` }), 'success', 8000);
       } else if (amt > 0) {
-        showToast(`Order cancelled. Your refund of Rs ${amt.toLocaleString()} is being processed and will be sent to you manually.`, 'success', 10000);
+        showToast(t('detail.toastRefundManual', { amount: `Rs ${amt.toLocaleString()}` }), 'success', 10000);
       } else {
-        showToast('Order cancelled successfully', 'success');
+        showToast(t('detail.toastCancelled'), 'success');
       }
     } catch (error: any) {
-      showToast(error.response?.data?.error?.message || 'Failed to cancel order', 'error');
+      showToast(error.response?.data?.error?.message || t('detail.cancelFailed'), 'error');
     } finally {
       setCancelling(false);
     }
@@ -402,9 +421,9 @@ function OrderDetailContent() {
       setShowReportModal(false);
       setReportDetails('');
       setReported(true);
-      showToast("Report submitted — our support team will look into it.", 'success');
+      showToast(t('detail.toastReported'), 'success');
     } catch (error: any) {
-      showToast(error.response?.data?.error?.message || 'Failed to submit report', 'error');
+      showToast(error.response?.data?.error?.message || t('detail.reportFailed'), 'error');
     } finally {
       setReporting(false);
     }
@@ -415,13 +434,13 @@ function OrderDetailContent() {
   if (loading) {
     return (
       <DashboardLayout
-        title="Order details"
-        subtitle="Loading..."
+        title={t('detail.title')}
+        subtitle={t('detail.loadingSub')}
         sidebarItems={customerSidebarItems}
         userType="customer"
       >
         <div className="flex items-center justify-center py-16">
-          <p className="text-gray-600">Loading order...</p>
+          <p className="text-gray-600">{t('detail.loadingOrder')}</p>
         </div>
       </DashboardLayout>
     );
@@ -430,7 +449,7 @@ function OrderDetailContent() {
   if (!order) {
     return (
       <DashboardLayout
-        title="Order Not Found"
+        title={t('detail.notFound')}
         subtitle=""
         sidebarItems={customerSidebarItems}
         userType="customer"
@@ -439,13 +458,13 @@ function OrderDetailContent() {
           <div className="w-16 h-16 rounded-full bg-slate-100 text-slate-500 flex items-center justify-center mx-auto mb-4 text-2xl shadow-xs">
             📦
           </div>
-          <h1 className="text-2xl font-black text-gray-900 mb-2">Order Not Found</h1>
+          <h1 className="text-2xl font-black text-gray-900 mb-2">{t('detail.notFound')}</h1>
           <p className="text-sm text-gray-500 mb-6 leading-relaxed">
-            The requested order could not be found or you do not have permission to view it.
+            {t('detail.notFoundBody')}
           </p>
           <div className="flex items-center justify-center gap-3">
             <Link href="/orders">
-              <Button>Back to My Orders</Button>
+              <Button>{t('detail.backToMyOrders')}</Button>
             </Link>
           </div>
         </div>
@@ -473,11 +492,15 @@ function OrderDetailContent() {
       ? { ...trackingData.location, updatedAt: trackingData.updatedAt, distanceKm: trackingData.distanceKm ?? null }
       : order.delivery?.riderLocation ?? null;
   const canCancel = orderStatus === 'pending';
+  // Display names, with words for the ones the order doesn't carry.
+  const sellerName = order.sellerName || t('detail.homeKitchen');
+  const customerName = order.customerName || t('detail.valuedCustomer');
+  const riderName = order.delivery?.rider ? order.delivery.rider.name || t('detail.yourRider') : t('detail.deliveryPartner');
 
   return (
     <DashboardLayout
-      title={`Order ${order.orderNumber}`}
-      subtitle={`${effectiveStatus.replace(/_/g, ' ')} • Payment: ${(order.paymentStatus ?? 'pending').replace(/_/g, ' ')}`}
+      title={t('detail.pageTitle', { number: order.orderNumber })}
+      subtitle={t('detail.pageSubtitle', { status: statusText(effectiveStatus), payment: payStatusText(order.paymentStatus ?? 'pending') })}
       sidebarItems={customerSidebarItems}
       userType="customer"
     >
@@ -485,16 +508,16 @@ function OrderDetailContent() {
         {/* Back from the payment page */}
         {searchParams.get('payment') === 'paid' && (
           <div role="status" className="bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-xl p-4 text-sm font-medium">
-            Payment received. The kitchen has been told and will start on your order.
+            {t('detail.paymentReceived')}
           </div>
         )}
         {searchParams.get('payment') === 'duplicate' && (
           <div role="status" className="bg-sky-50 border border-sky-200 text-sky-900 rounded-xl p-4 text-sm font-medium">
-            This order was already paid, so your payment went to your{' '}
+            {t('detail.duplicateBefore')}{' '}
             <Link href="/wallet" className="underline font-semibold">
-              Nuray Wallet
+              {t('detail.duplicateLink')}
             </Link>
-            .
+            {t('detail.duplicateAfter')}
           </div>
         )}
 
@@ -508,8 +531,8 @@ function OrderDetailContent() {
                 </svg>
               </span>
               <div>
-                <p className="font-semibold text-lg">Order confirmed!</p>
-                <p className="text-white/90 text-sm">Thank you for your order. We&apos;ve sent the details to the seller.</p>
+                <p className="font-semibold text-lg">{t('detail.placedTitle')}</p>
+                <p className="text-white/90 text-sm">{t('detail.placedBody')}</p>
               </div>
             </div>
             <button
@@ -517,7 +540,7 @@ function OrderDetailContent() {
               onClick={() => { setShowPlacedBanner(false); router.replace(`/orders/${params.id}`, { scroll: false }); }}
               className="text-sm font-medium text-white/90 hover:text-white underline"
             >
-              Dismiss
+              {t('detail.dismiss')}
             </button>
           </div>
         )}
@@ -525,7 +548,7 @@ function OrderDetailContent() {
       <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
         <div className="flex items-center gap-2 flex-wrap">
           <Link href="/orders">
-            <Button variant="outline" size="sm">Back to Orders</Button>
+            <Button variant="outline" size="sm">{t('detail.backToOrders')}</Button>
           </Link>
         </div>
 
@@ -533,25 +556,25 @@ function OrderDetailContent() {
           <button
             onClick={() => window.print()}
             className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl bg-white hover:bg-slate-50 text-slate-800 border border-slate-300 text-xs font-black transition-all shadow-xs active:scale-95"
-            title="Print / Save PDF Receipt"
+            title={t('detail.printTitle')}
           >
             <span>🖨️</span>
-            <span>Print Receipt</span>
+            <span>{t('detail.printReceipt')}</span>
           </button>
           <button
             onClick={() => setShowReceiptPreview(true)}
             className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-extrabold transition-all active:scale-95"
-            title="Preview formal receipt invoice"
+            title={t('detail.previewTitle')}
           >
             <span>🧾</span>
-            <span>View Receipt</span>
+            <span>{t('detail.viewReceipt')}</span>
           </button>
           <button
             onClick={() => setShowChatModal(true)}
             className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-[#0C1016] hover:bg-slate-800 text-white text-xs font-black transition-all shadow-xs"
           >
             <span>💬</span>
-            <span>Chat with {order.sellerName || 'Kitchen'}</span>
+            <span>{t('detail.chatWith', { name: sellerName })}</span>
           </button>
           {(effectiveStatus === 'delivered' || effectiveStatus === 'completed') && (
             <button
@@ -559,7 +582,7 @@ function OrderDetailContent() {
               className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-[#FF5500] hover:bg-[#e04400] text-white text-xs font-black transition-all shadow-xs"
             >
               <span>⭐</span>
-              <span>Rate Experience</span>
+              <span>{t('detail.rateExperience')}</span>
             </button>
           )}
         </div>
@@ -579,7 +602,7 @@ function OrderDetailContent() {
                   : 'bg-blue-100 text-blue-800'
               }`}
             >
-              {effectiveStatus.replace(/_/g, ' ').toUpperCase()}
+              {statusText(effectiveStatus).toUpperCase()}
             </span>
             <span
               className={`px-3 py-1 rounded-full text-sm font-medium ${
@@ -592,7 +615,7 @@ function OrderDetailContent() {
                   : 'bg-gray-100 text-gray-800'
               }`}
             >
-              Payment: {(order.paymentStatus ?? 'pending').toUpperCase()}
+              {t('detail.paymentBadge', { status: payStatusText(order.paymentStatus ?? 'pending').toUpperCase() })}
             </span>
           </div>
         </div>
@@ -624,7 +647,7 @@ function OrderDetailContent() {
             )}
 
             <div className="bg-white rounded-lg shadow-sm p-6">
-              <h2 className="text-xl font-bold text-gray-900 mb-4">Order Items</h2>
+              <h2 className="text-xl font-bold text-gray-900 mb-4">{t('detail.orderItems')}</h2>
               <div className="space-y-4">
                 {order.items.map((item) => (
                   <div key={item.id} className="flex gap-4 pb-4 border-b last:border-0">
@@ -637,7 +660,7 @@ function OrderDetailContent() {
                         />
                       ) : (
                         <div className="w-full h-full flex items-center justify-center text-gray-400 text-xs">
-                          No Image
+                          {t('detail.noImage')}
                         </div>
                       )}
                     </div>
@@ -650,13 +673,13 @@ function OrderDetailContent() {
                       <div className="flex items-center justify-between mt-2">
                         <div>
                           <p className="text-sm text-gray-600">
-                            Qty: {item.quantity} × {formatPrice(item.unitPrice)}
+                            {t('detail.qty', { qty: item.quantity, price: formatPrice(item.unitPrice) })}
                           </p>
                           <p className="font-semibold text-gray-900">
                             {formatPrice(item.totalPrice)}
                           </p>
                         </div>
-                        <span className="text-sm text-gray-600 capitalize">{item.status}</span>
+                        <span className="text-sm text-gray-600 capitalize">{statusText(item.status)}</span>
                       </div>
                       {(effectiveStatus === 'delivered' || effectiveStatus === 'completed') && item.productId && (
                         <WriteReviewForm orderId={order.id} orderItemId={item.id} productName={item.productName} />
@@ -669,7 +692,7 @@ function OrderDetailContent() {
 
             {/* Delivery Information */}
             <div className="bg-white rounded-lg shadow-sm p-6 space-y-4">
-              <h2 className="text-xl font-bold text-gray-900">Delivery Information</h2>
+              <h2 className="text-xl font-bold text-gray-900">{t('detail.deliveryInfo')}</h2>
 
               {/* Doorstep Handover PIN Card */}
               {order.delivery?.otp && !['delivered', 'completed', 'cancelled', 'refunded'].includes(effectiveStatus) && (
@@ -678,15 +701,15 @@ function OrderDetailContent() {
                     <div>
                       <div className="flex items-center gap-2">
                         <span className="inline-flex h-2.5 w-2.5 rounded-full bg-amber-500 animate-pulse" />
-                        <span className="text-xs uppercase font-bold tracking-wider text-amber-950">Doorstep Handover PIN</span>
+                        <span className="text-xs uppercase font-bold tracking-wider text-amber-950">{t('detail.pinTitle')}</span>
                       </div>
                       <p className="text-xs text-amber-800 mt-1 max-w-sm">
-                        Give this 4-digit code to whoever hands you the order (the rider, the kitchen, or the pickup counter), and only after you have the food. Never share it before.
+                        {t('detail.pinBody')}
                       </p>
                     </div>
                     <div className="bg-white border-2 border-amber-500 px-5 py-2 rounded-xl text-center shadow-inner">
-                      <span className="text-[10px] uppercase font-bold text-muted-foreground block">Confirmation PIN</span>
-                      <span className="text-3xl font-mono font-black tracking-widest text-amber-600">{order.delivery.otp}</span>
+                      <span className="text-[10px] uppercase font-bold text-muted-foreground block">{t('detail.pinLabel')}</span>
+                      <span data-ltr className="text-3xl font-mono font-black tracking-widest text-amber-600">{order.delivery.otp}</span>
                     </div>
                   </div>
                 </div>
@@ -694,29 +717,29 @@ function OrderDetailContent() {
 
               <div className="space-y-2 text-gray-700">
                 <p>
-                  <span className="font-semibold">Address:</span> {order.delivery?.address ?? '—'}
+                  <span className="font-semibold">{t('detail.address')}</span> {order.delivery?.address ?? '—'}
                 </p>
                 {order.delivery?.slotDate && (
                   <p>
-                    <span className="font-semibold">Slot:</span> {order.delivery.slotDate} (
+                    <span className="font-semibold">{t('detail.slot')}</span> {order.delivery.slotDate} (
                     {order.delivery.slotTime})
                   </p>
                 )}
                 {order.delivery?.estimatedAt && (
                   <p>
-                    <span className="font-semibold">Estimated Delivery:</span>{' '}
+                    <span className="font-semibold">{t('detail.estimatedDelivery')}</span>{' '}
                     {formatDateTime(order.delivery.estimatedAt)}
                   </p>
                 )}
                 {order.delivery?.rider && (
                   <div className="mt-4 p-4 bg-gray-50 rounded-lg border border-gray-200">
-                    <p className="font-semibold mb-2 text-gray-900">Assigned Rider</p>
-                    <p className="text-sm"><span className="text-muted-foreground">Name:</span> {order.delivery.rider.name}</p>
+                    <p className="font-semibold mb-2 text-gray-900">{t('detail.assignedRider')}</p>
+                    <p className="text-sm"><span className="text-muted-foreground">{t('detail.riderName')}</span> {order.delivery.rider.name || t('detail.yourRider')}</p>
                     {order.delivery.rider.phone && (
-                      <p className="text-sm"><span className="text-muted-foreground">Phone:</span> {order.delivery.rider.phone}</p>
+                      <p className="text-sm"><span className="text-muted-foreground">{t('detail.riderPhone')}</span> <span data-ltr>{order.delivery.rider.phone}</span></p>
                     )}
                     {order.delivery.rider.vehicle && (
-                      <p className="text-sm"><span className="text-muted-foreground">Vehicle:</span> {order.delivery.rider.vehicle}</p>
+                      <p className="text-sm"><span className="text-muted-foreground">{t('detail.riderVehicle')}</span> {order.delivery.rider.vehicle}</p>
                     )}
                   </div>
                 )}
@@ -729,11 +752,11 @@ function OrderDetailContent() {
                 <div className="flex items-center justify-between gap-3 mb-3 flex-wrap">
                   <h2 className="text-xl font-bold text-gray-900 flex items-center gap-2">
                     <span className="inline-flex h-2.5 w-2.5 rounded-full bg-emerald-500 animate-pulse" />
-                    Your order is on its way
+                    {t('detail.onItsWay')}
                   </h2>
                   <p className="text-xs text-gray-500">
-                    {typeof liveRider.distanceKm === 'number' && <span className="font-semibold text-gray-800">{liveRider.distanceKm.toFixed(1)} km away · </span>}
-                    {liveRider.updatedAt ? <UpdatedAgo iso={liveRider.updatedAt} /> : 'Live'}
+                    {typeof liveRider.distanceKm === 'number' && <span className="font-semibold text-gray-800">{t('detail.kmAway', { km: liveRider.distanceKm.toFixed(1) })}</span>}
+                    {liveRider.updatedAt ? <UpdatedAgo iso={liveRider.updatedAt} /> : t('detail.live')}
                   </p>
                 </div>
                 <RiderLiveMap
@@ -745,13 +768,13 @@ function OrderDetailContent() {
 
             {/* Timeline */}
             <div className="bg-white rounded-lg shadow-sm p-6">
-              <h2 className="text-xl font-bold text-gray-900 mb-4">Order Timeline</h2>
+              <h2 className="text-xl font-bold text-gray-900 mb-4">{t('detail.timeline')}</h2>
               <div className="space-y-3">
                 {(order.timeline ?? []).map((event, index) => (
                   <div key={index} className="flex items-start gap-3">
                     <div className="w-2 h-2 rounded-full bg-green-600 mt-2"></div>
                     <div>
-                      <p className="font-semibold capitalize">{(event.status ?? '').replace(/_/g, ' ')}</p>
+                      <p className="font-semibold capitalize">{statusText(event.status ?? '')}</p>
                       <p className="text-sm text-gray-600">{formatDateTime(event.timestamp)}</p>
                     </div>
                   </div>
@@ -763,29 +786,29 @@ function OrderDetailContent() {
           {/* Order Summary */}
           <div className="lg:col-span-1">
             <div className="bg-white rounded-lg shadow-sm p-6 sticky top-4">
-              <h2 className="text-xl font-bold text-gray-900 mb-4">Order Summary</h2>
+              <h2 className="text-xl font-bold text-gray-900 mb-4">{t('detail.summary')}</h2>
               <div className="space-y-2 mb-4">
                 <div className="flex justify-between text-gray-600">
-                  <span>Subtotal</span>
+                  <span>{tc('subtotal')}</span>
                   <span>{formatPrice(order.pricing?.subtotal ?? 0)}</span>
                 </div>
                 <div className="flex justify-between text-gray-600">
-                  <span>Delivery Fee</span>
+                  <span>{t('detail.deliveryFee')}</span>
                   <span>{formatPrice(order.pricing?.deliveryFee ?? 0)}</span>
                 </div>
                 {(order.pricing?.discount ?? 0) > 0 && (
                   <div className="flex justify-between text-green-600">
-                    <span>Discount</span>
+                    <span>{tc('discount')}</span>
                     <span>-{formatPrice(order.pricing?.discount ?? 0)}</span>
                   </div>
                 )}
                 <div className="flex justify-between text-gray-600">
-                  <span>GST (5%)</span>
+                  <span>{t('detail.gst')}</span>
                   <span>{formatPrice(order.pricing?.tax ?? 0)}</span>
                 </div>
                 <div className="border-t pt-2 mt-2">
                   <div className="flex justify-between font-bold text-lg">
-                    <span>Total</span>
+                    <span>{tc('total')}</span>
                     <span className="text-green-600">{formatPrice(order.pricing?.total ?? 0)}</span>
                   </div>
                 </div>
@@ -796,13 +819,13 @@ function OrderDetailContent() {
                   className="w-full"
                   onClick={() => setShowCancelModal(true)}
                 >
-                  Cancel Order
+                  {t('detail.cancelOrder')}
                 </Button>
               )}
               {(effectiveStatus === 'delivered' || effectiveStatus === 'completed') && (
                 reported ? (
                   <p className="text-sm text-gray-500 text-center mt-2">
-                    Report submitted — our support team is on it.
+                    {t('detail.reportedNote')}
                   </p>
                 ) : (
                   <Button
@@ -810,7 +833,7 @@ function OrderDetailContent() {
                     className="w-full mt-2 border-red-200 text-red-600 hover:bg-red-50"
                     onClick={() => setShowReportModal(true)}
                   >
-                    I didn't receive this order
+                    {t('detail.didntReceive')}
                   </Button>
                 )
               )}
@@ -825,17 +848,17 @@ function OrderDetailContent() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden">
             <div className="bg-red-500 px-6 py-4">
-              <h2 className="text-white font-bold text-lg">Report a problem</h2>
+              <h2 className="text-white font-bold text-lg">{t('detail.reportTitle')}</h2>
             </div>
             <div className="p-6 space-y-4">
               <p className="text-sm text-gray-600">
-                This order is marked delivered, but if you never actually received it, tell us what happened and our support team will follow up.
+                {t('detail.reportBody')}
               </p>
               <textarea
                 value={reportDetails}
                 onChange={(e) => setReportDetails(e.target.value)}
                 rows={4}
-                placeholder="e.g., I never received this order, or it was left at the wrong address..."
+                placeholder={t('detail.reportPlaceholder')}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-red-500"
               />
               <div className="flex items-center gap-3">
@@ -844,13 +867,13 @@ function OrderDetailContent() {
                   onClick={handleReportNonReceipt}
                   disabled={reporting || !reportDetails.trim()}
                 >
-                  {reporting ? 'Submitting...' : 'Submit Report'}
+                  {reporting ? t('detail.submitting') : t('detail.submitReport')}
                 </Button>
                 <button
                   onClick={() => { setShowReportModal(false); setReportDetails(''); }}
                   className="text-sm text-gray-500 hover:text-gray-700"
                 >
-                  Cancel
+                  {tc('cancel')}
                 </button>
               </div>
             </div>
@@ -868,9 +891,9 @@ function OrderDetailContent() {
                 <svg className="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
                 </svg>
-                <h2 className="text-white font-bold text-lg">Cancel Order</h2>
+                <h2 className="text-white font-bold text-lg">{t('detail.cancelOrder')}</h2>
               </div>
-              <button onClick={() => { setShowCancelModal(false); setCancelReason(''); }} className="text-white/70 hover:text-white">
+              <button onClick={() => { setShowCancelModal(false); setCancelReason(''); }} className="text-white/70 hover:text-white" aria-label={t('detail.closeAria')}>
                 <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
                 </svg>
@@ -879,13 +902,13 @@ function OrderDetailContent() {
             {/* Body */}
             <div className="px-6 py-5">
               <p className="text-gray-600 text-sm mb-4">
-                Are you sure you want to cancel order <strong>#{order.orderNumber}</strong>? This action cannot be undone.
+                {t('detail.cancelConfirmBefore')}<strong>#{order.orderNumber}</strong>{t('detail.cancelConfirmAfter')}
               </p>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Reason for cancellation <span className="text-red-500">*</span></label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">{t('detail.cancelReason')} <span className="text-red-500">*</span></label>
               <textarea
                 className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-red-400 resize-none"
                 rows={3}
-                placeholder="e.g. Changed my mind, ordered by mistake..."
+                placeholder={t('detail.cancelPlaceholder')}
                 value={cancelReason}
                 onChange={(e) => setCancelReason(e.target.value)}
               />
@@ -895,13 +918,13 @@ function OrderDetailContent() {
                   disabled={!cancelReason.trim() || cancelling}
                   className="flex-1 bg-red-500 hover:bg-red-600 disabled:opacity-50 disabled:cursor-not-allowed text-white font-semibold py-2.5 rounded-xl text-sm transition-all active:scale-95"
                 >
-                  {cancelling ? 'Cancelling...' : 'Yes, Cancel Order'}
+                  {cancelling ? t('detail.cancelling') : t('detail.yesCancel')}
                 </button>
                 <button
                   onClick={() => { setShowCancelModal(false); setCancelReason(''); }}
                   className="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium py-2.5 rounded-xl text-sm transition-all active:scale-95"
                 >
-                  Keep Order
+                  {t('detail.keepOrder')}
                 </button>
               </div>
             </div>
@@ -913,8 +936,8 @@ function OrderDetailContent() {
       <OrderChatModal
         orderId={order.id}
         orderNumber={order.orderNumber}
-        sellerName={order.sellerName || order.items[0]?.sellerName || 'Home Kitchen'}
-        customerName={order.customerName || 'Customer'}
+        sellerName={sellerName}
+        customerName={customerName}
         currentRole={user?.userType === 'seller' ? 'seller' : 'customer'}
         isOpen={showChatModal}
         onClose={() => setShowChatModal(false)}
@@ -926,8 +949,8 @@ function OrderDetailContent() {
         orderNumber={order.orderNumber}
         items={order.items}
         deliveryType={order.delivery?.type}
-        sellerName={order.sellerName || order.items[0]?.sellerName || 'Home Kitchen'}
-        riderName={order.delivery?.rider?.name || 'Delivery Partner'}
+        sellerName={sellerName}
+        riderName={riderName}
         isOpen={showReviewModal}
         onClose={() => setShowReviewModal(false)}
         onReviewed={() => loadOrder(true)}
@@ -940,15 +963,15 @@ function OrderDetailContent() {
           <div>
             <div className="flex items-center gap-2 mb-1">
               <span className="text-2xl font-black tracking-tight text-slate-950">NURAY FOOD &amp; FROST</span>
-              <span className="text-[10px] font-black bg-emerald-100 text-emerald-900 px-2 py-0.5 rounded-full uppercase">Verified Kitchen</span>
+              <span className="text-[10px] font-black bg-emerald-100 text-emerald-900 px-2 py-0.5 rounded-full uppercase">{t('receipt.verifiedKitchen')}</span>
             </div>
-            <p className="text-xs text-slate-600">Pakistan&apos;s Domestic Food Delivery Network • Karachi, PK</p>
-            <p className="text-[11px] text-slate-500 font-medium">Official Tax Invoice &amp; Customer Order Receipt</p>
+            <p className="text-xs text-slate-600">{t('receipt.network')}</p>
+            <p className="text-[11px] text-slate-500 font-medium">{t('receipt.officialInvoice')}</p>
           </div>
-          <div className="text-right">
-            <h2 className="text-xl font-black text-slate-900 tracking-tight">RECEIPT / INVOICE</h2>
-            <p className="text-xs font-mono font-bold text-slate-700">Order #{order.orderNumber}</p>
-            <p className="text-[11px] text-slate-500 mt-0.5">Date: {formatDate(order.createdAt || new Date().toISOString())}</p>
+          <div className="text-end">
+            <h2 className="text-xl font-black text-slate-900 tracking-tight">{t('receipt.heading')}</h2>
+            <p className="text-xs font-mono font-bold text-slate-700">{t('receipt.orderNumber', { number: order.orderNumber })}</p>
+            <p className="text-[11px] text-slate-500 mt-0.5">{t('receipt.date', { date: formatDate(order.createdAt || new Date().toISOString()) })}</p>
           </div>
         </div>
 
@@ -956,39 +979,39 @@ function OrderDetailContent() {
         <div className="grid grid-cols-2 gap-6 border-b border-slate-200 pb-4 mb-5 text-xs">
           <div>
             <span className="text-[10px] font-black uppercase text-slate-400 tracking-wider block mb-1">
-              Prepared &amp; Sold By
+              {t('receipt.preparedBy')}
             </span>
-            <h4 className="font-extrabold text-sm text-slate-900">{order.sellerName || 'Verified Home Kitchen'}</h4>
-            <p className="text-slate-600">Certified Domestic Home Chef</p>
-            <p className="text-slate-500 text-[11px]">Karachi Community Cluster, Pakistan</p>
+            <h4 className="font-extrabold text-sm text-slate-900">{sellerName}</h4>
+            <p className="text-slate-600">{t('receipt.certifiedChef')}</p>
+            <p className="text-slate-500 text-[11px]">{t('receipt.cluster')}</p>
           </div>
 
           <div>
             <span className="text-[10px] font-black uppercase text-slate-400 tracking-wider block mb-1">
-              Billed &amp; Delivered To
+              {t('receipt.billedTo')}
             </span>
-            <h4 className="font-extrabold text-sm text-slate-900">{order.customerName || 'Valued Customer'}</h4>
-            {order.customerPhone && <p className="text-slate-600 font-mono text-[11px]">{order.customerPhone}</p>}
+            <h4 className="font-extrabold text-sm text-slate-900">{customerName}</h4>
+            {order.customerPhone && <p data-ltr className="text-slate-600 font-mono text-[11px]">{order.customerPhone}</p>}
             <p className="text-slate-600 text-[11px] leading-relaxed mt-0.5">{order.delivery.address}</p>
           </div>
         </div>
 
         {/* Itemized Portion Table */}
         <div className="mb-5">
-          <table className="w-full text-left text-xs border-collapse">
+          <table className="w-full text-start text-xs border-collapse">
             <thead>
               <tr className="border-b-2 border-slate-800 text-[11px] uppercase tracking-wider text-slate-600">
-                <th className="py-2 pr-2 font-black">#</th>
-                <th className="py-2 px-2 font-black">Item Description / Portion</th>
-                <th className="py-2 px-2 font-black text-center">Qty</th>
-                <th className="py-2 px-2 font-black text-right">Unit Price</th>
-                <th className="py-2 pl-2 font-black text-right">Amount (PKR)</th>
+                <th className="py-2 pe-2 font-black">#</th>
+                <th className="py-2 px-2 font-black">{t('receipt.colItem')}</th>
+                <th className="py-2 px-2 font-black text-center">{t('receipt.colQty')}</th>
+                <th className="py-2 px-2 font-black text-end">{t('receipt.colUnitPrice')}</th>
+                <th className="py-2 ps-2 font-black text-end">{t('receipt.colAmount')}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-200">
               {order.items.map((item, idx) => (
                 <tr key={item.id} className="text-slate-800">
-                  <td className="py-2.5 pr-2 font-bold text-slate-400">{idx + 1}</td>
+                  <td className="py-2.5 pe-2 font-bold text-slate-400">{idx + 1}</td>
                   <td className="py-2.5 px-2 font-semibold">
                     <span className="font-bold text-slate-900 block">{item.productName}</span>
                     {item.variantName && (
@@ -996,8 +1019,8 @@ function OrderDetailContent() {
                     )}
                   </td>
                   <td className="py-2.5 px-2 text-center font-bold">{item.quantity}</td>
-                  <td className="py-2.5 px-2 text-right font-mono">{formatPrice(item.unitPrice)}</td>
-                  <td className="py-2.5 pl-2 text-right font-mono font-bold text-slate-900">
+                  <td className="py-2.5 px-2 text-end font-mono">{formatPrice(item.unitPrice)}</td>
+                  <td className="py-2.5 ps-2 text-end font-mono font-bold text-slate-900">
                     {formatPrice(item.totalPrice)}
                   </td>
                 </tr>
@@ -1011,32 +1034,32 @@ function OrderDetailContent() {
           {/* Payment Method Statement */}
           <div className="space-y-2">
             <span className="text-[10px] font-black uppercase text-slate-400 tracking-wider block">
-              Payment &amp; Settlement Details
+              {t('receipt.paymentDetails')}
             </span>
             <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-200 space-y-1.5">
               <div className="flex items-center justify-between">
-                <span className="font-bold text-slate-700">Payment Channel:</span>
+                <span className="font-bold text-slate-700">{t('receipt.paymentChannel')}</span>
                 <span className="font-extrabold text-slate-900">
-                  {paymentChannelLabel(order.paymentMethod, order.paymentSenderAccount)}
+                  {paymentChannelLabel(t, order.paymentMethod, order.paymentSenderAccount)}
                 </span>
               </div>
               <div className="flex items-center justify-between">
-                <span className="font-bold text-slate-700">Verification Status:</span>
+                <span className="font-bold text-slate-700">{t('receipt.verificationStatus')}</span>
                 <span className="font-extrabold text-emerald-700">
-                  {paymentStatusLabel(order.paymentMethod, order.paymentStatus)}
+                  {paymentStatusLabel(t, order.paymentMethod, order.paymentStatus)}
                 </span>
               </div>
               {order.paymentReferenceNumber && (
                 <div className="flex items-center justify-between text-[11px] pt-1 border-t border-slate-200">
-                  <span className="text-slate-500">Reference:</span>
-                  <span className="font-mono font-bold text-slate-800">{order.paymentReferenceNumber}</span>
+                  <span className="text-slate-500">{t('receipt.reference')}</span>
+                  <span data-ltr className="font-mono font-bold text-slate-800">{order.paymentReferenceNumber}</span>
                 </div>
               )}
               {order.paymentProofUrl && (
                 <div className="pt-2 border-t border-slate-200 flex items-center gap-2">
                   <span className="text-xs">🧾</span>
                   <span className="text-[10px] text-emerald-800 font-bold">
-                    Payment proof screenshot attached &amp; archived on platform
+                    {t('receipt.proofArchived')}
                   </span>
                 </div>
               )}
@@ -1044,29 +1067,29 @@ function OrderDetailContent() {
           </div>
 
           {/* Pricing Totals */}
-          <div className="space-y-1.5 text-right font-medium">
+          <div className="space-y-1.5 text-end font-medium">
             <div className="flex justify-between">
-              <span className="text-slate-500">Subtotal:</span>
+              <span className="text-slate-500">{t('receipt.subtotal')}</span>
               <span className="font-mono text-slate-800">{formatPrice(order.pricing.subtotal)}</span>
             </div>
             <div className="flex justify-between">
-              <span className="text-slate-500">Community Delivery:</span>
+              <span className="text-slate-500">{t('receipt.communityDelivery')}</span>
               <span className="font-mono text-slate-800">{formatPrice(order.pricing.deliveryFee)}</span>
             </div>
             {order.pricing.tax > 0 && (
               <div className="flex justify-between">
-                <span className="text-slate-500">Sales Tax (GST):</span>
+                <span className="text-slate-500">{t('receipt.salesTax')}</span>
                 <span className="font-mono text-slate-800">{formatPrice(order.pricing.tax)}</span>
               </div>
             )}
             {order.pricing.discount > 0 && (
               <div className="flex justify-between text-emerald-600 font-bold">
-                <span>Promotional Discount:</span>
+                <span>{t('receipt.promoDiscount')}</span>
                 <span className="font-mono">-{formatPrice(order.pricing.discount)}</span>
               </div>
             )}
             <div className="flex justify-between border-t-2 border-slate-300 pt-2 text-base font-black text-slate-950">
-              <span>Grand Total (PKR):</span>
+              <span>{t('receipt.grandTotalPkr')}</span>
               <span className="text-emerald-700 font-mono">{formatPrice(order.pricing.total)}</span>
             </div>
           </div>
@@ -1074,9 +1097,9 @@ function OrderDetailContent() {
 
         {/* Footer & Watermark */}
         <div className="border-t border-slate-200 pt-4 text-center text-[10px] text-slate-500 space-y-1">
-          <p className="font-extrabold text-slate-700">Thank you for supporting domestic home kitchens across Karachi!</p>
-          <p>For order queries or delivery assistance, open a support ticket under Help &amp; Support in your Nuray account.</p>
-          <p className="text-[9px] text-slate-400">Computer-generated receipt issued by Nuray Food &amp; Frost platform. No physical signature required.</p>
+          <p className="font-extrabold text-slate-700">{t('receipt.thanks')}</p>
+          <p>{t('receipt.support')}</p>
+          <p className="text-[9px] text-slate-400">{t('receipt.computerGenerated')}</p>
         </div>
       </div>
 
@@ -1087,7 +1110,7 @@ function OrderDetailContent() {
             <div className="px-6 py-4 bg-[#0C1016] text-white flex items-center justify-between border-b border-slate-800">
               <div className="flex items-center gap-2">
                 <span className="text-xl">🧾</span>
-                <h3 className="font-black text-sm">Receipt Preview</h3>
+                <h3 className="font-black text-sm">{t('receipt.preview')}</h3>
               </div>
               <div className="flex items-center gap-2">
                 <button
@@ -1098,10 +1121,11 @@ function OrderDetailContent() {
                   className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow-xs transition-all flex items-center gap-1.5"
                 >
                   <span>🖨️</span>
-                  <span>Print Now</span>
+                  <span>{t('receipt.printNow')}</span>
                 </button>
                 <button
                   onClick={() => setShowReceiptPreview(false)}
+                  aria-label={t('detail.closeAria')}
                   className="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center text-sm transition-colors"
                 >
                   ✕
@@ -1115,9 +1139,9 @@ function OrderDetailContent() {
                 <div className="flex items-start justify-between border-b-2 border-slate-900 pb-4">
                   <div>
                     <span className="text-xl font-black text-slate-950 block">NURAY FOOD &amp; FROST</span>
-                    <span className="text-[11px] text-slate-500 font-medium">Domestic Kitchen Tax Invoice &amp; Receipt</span>
+                    <span className="text-[11px] text-slate-500 font-medium">{t('receipt.kitchenInvoice')}</span>
                   </div>
-                  <div className="text-right">
+                  <div className="text-end">
                     <span className="font-mono font-bold text-sm text-slate-900 block">#{order.orderNumber}</span>
                     <span className="text-[11px] text-slate-400">{formatDate(order.createdAt || new Date().toISOString())}</span>
                   </div>
@@ -1126,13 +1150,13 @@ function OrderDetailContent() {
                 {/* Details */}
                 <div className="grid grid-cols-2 gap-4 text-xs">
                   <div>
-                    <span className="text-[10px] uppercase font-bold text-slate-400 block">Sold By</span>
-                    <span className="font-bold text-slate-900 block">{order.sellerName || 'Verified Home Kitchen'}</span>
-                    <span className="text-slate-500 text-[11px]">Karachi Community Kitchen</span>
+                    <span className="text-[10px] uppercase font-bold text-slate-400 block">{t('receipt.soldBy')}</span>
+                    <span className="font-bold text-slate-900 block">{sellerName}</span>
+                    <span className="text-slate-500 text-[11px]">{t('receipt.communityKitchen')}</span>
                   </div>
                   <div>
-                    <span className="text-[10px] uppercase font-bold text-slate-400 block">Delivered To</span>
-                    <span className="font-bold text-slate-900 block">{order.customerName || 'Valued Customer'}</span>
+                    <span className="text-[10px] uppercase font-bold text-slate-400 block">{t('receipt.deliveredTo')}</span>
+                    <span className="font-bold text-slate-900 block">{customerName}</span>
                     <span className="text-slate-500 text-[11px]">{order.delivery.address}</span>
                   </div>
                 </div>
@@ -1150,29 +1174,29 @@ function OrderDetailContent() {
                 {/* Summary */}
                 <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-2 text-xs">
                   <div className="flex justify-between">
-                    <span className="font-bold text-slate-700">Payment Channel:</span>
+                    <span className="font-bold text-slate-700">{t('receipt.paymentChannel')}</span>
                     <span className="font-extrabold text-slate-900">
-                      {paymentChannelLabel(order.paymentMethod, order.paymentSenderAccount)}
+                      {paymentChannelLabel(t, order.paymentMethod, order.paymentSenderAccount)}
                     </span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="font-bold text-slate-700">Payment Status:</span>
+                    <span className="font-bold text-slate-700">{t('receipt.paymentStatus')}</span>
                     <span className="font-extrabold text-emerald-700">
-                      {paymentStatusLabel(order.paymentMethod, order.paymentStatus)}
+                      {paymentStatusLabel(t, order.paymentMethod, order.paymentStatus)}
                     </span>
                   </div>
                   {order.paymentProofUrl && (
                     <div className="pt-2 border-t border-slate-200 flex items-center gap-3">
                       <div className="w-12 h-12 rounded-lg border border-slate-200 overflow-hidden flex-shrink-0">
-                        <img src={order.paymentProofUrl} alt="Receipt proof" className="w-full h-full object-cover" />
+                        <img src={order.paymentProofUrl} alt={t('receipt.proofAlt')} className="w-full h-full object-cover" />
                       </div>
                       <span className="text-[11px] text-emerald-800 font-bold">
-                        Proof screenshot attached by customer
+                        {t('receipt.proofByCustomer')}
                       </span>
                     </div>
                   )}
                   <div className="flex justify-between border-t border-slate-200 pt-2 text-sm font-black text-slate-950">
-                    <span>Grand Total:</span>
+                    <span>{t('receipt.grandTotal')}</span>
                     <span className="text-emerald-700 font-mono">{formatPrice(order.pricing.total)}</span>
                   </div>
                 </div>
