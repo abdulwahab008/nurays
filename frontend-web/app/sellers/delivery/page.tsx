@@ -444,7 +444,7 @@ export default function SellerDeliveryPage() {
                         </label>
 
                         {d.enabled && (
-                          <div className="grid grid-cols-3 gap-2.5 pl-6">
+                          <div className="grid grid-cols-3 gap-2.5 ps-6">
                             <div>
                               <label className="text-[11px] text-slate-500 block mb-1">Fee (PKR)</label>
                               <input
@@ -560,9 +560,9 @@ export default function SellerDeliveryPage() {
                             deliveryFeeFixed: e.target.value === '' ? null : parseInt(e.target.value, 10),
                           })
                         }
-                        className="w-full pl-3 pr-9 py-2 text-xs font-bold border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-[#FF5500]"
+                        className="w-full ps-3 pe-9 py-2 text-xs font-bold border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-[#FF5500]"
                       />
-                      <span className="absolute right-3 top-2 text-[11px] text-slate-400 font-medium">PKR</span>
+                      <span className="absolute end-3 top-2 text-[11px] text-slate-400 font-medium">PKR</span>
                     </div>
                   </div>
                 )}
@@ -584,9 +584,9 @@ export default function SellerDeliveryPage() {
                               deliveryFeeBase: e.target.value === '' ? null : parseInt(e.target.value, 10),
                             })
                           }
-                          className="w-full pl-3 pr-9 py-2 text-xs font-bold border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-[#FF5500]"
+                          className="w-full ps-3 pe-9 py-2 text-xs font-bold border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-[#FF5500]"
                         />
-                        <span className="absolute right-3 top-2 text-[11px] text-slate-400 font-medium">PKR</span>
+                        <span className="absolute end-3 top-2 text-[11px] text-slate-400 font-medium">PKR</span>
                       </div>
                     </div>
                     <div>
@@ -604,9 +604,9 @@ export default function SellerDeliveryPage() {
                               deliveryFeePerKm: e.target.value === '' ? null : parseFloat(e.target.value),
                             })
                           }
-                          className="w-full pl-3 pr-11 py-2 text-xs font-bold border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-[#FF5500]"
+                          className="w-full ps-3 pe-11 py-2 text-xs font-bold border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-[#FF5500]"
                         />
-                        <span className="absolute right-3 top-2 text-[11px] text-slate-400 font-medium">Rs/km</span>
+                        <span className="absolute end-3 top-2 text-[11px] text-slate-400 font-medium">Rs/km</span>
                       </div>
                     </div>
                   </div>
@@ -673,7 +673,7 @@ export default function SellerDeliveryPage() {
                         <button
                           type="button"
                           onClick={() => handleRemoveArea(area)}
-                          className="hover:text-red-500 ml-0.5"
+                          className="hover:text-red-500 ms-0.5"
                         >
                           <X className="w-3 h-3" />
                         </button>

@@ -90,7 +90,7 @@ export default function AdminAuditLogPage() {
             </button>
           ))}
           <form
-            className="ml-auto flex gap-2"
+            className="ms-auto flex gap-2"
             onSubmit={(e) => {
               e.preventDefault();
               setQuery(entityId.trim());
@@ -111,7 +111,7 @@ export default function AdminAuditLogPage() {
             <p className="p-10 text-center text-gray-500">Nothing recorded yet.</p>
           ) : (
             <table className="w-full text-sm" data-testid="audit-table">
-              <thead className="bg-gray-50 text-left text-xs uppercase tracking-wide text-gray-500">
+              <thead className="bg-gray-50 text-start text-xs uppercase tracking-wide text-gray-500">
                 <tr>
                   <th className="px-4 py-3">When</th>
                   <th className="px-4 py-3">Who</th>

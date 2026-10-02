@@ -493,7 +493,7 @@ export default function SellerSettingsPage() {
                 className="inline-flex items-center gap-1.5 text-xs font-bold text-[#FF5500] hover:text-[#e04400]"
               >
                 <span>Full Delivery Console</span>
-                <ArrowRight className="w-3.5 h-3.5" />
+                <ArrowRight className="rtl:-scale-x-100 w-3.5 h-3.5" />
               </Link>
             </div>
 
@@ -540,9 +540,9 @@ export default function SellerSettingsPage() {
                             deliveryFeeFixed: e.target.value === '' ? null : parseInt(e.target.value, 10),
                           })
                         }
-                        className="w-full pl-3 pr-10 py-1.5 text-xs font-bold border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-[#FF5500]"
+                        className="w-full ps-3 pe-10 py-1.5 text-xs font-bold border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-[#FF5500]"
                       />
-                      <span className="absolute right-3 top-2 text-[10px] text-slate-400 font-medium">PKR</span>
+                      <span className="absolute end-3 top-2 text-[10px] text-slate-400 font-medium">PKR</span>
                     </div>
                   </div>
 
@@ -560,9 +560,9 @@ export default function SellerSettingsPage() {
                             freeDeliveryRadiusKm: e.target.value === '' ? null : parseFloat(e.target.value),
                           })
                         }
-                        className="w-full pl-3 pr-8 py-1.5 text-xs font-bold border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-[#FF5500]"
+                        className="w-full ps-3 pe-8 py-1.5 text-xs font-bold border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-[#FF5500]"
                       />
-                      <span className="absolute right-3 top-2 text-[10px] text-slate-400 font-medium">KM</span>
+                      <span className="absolute end-3 top-2 text-[10px] text-slate-400 font-medium">KM</span>
                     </div>
                   </div>
                 </div>
@@ -600,7 +600,7 @@ export default function SellerSettingsPage() {
                           <button
                             type="button"
                             onClick={() => handleRemoveArea(area)}
-                            className="hover:text-red-500 ml-0.5"
+                            className="hover:text-red-500 ms-0.5"
                           >
                             <X className="w-2.5 h-2.5" />
                           </button>

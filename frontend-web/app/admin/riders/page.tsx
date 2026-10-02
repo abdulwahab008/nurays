@@ -161,7 +161,7 @@ function RidersMoney() {
           </button>
         ))}
         <form
-          className="ml-auto flex gap-2"
+          className="ms-auto flex gap-2"
           onSubmit={(e) => {
             e.preventDefault();
             setQuery(search.trim());
@@ -191,7 +191,7 @@ function RidersMoney() {
       ) : (
         <div className="bg-white rounded-lg border border-gray-200 overflow-x-auto">
           <table className="w-full text-sm" data-testid="riders-money-table">
-            <thead className="bg-gray-50 text-left text-xs uppercase tracking-wide text-gray-500">
+            <thead className="bg-gray-50 text-start text-xs uppercase tracking-wide text-gray-500">
               <tr>
                 <th className="px-4 py-3">Rider</th>
                 <th className="px-4 py-3">Cash in hand</th>
@@ -226,7 +226,7 @@ function RidersMoney() {
                     </td>
                     <td className="px-4 py-3 text-gray-700">{r.totalDeliveries}</td>
                     <td className="px-4 py-3 text-xs text-gray-500">{r.lastEntryAt ? formatDateTime(r.lastEntryAt) : '—'}</td>
-                    <td className="px-4 py-3 text-right">
+                    <td className="px-4 py-3 text-end">
                       <Link href={`/admin/riders/${r.id}`} className="text-sm font-semibold text-green-700 hover:underline">
                         Settle up →
                       </Link>

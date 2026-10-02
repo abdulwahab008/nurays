@@ -488,7 +488,7 @@ function SellerProductsContent() {
           {/* Search Input */}
           <div className="relative flex-1">
             <svg
-              className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2"
+              className="w-4 h-4 text-slate-400 absolute start-3.5 top-1/2 -translate-y-1/2"
               fill="none"
               viewBox="0 0 24 24"
               stroke="currentColor"
@@ -501,12 +501,12 @@ function SellerProductsContent() {
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder="Search by product title, category, or cuisine..."
-              className="w-full pl-10 pr-9 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-900 focus:bg-white transition-all placeholder:text-slate-400"
+              className="w-full ps-10 pe-9 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-900 focus:bg-white transition-all placeholder:text-slate-400"
             />
             {searchQuery && (
               <button
                 onClick={() => setSearchQuery('')}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 text-xs font-bold"
+                className="absolute end-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 text-xs font-bold"
               >
                 ✕
               </button>
@@ -534,7 +534,7 @@ function SellerProductsContent() {
                 {chip.dot && <span className={`w-2 h-2 rounded-full ${chip.dot} shrink-0`} />}
                 <span>{chip.label}</span>
                 <span
-                  className={`ml-1 text-[11px] px-1.5 py-0.2 rounded-full font-bold ${
+                  className={`ms-1 text-[11px] px-1.5 py-0.2 rounded-full font-bold ${
                     stockFilter === chip.key ? 'bg-white/20 text-white' : 'bg-white text-slate-600 shadow-xs'
                   }`}
                 >
@@ -545,7 +545,7 @@ function SellerProductsContent() {
 
             {/* Status Filter (when in All Products view) */}
             {!isInventoryView && (
-              <div className="flex items-center pl-2 border-l border-slate-200 gap-1">
+              <div className="flex items-center ps-2 border-s border-slate-200 gap-1">
                 {[
                   { key: 'all', label: 'Status: All' },
                   { key: 'active', label: 'Live' },
@@ -669,7 +669,7 @@ function SellerProductsContent() {
                       <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-black/20 pointer-events-none" />
 
                       {/* Badges Overlay */}
-                      <div className="absolute top-3 left-3 right-3 flex items-center justify-between gap-2 pointer-events-auto">
+                      <div className="absolute top-3 start-3 end-3 flex items-center justify-between gap-2 pointer-events-auto">
                         {/* Type Badge with SVG Icon */}
                         <span
                           className={`px-2.5 py-1 rounded-xl text-[11px] font-bold backdrop-blur-md border shadow-xs flex items-center gap-1.5 ${typeMeta.color} ${typeMeta.border}`}
@@ -707,7 +707,7 @@ function SellerProductsContent() {
                       </div>
 
                       {/* Shelf Life / Category bottom badge on image */}
-                      <div className="absolute bottom-2.5 left-3 right-3 flex items-center justify-between pointer-events-none text-white text-[11px] font-bold drop-shadow-sm">
+                      <div className="absolute bottom-2.5 start-3 end-3 flex items-center justify-between pointer-events-none text-white text-[11px] font-bold drop-shadow-sm">
                         <span>{product.category?.name || 'General'}</span>
                         {product.shelfLifeHours ? (
                           <span className="bg-black/50 px-2 py-0.5 rounded-lg backdrop-blur-xs flex items-center gap-1">
@@ -791,7 +791,7 @@ function SellerProductsContent() {
                           </span>
                           <span className="font-black text-emerald-700">
                             {formatPrice(product.price - product.costPrice - product.price * 0.15)}
-                            <span className="text-[10px] font-bold text-emerald-600 ml-1">
+                            <span className="text-[10px] font-bold text-emerald-600 ms-1">
                               ({(
                                 ((product.price - product.costPrice - product.price * 0.15) / product.price) *
                                 100

@@ -128,7 +128,7 @@ export default function AdminUsersPage() {
             <option value="suspended">Suspended</option>
           </select>
           <form
-            className="ml-auto flex gap-2"
+            className="ms-auto flex gap-2"
             onSubmit={(e) => {
               e.preventDefault();
               setQuery(search.trim());
@@ -155,7 +155,7 @@ export default function AdminUsersPage() {
             <p className="p-10 text-center text-gray-500">No accounts match.</p>
           ) : (
             <table className="w-full text-sm" data-testid="users-table">
-              <thead className="bg-gray-50 text-left text-xs uppercase tracking-wide text-gray-500">
+              <thead className="bg-gray-50 text-start text-xs uppercase tracking-wide text-gray-500">
                 <tr>
                   <th className="px-4 py-3">Person</th>
                   <th className="px-4 py-3">Account</th>
@@ -204,7 +204,7 @@ export default function AdminUsersPage() {
                       <br />
                       {u.lastLoginAt ? formatDateTime(u.lastLoginAt) : 'Never signed in'}
                     </td>
-                    <td className="px-4 py-3 text-right">
+                    <td className="px-4 py-3 text-end">
                       {u.userType === 'admin' ? null : u.status === 'active' ? (
                         <Button variant="outline" size="sm" disabled={busyId === u.id} onClick={() => changeStatus(u, 'suspended')} className="border-red-200 text-red-700">
                           Suspend

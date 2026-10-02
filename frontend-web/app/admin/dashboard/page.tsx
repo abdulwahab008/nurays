@@ -301,7 +301,7 @@ export default function AdminDashboardPage() {
                       </div>
                     </div>
 
-                    <div className="flex gap-2 ml-4">
+                    <div className="flex gap-2 ms-4">
                       <Button
                         onClick={() => handleApproveReject(seller.id, 'approve')}
                         disabled={processingId === seller.id}
@@ -343,25 +343,25 @@ export default function AdminDashboardPage() {
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
           <Link href="/admin/pending-sellers">
             <Button className="w-full justify-start" variant="outline">
-              <span className="mr-2">👥</span>
+              <span className="me-2">👥</span>
               Review Sellers
             </Button>
           </Link>
           <Link href="/admin/orders">
             <Button className="w-full justify-start" variant="outline">
-              <span className="mr-2">📋</span>
+              <span className="me-2">📋</span>
               Manage Orders
             </Button>
           </Link>
           <Link href="/admin/products">
             <Button className="w-full justify-start" variant="outline">
-              <span className="mr-2">🍽️</span>
+              <span className="me-2">🍽️</span>
               Moderate Products
             </Button>
           </Link>
           <Link href="/admin/analytics">
             <Button className="w-full justify-start" variant="outline">
-              <span className="mr-2">📈</span>
+              <span className="me-2">📈</span>
               View Analytics
             </Button>
           </Link>

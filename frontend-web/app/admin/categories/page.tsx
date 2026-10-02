@@ -172,7 +172,7 @@ function CategoryModal({ isOpen, onClose, onSubmit, category, parentCategories }
                 value={formData.nameUrdu}
                 onChange={(e) => setFormData({ ...formData, nameUrdu: e.target.value })}
                 placeholder="منجمد پراٹھے"
-                className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent text-right"
+                className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent text-end"
                 dir="rtl"
               />
             </div>
@@ -220,7 +220,7 @@ function CategoryModal({ isOpen, onClose, onSubmit, category, parentCategories }
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
               Parent Category
-              <span className="text-gray-400 font-normal ml-2">(for subcategories)</span>
+              <span className="text-gray-400 font-normal ms-2">(for subcategories)</span>
             </label>
             <select
               value={formData.parentId}
@@ -321,8 +321,8 @@ function CategoryTreeItem({
   const hasChildren = category.children && category.children.length > 0;
 
   return (
-    <div className={level > 0 ? 'ml-8 border-l-2 border-gray-100' : ''}>
-      <div className={`flex items-center gap-4 p-4 bg-white rounded-xl border border-gray-100 hover:shadow-md transition-all ${level > 0 ? 'ml-4' : ''}`}>
+    <div className={level > 0 ? 'ms-8 border-s-2 border-gray-100' : ''}>
+      <div className={`flex items-center gap-4 p-4 bg-white rounded-xl border border-gray-100 hover:shadow-md transition-all ${level > 0 ? 'ms-4' : ''}`}>
         {/* Expand/Collapse */}
         <button
           onClick={() => setIsExpanded(!isExpanded)}

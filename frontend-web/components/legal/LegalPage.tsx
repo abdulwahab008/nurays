@@ -25,7 +25,7 @@ export function LegalPage({ title, updated, children }: { title: string; updated
             placeholders in brackets filled in) before launch.
           </p>
         )}
-        <div className="mt-6 space-y-6 text-[15px] leading-7 text-slate-700 [&_h2]:text-lg [&_h2]:font-semibold [&_h2]:text-slate-900 [&_h2]:mt-8 [&_ul]:list-disc [&_ul]:pl-6 [&_ul]:space-y-1">
+        <div className="mt-6 space-y-6 text-[15px] leading-7 text-slate-700 [&_h2]:text-lg [&_h2]:font-semibold [&_h2]:text-slate-900 [&_h2]:mt-8 [&_ul]:list-disc [&_ul]:ps-6 [&_ul]:space-y-1">
           {children}
         </div>
         <nav className="mt-10 pt-6 border-t border-slate-100 flex flex-wrap gap-4 text-sm text-slate-600">

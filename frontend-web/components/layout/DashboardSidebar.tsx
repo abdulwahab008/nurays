@@ -3,6 +3,8 @@
 import { useEffect, useState, Suspense } from 'react';
 import Link from 'next/link';
 import { usePathname, useSearchParams } from 'next/navigation';
+import { useT } from '@/lib/i18n';
+import { navMessages } from '@/lib/i18n/messages/nav';
 import { useAuthStore } from '@/lib/store/auth-store';
 
 export interface SubItem {
@@ -237,6 +239,8 @@ const DefaultIcon: React.FC<{ className?: string }> = ({ className }) => (
 
 function DashboardSidebarContent({ items, userType }: DashboardSidebarProps) {
   const pathname = usePathname();
+  const tNav = useT(navMessages);
+  const label = (name: string) => tNav(name as keyof typeof navMessages.en);
   const searchParams = useSearchParams();
   const queryString = searchParams?.toString() || '';
   const currentHref = queryString ? `${pathname}?${queryString}` : pathname;
@@ -322,13 +326,13 @@ function DashboardSidebarContent({ items, userType }: DashboardSidebarProps) {
 
   return (
     <aside
-      className="w-64 h-full overflow-y-auto bg-white border-r border-slate-200"
+      className="w-64 h-full overflow-y-auto bg-white border-e border-slate-200"
     >
       <div className="px-4 py-6">
 
         {/* Menu Label */}
         <div className="px-3 mb-2">
-          <span className="eyebrow">Menu</span>
+          <span className="eyebrow">{tNav('menu')}</span>
         </div>
 
         {/* Navigation Items */}
@@ -358,7 +362,7 @@ function DashboardSidebarContent({ items, userType }: DashboardSidebarProps) {
                         className="w-5 h-5 flex-shrink-0"
                       />
                     )}
-                    <span className="flex-1 text-[14px]">{item.name}</span>
+                    <span className="flex-1 text-[14px]">{label(item.name)}</span>
                     {item.badge !== undefined && item.badge > 0 && (
                       <span
                         className="text-xs font-medium px-2 py-0.5 rounded-full min-w-[20px] text-center"
@@ -373,8 +377,8 @@ function DashboardSidebarContent({ items, userType }: DashboardSidebarProps) {
                     <button
                       type="button"
                       onClick={(e) => toggleExpand(item.name, e)}
-                      aria-label={isExpanded ? `Collapse ${item.name}` : `Expand ${item.name}`}
-                      className="p-2 mr-1 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-lg transition-colors cursor-pointer"
+                      aria-label={tNav(isExpanded ? 'collapse' : 'expand', { name: label(item.name) })}
+                      className="p-2 me-1 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-lg transition-colors cursor-pointer"
                     >
                       <svg
                         className={`w-3.5 h-3.5 transition-transform duration-200 ${isExpanded ? 'rotate-180' : ''}`}
@@ -390,7 +394,7 @@ function DashboardSidebarContent({ items, userType }: DashboardSidebarProps) {
                 </div>
 
                 {hasSubItems && isExpanded && (
-                  <div className="ml-5 pl-3.5 py-1 space-y-1 border-l-2 border-slate-200">
+                  <div className="ms-5 ps-3.5 py-1 space-y-1 border-s-2 border-slate-200">
                     {item.subItems!.map((sub) => {
                       const isSubActive = isItemActive(sub.href);
                       return (
@@ -416,7 +420,7 @@ function DashboardSidebarContent({ items, userType }: DashboardSidebarProps) {
                               }`}
                             />
                           )}
-                          <span className="flex-1 truncate">{sub.name}</span>
+                          <span className="flex-1 truncate">{label(sub.name)}</span>
                           {sub.badge !== undefined && sub.badge > 0 && (
                             <span
                               className="text-[10px] font-bold px-1.5 py-0.5 rounded-full"
@@ -477,7 +481,7 @@ function DashboardSidebarContent({ items, userType }: DashboardSidebarProps) {
 
 function SidebarSkeleton({ items }: { items: SidebarItem[] }) {
   return (
-    <aside className="w-64 h-full overflow-y-auto bg-white border-r border-slate-200">
+    <aside className="w-64 h-full overflow-y-auto bg-white border-e border-slate-200">
       <div className="px-4 py-6">
         <div className="mb-8 p-4 rounded-2xl bg-slate-50 border border-slate-100 flex items-center gap-3">
           <div className="w-10 h-10 rounded-2xl bg-slate-200 animate-pulse" />

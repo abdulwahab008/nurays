@@ -21,12 +21,17 @@ export function formatPrice(price: number | string | undefined | null): string {
   }).format(isNaN(num) ? 0 : num);
 }
 
+/** Dates follow the page's language (Urdu month names, Western digits as on Pakistani apps). */
+function dateLocale(): string {
+  return typeof document !== 'undefined' && document.documentElement.lang === 'ur' ? 'ur-PK-u-nu-latn' : 'en-PK';
+}
+
 export function formatDate(date: string | Date | undefined | null): string {
   if (!date) return '—';
   try {
     const d = new Date(date);
     if (isNaN(d.getTime())) return '—';
-    return new Intl.DateTimeFormat('en-PK', {
+    return new Intl.DateTimeFormat(dateLocale(), {
       year: 'numeric',
       month: 'long',
       day: 'numeric',
@@ -41,7 +46,7 @@ export function formatDateTime(date: string | Date | undefined | null): string {
   try {
     const d = new Date(date);
     if (isNaN(d.getTime())) return '—';
-    return new Intl.DateTimeFormat('en-PK', {
+    return new Intl.DateTimeFormat(dateLocale(), {
       year: 'numeric',
       month: 'short',
       day: 'numeric',

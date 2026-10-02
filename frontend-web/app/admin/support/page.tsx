@@ -151,7 +151,7 @@ export default function AdminSupportPage() {
               {selected.messages.map((m) => (
                 <div
                   key={m.id}
-                  className={`rounded-xl p-3 max-w-lg ${m.authorType === 'admin' ? 'bg-green-50 ml-auto' : 'bg-gray-50'}`}
+                  className={`rounded-xl p-3 max-w-lg ${m.authorType === 'admin' ? 'bg-green-50 ms-auto' : 'bg-gray-50'}`}
                 >
                   <p className="text-xs font-medium text-gray-500 mb-1">{m.authorName}</p>
                   <p className="text-sm text-gray-800">{m.message}</p>
@@ -217,7 +217,7 @@ export default function AdminSupportPage() {
                   <button
                     key={t.id}
                     onClick={() => openTicket(t.id)}
-                    className="w-full text-left px-6 py-4 hover:bg-gray-50 transition-colors flex items-center justify-between"
+                    className="w-full text-start px-6 py-4 hover:bg-gray-50 transition-colors flex items-center justify-between"
                   >
                     <div>
                       <p className="font-medium text-gray-900">{t.subject}</p>

@@ -187,7 +187,7 @@ export default function CategoryRequestsPage() {
           <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-8">
             <div className="flex items-center justify-center">
               <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
-              <span className="ml-3 text-gray-600">Loading requests...</span>
+              <span className="ms-3 text-gray-600">Loading requests...</span>
             </div>
           </div>
         ) : requests.length === 0 ? (
@@ -287,7 +287,7 @@ export default function CategoryRequestsPage() {
 
                     {/* Right: Actions */}
                     {request.status === 'pending' && (
-                      <div className="flex flex-col gap-2 ml-4">
+                      <div className="flex flex-col gap-2 ms-4">
                         <Button
                           onClick={() => handleApprove(request)}
                           disabled={actionLoading}

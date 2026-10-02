@@ -172,7 +172,7 @@ export function DashboardShell({
           }}
         />
         <div
-          className="nuray-drawer fixed top-16 bottom-0 left-0 z-50 w-64"
+          className="nuray-drawer fixed top-16 bottom-0 start-0 z-50 w-64"
           data-open={open ? 'true' : 'false'}
           onClick={() => setOpen(false)}
         >
@@ -180,7 +180,7 @@ export function DashboardShell({
         </div>
 
         <main
-          className="lg:ml-64 px-4 sm:px-6 lg:px-10 py-6 lg:py-10 min-h-[calc(100vh-4rem)] bg-[#FAFAFA]"
+          className="lg:ms-64 px-4 sm:px-6 lg:px-10 py-6 lg:py-10 min-h-[calc(100vh-4rem)] bg-[#FAFAFA]"
         >
           {title && (
             <div className="mb-6 sm:mb-8">

@@ -136,7 +136,7 @@ export default function AdminRefundsPage() {
                     </p>
                     {r.reason && <p className="text-sm text-gray-500 mt-1">Why: {r.reason}</p>}
                   </div>
-                  <div className="text-sm text-right">
+                  <div className="text-sm text-end">
                     <p className="font-semibold text-gray-900">{r.customer?.name || 'Customer'}</p>
                     <p className="text-gray-600">{r.customer?.phone}</p>
                     {r.customer?.email && <p className="text-gray-500 text-xs">{r.customer.email}</p>}

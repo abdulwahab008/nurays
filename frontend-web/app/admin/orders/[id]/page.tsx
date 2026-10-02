@@ -368,11 +368,11 @@ export default function AdminOrderDetailPage() {
                     <table className="w-full text-sm">
                       <thead className="bg-gray-50">
                         <tr>
-                          <th className="px-4 py-2 text-left font-medium text-gray-600">Product</th>
-                          <th className="px-4 py-2 text-left font-medium text-gray-600">Seller</th>
-                          <th className="px-4 py-2 text-right font-medium text-gray-600">Qty</th>
-                          <th className="px-4 py-2 text-right font-medium text-gray-600">Price</th>
-                          <th className="px-4 py-2 text-right font-medium text-gray-600">Total</th>
+                          <th className="px-4 py-2 text-start font-medium text-gray-600">Product</th>
+                          <th className="px-4 py-2 text-start font-medium text-gray-600">Seller</th>
+                          <th className="px-4 py-2 text-end font-medium text-gray-600">Qty</th>
+                          <th className="px-4 py-2 text-end font-medium text-gray-600">Price</th>
+                          <th className="px-4 py-2 text-end font-medium text-gray-600">Total</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-gray-200">
@@ -380,9 +380,9 @@ export default function AdminOrderDetailPage() {
                           <tr key={item.id}>
                             <td className="px-4 py-3 font-medium text-gray-900">{item.productName}</td>
                             <td className="px-4 py-3 text-gray-600">{item.seller?.businessName || '—'}</td>
-                            <td className="px-4 py-3 text-right">{item.quantity}</td>
-                            <td className="px-4 py-3 text-right">{formatPrice(item.unitPrice)}</td>
-                            <td className="px-4 py-3 text-right font-medium">{formatPrice(item.totalPrice)}</td>
+                            <td className="px-4 py-3 text-end">{item.quantity}</td>
+                            <td className="px-4 py-3 text-end">{formatPrice(item.unitPrice)}</td>
+                            <td className="px-4 py-3 text-end font-medium">{formatPrice(item.totalPrice)}</td>
                           </tr>
                         ))}
                       </tbody>
@@ -572,7 +572,7 @@ export default function AdminOrderDetailPage() {
                         <li key={r.id} className="flex items-center justify-between gap-3 rounded-lg border border-gray-200 px-3 py-2">
                           <div className="min-w-0">
                             <span className="font-medium text-gray-900">{formatPrice(r.amount)}</span>
-                            <span className="ml-2 text-gray-500">
+                            <span className="ms-2 text-gray-500">
                               {r.method === 'wallet' ? 'to wallet' : 'manual transfer'}
                               {r.reference ? ` · ref ${r.reference}` : ''}
                             </span>
@@ -614,7 +614,7 @@ export default function AdminOrderDetailPage() {
                         <li key={i}>
                           <span className="font-medium text-gray-700">{h.status}</span>
                           {h.notes && ` — ${h.notes}`}
-                          <span className="text-gray-400 ml-2">{formatDate(h.createdAt)}</span>
+                          <span className="text-gray-400 ms-2">{formatDate(h.createdAt)}</span>
                         </li>
                       ))}
                     </ul>
