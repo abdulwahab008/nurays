@@ -1,6 +1,7 @@
 import nodemailer from 'nodemailer';
 import type { Mail } from 'nodemailer';
 import { AppError } from '../middleware/errorHandler';
+import { emailProvider, runtimeMode } from '../config/env';
 
 interface EmailOptions {
   to: string;
@@ -9,180 +10,145 @@ interface EmailOptions {
   text?: string;
 }
 
+/** Escape text for HTML: user-chosen names must never inject markup or links into our emails. */
+export function escapeHtml(value: unknown): string {
+  return String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+const frontendUrl = () => (process.env.FRONTEND_URL || 'http://localhost:3000').replace(/\/+$/, '');
+
+/** The common email frame. `bodyHtml` must already be escaped where it contains user data. */
+export function emailLayout(title: string, bodyHtml: string): string {
+  return `<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>${escapeHtml(title)}</title></head>
+<body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
+  <div style="background: #f97316; padding: 20px; text-align: center; border-radius: 10px 10px 0 0;">
+    <h1 style="color: white; margin: 0; font-size: 24px;">Nuray</h1>
+  </div>
+  <div style="background: #f9fafb; padding: 32px; border-radius: 0 0 10px 10px; border: 1px solid #e5e7eb;">${bodyHtml}</div>
+  <p style="text-align: center; margin-top: 16px; color: #9ca3af; font-size: 12px;">© ${new Date().getFullYear()} Nuray</p>
+</body></html>`;
+}
+
+export function emailButton(url: string, label: string): string {
+  return `<p style="text-align:center;margin:28px 0;"><a href="${escapeHtml(url)}" style="background:#f97316;color:#fff;padding:14px 32px;text-decoration:none;border-radius:6px;font-weight:600;">${escapeHtml(label)}</a></p>
+<p style="font-size:12px;color:#6b7280;word-break:break-all;">${escapeHtml(url)}</p>`;
+}
+
+/**
+ * Email. Provider (see config/env.ts emailProvider):
+ *  - gmail / smtp: real delivery, with connection timeouts so a slow mail server can't
+ *    hold a request for minutes.
+ *  - ethereal: a throwaway test inbox, development only.
+ *  - console: nothing is sent; development prints the message, test stays quiet.
+ * Production refuses to start without gmail or smtp (config/env.ts).
+ */
 class EmailService {
   private transporter: Mail | null = null;
-  private initialized = false;
+  private initializing: Promise<void> | null = null;
 
-  constructor() {
-    this.initializeTransporter();
-  }
-
-  private async initializeTransporter() {
-    // Initialize email transporter
-    // Priority: Gmail > SMTP > Ethereal (for testing)
-    if (process.env.EMAIL_SERVICE === 'gmail') {
+  private async init(): Promise<void> {
+    const provider = emailProvider();
+    const timeouts = { connectionTimeout: 10_000, greetingTimeout: 10_000, socketTimeout: 20_000 };
+    if (provider === 'gmail') {
       this.transporter = nodemailer.createTransport({
         service: 'gmail',
-        auth: {
-          user: process.env.EMAIL_USER,
-          pass: process.env.EMAIL_PASSWORD, // Use App Password for Gmail
-        },
+        auth: { user: process.env.EMAIL_USER, pass: process.env.EMAIL_PASSWORD },
+        ...timeouts,
       });
-      console.log('✅ Email service configured with Gmail');
-    } else if (process.env.SMTP_HOST) {
+    } else if (provider === 'smtp') {
       this.transporter = nodemailer.createTransport({
         host: process.env.SMTP_HOST,
-        port: parseInt(process.env.SMTP_PORT || '587'),
+        port: parseInt(process.env.SMTP_PORT || '587', 10),
         secure: process.env.SMTP_SECURE === 'true',
-        auth: {
-          user: process.env.SMTP_USER,
-          pass: process.env.SMTP_PASSWORD,
-        },
+        auth: { user: process.env.SMTP_USER, pass: process.env.SMTP_PASSWORD },
+        ...timeouts,
       });
-      console.log('✅ Email service configured with SMTP');
-    } else {
-      // Create Ethereal test account for development
-      // This actually sends emails to a test inbox you can view online
+    } else if (provider === 'ethereal') {
       try {
         const testAccount = await nodemailer.createTestAccount();
         this.transporter = nodemailer.createTransport({
           host: 'smtp.ethereal.email',
           port: 587,
           secure: false,
-          auth: {
-            user: testAccount.user,
-            pass: testAccount.pass,
-          },
+          auth: { user: testAccount.user, pass: testAccount.pass },
+          ...timeouts,
         });
-        console.log('✅ Email service configured with Ethereal (test mode)');
-        console.log('📧 View test emails at: https://ethereal.email');
-        console.log(`   Login: ${testAccount.user}`);
-        console.log(`   Password: ${testAccount.pass}`);
-      } catch (error) {
-        console.warn('⚠️  Could not create Ethereal test account. Emails will be logged to console.');
+        console.log(`📧 Development email goes to an Ethereal test inbox (https://ethereal.email, login ${testAccount.user})`);
+      } catch {
+        console.warn('📧 Could not create an Ethereal test inbox; development emails are printed to the console.');
+        this.transporter = null;
       }
+    } else {
+      this.transporter = null;
     }
-    this.initialized = true;
+  }
+
+  private ready(): Promise<void> {
+    if (!this.initializing) this.initializing = this.init();
+    return this.initializing;
   }
 
   async sendEmail(options: EmailOptions): Promise<void> {
     const { to, subject, html, text } = options;
+    await this.ready();
 
-    // Wait for initialization if needed
-    if (!this.initialized) {
-      await this.initializeTransporter();
-    }
-
-    // If no transporter, log to console
     if (!this.transporter) {
-      console.log('\n📧 EMAIL (Console Mode - No transporter configured):');
-      console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-      console.log(`To: ${to}`);
-      console.log(`Subject: ${subject}`);
-      console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-      console.log(text || html);
-      console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
+      if (runtimeMode() === 'development') {
+        console.log(`\n📧 EMAIL (not sent, development console)\nTo: ${to}\nSubject: ${subject}\n${text || html}\n`);
+      }
       return;
     }
 
-    try {
-      const info = await this.transporter.sendMail({
-        from: process.env.EMAIL_FROM || 'Nuray <noreply@nuray.pk>',
-        to,
-        subject,
-        html,
-        text,
-      });
-
-      console.log(`📧 Email sent successfully to: ${to}`);
-      
-      // If using Ethereal, show the URL to view the email
-      const previewUrl = nodemailer.getTestMessageUrl(info);
-      if (previewUrl) {
-        console.log(`📬 Preview URL: ${previewUrl}`);
+    for (let attempt = 1; attempt <= 2; attempt++) {
+      try {
+        const info = await this.transporter.sendMail({
+          from: process.env.EMAIL_FROM || 'Nuray <noreply@nuray.pk>',
+          to,
+          subject,
+          html,
+          text,
+        });
+        if (runtimeMode() === 'development') {
+          const previewUrl = nodemailer.getTestMessageUrl(info);
+          if (previewUrl) console.log(`📬 Email preview: ${previewUrl}`);
+        }
+        return;
+      } catch (error) {
+        console.error(`Email "${subject}" failed (attempt ${attempt}): ${(error as Error)?.message ?? error}`);
       }
-    } catch (error) {
-      console.error('Failed to send email:', error);
-      throw new AppError('Failed to send email', 500, 'EMAIL_SEND_FAILED');
     }
+    throw new AppError('Failed to send email', 502, 'EMAIL_SEND_FAILED');
   }
 
   async sendPasswordResetEmail(email: string, name: string, token: string): Promise<void> {
-    const resetUrl = `${process.env.FRONTEND_URL || 'http://localhost:3000'}/reset-password?token=${token}`;
-    const html = `<!DOCTYPE html><html><body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
-      <h2>Reset your Nuray password</h2>
-      <p>Hi ${name}, we received a request to reset your password. This link works once and expires in 1 hour.</p>
-      <p style="text-align:center;margin:30px 0;"><a href="${resetUrl}" style="background:#10b981;color:#fff;padding:14px 32px;text-decoration:none;border-radius:6px;font-weight:600;">Choose a new password</a></p>
-      <p style="font-size:12px;color:#6b7280;word-break:break-all;">${resetUrl}</p>
-      <p style="font-size:13px;color:#6b7280;">If you didn't ask for this, ignore this email — your password won't change.</p>
-    </body></html>`;
+    const resetUrl = `${frontendUrl()}/reset-password?token=${encodeURIComponent(token)}`;
+    const html = emailLayout(
+      'Reset your Nuray password',
+      `<h2 style="margin-top:0;">Reset your password</h2>
+<p>Hi ${escapeHtml(name)}, we received a request to reset your password. This link works once and expires in 1 hour.</p>
+${emailButton(resetUrl, 'Choose a new password')}
+<p style="font-size:13px;color:#6b7280;">If you didn't ask for this, ignore this email; your password won't change.</p>`
+    );
     await this.sendEmail({ to: email, subject: 'Reset your Nuray password', html, text: `Reset your password: ${resetUrl}` });
   }
 
   async sendVerificationEmail(email: string, name: string, verificationToken: string): Promise<void> {
-    const verificationUrl = `${process.env.FRONTEND_URL || 'http://localhost:3000'}/verify-email?token=${verificationToken}`;
-
-    const html = `
-      <!DOCTYPE html>
-      <html>
-      <head>
-        <meta charset="utf-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>Verify Your Email - Nuray</title>
-      </head>
-      <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
-        <div style="background: linear-gradient(135deg, #10b981 0%, #059669 100%); padding: 30px; text-align: center; border-radius: 10px 10px 0 0;">
-          <h1 style="color: white; margin: 0; font-size: 28px;">🍽️ Nuray</h1>
-        </div>
-        <div style="background: #f9fafb; padding: 40px; border-radius: 0 0 10px 10px; border: 1px solid #e5e7eb;">
-          <h2 style="color: #111827; margin-top: 0;">Welcome to Nuray, ${name}!</h2>
-          <p style="color: #4b5563; font-size: 16px;">Thank you for signing up. Please verify your email address to activate your account and start ordering delicious homemade food.</p>
-          
-          <div style="text-align: center; margin: 30px 0;">
-            <a href="${verificationUrl}" 
-               style="display: inline-block; background: #10b981; color: white; padding: 14px 32px; text-decoration: none; border-radius: 6px; font-weight: 600; font-size: 16px;">
-              Verify Email Address
-            </a>
-          </div>
-          
-          <p style="color: #6b7280; font-size: 14px; margin-top: 30px;">Or copy and paste this link into your browser:</p>
-          <p style="color: #10b981; font-size: 12px; word-break: break-all; background: #f3f4f6; padding: 10px; border-radius: 4px;">${verificationUrl}</p>
-          
-          <p style="color: #6b7280; font-size: 14px; margin-top: 30px;">This link will expire in 24 hours.</p>
-          
-          <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 30px 0;">
-          
-          <p style="color: #9ca3af; font-size: 12px; margin: 0;">If you didn't create an account with Nuray, please ignore this email.</p>
-        </div>
-        <div style="text-align: center; margin-top: 20px; color: #9ca3af; font-size: 12px;">
-          <p>© 2025 Nuray. All rights reserved.</p>
-        </div>
-      </body>
-      </html>
-    `;
-
-    const text = `
-Welcome to Nuray, ${name}!
-
-Thank you for signing up. Please verify your email address to activate your account.
-
-Click this link to verify: ${verificationUrl}
-
-This link will expire in 24 hours.
-
-If you didn't create an account with Nuray, please ignore this email.
-
-© 2025 Nuray. All rights reserved.
-    `;
-
-    await this.sendEmail({
-      to: email,
-      subject: 'Verify Your Email - Nuray',
-      html,
-      text,
-    });
+    const verificationUrl = `${frontendUrl()}/verify-email?token=${encodeURIComponent(verificationToken)}`;
+    const html = emailLayout(
+      'Verify your email',
+      `<h2 style="margin-top:0;">Welcome to Nuray, ${escapeHtml(name)}!</h2>
+<p>Please verify your email address to activate your account.</p>
+${emailButton(verificationUrl, 'Verify email address')}
+<p style="font-size:13px;color:#6b7280;">This link expires in 24 hours. If you didn't create a Nuray account, ignore this email.</p>`
+    );
+    const text = `Welcome to Nuray!\n\nVerify your email address: ${verificationUrl}\n\nThis link expires in 24 hours. If you didn't create a Nuray account, ignore this email.`;
+    await this.sendEmail({ to: email, subject: 'Verify your email - Nuray', html, text });
   }
 }
 
 export default new EmailService();
-

@@ -1,9 +1,11 @@
 import rateLimit, { ipKeyGenerator } from 'express-rate-limit';
+import { isProduction } from '../config/env';
 
 // Brute-force protection on login: same IP can't hammer credentials.
 export const loginLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  limit: process.env.NODE_ENV === 'production' ? 10 : 1000,
+  // Relaxed only in development / test; any other NODE_ENV gets the real limit.
+  limit: isProduction() ? 10 : 1000,
   standardHeaders: true,
   legacyHeaders: false,
   message: { success: false, error: { message: 'Too many login attempts. Please try again later.', code: 'RATE_LIMITED' } },
@@ -21,7 +23,7 @@ export const otpLimiter = rateLimit({
 // Prevent scripted mass account creation from one IP.
 export const registerLimiter = rateLimit({
   windowMs: 60 * 60 * 1000,
-  limit: process.env.NODE_ENV === 'production' ? 10 : 10000,
+  limit: isProduction() ? 10 : 10000,
   standardHeaders: true,
   legacyHeaders: false,
   message: { success: false, error: { message: 'Too many registration attempts. Please try again later.', code: 'RATE_LIMITED' } },

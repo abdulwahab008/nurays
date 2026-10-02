@@ -670,6 +670,27 @@ async function main() {
   const freshRow = await prisma.otpVerification.findFirst({ where: { phone: brutePhone }, orderBy: { createdAt: 'desc' } });
   ok('requesting a new code after a lock-out gives a fresh, unlocked code', (await prisma.otpVerification.count({ where: { phone: brutePhone } })) === 2 && freshRow!.attempts === 0 && freshRow!.id !== bruteRow!.id && !!fresh);
 
+  // ---- 22b. OTP delivery: never in a response, real resend with a cooldown, failures reported ----
+  const otpUser = await mkUser();
+  const otpPhone = pn();
+  const firstReq: any = await authService.requestPhoneVerification(otpUser.id, otpPhone);
+  ok('the OTP code is never returned in the API response', !('otpCode' in firstReq) && !JSON.stringify(firstReq).match(/\b\d{6}\b/), JSON.stringify(firstReq));
+  ok('asking again within a minute is refused (cooldown)', (await authService.requestPhoneVerification(otpUser.id, otpPhone).then(() => 'OK', (e: any) => e.code)) === 'OTP_RESEND_COOLDOWN');
+  const oldRow = await prisma.otpVerification.findFirst({ where: { phone: otpPhone }, orderBy: { createdAt: 'desc' } });
+  await prisma.otpVerification.update({ where: { id: oldRow!.id }, data: { createdAt: new Date(Date.now() - 61_000) } });
+  await authService.requestPhoneVerification(otpUser.id, otpPhone);
+  const newRow = await prisma.otpVerification.findFirst({ where: { phone: otpPhone }, orderBy: { createdAt: 'desc' } });
+  ok('after the cooldown a resend issues a fresh code', newRow!.id !== oldRow!.id);
+  if (newRow!.otpCode !== oldRow!.otpCode) {
+    ok('and the previous code no longer works', (await otpService.verifyOTP(otpPhone, oldRow!.otpCode, 'registration').then(() => 'OK', (e: any) => e.code)) !== 'OK');
+  }
+  const prevSms = process.env.SMS_PROVIDER;
+  process.env.SMS_PROVIDER = 'none';
+  const failPhone = pn();
+  const failCode = await authService.requestPhoneVerification(otpUser.id, failPhone).then(() => 'OK', (e: any) => e.code);
+  if (prevSms === undefined) delete process.env.SMS_PROVIDER; else process.env.SMS_PROVIDER = prevSms;
+  ok('when the SMS cannot be sent the user is told, and no code is left behind', failCode === 'SMS_SEND_FAILED' && (await prisma.otpVerification.count({ where: { phone: failPhone } })) === 0, failCode);
+
   // ---- 23. review round: money ----
   const rc2 = await mkUser();
   const rcSellerA = await mkSeller();

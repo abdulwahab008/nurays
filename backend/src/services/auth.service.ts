@@ -526,14 +526,12 @@ export class AuthService {
       }
     }
 
-    // Generate and send OTP
-    const otpCode = await otpService.generateOTP(formattedPhone, purpose);
+    // Generate and send OTP (the code itself is only ever sent by SMS)
+    await otpService.generateOTP(formattedPhone, purpose);
 
     return {
       message: 'OTP sent successfully',
       phone: formattedPhone,
-      // In development, return OTP for testing
-      ...(process.env.NODE_ENV === 'development' && { otpCode }),
     };
   }
 
@@ -552,11 +550,11 @@ export class AuthService {
       throw new AppError('Phone number already registered', 409, 'PHONE_EXISTS');
     }
 
-    const otpCode = await otpService.generateOTP(formattedPhone, 'registration');
+    await otpService.generateOTP(formattedPhone, 'registration');
+    // The code is never returned in an API response: only the SMS carries it.
     return {
       message: 'OTP sent successfully',
       phone: formattedPhone,
-      ...(process.env.NODE_ENV === 'development' && { otpCode }),
     };
   }
 

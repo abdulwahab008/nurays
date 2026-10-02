@@ -1,6 +1,7 @@
 // Load env BEFORE any other import — modules like utils/jwt validate env at
 // import time and need it populated.
 import 'dotenv/config';
+import './config/check-env';
 
 import express from 'express';
 import { createServer } from 'http';
