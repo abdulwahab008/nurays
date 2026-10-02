@@ -3,6 +3,9 @@
 import React from 'react';
 import { Store, AlertTriangle, ArrowRight, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { useT } from '@/lib/i18n';
+import { commonMessages } from '@/lib/i18n/messages/common';
+import { checkoutMessages } from '@/lib/i18n/messages/checkout';
 
 export interface CartConflictInfo {
   existingSellerName: string;
@@ -24,6 +27,8 @@ export default function CartConflictModal({
   conflict,
   loading = false,
 }: CartConflictModalProps) {
+  const t = useT(checkoutMessages);
+  const tc = useT(commonMessages);
   if (!isOpen || !conflict) return null;
 
   return (
@@ -33,8 +38,8 @@ export default function CartConflictModal({
         <button
           onClick={conflict.onCancel}
           disabled={loading}
-          className="absolute top-4 right-4 w-8 h-8 flex items-center justify-center rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 transition-colors"
-          aria-label="Close"
+          className="absolute top-4 end-4 w-8 h-8 flex items-center justify-center rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 transition-colors"
+          aria-label={tc('close')}
         >
           <X className="w-4 h-4" />
         </button>
@@ -45,10 +50,10 @@ export default function CartConflictModal({
             <AlertTriangle className="w-7 h-7" />
           </div>
           <h3 className="text-xl font-black text-slate-900 tracking-tight">
-            Start Order from a New Kitchen?
+            {t('conflictTitle')}
           </h3>
           <p className="text-xs text-slate-500 font-medium mt-2 leading-relaxed">
-            Our home chefs prepare meals fresh in domestic kitchens. To ensure peak freshness and direct delivery, each order is fulfilled by one kitchen at a time.
+            {t('conflictText')}
           </p>
         </div>
 
@@ -56,29 +61,29 @@ export default function CartConflictModal({
         <div className="mx-6 p-4 rounded-2xl bg-slate-50 border border-slate-200/80 space-y-3">
           <div className="flex items-center justify-between text-xs">
             <span className="font-bold text-slate-400 uppercase tracking-wider text-[10px]">
-              Current Cart
+              {t('currentCart')}
             </span>
             <span className="px-2 py-0.5 rounded bg-slate-200 text-slate-700 font-black text-[10px]">
-              Will be cleared
+              {t('willBeCleared')}
             </span>
           </div>
           <div className="flex items-center gap-2.5">
             <Store className="w-4 h-4 text-slate-500 flex-shrink-0" />
             <span className="font-extrabold text-slate-800 text-sm truncate">
-              {conflict.existingSellerName || 'Previous Home Kitchen'}
+              {conflict.existingSellerName || t('previousKitchen')}
             </span>
           </div>
 
           <div className="flex items-center justify-center my-1 text-slate-400">
-            <ArrowRight className="w-4 h-4 rotate-90 text-[#FF5500]" />
+            <ArrowRight className="rtl:-scale-x-100 w-4 h-4 rotate-90 text-[#FF5500]" />
           </div>
 
           <div className="flex items-center justify-between text-xs">
             <span className="font-bold text-[#FF5500] uppercase tracking-wider text-[10px]">
-              New Kitchen
+              {t('newKitchen')}
             </span>
             <span className="px-2 py-0.5 rounded bg-orange-100 text-[#FF5500] font-black text-[10px]">
-              New Order
+              {t('newOrder')}
             </span>
           </div>
           <div className="flex items-center gap-2.5">
@@ -86,7 +91,7 @@ export default function CartConflictModal({
               👩‍🍳
             </div>
             <span className="font-black text-slate-950 text-sm truncate">
-              {conflict.newSellerName || 'New Home Kitchen'}
+              {conflict.newSellerName || t('newHomeKitchen')}
             </span>
           </div>
         </div>
@@ -101,10 +106,10 @@ export default function CartConflictModal({
             {loading ? (
               <>
                 <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                <span>Updating Cart...</span>
+                <span>{t('updatingCart')}</span>
               </>
             ) : (
-              <span>Clear Cart &amp; Add New Dish</span>
+              <span>{t('clearAndAdd')}</span>
             )}
           </button>
 
@@ -113,7 +118,7 @@ export default function CartConflictModal({
             disabled={loading}
             className="w-full py-3 px-4 rounded-2xl font-extrabold text-xs text-slate-600 bg-slate-100 hover:bg-slate-200 active:scale-[0.98] transition-all text-center"
           >
-            Keep Existing Items
+            {t('keepExisting')}
           </button>
         </div>
       </div>

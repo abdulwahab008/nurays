@@ -5,6 +5,8 @@ import { CreditCard } from 'lucide-react';
 import { paymentService, OrderPaymentStatus } from '@/lib/services/payment.service';
 import { useToast } from '@/components/ui/toast';
 import { formatPrice } from '@/lib/utils';
+import { useT } from '@/lib/i18n';
+import { paymentsMessages } from '@/lib/i18n/messages/payments';
 
 interface Props {
   orderId: string;
@@ -16,6 +18,7 @@ interface Props {
  * page. The order is paid once the payment provider confirms it; this page then updates by itself.
  */
 export default function OnlinePaymentCard({ orderId, totalAmount }: Props) {
+  const t = useT(paymentsMessages);
   const { showToast } = useToast();
   const [status, setStatus] = useState<OrderPaymentStatus | null>(null);
   const [opening, setOpening] = useState(false);
@@ -37,7 +40,7 @@ export default function OnlinePaymentCard({ orderId, totalAmount }: Props) {
       setOpening(true);
       window.location.href = await paymentService.startOrderPayment(orderId);
     } catch (err: any) {
-      showToast(err.response?.data?.error?.message || 'The payment page could not be opened. Please try again.', 'error');
+      showToast(err.response?.data?.error?.message || t('payPageFailed'), 'error');
       setOpening(false);
     }
   };
@@ -49,13 +52,13 @@ export default function OnlinePaymentCard({ orderId, totalAmount }: Props) {
           <CreditCard className="w-5 h-5" />
         </div>
         <div className="flex-1">
-          <h2 className="text-base font-bold text-slate-900">Complete your payment: {formatPrice(totalAmount)}</h2>
+          <h2 className="text-base font-bold text-slate-900">{t('completePayment', { amount: formatPrice(totalAmount) })}</h2>
           <p className="mt-1 text-sm text-slate-600">
-            The kitchen starts on your order once it is paid. An order that stays unpaid is cancelled automatically.
+            {t('onlineText')}
           </p>
           {recentAttempt && (
             <p className="mt-2 text-xs text-slate-500">
-              Already paid? It can take a moment to show here; this page updates by itself.
+              {t('alreadyPaid')}
             </p>
           )}
           {status.canPayOnline ? (
@@ -65,10 +68,10 @@ export default function OnlinePaymentCard({ orderId, totalAmount }: Props) {
               onClick={pay}
               className="mt-3 px-5 py-2.5 rounded-xl bg-[#FF5500] text-white text-sm font-bold hover:bg-[#e04400] disabled:opacity-50"
             >
-              {opening ? 'Opening the payment page…' : recentAttempt ? 'Open the payment page again' : 'Pay now'}
+              {opening ? t('openingPayPage') : recentAttempt ? t('openAgain') : t('payNow')}
             </button>
           ) : (
-            <p className="mt-3 text-sm font-medium text-slate-700">Online payment isn&apos;t available right now. Please try again later.</p>
+            <p className="mt-3 text-sm font-medium text-slate-700">{t('onlineUnavailable')}</p>
           )}
         </div>
       </div>
