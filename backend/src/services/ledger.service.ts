@@ -1,5 +1,6 @@
 import prisma from '../config/database';
 import { parseBreakdown, platformDeliveryFee } from '../utils/deliveryEarnings';
+import { collectorOf } from '../utils/paymentCustody';
 
 export class LedgerService {
   /**
@@ -23,6 +24,10 @@ export class LedgerService {
         include: { items: true },
       });
       if (!order) return { recorded: false, reason: 'ORDER_NOT_FOUND' };
+      // Only money that was actually received is posted. A transfer the seller hasn't
+      // confirmed yet is posted when they confirm it (order.service confirmManualPayment).
+      if (order.paymentStatus !== 'paid') return { recorded: false, reason: 'NOT_PAID' };
+      const collectedBy = collectorOf(order);
 
       // Only items that were actually sold. Cancelled items were refunded to the customer
       // (and restocked) and earn nothing, so they carry no earning, commission or fee.
@@ -46,9 +51,10 @@ export class LedgerService {
       const platformFee = breakdown.length
         ? liveBreakdown.filter((r) => r.provider !== 'self').reduce((sum, r) => sum + r.fee, 0)
         : platformDeliveryFee(Number(order.deliveryFee), order.deliveryFeeBreakdown); // legacy order: no split
-      // A COD delivery fee was handed to the seller at the door, so there's nothing payable.
+      // A delivery fee the seller collected themselves (COD at their door, a transfer into
+      // their account) is already in their hands, so there's nothing payable.
       const selfDeliveryShares =
-        order.paymentMethod === 'cod' ? [] : liveBreakdown.filter((r) => r.provider === 'self');
+        collectedBy === 'seller' ? [] : liveBreakdown.filter((r) => r.provider === 'self');
 
       const entries: Array<Record<string, unknown>> = [
         // 1. Customer Payment (Asset / Receivable debited)
@@ -59,9 +65,14 @@ export class LedgerService {
           entryType: 'debit',
           amount: totalAmount,
           currency: 'PKR',
-          description: `Customer payment received for Order #${order.orderNumber} via ${order.paymentMethod.toUpperCase()}`,
+          description:
+            collectedBy === 'seller'
+              ? `Customer payment for Order #${order.orderNumber} via ${order.paymentMethod.toUpperCase()}, collected directly by the seller (receivable from the seller)`
+              : collectedBy === 'rider'
+                ? `Cash for Order #${order.orderNumber} collected by the rider (receivable from the rider)`
+                : `Customer payment received for Order #${order.orderNumber} via ${order.paymentMethod.toUpperCase()}`,
           userId: order.customerId,
-          metadata: { paymentMethod: order.paymentMethod },
+          metadata: { paymentMethod: order.paymentMethod, collectedBy },
         },
         // 2. Seller Earnings (Liability credited to Seller payable)
         {
@@ -71,8 +82,12 @@ export class LedgerService {
           entryType: 'credit',
           amount: totalSellerPayout,
           currency: 'PKR',
-          description: `Earnings payable to home chef for Order #${order.orderNumber}`,
+          description:
+            collectedBy === 'seller'
+              ? `Home chef's earnings for Order #${order.orderNumber}, kept from the payment they collected`
+              : `Earnings payable to home chef for Order #${order.orderNumber}`,
           sellerId: primarySellerId,
+          metadata: { collectedBy },
         },
         // 3. Platform Marketplace Commission (Revenue credited to Platform)
         {

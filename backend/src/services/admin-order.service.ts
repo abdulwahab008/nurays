@@ -1,3 +1,4 @@
+import { codCollectorOf } from '../utils/paymentCustody';
 import prisma from '../config/database';
 import { AppError } from '../middleware/errorHandler';
 import realtimeOrderService from './realtime-order.service';
@@ -344,7 +345,7 @@ export class AdminOrderService {
       data: {
         orderStatus: status,
         ...(isDelivered ? { deliveredAt: new Date() } : {}),
-        ...(isCodDelivery ? { paymentStatus: 'paid', paidAt: new Date() } : {}),
+        ...(isCodDelivery ? { paymentStatus: 'paid', paymentCollectedBy: codCollectorOf(order), paidAt: new Date() } : {}),
       },
     });
     if (applied.count === 0) {

@@ -101,14 +101,17 @@ export class RiderService {
       },
     });
     if (!order || order.deliveryType !== 'home_delivery') return;
+    // No job for an order that is finished or called off.
+    if (['cancelled', 'refunded', 'delivered', 'completed'].includes(order.orderStatus)) return;
 
     // Sellers who deliver themselves don't post to the rider pool; they drive the
-    // order to delivered / delivery_failed from their own dashboard. If any seller
-    // on the order relies on the platform, the order still needs a rider job.
-    // Hub-fulfilled items are always delivered by the platform, whatever the seller's own setting.
-    const needsPlatformRider = order.items.some(
-      (i) => i.status !== 'cancelled' && (i.fulfillmentType === 'hub' || i.seller?.deliveryProvider !== 'self')
-    );
+    // order to delivered / delivery_failed from their own dashboard. The provider is
+    // snapshotted on the order at creation (hub stock always goes with a platform
+    // rider); older orders fall back to the sellers' current settings.
+    const liveItems = order.items.filter((i) => i.status !== 'cancelled');
+    const needsPlatformRider = order.deliveryProvider
+      ? order.deliveryProvider === 'platform' && liveItems.length > 0
+      : liveItems.some((i) => i.fulfillmentType === 'hub' || i.seller?.deliveryProvider !== 'self');
     if (!needsPlatformRider) return;
 
     const existing = await prisma.delivery.findUnique({ where: { orderId } });
@@ -373,7 +376,7 @@ export class RiderService {
         data: {
           orderStatus: newOrderStatus,
           ...(status === 'delivered' ? { deliveredAt: new Date() } : {}),
-          ...(status === 'delivered' && isCodPayment ? { paymentStatus: 'paid', paidAt: new Date() } : {}),
+          ...(status === 'delivered' && isCodPayment ? { paymentStatus: 'paid', paymentCollectedBy: 'rider', paidAt: new Date() } : {}),
         },
       });
 

@@ -232,6 +232,7 @@ export class PaymentService {
         data: {
           paymentMethod: 'wallet',
           paymentStatus: 'paid',
+          paymentCollectedBy: 'platform',
           paidAt: new Date(),
           paymentTransactionId: paymentId,
         },
@@ -411,6 +412,7 @@ export class PaymentService {
         where: { id: order.id, paymentStatus: { in: PAYABLE_STATUSES } },
         data: {
           paymentStatus: 'paid',
+          paymentCollectedBy: 'platform',
           paidAt: new Date(),
           paymentTransactionId: verifyResult.transactionId || paymentTxId,
           orderStatus: fresh.orderStatus === 'pending' ? 'confirmed' : fresh.orderStatus,

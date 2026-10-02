@@ -597,7 +597,14 @@ model Order {
   paymentConfirmedBy  String?   @map("payment_confirmed_by") // seller, admin
   paymentConfirmedAt  DateTime? @map("payment_confirmed_at")
   paymentDisputeReason String?  @map("payment_dispute_reason")
+  // Who physically received the customer's money, set when the order becomes paid:
+  // 'platform' (wallet / online gateway), 'seller' (transfer into the seller's own account, or
+  // cash at a self-delivery / pickup) or 'rider' (cash to a Nuray rider, owed to the platform).
+  // Seller balances and payouts are computed from this (see seller-balance.service.ts).
+  paymentCollectedBy  String?   @map("payment_collected_by")
   deliveryType        String    @map("delivery_type") // home_delivery, hub_pickup, self_pickup
+  // Who delivers a home delivery: 'platform' (a Nuray rider) or 'self' (the seller). Null for pickups.
+  deliveryProvider    String?   @map("delivery_provider")
   deliveryAddressId   String?   @map("delivery_address_id")
   deliveryAddressSnapshot Json? @map("delivery_address_snapshot")
   hubId               String?   @map("hub_id")
