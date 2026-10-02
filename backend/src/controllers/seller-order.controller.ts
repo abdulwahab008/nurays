@@ -44,9 +44,9 @@ export const updateOrderItemStatus = async (req: Request, res: Response) => {
   }
 
   const { id } = req.params;
-  const { status, reason } = req.body;
+  const { status, reason, handoverCode } = req.body;
 
-  const item = await sellerOrderService.updateOrderItemStatus(id, req.user.userId, status, reason);
+  const item = await sellerOrderService.updateOrderItemStatus(id, req.user.userId, status, reason, handoverCode);
 
   res.status(200).json({
     success: true,

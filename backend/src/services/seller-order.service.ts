@@ -1,4 +1,5 @@
 import { codCollectorOf, deliveryProviderOf } from '../utils/paymentCustody';
+import { verifyHandoverCode } from './handover.service';
 import prisma from '../config/database';
 import { AppError } from '../middleware/errorHandler';
 import realtimeOrderService from './realtime-order.service';
@@ -295,7 +296,8 @@ export class SellerOrderService {
     orderItemId: string,
     sellerId: string,
     status: string,
-    reason?: string
+    reason?: string,
+    handoverCode?: string
   ) {
     // Get seller by userId
     const seller = await prisma.seller.findUnique({
@@ -365,6 +367,10 @@ export class SellerOrderService {
           'PLATFORM_DELIVERY'
         );
       }
+    }
+    // The customer's code proves the food actually reached them.
+    if (status === 'delivered') {
+      await verifyHandoverCode(orderItem.orderId, handoverCode);
     }
     // Online and transfer payments must be confirmed before the food leaves the kitchen.
     if (['ready', 'dispatched'].includes(status) && orderItem.order.paymentMethod !== 'cod' && orderItem.order.paymentStatus !== 'paid') {

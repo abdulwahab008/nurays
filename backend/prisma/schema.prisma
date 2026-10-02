@@ -605,6 +605,11 @@ model Order {
   deliveryType        String    @map("delivery_type") // home_delivery, hub_pickup, self_pickup
   // Who delivers a home delivery: 'platform' (a Nuray rider) or 'self' (the seller). Null for pickups.
   deliveryProvider    String?   @map("delivery_provider")
+  // The customer's handover code: whoever hands the order over (rider, self-delivering
+  // seller, pickup counter) must enter it. Only the customer is ever shown it; the
+  // Prisma client omits it from every query unless explicitly selected (config/database.ts).
+  handoverCode        String?   @map("handover_code")
+  handoverAttempts    Int       @default(0) @map("handover_attempts")
   deliveryAddressId   String?   @map("delivery_address_id")
   deliveryAddressSnapshot Json? @map("delivery_address_snapshot")
   hubId               String?   @map("hub_id")
