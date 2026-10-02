@@ -25,12 +25,19 @@ export class OTPService {
       },
     });
 
-    // If OTP exists and not expired, return existing OTP (for testing)
-    // In production, you might want to rate limit this
-    // (A code already locked by too many wrong guesses is NOT reused: otherwise "request a new
-    // OTP" handed back the same dead code and anyone could keep a number locked out.)
+    // "Resend" sends a fresh code (the previous one stops working, since verification
+    // always checks the latest), but not more than once a minute. A code locked by too
+    // many wrong guesses can be replaced straight away.
+    const RESEND_COOLDOWN_MS = 60 * 1000;
     if (existingOTP && !isOTPExpired(existingOTP.createdAt) && existingOTP.attempts < 5) {
-      return existingOTP.otpCode;
+      const waitMs = existingOTP.createdAt.getTime() + RESEND_COOLDOWN_MS - Date.now();
+      if (waitMs > 0) {
+        throw new AppError(
+          `Please wait ${Math.ceil(waitMs / 1000)} seconds before requesting another code.`,
+          429,
+          'OTP_RESEND_COOLDOWN'
+        );
+      }
     }
 
     // Cap SMS per NUMBER, not just per IP: a locked-out code forces a fresh SMS on the next request,
@@ -58,10 +65,12 @@ export class OTPService {
       },
     });
 
-    // Send OTP via SMS (Twilio when configured, otherwise logged to console)
-    await smsService.sendOTPSMS(formattedPhone, otpCode, purpose);
-    if (process.env.NODE_ENV === 'development') {
-      console.log(`📱 OTP for ${formattedPhone}: ${otpCode}`);
+    // Send it. If the SMS can't be sent, the code is withdrawn and the caller is told,
+    // instead of "code sent" for a message that never left.
+    const sent = await smsService.sendOTPSMS(formattedPhone, otpCode, purpose);
+    if (!sent) {
+      await prisma.otpVerification.deleteMany({ where: { phone: formattedPhone, otpCode, purpose, isVerified: false } });
+      throw new AppError("We couldn't send the code by SMS. Please try again in a moment.", 502, 'SMS_SEND_FAILED');
     }
 
     return otpCode;

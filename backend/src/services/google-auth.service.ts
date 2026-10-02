@@ -1,4 +1,5 @@
 import prisma from '../config/database';
+import { isProduction } from '../config/env';
 import { generateToken, generateRefreshToken, tokenTtlSeconds, JWTPayload } from '../utils/jwt';
 import { AppError } from '../middleware/errorHandler';
 
@@ -14,7 +15,7 @@ export class GoogleAuthService {
       // unrelated third-party app, which that app could replay here to sign in
       // as the victim. tokeninfo reports the client it was issued to.
       const expectedClientId = process.env.GOOGLE_CLIENT_ID;
-      if (!expectedClientId && process.env.NODE_ENV === 'production') {
+      if (!expectedClientId && isProduction()) {
         console.error('GOOGLE_CLIENT_ID is not set; refusing Google sign-in');
         throw new AppError('Google sign-in is not configured', 503, 'GOOGLE_NOT_CONFIGURED');
       }
