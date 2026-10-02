@@ -79,3 +79,14 @@ export function imageVariant(url: string | null | undefined, size: 'sm' | 'md' |
   if (!url) return undefined;
   return url.replace(/-(lg|md|sm)\.webp(\?.*)?$/, `-${size}.webp$2`);
 }
+
+/**
+ * A rating to show, or null when there isn't one yet (no reviews): show "New" instead of
+ * inventing a number.
+ */
+export function displayRating(rating: number | string | null | undefined, reviewCount?: number | null): string | null {
+  const r = Number(rating);
+  if (!Number.isFinite(r) || r <= 0) return null;
+  if (reviewCount != null && reviewCount <= 0) return null;
+  return r.toFixed(1);
+}
