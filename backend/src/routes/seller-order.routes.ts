@@ -7,12 +7,17 @@ import {
   acceptOrder,
   rejectOrder,
   markOrderReady,
+  dispatchOrder,
+  deliverOrder,
+  reportDeliveryFailed,
 } from '../controllers/seller-order.controller';
 import { validate, validateQuery } from '../middleware/validation.middleware';
 import {
   getSellerOrdersQuerySchema,
   updateOrderItemStatusSchema,
   cancelOrderItemSchema,
+  deliverOrderSchema,
+  deliveryFailedSchema,
 } from '../validators/seller-order.validator';
 import { authenticate, authorize, blockSuspendedSeller } from '../middleware/auth.middleware';
 
@@ -33,6 +38,10 @@ router.get('/orders/:id', getSellerOrderDetails);
 router.post('/orders/:id/accept', acceptOrder);
 router.post('/orders/:id/reject', rejectOrder);
 router.post('/orders/:id/ready', markOrderReady);
+// Self-delivery / pickup: the kitchen hands the order over itself
+router.post('/orders/:id/dispatch', dispatchOrder);
+router.post('/orders/:id/deliver', validate(deliverOrderSchema), deliverOrder);
+router.post('/orders/:id/delivery-failed', validate(deliveryFailedSchema), reportDeliveryFailed);
 
 // Update order item status
 router.patch(

@@ -544,7 +544,7 @@ function SellerDashboardContent() {
                 {dashboard.lowStockProducts.map((product) => (
                   <Link
                     key={product.id}
-                    href={`/sellers/products/${product.id}`}
+                    href={`/sellers/products/${product.id}/edit`}
                     className="flex items-center gap-4 border border-gray-100 rounded-xl p-4 hover:shadow-md hover:border-gray-200 transition-all duration-200 bg-gray-50/50 hover:bg-white"
                   >
                     <div className="w-14 h-14 bg-gray-100 rounded-xl flex items-center justify-center overflow-hidden flex-shrink-0">

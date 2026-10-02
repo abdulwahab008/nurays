@@ -436,6 +436,24 @@ async function main() {
   ok('with the code it can', (await code(sellerOrderService.updateOrderItemStatus(sdItem!.id, selfUser, 'delivered', undefined, sdCode))) === 'OK' &&
     (await prisma.order.findUnique({ where: { id: sdOrder.id } }))!.paymentCollectedBy === 'seller');
 
+  // ---- 17d2. a self-delivering kitchen completes its own orders ----
+  const shOrder: any = await orderService.createOrder(hoCust.id, { items: [{ productId: sdProd.id, quantity: 1 }], deliveryType: 'home_delivery', deliveryAddressId: hoAddr.id, paymentMethod: 'cod' } as any);
+  const shCode = (await prisma.order.findUnique({ where: { id: shOrder.id }, select: { handoverCode: true } }))!.handoverCode!;
+  await sellerOrderService.acceptOrder(shOrder.id, selfUser);
+  await sellerOrderService.markOrderReady(shOrder.id, selfUser);
+  const listed: any = await sellerOrderService.getSellerOrders(selfUser, { page: 1, limit: 50 } as any);
+  ok('the kitchen\'s order list says it hands this order over itself', listed.orders.find((o: any) => o.order.id === shOrder.id)?.order.sellerHandsOver === true);
+  await sellerOrderService.selfHandover(shOrder.id, selfUser, 'dispatch');
+  ok('"out for delivery" moves the order to dispatched', (await prisma.order.findUnique({ where: { id: shOrder.id } }))!.orderStatus === 'dispatched');
+  ok('"delivered" without the customer\'s code is refused', (await code(sellerOrderService.selfHandover(shOrder.id, selfUser, 'deliver', { handoverCode: shCode === '1111' ? '2222' : '1111' }))) === 'INVALID_DELIVERY_OTP');
+  const shDone: any = await sellerOrderService.selfHandover(shOrder.id, selfUser, 'deliver', { handoverCode: shCode });
+  const shRow = await prisma.order.findUnique({ where: { id: shOrder.id } });
+  ok('with the code the order is delivered and the cash is recorded with the kitchen', shDone.orderStatus === 'delivered' && shRow!.paymentStatus === 'paid' && shRow!.paymentCollectedBy === 'seller');
+  const plOrder: any = await orderService.createOrder(hoCust.id, { items: [{ productId: hoProd.id, quantity: 1 }], deliveryType: 'home_delivery', deliveryAddressId: hoAddr.id, paymentMethod: 'cod' } as any);
+  await sellerOrderService.acceptOrder(plOrder.id, platUser);
+  await sellerOrderService.markOrderReady(plOrder.id, platUser);
+  ok('a kitchen on the Nuray fleet cannot send its order out itself', (await code(sellerOrderService.selfHandover(plOrder.id, platUser, 'dispatch'))) === 'PLATFORM_DELIVERY');
+
   // ---- 17e. receipts are private files the customer uploaded ----
   const pfC = await mkUser();
   const pfOther = await mkUser();

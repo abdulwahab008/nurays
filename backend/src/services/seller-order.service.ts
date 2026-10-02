@@ -91,6 +91,9 @@ export class SellerOrderService {
             paymentProofUrl: true,
             paymentNotes: true,
             paymentSubmittedAt: true,
+            deliveryType: true,
+            deliveryProvider: true,
+            deliveryFeeBreakdown: true,
             deliveryAddress: {
               select: {
                 area: true,
@@ -151,6 +154,11 @@ export class SellerOrderService {
             paymentProofUrl: item.order.paymentProofUrl, // presented below
             paymentNotes: item.order.paymentNotes,
             paymentSubmittedAt: item.order.paymentSubmittedAt,
+            deliveryType: item.order.deliveryType,
+            // Who hands the order over: the kitchen itself (self-delivery or pickup) or a Nuray rider.
+            sellerHandsOver:
+              item.order.deliveryType === 'self_pickup' ||
+              deliveryProviderOf(item.order, seller.deliveryProvider) === 'self',
             customerName: item.order.customer?.profile?.fullName || 'Customer',
             customerPhone: item.order.customer?.phone,
             deliveryAddress: item.order.deliveryAddress,
@@ -278,6 +286,8 @@ export class SellerOrderService {
     return {
       ...order,
       paymentProofUrl: await presentFile(order.paymentProofUrl),
+      sellerHandsOver:
+        order.deliveryType === 'self_pickup' || deliveryProviderOf(order, seller.deliveryProvider) === 'self',
       subtotal: Number(order.subtotal),
       deliveryFee: Number(order.deliveryFee),
       discountAmount: Number(order.discountAmount),
@@ -436,6 +446,13 @@ export class SellerOrderService {
       } else if (status === 'confirmed' && currentOrderStatus === 'pending') {
         derivedOrderStatus = 'confirmed';
         historyNote = 'Order confirmed by seller';
+      } else if (
+        status === 'dispatched' &&
+        allItems.every((i) => i.status === 'dispatched' || i.status === 'cancelled') &&
+        currentOrderStatus === 'ready'
+      ) {
+        derivedOrderStatus = 'dispatched';
+        historyNote = 'Out for delivery with the kitchen';
       } else if (status === 'delivery_failed' && anyFailed && currentOrderStatus !== 'delivery_failed') {
         derivedOrderStatus = 'delivery_failed';
         historyNote = `Seller reported a failed self-delivery: ${reason}`;
@@ -910,6 +927,52 @@ export class SellerOrderService {
         ? 'Order rejected successfully and customer notified'
         : 'Your items were rejected; the other kitchens on this order are unaffected',
     };
+  }
+
+  /**
+   * A kitchen that delivers the order itself (or hands it over at its counter) moves it
+   * forward as a whole: out for delivery, delivered (with the customer's code) or
+   * delivery failed. Each step runs the same guarded per-item transition as the item
+   * endpoint, so all the rules (who may hand over, payment confirmed, the code) apply.
+   */
+  async selfHandover(
+    orderId: string,
+    sellerUserId: string,
+    action: 'dispatch' | 'deliver' | 'fail',
+    opts: { handoverCode?: string; reason?: string } = {}
+  ) {
+    const seller = await prisma.seller.findUnique({ where: { userId: sellerUserId } });
+    if (!seller) throw new AppError('Seller not found', 404, 'SELLER_NOT_FOUND');
+    const items = await prisma.orderItem.findMany({
+      where: { orderId, sellerId: seller.id, status: { notIn: ['cancelled', 'delivered'] } },
+      orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+      select: { id: true, status: true },
+    });
+    if (items.length === 0) throw new AppError('No open items of yours on this order', 404, 'ORDER_NOT_FOUND');
+
+    if (action === 'dispatch') {
+      for (const item of items) {
+        if (item.status === 'ready') await this.updateOrderItemStatus(item.id, sellerUserId, 'dispatched');
+        else if (item.status !== 'dispatched' && item.status !== 'in_transit') {
+          throw new AppError('Mark the order ready before sending it out', 400, 'INVALID_STATUS_TRANSITION');
+        }
+      }
+    } else if (action === 'deliver') {
+      for (const item of items) {
+        if (item.status === 'ready') await this.updateOrderItemStatus(item.id, sellerUserId, 'dispatched');
+        await this.updateOrderItemStatus(item.id, sellerUserId, 'delivered', undefined, opts.handoverCode);
+      }
+    } else {
+      if (!opts.reason || opts.reason.trim().length < 3) {
+        throw new AppError('Say why the delivery failed', 400, 'REASON_REQUIRED');
+      }
+      for (const item of items) {
+        if (item.status === 'ready') await this.updateOrderItemStatus(item.id, sellerUserId, 'dispatched');
+        await this.updateOrderItemStatus(item.id, sellerUserId, 'delivery_failed', opts.reason.trim());
+      }
+    }
+    const order = await prisma.order.findUniqueOrThrow({ where: { id: orderId }, select: { id: true, orderStatus: true } });
+    return { orderId: order.id, orderStatus: order.orderStatus };
   }
 
   /**

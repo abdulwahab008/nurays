@@ -33,3 +33,10 @@ export const cancelOrderItemSchema = z.object({
   reason: z.string().min(5).max(500),
 });
 
+export const deliverOrderSchema = z.object({
+  handoverCode: z.string().trim().regex(/^\d{4}$/, 'The handover code is 4 digits'),
+});
+
+export const deliveryFailedSchema = z.object({
+  reason: z.string().trim().min(3, 'Say why the delivery failed').max(500),
+});

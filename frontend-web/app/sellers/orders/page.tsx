@@ -11,6 +11,7 @@ import { useSocket } from '@/lib/hooks/use-socket';
 import { apiClient } from '@/lib/api-client';
 import { formatPrice, formatDate } from '@/lib/utils';
 import OrderChatModal from '@/components/orders/OrderChatModal';
+import SelfHandoverActions from '@/components/orders/SelfHandoverActions';
 
 const sidebarItems = SELLER_SIDEBAR_ITEMS;
 
@@ -58,6 +59,9 @@ interface OrderTicket {
     paymentProofUrl?: string;
     paymentNotes?: string;
     paymentSubmittedAt?: string;
+    deliveryType?: string;
+    /** The kitchen hands this order over itself (self-delivery or customer pickup). */
+    sellerHandsOver?: boolean;
     customerName?: string;
     customerPhone?: string;
     deliveryAddress?: {
@@ -379,7 +383,9 @@ export default function SellerOrdersPage() {
                       <div>
                         <div className="flex items-center gap-2">
                           <span className="font-extrabold text-lg text-gray-900 tracking-tight">
-                            Order #{ord.orderNumber || ord.id.slice(0, 8)}
+                            <Link href={`/sellers/orders/${ord.id}`} className="hover:underline">
+                              Order #{ord.orderNumber || ord.id.slice(0, 8)}
+                            </Link>
                           </span>
                           <span
                             className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold border ${badge.bg}`}
@@ -602,20 +608,30 @@ export default function SellerOrdersPage() {
                       </div>
                     )}
 
-                    {/* State: Ready */}
-                    {ord.orderStatus === 'ready' && (
+                    {/* Self-delivery / pickup: the kitchen completes the handover itself */}
+                    {ord.sellerHandsOver && ['ready', 'dispatched', 'in_transit'].includes(ord.orderStatus) && (
+                      <SelfHandoverActions
+                        orderId={ord.id}
+                        orderStatus={ord.orderStatus}
+                        deliveryType={ord.deliveryType}
+                        onChanged={() => loadOrders(true)}
+                      />
+                    )}
+
+                    {/* State: Ready (a Nuray rider is coming) */}
+                    {ord.orderStatus === 'ready' && !ord.sellerHandsOver && (
                       <div className="p-4 bg-indigo-50 rounded-2xl border border-indigo-200 text-center">
                         <p className="text-sm font-bold text-indigo-900 mb-1 flex items-center justify-center gap-2">
                           <span>📦</span> Ready on Kitchen Counter
                         </p>
                         <p className="text-xs text-indigo-700">
-                          Delivery JIT Engine is coordinating rider arrival for pickup.
+                          A Nuray rider has been assigned and is on the way to pick it up.
                         </p>
                       </div>
                     )}
 
-                    {/* State: Dispatched or In Transit */}
-                    {(ord.orderStatus === 'dispatched' || ord.orderStatus === 'in_transit') && (
+                    {/* State: Dispatched or In Transit (with a Nuray rider) */}
+                    {(ord.orderStatus === 'dispatched' || ord.orderStatus === 'in_transit') && !ord.sellerHandsOver && (
                       <div className="p-4 bg-orange-50 rounded-2xl border border-orange-200 text-center">
                         <p className="text-sm font-bold text-orange-900 mb-1 flex items-center justify-center gap-2">
                           <span>🛵</span> Rider On The Way
