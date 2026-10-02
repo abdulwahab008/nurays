@@ -190,7 +190,7 @@ export default function AdminPendingSellersPage() {
                     <DocumentList documents={seller.documents ?? []} />
                   </div>
 
-                  <div className="flex gap-2 ml-4">
+                  <div className="flex gap-2 ms-4">
                     <Button
                       onClick={() => handleApproveReject(seller.id, 'approve')}
                       disabled={processingId === seller.id}

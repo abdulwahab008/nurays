@@ -274,7 +274,7 @@ export default function AdminHubSetupPage() {
             <p className="p-8 text-center text-gray-500">No hubs yet.</p>
           ) : (
             <table className="w-full text-sm mt-3" data-testid="hubs-table">
-              <thead className="bg-gray-50 text-left text-xs uppercase tracking-wide text-gray-500">
+              <thead className="bg-gray-50 text-start text-xs uppercase tracking-wide text-gray-500">
                 <tr>
                   <th className="px-5 py-2">Hub</th>
                   <th className="px-5 py-2">Capacity</th>
@@ -316,7 +316,7 @@ export default function AdminHubSetupPage() {
                           ))}
                       </select>
                     </td>
-                    <td className="px-5 py-3 text-right">
+                    <td className="px-5 py-3 text-end">
                       <Button
                         variant="outline"
                         size="sm"

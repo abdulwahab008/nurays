@@ -142,7 +142,7 @@ export function DatePicker({
         type="button"
         disabled={disabled}
         onClick={() => setIsOpen(!isOpen)}
-        className={`w-full flex items-center justify-between px-3.5 py-2.5 bg-white border rounded-xl text-left text-xs sm:text-sm transition-all focus:outline-hidden focus:ring-2 focus:ring-[#FF5500] cursor-pointer disabled:bg-slate-50 disabled:cursor-not-allowed ${
+        className={`w-full flex items-center justify-between px-3.5 py-2.5 bg-white border rounded-xl text-start text-xs sm:text-sm transition-all focus:outline-hidden focus:ring-2 focus:ring-[#FF5500] cursor-pointer disabled:bg-slate-50 disabled:cursor-not-allowed ${
           error
             ? 'border-red-300 focus:ring-red-400'
             : isOpen
@@ -175,7 +175,7 @@ export function DatePicker({
 
       {/* Popover Calendar */}
       {isOpen && (
-        <div className="absolute z-50 mt-1.5 p-3.5 bg-white rounded-2xl shadow-xl border border-slate-200/90 w-72 left-0 animate-in fade-in duration-150">
+        <div className="absolute z-50 mt-1.5 p-3.5 bg-white rounded-2xl shadow-xl border border-slate-200/90 w-72 start-0 animate-in fade-in duration-150">
           {/* Calendar Header */}
           <div className="flex items-center justify-between mb-3 pb-2 border-b border-slate-100">
             <button
@@ -184,7 +184,7 @@ export function DatePicker({
               className="p-1.5 hover:bg-slate-100 text-slate-600 rounded-lg transition-colors cursor-pointer"
               title="Previous month"
             >
-              <ChevronLeft className="w-4 h-4" />
+              <ChevronLeft className="rtl:-scale-x-100 w-4 h-4" />
             </button>
 
             <span className="text-xs font-bold text-slate-900">
@@ -197,7 +197,7 @@ export function DatePicker({
               className="p-1.5 hover:bg-slate-100 text-slate-600 rounded-lg transition-colors cursor-pointer"
               title="Next month"
             >
-              <ChevronRight className="w-4 h-4" />
+              <ChevronRight className="rtl:-scale-x-100 w-4 h-4" />
             </button>
           </div>
 

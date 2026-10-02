@@ -247,7 +247,7 @@ export default function AdminCommunitiesPage() {
             <p className="p-10 text-center text-gray-500">No communities yet.</p>
           ) : (
             <table className="w-full text-sm" data-testid="communities-table">
-              <thead className="bg-gray-50 text-left text-xs uppercase tracking-wide text-gray-500">
+              <thead className="bg-gray-50 text-start text-xs uppercase tracking-wide text-gray-500">
                 <tr>
                   <th className="px-4 py-3">Community</th>
                   <th className="px-4 py-3">Area</th>
@@ -278,7 +278,7 @@ export default function AdminCommunitiesPage() {
                     <td className="px-4 py-3 text-gray-700">
                       {c.sellerCount} / {c.memberCount}
                     </td>
-                    <td className="px-4 py-3 text-right">
+                    <td className="px-4 py-3 text-end">
                       <Button variant="outline" size="sm" onClick={() => setForm(fromCommunity(c))}>
                         Edit
                       </Button>

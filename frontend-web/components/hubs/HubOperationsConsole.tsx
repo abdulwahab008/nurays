@@ -536,7 +536,7 @@ export default function HubOperationsConsole({ mode }: { mode: 'admin' | 'manage
             onClick={() => setActiveTab('overview')}
             className={`px-4 py-2.5 text-sm font-semibold rounded-t-lg transition-all flex items-center gap-2 whitespace-nowrap ${
               activeTab === 'overview'
-                ? 'bg-white border-t-2 border-l border-r border-cyan-600 text-cyan-700 shadow-sm'
+                ? 'bg-white border-t-2 border-s border-e border-cyan-600 text-cyan-700 shadow-sm'
                 : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
             }`}
           >
@@ -547,7 +547,7 @@ export default function HubOperationsConsole({ mode }: { mode: 'admin' | 'manage
             onClick={() => setActiveTab('intake')}
             className={`px-4 py-2.5 text-sm font-semibold rounded-t-lg transition-all flex items-center gap-2 whitespace-nowrap ${
               activeTab === 'intake'
-                ? 'bg-white border-t-2 border-l border-r border-cyan-600 text-cyan-700 shadow-sm'
+                ? 'bg-white border-t-2 border-s border-e border-cyan-600 text-cyan-700 shadow-sm'
                 : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
             }`}
           >
@@ -561,7 +561,7 @@ export default function HubOperationsConsole({ mode }: { mode: 'admin' | 'manage
             onClick={() => setActiveTab('fefo')}
             className={`px-4 py-2.5 text-sm font-semibold rounded-t-lg transition-all flex items-center gap-2 whitespace-nowrap ${
               activeTab === 'fefo'
-                ? 'bg-white border-t-2 border-l border-r border-cyan-600 text-cyan-700 shadow-sm'
+                ? 'bg-white border-t-2 border-s border-e border-cyan-600 text-cyan-700 shadow-sm'
                 : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
             }`}
           >
@@ -577,7 +577,7 @@ export default function HubOperationsConsole({ mode }: { mode: 'admin' | 'manage
             onClick={() => setActiveTab('temperature')}
             className={`px-4 py-2.5 text-sm font-semibold rounded-t-lg transition-all flex items-center gap-2 whitespace-nowrap ${
               activeTab === 'temperature'
-                ? 'bg-white border-t-2 border-l border-r border-cyan-600 text-cyan-700 shadow-sm'
+                ? 'bg-white border-t-2 border-s border-e border-cyan-600 text-cyan-700 shadow-sm'
                 : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
             }`}
           >
@@ -708,11 +708,11 @@ export default function HubOperationsConsole({ mode }: { mode: 'admin' | 'manage
                     Storage unit layout across {hubStats?.freezerUnits || 2} commercial sub-zero industrial chest/walk-in units
                   </p>
                 </div>
-                <div className="text-right">
+                <div className="text-end">
                   <span className="text-lg font-black text-cyan-700">
                     {hubStats?.currentUtilization ?? 28}%
                   </span>
-                  <span className="text-xs text-gray-500 ml-1">Allocated</span>
+                  <span className="text-xs text-gray-500 ms-1">Allocated</span>
                 </div>
               </div>
               <div className="w-full bg-gray-100 rounded-full h-3 overflow-hidden">
@@ -1003,7 +1003,7 @@ export default function HubOperationsConsole({ mode }: { mode: 'admin' | 'manage
                         required
                         className="w-full border-2 border-cyan-500 rounded-xl px-4 py-3 text-xl font-mono font-black text-gray-900 focus:ring-4 focus:ring-cyan-500/20 outline-none"
                       />
-                      <span className="absolute right-4 top-3 text-sm font-bold text-gray-400">
+                      <span className="absolute end-4 top-3 text-sm font-bold text-gray-400">
                         °Celsius
                       </span>
                     </div>
@@ -1076,13 +1076,13 @@ export default function HubOperationsConsole({ mode }: { mode: 'admin' | 'manage
             {/* Search & Status Filters */}
             <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
               <div className="relative flex-1 w-full md:max-w-md">
-                <span className="absolute left-3.5 top-2.5 text-gray-400">🔍</span>
+                <span className="absolute start-3.5 top-2.5 text-gray-400">🔍</span>
                 <input
                   type="text"
                   placeholder="Filter by batch #, product, or barcode..."
                   value={fefoSearch}
                   onChange={(e) => setFefoSearch(e.target.value)}
-                  className="w-full pl-10 pr-4 py-2 text-sm border border-gray-300 rounded-xl focus:ring-2 focus:ring-cyan-500 outline-none"
+                  className="w-full ps-10 pe-4 py-2 text-sm border border-gray-300 rounded-xl focus:ring-2 focus:ring-cyan-500 outline-none"
                 />
               </div>
 
@@ -1132,7 +1132,7 @@ export default function HubOperationsConsole({ mode }: { mode: 'admin' | 'manage
 
             {/* BATCHES TABLE */}
             <div className="overflow-x-auto rounded-xl border border-gray-200">
-              <table className="w-full text-left border-collapse text-sm">
+              <table className="w-full text-start border-collapse text-sm">
                 <thead>
                   <tr className="bg-slate-50 border-b border-gray-200 text-gray-600 text-xs uppercase tracking-wider font-semibold">
                     <th className="py-3.5 px-4">FEFO Priority</th>
@@ -1142,7 +1142,7 @@ export default function HubOperationsConsole({ mode }: { mode: 'admin' | 'manage
                     <th className="py-3.5 px-4">In Stock</th>
                     <th className="py-3.5 px-4">Storage Slot</th>
                     <th className="py-3.5 px-4">Quality Status</th>
-                    <th className="py-3.5 px-4 text-right">Actions</th>
+                    <th className="py-3.5 px-4 text-end">Actions</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
@@ -1275,7 +1275,7 @@ export default function HubOperationsConsole({ mode }: { mode: 'admin' | 'manage
                           </td>
 
                           {/* Action Button */}
-                          <td className="py-4 px-4 text-right">
+                          <td className="py-4 px-4 text-end">
                             <button
                               onClick={() => openStatusModal(batch)}
                               disabled={updatingBatchId === batch.id}
@@ -1401,7 +1401,7 @@ export default function HubOperationsConsole({ mode }: { mode: 'admin' | 'manage
             <div className="bg-white border border-gray-200 rounded-2xl p-6 shadow-sm">
               <h4 className="font-bold text-gray-900 text-sm mb-4">Historical Probe Logs</h4>
               <div className="overflow-x-auto rounded-xl border border-gray-200">
-                <table className="w-full text-left text-sm">
+                <table className="w-full text-start text-sm">
                   <thead>
                     <tr className="bg-slate-50 border-b border-gray-200 text-xs uppercase text-gray-600 font-semibold">
                       <th className="py-3 px-4">Recorded At</th>

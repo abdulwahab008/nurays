@@ -229,7 +229,7 @@ export default function SellerAnalyticsPage() {
               className="rounded-xl border-slate-200 text-xs hover:bg-slate-50"
             >
               <svg
-                className={`w-3.5 h-3.5 mr-1 text-slate-500 ${loading ? 'animate-spin' : ''}`}
+                className={`w-3.5 h-3.5 me-1 text-slate-500 ${loading ? 'animate-spin' : ''}`}
                 fill="none"
                 viewBox="0 0 24 24"
                 stroke="currentColor"

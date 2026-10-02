@@ -213,7 +213,7 @@ export default function AdminPromotionsPage() {
             <p className="p-10 text-center text-gray-500">No platform codes yet.</p>
           ) : (
             <table className="w-full text-sm" data-testid="promo-table">
-              <thead className="bg-gray-50 text-left text-xs uppercase tracking-wide text-gray-500">
+              <thead className="bg-gray-50 text-start text-xs uppercase tracking-wide text-gray-500">
                 <tr>
                   <th className="px-4 py-3">Code</th>
                   <th className="px-4 py-3">Discount</th>
@@ -244,7 +244,7 @@ export default function AdminPromotionsPage() {
                       {c.usageLimitTotal ? ` / ${c.usageLimitTotal}` : ''} times
                       <p className="text-xs text-gray-500">{formatPrice(c.discountGiven)} given</p>
                     </td>
-                    <td className="px-4 py-3 text-right whitespace-nowrap">
+                    <td className="px-4 py-3 text-end whitespace-nowrap">
                       <Button variant="outline" size="sm" disabled={busyId === c.id} onClick={() => toggle(c)}>
                         {c.isActive ? 'Switch off' : 'Switch on'}
                       </Button>{' '}

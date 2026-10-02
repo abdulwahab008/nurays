@@ -323,7 +323,7 @@ function CreatePromotionModal({
                   key={type.value}
                   type="button"
                   onClick={() => setFormData({ ...formData, type: type.value })}
-                  className={`p-3.5 rounded-2xl border text-left transition-all ${
+                  className={`p-3.5 rounded-2xl border text-start transition-all ${
                     formData.type === type.value
                       ? 'border-orange-500 bg-orange-50/60 ring-1 ring-orange-400 shadow-xs'
                       : 'border-slate-200 hover:border-slate-300 bg-white'
@@ -347,7 +347,7 @@ function CreatePromotionModal({
               </label>
               <div className="relative">
                 {formData.type === 'fixed' && (
-                  <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-500">₨</span>
+                  <span className="absolute start-3.5 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-500">₨</span>
                 )}
                 <input
                   type="number"
@@ -355,12 +355,12 @@ function CreatePromotionModal({
                   onChange={(e) => setFormData({ ...formData, discountValue: e.target.value })}
                   placeholder={formData.type === 'percentage' ? '20' : '200'}
                   className={`w-full py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:bg-white transition-all ${
-                    formData.type === 'fixed' ? 'pl-9 pr-4' : 'px-4'
+                    formData.type === 'fixed' ? 'ps-9 pe-4' : 'px-4'
                   }`}
                   required
                 />
                 {formData.type === 'percentage' && (
-                  <span className="absolute right-3.5 top-1/2 -translate-y-1/2 text-xs font-black text-slate-500">%</span>
+                  <span className="absolute end-3.5 top-1/2 -translate-y-1/2 text-xs font-black text-slate-500">%</span>
                 )}
               </div>
             </div>
@@ -414,13 +414,13 @@ function CreatePromotionModal({
                 Minimum Order Requirement
               </label>
               <div className="relative">
-                <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-500">₨</span>
+                <span className="absolute start-3.5 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-500">₨</span>
                 <input
                   type="number"
                   value={formData.minOrderValue}
                   onChange={(e) => setFormData({ ...formData, minOrderValue: e.target.value })}
                   placeholder="0 (no minimum)"
-                  className="w-full pl-9 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:bg-white transition-all"
+                  className="w-full ps-9 pe-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:bg-white transition-all"
                 />
               </div>
             </div>
@@ -476,7 +476,7 @@ function CreatePromotionModal({
                 />
               )}
 
-              <div className="max-h-44 overflow-y-auto space-y-1.5 pr-1">
+              <div className="max-h-44 overflow-y-auto space-y-1.5 pe-1">
                 {productsLoadError ? (
                   <div className="py-4 text-center">
                     <p className="text-xs font-bold text-rose-600">{productsLoadError}</p>
@@ -935,7 +935,7 @@ export default function SellerPromotionsPage() {
           {/* Search Box */}
           <div className="relative flex-1">
             <svg
-              className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2"
+              className="w-4 h-4 text-slate-400 absolute start-3.5 top-1/2 -translate-y-1/2"
               fill="none"
               viewBox="0 0 24 24"
               stroke="currentColor"
@@ -948,7 +948,7 @@ export default function SellerPromotionsPage() {
               value={searchFilter}
               onChange={(e) => setSearchFilter(e.target.value)}
               placeholder="Search promotions by campaign title or promo code..."
-              className="w-full pl-10 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:bg-white transition-all placeholder:text-slate-400"
+              className="w-full ps-10 pe-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:bg-white transition-all placeholder:text-slate-400"
             />
           </div>
 
@@ -1039,7 +1039,7 @@ export default function SellerPromotionsPage() {
                     {/* Left Voucher Coupon Badge */}
                     <div className="lg:w-52 bg-gradient-to-br from-orange-500 to-amber-600 p-5 text-white flex flex-col justify-between relative overflow-hidden shrink-0">
                       {/* Decorative background watermark */}
-                      <div className="absolute -right-3 -bottom-3 w-20 h-20 opacity-15 select-none pointer-events-none text-white">
+                      <div className="absolute -end-3 -bottom-3 w-20 h-20 opacity-15 select-none pointer-events-none text-white">
                         {getTypeIcon(promo.type)}
                       </div>
 
@@ -1134,7 +1134,7 @@ export default function SellerPromotionsPage() {
                     </div>
 
                     {/* Right Action Center */}
-                    <div className="p-5 sm:p-6 lg:border-l border-slate-100 flex lg:flex-col items-center justify-between lg:justify-center gap-3 shrink-0 bg-slate-50/50">
+                    <div className="p-5 sm:p-6 lg:border-s border-slate-100 flex lg:flex-col items-center justify-between lg:justify-center gap-3 shrink-0 bg-slate-50/50">
                       <div className="text-center">
                         <div className="text-2xl font-black text-slate-900 tracking-tight">
                           {promo.usageCount}

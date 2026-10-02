@@ -348,12 +348,12 @@ export default function AdminRiderMoneyPage() {
             <p className="px-5 py-8 text-sm text-gray-500">No entries yet.</p>
           ) : (
             <table className="w-full text-sm mt-3" data-testid="admin-rider-ledger">
-              <thead className="bg-gray-50 text-left text-xs uppercase tracking-wide text-gray-500">
+              <thead className="bg-gray-50 text-start text-xs uppercase tracking-wide text-gray-500">
                 <tr>
                   <th className="px-5 py-2">When</th>
                   <th className="px-5 py-2">What</th>
                   <th className="px-5 py-2">Details</th>
-                  <th className="px-5 py-2 text-right">Amount</th>
+                  <th className="px-5 py-2 text-end">Amount</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
@@ -373,7 +373,7 @@ export default function AdminRiderMoneyPage() {
                         </>
                       )}
                     </td>
-                    <td className={`px-5 py-2.5 text-right font-semibold ${e.amount > 0 ? 'text-emerald-700' : 'text-gray-900'}`}>
+                    <td className={`px-5 py-2.5 text-end font-semibold ${e.amount > 0 ? 'text-emerald-700' : 'text-gray-900'}`}>
                       {e.amount > 0 ? '+' : '−'}
                       {formatPrice(Math.abs(e.amount))}
                     </td>

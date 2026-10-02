@@ -1,10 +1,13 @@
 import type { Metadata } from "next";
+import { cookies } from "next/headers";
 import { Plus_Jakarta_Sans, Geist_Mono } from "next/font/google";
 import { GoogleOAuthProvider } from "@react-oauth/google";
 import { ToastProvider } from "@/components/ui/toast";
 import { AuthProvider } from "@/components/AuthProvider";
 import { SellerNewOrderNotification } from "@/components/SellerNewOrderNotification";
 import { CustomerOrderNotification } from "@/components/CustomerOrderNotification";
+import { LocaleProvider } from "@/lib/i18n";
+import { DEFAULT_LOCALE, dirFor, isLocale, LOCALE_COOKIE } from "@/lib/i18n/config";
 import "./globals.css";
 
 const plusJakartaSans = Plus_Jakarta_Sans({
@@ -23,18 +26,21 @@ export const metadata: Metadata = {
   description: "Order fresh and frozen home-cooked food from verified home kitchens in your community, for delivery or pickup.",
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
   const googleClientId = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID || '';
-  
+  const saved = (await cookies()).get(LOCALE_COOKIE)?.value;
+  const locale = isLocale(saved) ? saved : DEFAULT_LOCALE;
+
   return (
-    <html lang="en" className="scroll-smooth">
+    <html lang={locale} dir={dirFor(locale)} className="scroll-smooth">
       <body
         className={`${plusJakartaSans.variable} ${geistMono.variable} font-sans antialiased bg-[#FAFAFA] text-[#0F172A] selection:bg-[#FF5500] selection:text-white`}
       >
+        <LocaleProvider initialLocale={locale}>
         <ToastProvider>
           <AuthProvider>
             <SellerNewOrderNotification />
@@ -48,6 +54,7 @@ export default function RootLayout({
             )}
           </AuthProvider>
         </ToastProvider>
+        </LocaleProvider>
       </body>
     </html>
   );
