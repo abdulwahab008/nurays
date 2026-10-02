@@ -29,7 +29,7 @@ import {
   AlertCircle,
 } from 'lucide-react';
 import { cartService, CartResponse } from '@/lib/services/cart.service';
-import { formatPrice, calculateGst } from '@/lib/utils';
+import { formatPrice, calculateGst, imageVariant } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { useAuthStore } from '@/lib/store/auth-store';
 import { useCartStore, CartItem as LocalCartItem } from '@/lib/store/cart-store';
@@ -668,7 +668,9 @@ export default function CartPage() {
                       >
                         {item.product.image ? (
                           <img
-                            src={item.product.image}
+                            src={imageVariant(item.product.image, 'sm')}
+                            loading="lazy"
+                            decoding="async"
                             alt={item.product.name}
                             className="w-full h-full object-cover group-hover:scale-105 transition-transform"
                           />

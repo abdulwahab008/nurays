@@ -32,7 +32,7 @@ import { useAuthStore } from '@/lib/store/auth-store';
 import { useCartStore } from '@/lib/store/cart-store';
 import { useToast } from '@/components/ui/toast';
 import { BrandLockup } from '@/components/ui/Mark';
-import { formatPrice } from '@/lib/utils';
+import { formatPrice, imageVariant } from '@/lib/utils';
 import { SlideOverCartDrawer } from '@/components/marketplace/SlideOverCartDrawer';
 import { UberLeftSidebar } from '@/components/marketplace/UberLeftSidebar';
 import { CuisineCarousel } from '@/components/marketplace/CuisineCarousel';
@@ -912,7 +912,9 @@ export default function Home() {
             >
               <div className="relative w-14 h-14 sm:w-16 sm:h-16 rounded-full overflow-hidden border border-slate-200 group-hover:border-[#FF5500] transition-all shadow-2xs">
                 <img
-                  src={k.avatar}
+                  src={imageVariant(k.avatar, 'sm')}
+                  loading="lazy"
+                  decoding="async"
                   alt={k.name}
                   className="w-full h-full object-cover group-hover:scale-105 transition-transform"
                 />
@@ -967,8 +969,9 @@ export default function Home() {
                 {/* Cover Image */}
                 <div className="relative aspect-[16/10] w-full overflow-hidden bg-slate-100">
                   <img
-                    src={kitchen.coverPhoto}
+                    src={imageVariant(kitchen.coverPhoto, 'md')}
                     alt={kitchen.name}
+                    decoding="async"
                     loading="lazy"
                     className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
                   />
@@ -1013,7 +1016,9 @@ export default function Home() {
                     <div className="flex items-start justify-between gap-2 mb-2">
                       <div className="flex items-center gap-2.5 min-w-0">
                         <img
-                          src={kitchen.avatar}
+                          src={imageVariant(kitchen.avatar, 'sm')}
+                          loading="lazy"
+                          decoding="async"
                           alt={kitchen.chef}
                           className="w-9 h-9 rounded-xl object-cover border border-slate-200 flex-shrink-0"
                         />
@@ -1101,7 +1106,9 @@ export default function Home() {
               {/* Dish Photo */}
               <div className="relative aspect-square overflow-hidden bg-slate-100">
                 <img
-                  src={dish.photo}
+                  src={imageVariant(dish.photo, 'md')}
+                  loading="lazy"
+                  decoding="async"
                   alt={dish.name}
                   className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
                 />

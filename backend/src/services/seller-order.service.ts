@@ -1,5 +1,6 @@
 import { codCollectorOf, deliveryProviderOf } from '../utils/paymentCustody';
 import { verifyHandoverCode } from './handover.service';
+import { presentFile } from '../storage';
 import prisma from '../config/database';
 import { AppError } from '../middleware/errorHandler';
 import realtimeOrderService from './realtime-order.service';
@@ -147,7 +148,7 @@ export class SellerOrderService {
             paymentReferenceNumber: item.order.paymentReferenceNumber,
             paymentSenderName: item.order.paymentSenderName,
             paymentSenderAccount: item.order.paymentSenderAccount,
-            paymentProofUrl: item.order.paymentProofUrl,
+            paymentProofUrl: item.order.paymentProofUrl, // presented below
             paymentNotes: item.order.paymentNotes,
             paymentSubmittedAt: item.order.paymentSubmittedAt,
             customerName: item.order.customer?.profile?.fullName || 'Customer',
@@ -178,6 +179,8 @@ export class SellerOrderService {
     });
 
     const orders = Array.from(orderMap.values());
+    // Payment receipts are private: this seller gets short-lived links to their orders' receipts.
+    for (const o of orders) o.order.paymentProofUrl = await presentFile(o.order.paymentProofUrl);
 
     // Get total count
     const totalWhere: any = { ...where };
@@ -274,6 +277,7 @@ export class SellerOrderService {
 
     return {
       ...order,
+      paymentProofUrl: await presentFile(order.paymentProofUrl),
       subtotal: Number(order.subtotal),
       deliveryFee: Number(order.deliveryFee),
       discountAmount: Number(order.discountAmount),

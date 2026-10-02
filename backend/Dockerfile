@@ -38,8 +38,12 @@ RUN npm ci --omit=dev && npx prisma generate && npm cache clean --force
 COPY --from=builder /app/dist ./dist
 
 # Run as non-root
+# /app/uploads is where the local storage driver keeps files; mount a persistent
+# volume there (docker-compose does), or use STORAGE_DRIVER=s3.
 RUN useradd --system --uid 1001 --shell /usr/sbin/nologin app \
+ && mkdir -p /app/uploads \
  && chown -R app:app /app
+ENV UPLOADS_DIR=/app/uploads
 USER app
 
 EXPOSE 3001

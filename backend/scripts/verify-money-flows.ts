@@ -436,6 +436,20 @@ async function main() {
   ok('with the code it can', (await code(sellerOrderService.updateOrderItemStatus(sdItem!.id, selfUser, 'delivered', undefined, sdCode))) === 'OK' &&
     (await prisma.order.findUnique({ where: { id: sdOrder.id } }))!.paymentCollectedBy === 'seller');
 
+  // ---- 17e. receipts are private files the customer uploaded ----
+  const pfC = await mkUser();
+  const pfOther = await mkUser();
+  const pfProd = await mkProduct(seller.id, 20, 100);
+  const pfO: any = (await order(pfC.id, [{ productId: pfProd.id, quantity: 1 }], { paymentMethod: 'bank' })).order;
+  const submit = (proofUrl: string) => orderService.submitManualPayment(pfO.id, pfC.id, { referenceNumber: 'TID-' + uniq(), proofUrl }).then(() => 'OK', (e: any) => e.code);
+  ok("a receipt uploaded by someone else can't be attached", (await submit(`private:x/proofs/${pfOther.id}/${uniq()}.jpg`)) === 'INVALID_PROOF_URL');
+  ok("a public product photo can't be passed off as a receipt", (await submit(`/media/p/products/${pfC.id}/abc-lg.webp`)) === 'INVALID_PROOF_URL');
+  ok('an external link is refused', (await submit('https://evil.example/receipt.jpg')) === 'INVALID_PROOF_URL');
+  const ownRef = `private:x/proofs/${pfC.id}/${require('crypto').randomUUID()}.jpg`;
+  ok("the customer's own private receipt is accepted", (await submit(ownRef)) === 'OK');
+  const pfView: any = await orderService.getOrderDetails(pfO.id, pfC.id);
+  ok('the order shows the receipt as a short-lived signed link, never the stored reference', typeof pfView.paymentProofUrl === 'string' && pfView.paymentProofUrl.startsWith('/files/x/proofs/') && /[?&]sig=/.test(pfView.paymentProofUrl), pfView.paymentProofUrl);
+
   // ---- 18. schema integrity ----
   const cc = await mkUser();
   const cp = await mkProduct(seller.id, 50, 100);
@@ -796,7 +810,9 @@ async function main() {
   const mkP = (images: string[], name = 'Img ' + uniq()) => productService.createProduct(sellerRowA!.userId, { name, price: 10, unit: 'pc', stockQuantity: 1, stockType: 'direct', images } as any).then((p: any) => 'OK:' + p.id, (e: any) => e.code);
   ok('a seller cannot attach another seller\'s image (so cannot delete it later)', (await mkP([legacyPath])) === 'IMAGE_NOT_OWNED' && (await mkP([`http://localhost:3001${legacyPath}`])) === 'IMAGE_NOT_OWNED');
   ok('a seller can use images they uploaded', (await mkP([`/uploads/products/${sellerRowA!.userId}_abc.png`])).startsWith('OK:'));
-  ok('a link to another site is fine', (await mkP(['https://cdn.example.com/x.png'])).startsWith('OK:'));
+  ok('a hot-linked image from another site is refused (photos must be uploaded)', (await mkP(['https://cdn.example.com/x.png'])) === 'INVALID_IMAGE_URL');
+  ok('a seller can use a photo they uploaded through the storage layer', (await mkP([`/media/p/products/${sellerRowA!.userId}/${require('crypto').randomUUID()}-lg.webp`])).startsWith('OK:'));
+  ok("but not another seller's stored photo", (await mkP([`/media/p/products/${victimSeller!.userId}/${require('crypto').randomUUID()}-lg.webp`])) === 'IMAGE_NOT_OWNED');
   void victimSeller;
 
   // OTP SMS cap per number

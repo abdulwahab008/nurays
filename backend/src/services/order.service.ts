@@ -9,7 +9,7 @@ import { GST_RATE, allocateDiscount } from '../utils/pricing';
 import { issueRefund, IssuedRefund } from './refund.service';
 import { allocateHubStock, releaseHubAllocations } from './hub-allocation.service';
 import { DeliveryFeeShare } from '../utils/deliveryEarnings';
-import { isOwnUploadPath } from '../utils/uploadPaths';
+import { isStoredFile, isPrivateRef, storedFileOwner, presentFile } from '../storage';
 import { getDeliveryFeeForSeller } from '../utils/deliveryFee';
 import { createStockAlert } from './stock-alert.service';
 import promotionService from './promotion.service';
@@ -964,6 +964,8 @@ export class OrderService {
     return {
       ...order,
       ...(handover ? { handoverCode: handover.handoverCode } : {}),
+      // The receipt is private: the viewer (already checked above) gets a short-lived link.
+      paymentProofUrl: await presentFile(order.paymentProofUrl),
       subtotal: Number(order.subtotal),
       deliveryFee: Number(order.deliveryFee),
       discountAmount: Number(order.discountAmount),
@@ -1225,7 +1227,12 @@ export class OrderService {
       throw new AppError('A payment reference number is required', 400, 'REFERENCE_REQUIRED');
     }
     // A proof is a link to an uploaded file — never an inline data: payload.
-    if (data.proofUrl && !isOwnUploadPath(data.proofUrl)) {
+    // And it must be a receipt this customer uploaded (stored privately).
+    if (
+      data.proofUrl &&
+      (!isStoredFile(data.proofUrl, { private: 'proofs' }) ||
+        (isPrivateRef(data.proofUrl) && storedFileOwner(data.proofUrl) !== userId))
+    ) {
       throw new AppError('Invalid payment proof link', 400, 'INVALID_PROOF_URL');
     }
 
@@ -1437,7 +1444,7 @@ export class OrderService {
       },
     });
 
-    return messages.map((m) => ({
+    return Promise.all(messages.map(async (m) => ({
       id: m.id,
       orderId: m.orderId,
       senderId: m.senderId,
@@ -1446,13 +1453,13 @@ export class OrderService {
       senderAvatar: m.sender.profile?.avatarUrl || null,
       message: m.message,
       messageType: m.messageType || 'text',
-      mediaUrl: m.mediaUrl || null,
+      mediaUrl: await presentFile(m.mediaUrl),
       duration: m.duration || null,
       isRead: m.isRead,
       readAt: m.readAt,
       createdAt: m.createdAt,
       isMe: m.senderId === userId,
-    }));
+    })));
   }
 
   /**
@@ -1562,7 +1569,7 @@ export class OrderService {
       senderAvatar: orderMsg.sender.profile?.avatarUrl || null,
       message: orderMsg.message,
       messageType: orderMsg.messageType,
-      mediaUrl: orderMsg.mediaUrl,
+      mediaUrl: await presentFile(orderMsg.mediaUrl),
       duration: orderMsg.duration,
       isRead: orderMsg.isRead,
       readAt: orderMsg.readAt,

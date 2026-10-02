@@ -1,4 +1,4 @@
-import rateLimit from 'express-rate-limit';
+import rateLimit, { ipKeyGenerator } from 'express-rate-limit';
 
 // Brute-force protection on login: same IP can't hammer credentials.
 export const loginLimiter = rateLimit({
@@ -34,4 +34,14 @@ export const promoValidateLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   message: { success: false, error: { message: 'Too many attempts. Please slow down.', code: 'RATE_LIMITED' } },
+});
+
+// Uploads are processed (decoded, resized) and stored: cap them per user.
+export const uploadLimiter = rateLimit({
+  windowMs: 10 * 60 * 1000,
+  limit: 60,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req: any) => req.user?.userId ?? ipKeyGenerator(req.ip ?? ''),
+  message: { success: false, error: { message: 'Too many uploads. Please wait a few minutes.', code: 'RATE_LIMITED' } },
 });

@@ -4,11 +4,11 @@ import 'dotenv/config';
 
 import express from 'express';
 import { createServer } from 'http';
-import path from 'path';
 import cors from 'cors';
 import helmet from 'helmet';
 import morgan from 'morgan';
 import socketManager from './config/socket';
+import { fileRoutes } from './storage/serve';
 import { checkAndCreateStockAlerts } from './services/stock-alert.service';
 import hubService from './services/hub.service';
 import { errorHandler } from './middleware/errorHandler';
@@ -78,18 +78,8 @@ app.use(express.json({
 }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
-// Serve static files (uploaded images) - with CORS headers
-app.use(
-  '/uploads',
-  express.static(path.join(__dirname, '../uploads'), {
-    // Uploads are images only. Never let a browser sniff one into something
-    // executable, and never render uploaded files as documents.
-    setHeaders: (res) => {
-      res.setHeader('X-Content-Type-Options', 'nosniff');
-      res.setHeader('Content-Security-Policy', "default-src 'none'; img-src 'self'; style-src 'unsafe-inline'; sandbox");
-    },
-  })
-);
+// Uploaded files: public media, signed private files, legacy /uploads (see storage/serve.ts).
+app.use(fileRoutes());
 
 // Routes
 app.use(`/api/${API_VERSION}/health`, healthRoutes);

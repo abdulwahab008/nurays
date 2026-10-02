@@ -4,6 +4,7 @@ import { computeSellerAvailability, isAcceptingOrders } from './availability.ser
 import { getDeliveryFeeForSeller, haversineKm } from '../utils/deliveryFee';
 import { SELLER_COMMUNITY_DELIVERY_SELECT } from '../utils/sellerDeliverySelect';
 import { isUploadedBy } from '../utils/uploadPaths';
+import { isStoredFile } from '../storage';
 
 const SELLER_AVAILABILITY_SELECT = {
   status: true,
@@ -972,20 +973,23 @@ export class ProductService {
    * Links to other sites are fine (nothing local can be deleted through them).
    */
   private async assertImageUrlsAllowed(urls: string[], userId: string, sellerId: string) {
+    // Product photos must be uploaded through the app (resized, stored, moderated with the
+    // product): hot-linked external images could change after approval or track viewers.
     const local: string[] = [];
     for (const url of urls) {
-      let path = url;
-      if (/^https?:\/\//i.test(url)) {
+      let value = url;
+      // Older clients sent absolute links to legacy uploads; keep accepting those as paths.
+      if (/^https?:\/\//i.test(url) && !isStoredFile(url, { public: 'products' })) {
         try {
-          path = new URL(url).pathname;
+          value = new URL(url).pathname;
         } catch {
           throw new AppError('Invalid image link', 400, 'INVALID_IMAGE_URL');
         }
       }
-      if (path.startsWith('/uploads/')) local.push(path);
-      else if (!/^https?:\/\//i.test(url)) {
-        throw new AppError('Invalid image link', 400, 'INVALID_IMAGE_URL');
+      if (!isStoredFile(value, { public: 'products' })) {
+        throw new AppError('Please upload product photos through the app', 400, 'INVALID_IMAGE_URL');
       }
+      local.push(value);
     }
     if (local.length === 0) return;
 

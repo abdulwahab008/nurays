@@ -6,7 +6,7 @@ import Link from 'next/link';
 import { BrandLockup } from '@/components/ui/Mark';
 import { useAuthStore } from '@/lib/store/auth-store';
 import { useToast } from '@/components/ui/toast';
-import { formatPrice } from '@/lib/utils';
+import { formatPrice, imageVariant } from '@/lib/utils';
 import { sellerService } from '@/lib/services/seller.service';
 import { cartService } from '@/lib/services/cart.service';
 import { useCartStore } from '@/lib/store/cart-store';
@@ -881,7 +881,8 @@ export default function KitchenStorefrontPage() {
             <div className="flex items-start gap-4">
               <div className="relative">
                 <img
-                  src={kitchen.chefAvatar}
+                  src={imageVariant(kitchen.chefAvatar, 'sm')}
+                  decoding="async"
                   alt={kitchen.chefName}
                   className="w-16 h-16 sm:w-20 sm:h-20 rounded-2xl object-cover ring-3 ring-white shadow-md"
                 />
@@ -1105,7 +1106,9 @@ export default function KitchenStorefrontPage() {
               >
                 <div className="w-full sm:w-36 h-36 rounded-xl overflow-hidden relative flex-shrink-0 bg-slate-100">
                   <img
-                    src={dish.photo}
+                    src={imageVariant(dish.photo, 'md')}
+                    loading="lazy"
+                    decoding="async"
                     alt={dish.name}
                     className="w-full h-full object-cover group-hover:scale-105 transition-transform"
                   />

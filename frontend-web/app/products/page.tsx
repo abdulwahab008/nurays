@@ -5,7 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { productService, Product } from '@/lib/services/product.service';
 import { addressService } from '@/lib/services/address.service';
-import { formatPrice } from '@/lib/utils';
+import { formatPrice, imageVariant } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/toast';
 import { useAuthStore } from '@/lib/store/auth-store';
@@ -1256,7 +1256,9 @@ function ProductsContent() {
 
                           {k.avatar && (
                             <img
-                              src={k.avatar}
+                              src={imageVariant(k.avatar, 'sm')}
+                              loading="lazy"
+                              decoding="async"
                               alt={k.businessName}
                               className="w-9 h-9 rounded-full object-cover ring-2 ring-slate-100 shadow-2xs shrink-0"
                             />
@@ -1386,7 +1388,9 @@ function ProductsContent() {
               <div className="aspect-[16/11] bg-slate-100 relative overflow-hidden">
                 {product.primaryImage ? (
                   <img
-                    src={product.primaryImage}
+                    src={imageVariant(product.primaryImage, 'md')}
+                    loading="lazy"
+                    decoding="async"
                     alt={product.name}
                     className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
                   />

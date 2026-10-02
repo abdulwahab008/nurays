@@ -1,4 +1,5 @@
 import { codCollectorOf } from '../utils/paymentCustody';
+import { presentFile } from '../storage';
 import prisma from '../config/database';
 import { AppError } from '../middleware/errorHandler';
 import realtimeOrderService from './realtime-order.service';
@@ -264,6 +265,7 @@ export class AdminOrderService {
 
     return {
       ...order,
+      paymentProofUrl: await presentFile(order.paymentProofUrl),
       refunds: order.refunds.map((r) => ({ ...r, amount: Number(r.amount) })),
       subtotal: Number(order.subtotal),
       deliveryFee: Number(order.deliveryFee),
