@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { io, Socket } from 'socket.io-client';
 import { useAuthStore } from '../store/auth-store';
 import { apiClient } from '../api-client';
+import { socketUrl } from '../config';
 
 export function useSocket() {
   // The socket is state, not just a ref: it is replaced whenever the access token
@@ -28,7 +29,7 @@ export function useSocket() {
     const token = apiClient.getAccessToken();
     if (!token) return;
 
-    const next = io(process.env.NEXT_PUBLIC_WS_URL || 'http://localhost:3001', {
+    const next = io(socketUrl(), {
       auth: { token },
       transports: ['websocket', 'polling'],
     });
