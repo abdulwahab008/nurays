@@ -17,6 +17,8 @@ services:
       dockerfile: Dockerfile
     container_name: nuray-backend
     restart: unless-stopped
+    # Room for the graceful shutdown (drain, finish requests and jobs) before Docker kills it.
+    stop_grace_period: 30s
     ports:
       - "3001:3001"
     env_file:

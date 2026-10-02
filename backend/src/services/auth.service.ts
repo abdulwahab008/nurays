@@ -5,7 +5,7 @@ import { AppError } from '../middleware/errorHandler';
 import bcrypt from 'bcrypt';
 import { randomBytes, createHash } from 'crypto';
 import otpService from './otp.service';
-import emailService from './email.service';
+import { queueVerificationEmail, queuePasswordResetEmail } from '../jobs/email.jobs';
 import adminService from './admin.service';
 import { generateVerificationToken } from '../utils/email-verification';
 
@@ -194,24 +194,14 @@ export class AuthService {
       },
     });
 
-    // Sending the verification email must NOT fail registration. The user row
-    // and token are already committed above; if SMTP is down we'd otherwise
-    // 500 the client even though the account exists, leaving them stuck
-    // (re-registering hits EMAIL_EXISTS). Instead we log, flag it on the
-    // response, and let the user trigger a resend.
+    // The verification email goes out in the background (retried if the mail server is
+    // down), so it can neither slow down nor fail registration; the user can also resend it.
     let emailSendFailed = false;
     try {
-      await emailService.sendVerificationEmail(
-        normalizedEmail,
-        fullName.trim(),
-        verificationToken
-      );
+      await queueVerificationEmail(user.id);
     } catch (err) {
       emailSendFailed = true;
-      console.error(
-        `[register] Verification email failed for ${normalizedEmail} — account created, user can resend.`,
-        err
-      );
+      console.error(`[register] Could not queue the verification email for ${normalizedEmail}; the user can resend it.`, err);
     }
 
     // Generate tokens (user can use app but should verify email)
@@ -330,12 +320,7 @@ export class AuthService {
       },
     });
 
-    // Send verification email
-    await emailService.sendVerificationEmail(
-      user.email,
-      user.profile?.fullName || 'User',
-      verificationToken
-    );
+    await queueVerificationEmail(user.id);
   }
 
   /**
@@ -599,22 +584,12 @@ export class AuthService {
     });
     if (!user || user.status !== 'active') return;
 
-    // Only the most recent link works.
-    await prisma.passwordReset.deleteMany({ where: { userId: user.id, usedAt: null } });
-
-    const token = generateVerificationToken();
-    await prisma.passwordReset.create({
-      data: {
-        userId: user.id,
-        tokenHash: createHash('sha256').update(token).digest('hex'),
-        expiresAt: new Date(Date.now() + 60 * 60 * 1000), // 1 hour
-      },
-    });
-
+    // The background job creates the single-use link (only its hash is stored) and emails
+    // it, so this answers just as fast for an unknown address as for a real one.
     try {
-      await emailService.sendPasswordResetEmail(normalizedEmail, user.profile?.fullName || 'there', token);
+      await queuePasswordResetEmail(user.id);
     } catch (err) {
-      console.error(`[forgotPassword] Could not send the reset email to ${normalizedEmail}`, err);
+      console.error(`[forgotPassword] Could not queue the reset email for ${normalizedEmail}`, err);
     }
   }
 

@@ -12,7 +12,14 @@ import socketManager from './config/socket';
 import { fileRoutes } from './storage/serve';
 import { checkAndCreateStockAlerts } from './services/stock-alert.service';
 import hubService from './services/hub.service';
-import { scheduleJob } from './jobs/scheduler';
+import { scheduleJob, stopScheduler } from './jobs/scheduler';
+import { startWorkers, stopWorkers } from './jobs/queue';
+import './jobs/email.jobs';
+import prisma from './config/database';
+import { closeRedis } from './config/redis';
+import { markShuttingDown, isShuttingDown } from './utils/lifecycle';
+import { apiLimiter } from './middleware/rateLimiter';
+import { isProduction } from './config/env';
 import { sweepStaleOrders, purgeExpiredSecrets } from './services/order-maintenance.service';
 import { errorHandler } from './middleware/errorHandler';
 import { notFoundHandler } from './middleware/notFoundHandler';
@@ -85,8 +92,9 @@ app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 // Uploaded files: public media, signed private files, legacy /uploads (see storage/serve.ts).
 app.use(fileRoutes());
 
-// Routes
+// Routes. Health checks stay outside the flood limit (load balancers poll them).
 app.use(`/api/${API_VERSION}/health`, healthRoutes);
+app.use('/api', apiLimiter);
 app.use(`/api/${API_VERSION}/stats`, statsRoutes);
 app.use(`/api/${API_VERSION}/auth`, authRoutes);
 app.use(`/api/${API_VERSION}/upload`, uploadRoutes);
@@ -147,7 +155,46 @@ httpServer.listen(PORT, () => {
   scheduleJob('stale-orders', 2 * 60 * 1000, () => sweepStaleOrders());
   // Old one-time codes and used / expired reset tokens.
   scheduleJob('purge-expired-secrets', 6 * 60 * 60 * 1000, () => purgeExpiredSecrets());
+
+  // Background jobs (emails, notifications). With Redis every instance takes queued jobs.
+  startWorkers();
 });
+
+/**
+ * Graceful shutdown (deploys, scaling down): report not-ready so the load balancer stops
+ * sending traffic, finish in-flight requests and running jobs, then close connections.
+ * Forced exit if that takes too long.
+ */
+const SHUTDOWN_GRACE_MS = Number(process.env.SHUTDOWN_GRACE_MS) || 25_000;
+// How long readiness reports 503 before the listener closes, so a load balancer stops
+// routing here first (its health-check interval or so).
+const SHUTDOWN_DRAIN_MS = Number(process.env.SHUTDOWN_DRAIN_MS ?? (isProduction() ? 5_000 : 0));
+
+async function shutdown(signal: string) {
+  if (isShuttingDown()) return;
+  markShuttingDown();
+  console.log(`${signal} received: shutting down`);
+  const forced = setTimeout(() => {
+    console.error('Shutdown took too long; exiting.');
+    process.exit(1);
+  }, SHUTDOWN_GRACE_MS);
+  forced.unref();
+
+  stopScheduler();
+  if (SHUTDOWN_DRAIN_MS > 0) await new Promise((resolve) => setTimeout(resolve, SHUTDOWN_DRAIN_MS));
+  // Stop accepting connections; in-flight requests finish. Live sockets never end on their
+  // own, so they are closed (clients reconnect to another instance).
+  const httpClosed = new Promise<void>((resolve) => httpServer.close(() => resolve()));
+  await socketManager.close().catch((err) => console.error('Closing sockets failed:', err));
+  await httpClosed;
+  await stopWorkers().catch((err) => console.error('Stopping job workers failed:', err));
+  await Promise.allSettled([prisma.$disconnect(), closeRedis()]);
+  console.log('Shutdown complete');
+  process.exit(0);
+}
+
+process.on('SIGTERM', () => void shutdown('SIGTERM'));
+process.on('SIGINT', () => void shutdown('SIGINT'));
 
 export default app;
 
