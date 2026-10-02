@@ -162,6 +162,8 @@ html[lang="ur"] :is(h1, h2, h3, h4, h5, h6, p, span, a, button, label, li, td, t
 html[dir="rtl"] .leaflet-container,
 html[dir="rtl"] [data-ltr] {
   direction: ltr;
+  /* Isolate it too: without this an inline "#FN123" still gets its "#" moved to the end. */
+  unicode-bidi: isolate;
 }
 
 h1, h2, h3, h4, h5, h6 {

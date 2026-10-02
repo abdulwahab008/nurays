@@ -93,7 +93,7 @@ export const dashboardMessages = defineMessages({
     subtitleIn: '{community} میں تصدیق شدہ گھریلو کچن اور ان کے مینو',
     subtitle: 'تصدیق شدہ گھریلو کچن اور ان کے مینو۔ اپنے قریب کے کچن دیکھنے کے لیے اپنا علاقہ چنیں۔',
     activeDelivery: 'جاری ڈیلیوری',
-    orderNumber: 'آرڈر #{number}',
+    orderNumber: 'آرڈر \u2066#{number}\u2069',
     statusLabel: 'صورتحال:',
     itemsCount: '{count} آئٹمز',
     liveTrack: 'لائیو ٹریک کریں',

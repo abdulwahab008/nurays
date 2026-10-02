@@ -163,7 +163,7 @@ export const paymentsMessages = defineMessages({
     'tx.topup': 'ٹاپ اپ',
     'tx.credit': 'کریڈٹ',
     'tx.payment': 'ادائیگی',
-    orderNumber: 'آرڈر #{number}',
+    orderNumber: 'آرڈر \u2066#{number}\u2069',
     balanceAfter: 'بیلنس {amount}',
     showOlder: 'پرانی دیکھیں',
 
