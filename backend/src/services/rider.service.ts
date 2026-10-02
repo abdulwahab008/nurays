@@ -477,12 +477,13 @@ export class RiderService {
 
     return {
       id: rider.id,
-      name: user?.profile?.fullName || 'Tariq Mehmood',
-      phone: user?.phone || '+92 300 1234567',
-      vehicleType: rider.vehicleType || 'Motorbike (Cold-Box)',
-      vehicleNumber: rider.vehicleNumber || 'KHI-8921',
-      city: rider.city || 'Karachi',
-      ratingAverage: Number(rider.ratingAverage || 4.9),
+      // The rider's own details only: no made-up name, phone, vehicle or rating.
+      name: user?.profile?.fullName || null,
+      phone: user?.phone || null,
+      vehicleType: rider.vehicleType || null,
+      vehicleNumber: rider.vehicleNumber || null,
+      city: rider.city || null,
+      ratingAverage: Number(rider.ratingAverage) || 0,
       totalDeliveries: rider.totalDeliveries,
       isAvailable: rider.isAvailable,
       cashInHand,

@@ -15,6 +15,7 @@ import hubService from './services/hub.service';
 import { errorHandler } from './middleware/errorHandler';
 import { notFoundHandler } from './middleware/notFoundHandler';
 import healthRoutes from './routes/health.routes';
+import statsRoutes from './routes/stats.routes';
 import authRoutes from './routes/auth.routes';
 import productRoutes from './routes/product.routes';
 import productVariantRoutes from './routes/product-variant.routes';
@@ -84,6 +85,7 @@ app.use(fileRoutes());
 
 // Routes
 app.use(`/api/${API_VERSION}/health`, healthRoutes);
+app.use(`/api/${API_VERSION}/stats`, statsRoutes);
 app.use(`/api/${API_VERSION}/auth`, authRoutes);
 app.use(`/api/${API_VERSION}/upload`, uploadRoutes);
 app.use(`/api/${API_VERSION}/products`, productRoutes);
