@@ -1426,6 +1426,18 @@ async function main() {
     ok('riders see the closer pickup first, with its distance', iNear >= 0 && iNear < iFar && pool[iNear].pickupDistanceKm < 1 && pool[iFar].pickupDistanceKm > 10, `${pool[iNear]?.pickupDistanceKm} / ${pool[iFar]?.pickupDistanceKm} km`);
   }
 
+  // Category requests: approving twice at once creates one category, and the kitchen hears about it.
+  {
+    const crSvc = require('../src/services/category-request.service').categoryRequestService;
+    const kCat = await mkSeller();
+    const catName = 'Requested ' + uniq();
+    const req = await prisma.categoryRequest.create({ data: { sellerId: kCat.id, productType: 'ready_to_eat', name: catName } });
+    const admin2 = await mkUser('admin');
+    const results = await Promise.all([crSvc.approveRequest(req.id, admin2.id).then(() => 'OK', (e: any) => e.message), crSvc.approveRequest(req.id, admin2.id).then(() => 'OK', (e: any) => e.message)]);
+    ok('two admins approving the same request create one category', (await prisma.category.count({ where: { name: catName } })) === 1 && results.filter((r) => r === 'OK').length === 1, results.join(' / '));
+    ok('the kitchen is told its category was approved', (await prisma.notification.count({ where: { userId: kCat.userId, title: 'Category approved' } })) === 1);
+  }
+
   // OTP SMS cap per number
   const capPhone = pn();
   for (let i = 0; i < 5; i++) await prisma.otpVerification.create({ data: { phone: capPhone, otpCode: '111111', purpose: 'login', expiresAt: new Date(Date.now() - 1000), attempts: 5 } });
