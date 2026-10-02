@@ -4,6 +4,8 @@ import { useCallback, useEffect, useState } from 'react';
 import { apiClient, apiErrorMessage } from '@/lib/api-client';
 import { useToast } from '@/components/ui/toast';
 import FileUploadField from '@/components/ui/FileUploadField';
+import { useT } from '@/lib/i18n';
+import { riderMessages } from '@/lib/i18n/messages/rider';
 
 interface Application {
   verificationStatus: 'pending' | 'approved' | 'rejected';
@@ -16,11 +18,11 @@ interface Application {
 }
 
 const VEHICLES = [
-  ['motorcycle', 'Motorcycle'],
-  ['scooter', 'Scooter'],
-  ['bicycle', 'Bicycle'],
-  ['car', 'Car'],
-  ['rickshaw', 'Rickshaw'],
+  ['motorcycle', 'vehicle.motorcycle'],
+  ['scooter', 'vehicle.scooter'],
+  ['bicycle', 'vehicle.bicycle'],
+  ['car', 'vehicle.car'],
+  ['rickshaw', 'vehicle.rickshaw'],
 ] as const;
 
 const REQUIRED = ['cnic_front', 'cnic_back', 'license'];
@@ -31,6 +33,7 @@ const REQUIRED = ['cnic_front', 'cnic_back', 'license'];
  */
 export default function RiderApplicationForm() {
   const { showToast } = useToast();
+  const t = useT(riderMessages);
   const [app, setApp] = useState<Application | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [editing, setEditing] = useState(false);
@@ -55,9 +58,9 @@ export default function RiderApplicationForm() {
       const complete = !!a.vehicleType && !!a.vehicleNumber && REQUIRED.every((t) => a.documents.some((d) => d.type === t));
       setEditing(!complete || a.verificationStatus === 'rejected');
     } catch (error) {
-      setLoadError(apiErrorMessage(error, 'Could not load your application'));
+      setLoadError(apiErrorMessage(error, t('app.loadFailed')));
     }
-  }, []);
+  }, [t]);
 
   useEffect(() => {
     load();
@@ -72,7 +75,7 @@ export default function RiderApplicationForm() {
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (missingDocs.length) {
-      showToast('Please upload photos of both sides of your CNIC and your driving licence.', 'warning');
+      showToast(t('app.missingDocs'), 'warning');
       return;
     }
     try {
@@ -86,13 +89,13 @@ export default function RiderApplicationForm() {
         cnicBackUrl: cnicBack || undefined,
         licenseUrl: license || undefined,
       });
-      showToast('Application sent. We will review it shortly.', 'success');
+      showToast(t('app.sent'), 'success');
       setCnicFront(null);
       setCnicBack(null);
       setLicense(null);
       await load();
     } catch (error) {
-      showToast(apiErrorMessage(error, 'Could not send your application'), 'error');
+      showToast(apiErrorMessage(error, t('app.sendFailed')), 'error');
     } finally {
       setSaving(false);
     }
@@ -105,63 +108,68 @@ export default function RiderApplicationForm() {
     <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 sm:p-8 max-w-2xl mx-auto" data-testid="rider-application">
       {app.verificationStatus === 'rejected' && (
         <div className="mb-5 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-800">
-          <strong>Your application wasn&apos;t approved.</strong> {app.rejectionReason ? `Reason: ${app.rejectionReason}. ` : ''}Fix the details below and send it again.
+          <strong>{t('app.rejectedTitle')}</strong> {app.rejectionReason ? t('app.rejectedReason', { reason: app.rejectionReason }) : ''}{t('app.rejectedFix')}
         </div>
       )}
 
       {!editing ? (
         <div className="text-center">
           <div className="w-16 h-16 bg-amber-100 rounded-full flex items-center justify-center mx-auto mb-4 text-3xl">⏳</div>
-          <h2 className="text-xl font-bold text-slate-900">Application under review</h2>
+          <h2 className="text-xl font-bold text-slate-900">{t('app.underReview')}</h2>
           <p className="text-slate-600 mt-2 text-sm">
-            We have your {VEHICLES.find(([v]) => v === app.vehicleType)?.[1].toLowerCase() ?? 'vehicle'} ({app.vehicleNumber}) and your documents. You can take
-            deliveries as soon as an admin approves your account.
+            {(() => {
+              const vehicleKey = VEHICLES.find(([v]) => v === app.vehicleType)?.[1];
+              return t('app.underReviewBody', {
+                vehicle: vehicleKey ? t(vehicleKey).toLowerCase() : t('app.vehicleGeneric'),
+                number: app.vehicleNumber,
+              });
+            })()}
           </p>
           <button type="button" onClick={() => setEditing(true)} className="mt-4 text-sm font-semibold text-emerald-700 underline">
-            Change my details
+            {t('app.changeDetails')}
           </button>
         </div>
       ) : (
         <form onSubmit={submit} className="space-y-4">
           <div>
-            <h2 className="text-xl font-bold text-slate-900">Finish your rider application</h2>
-            <p className="text-sm text-slate-600 mt-1">Tell us about your vehicle and upload your documents. Only Nuray&apos;s verification team sees them.</p>
+            <h2 className="text-xl font-bold text-slate-900">{t('app.finishTitle')}</h2>
+            <p className="text-sm text-slate-600 mt-1">{t('app.finishBody')}</p>
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
-              <label className={label}>City</label>
+              <label className={label}>{t('app.city')}</label>
               <input required value={city} onChange={(e) => setCity(e.target.value)} placeholder="Lahore" className={field} />
             </div>
             <div>
-              <label className={label}>Vehicle</label>
+              <label className={label}>{t('app.vehicle')}</label>
               <select value={vehicleType} onChange={(e) => setVehicleType(e.target.value)} className={field}>
                 {VEHICLES.map(([v, l]) => (
                   <option key={v} value={v}>
-                    {l}
+                    {t(l)}
                   </option>
                 ))}
               </select>
             </div>
             <div>
-              <label className={label}>Registration number</label>
-              <input required value={vehicleNumber} onChange={(e) => setVehicleNumber(e.target.value.toUpperCase())} placeholder="LEA-1234" className={field} />
+              <label className={label}>{t('app.regNumber')}</label>
+              <input required dir="ltr" value={vehicleNumber} onChange={(e) => setVehicleNumber(e.target.value.toUpperCase())} placeholder="LEA-1234" className={field} />
             </div>
             <div>
-              <label className={label}>Driving licence number</label>
-              <input value={licenseNumber} onChange={(e) => setLicenseNumber(e.target.value)} placeholder="Optional" className={field} />
+              <label className={label}>{t('app.licenseNumber')}</label>
+              <input dir="ltr" value={licenseNumber} onChange={(e) => setLicenseNumber(e.target.value)} placeholder={t('app.optional')} className={field} />
             </div>
           </div>
           <div className="grid grid-cols-1 gap-3">
-            <FileUploadField kind="document" label="CNIC front" required value={cnicFront} onChange={setCnicFront} onFileText={onFile('cnic_front') ? 'On file' : undefined} testId="rider-cnic-front" />
-            <FileUploadField kind="document" label="CNIC back" required value={cnicBack} onChange={setCnicBack} onFileText={onFile('cnic_back') ? 'On file' : undefined} testId="rider-cnic-back" />
-            <FileUploadField kind="document" label="Driving licence" required value={license} onChange={setLicense} onFileText={onFile('license') ? 'On file' : undefined} testId="rider-license" />
+            <FileUploadField kind="document" label={t('app.cnicFront')} required value={cnicFront} onChange={setCnicFront} onFileText={onFile('cnic_front') ? t('app.onFile') : undefined} testId="rider-cnic-front" />
+            <FileUploadField kind="document" label={t('app.cnicBack')} required value={cnicBack} onChange={setCnicBack} onFileText={onFile('cnic_back') ? t('app.onFile') : undefined} testId="rider-cnic-back" />
+            <FileUploadField kind="document" label={t('app.license')} required value={license} onChange={setLicense} onFileText={onFile('license') ? t('app.onFile') : undefined} testId="rider-license" />
           </div>
           <button
             type="submit"
             disabled={saving}
             className="w-full py-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold disabled:opacity-50"
           >
-            {saving ? 'Sending…' : app.verificationStatus === 'rejected' ? 'Send my application again' : 'Send my application'}
+            {saving ? t('app.sending') : app.verificationStatus === 'rejected' ? t('app.sendAgain') : t('app.send')}
           </button>
         </form>
       )}

@@ -5,6 +5,8 @@ import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/toast';
 import { apiClient } from '@/lib/api-client';
 import { useAuthStore } from '@/lib/store/auth-store';
+import { useT } from '@/lib/i18n';
+import { joinMessages } from '@/lib/i18n/messages/join';
 
 interface SellerOnboardingModalProps {
   isOpen: boolean;
@@ -51,6 +53,7 @@ import LocationMap from '@/components/ui/LocationMap';
 
 export function SellerOnboardingModal({ isOpen, onClose, onComplete }: SellerOnboardingModalProps) {
   const { showToast } = useToast();
+  const t = useT(joinMessages);
   const { user } = useAuthStore();
   const [step, setStep] = useState(1);
   const [loading, setLoading] = useState(false);
@@ -151,7 +154,7 @@ export function SellerOnboardingModal({ isOpen, onClose, onComplete }: SellerOnb
     if (!file) return;
 
     if (file.size > 5 * 1024 * 1024) {
-      setErrors(prev => ({ ...prev, [field]: 'File size must be less than 5MB' }));
+      setErrors(prev => ({ ...prev, [field]: t('ob.fileTooBig') }));
       return;
     }
 
@@ -187,26 +190,26 @@ export function SellerOnboardingModal({ isOpen, onClose, onComplete }: SellerOnb
     switch (stepNum) {
       case 1:
         if (!formData.businessName.trim()) {
-          newErrors.businessName = 'Business name is required';
+          newErrors.businessName = t('ob.nameRequired');
         } else if (formData.businessName.trim().length < 3) {
-          newErrors.businessName = 'Business name must be at least 3 characters';
+          newErrors.businessName = t('errNameShort');
         }
         break;
       case 2:
         if (!formData.city) {
-          newErrors.city = 'Please select your city';
+          newErrors.city = t('ob.cityRequired');
         }
         if (!formData.area.trim()) {
-          newErrors.area = 'Area/Neighborhood is required';
+          newErrors.area = t('ob.areaRequired');
         }
         break;
       case 3:
         // Payment info is optional but validate format if provided
         if (formData.jazzcashNumber && !/^03\d{9}$/.test(formData.jazzcashNumber)) {
-          newErrors.jazzcashNumber = 'Enter valid JazzCash number (03XXXXXXXXX)';
+          newErrors.jazzcashNumber = t('ob.jazzInvalid');
         }
         if (formData.easypaisaNumber && !/^03\d{9}$/.test(formData.easypaisaNumber)) {
-          newErrors.easypaisaNumber = 'Enter valid Easypaisa number (03XXXXXXXXX)';
+          newErrors.easypaisaNumber = t('ob.easyInvalid');
         }
         break;
       case 4:
@@ -263,11 +266,11 @@ export function SellerOnboardingModal({ isOpen, onClose, onComplete }: SellerOnb
       const response = await apiClient.post('/sellers/register', sellerData);
 
       if (response.data.success) {
-        showToast('🎉 Seller application submitted successfully!', 'success');
+        showToast(t('ob.submitted'), 'success');
         onComplete();
       }
     } catch (error: any) {
-      const errorMessage = error.response?.data?.error?.message || error.response?.data?.message || 'Failed to register as seller';
+      const errorMessage = error.response?.data?.error?.message || error.response?.data?.message || t('ob.registerFailed');
       showToast(errorMessage, 'error');
     } finally {
       setLoading(false);
@@ -324,13 +327,13 @@ export function SellerOnboardingModal({ isOpen, onClose, onComplete }: SellerOnb
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
           </svg>
         </div>
-        <h3 className="text-xl font-bold text-gray-900">Tell us about your business</h3>
-        <p className="text-gray-500 mt-1">This helps customers find and recognize your brand</p>
+        <h3 className="text-xl font-bold text-gray-900">{t('ob.s1Title')}</h3>
+        <p className="text-gray-500 mt-1">{t('ob.s1Sub')}</p>
       </div>
 
       <div>
         <label className="block text-sm font-medium text-gray-700 mb-2">
-          Business Name (English) <span className="text-gray-600">*</span>
+          {t('ob.nameEn')} <span className="text-gray-600">*</span>
         </label>
         <input
           type="text"
@@ -340,7 +343,7 @@ export function SellerOnboardingModal({ isOpen, onClose, onComplete }: SellerOnb
           className={`w-full px-4 py-3 border rounded-xl focus:ring-2 focus:ring-green-500 focus:border-green-500 transition-all ${
             errors.businessName ? 'border-red-500 bg-red-50' : 'border-gray-300'
           }`}
-          placeholder="e.g., Mom's Kitchen, Desi Delights"
+          placeholder={t('ob.nameEnPh')}
         />
         {errors.businessName && (
           <p className="text-gray-600 text-sm mt-1 flex items-center gap-1">
@@ -354,7 +357,7 @@ export function SellerOnboardingModal({ isOpen, onClose, onComplete }: SellerOnb
 
       <div>
         <label className="block text-sm font-medium text-gray-700 mb-2">
-          Business Name (Urdu) <span className="text-gray-400 text-xs">(Optional)</span>
+          {t('ob.nameUr')} <span className="text-gray-400 text-xs">{t('ob.optional')}</span>
         </label>
         <input
           type="text"
@@ -362,14 +365,14 @@ export function SellerOnboardingModal({ isOpen, onClose, onComplete }: SellerOnb
           value={formData.businessNameUrdu}
           onChange={handleInputChange}
           className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-green-500 transition-all"
-          placeholder="e.g., امی کا کچن"
+          placeholder={t('ob.nameUrPh')}
           dir="rtl"
         />
       </div>
 
       <div>
         <label className="block text-sm font-medium text-gray-700 mb-2">
-          Description <span className="text-gray-400 text-xs">(Optional)</span>
+          {t('ob.description')} <span className="text-gray-400 text-xs">{t('ob.optional')}</span>
         </label>
         <textarea
           name="description"
@@ -377,7 +380,7 @@ export function SellerOnboardingModal({ isOpen, onClose, onComplete }: SellerOnb
           onChange={handleInputChange}
           rows={3}
           className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-green-500 transition-all resize-none"
-          placeholder="Tell customers what makes your food special..."
+          placeholder={t('ob.descPh')}
         />
       </div>
     </div>
@@ -386,8 +389,8 @@ export function SellerOnboardingModal({ isOpen, onClose, onComplete }: SellerOnb
   const renderStep2 = () => (
     <div className="space-y-4">
       <div className="text-center mb-3">
-        <h3 className="text-lg font-bold text-gray-900">Kitchen Location</h3>
-        <p className="text-gray-500 text-xs mt-0.5">Search or drop a pin at your kitchen</p>
+        <h3 className="text-lg font-bold text-gray-900">{t('ob.s2Title')}</h3>
+        <p className="text-gray-500 text-xs mt-0.5">{t('ob.s2Sub')}</p>
       </div>
 
       <LocationMap
@@ -407,7 +410,7 @@ export function SellerOnboardingModal({ isOpen, onClose, onComplete }: SellerOnb
       <div className="grid grid-cols-2 gap-3">
         <div>
           <label className="block text-xs font-semibold text-gray-700 mb-1">
-            City <span className="text-red-500">*</span>
+            {t('ob.city')} <span className="text-red-500">*</span>
           </label>
           <select
             name="city"
@@ -417,7 +420,7 @@ export function SellerOnboardingModal({ isOpen, onClose, onComplete }: SellerOnb
               errors.city ? 'border-red-500 bg-red-50' : 'border-gray-200'
             }`}
           >
-            <option value="">Select City</option>
+            <option value="">{t('ob.selectCity')}</option>
             {PAKISTANI_CITIES.map(city => (
               <option key={city} value={city}>{city}</option>
             ))}
@@ -427,7 +430,7 @@ export function SellerOnboardingModal({ isOpen, onClose, onComplete }: SellerOnb
 
         <div>
           <label className="block text-xs font-semibold text-gray-700 mb-1">
-            Area / Society <span className="text-red-500">*</span>
+            {t('ob.area')} <span className="text-red-500">*</span>
           </label>
           <input
             type="text"
@@ -437,7 +440,7 @@ export function SellerOnboardingModal({ isOpen, onClose, onComplete }: SellerOnb
             className={`w-full px-3 py-2 text-sm border rounded-xl focus:ring-2 focus:ring-emerald-500 ${
               errors.area ? 'border-red-500 bg-red-50' : 'border-gray-200'
             }`}
-            placeholder="e.g. Askari 11, DHA Phase 5"
+            placeholder={t('ob.areaPh')}
           />
           {errors.area && <p className="text-red-500 text-xs mt-1">{errors.area}</p>}
         </div>
@@ -445,7 +448,7 @@ export function SellerOnboardingModal({ isOpen, onClose, onComplete }: SellerOnb
 
       <div>
         <label className="block text-xs font-semibold text-gray-700 mb-1">
-          Full Address
+          {t('ob.fullAddress')}
         </label>
         <input
           type="text"
@@ -453,7 +456,7 @@ export function SellerOnboardingModal({ isOpen, onClose, onComplete }: SellerOnb
           value={formData.address}
           onChange={handleInputChange}
           className="w-full px-3 py-2 text-sm border border-gray-200 rounded-xl focus:ring-2 focus:ring-emerald-500"
-          placeholder="House, street, and landmark details"
+          placeholder={t('ob.addressPh')}
         />
       </div>
     </div>
@@ -467,8 +470,8 @@ export function SellerOnboardingModal({ isOpen, onClose, onComplete }: SellerOnb
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
           </svg>
         </div>
-        <h3 className="text-xl font-bold text-gray-900">Payment Information</h3>
-        <p className="text-gray-500 mt-1">How would you like to receive your earnings?</p>
+        <h3 className="text-xl font-bold text-gray-900">{t('ob.s3Title')}</h3>
+        <p className="text-gray-500 mt-1">{t('ob.s3Sub')}</p>
       </div>
 
       {/* Mobile Wallets */}
@@ -477,14 +480,15 @@ export function SellerOnboardingModal({ isOpen, onClose, onComplete }: SellerOnb
           <svg className="w-5 h-5 text-gray-600" fill="currentColor" viewBox="0 0 20 20">
             <path d="M2 3a1 1 0 011-1h2.153a1 1 0 01.986.836l.74 4.435a1 1 0 01-.54 1.06l-1.548.773a11.037 11.037 0 006.105 6.105l.774-1.548a1 1 0 011.059-.54l4.435.74a1 1 0 01.836.986V17a1 1 0 01-1 1h-2C7.82 18 2 12.18 2 5V3z" />
           </svg>
-          Mobile Wallets
+          {t('ob.mobileWallets')}
         </h4>
         <div className="grid grid-cols-2 gap-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
-              JazzCash Number
+              {t('ob.jazzcash')}
             </label>
             <input
+              dir="ltr"
               type="tel"
               name="jazzcashNumber"
               value={formData.jazzcashNumber}
@@ -499,9 +503,10 @@ export function SellerOnboardingModal({ isOpen, onClose, onComplete }: SellerOnb
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
-              Easypaisa Number
+              {t('ob.easypaisa')}
             </label>
             <input
+              dir="ltr"
               type="tel"
               name="easypaisaNumber"
               value={formData.easypaisaNumber}
@@ -523,18 +528,18 @@ export function SellerOnboardingModal({ isOpen, onClose, onComplete }: SellerOnb
           <svg className="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 14v3m4-3v3m4-3v3M3 21h18M3 10h18M3 7l9-4 9 4M4 10h16v11H4V10z" />
           </svg>
-          Bank Account (Optional)
+          {t('ob.bankOptional')}
         </h4>
         <div className="space-y-3">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Bank Name</label>
+            <label className="block text-sm font-medium text-gray-700 mb-2">{t('bankName')}</label>
             <select
               name="bankName"
               value={formData.bankName}
               onChange={handleInputChange}
               className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-400 focus:border-blue-400 transition-all"
             >
-              <option value="">Select Bank</option>
+              <option value="">{t('ob.selectBank')}</option>
               <option value="HBL">HBL - Habib Bank Limited</option>
               <option value="MCB">MCB Bank</option>
               <option value="UBL">UBL - United Bank Limited</option>
@@ -543,30 +548,31 @@ export function SellerOnboardingModal({ isOpen, onClose, onComplete }: SellerOnb
               <option value="Faysal">Faysal Bank</option>
               <option value="Bank Alfalah">Bank Alfalah</option>
               <option value="Standard Chartered">Standard Chartered</option>
-              <option value="Other">Other</option>
+              <option value="Other">{t('ob.otherBank')}</option>
             </select>
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Account Number</label>
+              <label className="block text-sm font-medium text-gray-700 mb-2">{t('ob.accountNumber')}</label>
               <input
+                dir="ltr"
                 type="text"
                 name="bankAccountNumber"
                 value={formData.bankAccountNumber}
                 onChange={handleInputChange}
                 className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-400 focus:border-blue-400 transition-all"
-                placeholder="Account Number"
+                placeholder={t('ob.accountNumber')}
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Account Title</label>
+              <label className="block text-sm font-medium text-gray-700 mb-2">{t('accountTitle')}</label>
               <input
                 type="text"
                 name="bankAccountTitle"
                 value={formData.bankAccountTitle}
                 onChange={handleInputChange}
                 className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-400 focus:border-blue-400 transition-all"
-                placeholder="Account Holder Name"
+                placeholder={t('ob.holderPh')}
               />
             </div>
           </div>
@@ -574,7 +580,7 @@ export function SellerOnboardingModal({ isOpen, onClose, onComplete }: SellerOnb
       </div>
 
       <p className="text-xs text-gray-500 text-center">
-        💡 You can update payment information later from your seller dashboard
+        {t('ob.payLater')}
       </p>
     </div>
   );
@@ -587,26 +593,26 @@ export function SellerOnboardingModal({ isOpen, onClose, onComplete }: SellerOnb
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
           </svg>
         </div>
-        <h3 className="text-xl font-bold text-gray-900">Profile & Cover Images</h3>
-        <p className="text-gray-500 mt-1">Make your store stand out with great visuals</p>
+        <h3 className="text-xl font-bold text-gray-900">{t('ob.s4Title')}</h3>
+        <p className="text-gray-500 mt-1">{t('ob.s4Sub')}</p>
       </div>
 
       <div className="grid grid-cols-2 gap-6">
         {/* Profile Image */}
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">Profile Image</label>
+          <label className="block text-sm font-medium text-gray-700 mb-2">{t('ob.profileImage')}</label>
           <div className="relative">
             {formData.profileImageUrl ? (
               <div className="relative">
                 <img
                   src={formData.profileImageUrl}
-                  alt="Profile"
+                  alt={t('ob.altProfile')}
                   className="w-32 h-32 rounded-full object-cover mx-auto border-4 border-green-200"
                 />
                 <button
                   type="button"
                   onClick={() => setFormData(prev => ({ ...prev, profileImageUrl: '' }))}
-                  className="absolute top-0 right-1/4 bg-red-500 text-white rounded-full w-6 h-6 flex items-center justify-center text-xs hover:bg-red-600"
+                  className="absolute top-0 end-1/4 bg-red-500 text-white rounded-full w-6 h-6 flex items-center justify-center text-xs hover:bg-red-600"
                 >
                   ×
                 </button>
@@ -616,7 +622,7 @@ export function SellerOnboardingModal({ isOpen, onClose, onComplete }: SellerOnb
                 <svg className="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
                 </svg>
-                <span className="text-xs text-gray-500 mt-1">Add Photo</span>
+                <span className="text-xs text-gray-500 mt-1">{t('ob.addPhoto')}</span>
                 <input
                   type="file"
                   accept="image/*"
@@ -626,24 +632,24 @@ export function SellerOnboardingModal({ isOpen, onClose, onComplete }: SellerOnb
               </label>
             )}
           </div>
-          <p className="text-xs text-gray-500 text-center mt-2">Your brand logo or photo</p>
+          <p className="text-xs text-gray-500 text-center mt-2">{t('ob.profileHint')}</p>
         </div>
 
         {/* Cover Image */}
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">Cover Image</label>
+          <label className="block text-sm font-medium text-gray-700 mb-2">{t('ob.coverImage')}</label>
           <div className="relative">
             {formData.coverImageUrl ? (
               <div className="relative">
                 <img
                   src={formData.coverImageUrl}
-                  alt="Cover"
+                  alt={t('ob.altCover')}
                   className="w-full h-32 rounded-xl object-cover border-2 border-green-200"
                 />
                 <button
                   type="button"
                   onClick={() => setFormData(prev => ({ ...prev, coverImageUrl: '' }))}
-                  className="absolute top-2 right-2 bg-red-500 text-white rounded-full w-6 h-6 flex items-center justify-center text-xs hover:bg-red-600"
+                  className="absolute top-2 end-2 bg-red-500 text-white rounded-full w-6 h-6 flex items-center justify-center text-xs hover:bg-red-600"
                 >
                   ×
                 </button>
@@ -653,7 +659,7 @@ export function SellerOnboardingModal({ isOpen, onClose, onComplete }: SellerOnb
                 <svg className="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
                 </svg>
-                <span className="text-xs text-gray-500 mt-1">Add Cover</span>
+                <span className="text-xs text-gray-500 mt-1">{t('ob.addCover')}</span>
                 <input
                   type="file"
                   accept="image/*"
@@ -663,7 +669,7 @@ export function SellerOnboardingModal({ isOpen, onClose, onComplete }: SellerOnb
               </label>
             )}
           </div>
-          <p className="text-xs text-gray-500 text-center mt-2">Banner for your store page</p>
+          <p className="text-xs text-gray-500 text-center mt-2">{t('ob.coverHint')}</p>
         </div>
       </div>
     </div>
@@ -677,24 +683,24 @@ export function SellerOnboardingModal({ isOpen, onClose, onComplete }: SellerOnb
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
           </svg>
         </div>
-        <h3 className="text-xl font-bold text-gray-900">Verification Documents</h3>
-        <p className="text-gray-500 mt-1">Help us verify your identity and kitchen</p>
+        <h3 className="text-xl font-bold text-gray-900">{t('ob.s5Title')}</h3>
+        <p className="text-gray-500 mt-1">{t('ob.s5Sub')}</p>
       </div>
 
       {/* CNIC Section */}
       <div className="bg-gray-50 p-4 rounded-xl">
-        <h4 className="font-semibold text-gray-800 mb-3">CNIC Photos</h4>
+        <h4 className="font-semibold text-gray-800 mb-3">{t('ob.cnicPhotos')}</h4>
         <div className="grid grid-cols-2 gap-4">
           {/* CNIC Front */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Front Side</label>
+            <label className="block text-sm font-medium text-gray-700 mb-2">{t('ob.frontSide')}</label>
             {formData.cnicFrontUrl ? (
               <div className="relative">
-                <img src={formData.cnicFrontUrl} alt="CNIC Front" className="w-full h-24 object-cover rounded-lg border" />
+                <img src={formData.cnicFrontUrl} alt={t('ob.altCnicFront')} className="w-full h-24 object-cover rounded-lg border" />
                 <button
                   type="button"
                   onClick={() => setFormData(prev => ({ ...prev, cnicFrontUrl: '' }))}
-                  className="absolute top-1 right-1 bg-red-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs"
+                  className="absolute top-1 end-1 bg-red-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs"
                 >
                   ×
                 </button>
@@ -704,7 +710,7 @@ export function SellerOnboardingModal({ isOpen, onClose, onComplete }: SellerOnb
                 <svg className="w-6 h-6 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
                 </svg>
-                <span className="text-xs text-gray-500">Upload</span>
+                <span className="text-xs text-gray-500">{t('ob.upload')}</span>
                 <input type="file" accept="image/*" onChange={(e) => handleFileUpload(e, 'cnicFrontUrl')} className="hidden" />
               </label>
             )}
@@ -712,14 +718,14 @@ export function SellerOnboardingModal({ isOpen, onClose, onComplete }: SellerOnb
 
           {/* CNIC Back */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Back Side</label>
+            <label className="block text-sm font-medium text-gray-700 mb-2">{t('ob.backSide')}</label>
             {formData.cnicBackUrl ? (
               <div className="relative">
-                <img src={formData.cnicBackUrl} alt="CNIC Back" className="w-full h-24 object-cover rounded-lg border" />
+                <img src={formData.cnicBackUrl} alt={t('ob.altCnicBack')} className="w-full h-24 object-cover rounded-lg border" />
                 <button
                   type="button"
                   onClick={() => setFormData(prev => ({ ...prev, cnicBackUrl: '' }))}
-                  className="absolute top-1 right-1 bg-red-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs"
+                  className="absolute top-1 end-1 bg-red-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs"
                 >
                   ×
                 </button>
@@ -729,7 +735,7 @@ export function SellerOnboardingModal({ isOpen, onClose, onComplete }: SellerOnb
                 <svg className="w-6 h-6 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
                 </svg>
-                <span className="text-xs text-gray-500">Upload</span>
+                <span className="text-xs text-gray-500">{t('ob.upload')}</span>
                 <input type="file" accept="image/*" onChange={(e) => handleFileUpload(e, 'cnicBackUrl')} className="hidden" />
               </label>
             )}
@@ -739,15 +745,15 @@ export function SellerOnboardingModal({ isOpen, onClose, onComplete }: SellerOnb
 
       {/* Kitchen Photos */}
       <div className="bg-gray-50 p-4 rounded-xl">
-        <h4 className="font-semibold text-gray-800 mb-3">Kitchen Photos</h4>
+        <h4 className="font-semibold text-gray-800 mb-3">{t('ob.kitchenPhotos')}</h4>
         <div className="grid grid-cols-4 gap-2">
           {formData.kitchenPhotoUrls.map((url, index) => (
             <div key={index} className="relative">
-              <img src={url} alt={`Kitchen ${index + 1}`} className="w-full h-20 object-cover rounded-lg border" />
+              <img src={url} alt={t('ob.altKitchen', { n: index + 1 })} className="w-full h-20 object-cover rounded-lg border" />
               <button
                 type="button"
                 onClick={() => removeKitchenPhoto(index)}
-                className="absolute top-1 right-1 bg-red-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs"
+                className="absolute top-1 end-1 bg-red-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs"
               >
                 ×
               </button>
@@ -767,19 +773,20 @@ export function SellerOnboardingModal({ isOpen, onClose, onComplete }: SellerOnb
             </label>
           )}
         </div>
-        <p className="text-xs text-gray-500 mt-2">Add up to 6 photos of your kitchen</p>
+        <p className="text-xs text-gray-500 mt-2">{t('ob.kitchenPhotosHint')}</p>
       </div>
 
       {/* Kitchen Video */}
       <div className="bg-gray-50 p-4 rounded-xl">
-        <h4 className="font-semibold text-gray-800 mb-3">Kitchen Video (Optional)</h4>
+        <h4 className="font-semibold text-gray-800 mb-3">{t('ob.kitchenVideo')}</h4>
         <input
           type="url"
+          dir="ltr"
           name="kitchenVideoUrl"
           value={formData.kitchenVideoUrl}
           onChange={handleInputChange}
           className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-green-500 transition-all"
-          placeholder="YouTube or video URL"
+          placeholder={t('ob.videoPh')}
         />
       </div>
 
@@ -789,20 +796,14 @@ export function SellerOnboardingModal({ isOpen, onClose, onComplete }: SellerOnb
             <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
           </svg>
           <span>
-            These documents help us verify your identity and ensure food safety. Your application will be reviewed within 24-48 hours.
+            {t('ob.docsNote')}
           </span>
         </p>
       </div>
     </div>
   );
 
-  const stepTitles = [
-    'Business Info',
-    'Location',
-    'Payment',
-    'Profile',
-    'Verification'
-  ];
+  const stepTitles = [t('ob.step1'), t('ob.step2'), t('ob.step3'), t('ob.step4'), t('ob.step5')];
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
@@ -818,8 +819,8 @@ export function SellerOnboardingModal({ isOpen, onClose, onComplete }: SellerOnb
         <div className="bg-gradient-to-r from-green-600 to-green-500 px-6 py-4 text-white">
           <div className="flex items-center justify-between">
             <div>
-              <h2 className="text-xl font-bold">Complete Your Seller Profile</h2>
-              <p className="text-gray-100 text-sm">Step {step} of {totalSteps}: {stepTitles[step - 1]}</p>
+              <h2 className="text-xl font-bold">{t('ob.header')}</h2>
+              <p className="text-gray-100 text-sm">{t('ob.stepOf', { step, total: totalSteps, title: stepTitles[step - 1] })}</p>
             </div>
             <button
               onClick={onClose}
@@ -856,7 +857,7 @@ export function SellerOnboardingModal({ isOpen, onClose, onComplete }: SellerOnb
                 onClick={handleBack}
                 disabled={loading}
               >
-                ← Back
+                {t('ob.back')}
               </Button>
             )}
           </div>
@@ -869,7 +870,7 @@ export function SellerOnboardingModal({ isOpen, onClose, onComplete }: SellerOnb
                 disabled={loading}
                 className="text-gray-500 hover:text-gray-700 text-sm font-medium"
               >
-                Skip for now
+                {t('ob.skip')}
               </button>
             )}
             
@@ -880,7 +881,7 @@ export function SellerOnboardingModal({ isOpen, onClose, onComplete }: SellerOnb
                 disabled={loading}
                 className="bg-gray-700 hover:bg-gray-800 text-white px-6"
               >
-                Next →
+                {t('ob.next')}
               </Button>
             ) : (
               <Button
@@ -892,10 +893,10 @@ export function SellerOnboardingModal({ isOpen, onClose, onComplete }: SellerOnb
                 {loading ? (
                   <span className="flex items-center gap-2">
                     <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                    Submitting...
+                    {t('ob.submitting')}
                   </span>
                 ) : (
-                  '🎉 Submit Application'
+                  t('ob.submit')
                 )}
               </Button>
             )}
