@@ -1,1010 +1,1613 @@
--- ============================================
--- FrozenNuray Platform - Complete Database Schema
--- PostgreSQL 15+
--- ============================================
+-- Nuray database schema (PostgreSQL), generated from backend/prisma/schema.prisma.
+-- Do not edit: regenerate with
+--   npx prisma migrate diff --from-empty --to-schema-datamodel prisma/schema.prisma --script > ../docs/DATABASE_SCHEMA.sql
+-- The migrations in backend/prisma/migrations are what actually build the database (they also add CHECK constraints
+-- and the pg_trgm extension, which this file leaves out).
 
--- Enable UUID extension
-CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
-CREATE EXTENSION IF NOT EXISTS "pg_trgm"; -- For fuzzy text search
+-- CreateSchema
+CREATE SCHEMA IF NOT EXISTS "public";
 
--- ============================================
--- USERS & AUTHENTICATION
--- ============================================
+-- CreateExtension
+CREATE EXTENSION IF NOT EXISTS "pg_trgm";
 
-CREATE TABLE users (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    phone VARCHAR(20) UNIQUE NOT NULL,
-    email VARCHAR(255) UNIQUE,
-    password_hash VARCHAR(255),
-    user_type VARCHAR(20) NOT NULL CHECK (user_type IN ('customer', 'seller', 'admin', 'hub_manager', 'rider')),
-    status VARCHAR(20) DEFAULT 'active' CHECK (status IN ('active', 'suspended', 'banned', 'deleted')),
-    email_verified BOOLEAN DEFAULT FALSE,
-    phone_verified BOOLEAN DEFAULT TRUE,
-    last_login_at TIMESTAMP,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+-- CreateTable
+CREATE TABLE "users" (
+    "id" TEXT NOT NULL,
+    "phone" TEXT NOT NULL,
+    "email" TEXT,
+    "password_hash" TEXT,
+    "user_type" TEXT NOT NULL,
+    "status" TEXT NOT NULL DEFAULT 'active',
+    "email_verified" BOOLEAN NOT NULL DEFAULT false,
+    "phone_verified" BOOLEAN NOT NULL DEFAULT false,
+    "referral_code" TEXT,
+    "referred_by" TEXT,
+    "primary_community_id" TEXT,
+    "last_login_at" TIMESTAMP(3),
+    "tokens_valid_after" TIMESTAMP(3),
+    "notification_preferences" JSONB,
+    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updated_at" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "users_pkey" PRIMARY KEY ("id")
 );
 
-CREATE TABLE user_profiles (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    user_id UUID REFERENCES users(id) ON DELETE CASCADE,
-    full_name VARCHAR(255) NOT NULL,
-    avatar_url TEXT,
-    city VARCHAR(100),
-    area VARCHAR(100),
-    language_preference VARCHAR(10) DEFAULT 'en' CHECK (language_preference IN ('en', 'ur')),
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+-- CreateTable
+CREATE TABLE "user_profiles" (
+    "id" TEXT NOT NULL,
+    "user_id" TEXT NOT NULL,
+    "full_name" TEXT NOT NULL,
+    "avatar_url" TEXT,
+    "city" TEXT,
+    "area" TEXT,
+    "language_preference" TEXT NOT NULL DEFAULT 'en',
+    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updated_at" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "user_profiles_pkey" PRIMARY KEY ("id")
 );
 
-CREATE TABLE user_addresses (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    user_id UUID REFERENCES users(id) ON DELETE CASCADE,
-    label VARCHAR(50), -- 'home', 'work', 'other'
-    address_line1 TEXT NOT NULL,
-    address_line2 TEXT,
-    area VARCHAR(100) NOT NULL,
-    city VARCHAR(100) NOT NULL,
-    postal_code VARCHAR(20),
-    landmark TEXT,
-    latitude DECIMAL(10, 8),
-    longitude DECIMAL(11, 8),
-    is_default BOOLEAN DEFAULT FALSE,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+-- CreateTable
+CREATE TABLE "user_addresses" (
+    "id" TEXT NOT NULL,
+    "user_id" TEXT NOT NULL,
+    "label" TEXT,
+    "address_line1" TEXT NOT NULL,
+    "address_line2" TEXT,
+    "area" TEXT NOT NULL,
+    "city" TEXT NOT NULL,
+    "postal_code" TEXT,
+    "landmark" TEXT,
+    "house_number" TEXT,
+    "community_id" TEXT,
+    "latitude" DECIMAL(10,8),
+    "longitude" DECIMAL(11,8),
+    "is_default" BOOLEAN NOT NULL DEFAULT false,
+    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updated_at" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "user_addresses_pkey" PRIMARY KEY ("id")
 );
 
-CREATE TABLE otp_verifications (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    phone VARCHAR(20) NOT NULL,
-    otp_code VARCHAR(6) NOT NULL,
-    purpose VARCHAR(50) NOT NULL, -- 'registration', 'login', 'reset_password'
-    attempts INT DEFAULT 0,
-    is_verified BOOLEAN DEFAULT FALSE,
-    expires_at TIMESTAMP NOT NULL,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+-- CreateTable
+CREATE TABLE "otp_verifications" (
+    "id" TEXT NOT NULL,
+    "phone" TEXT NOT NULL,
+    "otp_code" TEXT NOT NULL,
+    "purpose" TEXT NOT NULL,
+    "attempts" INTEGER NOT NULL DEFAULT 0,
+    "is_verified" BOOLEAN NOT NULL DEFAULT false,
+    "expires_at" TIMESTAMP(3) NOT NULL,
+    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "otp_verifications_pkey" PRIMARY KEY ("id")
 );
 
--- ============================================
--- SELLERS
--- ============================================
+-- CreateTable
+CREATE TABLE "email_verifications" (
+    "id" TEXT NOT NULL,
+    "user_id" TEXT NOT NULL,
+    "token" TEXT NOT NULL,
+    "email" TEXT NOT NULL,
+    "expires_at" TIMESTAMP(3) NOT NULL,
+    "is_verified" BOOLEAN NOT NULL DEFAULT false,
+    "verified_at" TIMESTAMP(3),
+    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
-CREATE TABLE sellers (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    user_id UUID REFERENCES users(id) ON DELETE CASCADE,
-    business_name VARCHAR(255) NOT NULL,
-    business_name_urdu VARCHAR(255),
-    description TEXT,
-    description_urdu TEXT,
-    kitchen_video_url TEXT,
-    cover_image_url TEXT,
-    rating_average DECIMAL(3,2) DEFAULT 0.00,
-    total_reviews INT DEFAULT 0,
-    total_orders INT DEFAULT 0,
-    total_sales DECIMAL(12,2) DEFAULT 0.00,
-    commission_rate DECIMAL(5,2) DEFAULT 15.00, -- Percentage
-    is_verified BOOLEAN DEFAULT FALSE,
-    is_featured BOOLEAN DEFAULT FALSE,
-    featured_until TIMESTAMP,
-    verification_status VARCHAR(20) DEFAULT 'pending' CHECK (verification_status IN ('pending', 'approved', 'rejected')),
-    rejection_reason TEXT,
-    status VARCHAR(20) DEFAULT 'active' CHECK (status IN ('active', 'inactive', 'suspended')),
-    bank_account_name VARCHAR(255),
-    bank_account_number VARCHAR(50),
-    bank_name VARCHAR(100),
-    jazzcash_number VARCHAR(20),
-    easypaisa_number VARCHAR(20),
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    CONSTRAINT "email_verifications_pkey" PRIMARY KEY ("id")
 );
 
-CREATE TABLE seller_documents (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    seller_id UUID REFERENCES sellers(id) ON DELETE CASCADE,
-    document_type VARCHAR(50) NOT NULL, -- 'cnic', 'kitchen_photo', 'business_license'
-    document_url TEXT NOT NULL,
-    is_verified BOOLEAN DEFAULT FALSE,
-    uploaded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+-- CreateTable
+CREATE TABLE "sellers" (
+    "id" TEXT NOT NULL,
+    "user_id" TEXT NOT NULL,
+    "business_name" TEXT NOT NULL,
+    "business_name_urdu" TEXT,
+    "description" TEXT,
+    "description_urdu" TEXT,
+    "kitchen_video_url" TEXT,
+    "cover_image_url" TEXT,
+    "rating_average" DECIMAL(3,2) NOT NULL DEFAULT 0,
+    "total_reviews" INTEGER NOT NULL DEFAULT 0,
+    "total_orders" INTEGER NOT NULL DEFAULT 0,
+    "total_sales" DECIMAL(12,2) NOT NULL DEFAULT 0,
+    "trend_score" DOUBLE PRECISION NOT NULL DEFAULT 0,
+    "rating_score" DOUBLE PRECISION NOT NULL DEFAULT 4,
+    "commission_rate" DECIMAL(5,2) NOT NULL DEFAULT 15.00,
+    "is_verified" BOOLEAN NOT NULL DEFAULT false,
+    "is_featured" BOOLEAN NOT NULL DEFAULT false,
+    "featured_until" TIMESTAMP(3),
+    "verification_status" TEXT NOT NULL DEFAULT 'pending',
+    "rejection_reason" TEXT,
+    "status" TEXT NOT NULL DEFAULT 'active',
+    "bank_account_name" TEXT,
+    "bank_account_number" TEXT,
+    "bank_name" TEXT,
+    "jazzcash_number" TEXT,
+    "jazzcash_account_title" TEXT,
+    "easypaisa_number" TEXT,
+    "easypaisa_account_title" TEXT,
+    "low_stock_threshold" INTEGER NOT NULL DEFAULT 10,
+    "enable_stock_alerts" BOOLEAN NOT NULL DEFAULT true,
+    "free_delivery_areas" JSONB,
+    "free_delivery_radius_km" DOUBLE PRECISION,
+    "latitude" DECIMAL(10,8),
+    "longitude" DECIMAL(11,8),
+    "delivery_fee_type" TEXT,
+    "delivery_fee_fixed" INTEGER,
+    "delivery_fee_base" INTEGER,
+    "delivery_fee_per_km" DECIMAL(6,2),
+    "distance_pricing_tiers" JSONB,
+    "max_delivery_distance_km" DOUBLE PRECISION,
+    "min_order_amount_for_delivery" DECIMAL(10,2),
+    "free_delivery_threshold" DECIMAL(10,2),
+    "allowed_postal_codes" TEXT[] DEFAULT ARRAY[]::TEXT[],
+    "delivery_zones" JSONB,
+    "delivery_modes" TEXT[] DEFAULT ARRAY['delivery', 'pickup']::TEXT[],
+    "business_type" TEXT NOT NULL DEFAULT 'restaurant',
+    "meal_categories" TEXT[] DEFAULT ARRAY[]::TEXT[],
+    "store_notice" TEXT,
+    "schedule_mode" TEXT NOT NULL DEFAULT '24_7',
+    "operating_hours" JSONB,
+    "availability_override" TEXT,
+    "availability_override_until" TIMESTAMP(3),
+    "availability_note" TEXT,
+    "order_cutoff_time" TEXT,
+    "max_daily_orders" INTEGER,
+    "min_prep_time_minutes" INTEGER,
+    "pre_order_only" BOOLEAN NOT NULL DEFAULT false,
+    "advance_booking_min_days" INTEGER,
+    "advance_booking_max_days" INTEGER,
+    "community_id" TEXT,
+    "allow_cross_community" BOOLEAN NOT NULL DEFAULT true,
+    "primary_community_name" TEXT,
+    "delivery_provider" TEXT NOT NULL DEFAULT 'platform',
+    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updated_at" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "sellers_pkey" PRIMARY KEY ("id")
 );
 
-CREATE TABLE seller_badges (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    seller_id UUID REFERENCES sellers(id) ON DELETE CASCADE,
-    badge_type VARCHAR(50) NOT NULL, -- 'top_rated', 'customer_favorite', 'reliable', 'premium_quality'
-    badge_name VARCHAR(100) NOT NULL,
-    badge_icon TEXT,
-    earned_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+-- CreateTable
+CREATE TABLE "seller_documents" (
+    "id" TEXT NOT NULL,
+    "seller_id" TEXT NOT NULL,
+    "document_type" TEXT NOT NULL,
+    "document_url" TEXT NOT NULL,
+    "is_verified" BOOLEAN NOT NULL DEFAULT false,
+    "uploaded_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "seller_documents_pkey" PRIMARY KEY ("id")
 );
 
--- ============================================
--- PRODUCTS & CATEGORIES
--- ============================================
+-- CreateTable
+CREATE TABLE "seller_badges" (
+    "id" TEXT NOT NULL,
+    "seller_id" TEXT NOT NULL,
+    "badge_type" TEXT NOT NULL,
+    "badge_name" TEXT NOT NULL,
+    "badge_icon" TEXT,
+    "earned_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
-CREATE TABLE categories (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    name VARCHAR(100) NOT NULL,
-    name_urdu VARCHAR(100),
-    slug VARCHAR(100) UNIQUE NOT NULL,
-    description TEXT,
-    icon_url TEXT,
-    parent_id UUID REFERENCES categories(id) ON DELETE SET NULL,
-    sort_order INT DEFAULT 0,
-    is_active BOOLEAN DEFAULT TRUE,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    CONSTRAINT "seller_badges_pkey" PRIMARY KEY ("id")
 );
 
-CREATE TABLE products (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    seller_id UUID REFERENCES sellers(id) ON DELETE CASCADE,
-    category_id UUID REFERENCES categories(id) ON DELETE SET NULL,
-    name VARCHAR(255) NOT NULL,
-    name_urdu VARCHAR(255),
-    slug VARCHAR(255) UNIQUE NOT NULL,
-    description TEXT,
-    description_urdu TEXT,
-    price DECIMAL(10,2) NOT NULL,
-    original_price DECIMAL(10,2), -- For discounts
-    unit VARCHAR(50) NOT NULL, -- 'piece', 'kg', 'dozen', 'pack'
-    unit_urdu VARCHAR(50),
-    weight_grams INT,
-    ingredients TEXT,
-    allergens TEXT,
-    dietary_info TEXT[], -- ['halal', 'vegan', 'gluten_free']
-    storage_days INT DEFAULT 30, -- How long it stays good frozen
-    heating_instructions TEXT,
-    heating_instructions_urdu TEXT,
-    min_order_quantity INT DEFAULT 1,
-    max_order_quantity INT,
-    stock_quantity INT DEFAULT 0,
-    stock_type VARCHAR(20) DEFAULT 'direct' CHECK (stock_type IN ('direct', 'hub', 'both')),
-    rating_average DECIMAL(3,2) DEFAULT 0.00,
-    total_reviews INT DEFAULT 0,
-    total_orders INT DEFAULT 0,
-    views_count INT DEFAULT 0,
-    is_featured BOOLEAN DEFAULT FALSE,
-    is_active BOOLEAN DEFAULT TRUE,
-    approval_status VARCHAR(20) DEFAULT 'pending' CHECK (approval_status IN ('pending', 'approved', 'rejected')),
-    rejection_reason TEXT,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+-- CreateTable
+CREATE TABLE "stock_alerts" (
+    "id" TEXT NOT NULL,
+    "seller_id" TEXT NOT NULL,
+    "product_id" TEXT NOT NULL,
+    "variant_id" TEXT,
+    "alert_type" TEXT NOT NULL,
+    "current_stock" INTEGER NOT NULL,
+    "threshold" INTEGER NOT NULL,
+    "is_read" BOOLEAN NOT NULL DEFAULT false,
+    "is_dismissed" BOOLEAN NOT NULL DEFAULT false,
+    "email_sent" BOOLEAN NOT NULL DEFAULT false,
+    "sms_sent" BOOLEAN NOT NULL DEFAULT false,
+    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "read_at" TIMESTAMP(3),
+
+    CONSTRAINT "stock_alerts_pkey" PRIMARY KEY ("id")
 );
 
-CREATE TABLE product_images (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    product_id UUID REFERENCES products(id) ON DELETE CASCADE,
-    image_url TEXT NOT NULL,
-    is_primary BOOLEAN DEFAULT FALSE,
-    sort_order INT DEFAULT 0,
-    uploaded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+-- CreateTable
+CREATE TABLE "categories" (
+    "id" TEXT NOT NULL,
+    "product_type" TEXT,
+    "name" TEXT NOT NULL,
+    "name_urdu" TEXT,
+    "slug" TEXT NOT NULL,
+    "description" TEXT,
+    "icon_url" TEXT,
+    "parent_id" TEXT,
+    "sort_order" INTEGER NOT NULL DEFAULT 0,
+    "is_active" BOOLEAN NOT NULL DEFAULT true,
+    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updated_at" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "categories_pkey" PRIMARY KEY ("id")
 );
 
-CREATE TABLE product_tags (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    product_id UUID REFERENCES products(id) ON DELETE CASCADE,
-    tag VARCHAR(50) NOT NULL,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    UNIQUE(product_id, tag)
+-- CreateTable
+CREATE TABLE "category_requests" (
+    "id" TEXT NOT NULL,
+    "seller_id" TEXT NOT NULL,
+    "product_type" TEXT NOT NULL,
+    "name" TEXT NOT NULL,
+    "name_urdu" TEXT,
+    "description" TEXT,
+    "parent_category_id" TEXT,
+    "status" TEXT NOT NULL DEFAULT 'pending',
+    "admin_notes" TEXT,
+    "reviewed_by" TEXT,
+    "reviewed_at" TIMESTAMP(3),
+    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updated_at" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "category_requests_pkey" PRIMARY KEY ("id")
 );
 
--- ============================================
--- HUB CENTERS (Micro-Fulfillment)
--- ============================================
+-- CreateTable
+CREATE TABLE "products" (
+    "id" TEXT NOT NULL,
+    "seller_id" TEXT NOT NULL,
+    "category_id" TEXT,
+    "name" TEXT NOT NULL,
+    "name_urdu" TEXT,
+    "slug" TEXT NOT NULL,
+    "description" TEXT,
+    "description_urdu" TEXT,
+    "price" DECIMAL(10,2) NOT NULL,
+    "original_price" DECIMAL(10,2),
+    "cost_price" DECIMAL(10,2),
+    "product_type" TEXT NOT NULL DEFAULT 'frozen',
+    "shelf_life_hours" INTEGER,
+    "preparation_time" INTEGER,
+    "unit" TEXT NOT NULL,
+    "unit_urdu" TEXT,
+    "weight_grams" INTEGER,
+    "ingredients" TEXT,
+    "allergens" TEXT,
+    "dietary_info" TEXT[],
+    "storage_days" INTEGER NOT NULL DEFAULT 30,
+    "heating_instructions" TEXT,
+    "heating_instructions_urdu" TEXT,
+    "min_order_quantity" INTEGER NOT NULL DEFAULT 1,
+    "max_order_quantity" INTEGER,
+    "stock_quantity" INTEGER NOT NULL DEFAULT 0,
+    "stock_type" TEXT NOT NULL DEFAULT 'direct',
+    "rating_average" DECIMAL(3,2) NOT NULL DEFAULT 0,
+    "total_reviews" INTEGER NOT NULL DEFAULT 0,
+    "total_orders" INTEGER NOT NULL DEFAULT 0,
+    "trend_score" DOUBLE PRECISION NOT NULL DEFAULT 0,
+    "rating_score" DOUBLE PRECISION NOT NULL DEFAULT 4,
+    "views_count" INTEGER NOT NULL DEFAULT 0,
+    "is_featured" BOOLEAN NOT NULL DEFAULT false,
+    "is_active" BOOLEAN NOT NULL DEFAULT true,
+    "approval_status" TEXT NOT NULL DEFAULT 'pending',
+    "rejection_reason" TEXT,
+    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updated_at" TIMESTAMP(3) NOT NULL,
 
-CREATE TABLE hub_centers (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    name VARCHAR(255) NOT NULL,
-    code VARCHAR(50) UNIQUE NOT NULL, -- 'DHA_KHI', 'GULSHAN_KHI'
-    city VARCHAR(100) NOT NULL,
-    area VARCHAR(100) NOT NULL,
-    address TEXT NOT NULL,
-    latitude DECIMAL(10, 8) NOT NULL,
-    longitude DECIMAL(11, 8) NOT NULL,
-    capacity_cubic_feet INT NOT NULL,
-    current_utilization DECIMAL(5,2) DEFAULT 0.00, -- Percentage
-    freezer_units INT DEFAULT 1,
-    temperature_celsius DECIMAL(4,2),
-    operating_hours JSONB, -- {"monday": {"open": "08:00", "close": "22:00"}, ...}
-    manager_id UUID REFERENCES users(id) ON DELETE SET NULL,
-    contact_phone VARCHAR(20),
-    status VARCHAR(20) DEFAULT 'active' CHECK (status IN ('active', 'inactive', 'maintenance')),
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    CONSTRAINT "products_pkey" PRIMARY KEY ("id")
 );
 
-CREATE TABLE hub_inventory (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    hub_id UUID REFERENCES hub_centers(id) ON DELETE CASCADE,
-    product_id UUID REFERENCES products(id) ON DELETE CASCADE,
-    seller_id UUID REFERENCES sellers(id) ON DELETE CASCADE,
-    quantity INT NOT NULL DEFAULT 0,
-    batch_number VARCHAR(50),
-    manufactured_date DATE,
-    expiry_date DATE NOT NULL,
-    storage_unit VARCHAR(20), -- 'A1', 'B2' - Physical location in freezer
-    barcode VARCHAR(100),
-    status VARCHAR(20) DEFAULT 'available' CHECK (status IN ('available', 'reserved', 'expired', 'damaged')),
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    UNIQUE(hub_id, product_id, batch_number)
+-- CreateTable
+CREATE TABLE "product_images" (
+    "id" TEXT NOT NULL,
+    "product_id" TEXT NOT NULL,
+    "image_url" TEXT NOT NULL,
+    "is_primary" BOOLEAN NOT NULL DEFAULT false,
+    "sort_order" INTEGER NOT NULL DEFAULT 0,
+    "uploaded_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "product_images_pkey" PRIMARY KEY ("id")
 );
 
-CREATE TABLE hub_inventory_logs (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    hub_inventory_id UUID REFERENCES hub_inventory(id) ON DELETE CASCADE,
-    action VARCHAR(50) NOT NULL, -- 'stock_in', 'stock_out', 'adjustment', 'expired'
-    quantity_change INT NOT NULL,
-    previous_quantity INT NOT NULL,
-    new_quantity INT NOT NULL,
-    reason TEXT,
-    performed_by UUID REFERENCES users(id),
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+-- CreateTable
+CREATE TABLE "product_tags" (
+    "id" TEXT NOT NULL,
+    "product_id" TEXT NOT NULL,
+    "tag" TEXT NOT NULL,
+    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "product_tags_pkey" PRIMARY KEY ("id")
 );
 
-CREATE TABLE hub_temperature_logs (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    hub_id UUID REFERENCES hub_centers(id) ON DELETE CASCADE,
-    temperature_celsius DECIMAL(4,2) NOT NULL,
-    freezer_unit INT,
-    is_alert BOOLEAN DEFAULT FALSE,
-    recorded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+-- CreateTable
+CREATE TABLE "product_variants" (
+    "id" TEXT NOT NULL,
+    "product_id" TEXT NOT NULL,
+    "name" TEXT NOT NULL,
+    "name_urdu" TEXT,
+    "sku" TEXT,
+    "price" DECIMAL(10,2) NOT NULL,
+    "original_price" DECIMAL(10,2),
+    "cost_price" DECIMAL(10,2),
+    "stock_quantity" INTEGER NOT NULL DEFAULT 0,
+    "stock_threshold" INTEGER NOT NULL DEFAULT 10,
+    "weight_grams" INTEGER,
+    "is_default" BOOLEAN NOT NULL DEFAULT false,
+    "is_active" BOOLEAN NOT NULL DEFAULT true,
+    "sort_order" INTEGER NOT NULL DEFAULT 0,
+    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updated_at" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "product_variants_pkey" PRIMARY KEY ("id")
 );
 
--- ============================================
--- ORDERS
--- ============================================
+-- CreateTable
+CREATE TABLE "hub_centers" (
+    "id" TEXT NOT NULL,
+    "name" TEXT NOT NULL,
+    "code" TEXT NOT NULL,
+    "city" TEXT NOT NULL,
+    "area" TEXT NOT NULL,
+    "address" TEXT NOT NULL,
+    "latitude" DECIMAL(10,8) NOT NULL,
+    "longitude" DECIMAL(11,8) NOT NULL,
+    "capacity_cubic_feet" INTEGER NOT NULL,
+    "current_utilization" DECIMAL(5,2) NOT NULL DEFAULT 0,
+    "freezer_units" INTEGER NOT NULL DEFAULT 1,
+    "temperature_celsius" DECIMAL(4,2),
+    "operating_hours" JSONB,
+    "manager_id" TEXT,
+    "contact_phone" TEXT,
+    "status" TEXT NOT NULL DEFAULT 'active',
+    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updated_at" TIMESTAMP(3) NOT NULL,
 
-CREATE TABLE orders (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    order_number VARCHAR(50) UNIQUE NOT NULL,
-    customer_id UUID REFERENCES users(id) ON DELETE SET NULL,
-    
-    -- Pricing
-    subtotal DECIMAL(10,2) NOT NULL,
-    delivery_fee DECIMAL(10,2) DEFAULT 0.00,
-    discount_amount DECIMAL(10,2) DEFAULT 0.00,
-    tax_amount DECIMAL(10,2) DEFAULT 0.00,
-    total_amount DECIMAL(10,2) NOT NULL,
-    
-    -- Payment
-    payment_method VARCHAR(50) NOT NULL, -- 'jazzcash', 'easypaisa', 'card', 'cod', 'wallet'
-    payment_status VARCHAR(20) DEFAULT 'pending' CHECK (payment_status IN ('pending', 'paid', 'failed', 'refunded')),
-    payment_transaction_id VARCHAR(255),
-    paid_at TIMESTAMP,
-    
-    -- Delivery
-    delivery_type VARCHAR(20) NOT NULL CHECK (delivery_type IN ('home_delivery', 'hub_pickup', 'self_pickup')),
-    delivery_address_id UUID REFERENCES user_addresses(id) ON DELETE SET NULL,
-    delivery_address_snapshot JSONB, -- Store full address in case deleted later
-    hub_id UUID REFERENCES hub_centers(id) ON DELETE SET NULL,
-    delivery_slot_date DATE,
-    delivery_slot_time VARCHAR(20), -- 'morning', 'afternoon', 'evening'
-    delivery_instructions TEXT,
-    
-    -- Status
-    order_status VARCHAR(20) DEFAULT 'pending' CHECK (
-        order_status IN ('pending', 'confirmed', 'preparing', 'ready', 'dispatched', 
-                        'in_transit', 'delivered', 'completed', 'cancelled', 'refunded')
-    ),
-    cancellation_reason TEXT,
-    cancelled_by VARCHAR(20), -- 'customer', 'seller', 'admin'
-    
-    -- Tracking
-    estimated_delivery_at TIMESTAMP,
-    delivered_at TIMESTAMP,
-    
-    -- Metadata
-    notes TEXT,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    CONSTRAINT "hub_centers_pkey" PRIMARY KEY ("id")
 );
 
-CREATE TABLE order_items (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    order_id UUID REFERENCES orders(id) ON DELETE CASCADE,
-    product_id UUID REFERENCES products(id) ON DELETE SET NULL,
-    seller_id UUID REFERENCES sellers(id) ON DELETE SET NULL,
-    
-    -- Product snapshot (in case product deleted/changed)
-    product_name VARCHAR(255) NOT NULL,
-    product_image TEXT,
-    
-    quantity INT NOT NULL,
-    unit_price DECIMAL(10,2) NOT NULL,
-    total_price DECIMAL(10,2) NOT NULL,
-    
-    -- Commission
-    commission_rate DECIMAL(5,2) NOT NULL,
-    commission_amount DECIMAL(10,2) NOT NULL,
-    seller_payout DECIMAL(10,2) NOT NULL,
-    
-    -- Fulfillment
-    fulfillment_type VARCHAR(20) CHECK (fulfillment_type IN ('direct', 'hub')),
-    hub_id UUID REFERENCES hub_centers(id) ON DELETE SET NULL,
-    
-    -- Status specific to this item
-    status VARCHAR(20) DEFAULT 'pending' CHECK (
-        status IN ('pending', 'accepted', 'rejected', 'preparing', 'ready', 'delivered', 'cancelled')
-    ),
-    
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+-- CreateTable
+CREATE TABLE "hub_inventory" (
+    "id" TEXT NOT NULL,
+    "hub_id" TEXT NOT NULL,
+    "product_id" TEXT NOT NULL,
+    "seller_id" TEXT NOT NULL,
+    "quantity" INTEGER NOT NULL DEFAULT 0,
+    "batch_number" TEXT,
+    "manufactured_date" DATE,
+    "expiry_date" DATE NOT NULL,
+    "storage_unit" TEXT,
+    "barcode" TEXT,
+    "status" TEXT NOT NULL DEFAULT 'available',
+    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updated_at" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "hub_inventory_pkey" PRIMARY KEY ("id")
 );
 
-CREATE TABLE order_status_history (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    order_id UUID REFERENCES orders(id) ON DELETE CASCADE,
-    status VARCHAR(20) NOT NULL,
-    notes TEXT,
-    changed_by UUID REFERENCES users(id),
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+-- CreateTable
+CREATE TABLE "hub_inventory_logs" (
+    "id" TEXT NOT NULL,
+    "hub_inventory_id" TEXT NOT NULL,
+    "action" TEXT NOT NULL,
+    "quantity_change" INTEGER NOT NULL,
+    "previous_quantity" INTEGER NOT NULL,
+    "new_quantity" INTEGER NOT NULL,
+    "reason" TEXT,
+    "performed_by" TEXT,
+    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "hub_inventory_logs_pkey" PRIMARY KEY ("id")
 );
 
--- ============================================
--- DELIVERIES & RIDERS
--- ============================================
+-- CreateTable
+CREATE TABLE "hub_temperature_logs" (
+    "id" TEXT NOT NULL,
+    "hub_id" TEXT NOT NULL,
+    "temperature_celsius" DECIMAL(4,2) NOT NULL,
+    "freezer_unit" INTEGER,
+    "is_alert" BOOLEAN NOT NULL DEFAULT false,
+    "recorded_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
-CREATE TABLE riders (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    user_id UUID REFERENCES users(id) ON DELETE CASCADE,
-    vehicle_type VARCHAR(50), -- 'bike', 'car', 'bicycle'
-    vehicle_number VARCHAR(50),
-    license_number VARCHAR(50),
-    city VARCHAR(100) NOT NULL,
-    hub_id UUID REFERENCES hub_centers(id) ON DELETE SET NULL,
-    rating_average DECIMAL(3,2) DEFAULT 0.00,
-    total_deliveries INT DEFAULT 0,
-    is_available BOOLEAN DEFAULT TRUE,
-    status VARCHAR(20) DEFAULT 'active' CHECK (status IN ('active', 'inactive', 'suspended')),
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    CONSTRAINT "hub_temperature_logs_pkey" PRIMARY KEY ("id")
 );
 
-CREATE TABLE deliveries (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    order_id UUID REFERENCES orders(id) ON DELETE CASCADE,
-    rider_id UUID REFERENCES riders(id) ON DELETE SET NULL,
-    
-    -- Pickup details
-    pickup_address TEXT NOT NULL,
-    pickup_latitude DECIMAL(10, 8),
-    pickup_longitude DECIMAL(11, 8),
-    pickup_time TIMESTAMP,
-    
-    -- Delivery details
-    delivery_address TEXT NOT NULL,
-    delivery_latitude DECIMAL(10, 8),
-    delivery_longitude DECIMAL(11, 8),
-    delivery_time TIMESTAMP,
-    
-    -- Tracking
-    distance_km DECIMAL(6,2),
-    estimated_duration_minutes INT,
-    actual_duration_minutes INT,
-    tracking_url TEXT,
-    
-    -- Status
-    status VARCHAR(20) DEFAULT 'assigned' CHECK (
-        status IN ('assigned', 'accepted', 'picked_up', 'in_transit', 'delivered', 'failed', 'cancelled')
-    ),
-    
-    -- Proof of delivery
-    delivery_photo_url TEXT,
-    customer_signature TEXT,
-    delivery_notes TEXT,
-    
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+-- CreateTable
+CREATE TABLE "orders" (
+    "id" TEXT NOT NULL,
+    "order_number" TEXT NOT NULL,
+    "customer_id" TEXT,
+    "subtotal" DECIMAL(10,2) NOT NULL,
+    "delivery_fee" DECIMAL(10,2) NOT NULL DEFAULT 0,
+    "delivery_fee_breakdown" JSONB,
+    "discount_amount" DECIMAL(10,2) NOT NULL DEFAULT 0,
+    "tax_amount" DECIMAL(10,2) NOT NULL DEFAULT 0,
+    "tip_amount" DECIMAL(10,2) DEFAULT 0,
+    "total_amount" DECIMAL(10,2) NOT NULL,
+    "payment_method" TEXT NOT NULL,
+    "payment_status" TEXT NOT NULL DEFAULT 'pending',
+    "payment_transaction_id" TEXT,
+    "paid_at" TIMESTAMP(3),
+    "payment_proof_url" TEXT,
+    "payment_sender_name" TEXT,
+    "payment_sender_account" TEXT,
+    "payment_reference_number" TEXT,
+    "payment_submitted_at" TIMESTAMP(3),
+    "payment_notes" TEXT,
+    "payment_confirmed_by" TEXT,
+    "payment_confirmed_at" TIMESTAMP(3),
+    "payment_dispute_reason" TEXT,
+    "payment_collected_by" TEXT,
+    "delivery_type" TEXT NOT NULL,
+    "delivery_provider" TEXT,
+    "handover_code" TEXT,
+    "handover_attempts" INTEGER NOT NULL DEFAULT 0,
+    "idempotency_key" TEXT,
+    "delivery_address_id" TEXT,
+    "delivery_address_snapshot" JSONB,
+    "hub_id" TEXT,
+    "delivery_slot_date" DATE,
+    "delivery_slot_time" TEXT,
+    "delivery_instructions" TEXT,
+    "order_status" TEXT NOT NULL DEFAULT 'pending',
+    "cancellation_reason" TEXT,
+    "cancelled_by" TEXT,
+    "estimated_delivery_at" TIMESTAMP(3),
+    "delivered_at" TIMESTAMP(3),
+    "notes" TEXT,
+    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updated_at" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "orders_pkey" PRIMARY KEY ("id")
 );
 
--- ============================================
--- REVIEWS & RATINGS
--- ============================================
+-- CreateTable
+CREATE TABLE "order_items" (
+    "id" TEXT NOT NULL,
+    "order_id" TEXT NOT NULL,
+    "product_id" TEXT,
+    "variant_id" TEXT,
+    "seller_id" TEXT NOT NULL,
+    "product_name" TEXT NOT NULL,
+    "variant_name" TEXT,
+    "product_image" TEXT,
+    "quantity" INTEGER NOT NULL,
+    "unit_price" DECIMAL(10,2) NOT NULL,
+    "total_price" DECIMAL(10,2) NOT NULL,
+    "commission_rate" DECIMAL(5,2) NOT NULL,
+    "commission_amount" DECIMAL(10,2) NOT NULL,
+    "seller_payout" DECIMAL(10,2) NOT NULL,
+    "promo_discount" DECIMAL(10,2) NOT NULL DEFAULT 0,
+    "fulfillment_type" TEXT,
+    "hub_id" TEXT,
+    "status" TEXT NOT NULL DEFAULT 'pending',
+    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updated_at" TIMESTAMP(3) NOT NULL,
 
-CREATE TABLE reviews (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    order_id UUID REFERENCES orders(id) ON DELETE CASCADE,
-    order_item_id UUID REFERENCES order_items(id) ON DELETE CASCADE,
-    customer_id UUID REFERENCES users(id) ON DELETE CASCADE,
-    seller_id UUID REFERENCES sellers(id) ON DELETE CASCADE,
-    product_id UUID REFERENCES products(id) ON DELETE SET NULL,
-    
-    -- Ratings
-    product_rating INT CHECK (product_rating >= 1 AND product_rating <= 5),
-    seller_rating INT CHECK (seller_rating >= 1 AND seller_rating <= 5),
-    delivery_rating INT CHECK (delivery_rating >= 1 AND delivery_rating <= 5),
-    
-    -- Review content
-    comment TEXT,
-    pros TEXT,
-    cons TEXT,
-    
-    -- Media
-    photos TEXT[], -- Array of image URLs
-    
-    -- Response
-    seller_response TEXT,
-    seller_responded_at TIMESTAMP,
-    
-    -- Verification
-    is_verified_purchase BOOLEAN DEFAULT TRUE,
-    is_anonymous BOOLEAN DEFAULT FALSE,
-    
-    -- Moderation
-    is_approved BOOLEAN DEFAULT TRUE,
-    is_flagged BOOLEAN DEFAULT FALSE,
-    flag_reason TEXT,
-    
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    CONSTRAINT "order_items_pkey" PRIMARY KEY ("id")
 );
 
--- ============================================
--- PAYMENTS & WALLETS
--- ============================================
+-- CreateTable
+CREATE TABLE "order_status_history" (
+    "id" TEXT NOT NULL,
+    "order_id" TEXT NOT NULL,
+    "status" TEXT NOT NULL,
+    "notes" TEXT,
+    "changed_by" TEXT,
+    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
-CREATE TABLE wallets (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    user_id UUID REFERENCES users(id) ON DELETE CASCADE,
-    balance DECIMAL(10,2) DEFAULT 0.00,
-    currency VARCHAR(3) DEFAULT 'PKR',
-    is_locked BOOLEAN DEFAULT FALSE,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    UNIQUE(user_id)
+    CONSTRAINT "order_status_history_pkey" PRIMARY KEY ("id")
 );
 
-CREATE TABLE wallet_transactions (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    wallet_id UUID REFERENCES wallets(id) ON DELETE CASCADE,
-    order_id UUID REFERENCES orders(id) ON DELETE SET NULL,
-    
-    transaction_type VARCHAR(50) NOT NULL, -- 'credit', 'debit', 'refund', 'payout', 'bonus'
-    amount DECIMAL(10,2) NOT NULL,
-    balance_before DECIMAL(10,2) NOT NULL,
-    balance_after DECIMAL(10,2) NOT NULL,
-    
-    description TEXT,
-    reference_id VARCHAR(255),
-    
-    status VARCHAR(20) DEFAULT 'completed' CHECK (status IN ('pending', 'completed', 'failed', 'reversed')),
-    
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+-- CreateTable
+CREATE TABLE "riders" (
+    "id" TEXT NOT NULL,
+    "user_id" TEXT NOT NULL,
+    "vehicle_type" TEXT,
+    "vehicle_number" TEXT,
+    "license_number" TEXT,
+    "city" TEXT NOT NULL,
+    "hub_id" TEXT,
+    "rating_average" DECIMAL(3,2) NOT NULL DEFAULT 0,
+    "total_deliveries" INTEGER NOT NULL DEFAULT 0,
+    "is_available" BOOLEAN NOT NULL DEFAULT true,
+    "status" TEXT NOT NULL DEFAULT 'active',
+    "verification_status" TEXT NOT NULL DEFAULT 'pending',
+    "rejection_reason" TEXT,
+    "cash_limit" DECIMAL(10,2),
+    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updated_at" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "riders_pkey" PRIMARY KEY ("id")
 );
 
-CREATE TABLE seller_payouts (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    seller_id UUID REFERENCES sellers(id) ON DELETE CASCADE,
-    
-    amount DECIMAL(10,2) NOT NULL,
-    commission_deducted DECIMAL(10,2) NOT NULL,
-    net_amount DECIMAL(10,2) NOT NULL,
-    
-    payout_method VARCHAR(50) NOT NULL, -- 'bank_transfer', 'jazzcash', 'easypaisa'
-    account_details JSONB, -- Store encrypted account info
-    
-    status VARCHAR(20) DEFAULT 'pending' CHECK (status IN ('pending', 'processing', 'completed', 'failed')),
-    transaction_id VARCHAR(255),
-    
-    period_start DATE NOT NULL,
-    period_end DATE NOT NULL,
-    
-    processed_at TIMESTAMP,
-    failed_reason TEXT,
-    
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+-- CreateTable
+CREATE TABLE "deliveries" (
+    "id" TEXT NOT NULL,
+    "orderId" TEXT NOT NULL,
+    "rider_id" TEXT,
+    "pickup_address" TEXT NOT NULL,
+    "pickup_latitude" DECIMAL(10,8),
+    "pickup_longitude" DECIMAL(11,8),
+    "pickup_time" TIMESTAMP(3),
+    "delivery_address" TEXT NOT NULL,
+    "delivery_latitude" DECIMAL(10,8),
+    "delivery_longitude" DECIMAL(11,8),
+    "delivery_time" TIMESTAMP(3),
+    "distance_km" DECIMAL(6,2),
+    "estimated_duration_minutes" INTEGER,
+    "actual_duration_minutes" INTEGER,
+    "tracking_url" TEXT,
+    "status" TEXT NOT NULL DEFAULT 'assigned',
+    "delivery_otp" TEXT,
+    "otp_verified_at" TIMESTAMP(3),
+    "arrived_at_pickup" TIMESTAMP(3),
+    "arrived_at_customer" TIMESTAMP(3),
+    "estimated_ready_at" TIMESTAMP(3),
+    "delivery_photo_url" TEXT,
+    "customer_signature" TEXT,
+    "delivery_notes" TEXT,
+    "rider_fee" DECIMAL(10,2),
+    "rider_bonus" DECIMAL(10,2),
+    "rider_latitude" DECIMAL(10,8),
+    "rider_longitude" DECIMAL(11,8),
+    "rider_location_at" TIMESTAMP(3),
+    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updated_at" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "deliveries_pkey" PRIMARY KEY ("id")
 );
 
--- ============================================
--- PROMOTIONS & DISCOUNTS
--- ============================================
+-- CreateTable
+CREATE TABLE "rider_documents" (
+    "id" TEXT NOT NULL,
+    "rider_id" TEXT NOT NULL,
+    "document_type" TEXT NOT NULL,
+    "document_url" TEXT NOT NULL,
+    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
-CREATE TABLE promotions (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    code VARCHAR(50) UNIQUE NOT NULL,
-    name VARCHAR(255) NOT NULL,
-    description TEXT,
-    
-    discount_type VARCHAR(20) NOT NULL CHECK (discount_type IN ('percentage', 'fixed', 'free_delivery')),
-    discount_value DECIMAL(10,2) NOT NULL,
-    max_discount_amount DECIMAL(10,2), -- For percentage discounts
-    
-    min_order_amount DECIMAL(10,2) DEFAULT 0.00,
-    
-    -- Applicability
-    applicable_to VARCHAR(20) DEFAULT 'all' CHECK (applicable_to IN ('all', 'new_users', 'specific_users', 'specific_products', 'specific_categories')),
-    applicable_cities TEXT[],
-    
-    -- Usage limits
-    usage_limit_total INT, -- Total times code can be used
-    usage_limit_per_user INT DEFAULT 1,
-    used_count INT DEFAULT 0,
-    
-    -- Validity
-    valid_from TIMESTAMP NOT NULL,
-    valid_until TIMESTAMP NOT NULL,
-    
-    is_active BOOLEAN DEFAULT TRUE,
-    
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    CONSTRAINT "rider_documents_pkey" PRIMARY KEY ("id")
 );
 
-CREATE TABLE promotion_usages (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    promotion_id UUID REFERENCES promotions(id) ON DELETE CASCADE,
-    user_id UUID REFERENCES users(id) ON DELETE CASCADE,
-    order_id UUID REFERENCES orders(id) ON DELETE CASCADE,
-    discount_applied DECIMAL(10,2) NOT NULL,
-    used_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+-- CreateTable
+CREATE TABLE "rider_ledger_entries" (
+    "id" TEXT NOT NULL,
+    "rider_id" TEXT NOT NULL,
+    "type" TEXT NOT NULL,
+    "amount" DECIMAL(10,2) NOT NULL,
+    "delivery_id" TEXT,
+    "order_id" TEXT,
+    "reference" TEXT,
+    "note" TEXT,
+    "created_by" TEXT,
+    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "rider_ledger_entries_pkey" PRIMARY KEY ("id")
 );
 
--- ============================================
--- NOTIFICATIONS
--- ============================================
+-- CreateTable
+CREATE TABLE "reviews" (
+    "id" TEXT NOT NULL,
+    "order_id" TEXT NOT NULL,
+    "order_item_id" TEXT NOT NULL,
+    "customer_id" TEXT NOT NULL,
+    "seller_id" TEXT NOT NULL,
+    "product_id" TEXT,
+    "product_rating" INTEGER,
+    "seller_rating" INTEGER,
+    "delivery_rating" INTEGER,
+    "comment" TEXT,
+    "pros" TEXT,
+    "cons" TEXT,
+    "photos" TEXT[],
+    "seller_response" TEXT,
+    "seller_responded_at" TIMESTAMP(3),
+    "is_verified_purchase" BOOLEAN NOT NULL DEFAULT true,
+    "is_anonymous" BOOLEAN NOT NULL DEFAULT false,
+    "is_approved" BOOLEAN NOT NULL DEFAULT true,
+    "is_flagged" BOOLEAN NOT NULL DEFAULT false,
+    "flag_reason" TEXT,
+    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updated_at" TIMESTAMP(3) NOT NULL,
 
-CREATE TABLE notifications (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    user_id UUID REFERENCES users(id) ON DELETE CASCADE,
-    
-    type VARCHAR(50) NOT NULL, -- 'order_update', 'payment', 'review', 'promotion', 'system'
-    title VARCHAR(255) NOT NULL,
-    message TEXT NOT NULL,
-    
-    data JSONB, -- Additional structured data
-    
-    action_url TEXT,
-    
-    is_read BOOLEAN DEFAULT FALSE,
-    read_at TIMESTAMP,
-    
-    channel VARCHAR(20) DEFAULT 'push' CHECK (channel IN ('push', 'sms', 'email', 'in_app')),
-    
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    CONSTRAINT "reviews_pkey" PRIMARY KEY ("id")
 );
 
--- ============================================
--- SUPPORT & COMPLAINTS
--- ============================================
+-- CreateTable
+CREATE TABLE "wallets" (
+    "id" TEXT NOT NULL,
+    "user_id" TEXT NOT NULL,
+    "balance" DECIMAL(10,2) NOT NULL DEFAULT 0,
+    "currency" TEXT NOT NULL DEFAULT 'PKR',
+    "is_locked" BOOLEAN NOT NULL DEFAULT false,
+    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updated_at" TIMESTAMP(3) NOT NULL,
 
-CREATE TABLE support_tickets (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    ticket_number VARCHAR(50) UNIQUE NOT NULL,
-    user_id UUID REFERENCES users(id) ON DELETE CASCADE,
-    order_id UUID REFERENCES orders(id) ON DELETE SET NULL,
-    
-    category VARCHAR(50) NOT NULL, -- 'order_issue', 'payment', 'delivery', 'quality', 'other'
-    subject VARCHAR(255) NOT NULL,
-    description TEXT NOT NULL,
-    
-    priority VARCHAR(20) DEFAULT 'medium' CHECK (priority IN ('low', 'medium', 'high', 'urgent')),
-    status VARCHAR(20) DEFAULT 'open' CHECK (status IN ('open', 'in_progress', 'resolved', 'closed')),
-    
-    assigned_to UUID REFERENCES users(id) ON DELETE SET NULL,
-    
-    resolved_at TIMESTAMP,
-    resolution_notes TEXT,
-    
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    CONSTRAINT "wallets_pkey" PRIMARY KEY ("id")
 );
 
-CREATE TABLE support_messages (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    ticket_id UUID REFERENCES support_tickets(id) ON DELETE CASCADE,
-    user_id UUID REFERENCES users(id) ON DELETE CASCADE,
-    
-    message TEXT NOT NULL,
-    attachments TEXT[],
-    
-    is_internal BOOLEAN DEFAULT FALSE, -- Internal notes not visible to customer
-    
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+-- CreateTable
+CREATE TABLE "wallet_transactions" (
+    "id" TEXT NOT NULL,
+    "wallet_id" TEXT NOT NULL,
+    "order_id" TEXT,
+    "transaction_type" TEXT NOT NULL,
+    "amount" DECIMAL(10,2) NOT NULL,
+    "balance_before" DECIMAL(10,2) NOT NULL,
+    "balance_after" DECIMAL(10,2) NOT NULL,
+    "description" TEXT,
+    "reference_id" TEXT,
+    "status" TEXT NOT NULL DEFAULT 'completed',
+    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "wallet_transactions_pkey" PRIMARY KEY ("id")
 );
 
--- ============================================
--- CARTS (Persistent Cart Storage)
--- ============================================
+-- CreateTable
+CREATE TABLE "payment_attempts" (
+    "id" TEXT NOT NULL,
+    "purpose" TEXT NOT NULL,
+    "order_id" TEXT,
+    "user_id" TEXT NOT NULL,
+    "gateway" TEXT NOT NULL DEFAULT 'safepay',
+    "tracker" TEXT NOT NULL,
+    "amount" DECIMAL(10,2) NOT NULL,
+    "status" TEXT NOT NULL DEFAULT 'pending',
+    "reference" TEXT,
+    "settled_via" TEXT,
+    "paid_at" TIMESTAMP(3),
+    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updated_at" TIMESTAMP(3) NOT NULL,
 
-CREATE TABLE carts (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    user_id UUID REFERENCES users(id) ON DELETE CASCADE,
-    expires_at TIMESTAMP,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    UNIQUE(user_id)
+    CONSTRAINT "payment_attempts_pkey" PRIMARY KEY ("id")
 );
 
-CREATE TABLE cart_items (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    cart_id UUID REFERENCES carts(id) ON DELETE CASCADE,
-    product_id UUID REFERENCES products(id) ON DELETE CASCADE,
-    seller_id UUID REFERENCES sellers(id) ON DELETE CASCADE,
-    quantity INT NOT NULL DEFAULT 1 CHECK (quantity > 0),
-    stock_type VARCHAR(20) CHECK (stock_type IN ('direct', 'hub')),
-    hub_id UUID REFERENCES hub_centers(id) ON DELETE SET NULL,
-    price_snapshot DECIMAL(10,2) NOT NULL CHECK (price_snapshot > 0),
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+-- CreateTable
+CREATE TABLE "seller_payouts" (
+    "id" TEXT NOT NULL,
+    "seller_id" TEXT NOT NULL,
+    "amount" DECIMAL(10,2) NOT NULL,
+    "commission_deducted" DECIMAL(10,2) NOT NULL,
+    "net_amount" DECIMAL(10,2) NOT NULL,
+    "payout_method" TEXT NOT NULL,
+    "account_details" JSONB,
+    "status" TEXT NOT NULL DEFAULT 'pending',
+    "transaction_id" TEXT,
+    "period_start" DATE NOT NULL,
+    "period_end" DATE NOT NULL,
+    "processed_at" TIMESTAMP(3),
+    "failed_reason" TEXT,
+    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updated_at" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "seller_payouts_pkey" PRIMARY KEY ("id")
 );
 
--- ============================================
--- INVENTORY RESERVATIONS
--- ============================================
+-- CreateTable
+CREATE TABLE "seller_payout_schedules" (
+    "id" TEXT NOT NULL,
+    "seller_id" TEXT NOT NULL,
+    "payout_day" INTEGER,
+    "payout_method" TEXT NOT NULL,
+    "minimum_payout_amount" DECIMAL(10,2) NOT NULL DEFAULT 1000.00,
+    "auto_payout" BOOLEAN NOT NULL DEFAULT false,
+    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updated_at" TIMESTAMP(3) NOT NULL,
 
-CREATE TABLE inventory_reservations (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    product_id UUID REFERENCES products(id) ON DELETE CASCADE,
-    quantity INT NOT NULL CHECK (quantity > 0),
-    reservation_type VARCHAR(20) NOT NULL CHECK (reservation_type IN ('cart', 'order')),
-    reservation_id UUID NOT NULL, -- cart_id or order_id
-    expires_at TIMESTAMP NOT NULL,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    CONSTRAINT "seller_payout_schedules_pkey" PRIMARY KEY ("id")
 );
 
--- ============================================
--- SELLER PAYOUT SCHEDULES
--- ============================================
+-- CreateTable
+CREATE TABLE "promotions" (
+    "id" TEXT NOT NULL,
+    "seller_id" TEXT,
+    "code" TEXT NOT NULL,
+    "name" TEXT NOT NULL,
+    "description" TEXT,
+    "discount_type" TEXT NOT NULL,
+    "discount_value" DECIMAL(10,2) NOT NULL,
+    "max_discount_amount" DECIMAL(10,2),
+    "min_order_amount" DECIMAL(10,2) NOT NULL DEFAULT 0,
+    "applicable_to" TEXT NOT NULL DEFAULT 'all',
+    "applicable_product_ids" TEXT[] DEFAULT ARRAY[]::TEXT[],
+    "applicable_cities" TEXT[],
+    "usage_limit_total" INTEGER,
+    "usage_limit_per_user" INTEGER NOT NULL DEFAULT 1,
+    "used_count" INTEGER NOT NULL DEFAULT 0,
+    "valid_from" TIMESTAMP(3) NOT NULL,
+    "valid_until" TIMESTAMP(3) NOT NULL,
+    "is_active" BOOLEAN NOT NULL DEFAULT true,
+    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updated_at" TIMESTAMP(3) NOT NULL,
 
-CREATE TABLE seller_payout_schedules (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    seller_id UUID REFERENCES sellers(id) ON DELETE CASCADE,
-    payout_day INT CHECK (payout_day BETWEEN 1 AND 7), -- 1=Monday, 7=Sunday
-    payout_method VARCHAR(50) NOT NULL,
-    minimum_payout_amount DECIMAL(10,2) DEFAULT 1000.00 CHECK (minimum_payout_amount >= 0),
-    auto_payout BOOLEAN DEFAULT FALSE,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    UNIQUE(seller_id)
+    CONSTRAINT "promotions_pkey" PRIMARY KEY ("id")
 );
 
--- ============================================
--- AUDIT LOGS
--- ============================================
+-- CreateTable
+CREATE TABLE "promotion_usages" (
+    "id" TEXT NOT NULL,
+    "promotion_id" TEXT NOT NULL,
+    "user_id" TEXT NOT NULL,
+    "order_id" TEXT NOT NULL,
+    "discount_applied" DECIMAL(10,2) NOT NULL,
+    "used_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
-CREATE TABLE audit_logs (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    user_id UUID REFERENCES users(id) ON DELETE SET NULL,
-    action VARCHAR(100) NOT NULL, -- 'user_login', 'order_created', 'payment_processed', 'admin_action'
-    entity_type VARCHAR(50), -- 'user', 'order', 'payment', 'seller'
-    entity_id UUID,
-    ip_address INET,
-    user_agent TEXT,
-    request_data JSONB,
-    response_status INT,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    CONSTRAINT "promotion_usages_pkey" PRIMARY KEY ("id")
 );
 
--- ============================================
--- ANALYTICS & TRACKING
--- ============================================
+-- CreateTable
+CREATE TABLE "push_subscriptions" (
+    "id" TEXT NOT NULL,
+    "user_id" TEXT NOT NULL,
+    "endpoint" TEXT NOT NULL,
+    "p256dh" TEXT NOT NULL,
+    "auth" TEXT NOT NULL,
+    "user_agent" TEXT,
+    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "last_used_at" TIMESTAMP(3),
 
-CREATE TABLE user_activity_logs (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    user_id UUID REFERENCES users(id) ON DELETE SET NULL,
-    
-    activity_type VARCHAR(50) NOT NULL, -- 'page_view', 'product_view', 'search', 'add_to_cart', 'purchase'
-    entity_type VARCHAR(50), -- 'product', 'category', 'seller'
-    entity_id UUID,
-    
-    metadata JSONB,
-    
-    ip_address INET,
-    user_agent TEXT,
-    device_type VARCHAR(50),
-    
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    CONSTRAINT "push_subscriptions_pkey" PRIMARY KEY ("id")
 );
 
-CREATE TABLE search_queries (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    user_id UUID REFERENCES users(id) ON DELETE SET NULL,
-    
-    query TEXT NOT NULL,
-    filters JSONB,
-    results_count INT,
-    
-    clicked_product_id UUID REFERENCES products(id) ON DELETE SET NULL,
-    
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+-- CreateTable
+CREATE TABLE "notifications" (
+    "id" TEXT NOT NULL,
+    "user_id" TEXT NOT NULL,
+    "type" TEXT NOT NULL,
+    "title" TEXT NOT NULL,
+    "message" TEXT NOT NULL,
+    "data" JSONB,
+    "action_url" TEXT,
+    "is_read" BOOLEAN NOT NULL DEFAULT false,
+    "read_at" TIMESTAMP(3),
+    "channel" TEXT NOT NULL DEFAULT 'push',
+    "dedupe_key" TEXT,
+    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "notifications_pkey" PRIMARY KEY ("id")
 );
 
--- ============================================
--- SYSTEM CONFIGURATION
--- ============================================
+-- CreateTable
+CREATE TABLE "support_tickets" (
+    "id" TEXT NOT NULL,
+    "ticket_number" TEXT NOT NULL,
+    "user_id" TEXT NOT NULL,
+    "order_id" TEXT,
+    "category" TEXT NOT NULL,
+    "subject" TEXT NOT NULL,
+    "description" TEXT NOT NULL,
+    "priority" TEXT NOT NULL DEFAULT 'medium',
+    "status" TEXT NOT NULL DEFAULT 'open',
+    "assigned_to" TEXT,
+    "resolved_at" TIMESTAMP(3),
+    "resolution_notes" TEXT,
+    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updated_at" TIMESTAMP(3) NOT NULL,
 
-CREATE TABLE system_settings (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    key VARCHAR(255) UNIQUE NOT NULL,
-    value JSONB NOT NULL,
-    description TEXT,
-    updated_by UUID REFERENCES users(id),
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    CONSTRAINT "support_tickets_pkey" PRIMARY KEY ("id")
 );
 
--- ============================================
--- INDEXES FOR PERFORMANCE
--- ============================================
+-- CreateTable
+CREATE TABLE "support_messages" (
+    "id" TEXT NOT NULL,
+    "ticket_id" TEXT NOT NULL,
+    "user_id" TEXT NOT NULL,
+    "message" TEXT NOT NULL,
+    "attachments" TEXT[] DEFAULT ARRAY[]::TEXT[],
+    "is_internal" BOOLEAN NOT NULL DEFAULT false,
+    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
--- Users
-CREATE INDEX idx_users_phone ON users(phone);
-CREATE INDEX idx_users_email ON users(email);
-CREATE INDEX idx_users_type ON users(user_type);
-CREATE INDEX idx_users_status ON users(status);
+    CONSTRAINT "support_messages_pkey" PRIMARY KEY ("id")
+);
 
--- Sellers
-CREATE INDEX idx_sellers_user_id ON sellers(user_id);
-CREATE INDEX idx_sellers_status ON sellers(status);
-CREATE INDEX idx_sellers_verification_status ON sellers(verification_status);
-CREATE INDEX idx_sellers_rating ON sellers(rating_average DESC);
-CREATE INDEX idx_sellers_featured ON sellers(is_featured) WHERE is_featured = TRUE;
+-- CreateTable
+CREATE TABLE "carts" (
+    "id" TEXT NOT NULL,
+    "user_id" TEXT NOT NULL,
+    "expires_at" TIMESTAMP(3),
+    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updated_at" TIMESTAMP(3) NOT NULL,
 
--- Products
-CREATE INDEX idx_products_seller_id ON products(seller_id);
-CREATE INDEX idx_products_category_id ON products(category_id);
-CREATE INDEX idx_products_status ON products(is_active) WHERE is_active = TRUE;
-CREATE INDEX idx_products_featured ON products(is_featured) WHERE is_featured = TRUE;
-CREATE INDEX idx_products_rating ON products(rating_average DESC);
-CREATE INDEX idx_products_name_search ON products USING gin(to_tsvector('english', name));
-CREATE INDEX idx_products_price ON products(price);
+    CONSTRAINT "carts_pkey" PRIMARY KEY ("id")
+);
 
--- Orders
-CREATE INDEX idx_orders_customer_id ON orders(customer_id);
-CREATE INDEX idx_orders_order_number ON orders(order_number);
-CREATE INDEX idx_orders_status ON orders(order_status);
-CREATE INDEX idx_orders_payment_status ON orders(payment_status);
-CREATE INDEX idx_orders_created_at ON orders(created_at DESC);
-CREATE INDEX idx_orders_hub_id ON orders(hub_id);
+-- CreateTable
+CREATE TABLE "cart_items" (
+    "id" TEXT NOT NULL,
+    "cart_id" TEXT NOT NULL,
+    "product_id" TEXT NOT NULL,
+    "variant_id" TEXT,
+    "seller_id" TEXT NOT NULL,
+    "quantity" INTEGER NOT NULL DEFAULT 1,
+    "stock_type" TEXT,
+    "hub_id" TEXT,
+    "price_snapshot" DECIMAL(10,2) NOT NULL,
+    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updated_at" TIMESTAMP(3) NOT NULL,
 
--- Order Items
-CREATE INDEX idx_order_items_order_id ON order_items(order_id);
-CREATE INDEX idx_order_items_seller_id ON order_items(seller_id);
-CREATE INDEX idx_order_items_product_id ON order_items(product_id);
+    CONSTRAINT "cart_items_pkey" PRIMARY KEY ("id")
+);
 
--- Hub Inventory
-CREATE INDEX idx_hub_inventory_hub_id ON hub_inventory(hub_id);
-CREATE INDEX idx_hub_inventory_product_id ON hub_inventory(product_id);
-CREATE INDEX idx_hub_inventory_seller_id ON hub_inventory(seller_id);
-CREATE INDEX idx_hub_inventory_expiry ON hub_inventory(expiry_date);
+-- CreateTable
+CREATE TABLE "inventory_reservations" (
+    "id" TEXT NOT NULL,
+    "product_id" TEXT NOT NULL,
+    "quantity" INTEGER NOT NULL,
+    "reservation_type" TEXT NOT NULL,
+    "reservation_id" TEXT NOT NULL,
+    "expires_at" TIMESTAMP(3) NOT NULL,
+    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
--- Reviews
-CREATE INDEX idx_reviews_product_id ON reviews(product_id);
-CREATE INDEX idx_reviews_seller_id ON reviews(seller_id);
-CREATE INDEX idx_reviews_customer_id ON reviews(customer_id);
-CREATE INDEX idx_reviews_created_at ON reviews(created_at DESC);
+    CONSTRAINT "inventory_reservations_pkey" PRIMARY KEY ("id")
+);
 
--- Notifications
-CREATE INDEX idx_notifications_user_id ON notifications(user_id);
-CREATE INDEX idx_notifications_is_read ON notifications(is_read) WHERE is_read = FALSE;
+-- CreateTable
+CREATE TABLE "user_activity_logs" (
+    "id" TEXT NOT NULL,
+    "user_id" TEXT,
+    "activity_type" TEXT NOT NULL,
+    "entity_type" TEXT,
+    "entity_id" TEXT,
+    "metadata" JSONB,
+    "ip_address" TEXT,
+    "user_agent" TEXT,
+    "device_type" TEXT,
+    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
--- Promotions
-CREATE INDEX idx_promotions_code ON promotions(code);
-CREATE INDEX idx_promotions_active ON promotions(is_active, valid_from, valid_until);
+    CONSTRAINT "user_activity_logs_pkey" PRIMARY KEY ("id")
+);
 
--- User Activity
-CREATE INDEX idx_user_activity_user_id ON user_activity_logs(user_id);
-CREATE INDEX idx_user_activity_type ON user_activity_logs(activity_type);
-CREATE INDEX idx_user_activity_created_at ON user_activity_logs(created_at DESC);
+-- CreateTable
+CREATE TABLE "search_queries" (
+    "id" TEXT NOT NULL,
+    "user_id" TEXT,
+    "query" TEXT NOT NULL,
+    "filters" JSONB,
+    "results_count" INTEGER,
+    "clicked_product_id" TEXT,
+    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
--- Carts
-CREATE INDEX idx_carts_user_id ON carts(user_id);
-CREATE INDEX idx_cart_items_cart_id ON cart_items(cart_id);
-CREATE INDEX idx_cart_items_product_id ON cart_items(product_id);
-CREATE INDEX idx_cart_items_seller_id ON cart_items(seller_id);
+    CONSTRAINT "search_queries_pkey" PRIMARY KEY ("id")
+);
 
--- Inventory Reservations
-CREATE INDEX idx_inventory_reservations_product_id ON inventory_reservations(product_id);
-CREATE INDEX idx_inventory_reservations_expires_at ON inventory_reservations(expires_at);
-CREATE INDEX idx_inventory_reservations_type_id ON inventory_reservations(reservation_type, reservation_id);
+-- CreateTable
+CREATE TABLE "system_settings" (
+    "id" TEXT NOT NULL,
+    "key" TEXT NOT NULL,
+    "value" JSONB NOT NULL,
+    "description" TEXT,
+    "updated_by" TEXT,
+    "updated_at" TIMESTAMP(3) NOT NULL,
 
--- Seller Payout Schedules
-CREATE INDEX idx_seller_payout_schedules_seller_id ON seller_payout_schedules(seller_id);
+    CONSTRAINT "system_settings_pkey" PRIMARY KEY ("id")
+);
 
--- Audit Logs
-CREATE INDEX idx_audit_logs_user_id ON audit_logs(user_id);
-CREATE INDEX idx_audit_logs_action ON audit_logs(action);
-CREATE INDEX idx_audit_logs_entity ON audit_logs(entity_type, entity_id);
-CREATE INDEX idx_audit_logs_created_at ON audit_logs(created_at DESC);
+-- CreateTable
+CREATE TABLE "audit_logs" (
+    "id" TEXT NOT NULL,
+    "user_id" TEXT,
+    "action" TEXT NOT NULL,
+    "entity_type" TEXT,
+    "entity_id" TEXT,
+    "ip_address" TEXT,
+    "user_agent" TEXT,
+    "request_data" JSONB,
+    "response_status" INTEGER,
+    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
--- Additional Indexes for Performance
-CREATE INDEX idx_orders_delivery_slot_date ON orders(delivery_slot_date);
-CREATE INDEX idx_orders_estimated_delivery_at ON orders(estimated_delivery_at);
-CREATE INDEX idx_hub_inventory_status ON hub_inventory(status);
-CREATE INDEX idx_reviews_is_approved ON reviews(is_approved) WHERE is_approved = TRUE;
-CREATE INDEX idx_promotions_code_active ON promotions(code, is_active) WHERE is_active = TRUE;
+    CONSTRAINT "audit_logs_pkey" PRIMARY KEY ("id")
+);
 
--- Full-Text Search Indexes
-CREATE INDEX idx_products_name_fts ON products USING gin(to_tsvector('english', name));
-CREATE INDEX idx_products_description_fts ON products USING gin(to_tsvector('english', description));
-CREATE INDEX idx_sellers_business_name_fts ON sellers USING gin(to_tsvector('english', business_name));
+-- CreateTable
+CREATE TABLE "ledger_entries" (
+    "id" TEXT NOT NULL,
+    "order_id" TEXT,
+    "transaction_type" TEXT NOT NULL,
+    "account_type" TEXT NOT NULL,
+    "entry_type" TEXT NOT NULL,
+    "amount" DECIMAL(12,2) NOT NULL,
+    "currency" TEXT NOT NULL DEFAULT 'PKR',
+    "description" TEXT,
+    "seller_id" TEXT,
+    "user_id" TEXT,
+    "metadata" JSONB,
+    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
--- ============================================
--- TRIGGERS FOR AUTOMATIC UPDATES
--- ============================================
+    CONSTRAINT "ledger_entries_pkey" PRIMARY KEY ("id")
+);
 
--- Update timestamp trigger function
-CREATE OR REPLACE FUNCTION update_updated_at_column()
-RETURNS TRIGGER AS $$
-BEGIN
-    NEW.updated_at = CURRENT_TIMESTAMP;
-    RETURN NEW;
-END;
-$$ language 'plpgsql';
+-- CreateTable
+CREATE TABLE "communities" (
+    "id" TEXT NOT NULL,
+    "name" TEXT NOT NULL,
+    "slug" TEXT NOT NULL,
+    "city" TEXT NOT NULL DEFAULT 'Lahore',
+    "area_description" TEXT,
+    "center_latitude" DECIMAL(10,8) NOT NULL,
+    "center_longitude" DECIMAL(11,8) NOT NULL,
+    "radius_km" DOUBLE PRECISION NOT NULL DEFAULT 3.0,
+    "neighbor_community_ids" TEXT[] DEFAULT ARRAY[]::TEXT[],
+    "cross_community_enabled" BOOLEAN NOT NULL DEFAULT true,
+    "delivery_base_fee" DECIMAL(10,2) NOT NULL DEFAULT 100,
+    "cross_community_base_fee" DECIMAL(10,2) NOT NULL DEFAULT 150,
+    "is_active" BOOLEAN NOT NULL DEFAULT true,
+    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updated_at" TIMESTAMP(3) NOT NULL,
 
--- Apply to tables
-CREATE TRIGGER update_users_updated_at BEFORE UPDATE ON users FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
-CREATE TRIGGER update_user_profiles_updated_at BEFORE UPDATE ON user_profiles FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
-CREATE TRIGGER update_sellers_updated_at BEFORE UPDATE ON sellers FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
-CREATE TRIGGER update_products_updated_at BEFORE UPDATE ON products FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
-CREATE TRIGGER update_orders_updated_at BEFORE UPDATE ON orders FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
-CREATE TRIGGER update_hub_centers_updated_at BEFORE UPDATE ON hub_centers FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
-CREATE TRIGGER update_hub_inventory_updated_at BEFORE UPDATE ON hub_inventory FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
-CREATE TRIGGER update_carts_updated_at BEFORE UPDATE ON carts FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
-CREATE TRIGGER update_cart_items_updated_at BEFORE UPDATE ON cart_items FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
-CREATE TRIGGER update_seller_payout_schedules_updated_at BEFORE UPDATE ON seller_payout_schedules FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+    CONSTRAINT "communities_pkey" PRIMARY KEY ("id")
+);
 
--- Trigger to update product rating when review is added
-CREATE OR REPLACE FUNCTION update_product_rating()
-RETURNS TRIGGER AS $$
-BEGIN
-    UPDATE products
-    SET 
-        rating_average = (
-            SELECT AVG(product_rating)::DECIMAL(3,2)
-            FROM reviews
-            WHERE product_id = NEW.product_id
-            AND is_approved = TRUE
-        ),
-        total_reviews = (
-            SELECT COUNT(*)
-            FROM reviews
-            WHERE product_id = NEW.product_id
-            AND is_approved = TRUE
-        )
-    WHERE id = NEW.product_id;
-    RETURN NEW;
-END;
-$$ language 'plpgsql';
+-- CreateTable
+CREATE TABLE "community_pair_fees" (
+    "id" TEXT NOT NULL,
+    "community_a_id" TEXT NOT NULL,
+    "community_b_id" TEXT NOT NULL,
+    "fee" DECIMAL(10,2) NOT NULL,
+    "updated_by" TEXT,
+    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updated_at" TIMESTAMP(3) NOT NULL,
 
-CREATE TRIGGER update_product_rating_on_review AFTER INSERT ON reviews FOR EACH ROW EXECUTE FUNCTION update_product_rating();
+    CONSTRAINT "community_pair_fees_pkey" PRIMARY KEY ("id")
+);
 
--- Trigger to update seller rating when review is added
-CREATE OR REPLACE FUNCTION update_seller_rating()
-RETURNS TRIGGER AS $$
-BEGIN
-    UPDATE sellers
-    SET 
-        rating_average = (
-            SELECT AVG(seller_rating)::DECIMAL(3,2)
-            FROM reviews
-            WHERE seller_id = NEW.seller_id
-            AND is_approved = TRUE
-        ),
-        total_reviews = (
-            SELECT COUNT(*)
-            FROM reviews
-            WHERE seller_id = NEW.seller_id
-            AND is_approved = TRUE
-        )
-    WHERE id = NEW.seller_id;
-    RETURN NEW;
-END;
-$$ language 'plpgsql';
+-- CreateTable
+CREATE TABLE "seller_community_deliveries" (
+    "id" TEXT NOT NULL,
+    "seller_id" TEXT NOT NULL,
+    "community_id" TEXT NOT NULL,
+    "fee" DECIMAL(10,2) NOT NULL,
+    "free_above" DECIMAL(10,2),
+    "min_order_amount" DECIMAL(10,2),
+    "is_enabled" BOOLEAN NOT NULL DEFAULT true,
+    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updated_at" TIMESTAMP(3) NOT NULL,
 
-CREATE TRIGGER update_seller_rating_on_review AFTER INSERT ON reviews FOR EACH ROW EXECUTE FUNCTION update_seller_rating();
+    CONSTRAINT "seller_community_deliveries_pkey" PRIMARY KEY ("id")
+);
 
--- ============================================
--- INITIAL DATA SEEDS
--- ============================================
+-- CreateTable
+CREATE TABLE "refunds" (
+    "id" TEXT NOT NULL,
+    "order_id" TEXT NOT NULL,
+    "customer_id" TEXT,
+    "amount" DECIMAL(10,2) NOT NULL,
+    "method" TEXT NOT NULL,
+    "status" TEXT NOT NULL DEFAULT 'pending',
+    "reason" TEXT,
+    "reference" TEXT,
+    "created_by" TEXT,
+    "processed_by" TEXT,
+    "processed_at" TIMESTAMP(3),
+    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updated_at" TIMESTAMP(3) NOT NULL,
 
--- Insert default categories
-INSERT INTO categories (name, name_urdu, slug, description, sort_order) VALUES
-('Frozen Parathas', 'منجمد پراٹھے', 'frozen-parathas', 'Fresh homemade frozen parathas', 1),
-('Samosas & Snacks', 'سموسے اور نمکین', 'samosas-snacks', 'Delicious frozen samosas and snacks', 2),
-('Ready Meals', 'تیار کھانے', 'ready-meals', 'Complete frozen meals ready to heat', 3),
-('Kebabs & Tikkas', 'کباب اور ٹکے', 'kebabs-tikkas', 'Frozen kebabs and tikka varieties', 4),
-('Desserts', 'میٹھائیاں', 'desserts', 'Frozen desserts and sweets', 5),
-('Bread & Roti', 'روٹی اور نان', 'bread-roti', 'Frozen bread, roti, and naan', 6),
-('Diet Meals', 'ڈائیٹ کھانے', 'diet-meals', 'Healthy frozen meal options', 7),
-('Kids Favorites', 'بچوں کی پسند', 'kids-favorites', 'Kid-friendly frozen items', 8);
+    CONSTRAINT "refunds_pkey" PRIMARY KEY ("id")
+);
 
--- Insert system settings
-INSERT INTO system_settings (key, value, description) VALUES
-('default_commission_rate', '15', 'Default commission rate for sellers'),
-('delivery_fee_base', '100', 'Base delivery fee in PKR'),
-('free_delivery_threshold', '1000', 'Minimum order amount for free delivery in PKR'),
-('hub_delivery_fee', '50', 'Delivery fee for hub orders in PKR'),
-('max_order_items', '50', 'Maximum items per order'),
-('order_cancellation_window', '30', 'Minutes within which customer can cancel order'),
-('seller_payout_day', '7', 'Day of week for seller payouts (1=Monday, 7=Sunday)'),
-('platform_currency', '"PKR"', 'Platform currency code'),
-('otp_expiry_minutes', '5', 'OTP expiry time in minutes'),
-('max_otp_attempts', '3', 'Maximum OTP verification attempts');
+-- CreateTable
+CREATE TABLE "hub_batch_allocations" (
+    "id" TEXT NOT NULL,
+    "order_id" TEXT NOT NULL,
+    "product_id" TEXT NOT NULL,
+    "order_item_id" TEXT,
+    "hub_inventory_id" TEXT NOT NULL,
+    "quantity" INTEGER NOT NULL,
+    "released_at" TIMESTAMP(3),
+    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
--- ============================================
--- VIEWS FOR COMMON QUERIES
--- ============================================
+    CONSTRAINT "hub_batch_allocations_pkey" PRIMARY KEY ("id")
+);
 
--- View for active products with seller info
-CREATE VIEW active_products_view AS
-SELECT 
-    p.*,
-    s.business_name as seller_name,
-    s.rating_average as seller_rating,
-    s.is_verified as seller_verified,
-    c.name as category_name,
-    (
-        SELECT image_url 
-        FROM product_images 
-        WHERE product_id = p.id AND is_primary = TRUE 
-        LIMIT 1
-    ) as primary_image
-FROM products p
-JOIN sellers s ON p.seller_id = s.id
-LEFT JOIN categories c ON p.category_id = c.id
-WHERE p.is_active = TRUE 
-AND p.approval_status = 'approved'
-AND s.status = 'active';
+-- CreateTable
+CREATE TABLE "password_resets" (
+    "id" TEXT NOT NULL,
+    "user_id" TEXT NOT NULL,
+    "token_hash" TEXT NOT NULL,
+    "expires_at" TIMESTAMP(3) NOT NULL,
+    "used_at" TIMESTAMP(3),
+    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
--- View for order summary
-CREATE VIEW order_summary_view AS
-SELECT 
-    o.*,
-    u.full_name as customer_name,
-    u.phone as customer_phone,
-    COUNT(oi.id) as total_items,
-    COUNT(DISTINCT oi.seller_id) as total_sellers
-FROM orders o
-JOIN users usr ON o.customer_id = usr.id
-JOIN user_profiles u ON usr.id = u.user_id
-LEFT JOIN order_items oi ON o.id = oi.order_id
-GROUP BY o.id, u.full_name, u.phone;
+    CONSTRAINT "password_resets_pkey" PRIMARY KEY ("id")
+);
 
--- ============================================
--- FUNCTIONS FOR BUSINESS LOGIC
--- ============================================
+-- CreateTable
+CREATE TABLE "favorite_sellers" (
+    "id" TEXT NOT NULL,
+    "user_id" TEXT NOT NULL,
+    "seller_id" TEXT NOT NULL,
+    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
--- Function to calculate seller earnings for a period
-CREATE OR REPLACE FUNCTION calculate_seller_earnings(
-    p_seller_id UUID,
-    p_start_date DATE,
-    p_end_date DATE
-)
-RETURNS TABLE (
-    total_orders BIGINT,
-    total_sales DECIMAL(10,2),
-    total_commission DECIMAL(10,2),
-    net_earnings DECIMAL(10,2)
-) AS $$
-BEGIN
-    RETURN QUERY
-    SELECT 
-        COUNT(DISTINCT oi.order_id)::BIGINT,
-        COALESCE(SUM(oi.total_price), 0)::DECIMAL(10,2),
-        COALESCE(SUM(oi.commission_amount), 0)::DECIMAL(10,2),
-        COALESCE(SUM(oi.seller_payout), 0)::DECIMAL(10,2)
-    FROM order_items oi
-    JOIN orders o ON oi.order_id = o.id
-    WHERE oi.seller_id = p_seller_id
-    AND o.order_status = 'completed'
-    AND o.payment_status = 'paid'
-    AND o.created_at::DATE BETWEEN p_start_date AND p_end_date;
-END;
-$$ LANGUAGE plpgsql;
+    CONSTRAINT "favorite_sellers_pkey" PRIMARY KEY ("id")
+);
 
--- ============================================
--- COMMENTS FOR DOCUMENTATION
--- ============================================
+-- CreateTable
+CREATE TABLE "order_messages" (
+    "id" TEXT NOT NULL,
+    "order_id" TEXT NOT NULL,
+    "sender_id" TEXT NOT NULL,
+    "sender_role" TEXT NOT NULL,
+    "message" TEXT NOT NULL,
+    "message_type" TEXT NOT NULL DEFAULT 'text',
+    "media_url" TEXT,
+    "duration" INTEGER,
+    "is_read" BOOLEAN NOT NULL DEFAULT false,
+    "read_at" TIMESTAMP(3),
+    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
-COMMENT ON TABLE users IS 'Core user authentication and account information';
-COMMENT ON TABLE sellers IS 'Seller profiles and business information';
-COMMENT ON TABLE products IS 'Product catalog with inventory and pricing';
-COMMENT ON TABLE hub_centers IS 'Micro-fulfillment centers for high-density areas';
-COMMENT ON TABLE hub_inventory IS 'Real-time inventory at hub locations';
-COMMENT ON TABLE orders IS 'Customer orders and transactions';
-COMMENT ON TABLE order_items IS 'Individual items within orders';
-COMMENT ON TABLE reviews IS 'Customer reviews and ratings';
-COMMENT ON TABLE promotions IS 'Discount codes and promotional campaigns';
-COMMENT ON TABLE notifications IS 'System notifications for users';
-COMMENT ON TABLE support_tickets IS 'Customer support and complaint management';
+    CONSTRAINT "order_messages_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateIndex
+CREATE UNIQUE INDEX "users_phone_key" ON "users"("phone");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "users_email_key" ON "users"("email");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "users_referral_code_key" ON "users"("referral_code");
+
+-- CreateIndex
+CREATE INDEX "users_primary_community_id_idx" ON "users"("primary_community_id");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "user_profiles_user_id_key" ON "user_profiles"("user_id");
+
+-- CreateIndex
+CREATE INDEX "user_addresses_user_id_idx" ON "user_addresses"("user_id");
+
+-- CreateIndex
+CREATE INDEX "user_addresses_community_id_idx" ON "user_addresses"("community_id");
+
+-- CreateIndex
+CREATE INDEX "otp_verifications_phone_purpose_created_at_idx" ON "otp_verifications"("phone", "purpose", "created_at");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "email_verifications_user_id_key" ON "email_verifications"("user_id");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "email_verifications_token_key" ON "email_verifications"("token");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "sellers_user_id_key" ON "sellers"("user_id");
+
+-- CreateIndex
+CREATE INDEX "sellers_community_id_idx" ON "sellers"("community_id");
+
+-- CreateIndex
+CREATE INDEX "sellers_status_verification_status_idx" ON "sellers"("status", "verification_status");
+
+-- CreateIndex
+CREATE INDEX "seller_documents_seller_id_idx" ON "seller_documents"("seller_id");
+
+-- CreateIndex
+CREATE INDEX "seller_badges_seller_id_idx" ON "seller_badges"("seller_id");
+
+-- CreateIndex
+CREATE INDEX "stock_alerts_seller_id_idx" ON "stock_alerts"("seller_id");
+
+-- CreateIndex
+CREATE INDEX "stock_alerts_product_id_idx" ON "stock_alerts"("product_id");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "categories_slug_key" ON "categories"("slug");
+
+-- CreateIndex
+CREATE INDEX "categories_parent_id_idx" ON "categories"("parent_id");
+
+-- CreateIndex
+CREATE INDEX "category_requests_seller_id_idx" ON "category_requests"("seller_id");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "products_slug_key" ON "products"("slug");
+
+-- CreateIndex
+CREATE INDEX "products_seller_id_idx" ON "products"("seller_id");
+
+-- CreateIndex
+CREATE INDEX "products_category_id_idx" ON "products"("category_id");
+
+-- CreateIndex
+CREATE INDEX "products_approval_status_is_active_created_at_idx" ON "products"("approval_status", "is_active", "created_at" DESC);
+
+-- CreateIndex
+CREATE INDEX "products_trend_score_idx" ON "products"("trend_score" DESC);
+
+-- CreateIndex
+CREATE INDEX "products_name_trgm_idx" ON "products" USING GIN ("name" gin_trgm_ops);
+
+-- CreateIndex
+CREATE INDEX "products_name_urdu_trgm_idx" ON "products" USING GIN ("name_urdu" gin_trgm_ops);
+
+-- CreateIndex
+CREATE INDEX "products_description_trgm_idx" ON "products" USING GIN ("description" gin_trgm_ops);
+
+-- CreateIndex
+CREATE INDEX "product_images_product_id_idx" ON "product_images"("product_id");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "product_tags_product_id_tag_key" ON "product_tags"("product_id", "tag");
+
+-- CreateIndex
+CREATE INDEX "product_variants_product_id_idx" ON "product_variants"("product_id");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "product_variants_product_id_sku_key" ON "product_variants"("product_id", "sku");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "hub_centers_code_key" ON "hub_centers"("code");
+
+-- CreateIndex
+CREATE INDEX "hub_centers_manager_id_idx" ON "hub_centers"("manager_id");
+
+-- CreateIndex
+CREATE INDEX "hub_inventory_product_id_idx" ON "hub_inventory"("product_id");
+
+-- CreateIndex
+CREATE INDEX "hub_inventory_seller_id_idx" ON "hub_inventory"("seller_id");
+
+-- CreateIndex
+CREATE INDEX "hub_inventory_hub_id_status_expiry_date_idx" ON "hub_inventory"("hub_id", "status", "expiry_date");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "hub_inventory_hub_id_product_id_batch_number_key" ON "hub_inventory"("hub_id", "product_id", "batch_number");
+
+-- CreateIndex
+CREATE INDEX "hub_inventory_logs_hub_inventory_id_idx" ON "hub_inventory_logs"("hub_inventory_id");
+
+-- CreateIndex
+CREATE INDEX "hub_temperature_logs_hub_id_idx" ON "hub_temperature_logs"("hub_id");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "orders_order_number_key" ON "orders"("order_number");
+
+-- CreateIndex
+CREATE INDEX "orders_customer_id_created_at_idx" ON "orders"("customer_id", "created_at");
+
+-- CreateIndex
+CREATE INDEX "orders_order_status_idx" ON "orders"("order_status");
+
+-- CreateIndex
+CREATE INDEX "orders_payment_status_idx" ON "orders"("payment_status");
+
+-- CreateIndex
+CREATE INDEX "orders_created_at_idx" ON "orders"("created_at");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "orders_customer_id_idempotency_key_key" ON "orders"("customer_id", "idempotency_key");
+
+-- CreateIndex
+CREATE INDEX "order_items_order_id_idx" ON "order_items"("order_id");
+
+-- CreateIndex
+CREATE INDEX "order_items_seller_id_created_at_idx" ON "order_items"("seller_id", "created_at");
+
+-- CreateIndex
+CREATE INDEX "order_items_product_id_idx" ON "order_items"("product_id");
+
+-- CreateIndex
+CREATE INDEX "order_status_history_order_id_idx" ON "order_status_history"("order_id");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "riders_user_id_key" ON "riders"("user_id");
+
+-- CreateIndex
+CREATE INDEX "riders_status_verification_status_idx" ON "riders"("status", "verification_status");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "deliveries_orderId_key" ON "deliveries"("orderId");
+
+-- CreateIndex
+CREATE INDEX "deliveries_rider_id_status_idx" ON "deliveries"("rider_id", "status");
+
+-- CreateIndex
+CREATE INDEX "rider_documents_rider_id_idx" ON "rider_documents"("rider_id");
+
+-- CreateIndex
+CREATE INDEX "rider_ledger_entries_rider_id_created_at_idx" ON "rider_ledger_entries"("rider_id", "created_at");
+
+-- CreateIndex
+CREATE INDEX "rider_ledger_entries_rider_id_type_idx" ON "rider_ledger_entries"("rider_id", "type");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "rider_ledger_entries_delivery_id_type_key" ON "rider_ledger_entries"("delivery_id", "type");
+
+-- CreateIndex
+CREATE INDEX "reviews_seller_id_idx" ON "reviews"("seller_id");
+
+-- CreateIndex
+CREATE INDEX "reviews_product_id_idx" ON "reviews"("product_id");
+
+-- CreateIndex
+CREATE INDEX "reviews_customer_id_idx" ON "reviews"("customer_id");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "reviews_order_item_id_customer_id_key" ON "reviews"("order_item_id", "customer_id");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "wallets_user_id_key" ON "wallets"("user_id");
+
+-- CreateIndex
+CREATE INDEX "wallet_transactions_wallet_id_created_at_idx" ON "wallet_transactions"("wallet_id", "created_at");
+
+-- CreateIndex
+CREATE INDEX "wallet_transactions_order_id_idx" ON "wallet_transactions"("order_id");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "payment_attempts_tracker_key" ON "payment_attempts"("tracker");
+
+-- CreateIndex
+CREATE INDEX "payment_attempts_order_id_idx" ON "payment_attempts"("order_id");
+
+-- CreateIndex
+CREATE INDEX "payment_attempts_user_id_created_at_idx" ON "payment_attempts"("user_id", "created_at");
+
+-- CreateIndex
+CREATE INDEX "payment_attempts_status_created_at_idx" ON "payment_attempts"("status", "created_at");
+
+-- CreateIndex
+CREATE INDEX "seller_payouts_seller_id_status_idx" ON "seller_payouts"("seller_id", "status");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "seller_payout_schedules_seller_id_key" ON "seller_payout_schedules"("seller_id");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "promotions_code_key" ON "promotions"("code");
+
+-- CreateIndex
+CREATE INDEX "promotions_seller_id_idx" ON "promotions"("seller_id");
+
+-- CreateIndex
+CREATE INDEX "promotion_usages_promotion_id_user_id_idx" ON "promotion_usages"("promotion_id", "user_id");
+
+-- CreateIndex
+CREATE INDEX "promotion_usages_order_id_idx" ON "promotion_usages"("order_id");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "promotion_usages_promotion_id_order_id_key" ON "promotion_usages"("promotion_id", "order_id");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "push_subscriptions_endpoint_key" ON "push_subscriptions"("endpoint");
+
+-- CreateIndex
+CREATE INDEX "push_subscriptions_user_id_idx" ON "push_subscriptions"("user_id");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "notifications_dedupe_key_key" ON "notifications"("dedupe_key");
+
+-- CreateIndex
+CREATE INDEX "notifications_user_id_is_read_idx" ON "notifications"("user_id", "is_read");
+
+-- CreateIndex
+CREATE INDEX "notifications_user_id_created_at_idx" ON "notifications"("user_id", "created_at");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "support_tickets_ticket_number_key" ON "support_tickets"("ticket_number");
+
+-- CreateIndex
+CREATE INDEX "support_tickets_user_id_idx" ON "support_tickets"("user_id");
+
+-- CreateIndex
+CREATE INDEX "support_messages_ticket_id_idx" ON "support_messages"("ticket_id");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "carts_user_id_key" ON "carts"("user_id");
+
+-- CreateIndex
+CREATE INDEX "cart_items_cart_id_idx" ON "cart_items"("cart_id");
+
+-- CreateIndex
+CREATE INDEX "cart_items_product_id_idx" ON "cart_items"("product_id");
+
+-- CreateIndex
+CREATE INDEX "inventory_reservations_product_id_idx" ON "inventory_reservations"("product_id");
+
+-- CreateIndex
+CREATE INDEX "inventory_reservations_reservation_id_idx" ON "inventory_reservations"("reservation_id");
+
+-- CreateIndex
+CREATE INDEX "user_activity_logs_user_id_created_at_idx" ON "user_activity_logs"("user_id", "created_at");
+
+-- CreateIndex
+CREATE INDEX "search_queries_user_id_idx" ON "search_queries"("user_id");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "system_settings_key_key" ON "system_settings"("key");
+
+-- CreateIndex
+CREATE INDEX "audit_logs_user_id_created_at_idx" ON "audit_logs"("user_id", "created_at");
+
+-- CreateIndex
+CREATE INDEX "audit_logs_entity_type_entity_id_idx" ON "audit_logs"("entity_type", "entity_id");
+
+-- CreateIndex
+CREATE INDEX "ledger_entries_order_id_idx" ON "ledger_entries"("order_id");
+
+-- CreateIndex
+CREATE INDEX "ledger_entries_seller_id_idx" ON "ledger_entries"("seller_id");
+
+-- CreateIndex
+CREATE INDEX "ledger_entries_transaction_type_idx" ON "ledger_entries"("transaction_type");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "communities_slug_key" ON "communities"("slug");
+
+-- CreateIndex
+CREATE INDEX "community_pair_fees_community_b_id_idx" ON "community_pair_fees"("community_b_id");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "community_pair_fees_community_a_id_community_b_id_key" ON "community_pair_fees"("community_a_id", "community_b_id");
+
+-- CreateIndex
+CREATE INDEX "seller_community_deliveries_community_id_idx" ON "seller_community_deliveries"("community_id");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "seller_community_deliveries_seller_id_community_id_key" ON "seller_community_deliveries"("seller_id", "community_id");
+
+-- CreateIndex
+CREATE INDEX "refunds_order_id_idx" ON "refunds"("order_id");
+
+-- CreateIndex
+CREATE INDEX "refunds_status_idx" ON "refunds"("status");
+
+-- CreateIndex
+CREATE INDEX "hub_batch_allocations_order_id_product_id_idx" ON "hub_batch_allocations"("order_id", "product_id");
+
+-- CreateIndex
+CREATE INDEX "hub_batch_allocations_hub_inventory_id_idx" ON "hub_batch_allocations"("hub_inventory_id");
+
+-- CreateIndex
+CREATE INDEX "hub_batch_allocations_order_item_id_idx" ON "hub_batch_allocations"("order_item_id");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "password_resets_token_hash_key" ON "password_resets"("token_hash");
+
+-- CreateIndex
+CREATE INDEX "password_resets_user_id_idx" ON "password_resets"("user_id");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "favorite_sellers_user_id_seller_id_key" ON "favorite_sellers"("user_id", "seller_id");
+
+-- CreateIndex
+CREATE INDEX "order_messages_order_id_created_at_idx" ON "order_messages"("order_id", "created_at");
+
+-- AddForeignKey
+ALTER TABLE "users" ADD CONSTRAINT "users_primary_community_id_fkey" FOREIGN KEY ("primary_community_id") REFERENCES "communities"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "user_profiles" ADD CONSTRAINT "user_profiles_user_id_fkey" FOREIGN KEY ("user_id") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "user_addresses" ADD CONSTRAINT "user_addresses_user_id_fkey" FOREIGN KEY ("user_id") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "user_addresses" ADD CONSTRAINT "user_addresses_community_id_fkey" FOREIGN KEY ("community_id") REFERENCES "communities"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "email_verifications" ADD CONSTRAINT "email_verifications_user_id_fkey" FOREIGN KEY ("user_id") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "sellers" ADD CONSTRAINT "sellers_user_id_fkey" FOREIGN KEY ("user_id") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "sellers" ADD CONSTRAINT "sellers_community_id_fkey" FOREIGN KEY ("community_id") REFERENCES "communities"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "seller_documents" ADD CONSTRAINT "seller_documents_seller_id_fkey" FOREIGN KEY ("seller_id") REFERENCES "sellers"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "seller_badges" ADD CONSTRAINT "seller_badges_seller_id_fkey" FOREIGN KEY ("seller_id") REFERENCES "sellers"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "stock_alerts" ADD CONSTRAINT "stock_alerts_seller_id_fkey" FOREIGN KEY ("seller_id") REFERENCES "sellers"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "categories" ADD CONSTRAINT "categories_parent_id_fkey" FOREIGN KEY ("parent_id") REFERENCES "categories"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "category_requests" ADD CONSTRAINT "category_requests_seller_id_fkey" FOREIGN KEY ("seller_id") REFERENCES "sellers"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "category_requests" ADD CONSTRAINT "category_requests_parent_category_id_fkey" FOREIGN KEY ("parent_category_id") REFERENCES "categories"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "products" ADD CONSTRAINT "products_seller_id_fkey" FOREIGN KEY ("seller_id") REFERENCES "sellers"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "products" ADD CONSTRAINT "products_category_id_fkey" FOREIGN KEY ("category_id") REFERENCES "categories"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "product_images" ADD CONSTRAINT "product_images_product_id_fkey" FOREIGN KEY ("product_id") REFERENCES "products"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "product_tags" ADD CONSTRAINT "product_tags_product_id_fkey" FOREIGN KEY ("product_id") REFERENCES "products"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "product_variants" ADD CONSTRAINT "product_variants_product_id_fkey" FOREIGN KEY ("product_id") REFERENCES "products"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "hub_centers" ADD CONSTRAINT "hub_centers_manager_id_fkey" FOREIGN KEY ("manager_id") REFERENCES "users"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "hub_inventory" ADD CONSTRAINT "hub_inventory_hub_id_fkey" FOREIGN KEY ("hub_id") REFERENCES "hub_centers"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "hub_inventory" ADD CONSTRAINT "hub_inventory_product_id_fkey" FOREIGN KEY ("product_id") REFERENCES "products"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "hub_inventory" ADD CONSTRAINT "hub_inventory_seller_id_fkey" FOREIGN KEY ("seller_id") REFERENCES "sellers"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "hub_inventory_logs" ADD CONSTRAINT "hub_inventory_logs_hub_inventory_id_fkey" FOREIGN KEY ("hub_inventory_id") REFERENCES "hub_inventory"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "hub_temperature_logs" ADD CONSTRAINT "hub_temperature_logs_hub_id_fkey" FOREIGN KEY ("hub_id") REFERENCES "hub_centers"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "orders" ADD CONSTRAINT "orders_customer_id_fkey" FOREIGN KEY ("customer_id") REFERENCES "users"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "orders" ADD CONSTRAINT "orders_delivery_address_id_fkey" FOREIGN KEY ("delivery_address_id") REFERENCES "user_addresses"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "orders" ADD CONSTRAINT "orders_hub_id_fkey" FOREIGN KEY ("hub_id") REFERENCES "hub_centers"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "order_items" ADD CONSTRAINT "order_items_order_id_fkey" FOREIGN KEY ("order_id") REFERENCES "orders"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "order_items" ADD CONSTRAINT "order_items_product_id_fkey" FOREIGN KEY ("product_id") REFERENCES "products"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "order_items" ADD CONSTRAINT "order_items_variant_id_fkey" FOREIGN KEY ("variant_id") REFERENCES "product_variants"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "order_items" ADD CONSTRAINT "order_items_seller_id_fkey" FOREIGN KEY ("seller_id") REFERENCES "sellers"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "order_items" ADD CONSTRAINT "order_items_hub_id_fkey" FOREIGN KEY ("hub_id") REFERENCES "hub_centers"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "order_status_history" ADD CONSTRAINT "order_status_history_order_id_fkey" FOREIGN KEY ("order_id") REFERENCES "orders"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "riders" ADD CONSTRAINT "riders_hub_id_fkey" FOREIGN KEY ("hub_id") REFERENCES "hub_centers"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "deliveries" ADD CONSTRAINT "deliveries_orderId_fkey" FOREIGN KEY ("orderId") REFERENCES "orders"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "deliveries" ADD CONSTRAINT "deliveries_rider_id_fkey" FOREIGN KEY ("rider_id") REFERENCES "riders"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "rider_documents" ADD CONSTRAINT "rider_documents_rider_id_fkey" FOREIGN KEY ("rider_id") REFERENCES "riders"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "rider_ledger_entries" ADD CONSTRAINT "rider_ledger_entries_rider_id_fkey" FOREIGN KEY ("rider_id") REFERENCES "riders"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "rider_ledger_entries" ADD CONSTRAINT "rider_ledger_entries_delivery_id_fkey" FOREIGN KEY ("delivery_id") REFERENCES "deliveries"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "reviews" ADD CONSTRAINT "reviews_order_id_fkey" FOREIGN KEY ("order_id") REFERENCES "orders"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "reviews" ADD CONSTRAINT "reviews_order_item_id_fkey" FOREIGN KEY ("order_item_id") REFERENCES "order_items"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "reviews" ADD CONSTRAINT "reviews_customer_id_fkey" FOREIGN KEY ("customer_id") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "reviews" ADD CONSTRAINT "reviews_seller_id_fkey" FOREIGN KEY ("seller_id") REFERENCES "sellers"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "reviews" ADD CONSTRAINT "reviews_product_id_fkey" FOREIGN KEY ("product_id") REFERENCES "products"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "wallets" ADD CONSTRAINT "wallets_user_id_fkey" FOREIGN KEY ("user_id") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "wallet_transactions" ADD CONSTRAINT "wallet_transactions_wallet_id_fkey" FOREIGN KEY ("wallet_id") REFERENCES "wallets"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "wallet_transactions" ADD CONSTRAINT "wallet_transactions_order_id_fkey" FOREIGN KEY ("order_id") REFERENCES "orders"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "payment_attempts" ADD CONSTRAINT "payment_attempts_order_id_fkey" FOREIGN KEY ("order_id") REFERENCES "orders"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "payment_attempts" ADD CONSTRAINT "payment_attempts_user_id_fkey" FOREIGN KEY ("user_id") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "seller_payouts" ADD CONSTRAINT "seller_payouts_seller_id_fkey" FOREIGN KEY ("seller_id") REFERENCES "sellers"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "seller_payout_schedules" ADD CONSTRAINT "seller_payout_schedules_seller_id_fkey" FOREIGN KEY ("seller_id") REFERENCES "sellers"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "promotions" ADD CONSTRAINT "promotions_seller_id_fkey" FOREIGN KEY ("seller_id") REFERENCES "sellers"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "promotion_usages" ADD CONSTRAINT "promotion_usages_promotion_id_fkey" FOREIGN KEY ("promotion_id") REFERENCES "promotions"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "promotion_usages" ADD CONSTRAINT "promotion_usages_order_id_fkey" FOREIGN KEY ("order_id") REFERENCES "orders"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "push_subscriptions" ADD CONSTRAINT "push_subscriptions_user_id_fkey" FOREIGN KEY ("user_id") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "notifications" ADD CONSTRAINT "notifications_user_id_fkey" FOREIGN KEY ("user_id") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "support_tickets" ADD CONSTRAINT "support_tickets_user_id_fkey" FOREIGN KEY ("user_id") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "support_tickets" ADD CONSTRAINT "support_tickets_order_id_fkey" FOREIGN KEY ("order_id") REFERENCES "orders"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "support_messages" ADD CONSTRAINT "support_messages_ticket_id_fkey" FOREIGN KEY ("ticket_id") REFERENCES "support_tickets"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "carts" ADD CONSTRAINT "carts_user_id_fkey" FOREIGN KEY ("user_id") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "cart_items" ADD CONSTRAINT "cart_items_cart_id_fkey" FOREIGN KEY ("cart_id") REFERENCES "carts"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "cart_items" ADD CONSTRAINT "cart_items_product_id_fkey" FOREIGN KEY ("product_id") REFERENCES "products"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "cart_items" ADD CONSTRAINT "cart_items_variant_id_fkey" FOREIGN KEY ("variant_id") REFERENCES "product_variants"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "cart_items" ADD CONSTRAINT "cart_items_seller_id_fkey" FOREIGN KEY ("seller_id") REFERENCES "sellers"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "cart_items" ADD CONSTRAINT "cart_items_hub_id_fkey" FOREIGN KEY ("hub_id") REFERENCES "hub_centers"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "inventory_reservations" ADD CONSTRAINT "inventory_reservations_product_id_fkey" FOREIGN KEY ("product_id") REFERENCES "products"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "user_activity_logs" ADD CONSTRAINT "user_activity_logs_user_id_fkey" FOREIGN KEY ("user_id") REFERENCES "users"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "search_queries" ADD CONSTRAINT "search_queries_user_id_fkey" FOREIGN KEY ("user_id") REFERENCES "users"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "search_queries" ADD CONSTRAINT "search_queries_clicked_product_id_fkey" FOREIGN KEY ("clicked_product_id") REFERENCES "products"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "audit_logs" ADD CONSTRAINT "audit_logs_user_id_fkey" FOREIGN KEY ("user_id") REFERENCES "users"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "community_pair_fees" ADD CONSTRAINT "community_pair_fees_community_a_id_fkey" FOREIGN KEY ("community_a_id") REFERENCES "communities"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "community_pair_fees" ADD CONSTRAINT "community_pair_fees_community_b_id_fkey" FOREIGN KEY ("community_b_id") REFERENCES "communities"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "seller_community_deliveries" ADD CONSTRAINT "seller_community_deliveries_seller_id_fkey" FOREIGN KEY ("seller_id") REFERENCES "sellers"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "seller_community_deliveries" ADD CONSTRAINT "seller_community_deliveries_community_id_fkey" FOREIGN KEY ("community_id") REFERENCES "communities"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "refunds" ADD CONSTRAINT "refunds_order_id_fkey" FOREIGN KEY ("order_id") REFERENCES "orders"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "hub_batch_allocations" ADD CONSTRAINT "hub_batch_allocations_order_id_fkey" FOREIGN KEY ("order_id") REFERENCES "orders"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "hub_batch_allocations" ADD CONSTRAINT "hub_batch_allocations_hub_inventory_id_fkey" FOREIGN KEY ("hub_inventory_id") REFERENCES "hub_inventory"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "password_resets" ADD CONSTRAINT "password_resets_user_id_fkey" FOREIGN KEY ("user_id") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "favorite_sellers" ADD CONSTRAINT "favorite_sellers_user_id_fkey" FOREIGN KEY ("user_id") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "favorite_sellers" ADD CONSTRAINT "favorite_sellers_seller_id_fkey" FOREIGN KEY ("seller_id") REFERENCES "sellers"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "order_messages" ADD CONSTRAINT "order_messages_order_id_fkey" FOREIGN KEY ("order_id") REFERENCES "orders"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "order_messages" ADD CONSTRAINT "order_messages_sender_id_fkey" FOREIGN KEY ("sender_id") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
