@@ -24,12 +24,14 @@ import {
   getAnalyticsQuerySchema,
 } from '../validators/admin-order.validator';
 import { authenticate, authorize } from '../middleware/auth.middleware';
+import { auditWrites } from '../middleware/audit';
 
 const router = Router();
 
 // All admin order routes require authentication and admin role
 router.use(authenticate);
 router.use(authorize('admin'));
+router.use(auditWrites('admin'));
 
 // Get platform analytics
 router.get('/analytics', validateQuery(getAnalyticsQuerySchema), getPlatformAnalytics);

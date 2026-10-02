@@ -1,4 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
+import { logger } from '../utils/logger';
+import { reportError } from '../config/sentry';
 
 export class AppError extends Error {
   statusCode: number;
@@ -61,49 +63,42 @@ export const errorHandler = (
   _next: NextFunction
 ): void => {
   const err = toAppError(rawErr);
-  // Handle AppError
+  const requestId = (req as Request & { id?: string }).id;
+  const isDev = process.env.NODE_ENV === 'development';
+  const expected = err instanceof AppError && err.statusCode < 500;
+
+  if (expected) {
+    // A client mistake (validation, not found, forbidden...): worth a line, not an alert.
+    logger.warn({ code: (err as AppError).code, status: (err as AppError).statusCode, path: req.path, method: req.method }, err.message);
+  } else {
+    // A bug or an outage: the full stack goes to the logs and to error tracking, never to the client.
+    logger.error({ err, path: req.path, method: req.method }, 'Request failed');
+    reportError(err, { path: req.path, method: req.method });
+  }
+
   if (err instanceof AppError) {
-    const statusCode = err.statusCode || 500;
-    const message = err.message || 'Internal Server Error';
-
-    // Log error (in production, use proper logging service)
-    console.error('Error:', {
-      message: err.message,
-      code: err.code,
-      stack: process.env.NODE_ENV === 'development' ? err.stack : undefined,
-      path: req.path,
-      method: req.method
-    });
-
-    res.status(statusCode).json({
+    res.status(err.statusCode || 500).json({
       success: false,
       error: {
         code: err.code || 'INTERNAL_ERROR',
-        message: message,
+        message: err.message || 'Internal Server Error',
         ...(err.details && { details: err.details }),
-        ...(process.env.NODE_ENV === 'development' && err.stack && { stack: err.stack })
+        ...(isDev && err.stack && { stack: err.stack }),
       },
-      timestamp: new Date().toISOString()
+      requestId,
+      timestamp: new Date().toISOString(),
     });
     return;
   }
-
-  // Handle other errors
-  console.error('Unexpected Error:', {
-    message: err.message,
-    stack: process.env.NODE_ENV === 'development' ? err.stack : undefined,
-    path: req.path,
-    method: req.method
-  });
 
   res.status(500).json({
     success: false,
     error: {
       code: 'INTERNAL_ERROR',
-      message: process.env.NODE_ENV === 'development' ? err.message : 'Internal Server Error',
-      ...(process.env.NODE_ENV === 'development' && { stack: err.stack })
+      message: isDev ? err.message : 'Something went wrong on our side. Please try again.',
+      ...(isDev && { stack: err.stack }),
     },
-    timestamp: new Date().toISOString()
+    requestId,
+    timestamp: new Date().toISOString(),
   });
 };
-

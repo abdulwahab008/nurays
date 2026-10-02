@@ -57,6 +57,7 @@ services:
         NEXT_PUBLIC_LEGAL_ADDRESS: ${NEXT_PUBLIC_LEGAL_ADDRESS:-}
         NEXT_PUBLIC_SUPPORT_EMAIL: ${NEXT_PUBLIC_SUPPORT_EMAIL:-}
         NEXT_PUBLIC_LEGAL_REVIEWED: ${NEXT_PUBLIC_LEGAL_REVIEWED:-false}
+        NEXT_PUBLIC_SENTRY_DSN: ${NEXT_PUBLIC_SENTRY_DSN:-}
     container_name: nuray-frontend
     restart: unless-stopped
     ports:
