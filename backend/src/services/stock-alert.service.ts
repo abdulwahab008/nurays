@@ -1,5 +1,5 @@
 import prisma from '../config/database';
-import emailService from './email.service';
+import { queueEmail } from '../jobs/email.jobs';
 
 interface CreateStockAlertData {
   sellerId: string;
@@ -89,17 +89,10 @@ export const createStockAlert = async (data: CreateStockAlertData) => {
     `;
 
     try {
-      await emailService.sendEmail({
-        to: seller.user.email,
-        subject,
-        html: message,
-      });
-      await prisma.stockAlert.update({
-        where: { id: alert.id },
-        data: { emailSent: true },
-      });
+      // Sent in the background; the alert is marked emailed once it has gone out.
+      await queueEmail({ to: seller.user.email, subject, html: message, stockAlertId: alert.id });
     } catch (error) {
-      console.error('Failed to send stock alert email:', error);
+      console.error('Failed to queue stock alert email:', error);
     }
   }
 

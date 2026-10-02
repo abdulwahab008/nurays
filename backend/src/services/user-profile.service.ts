@@ -2,7 +2,7 @@ import prisma from '../config/database';
 import { isStoredFile, storedFileOwner } from '../storage';
 import { AppError } from '../middleware/errorHandler';
 import { communityService } from './community.service';
-import emailService from './email.service';
+import { queueVerificationEmail } from '../jobs/email.jobs';
 import { generateVerificationToken } from '../utils/email-verification';
 
 export class UserProfileService {
@@ -86,9 +86,9 @@ export class UserProfileService {
         }),
       ]);
       try {
-        await emailService.sendVerificationEmail(newEmail, data.fullName || 'there', token);
+        await queueVerificationEmail(userId);
       } catch (err) {
-        console.error(`[updateProfile] Could not send verification email to ${newEmail}`, err);
+        console.error(`[updateProfile] Could not queue the verification email for ${newEmail}`, err);
       }
     }
 
