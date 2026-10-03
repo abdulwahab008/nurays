@@ -1,137 +1,42 @@
-# FrozenNuray - AI Coding Agent Instructions
+# Nuray: instructions for AI coding agents
 
-## Project Overview
-FrozenNuray is Pakistan's first frozen homemade food marketplace platform with a monolithic backend (Node.js/Express/Prisma), Next.js web frontend, and planned Flutter mobile apps. The platform connects home-based food entrepreneurs with customers through hub-based micro-fulfillment centers.
+Nuray is a community food marketplace for Pakistan: home kitchens sell to people in their community; Nuray riders or
+the kitchen deliver. Backend: `backend/` (Node 20, Express 5, TypeScript, Prisma 6, PostgreSQL, Redis/BullMQ,
+Socket.IO). Frontend: `frontend-web/` (Next.js 16 App Router, React 19, Tailwind 4; English and Urdu). There is no
+mobile app. Read [README.md](../README.md) and [docs/README.md](../docs/README.md) first.
 
-## Architecture & Key Concepts
+## Conventions
 
-### Multi-Tier User System
-- **5 user types** (customer, seller, admin, hub_manager, rider) all stored in single `users` table
-- User type determines access via `requireRole()` middleware in [backend/src/middleware/auth.middleware.ts](../backend/src/middleware/auth.middleware.ts)
-- Most entities have relationships to `User` model, not specific role models
-- Sellers have extended data in separate `Seller` model with `userId` foreign key
+- **Layers**: routes (`backend/src/routes/*.routes.ts`) → validators (zod, `backend/src/validators`) → controllers →
+  services (`backend/src/services`, where the logic and all database work live). Pure rules (pricing, delivery fees,
+  ranking) are in `backend/src/utils` with unit tests.
+- **Roles**: `customer`, `seller`, `rider`, `admin`, `hub_manager` in one `users` table; guard routes with the
+  middleware in `backend/src/middleware/auth.middleware.ts` and check ownership in the service.
+- **Database**: snake_case columns via `@map`, camelCase in code. Change the schema with a new migration
+  (`backend/prisma/README.md`); never edit an applied migration. `docs/DATABASE_SCHEMA.sql` is generated.
+- **Money**: whole-rupee order totals (`utils/pricing.ts` `priceOrder`, mirrored in `frontend-web/lib/utils.ts`);
+  anything that moves money runs in a database transaction and writes ledger entries; use `AppError` with a code.
+- **Delivery prices**: Nuray-rider fees in `utils/deliveryFee.ts` + `services/delivery-pricing.service.ts`; a kitchen's own
+  fees apply only to self-delivery. See `docs/BUSINESS_RULES.md`.
+- **Frontend text**: every user-facing string goes in a message module under `frontend-web/lib/i18n/messages/` with both
+  `en` and `ur` (`useT`); use direction-neutral Tailwind classes (`ms-`, `me-`, `ps-`, `pe-`, `start-`, `end-`,
+  `text-start`), and mark phone numbers, codes and order numbers `data-ltr`.
+- **Real time**: events and rooms are listed in `docs/REALTIME_ORDER_MANAGEMENT.md`.
+- **Notifications**: call `notify()` (`services/notify.service.ts`); it never throws and de-duplicates by key.
 
-### Database Conventions (Prisma)
-- **Snake_case in database**, camelCase in TypeScript code
-- All Prisma fields use `@map("snake_case")` for database columns
-- Table names use `@@map("table_name")` 
-- Example: `fullName String @map("full_name")` in code maps to `full_name` column
-- Always use camelCase when writing Prisma queries: `prisma.user.findUnique({ where: { id: userId } })`
+## Checking your work
 
-### Real-Time Architecture
-- Socket.io WebSocket server initialized in [backend/src/index.ts](../backend/src/index.ts) via `socketManager`
-- Room-based notifications: `user:${userId}`, `role:${role}`, `order:${orderId}`
-- Authentication via JWT in socket handshake: `socket.handshake.auth.token`
-- See [backend/docs/REALTIME_ORDER_MANAGEMENT.md](../backend/docs/REALTIME_ORDER_MANAGEMENT.md) for event patterns
-
-### API Structure
-- RESTful with versioned routes: `/api/v1/{resource}`
-- All routes in [backend/src/routes/](../backend/src/routes/) follow pattern: `{resource}.routes.ts`
-- Controllers in [backend/src/controllers/](../backend/src/controllers/) named `{resource}.controller.ts`
-- Authentication via JWT Bearer tokens with `authenticate` middleware
-- Role-based access with `requireRole(['seller', 'admin'])` middleware
-
-## Development Workflows
-
-### Backend Development
 ```bash
-cd backend
-npm run dev              # Start with nodemon (auto-restart on changes)
-npm run prisma:studio    # Open Prisma Studio GUI for database inspection
-npm run prisma:migrate   # Create and apply new migrations
+cd backend && npx tsc --noEmit && npm test
+cd frontend-web && npx tsc --noEmit
 ```
 
-### Frontend Development  
-```bash
-cd frontend-web
-npm run dev              # Start Next.js dev server on localhost:3000
-```
+Money, ordering and payment changes also need the real-database check
+(`backend/scripts/verify-money-flows.ts`, see `docs/TESTING_STRATEGY.md`); UI changes should be looked at in the browser,
+in English and Urdu.
 
-### Database Operations
-- **Never modify migrations directly** - create new ones with `prisma migrate dev --name <description>`
-- Seed scripts in [backend/scripts/](../backend/scripts/): `seed-categories.js`, `create-admin.js`, etc.
-- Run scripts: `node backend/scripts/<script-name>.js`
+## Don't
 
-### Testing Database State
-Use Prisma Studio (`npm run prisma:studio` in backend/) to inspect data visually rather than writing queries.
-
-## Project-Specific Patterns
-
-### Authentication Flow
-1. Frontend stores JWT in localStorage via Zustand persistent store
-2. ApiClient in [frontend-web/lib/api-client.ts](../frontend-web/lib/api-client.ts) auto-injects token via axios interceptor
-3. Backend verifies with `authenticate` middleware, attaches `req.user` with `{ userId, userType }`
-4. 401 responses trigger automatic logout and redirect to `/login`
-
-### State Management (Frontend)
-- **Zustand stores** in [frontend-web/lib/store/](../frontend-web/lib/store/):
-  - `useAuthStore` - user session (persisted to localStorage)
-  - `useCartStore` - shopping cart state
-- Pattern: `const { user, setUser } = useAuthStore();`
-- Stores use `persist()` middleware for automatic localStorage sync
-
-### Error Handling
-- Backend uses custom `AppError` class with `(message, statusCode, errorCode)`
-- Centralized error handler in [backend/src/middleware/errorHandler.ts](../backend/src/middleware/errorHandler.ts)
-- Always throw `AppError` for business logic errors, not generic `Error`
-
-### File Uploads
-- Images stored locally in [backend/uploads/products/](../backend/uploads/products/)
-- Served statically via `/uploads` route
-- Upload controller handles multipart/form-data with multer
-- Frontend cloudinary integration planned but not yet implemented
-
-## Common Tasks
-
-### Adding New API Endpoint
-1. Define route in `backend/src/routes/{resource}.routes.ts`
-2. Add controller function in `backend/src/controllers/{resource}.controller.ts`
-3. Use middleware: `router.post('/', authenticate, requireRole(['admin']), controller.create)`
-4. Always validate input with Zod or similar before database operations
-
-### Adding New Database Model
-1. Add model to [backend/prisma/schema.prisma](../backend/prisma/schema.prisma)
-2. Use `@map()` for all fields to match snake_case database convention
-3. Run `npm run prisma:migrate` to create migration
-4. Update TypeScript types if needed (Prisma Client auto-generates most)
-
-### Adding Real-Time Feature
-1. Emit events via `socketManager.emitToUser(userId, 'event:name', data)` from controllers
-2. Add socket event listener in [backend/src/config/socket.ts](../backend/src/config/socket.ts) if client-initiated
-3. Frontend connects via [frontend-web/lib/hooks/useSocket.ts](../frontend-web/lib/hooks/) (if exists) or raw socket.io-client
-
-### Creating Seller-Specific Features
-- Always check `req.user.userType === 'seller'` or use `requireRole(['seller'])`
-- Get seller record: `await prisma.seller.findUnique({ where: { userId: req.user.userId } })`
-- Sellers can only access their own products/orders - always filter by `sellerId`
-
-## Critical Gotchas
-
-### Database Field Naming
-❌ `prisma.user.findUnique({ where: { full_name: 'John' } })` - WRONG (database name)
-✅ `prisma.user.findUnique({ where: { profile: { fullName: 'John' } } })` - CORRECT (TypeScript name)
-
-### Authentication Context
-- `req.user` only exists AFTER `authenticate` middleware runs
-- Contains `{ userId, userType }` - use these for authorization checks
-- Never trust client-provided user IDs - always use `req.user.userId`
-
-### Socket.io Rooms
-- Users auto-join `user:${userId}` and `role:${userType}` rooms on connect
-- Must explicitly join order rooms: `socket.emit('join:order', orderId)`
-- Emit to specific rooms with `socketManager.emitToUser()` or `emitToRole()`
-
-## Key Files Reference
-- **Entry point**: [backend/src/index.ts](../backend/src/index.ts) - all routes registered here
-- **Schema**: [backend/prisma/schema.prisma](../backend/prisma/schema.prisma) - single source of truth for data models
-- **Auth middleware**: [backend/src/middleware/auth.middleware.ts](../backend/src/middleware/auth.middleware.ts) - JWT verification and role checks
-- **Socket config**: [backend/src/config/socket.ts](../backend/src/config/socket.ts) - WebSocket authentication and room management
-- **API client**: [frontend-web/lib/api-client.ts](../frontend-web/lib/api-client.ts) - axios wrapper with auth interceptors
-- **Architecture docs**: [docs/ARCHITECTURE.md](../docs/ARCHITECTURE.md) - high-level system design
-
-## Development Environment
-- Node.js 20.x LTS required
-- PostgreSQL 15.x for database
-- Redis 7.x for caching (planned, not yet integrated)
-- Backend runs on port 3001, frontend on 3000
-- Set `DATABASE_URL`, `JWT_SECRET`, `CORS_ORIGIN` in `backend/.env`
+- Don't trust old planning documents in `docs/archive/`: they describe plans, not the system.
+- Don't add fake or hard-coded data to screens; show real data or nothing.
+- Don't send commit messages or pull requests that name an AI tool unless asked.

@@ -49,7 +49,7 @@ One order from a brand-new dish to a delivered parcel. Do it in this order.
 2. `/products`: search for the dish name. Expected: it shows, name matches first. Try a typo ("biryni"); it still
    finds biryani when there are few exact matches.
 3. Open the dish (`/products/<id>`), set quantity, add a note, Add to cart. `/cart` shows it. Adding a dish from a
-   different kitchen is allowed (one cart can hold several kitchens); each kitchen's delivery fee is its own line.
+   different kitchen asks to start a new cart: an order is from one kitchen.
 4. `/checkout`: pick the address, a payment method, place the order. Expected: totals are whole rupees, the order
    appears in `/orders`, and a double-click on Place order creates one order.
 5. `/orders/<id>`: status is waiting for the kitchen. Note the handover PIN card; only the customer sees the PIN.
@@ -67,7 +67,7 @@ One order from a brand-new dish to a delivered parcel. Do it in this order.
 ### E. Rider claims, picks up, hands over
 
 1. Rider: `/riders/dashboard`. Go on duty. Expected: the job shows in "Available Pool" with the pay shown on the
-   Claim button. A rider over the cash limit is only offered prepaid jobs.
+   Claim button. A rider over the cash limit still sees cash jobs, flagged and ranked last, and claiming one is refused until they hand cash in.
 2. Claim. Then use the status buttons in order: arrived at pickup, picked up, in transit, arrived at customer. The
    rider's position appears on the customer's order page map while on the way.
 3. At the door, the rider opens the handover dialog and types the customer's 4-digit PIN. A wrong PIN is refused.
@@ -84,7 +84,7 @@ One order from a brand-new dish to a delivered parcel. Do it in this order.
   (`/verify-email`, `/verify-email-pending`). Phone can be verified with an OTP from the profile.
 - Login at `/login` by Email + password, by phone OTP, and Google (when `NEXT_PUBLIC_GOOGLE_CLIENT_ID` is set).
 - Browse: `/kitchens`, `/kitchens/<id>`, `/products`; add and remove favourites at `/favorites`.
-- Cart conflicts, quantity limits, out-of-stock dishes are refused with a clear message.
+- Cart conflict: a dish from a second kitchen asks to replace the cart. Quantity over stock and out-of-stock dishes are refused with a clear message.
 - `/profile`: edit details, language (English / Urdu). `/profile/addresses`: add, edit, set default, delete.
 - `/orders`, `/orders/<id>`: tracking, cancel (while allowed), chat with the kitchen, review.
 - `/wallet`: balance, history, top-up through Safepay (needs keys).
@@ -152,7 +152,7 @@ Switch language from the top bar and from `/profile`. The choice is kept in the 
 At `/checkout`, one order each:
 - Cash on delivery: the rider collects cash; the rider's cash held increases after delivery; admin settles up.
 - Online (Safepay): only offered when keys are set. The order reaches the kitchen only after the signed webhook
-  confirms payment; abandon a payment and it expires (about 15 minutes sweep) and the order is cancelled.
+  confirms payment; abandon a payment and the attempt expires (swept every 15 minutes) and the unpaid order is cancelled automatically.
   Return lands on `/payment/return`.
 - Nuray wallet: top up at `/wallet`, pay with it; a cancelled paid order refunds into the wallet instantly.
 - Bank / JazzCash / EasyPaisa transfer: pay the kitchen directly, submit the transaction id (and receipt); the kitchen
