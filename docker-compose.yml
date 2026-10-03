@@ -1,4 +1,4 @@
-# docker-compose for local dev of the FrozenNuray app containers.
+# docker-compose for local dev of the Nuray app containers.
 # Postgres + Redis are expected to run on the host machine (the dev setup
 # you already use); the containers reach them via `host.docker.internal`.
 #

@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1.7
 #
-# FrozenNuray frontend (Next.js 16) — multi-stage build
+# Nuray frontend (Next.js 16) — multi-stage build
 # Uses Next's `output: "standalone"` so the runtime image carries only the
 # minimal server + the files it traces, not the whole node_modules.
 

@@ -1,7 +1,7 @@
 {
   "name": "frozen-nuray-backend",
   "version": "1.0.0",
-  "description": "FrozenNuray Platform Backend API",
+  "description": "Nuray backend API",
   "main": "dist/index.js",
   "scripts": {
     "dev": "nodemon --exec ts-node src/index.ts",

@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1.7
 #
-# FrozenNuray backend — multi-stage Docker build
+# Nuray backend — multi-stage Docker build
 # Stage 1: install deps + generate Prisma client + build TypeScript
 # Stage 2: production runtime with only the artefacts it needs
 
