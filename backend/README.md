@@ -1,97 +1,51 @@
-# FrozenNuray Backend API
+# Nuray backend
 
-Backend API for FrozenNuray Platform - Pakistan's first frozen homemade food marketplace.
+The API behind Nuray, a community food marketplace for Pakistan: Node.js 20, Express 5, TypeScript, Prisma 6 on
+PostgreSQL, Redis (BullMQ jobs, Socket.IO adapter, rate limits; optional in development), Socket.IO, Zod, pino. Routes
+are mounted under `/api/v1`; health is `/api/v1/health`.
 
-## Tech Stack
+Setup, environment variables and the money, delivery and payment rules are in the [root README](../README.md).
+Step-by-step local setup and conventions: [`docs/DEVELOPER_ONBOARDING.md`](../docs/DEVELOPER_ONBOARDING.md).
 
-- **Runtime**: Node.js 20.x
-- **Framework**: Express.js
-- **Language**: TypeScript
-- **Database**: PostgreSQL 15.x
-- **ORM**: Prisma
-- **Cache**: Redis
-- **Validation**: Zod
-
-## Prerequisites
-
-- Node.js 20.x or higher
-- PostgreSQL 14.x or higher
-- Redis 7.x or higher
-
-## Setup
-
-### 1. Install Dependencies
+## Quick start
 
 ```bash
 npm install
+cp .env.example .env     # set DATABASE_URL and JWT_SECRET (32+ chars); every variable is explained in the file
+npx prisma generate
+npm run db:migrate
+npm run seed:e2e         # optional sample data
+npm run dev              # http://localhost:3001
 ```
 
-### 2. Environment Variables
+## Scripts
 
-Copy `.env.example` to `.env` and update with your values:
+| Script | What it does |
+|---|---|
+| `npm run dev` | nodemon + ts-node on `src/index.ts` |
+| `npm run build` / `npm start` | compile to `dist/` / run `dist/index.js` |
+| `npm run start:prod` | `NODE_ENV=production node dist/index.js` |
+| `npm test`, `test:watch`, `test:coverage` | Jest unit tests (`tests/`) |
+| `npm run db:migrate` | `prisma migrate deploy` |
+| `npm run prisma:migrate` | `prisma migrate dev` (create a migration) |
+| `npm run db:baseline` | one-time: bring a pre-baseline database under migrations |
+| `npm run db:check` | database vs `schema.prisma`; exit code 2 on drift |
+| `npm run prisma:generate`, `prisma:studio` | generate the client, browse data |
+| `npm run seed:e2e` | communities, kitchens, a test kitchen account |
 
-```bash
-cp .env.example .env
-```
+Other helpers in `scripts/`: `create-admin.js <email> <password> "<name>"`, `list-admin-users.js`,
+`seed-ideal-flow-users.ts` (demo accounts), and `verify-money-flows.ts` (run only against a throwaway database; see
+[`docs/TESTING_STRATEGY.md`](../docs/TESTING_STRATEGY.md)).
 
-### 3. Database Setup
-
-```bash
-# Generate Prisma Client
-npm run prisma:generate
-
-# Run migrations
-npm run prisma:migrate
-
-# (Optional) Seed database
-npm run prisma:seed
-```
-
-### 4. Start Development Server
-
-```bash
-npm run dev
-```
-
-Server will run on `http://localhost:3000`
-
-## Available Scripts
-
-- `npm run dev` - Start development server with hot reload
-- `npm run build` - Build TypeScript to JavaScript
-- `npm start` - Start production server
-- `npm run prisma:generate` - Generate Prisma Client
-- `npm run prisma:migrate` - Run database migrations
-- `npm run prisma:studio` - Open Prisma Studio (database GUI)
-
-## Project Structure
+## Layout
 
 ```
-backend/
-├── src/
-│   ├── controllers/    # Route controllers
-│   ├── services/       # Business logic
-│   ├── models/         # Data models (Prisma)
-│   ├── middleware/     # Express middleware
-│   ├── routes/         # API routes
-│   ├── utils/          # Utility functions
-│   ├── config/         # Configuration files
-│   └── index.ts        # Entry point
-├── prisma/
-│   └── schema.prisma   # Database schema
-└── tests/              # Test files
+src/
+  index.ts       app, route mounting, scheduled sweeps
+  routes/ controllers/ validators/   HTTP layer
+  services/      business logic and database work
+  middleware/ utils/ config/ gateways/ jobs/ storage/
+prisma/          schema.prisma, migrations/, seeds (see prisma/README.md)
+scripts/         admin helpers and verification scripts
+tests/           Jest tests
 ```
-
-## API Endpoints
-
-### Health Check
-- `GET /api/v1/health` - Health check endpoint
-
-## Environment Variables
-
-See `.env.example` for all required environment variables.
-
-## Documentation
-
-See main project README and `/docs` folder for complete documentation.
-

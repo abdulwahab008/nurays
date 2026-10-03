@@ -121,7 +121,7 @@ emails and password `Password123!`, submit the application for both, reject one 
 
 - Users: `/forgot-password` asks for the email; `POST /auth/forgot-password` always answers the same way, whether or
   not the account exists. An email with a single-use link to `/reset-password?token=...` is sent through the
-  background job (in development, find it in the Ethereal inbox URL printed by the backend). The link expires, works
+  background job (in development, the backend logs an "Email preview" URL). The link expires, works
   once, and on success every existing session of the account is signed out. New password: 6+ characters.
 - Accounts without an email, or non-active accounts, get no email.
 - Admins can use the same flow, or the scripts above (`create-admin.js` on an existing email also sets a new password).
