@@ -159,23 +159,23 @@ All routes need authentication (`user-profile.routes.ts`).
 | `GET /sellers/me` | authenticated | none | the caller's seller profile (also while pending or rejected) |
 | `GET /sellers/me/dashboard` | authenticated | none | dashboard numbers for the caller's seller account (404 `SELLER_NOT_FOUND` without one) |
 | `PATCH /sellers/me`, `PUT /sellers/me` | role seller (not suspended) | all optional, most nullable: `businessName`, `businessNameUrdu`, `description`, `kitchenVideoUrl`, `coverImageUrl`, payment fields (`jazzcash*`, `easypaisa*`, `bank*`), `lowStockThreshold`, `enableStockAlerts`, `latitude`, `longitude`, delivery settings (`deliveryProvider`: `platform` \| `self`, `allowCrossCommunity`, `deliveryFeeType`: `fixed` \| `distance`, `deliveryFeeFixed`, `deliveryFeeBase`, `deliveryFeePerKm`, `distancePricingTiers[{maxKm,fee}]`, `maxDeliveryDistanceKm`, `minOrderAmountForDelivery`, `freeDeliveryThreshold`, `freeDeliveryAreas[]`, `freeDeliveryRadiusKm`, `allowedPostalCodes[]`, `deliveryZones[]`, `deliveryModes[]`), `businessType`, `mealCategories[]`, `storeNotice` (max 500), availability (`scheduleMode`, `operatingHours` as `{ fixedDaily?, weekly? }` with `HH:MM` times, `availabilityOverride` such as `open`, `closed`, `busy`, `vacation`, `holiday`, `preorder_only`, `availabilityOverrideUntil`, `availabilityNote` max 300), `orderCutoffTime`, `maxDailyOrders`, `minPrepTimeMinutes`, `preOrderOnly`, `advanceBookingMinDays`, `advanceBookingMaxDays` | the updated profile |
-| `POST /sellers/me/toggle-live` | role seller (not suspended) | none | `{ ... }` with a message saying whether the store is now live or paused |
+| `POST /sellers/me/toggle-live` | role seller (not suspended) | none | `{ availabilityOverride, isOpen, message }`: flips the store between open and closed (sets `availabilityOverride` to `open` or `closed`, clearing any end date) |
 | `GET /sellers/me/community-delivery` | role seller (not suspended) | none | the kitchen's per-community delivery terms |
 | `PUT /sellers/me/community-delivery` | role seller (not suspended) | `terms[]` (max 200), each `{ communityId, fee (0-100000, default 0), freeAbove?, minOrderAmount?, isEnabled? }`. The fee is only used for self-delivery; with Nuray riders the delivery fee is Nuray's | saved terms |
 | `GET /sellers/me/analytics` | role seller (not suspended) | query `period` (default `30d`) | sales analytics |
-| `POST /sellers/me/payouts` | role seller (not suspended) | `amount` (min 100), `payoutMethod`: `bank_transfer` \| `jazzcash` \| `easypaisa`, `accountNumber` | 201 the payout request; the amount is also checked against the available balance and the platform minimum |
+| `POST /sellers/me/payouts` | role seller (not suspended) | `amount` (min 100), `payoutMethod`: `bank_transfer` \| `jazzcash` \| `easypaisa`, `accountNumber` | 201 the payout request; the amount must reach the minimum payout (`minPayoutAmount` setting or the seller's payout schedule) and not exceed the available balance (400 `INSUFFICIENT_BALANCE`) |
 | `GET /sellers/me/payouts` | role seller (not suspended) | none | the seller's payout history |
 
 ## Seller orders: `/seller`
 
-Note the singular. `seller-order.routes.ts`. All routes need role `seller` or `admin` and a non-suspended seller. An admin acting here is treated as the seller of the order's first item.
+Note the singular. `seller-order.routes.ts`. All routes need role `seller` or `admin` and a non-suspended seller. 
 
 | Method and path | Body / query | Returns |
 |---|---|---|
 | `GET /seller/orders` | query `page`, `limit`, `status` (`pending`, `preparing`, `ready`, `dispatched`, `cancelled`; item status), `orderStatus` (any order status), `dateFrom`, `dateTo` | `{ orders, pagination }` containing the seller's items |
-| `GET /seller/orders/:id` | none | order with the seller's items (and the order's handover details as the service allows) |
-| `POST /seller/orders/:id/accept` | none | accepts the order (starts preparation); creates the Nuray delivery job when Nuray delivers |
-| `POST /seller/orders/:id/reject` | `reason` (not schema-validated) | rejects, restocks, notifies the customer; refund created when paid |
+| `GET /seller/orders/:id` | none | one order with the seller's items |
+| `POST /seller/orders/:id/accept` | none | accepts the order (starts preparation); when Nuray delivers, a delivery job is created for riders |
+| `POST /seller/orders/:id/reject` | `reason` (not schema-validated) | rejects and notifies the customer |
 | `POST /seller/orders/:id/ready` | none | marks it ready for pickup |
 | `POST /seller/orders/:id/dispatch` | none | self-delivery or pickup: the kitchen hands the order out |
 | `POST /seller/orders/:id/deliver` | `handoverCode` (exactly 4 digits, the customer's code) | self-delivery or pickup: marks delivered |
@@ -282,7 +282,7 @@ All routes need authentication (`order.routes.ts`, `order.validator.ts`). Access
 |---|---|---|
 | `POST /orders` | order limit, `Idempotency-Key`. Body: `items[]` (min 1; each `productId` uuid, `quantity` int >0, optional `variantId`, `stockType`, `hubId`), `deliveryType`: `home_delivery` \| `hub_pickup` \| `self_pickup`, `paymentMethod`: `jazzcash` \| `easypaisa` \| `bank` \| `cod` \| `wallet` \| `card` \| `safepay`; optional `deliveryAddressId` (uuid), `hubId`, `deliverySlotDate`, `deliverySlotTime`, `promotionCode`, `deliveryInstructions` (max 500) | 201 `{ order: { id, orderNumber, totalAmount, paymentMethod, paymentStatus, orderStatus, items }, payment: { gateway, status: "pending" } }`. For an online payment, follow with `POST /payments/process`. Totals are whole rupees |
 | `GET /orders/me` | query `page`, `limit`, `status` (`pending` ... `cancelled`, `refunded`) | `{ orders, pagination, statusCounts }` where `statusCounts` is the count per order status across the whole history |
-| `GET /orders/:id` | none | full order (items, delivery, payment, status history, handover code for the customer) |
+| `GET /orders/:id` | none | full order (items, delivery, payment, status history) |
 | `POST /orders/:id/cancel` | `reason` (5-500) | cancels. Customers can only cancel while the order is `pending` (400 `ORDER_NOT_CANCELLABLE` otherwise); stock is restored and a refund created if it was paid |
 | `GET /orders/:id/payment-details` | none | the kitchen's transfer details (bank, JazzCash, EasyPaisa) for a manual-transfer order |
 | `POST /orders/:id/submit-payment` | submission limit. Body (not schema-validated): `referenceNumber` (required), optional `senderName`, `senderAccount`, `proofUrl` (from `POST /upload/payment-proof`), `notes` | records the customer's transfer, status `payment_submitted`; 400 for paid, cancelled, COD or wallet orders |
@@ -504,7 +504,7 @@ Every route under `/admin` needs role `admin` (`admin.routes.ts`, `admin-order.r
 | `POST /admin/riders/:id/settlements` | optional `cashHandedIn` (0 to 1,000,000), `keptAsPay` (0 to 1,000,000), at least one above zero; optional `reference` (max 100), `note` (max 300) | 201 settle up: cash handed in and pay kept from it |
 | `POST /admin/riders/:id/payouts` | `amount` (>0, max 1,000,000); optional `reference`, `note` | 201 `{ id, amount }` records a payout |
 | `POST /admin/riders/:id/adjustments` | `amount` (non-zero, up to 1,000,000 in size, may be negative), `note` (required, max 300) | 201 `{ id, amount }` |
-| `PATCH /admin/riders/:id/cash-limit` | `cashLimit` (0 to 1,000,000, or `null` for the default `RIDER_CASH_LIMIT`) | the updated limit |
+| `PATCH /admin/riders/:id/cash-limit` | `cashLimit` (0 to 1,000,000, or `null` for the default `RIDER_CASH_LIMIT`, Rs 10,000 unless set); returns `{ cashLimit, isDefault }` | the updated limit |
 
 ### People
 
@@ -576,4 +576,4 @@ Same body schemas as seller promotions (see Promotions), but the discount is pai
 - `POST /auth/logout` and the refresh endpoint do not revoke tokens; sessions are only revoked by password reset or account takeover handling (`tokensValidAfter`).
 - `GET /realtime/orders/:id/track` rejects the order's assigned rider, although a rider can join the order's socket room.
 - Several routes read their body without a zod schema (seller reject reason, manual payment submission, order-payment confirmation, rider location, category requests, Google sign-in). Their checks are in the controller or service.
-- Error shapes are not completely uniform: `community.controller.ts` and `category-request.controller.ts` return some 400s as `{ success: false, message }` or with a slightly different `error` object.
+- Error shapes are not completely uniform: `community.controller.ts` returns its 400s as `{ success: false, message }` without an `error` object.
