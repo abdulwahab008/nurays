@@ -1,762 +1,285 @@
-# FrozenNuray Platform - Deployment Guide
+# Deployment guide
 
-## Document Information
-- **Version**: 1.0
-- **Last Updated**: November 2025
-- **Document Owner**: DevOps Team
-- **Target Audience**: DevOps Engineers, System Administrators
+How to run Nuray in production. For local development see the root [`README.md`](../README.md).
+Every backend setting is documented in [`backend/.env.example`](../backend/.env.example); the frontend's in
+[`frontend-web/.env.example`](../frontend-web/.env.example).
 
----
+## What you run
 
-## 1. Deployment Overview
+| Piece | Notes |
+|---|---|
+| Backend (Node 20, Express) | Stateless; run one or more instances behind a load balancer. Port 3001 in the Docker image. Serves the REST API under `/api/v1` and Socket.IO on the same port. |
+| Frontend (Next.js 16) | `output: "standalone"` server on port 3000. It also proxies `/uploads`, `/media` and `/files` to the backend (`frontend-web/next.config.ts`), using `NEXT_PUBLIC_API_URL` at build time. |
+| PostgreSQL 15+ | Must allow `CREATE EXTENSION pg_trgm` (the baseline migration creates it; search typo tolerance uses it). |
+| Redis 7+ | Required in production (see "Several instances"). |
+| File storage | S3-compatible bucket plus a CDN (`ASSET_BASE_URL`) is recommended; local disk works for a single server with a persistent, backed-up volume. |
+| SMTP | Required: verification and password-reset emails. |
+| Twilio | Required for phone OTP, unless `SMS_PROVIDER=none`. |
+| Safepay | Optional. Without keys, online payment and wallet top-ups are not offered. |
+| VAPID keys | Optional. Without them there is no web push. |
+| Sentry (or GlitchTip) | Optional error tracking, backend and browser. |
 
-### 1.1 Deployment Environments
+Put TLS in front of both services. The backend sets `trust proxy` to 1, so there must be exactly one proxy hop
+between the internet and the app (`backend/src/index.ts`); rate limits key on the client IP it reports.
 
-**Development:**
-- Purpose: Local development
-- Infrastructure: Developer machines
-- Database: Local PostgreSQL
-- Services: Mocked external services
+Browser-facing hostnames: the website (`FRONTEND_URL`, also `CORS_ORIGIN`) and the API (`BASE_URL`). The backend
+allows exactly one CORS origin, so serve the site from a single origin.
 
-**Staging:**
-- Purpose: Pre-production testing
-- Infrastructure: AWS/DigitalOcean (smaller instances)
-- Database: Staging database (anonymized data)
-- Services: Test mode external services
+## Backend environment variables
 
-**Production:**
-- Purpose: Live application
-- Infrastructure: AWS/DigitalOcean (scaled instances)
-- Database: Production database
-- Services: Production external services
+Required means the server will not start in production without it (see "Startup validation").
 
-### 1.2 Deployment Strategy
+### Core
 
-**Backend:**
-- Blue-green deployment
-- Zero-downtime deployments
-- Automated rollback on failure
-- Health checks before traffic switch
+| Variable | Required | Notes |
+|---|---|---|
+| `NODE_ENV` | set it | Only `development` and `test` relax checks. Anything else, including unset or a typo, runs with production rules. |
+| `PORT` | no | The Docker image sets 3001. Without it the code falls back to 3000. |
+| `API_VERSION` | no | Default `v1`. |
+| `DATABASE_URL` | yes | PostgreSQL connection string. |
+| `REDIS_URL` | yes (production) | |
+| `JWT_SECRET` | yes | 32+ characters, not a placeholder in production. `openssl rand -hex 32`. |
+| `JWT_EXPIRES_IN`, `JWT_REFRESH_EXPIRES_IN` | no | Defaults in `.env.example`: `24h`, `30d`. |
+| `GOOGLE_CLIENT_ID` | no | Google sign-in; see [GOOGLE_OAUTH_SETUP.md](GOOGLE_OAUTH_SETUP.md). |
+| `FRONTEND_URL` | yes (production) | Must be `https://`. Used in email links. |
+| `CORS_ORIGIN` | no, but set it | The one browser origin allowed for HTTP and Socket.IO. Defaults to `http://localhost:3000`, so production must set it. |
+| `BASE_URL` | when Safepay is on | The API's public `https://` URL. |
 
-**Frontend (Web):**
-- Vercel deployment (recommended)
-- Or: AWS S3 + CloudFront
-- Automatic deployments on merge to main
+### Email (one of two)
 
-**Mobile Apps:**
-- Android: Google Play Store
-- iOS: App Store
-- Staged rollouts (10% → 50% → 100%)
+| Variable | Required | Notes |
+|---|---|---|
+| `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURE`, `SMTP_USER`, `SMTP_PASSWORD` | yes (or Gmail) | Any SMTP provider. With `SMTP_HOST` set, user and password are required. |
+| `EMAIL_SERVICE=gmail`, `EMAIL_USER`, `EMAIL_PASSWORD` | alternative | Gmail with an app password. |
+| `EMAIL_FROM` | yes (production) | e.g. `Nuray <noreply@yourdomain.pk>`. |
 
----
+### SMS
 
-## 2. Prerequisites
+| Variable | Required | Notes |
+|---|---|---|
+| `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_PHONE_NUMBER` | yes, or `SMS_PROVIDER=none` | |
+| `SMS_PROVIDER` | no | `twilio`, `console` (refused in production: it prints OTP codes), or `none` (no phone OTP). Empty picks Twilio when all three Twilio values are set, otherwise `none` in production. |
 
-### 2.1 Required Accounts
+### Storage
 
-- AWS Account (or DigitalOcean)
-- Domain registrar account
-- Cloudflare account (CDN + DNS)
-- GitHub account (CI/CD)
-- Vercel account (web deployment)
-- Google Play Console (Android)
-- Apple App Store Connect (iOS)
+| Variable | Required | Notes |
+|---|---|---|
+| `STORAGE_DRIVER` | no | `local` (default) or `s3`. Anything else is refused in production. |
+| `UPLOADS_DIR` | yes for `local` | Persistent, backed-up volume. The Docker image sets `/app/uploads`. |
+| `S3_BUCKET`, `ASSET_BASE_URL`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY` | yes for `s3` | `ASSET_BASE_URL` is the CDN or bucket public URL. |
+| `S3_PRIVATE_BUCKET` | no | Defaults to `S3_BUCKET`. Must not be publicly readable. With one shared bucket, allow public reads only for keys starting `p/`. |
+| `S3_REGION` (default `auto`), `S3_ENDPOINT`, `S3_FORCE_PATH_STYLE` | no | R2, MinIO and B2 need `S3_ENDPOINT`; MinIO usually needs path style. |
+| `FILE_URL_SECRET` | no | Signs private-file links for the local driver. Defaults to a value derived from `JWT_SECRET`. |
 
-### 2.2 Required Tools
+Public files (key prefix `p/`: product images, avatars) are served from the CDN. Private files (key prefix `x/`:
+payment receipts, seller and rider documents, chat media) are never public; the API hands out links valid for
+10 minutes (`backend/src/storage/index.ts`).
 
-- Docker & Docker Compose
-- AWS CLI (or DigitalOcean CLI)
-- kubectl (if using Kubernetes)
-- Terraform (infrastructure as code)
-- GitHub Actions (CI/CD)
+### Online payments and wallet
 
-### 2.3 Required Knowledge
+| Variable | Required | Notes |
+|---|---|---|
+| `SAFEPAY_PUBLIC_KEY`, `SAFEPAY_SECRET_KEY` | optional | Both together switch online payment on. |
+| `SAFEPAY_WEBHOOK_SECRET` | yes if the keys are set | |
+| `SAFEPAY_SANDBOX` | yes if the keys are set | Must be exactly `true` or `false`. `false` is live. |
+| `WALLET_TOPUP_MAX` | no | Largest single top-up, Rs. |
 
-- Linux server administration
-- Docker containerization
-- Cloud infrastructure (AWS/DigitalOcean)
-- CI/CD pipelines
-- SSL/TLS certificates
-- Domain management
+### Other
 
----
+| Variable | Required | Notes |
+|---|---|---|
+| `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT` | optional, as a pair | Setting only one of the keys stops startup. `npx web-push generate-vapid-keys`. |
+| `RIDER_CASH_LIMIT` | no | Rs, default 10000; must be above 0 if set. |
+| `ORDER_ACCEPT_TIMEOUT_MINUTES` (30), `ORDER_PAYMENT_TIMEOUT_MINUTES` (60), `PAYMENT_CONFIRM_ESCALATE_HOURS` (6) | no | Used by the stale-order sweep. |
+| `BANK_API_URL`, `BANK_MERCHANT_ID`, `BANK_API_KEY`, `BANK_RETURN_URL` | no | Placeholder for a bank gateway that is not implemented. Leave empty. See [PAYMENT_GATEWAY_INTEGRATION.md](PAYMENT_GATEWAY_INTEGRATION.md). |
+| `LOG_LEVEL`, `LOG_FORMAT` | no | Default `info`. |
+| `SENTRY_DSN`, `SENTRY_ENVIRONMENT`, `SENTRY_RELEASE`, `SENTRY_TRACES_SAMPLE_RATE` | no | Sentry is off when `SENTRY_DSN` is empty. The traces rate is read in code but not listed in `.env.example`; default 0. |
+| `SHUTDOWN_DRAIN_MS`, `SHUTDOWN_GRACE_MS` | no | See "Graceful shutdown". |
+| `MIGRATE_ON_START` | no | Docker image only; see "Migrations". |
 
-## 3. Infrastructure Setup
+## Frontend variables
 
-### 3.1 AWS Setup (Recommended)
+All `NEXT_PUBLIC_*` values are inlined into the JavaScript at build time. Changing one means rebuilding the image
+(the Dockerfile takes them as build args; `docker-compose.yml` and the publish workflow pass them through).
 
-**Services Used:**
-- EC2: Application servers
-- RDS: PostgreSQL database
-- ElastiCache: Redis cache
-- S3: File storage and backups
-- CloudFront: CDN
-- Route 53: DNS
-- ACM: SSL certificates
-- CloudWatch: Monitoring
+| Variable | Required | Notes |
+|---|---|---|
+| `NEXT_PUBLIC_API_URL` | yes | Public API URL including `/api/v1`, e.g. `https://api.example.pk/api/v1`. Also decides where the Next.js rewrites send `/media`, `/files`, `/uploads`. |
+| `NEXT_PUBLIC_WS_URL` | no | Socket.IO origin when it is not the API's origin. |
+| `NEXT_PUBLIC_GOOGLE_CLIENT_ID` | no | Same client ID as the backend's `GOOGLE_CLIENT_ID`. |
+| `NEXT_PUBLIC_SENTRY_DSN`, `NEXT_PUBLIC_SENTRY_ENVIRONMENT`, `NEXT_PUBLIC_SENTRY_RELEASE` | no | Browser error tracking; nothing loads when empty. (`NEXT_PUBLIC_SENTRY_RELEASE` is read by the app but is not a Dockerfile build arg.) |
+| `NEXT_PUBLIC_LEGAL_COMPANY_NAME`, `NEXT_PUBLIC_LEGAL_ADDRESS`, `NEXT_PUBLIC_SUPPORT_EMAIL` | set before launch | Shown on the Terms, Privacy and Refund pages; bracketed placeholders appear until set. |
+| `NEXT_PUBLIC_LEGAL_REVIEWED` | no | Set `true` once a lawyer has reviewed the text to remove the "draft" notice. |
+| `NEXT_PUBLIC_ENABLE_DEMO_LOGIN` | no | Never `true` on a real site; it shows one-click demo accounts. |
+| `NOMINATIM_USER_AGENT` | recommended | Server-side only (runtime, not build time). Contact string for OpenStreetMap's geocoder. |
 
-**Region:** Bahrain (me-south-1) - Lowest latency for Pakistan
+The Dockerfile and compose file also pass `NEXT_PUBLIC_SAFEPAY_SANDBOX`; nothing in the frontend code reads it.
 
-**Initial Setup:**
+## Startup validation
+
+`backend/src/config/check-env.ts` runs `validateConfigOrExit()` from `backend/src/config/env.ts` before anything
+else. It prints every problem and exits with code 1. In production (any `NODE_ENV` other than `development` or
+`test`) it refuses to start when:
+
+- `DATABASE_URL` or `JWT_SECRET` is missing, `JWT_SECRET` is under 32 characters, or it is a placeholder (sample
+  value, `change-me`, starts with `your-`, a single repeated character, and so on).
+- `REDIS_URL` or `FRONTEND_URL` is missing, or `FRONTEND_URL` is not `https://`.
+- Email is not SMTP or Gmail, the chosen mode lacks its user and password, or `EMAIL_FROM` is missing.
+- `SMS_PROVIDER=console`, or SMS resolves to `none` without `SMS_PROVIDER=none` being set explicitly.
+- Safepay keys are set but `BASE_URL` is not `https://`, `SAFEPAY_WEBHOOK_SECRET` is empty, or `SAFEPAY_SANDBOX` is
+  not `true`/`false`.
+- `STORAGE_DRIVER=s3` without bucket, `ASSET_BASE_URL`, access key and secret; `STORAGE_DRIVER=local` without
+  `UPLOADS_DIR`; or a driver other than `local`/`s3`.
+
+In every mode it refuses a missing `DATABASE_URL`/`JWT_SECRET`, a short `JWT_SECRET`, a half-set VAPID pair, and a
+`RIDER_CASH_LIMIT` that is not above 0. Non-fatal warnings are printed for a missing or unrecognised `NODE_ENV`, no
+VAPID keys, and local storage in production.
+
+Note that `docker-compose.yml` sets `FRONTEND_URL: http://frontend:3000` for the backend container. That is for local
+use; production (`https://` required) must override it.
+
+## Migrations
+
+Details are in [`backend/prisma/README.md`](../backend/prisma/README.md). In short:
+
 ```bash
-# Install AWS CLI
-curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
-unzip awscliv2.zip
-sudo ./aws/install
-
-# Configure AWS CLI
-aws configure
-# Enter: Access Key ID, Secret Access Key, Region (me-south-1), Output format (json)
+cd backend
+DATABASE_URL=... npm run db:migrate    # prisma migrate deploy: new database, or pending migrations
+DATABASE_URL=... npm run db:check      # exit 0 if the database matches schema.prisma, 2 if not
+DATABASE_URL=... npm run db:baseline   # once, for a database created before the migration baseline
 ```
 
-### 3.2 DigitalOcean Setup (Alternative)
+- Never use `prisma db push` on a real database: it skips the CHECK constraints (stock and wallet balances cannot
+  go negative) and records no history.
+- Apply migrations as a release step before rolling out, or set `MIGRATE_ON_START=true` on the container, which runs
+  `prisma migrate deploy` before starting node. Prisma takes a database lock, so several instances starting together
+  are safe. Write migrations that the old code can run against (add first, remove later).
+- `db:baseline` is only for databases built with `db push` or the old migration set. It stops with the SQL to review
+  if the database differs from the baseline schema. It uses `ts-node` (a dev dependency), so run it from a checkout
+  with dev dependencies, not from the production image.
 
-**Services Used:**
-- Droplets: Application servers
-- Managed Databases: PostgreSQL
-- Spaces: Object storage
-- Load Balancer: Traffic distribution
-- DNS: Domain management
+## Docker
 
-**Initial Setup:**
+| File | What it does |
+|---|---|
+| `backend/Dockerfile` | Builds TypeScript, then a runtime image with production dependencies only, running as a non-root user. `NODE_ENV=production`, `PORT=3001`, `UPLOADS_DIR=/app/uploads`, a `HEALTHCHECK` on `/api/v1/health`. `exec node dist/index.js` keeps node as PID 1 so SIGTERM reaches it. The image contains `dist` and `prisma`, not `scripts/`. |
+| `frontend-web/Dockerfile` | Next.js standalone build with the `NEXT_PUBLIC_*` build args, non-root, port 3000, healthcheck on `/`. |
+| `docker-compose.yml` | Builds both images for local use. Expects PostgreSQL and Redis on the host (`host.docker.internal`), mounts a named `uploads` volume, `stop_grace_period: 30s`, and starts the frontend after the backend is healthy. It is not a full production stack: it has no database, Redis, TLS or proxy. |
+| `.github/workflows/docker-publish.yml` | On pushes to `main` and `v*` tags (or manually), builds both images and pushes them to GitHub Container Registry as `ghcr.io/<owner>/nuray-backend` and `nuray-frontend`. Tags: `main` and `sha-<short>` on `main`; the version, `major.minor` and `latest` on `v*` tags. Frontend build args come from repository variables (`vars.NEXT_PUBLIC_API_URL`, and so on). Without them it bakes in `http://localhost:3001/api/v1`, so set the variables before using these images in production. |
+
+`.github/workflows/ci.yml` (typecheck, build, Docker build, Playwright) runs on pull requests and on `main`.
+
+## Health and readiness
+
+| Endpoint | Meaning | Use it for |
+|---|---|---|
+| `GET /api/v1/health/live` | The process is up. Always 200. | Liveness probe. |
+| `GET /api/v1/health/ready` | 200 if the database answers; 503 when it does not or while shutting down. | Load balancer / readiness probe. |
+| `GET /api/v1/health` | Database, Redis and payment gateway status. 503 only if the database is down; a Redis outage reports `degraded` with 200. | Monitoring and the container `HEALTHCHECK`. |
+
+These routes sit outside the API rate limit.
+
+## Graceful shutdown
+
+On SIGTERM or SIGINT (`backend/src/index.ts`): readiness starts answering 503, the scheduler stops, the server waits
+`SHUTDOWN_DRAIN_MS` (default 5000 in production, 0 otherwise) so the load balancer takes it out of rotation, then it
+stops accepting connections, closes Socket.IO sockets (clients reconnect to another instance), finishes in-flight
+requests, stops job workers and disconnects Prisma, Redis and Sentry. If that takes longer than `SHUTDOWN_GRACE_MS`
+(default 25000) the process exits with code 1. Keep the orchestrator's kill timeout above the grace period
+(compose uses 30s), and `SHUTDOWN_DRAIN_MS` at least your load balancer's health-check interval. An uncaught
+exception also triggers this shutdown (exit code 1); unhandled promise rejections are logged and reported only.
+
+## Several instances
+
+Run as many backend instances as you need; they share state through PostgreSQL and Redis (`REDIS_URL` is why it is
+mandatory in production):
+
+- Rate limits: counters live in Redis (`middleware/rateLimiter.ts`). If Redis is unreachable requests are let
+  through rather than refused.
+- Live updates: Socket.IO uses the Redis adapter so an event emitted on one instance reaches clients on any other
+  (`config/socket.ts`). Clients may use WebSocket or long polling; if you rely on polling, enable sticky sessions on
+  the load balancer.
+- Background jobs: BullMQ queue `nuray-jobs` in Redis (emails, notification delivery, push). Jobs survive restarts and
+  retry with backoff (5 attempts); every instance runs a worker. If Redis is unreachable at enqueue time the job runs
+  in the process that queued it and is lost if that process dies.
+- Timed sweeps (below) take a Postgres advisory lock per job, so only one instance runs a given sweep at a time.
+- Files: with `STORAGE_DRIVER=local` every instance needs the same volume. Use `s3` once you run more than one.
+
+## Background jobs
+
+Scheduled in `backend/src/index.ts` through `jobs/scheduler.ts`; each starts about 5 seconds after boot and then
+repeats.
+
+| Job | Every | What it does |
+|---|---|---|
+| `stale-orders` | 2 min | Cancels orders the kitchen did not accept, or whose online payment or transfer never completed, and returns stock; creates refunds; alerts admins to unconfirmed transfers (timeouts above). |
+| `expire-payment-attempts` | 15 min | Expires abandoned online checkout sessions (a late confirmation still settles). |
+| `ranking-scores` | 15 min | Recomputes trending and rating scores. |
+| `hub-expiry` | 1 h | Hides expired hub batches. |
+| `stock-alerts` | 6 h | Safety-net stock alert check. |
+| `purge-expired-secrets` | 6 h | Deletes old OTP codes and used or expired reset tokens. |
+
+## Logs and error tracking
+
+- Production logs are one JSON object per line (pino), each carrying the `requestId`, and `userId` once known. The
+  same id is returned to clients in the `X-Request-Id` header and in error responses, so a support report can be
+  traced. Tokens, passwords and OTPs are redacted. Send stdout to your log collector.
+- With `SENTRY_DSN` set, unexpected errors (500s, crashes, unhandled rejections) are reported with the request id and
+  user id only; request bodies, cookies, headers and query strings are stripped. 4xx errors are not reported.
+
+## Backups
+
+Nuray has no backup tooling of its own; set this up on your infrastructure:
+
+- PostgreSQL: scheduled dumps or your provider's point-in-time recovery. It holds orders, the ledger, wallets and
+  payouts. Test a restore.
+- Files: the object-storage bucket(s), or the `UPLOADS_DIR` volume, including private receipts and documents.
+- Redis holds only rate-limit counters, queued jobs and socket fan-out; losing it loses queued jobs but no business
+  records.
+- Keep your environment variables (especially `JWT_SECRET`, Safepay and S3 secrets) in a secrets manager.
+
+## Safepay webhook setup
+
+1. Get the public and secret keys from the Safepay dashboard and set `SAFEPAY_PUBLIC_KEY`, `SAFEPAY_SECRET_KEY`.
+2. Set `BASE_URL` to the API's public https URL.
+3. In the dashboard (Developer, Endpoints) add `https://<api-host>/api/v1/payments/safepay-webhook`, copy its shared
+   secret into `SAFEPAY_WEBHOOK_SECRET`.
+4. Set `SAFEPAY_SANDBOX` explicitly: `true` while testing, `false` for live. Use matching sandbox or live keys and
+   webhook secret.
+5. Customers come back through `https://<api-host>/api/v1/payments/safepay/return`.
+
+Details and the payment flows are in [PAYMENT_GATEWAY_INTEGRATION.md](PAYMENT_GATEWAY_INTEGRATION.md).
+
+## First admin
+
+There is no default admin. `backend/scripts/create-admin.js` creates one (or promotes and resets the password of an
+existing account with that email), already email-verified:
+
 ```bash
-# Install doctl
-cd ~
-wget https://github.com/digitalocean/doctl/releases/download/v1.94.0/doctl-1.94.0-linux-amd64.tar.gz
-tar xf doctl-1.94.0-linux-amd64.tar.gz
-sudo mv doctl /usr/local/bin
-
-# Authenticate
-doctl auth init
+cd backend
+DATABASE_URL=... node scripts/create-admin.js admin@yourdomain.pk '<strong password>' "Admin Name"
 ```
 
----
-
-## 4. Backend Deployment
-
-### 4.1 Server Setup
-
-**EC2 Instance (AWS):**
-- Instance Type: t3.medium (2 vCPU, 4GB RAM) - Start
-- OS: Ubuntu 22.04 LTS
-- Storage: 20GB SSD
-- Security Group: Allow HTTPS (443), SSH (22 from whitelisted IPs)
-
-**Droplet (DigitalOcean):**
-- Size: 4GB RAM, 2 vCPU
-- OS: Ubuntu 22.04 LTS
-- Region: Singapore (closest to Pakistan)
-
-**Server Hardening:**
-```bash
-# Update system
-sudo apt update && sudo apt upgrade -y
-
-# Install Docker
-curl -fsSL https://get.docker.com -o get-docker.sh
-sudo sh get-docker.sh
-
-# Install Docker Compose
-sudo curl -L "https://github.com/docker/compose/releases/latest/download/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
-sudo chmod +x /usr/local/bin/docker-compose
-
-# Create non-root user
-sudo adduser deploy
-sudo usermod -aG docker deploy
-sudo usermod -aG sudo deploy
-```
-
-### 4.2 Application Deployment
-
-**Directory Structure:**
-```
-/home/deploy/frozen-nuray/
-├── backend/
-├── docker-compose.yml
-├── .env
-└── nginx/
-```
-
-**Docker Compose Configuration:**
-```yaml
-version: '3.8'
-
-services:
-  api:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile
-    ports:
-      - "3000:3000"
-    environment:
-      - NODE_ENV=production
-      - DATABASE_URL=${DATABASE_URL}
-      - REDIS_URL=${REDIS_URL}
-    env_file:
-      - .env
-    restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-
-  nginx:
-    image: nginx:alpine
-    ports:
-      - "80:80"
-      - "443:443"
-    volumes:
-      - ./nginx/nginx.conf:/etc/nginx/nginx.conf
-      - ./nginx/ssl:/etc/nginx/ssl
-    depends_on:
-      - api
-    restart: unless-stopped
-```
-
-**Deployment Script:**
-```bash
-#!/bin/bash
-# deploy.sh
-
-set -e
-
-echo "🚀 Starting deployment..."
-
-# Pull latest code
-git pull origin main
-
-# Build and start containers
-docker-compose build
-docker-compose up -d
-
-# Run database migrations
-docker-compose exec api npx prisma migrate deploy
-
-# Wait for health check
-sleep 10
-curl -f http://localhost:3000/health || exit 1
-
-echo "✅ Deployment complete!"
-```
-
-### 4.3 Environment Variables
-
-**.env File (Production):**
-```bash
-# Database
-DATABASE_URL=postgresql://user:password@rds-endpoint:5432/frozennuray
-
-# Redis
-REDIS_URL=redis://elasticache-endpoint:6379
-
-# JWT
-JWT_SECRET=your-super-secret-jwt-key-here
-JWT_EXPIRES_IN=24h
-
-# Payment Gateways
-JAZZCASH_MERCHANT_ID=your-merchant-id
-JAZZCASH_PASSWORD=your-password
-EASYPAISA_STORE_ID=your-store-id
-STRIPE_SECRET_KEY=sk_live_...
-
-# SMS
-TWILIO_ACCOUNT_SID=your-sid
-TWILIO_AUTH_TOKEN=your-token
-TWILIO_PHONE_NUMBER=+1234567890
-
-# Email
-SENDGRID_API_KEY=your-sendgrid-key
-
-# File Storage
-CLOUDINARY_CLOUD_NAME=your-cloud-name
-CLOUDINARY_API_KEY=your-api-key
-CLOUDINARY_API_SECRET=your-api-secret
-
-# Maps
-GOOGLE_MAPS_API_KEY=your-google-maps-key
-
-# App
-NODE_ENV=production
-PORT=3000
-API_URL=https://api.frozennuray.com
-```
-
-**Security:**
-- Store .env file securely (not in git)
-- Use AWS Secrets Manager or HashiCorp Vault
-- Rotate secrets regularly
-- Use different secrets for each environment
-
----
-
-## 5. Database Deployment
-
-### 5.1 RDS Setup (AWS)
-
-**Database Configuration:**
-- Engine: PostgreSQL 15.x
-- Instance: db.t3.medium (2 vCPU, 4GB RAM)
-- Storage: 100GB (auto-scaling enabled)
-- Multi-AZ: Enabled (for high availability)
-- Backup: Daily automated backups (7-day retention)
-- Encryption: Enabled at rest
-
-**Connection:**
-```bash
-# Get endpoint
-aws rds describe-db-instances --db-instance-identifier frozennuray-db
-
-# Connect
-psql -h <endpoint> -U admin -d frozennuray
-```
-
-### 5.2 Database Migrations
-
-**Migration Strategy:**
-```bash
-# Development
-npx prisma migrate dev
-
-# Staging/Production
-npx prisma migrate deploy
-```
-
-**Migration Best Practices:**
-- Test migrations on staging first
-- Backup database before migration
-- Run migrations during low-traffic hours
-- Have rollback plan ready
-
-### 5.3 Database Backups
-
-**Automated Backups:**
-- RDS: Automatic daily backups
-- Manual: Before major changes
-- Retention: 30 days
-
-**Backup Restoration:**
-```bash
-# Restore from snapshot
-aws rds restore-db-instance-from-db-snapshot \
-  --db-instance-identifier frozennuray-db-restored \
-  --db-snapshot-identifier snapshot-name
-```
-
----
-
-## 6. Frontend Deployment (Web)
-
-### 6.1 Vercel Deployment (Recommended)
-
-**Setup:**
-1. Connect GitHub repository to Vercel
-2. Configure build settings:
-   - Framework: Next.js
-   - Build Command: `npm run build`
-   - Output Directory: `.next`
-3. Add environment variables
-4. Deploy
-
-**Environment Variables:**
-```bash
-NEXT_PUBLIC_API_URL=https://api.frozennuray.com
-NEXT_PUBLIC_GOOGLE_MAPS_KEY=your-key
-NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME=your-cloud-name
-```
-
-**Automatic Deployments:**
-- Production: Deploys on merge to `main` branch
-- Preview: Deploys on every PR
-
-### 6.2 AWS S3 + CloudFront (Alternative)
-
-**Setup:**
-```bash
-# Build
-cd frontend-web
-npm run build
-
-# Upload to S3
-aws s3 sync .next/static s3://frozennuray-web/static
-aws s3 sync public s3://frozennuray-web/public
-
-# Invalidate CloudFront cache
-aws cloudfront create-invalidation \
-  --distribution-id YOUR_DIST_ID \
-  --paths "/*"
-```
-
----
-
-## 7. Mobile App Deployment
-
-### 7.1 Android Deployment
-
-**Build:**
-```bash
-cd mobile-app
-flutter build appbundle --release
-```
-
-**Google Play Console:**
-1. Create app listing
-2. Upload app bundle
-3. Fill store listing details
-4. Submit for review
-5. Staged rollout (10% → 50% → 100%)
-
-### 7.2 iOS Deployment
-
-**Build:**
-```bash
-cd mobile-app
-flutter build ios --release
-```
-
-**App Store Connect:**
-1. Create app record
-2. Upload build via Xcode or Transporter
-3. Fill app information
-4. Submit for review
-5. Release after approval
-
----
-
-## 8. CI/CD Pipeline
-
-### 8.1 GitHub Actions Workflow
-
-**.github/workflows/deploy.yml:**
-```yaml
-name: Deploy to Production
-
-on:
-  push:
-    branches: [main]
-
-jobs:
-  test:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v3
-      - uses: actions/setup-node@v3
-      - run: npm install
-      - run: npm test
-      - run: npm run test:coverage
-
-  build:
-    needs: test
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v3
-      - name: Build Docker image
-        run: |
-          docker build -t frozennuray-api:${{ github.sha }} ./backend
-          docker tag frozennuray-api:${{ github.sha }} frozennuray-api:latest
-
-  deploy-staging:
-    needs: build
-    runs-on: ubuntu-latest
-    steps:
-      - name: Deploy to staging
-        run: |
-          ssh deploy@staging-server "cd /home/deploy/frozen-nuray && git pull && docker-compose up -d"
-
-  deploy-production:
-    needs: deploy-staging
-    if: github.ref == 'refs/heads/main'
-    runs-on: ubuntu-latest
-    steps:
-      - name: Deploy to production
-        run: |
-          ssh deploy@production-server "cd /home/deploy/frozen-nuray && git pull && docker-compose up -d"
-```
-
-### 8.2 Deployment Process
-
-**Automated:**
-1. Code pushed to `main` branch
-2. Tests run automatically
-3. Build Docker image
-4. Deploy to staging
-5. Run smoke tests
-6. Deploy to production (if staging passes)
-
-**Manual Approval:**
-- Production deployments require manual approval
-- Review staging deployment first
-- Check monitoring before production deploy
-
----
-
-## 9. SSL/TLS Setup
-
-### 9.1 Let's Encrypt (Free)
-
-**Install Certbot:**
-```bash
-sudo apt install certbot python3-certbot-nginx
-```
-
-**Obtain Certificate:**
-```bash
-sudo certbot --nginx -d api.frozennuray.com
-```
-
-**Auto-Renewal:**
-```bash
-# Test renewal
-sudo certbot renew --dry-run
-
-# Add to crontab (auto-renewal)
-0 0 * * * certbot renew --quiet
-```
-
-### 9.2 AWS Certificate Manager (ACM)
-
-**Request Certificate:**
-1. Go to ACM in AWS Console
-2. Request public certificate
-3. Add domain names (api.frozennuray.com, *.frozennuray.com)
-4. Validate via DNS
-5. Use with CloudFront or ALB
-
----
-
-## 10. Monitoring and Logging
-
-### 10.1 Application Monitoring
-
-**Sentry (Error Tracking):**
-```bash
-# Install Sentry
-npm install @sentry/node
-
-# Configure
-Sentry.init({
-  dsn: process.env.SENTRY_DSN,
-  environment: process.env.NODE_ENV,
-});
-```
-
-**LogRocket (Session Replay):**
-- Sign up at logrocket.com
-- Add SDK to frontend
-- Monitor user sessions
-
-### 10.2 Infrastructure Monitoring
-
-**CloudWatch (AWS):**
-- CPU utilization
-- Memory usage
-- Disk I/O
-- Network traffic
-- Custom metrics
-
-**Uptime Monitoring:**
-- Pingdom or UptimeRobot
-- Monitor API endpoints
-- Alert on downtime
-
-### 10.3 Logging
-
-**Application Logs:**
-```typescript
-// Structured logging
-logger.info('Order created', {
-  orderId: order.id,
-  customerId: customer.id,
-  amount: order.total_amount,
-});
-```
-
-**Log Aggregation:**
-- CloudWatch Logs (AWS)
-- Or: ELK Stack (Elasticsearch, Logstash, Kibana)
-
----
-
-## 11. Backup and Recovery
-
-### 11.1 Database Backups
-
-**Automated:**
-- RDS: Daily automated backups
-- Retention: 30 days
-- Point-in-time recovery: Enabled
-
-**Manual Backup:**
-```bash
-# Create backup
-pg_dump -h <host> -U <user> -d frozennuray > backup.sql
-
-# Restore
-psql -h <host> -U <user> -d frozennuray < backup.sql
-```
-
-### 11.2 File Backups
-
-**Cloudinary:**
-- Automatic backups enabled
-- Manual backup to S3 (weekly)
-
-**Application Files:**
-- Configuration files in git
-- Environment variables in secrets manager
-
----
-
-## 12. Security Hardening
-
-### 12.1 Server Security
-
-**Firewall:**
-```bash
-# UFW configuration
-sudo ufw default deny incoming
-sudo ufw default allow outgoing
-sudo ufw allow 22/tcp  # SSH (restrict to specific IPs)
-sudo ufw allow 80/tcp  # HTTP
-sudo ufw allow 443/tcp # HTTPS
-sudo ufw enable
-```
-
-**SSH Security:**
-```bash
-# Disable root login
-sudo sed -i 's/PermitRootLogin yes/PermitRootLogin no/' /etc/ssh/sshd_config
-
-# Key-based authentication only
-sudo sed -i 's/#PasswordAuthentication yes/PasswordAuthentication no/' /etc/ssh/sshd_config
-
-# Restart SSH
-sudo systemctl restart sshd
-```
-
-### 12.2 Application Security
-
-**Security Headers:**
-- Configured in nginx
-- HTTPS only
-- HSTS enabled
-- CSP headers
-
-**Rate Limiting:**
-- Implemented in application
-- Per IP and per user
-- Redis-based rate limiting
-
----
-
-## 13. Scaling
-
-### 13.1 Horizontal Scaling
-
-**Load Balancer:**
-- AWS ALB or DigitalOcean Load Balancer
-- Health checks configured
-- SSL termination at load balancer
-
-**Auto-Scaling:**
-- AWS Auto Scaling Groups
-- Scale based on CPU/memory
-- Min: 2 instances, Max: 10 instances
-
-### 13.2 Database Scaling
-
-**Read Replicas:**
-- Create read replicas for read-heavy operations
-- Application uses read replicas for queries
-- Primary for writes only
-
-**Connection Pooling:**
-- PgBouncer for connection pooling
-- Reduce database connections
-
----
-
-## 14. Rollback Procedure
-
-### 14.1 Application Rollback
-
-**Quick Rollback:**
-```bash
-# Revert to previous Docker image
-docker-compose down
-docker-compose up -d frozennuray-api:previous-tag
-```
-
-**Git Rollback:**
-```bash
-# Revert to previous commit
-git revert HEAD
-git push origin main
-# Triggers new deployment
-```
-
-### 14.2 Database Rollback
-
-**Migration Rollback:**
-```bash
-# Rollback last migration
-npx prisma migrate resolve --rolled-back <migration-name>
-```
-
-**Data Rollback:**
-- Restore from backup
-- Point-in-time recovery (RDS)
-
----
-
-## 15. Post-Deployment Checklist
-
-- [ ] Health checks passing
-- [ ] SSL certificates valid
-- [ ] Monitoring alerts configured
-- [ ] Logs being collected
-- [ ] Backups running
-- [ ] Performance metrics normal
-- [ ] Error rates normal
-- [ ] Smoke tests passing
-
----
-
-## 16. Troubleshooting
-
-### 16.1 Common Issues
-
-**Application Not Starting:**
-- Check logs: `docker-compose logs api`
-- Check environment variables
-- Check database connectivity
-- Check Redis connectivity
-
-**High Error Rate:**
-- Check application logs
-- Check database performance
-- Check external service status
-- Check rate limiting
-
-**Performance Issues:**
-- Check database query performance
-- Check cache hit rates
-- Check server resources
-- Check network latency
-
----
-
-## 17. Contact Information
-
-**DevOps Team:**
-- DevOps Lead: devops@frozennuray.com
-- On-Call: [Emergency contact]
-
-**Infrastructure:**
-- AWS Support: [Support plan]
-- DigitalOcean Support: [Support plan]
-
----
-
-**End of Document**
-
+It needs `node_modules` and the generated Prisma client, so run it from a checkout, not from the runtime image
+(which has no `scripts/`). It prints the password it was given to the terminal; clear your shell history and use a
+strong password. Sign in at `/admin/login`. Other admins, hub managers and communities are managed from the admin
+screens.
+
+## Go-live checklist
+
+- [ ] `NODE_ENV=production`; the server starts with no validation errors.
+- [ ] `JWT_SECRET` is random and kept in a secrets manager.
+- [ ] `FRONTEND_URL`, `CORS_ORIGIN` and `BASE_URL` match the real https hostnames; frontend was built with the
+      production `NEXT_PUBLIC_API_URL`.
+- [ ] Migrations applied (`db:migrate`) and `db:check` passes.
+- [ ] Redis reachable; `/api/v1/health` shows database and redis `healthy`.
+- [ ] Load balancer uses `/api/v1/health/ready`, exactly one proxy hop in front of the app.
+- [ ] S3 bucket and CDN configured; private bucket or prefix not publicly readable; a test image upload and a
+      receipt link work.
+- [ ] Test email (registration verification) and test phone OTP both arrive.
+- [ ] Safepay: `SAFEPAY_SANDBOX=false`, live keys, webhook registered; one real small payment completes the order.
+- [ ] VAPID keys set if you want push; Sentry DSNs set if you want error tracking.
+- [ ] Legal company details set in the frontend build; `NEXT_PUBLIC_ENABLE_DEMO_LOGIN` not `true`.
+- [ ] First admin created; communities, delivery prices (admin, Settings) and kitchens/riders approved.
+- [ ] Database and file backups running, and a restore tested.
+- [ ] Shutdown tested: rolling a deploy drops no requests (`SHUTDOWN_DRAIN_MS` versus the balancer's check interval).
