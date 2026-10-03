@@ -61,3 +61,10 @@ and left a failed entry in the migration history; `db:baseline` clears that firs
 ## Checks
 
 - `npm run db:check`: does the database match `schema.prisma`? Exit code 0 yes, 2 no.
+
+## Seeds
+
+- `seed-e2e.ts` (`npm run seed:e2e`): idempotent sample data. Runs `seed-communities.ts` (Karachi communities) and
+  `seed-community-kitchens.ts` (13 kitchens with dishes), then adds an approved test kitchen
+  (`e2e-seller@nuray.test`) with three products. Run after `npm run db:migrate`.
+- Demo accounts for all roles come from `../scripts/seed-ideal-flow-users.ts`; see `docs/ACCOUNT_CREDENTIALS.md`.
