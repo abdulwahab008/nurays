@@ -6,9 +6,12 @@ import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/toast';
 import { authService } from '@/lib/services/auth.service';
 import { useAuthStore } from '@/lib/store/auth-store';
+import { useT } from '@/lib/i18n';
+import { shellMessages } from '@/lib/i18n/messages/shell';
 
 export function EmailVerificationBanner() {
   const router = useRouter();
+  const t = useT(shellMessages);
   const { user } = useAuthStore();
   const { showToast } = useToast();
   const [loading, setLoading] = useState(false);
@@ -22,26 +25,26 @@ export function EmailVerificationBanner() {
     setLoading(true);
     try {
       await authService.resendVerificationEmail();
-      showToast('Verification email sent! Please check your inbox.', 'success');
+      showToast(t('verifySent'), 'success');
     } catch (err: any) {
-      showToast(err.response?.data?.error?.message || 'Failed to resend email', 'error');
+      showToast(err.response?.data?.error?.message || t('verifyFailed'), 'error');
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="bg-yellow-50 border-l-4 border-yellow-400 p-4 mb-4">
+    <div className="bg-yellow-50 border-s-4 border-yellow-400 p-4 mb-4">
       <div className="flex items-start">
         <div className="flex-shrink-0">
           <span className="text-2xl">📧</span>
         </div>
-        <div className="ml-3 flex-1">
+        <div className="ms-3 flex-1">
           <h3 className="text-sm font-medium text-yellow-800">
-            Verify Your Email Address
+            {t('verifyTitle')}
           </h3>
           <p className="mt-1 text-sm text-yellow-700">
-            Please verify your email ({user.email}) to activate your account and access all features.
+            {t('verifyBody', { email: user.email })}
           </p>
           <div className="mt-3 flex gap-2">
             <Button
@@ -51,19 +54,19 @@ export function EmailVerificationBanner() {
               disabled={loading}
               className="text-xs"
             >
-              {loading ? 'Sending...' : 'Resend Email'}
+              {loading ? t('sending') : t('resendEmail')}
             </Button>
             <button
               onClick={() => router.push('/verify-email-pending')}
               className="text-xs text-yellow-800 underline hover:text-yellow-900"
             >
-              View Details
+              {t('viewDetails')}
             </button>
             <button
               onClick={() => setDismissed(true)}
-              className="text-xs text-yellow-600 hover:text-yellow-800 ml-auto"
+              className="text-xs text-yellow-600 hover:text-yellow-800 ms-auto"
             >
-              Dismiss
+              {t('dismiss')}
             </button>
           </div>
         </div>

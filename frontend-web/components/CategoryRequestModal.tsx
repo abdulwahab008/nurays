@@ -309,7 +309,7 @@ export function CategoryRequestModal({
                 value={formData.nameUrdu}
                 onChange={(e) => setFormData({ ...formData, nameUrdu: e.target.value })}
                 placeholder="مثال: منجمد بریانی"
-                className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent text-right"
+                className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent text-end"
                 dir="rtl"
                 maxLength={100}
               />

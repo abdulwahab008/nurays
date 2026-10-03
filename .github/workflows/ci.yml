@@ -127,12 +127,17 @@ jobs:
 
       - name: Prisma generate + migrate
         working-directory: backend
-        # Migrations are reconciled with schema.prisma (see migration
-        # 20260530203923_reconcile_schema_drift), so `migrate deploy` builds a
-        # complete schema and exercises the real production deploy path.
+        # Builds the schema from an empty database with the migrations, exactly
+        # as a production deploy does (prisma/migrations starts with a full baseline).
         run: |
           npx prisma generate
-          npx prisma db push --accept-data-loss
+          npx prisma migrate deploy
+
+      - name: Schema drift check
+        working-directory: backend
+        # Fails when schema.prisma was changed without a migration: the database
+        # the migrations built must match the schema exactly.
+        run: npm run db:check
 
       - name: Seed E2E data
         working-directory: backend

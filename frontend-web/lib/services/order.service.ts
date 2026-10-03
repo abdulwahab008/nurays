@@ -66,10 +66,16 @@ export interface OrderMessage {
 }
 
 export const orderService = {
-  createOrder: async (data: CreateOrderRequest) => {
+  /**
+   * Place an order. `idempotencyKey` identifies one checkout attempt: sending the same
+   * key again (a retry after a timeout) returns the order already placed instead of
+   * creating a second one.
+   */
+  createOrder: async (data: CreateOrderRequest, idempotencyKey?: string) => {
     const response = await apiClient.post<ApiResponse<{ order: Order; payment?: any }>>(
       '/orders',
-      data
+      data,
+      idempotencyKey ? { headers: { 'Idempotency-Key': idempotencyKey } } : undefined
     );
     return response.data;
   },

@@ -4,6 +4,9 @@ import { useEffect, useRef, useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuthStore } from '@/lib/store/auth-store';
 import { useSocket } from '@/lib/hooks/use-socket';
+import { useT } from '@/lib/i18n';
+import { commonMessages, statusKey } from '@/lib/i18n/messages/common';
+import { ordersMessages } from '@/lib/i18n/messages/orders';
 
 interface OrderItemUpdate {
   orderItemId: string;
@@ -76,33 +79,34 @@ function playCustomerNotificationSound() {
   }
 }
 
-const STATUS_CONFIG: Record<string, { label: string; emoji: string; headerClass: string; dotClass: string }> = {
+// labelKey: the toast's heading, from ordersMessages.
+const STATUS_CONFIG: Record<string, { labelKey: keyof typeof ordersMessages.en; emoji: string; headerClass: string; dotClass: string }> = {
   confirmed: {
-    label: 'Order Accepted!',
+    labelKey: 'notif.confirmed',
     emoji: '✓',
     headerClass: 'from-blue-500 to-blue-600',
     dotClass: 'bg-white',
   },
   preparing: {
-    label: 'Being Prepared',
+    labelKey: 'notif.preparing',
     emoji: '🍳',
     headerClass: 'from-amber-500 to-orange-500',
     dotClass: 'bg-white',
   },
   ready: {
-    label: 'Ready for Pickup',
+    labelKey: 'notif.ready',
     emoji: '✔',
     headerClass: 'from-emerald-500 to-emerald-600',
     dotClass: 'bg-white',
   },
   dispatched: {
-    label: 'On the Way!',
+    labelKey: 'notif.dispatched',
     emoji: '🚚',
     headerClass: 'from-violet-500 to-purple-600',
     dotClass: 'bg-white',
   },
   delivered: {
-    label: 'Delivered!',
+    labelKey: 'notif.delivered',
     emoji: '🎉',
     headerClass: 'from-teal-500 to-cyan-600',
     dotClass: 'bg-white',
@@ -118,6 +122,8 @@ export function CustomerOrderNotification() {
   const router = useRouter();
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const mountedRef = useRef(false);
+  const t = useT(ordersMessages);
+  const tc = useT(commonMessages);
 
   const isCustomer = user?.userType === 'customer' || user?.user_type === 'customer';
 
@@ -153,14 +159,20 @@ export function CustomerOrderNotification() {
   if (!isCustomer || notifications.length === 0) return null;
 
   return (
-    <div className="fixed top-4 right-4 z-[9998] flex flex-col gap-3 pointer-events-none">
+    <div className="fixed top-4 end-4 z-[9998] flex flex-col gap-3 pointer-events-none">
       {notifications.map((n) => {
-        const cfg = STATUS_CONFIG[n.status] || {
-          label: n.status.charAt(0).toUpperCase() + n.status.slice(1),
-          emoji: '•',
-          headerClass: 'from-gray-500 to-gray-600',
-          dotClass: 'bg-white',
-        };
+        const known = STATUS_CONFIG[n.status];
+        const cfg = known
+          ? { ...known, label: t(known.labelKey) }
+          : {
+              label:
+                statusKey(n.status) in commonMessages.en
+                  ? tc(statusKey(n.status))
+                  : n.status.charAt(0).toUpperCase() + n.status.slice(1),
+              emoji: '•',
+              headerClass: 'from-gray-500 to-gray-600',
+              dotClass: 'bg-white',
+            };
 
         return (
           <div
@@ -179,6 +191,7 @@ export function CustomerOrderNotification() {
               </div>
               <button
                 onClick={() => dismiss(n.id)}
+                aria-label={t('notif.dismiss')}
                 className="text-white/70 hover:text-white transition-colors"
               >
                 <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
@@ -189,21 +202,21 @@ export function CustomerOrderNotification() {
 
             {/* Body */}
             <div className="px-4 py-3">
-              <p className="text-gray-500 text-xs mb-1">Your order</p>
-              <p className="text-gray-900 font-bold text-sm mb-3">#{n.orderNumber}</p>
+              <p className="text-gray-500 text-xs mb-1">{t('notif.yourOrder')}</p>
+              <p className="text-gray-900 font-bold text-sm mb-3"><span data-ltr>#{n.orderNumber}</span></p>
 
               <div className="flex gap-2">
                 <button
                   onClick={() => { router.push(`/orders/${n.orderId}`); dismiss(n.id); }}
                   className="flex-1 bg-gray-900 hover:bg-gray-800 active:scale-95 text-white text-xs font-semibold py-2 rounded-xl transition-all"
                 >
-                  View Order
+                  {t('notif.viewOrder')}
                 </button>
                 <button
                   onClick={() => dismiss(n.id)}
                   className="px-3 bg-gray-100 hover:bg-gray-200 active:scale-95 text-gray-500 text-xs font-medium py-2 rounded-xl transition-all"
                 >
-                  OK
+                  {t('notif.ok')}
                 </button>
               </div>
             </div>

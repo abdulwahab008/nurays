@@ -1,8 +1,11 @@
 import prisma from '../config/database';
+import { getPlatformDeliveryPricing } from './delivery-pricing.service';
+import { platformDeliveryFee } from '../utils/deliveryFee';
 import { AppError } from '../middleware/errorHandler';
 import adminService from './admin.service';
 import { computeSellerAvailability } from './availability.service';
-import { sumSelfDeliveryFees } from '../utils/deliveryEarnings';
+import { computeSellerBalance } from './seller-balance.service';
+import { assertOwnDocument, assertOwnPublicImage } from '../utils/documents';
 
 /** Shared shape for the business-operations fields — read by getSellerProfile, written by updateSellerProfile. */
 function formatBusinessOperationsFields(seller: {
@@ -55,6 +58,17 @@ function formatBusinessOperationsFields(seller: {
   };
 }
 
+/** A seller's documents of each given type are replaced by the new ones (null: left as they are). */
+async function replaceSellerDocuments(sellerId: string, docs: Record<string, string[] | null>) {
+  for (const [documentType, urls] of Object.entries(docs)) {
+    if (!urls) continue;
+    await prisma.$transaction([
+      prisma.sellerDocument.deleteMany({ where: { sellerId, documentType } }),
+      prisma.sellerDocument.createMany({ data: urls.map((documentUrl) => ({ sellerId, documentType, documentUrl })) }),
+    ]);
+  }
+}
+
 export class SellerService {
   /**
    * Register as seller
@@ -91,61 +105,64 @@ export class SellerService {
       where: { userId },
     });
 
-    if (existingSeller) {
-      // If previously rejected, permit re-submitting application with fixed details
-      if (existingSeller.verificationStatus === 'rejected') {
-        const updated = await prisma.seller.update({
-          where: { id: existingSeller.id },
-          data: {
-            businessName: data.businessName,
-            businessNameUrdu: data.businessNameUrdu,
-            businessType: data.businessType || existingSeller.businessType || 'home_kitchen',
-            description: data.description,
-            kitchenVideoUrl: data.kitchenVideoUrl,
-            coverImageUrl: data.coverImageUrl,
-            communityId: data.communityId,
-            primaryCommunityName: data.primaryCommunityName,
-            latitude: data.latitude !== undefined ? data.latitude : existingSeller.latitude,
-            longitude: data.longitude !== undefined ? data.longitude : existingSeller.longitude,
-            mealCategories: data.mealCategories || existingSeller.mealCategories,
-            deliveryModes: data.deliveryModes || existingSeller.deliveryModes,
-            bankAccountName: data.bankAccountName,
-            bankAccountNumber: data.bankAccountNumber,
-            bankName: data.bankName,
-            jazzcashNumber: data.jazzcashNumber,
-            easypaisaNumber: data.easypaisaNumber,
-            verificationStatus: 'pending',
-            rejectionReason: null,
-          },
-        });
-
-        // Add documents if provided
-        if (data.cnicFrontUrl) {
-          await prisma.sellerDocument.create({
-            data: { sellerId: updated.id, documentType: 'cnic_front', documentUrl: data.cnicFrontUrl },
-          });
-        }
-        if (data.cnicBackUrl) {
-          await prisma.sellerDocument.create({
-            data: { sellerId: updated.id, documentType: 'cnic_back', documentUrl: data.cnicBackUrl },
-          });
-        }
-        if (data.kitchenPhotoUrls && data.kitchenPhotoUrls.length > 0) {
-          for (const url of data.kitchenPhotoUrls) {
-            await prisma.sellerDocument.create({
-              data: { sellerId: updated.id, documentType: 'kitchen_photo', documentUrl: url },
-            });
-          }
-        }
-
-        return {
-          sellerId: updated.id,
-          verificationStatus: updated.verificationStatus,
-          message: 'Application resubmitted for review',
-        };
-      }
-
+    // Only a rejected application can be sent again.
+    if (existingSeller && existingSeller.verificationStatus !== 'rejected') {
       throw new AppError('Seller account already exists', 400, 'SELLER_ALREADY_EXISTS');
+    }
+
+    // Identity documents and photos must be files this user uploaded here, never links from
+    // elsewhere. A first application needs both sides of the CNIC; a resubmission keeps the
+    // ones already on file unless new ones are sent.
+    const cnicFront = data.cnicFrontUrl ? assertOwnDocument(data.cnicFrontUrl, userId, 'front of your CNIC') : null;
+    const cnicBack = data.cnicBackUrl ? assertOwnDocument(data.cnicBackUrl, userId, 'back of your CNIC') : null;
+    const kitchenPhotos = (data.kitchenPhotoUrls ?? []).slice(0, 6).map((url) => assertOwnDocument(url, userId, 'kitchen photo'));
+    const coverImageUrl =
+      data.coverImageUrl && data.coverImageUrl !== existingSeller?.coverImageUrl
+        ? assertOwnPublicImage(data.coverImageUrl, userId, 'covers', 'cover photo')
+        : data.coverImageUrl || existingSeller?.coverImageUrl || undefined;
+    const cnicOnFile = existingSeller
+      ? await prisma.sellerDocument.count({ where: { sellerId: existingSeller.id, documentType: { in: ['cnic_front', 'cnic_back'] } } })
+      : 0;
+    if ((!cnicFront || !cnicBack) && cnicOnFile < 2) {
+      throw new AppError('Please upload photos of both sides of your CNIC.', 400, 'CNIC_REQUIRED');
+    }
+    const saveDocuments = (sellerId: string) =>
+      replaceSellerDocuments(sellerId, { cnic_front: cnicFront ? [cnicFront] : null, cnic_back: cnicBack ? [cnicBack] : null, kitchen_photo: kitchenPhotos.length ? kitchenPhotos : null });
+
+    if (existingSeller) {
+      // Previously rejected: the application is sent again with the details fixed.
+      const updated = await prisma.seller.update({
+        where: { id: existingSeller.id },
+        data: {
+          businessName: data.businessName,
+          businessNameUrdu: data.businessNameUrdu,
+          businessType: data.businessType || existingSeller.businessType || 'home_kitchen',
+          description: data.description,
+          kitchenVideoUrl: data.kitchenVideoUrl,
+          coverImageUrl,
+          communityId: data.communityId,
+          primaryCommunityName: data.primaryCommunityName,
+          latitude: data.latitude !== undefined ? data.latitude : existingSeller.latitude,
+          longitude: data.longitude !== undefined ? data.longitude : existingSeller.longitude,
+          mealCategories: data.mealCategories || existingSeller.mealCategories,
+          deliveryModes: data.deliveryModes || existingSeller.deliveryModes,
+          bankAccountName: data.bankAccountName,
+          bankAccountNumber: data.bankAccountNumber,
+          bankName: data.bankName,
+          jazzcashNumber: data.jazzcashNumber,
+          easypaisaNumber: data.easypaisaNumber,
+          verificationStatus: 'pending',
+          rejectionReason: null,
+        },
+      });
+
+      await saveDocuments(updated.id);
+
+      return {
+        sellerId: updated.id,
+        verificationStatus: updated.verificationStatus,
+        message: 'Application resubmitted for review',
+      };
     }
 
     // Check if user exists
@@ -173,7 +190,7 @@ export class SellerService {
         businessType: data.businessType || 'home_kitchen',
         description: data.description,
         kitchenVideoUrl: data.kitchenVideoUrl,
-        coverImageUrl: data.coverImageUrl,
+        coverImageUrl,
         communityId: data.communityId,
         primaryCommunityName: data.primaryCommunityName,
         latitude: data.latitude,
@@ -190,24 +207,7 @@ export class SellerService {
       },
     });
 
-    // Store uploaded documents
-    if (data.cnicFrontUrl) {
-      await prisma.sellerDocument.create({
-        data: { sellerId: seller.id, documentType: 'cnic_front', documentUrl: data.cnicFrontUrl },
-      });
-    }
-    if (data.cnicBackUrl) {
-      await prisma.sellerDocument.create({
-        data: { sellerId: seller.id, documentType: 'cnic_back', documentUrl: data.cnicBackUrl },
-      });
-    }
-    if (data.kitchenPhotoUrls && data.kitchenPhotoUrls.length > 0) {
-      for (const url of data.kitchenPhotoUrls) {
-        await prisma.sellerDocument.create({
-          data: { sellerId: seller.id, documentType: 'kitchen_photo', documentUrl: url },
-        });
-      }
-    }
+    await saveDocuments(seller.id);
 
     // Update user type to seller (if not already)
     if (user.userType !== 'seller') {
@@ -437,6 +437,7 @@ export class SellerService {
     });
     const ruleById = new Map(seller.communityDeliveries.map((r) => [r.communityId, r]));
     const neighborIds = new Set(seller.community?.neighborCommunityIds ?? []);
+    const pricing = await getPlatformDeliveryPricing();
 
     return {
       deliveryProvider: seller.deliveryProvider,
@@ -455,6 +456,13 @@ export class SellerService {
           isHome: c.id === seller.communityId,
           isNeighbor: neighborIds.has(c.id),
           suggestedFee: Number(c.id === seller.communityId ? c.deliveryBaseFee : c.crossCommunityBaseFee),
+          // What a customer there pays when a Nuray rider delivers (community centre to centre;
+          // the real fee uses the exact addresses). null: too far for Nuray riders.
+          ...(() => {
+            const r = platformDeliveryFee(seller.communityId, { communityId: c.id }, null, pricing);
+            // fixed: the community's own fee or an admin's pair price; distance: estimated by distance
+            return { nurayFee: r.deliverable ? r.fee : null, nurayFeeIsFixed: r.pricing === 'same_community' || r.pricing === 'community_pair' };
+          })(),
           terms: rule
             ? {
                 fee: Number(rule.fee),
@@ -604,62 +612,14 @@ export class SellerService {
         item.order.paymentStatus === 'paid'
     );
 
-    // A seller who delivers their own orders keeps the delivery fee (the platform
-    // takes no commission on it and pays no rider). For an online order we hold
-    // that money, so it is withdrawable; for COD it was handed over at the door.
-    const completedOrders = completedItems.map((i) => ({
-      id: i.order.id,
-      deliveryFeeBreakdown: i.order.deliveryFeeBreakdown,
-      paymentMethod: i.order.paymentMethod,
-    }));
-    const selfDeliveryFeesAll = sumSelfDeliveryFees(completedOrders, sellerId, { onlineOnly: false });
-    const selfDeliveryFeesOnline = sumSelfDeliveryFees(completedOrders, sellerId, { onlineOnly: true });
-
-    const totalEarnings =
-      completedItems.reduce((sum, item) => {
-        return sum + Number(item.sellerPayout);
-      }, 0) + selfDeliveryFeesAll;
-
-    // We're a facilitator, not an escrow agent: for a COD order the customer
-    // paid the seller directly, so that sellerPayout is money the seller
-    // already has in hand — it isn't payable again through SellerPayout.
-    // What the seller DOES owe us is the platform commission on that sale,
-    // which nets against whatever we owe them from their online orders below.
-    const codCommissionOwed = completedItems
-      .filter((item) => item.order.paymentMethod === 'cod')
-      .reduce((sum, item) => sum + Number(item.commissionAmount), 0);
-    const onlineEarnings =
-      completedItems
-        .filter((item) => item.order.paymentMethod !== 'cod')
-        .reduce((sum, item) => sum + Number(item.sellerPayout), 0) + selfDeliveryFeesOnline;
-
-    // Get pending payout
-    const pendingPayouts = await prisma.sellerPayout.findMany({
-      where: {
-        sellerId,
-        status: { in: ['pending', 'processing'] },
-      },
-      select: {
-        netAmount: true,
-      },
-    });
-
-    const pendingPayout = pendingPayouts.reduce((sum, payout) => {
-      return sum + Number(payout.netAmount);
-    }, 0);
-
-    // What can actually be withdrawn from the platform: money we hold from
-    // online orders, minus what's already been paid or requested, minus
-    // commission owed on COD sales (settled by netting, not a separate bill).
-    const alreadyPaidOrRequested = await prisma.sellerPayout.findMany({
-      where: { sellerId, status: { in: ['completed', 'pending', 'processing'] } },
-      select: { netAmount: true },
-    });
-    const paidOrRequestedTotal = alreadyPaidOrRequested.reduce(
-      (sum, payout) => sum + Number(payout.netAmount),
-      0
-    );
-    const availableForPayout = onlineEarnings - paidOrRequestedTotal - codCommissionOwed;
+    // Balance from who actually holds each order's money (see seller-balance.service.ts).
+    const balance = await computeSellerBalance(prisma, sellerId);
+    const totalEarnings = balance.totalEarnings;
+    const pendingPayout = balance.pendingPayout;
+    // Kept under its old name for the dashboard: what the seller owes the platform on money
+    // they collected themselves (COD at their own door, transfers into their own account).
+    const codCommissionOwed = Math.max(0, balance.sellerOwesPlatform);
+    const availableForPayout = balance.available;
 
     // Get recent orders
     const recentOrderItems = await prisma.orderItem.findMany({
@@ -741,12 +701,7 @@ export class SellerService {
     const grossSales = completedItems.reduce((sum, item) => sum + Number(item.totalPrice), 0);
     const platformFees = completedItems.reduce((sum, item) => sum + Number(item.commissionAmount), 0);
 
-    // Settled payouts
-    const completedPayouts = await prisma.sellerPayout.findMany({
-      where: { sellerId, status: 'completed' },
-      select: { netAmount: true },
-    });
-    const paidSettlement = completedPayouts.reduce((sum, p) => sum + Number(p.netAmount), 0);
+    const paidSettlement = balance.paidOut;
 
     const availability = computeSellerAvailability(seller);
 
@@ -776,6 +731,7 @@ export class SellerService {
         totalEarnings,
         pendingPayout,
         codCommissionOwed,
+        owedToPlatform: codCommissionOwed,
         availableForPayout: Math.max(0, availableForPayout),
         rating: Number(seller.ratingAverage),
         totalReviews: seller.totalReviews,
@@ -999,68 +955,17 @@ export class SellerService {
     // two simultaneous requests used to both read the same balance and together
     // withdraw more than the seller had earned.
     const payout = await prisma.$transaction(async (tx) => {
-      await tx.$queryRaw`SELECT id FROM sellers WHERE id = ${sellerId} FOR UPDATE`;
+      // FOR NO KEY UPDATE, not FOR UPDATE: it still serialises payout requests for this
+      // seller, but doesn't block the KEY SHARE lock every new order item / cart item
+      // takes on its seller row, so the kitchen keeps taking orders meanwhile.
+      await tx.$queryRaw`SELECT id FROM sellers WHERE id = ${sellerId} FOR NO KEY UPDATE`;
 
-      // Calculate available balance. Must also require paymentStatus: 'paid' —
-      // a delivered order whose online payment never actually completed hasn't
-      // put any money in our hands to pay out.
-      const orderItems = await tx.orderItem.findMany({
-        where: {
-          sellerId,
-          status: { not: 'cancelled' },
-          order: {
-            orderStatus: { in: ['delivered', 'completed'] },
-            paymentStatus: 'paid',
-          },
-        },
-        include: {
-          order: { select: { id: true, paymentMethod: true, deliveryFeeBreakdown: true } },
-        },
-      });
-
-      // We're a facilitator, not an escrow agent: COD money already went
-      // straight to the seller, so it's not payable again here — only what we
-      // actually collected online is withdrawable, net of the commission the
-      // seller owes us on their COD sales.
-      // Includes the delivery fee a self-delivering seller keeps on online orders.
-      const onlineEarnings =
-        orderItems
-          .filter((item) => item.order.paymentMethod !== 'cod')
-          .reduce((sum, item) => sum + Number(item.sellerPayout), 0) +
-        sumSelfDeliveryFees(
-          orderItems.map((i) => ({
-            id: i.order.id,
-            deliveryFeeBreakdown: i.order.deliveryFeeBreakdown,
-            paymentMethod: i.order.paymentMethod,
-          })),
-          sellerId,
-          { onlineOnly: true }
-        );
-      const codCommissionOwed = orderItems
-        .filter((item) => item.order.paymentMethod === 'cod')
-        .reduce((sum, item) => sum + Number(item.commissionAmount), 0);
-
-      // Get already paid out AND already-requested-but-not-yet-processed amounts —
-      // a pending payout must reserve its amount too, or a seller could submit
-      // several requests back-to-back before any of them are processed and
-      // collectively withdraw more than they've actually earned.
-      const outstandingPayouts = await tx.sellerPayout.findMany({
-        where: {
-          sellerId,
-          status: { in: ['completed', 'pending', 'processing'] },
-        },
-        select: {
-          netAmount: true,
-        },
-      });
-
-      const paidOut = outstandingPayouts.reduce((sum, payout) => {
-        return sum + Number(payout.netAmount);
-      }, 0);
-
-      const availableBalance = onlineEarnings - paidOut - codCommissionOwed;
-
-      if (data.amount > availableBalance) {
+      // From who actually holds each order's money (seller-balance.service.ts): money the
+      // platform collected, minus what the seller owes on money they collected themselves
+      // (COD at their door, transfers into their own account), minus payouts completed or
+      // already requested (so back-to-back requests can't withdraw the same money twice).
+      const balance = await computeSellerBalance(tx, sellerId);
+      if (data.amount > balance.available) {
         throw new AppError('Insufficient balance', 400, 'INSUFFICIENT_BALANCE');
       }
 

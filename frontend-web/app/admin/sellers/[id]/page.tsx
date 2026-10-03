@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/toast';
 import { useAuthStore } from '@/lib/store/auth-store';
 import { apiClient } from '@/lib/api-client';
+import DocumentList from '@/components/admin/DocumentList';
 import { formatDate } from '@/lib/utils';
 
 interface SellerDetail {
@@ -24,6 +25,7 @@ interface SellerDetail {
   createdAt: string;
   updatedAt: string;
   productCount: number;
+  documents?: Array<{ id: string; type: string; url: string | null }>;
   user: {
     id: string;
     email: string;
@@ -246,6 +248,11 @@ export default function AdminSellerDetailPage() {
                   <p className="text-red-700">{seller.rejectionReason}</p>
                 </div>
               )}
+
+              <div>
+                <h2 className="text-sm font-medium text-gray-500 uppercase mb-1">Verification documents</h2>
+                <DocumentList documents={seller.documents ?? []} />
+              </div>
 
               <div className="grid grid-cols-2 gap-4 text-sm">
                 <div>

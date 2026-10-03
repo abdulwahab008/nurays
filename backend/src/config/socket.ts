@@ -1,5 +1,7 @@
 import { Server as HTTPServer } from 'http';
 import { Server as SocketIOServer } from 'socket.io';
+import { createAdapter } from '@socket.io/redis-adapter';
+import { redisUrl, newRedisConnection } from './redis';
 import { verifyToken, isTokenRevoked } from '../utils/jwt';
 import prisma from './database';
 
@@ -21,6 +23,12 @@ class SocketManager {
       },
       transports: ['websocket', 'polling'],
     });
+
+    // With Redis, events emitted on any instance reach clients connected to every instance
+    // (and room operations like socketsLeave apply everywhere). Without it, only this one.
+    if (redisUrl()) {
+      this.io.adapter(createAdapter(newRedisConnection('socket-pub'), newRedisConnection('socket-sub')));
+    }
 
     // Authentication middleware
     this.io.use(async (socket, next) => {
@@ -133,6 +141,14 @@ class SocketManager {
     return this.io;
   }
 
+  /** Disconnect every client and stop accepting new ones (graceful shutdown). */
+  async close(): Promise<void> {
+    if (!this.io) return;
+    const io = this.io;
+    this.io = null;
+    await new Promise<void>((resolve) => io.close(() => resolve()));
+  }
+
   getIO(): SocketIOServer {
     if (!this.io) {
       throw new Error('Socket.io not initialized. Call initialize() first.');
@@ -150,6 +166,16 @@ class SocketManager {
    */
   removeUserFromOrder(userId: string, orderId: string) {
     this.io?.in(`user:${userId}`).socketsLeave(`order:${orderId}`);
+  }
+
+  /**
+   * One event to everyone in any of these rooms. A connection in several of them (a customer
+   * who is in the order's room and their own user room) receives it once, not once per room.
+   */
+  emitToRooms(rooms: string[], event: string, data: any) {
+    if (this.io && rooms.length > 0) {
+      this.io.to(Array.from(new Set(rooms))).emit(event, data);
+    }
   }
 
   emitToUser(userId: string, event: string, data: any) {

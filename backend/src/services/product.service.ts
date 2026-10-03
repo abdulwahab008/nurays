@@ -1,9 +1,13 @@
+import { Prisma } from '@prisma/client';
 import prisma from '../config/database';
+import { getPlatformDeliveryPricing } from './delivery-pricing.service';
+import { searchRankedProductIds } from './ranking.service';
 import { AppError } from '../middleware/errorHandler';
 import { computeSellerAvailability, isAcceptingOrders } from './availability.service';
 import { getDeliveryFeeForSeller, haversineKm } from '../utils/deliveryFee';
 import { SELLER_COMMUNITY_DELIVERY_SELECT } from '../utils/sellerDeliverySelect';
 import { isUploadedBy } from '../utils/uploadPaths';
+import { isStoredFile } from '../storage';
 
 const SELLER_AVAILABILITY_SELECT = {
   status: true,
@@ -42,6 +46,7 @@ const SELLER_ORDERING_SELECT = {
   primaryCommunityName: true,
   communityId: true,
   allowCrossCommunity: true,
+  deliveryProvider: true,
   communityDeliveries: SELLER_COMMUNITY_DELIVERY_SELECT.communityDeliveries,
   community: {
     select: {
@@ -88,6 +93,64 @@ function estimateDeliveryMinutes(
   return { minMinutes: prep + travel, maxMinutes: prep + travel + 15 };
 }
 
+/** Deepest catalog page served; nobody pages this far, and it bounds the database's OFFSET work. */
+const MAX_PAGE = 500;
+
+const KM_PER_DEGREE_LATITUDE = 111.32;
+
+/**
+ * Ids of the sellers matching `sellerWhere` that are open now, within `maxDistanceKm` of the
+ * customer, and/or able to deliver within FAST_DELIVERY_MAX_MINUTES, as requested. A
+ * latitude/longitude box narrows the distance check in SQL; the exact distance is checked here.
+ */
+async function sellersPassingComputedFilters(
+  sellerWhere: Prisma.SellerWhereInput,
+  opts: {
+    openNow: boolean;
+    fastDelivery: boolean;
+    maxDistanceKm?: number;
+    customerLat?: number;
+    customerLng?: number;
+  }
+): Promise<string[]> {
+  const hasLocation = opts.customerLat != null && opts.customerLng != null;
+  const box: Prisma.SellerWhereInput[] = [];
+  if (opts.maxDistanceKm != null && hasLocation) {
+    const lat = opts.customerLat!;
+    const lng = opts.customerLng!;
+    const latDelta = opts.maxDistanceKm / KM_PER_DEGREE_LATITUDE;
+    box.push({ latitude: { gte: lat - latDelta, lte: lat + latDelta } });
+    const cosLat = Math.cos((lat * Math.PI) / 180);
+    const lngDelta = cosLat > 0.01 ? opts.maxDistanceKm / (KM_PER_DEGREE_LATITUDE * cosLat) : 360;
+    // Skip the longitude bound where the box would wrap around the antimeridian.
+    if (lng - lngDelta >= -180 && lng + lngDelta <= 180) {
+      box.push({ longitude: { gte: lng - lngDelta, lte: lng + lngDelta } });
+    }
+  }
+
+  const sellers = await prisma.seller.findMany({
+    where: box.length > 0 ? { AND: [sellerWhere, ...box] } : sellerWhere,
+    select: { id: true, latitude: true, longitude: true, minPrepTimeMinutes: true, ...SELLER_AVAILABILITY_SELECT },
+  });
+
+  return sellers
+    .filter((seller) => {
+      if (opts.openNow && !computeSellerAvailability(seller).isOpen) return false;
+      const distanceKm =
+        hasLocation && seller.latitude != null && seller.longitude != null
+          ? haversineKm(opts.customerLat!, opts.customerLng!, Number(seller.latitude), Number(seller.longitude))
+          : null;
+      if (opts.maxDistanceKm != null && hasLocation && (distanceKm == null || distanceKm > opts.maxDistanceKm)) {
+        return false;
+      }
+      if (opts.fastDelivery && estimateDeliveryMinutes(seller.minPrepTimeMinutes, distanceKm).maxMinutes > FAST_DELIVERY_MAX_MINUTES) {
+        return false;
+      }
+      return true;
+    })
+    .map((seller) => seller.id);
+}
+
 /**
  * Per-seller "what should the customer see" bundle: whether new orders are
  * actually being accepted right now (distinct from just isOpen — folds in
@@ -113,7 +176,9 @@ async function computeCustomerFacingSellerInfo(
     seller as any,
     { latitude: customerLat, longitude: customerLng, communityId: customerCommunityId },
     seller.latitude != null ? Number(seller.latitude) : null,
-    seller.longitude != null ? Number(seller.longitude) : null
+    seller.longitude != null ? Number(seller.longitude) : null,
+    undefined,
+    { pricing: await getPlatformDeliveryPricing() }
   );
   const eta = estimateDeliveryMinutes(seller.minPrepTimeMinutes, feeResult.distanceKm);
   return {
@@ -213,9 +278,11 @@ export class ProductService {
     customerLng?: number;
     maxDistanceKm?: number;
     communityId?: string;
+    /** Only these dishes, in this order (recommendations, "order again"). */
+    rankedIds?: string[];
   }) {
-    const page = filters.page || 1;
-    const limit = Math.min(filters.limit || 20, 100);
+    const page = Math.min(Math.max(Math.trunc(filters.page || 1), 1), MAX_PAGE);
+    const limit = Math.min(Math.max(Math.trunc(filters.limit || 20), 1), 100);
     const skip = (page - 1) * limit;
 
     // Build where clause
@@ -249,13 +316,10 @@ export class ProductService {
       where.productType = filters.productType;
     }
 
-    if (filters.isActive !== undefined) {
-      where.isActive = filters.isActive;
-    } else {
-      where.isActive = true;
-    }
-    // Public catalog: never show a product that hasn't cleared admin moderation,
-    // regardless of its isActive flag. Admin-only listing lives in admin.service.ts.
+    // Public catalog: only products the seller has switched on (a seller's own hidden
+    // products are listed by getSellerProducts, an admin's by admin.service.ts)...
+    where.isActive = true;
+    // ...that have cleared admin moderation...
     where.approvalStatus = 'approved';
     // ...nor a product from a suspended/inactive seller.
     where.seller = { status: 'active' };
@@ -297,37 +361,61 @@ export class ProductService {
       where.seller.createdAt = { gte: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000) };
     }
 
+    // Search: matching dishes ranked by relevance (typos tolerated, see ranking.service.ts).
+    // Without another sort chosen, results come in that order.
+    let rankedIds = filters.rankedIds;
     if (filters.search) {
-      where.OR = expandSearchTerms(filters.search).flatMap((term) => [
-        { name: { contains: term, mode: 'insensitive' } },
-        { nameUrdu: { contains: term, mode: 'insensitive' } },
-        { description: { contains: term, mode: 'insensitive' } },
-      ]);
+      const matches = await searchRankedProductIds(expandSearchTerms(filters.search));
+      if (filters.sort) where.id = { in: matches };
+      else rankedIds = rankedIds ? matches.filter((id) => rankedIds!.includes(id)) : matches;
+    }
+    if (rankedIds) where.id = { in: rankedIds };
+
+    const hasCustomerLocation = filters.customerLat != null && filters.customerLng != null;
+    const targetCommunity = filters.communityId
+      ? await prisma.community.findFirst({
+          where: { OR: [{ id: filters.communityId }, { slug: filters.communityId }] },
+          select: { id: true, neighborCommunityIds: true },
+        })
+      : null;
+
+    // "Open now", "within X km" and "fast delivery" depend on opening hours, distance and
+    // the delivery-time estimate, which are worked out in code. They are worked out over the
+    // matching sellers (far fewer than their products), and the product query keeps only
+    // the sellers that pass, so filtering, counting and paging all stay in the database.
+    if (filters.openNow || filters.fastDelivery || (filters.maxDistanceKm != null && hasCustomerLocation)) {
+      where.sellerId = {
+        in: await sellersPassingComputedFilters(
+          { ...where.seller, ...(filters.sellerId ? { id: filters.sellerId } : {}) },
+          {
+            openNow: !!filters.openNow,
+            fastDelivery: !!filters.fastDelivery,
+            maxDistanceKm: hasCustomerLocation ? filters.maxDistanceKm : undefined,
+            customerLat: filters.customerLat,
+            customerLng: filters.customerLng,
+          }
+        ),
+      };
     }
 
-    // Build orderBy
-    let orderBy: any = { createdAt: 'desc' };
-    if (filters.sort) {
-      switch (filters.sort) {
-        case 'popular':
-          orderBy = { totalOrders: 'desc' };
-          break;
-        case 'newest':
-          orderBy = { createdAt: 'desc' };
-          break;
-        case 'price_low':
-          orderBy = { price: 'asc' };
-          break;
-        case 'price_high':
-          orderBy = { price: 'desc' };
-          break;
-        case 'rating':
-          orderBy = { ratingAverage: 'desc' };
-          break;
-        default:
-          orderBy = { createdAt: 'desc' };
-      }
-    }
+    // Order. Every ordering ends with the id so pages never overlap or skip rows that tie.
+    const sort = filters.sort;
+    // "Popular" is what's ordered now (trend score: recent orders, fading over days; see
+    // utils/ranking.ts), then all-time orders. Ratings use the review-count-aware score, so one
+    // 5-star review doesn't beat two hundred 4.8s.
+    const orderBy: Prisma.ProductOrderByWithRelationInput[] =
+      sort === 'popular' || sort === 'trending'
+        ? [{ trendScore: 'desc' }, { totalOrders: 'desc' }, { ratingScore: 'desc' }, { id: 'asc' }]
+        : sort === 'price_low'
+        ? [{ price: 'asc' }, { id: 'asc' }]
+        : sort === 'price_high'
+        ? [{ price: 'desc' }, { id: 'asc' }]
+        : sort === 'rating'
+        ? [{ ratingScore: 'desc' }, { totalReviews: 'desc' }, { id: 'asc' }]
+        : sort === 'newest' || !targetCommunity
+        ? [{ createdAt: 'desc' }, { id: 'asc' }]
+        : // Default order within a community: best rated first.
+          [{ ratingScore: 'desc' }, { trendScore: 'desc' }, { createdAt: 'desc' }, { id: 'asc' }];
 
     const productInclude = {
       category: {
@@ -358,98 +446,68 @@ export class ProductService {
           imageUrl: true,
         },
       },
-      _count: {
-        select: {
-          reviews: true,
-        },
-      },
-    } as const;
+    } as const satisfies Prisma.ProductInclude;
 
-    const hasCustomerLocation = filters.customerLat != null && filters.customerLng != null;
-    const targetCommunity = filters.communityId
-      ? await prisma.community.findFirst({
-          where: { OR: [{ id: filters.communityId }, { slug: filters.communityId }] },
-        })
-      : null;
-
-    const needsInMemoryFilter =
-      !!filters.openNow || !!filters.fastDelivery || !!targetCommunity || (filters.maxDistanceKm != null && hasCustomerLocation);
-
-    // "Open now", "within X km", and community-priority can't be expressed as simple DB predicates,
-    // so when requested we pull a candidate window, filter/sort in JS, then paginate.
-    let products: Array<Awaited<ReturnType<typeof prisma.product.findMany<{ where: typeof where; include: typeof productInclude; orderBy: typeof orderBy }>>>[number]>;
-    let total: number;
-
-    if (needsInMemoryFilter) {
-      const candidates = await prisma.product.findMany({
-        where,
-        orderBy,
-        include: productInclude,
-        take: 500,
-      });
-      let filtered = candidates.filter((p) => {
-        if (filters.openNow && !computeSellerAvailability(p.seller as any).isOpen) return false;
-        if (filters.maxDistanceKm != null && hasCustomerLocation) {
-          const seller = p.seller as any;
-          if (seller.latitude == null || seller.longitude == null) return false;
-          const distanceKm = haversineKm(
-            filters.customerLat!,
-            filters.customerLng!,
-            Number(seller.latitude),
-            Number(seller.longitude)
-          );
-          if (distanceKm > filters.maxDistanceKm) return false;
-        }
-        if (filters.fastDelivery) {
-          const seller = p.seller as any;
-          const distanceKm =
-            hasCustomerLocation && seller.latitude != null && seller.longitude != null
-              ? haversineKm(filters.customerLat!, filters.customerLng!, Number(seller.latitude), Number(seller.longitude))
-              : null;
-          const eta = estimateDeliveryMinutes(seller.minPrepTimeMinutes, distanceKm);
-          if (eta.maxMinutes > FAST_DELIVERY_MAX_MINUTES) return false;
-        }
-        return true;
-      });
-
-      // Priority sort by Community:
-      // Tier 1: Same community (Score 100)
-      // Tier 2: Neighbor communities (Score 50)
-      // Tier 3: Other serviceable communities (Score 10)
-      if (targetCommunity && (!filters.sort || filters.sort === 'popular')) {
-        filtered = filtered.sort((a, b) => {
-          const sellerA = a.seller as any;
-          const sellerB = b.seller as any;
-          const scoreA =
-            sellerA.communityId === targetCommunity.id
-              ? 100
-              : targetCommunity.neighborCommunityIds.includes(sellerA.communityId)
-              ? 50
-              : 10;
-          const scoreB =
-            sellerB.communityId === targetCommunity.id
-              ? 100
-              : targetCommunity.neighborCommunityIds.includes(sellerB.communityId)
-              ? 50
-              : 10;
-          if (scoreB !== scoreA) return scoreB - scoreA;
-          return Number(b.ratingAverage) - Number(a.ratingAverage);
-        });
-      }
-
-      total = filtered.length;
-      products = filtered.slice(skip, skip + limit);
-    } else {
-      [products, total] = await Promise.all([
-        prisma.product.findMany({
+    // With a community chosen and the default or "popular" order, the buyer's own community
+    // comes first, then its neighbours, then everywhere else. Each tier is its own query,
+    // counted and paged by the database: the page is cut from the tiers in order.
+    const tiers: Prisma.ProductWhereInput[] = [];
+    if (!rankedIds && targetCommunity && (!sort || sort === 'popular')) {
+      const neighbourIds = targetCommunity.neighborCommunityIds.filter((id) => id !== targetCommunity.id);
+      tiers.push({ AND: [where, { seller: { communityId: targetCommunity.id } }] });
+      if (neighbourIds.length > 0) tiers.push({ AND: [where, { seller: { communityId: { in: neighbourIds } } }] });
+      tiers.push({
+        AND: [
           where,
-          skip,
-          take: limit,
-          orderBy,
-          include: productInclude,
-        }),
-        prisma.product.count({ where }),
-      ]);
+          {
+            seller: {
+              OR: [{ communityId: null }, { communityId: { notIn: [targetCommunity.id, ...neighbourIds] } }],
+            },
+          },
+        ],
+      });
+    } else {
+      tiers.push(where);
+    }
+
+    let total: number;
+    let products: Array<Prisma.ProductGetPayload<{ include: typeof productInclude }>>;
+    if (rankedIds) {
+      // A given order: find which of the ranked dishes pass the filters, page through them in
+      // rank order, and load just that page.
+      const position = new Map(rankedIds.map((id, i) => [id, i]));
+      const passing = (await prisma.product.findMany({ where, select: { id: true } }))
+        .map((p) => p.id)
+        .sort((a, b) => position.get(a)! - position.get(b)!);
+      total = passing.length;
+      const pageIds = passing.slice(skip, skip + limit);
+      const rows = await prisma.product.findMany({ where: { id: { in: pageIds } }, include: productInclude });
+      const byId = new Map(rows.map((r) => [r.id, r]));
+      products = pageIds.map((id) => byId.get(id)!).filter(Boolean);
+    } else {
+      const counts = await Promise.all(tiers.map((tierWhere) => prisma.product.count({ where: tierWhere })));
+      total = counts.reduce((sum, n) => sum + n, 0);
+      const slices: Array<{ where: Prisma.ProductWhereInput; skip: number; take: number }> = [];
+      let offset = skip;
+      let remaining = limit;
+      tiers.forEach((tierWhere, i) => {
+        if (remaining <= 0) return;
+        if (offset >= counts[i]) {
+          offset -= counts[i];
+          return;
+        }
+        const take = Math.min(remaining, counts[i] - offset);
+        slices.push({ where: tierWhere, skip: offset, take });
+        remaining -= take;
+        offset = 0;
+      });
+      products = (
+        await Promise.all(
+          slices.map((slice) =>
+            prisma.product.findMany({ where: slice.where, orderBy, include: productInclude, skip: slice.skip, take: slice.take })
+          )
+        )
+      ).flat();
     }
 
     // Compute accepting-orders/delivery-fee/distance/ETA once per UNIQUE seller
@@ -502,6 +560,7 @@ export class ProductService {
         unitUrdu: product.unitUrdu,
         ratingAverage: Number(product.ratingAverage),
         totalReviews: product.totalReviews,
+        trendScore: Math.round(product.trendScore * 100) / 100,
         primaryImage: imageUrl ? (imageUrl.startsWith('http') ? imageUrl : `${baseUrl}${imageUrl}`) : null,
         category: product.category,
         community: sellerCommunity,
@@ -972,20 +1031,23 @@ export class ProductService {
    * Links to other sites are fine (nothing local can be deleted through them).
    */
   private async assertImageUrlsAllowed(urls: string[], userId: string, sellerId: string) {
+    // Product photos must be uploaded through the app (resized, stored, moderated with the
+    // product): hot-linked external images could change after approval or track viewers.
     const local: string[] = [];
     for (const url of urls) {
-      let path = url;
-      if (/^https?:\/\//i.test(url)) {
+      let value = url;
+      // Older clients sent absolute links to legacy uploads; keep accepting those as paths.
+      if (/^https?:\/\//i.test(url) && !isStoredFile(url, { public: 'products' })) {
         try {
-          path = new URL(url).pathname;
+          value = new URL(url).pathname;
         } catch {
           throw new AppError('Invalid image link', 400, 'INVALID_IMAGE_URL');
         }
       }
-      if (path.startsWith('/uploads/')) local.push(path);
-      else if (!/^https?:\/\//i.test(url)) {
-        throw new AppError('Invalid image link', 400, 'INVALID_IMAGE_URL');
+      if (!isStoredFile(value, { public: 'products' })) {
+        throw new AppError('Please upload product photos through the app', 400, 'INVALID_IMAGE_URL');
       }
+      local.push(value);
     }
     if (local.length === 0) return;
 

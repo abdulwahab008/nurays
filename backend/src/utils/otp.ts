@@ -49,3 +49,7 @@ export const isValidPhoneNumber = (phone: string): boolean => {
   return pakistanPhoneRegex.test(formatted);
 };
 
+
+/** Phone numbers starting +999 are stand-ins for accounts that never gave a phone; never show them as a contact number. */
+export const isPlaceholderPhone = (phone?: string | null): boolean => !!phone && phone.startsWith('+999');
+export const realPhoneOrNull = (phone?: string | null): string | null => (phone && !isPlaceholderPhone(phone) ? phone : null);

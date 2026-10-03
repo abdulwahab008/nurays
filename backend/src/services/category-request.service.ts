@@ -1,4 +1,5 @@
 import prisma from '../config/database';
+import { notifySeller } from './notify.service';
 
 interface CreateCategoryRequestData {
   sellerId: string;
@@ -191,31 +192,35 @@ class CategoryRequestService {
       counter++;
     }
 
-    // Create the category
-    const category = await prisma.category.create({
-      data: {
-        name: request.name,
-        nameUrdu: request.nameUrdu,
-        description: request.description,
-        productType: request.parentCategoryId ? null : request.productType, // Only parent categories have productType
-        parentId: request.parentCategoryId,
-        slug,
-        isActive: true,
-      },
+    // Claim the request and create the category together: a second click (or a second
+    // admin) finds it no longer pending instead of creating the category twice.
+    const category = await prisma.$transaction(async (tx) => {
+      const claimed = await tx.categoryRequest.updateMany({
+        where: { id: requestId, status: 'pending' },
+        data: { status: 'approved', reviewedBy: adminId, reviewedAt: new Date() },
+      });
+      if (claimed.count === 0) throw new Error('This request has already been processed');
+      const created = await tx.category.create({
+        data: {
+          name: request.name,
+          nameUrdu: request.nameUrdu,
+          description: request.description,
+          productType: request.parentCategoryId ? null : request.productType, // Only parent categories have productType
+          parentId: request.parentCategoryId,
+          slug,
+          isActive: true,
+        },
+      });
+      await tx.categoryRequest.update({ where: { id: requestId }, data: { adminNotes: `Category created with ID: ${created.id}` } });
+      return created;
     });
 
-    // Update the request
-    await prisma.categoryRequest.update({
-      where: { id: requestId },
-      data: {
-        status: 'approved',
-        reviewedBy: adminId,
-        reviewedAt: new Date(),
-        adminNotes: `Category created with ID: ${category.id}`,
-      },
+    await notifySeller(request.sellerId, {
+      title: 'Category approved',
+      message: `"${request.name}" is now a category. You can list your dishes in it.`,
+      actionUrl: '/sellers/products/new',
+      dedupeKey: `category-request:${requestId}:approved`,
     });
-
-    // TODO: Notify seller about approval
 
     return category;
   }
@@ -252,7 +257,12 @@ class CategoryRequestService {
       },
     });
 
-    // TODO: Notify seller about rejection
+    await notifySeller(request.sellerId, {
+      title: 'Category request not approved',
+      message: `"${request.name}" wasn't added: ${reason}`,
+      actionUrl: '/sellers/products/new',
+      dedupeKey: `category-request:${requestId}:rejected`,
+    });
 
     return updated;
   }

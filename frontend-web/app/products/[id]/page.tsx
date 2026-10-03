@@ -17,6 +17,9 @@ import ProductReviews from '@/components/products/ProductReviews';
 import { favoriteService } from '@/lib/services/favorite.service';
 import CartConflictModal, { CartConflictInfo } from '@/components/cart/CartConflictModal';
 import { Heart } from 'lucide-react';
+import { useT } from '@/lib/i18n';
+import { commonMessages } from '@/lib/i18n/messages/common';
+import { browseMessages, availabilityKey, type BrowseT } from '@/lib/i18n/messages/browse';
 
 interface CatalogPromotion {
   id: string;
@@ -29,10 +32,10 @@ function formatClock(iso: string): string {
   return new Date(iso).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
 }
 
-function getPromotionLabel(p: CatalogPromotion): string {
-  if (p.type === 'percentage' && p.discountValue > 0) return `${p.discountValue}% off`;
-  if (p.type === 'fixed' && p.discountValue > 0) return `${formatPrice(p.discountValue)} off`;
-  return p.name || 'Deal';
+function getPromotionLabel(p: CatalogPromotion, t: BrowseT): string {
+  if (p.type === 'percentage' && p.discountValue > 0) return t('pctOff', { value: p.discountValue });
+  if (p.type === 'fixed' && p.discountValue > 0) return t('amountOff', { amount: formatPrice(p.discountValue) });
+  return p.name || t('deal');
 }
 
 function getStackedDiscountedPrice(originalPrice: number, promos: CatalogPromotion[]): number {
@@ -110,6 +113,8 @@ export default function ProductDetailPage() {
   const router = useRouter();
   const { isAuthenticated } = useAuthStore();
   const { showToast } = useToast();
+  const t = useT(browseMessages);
+  const tc = useT(commonMessages);
   const { addItem } = useCartStore();
   const [product, setProduct] = useState<ProductDetail | null>(null);
   const [catalogPromotions, setCatalogPromotions] = useState<CatalogPromotion[]>([]);
@@ -183,7 +188,7 @@ export default function ProductDetailPage() {
       const seller = data.seller
         ? {
             id: data.seller.id ?? '',
-            businessName: data.seller.businessName ?? data.seller.business_name ?? 'Seller',
+            businessName: data.seller.businessName ?? data.seller.business_name ?? t('seller'),
             rating: Number(data.seller.rating ?? data.seller.ratingAverage ?? 0),
             isVerified: Boolean(data.seller.isVerified ?? data.seller.is_verified),
             mealCategories: Array.isArray(data.seller.mealCategories) ? data.seller.mealCategories : [],
@@ -193,7 +198,7 @@ export default function ProductDetailPage() {
             acceptingOrdersReason: data.seller.acceptingOrdersReason ?? null,
             availability: data.seller.availability,
           }
-        : { id: '', businessName: 'Seller', rating: 0, isVerified: false, mealCategories: [], preOrderOnly: false, isAcceptingOrders: false, acceptingOrdersReason: null, availability: undefined };
+        : { id: '', businessName: t('seller'), rating: 0, isVerified: false, mealCategories: [], preOrderOnly: false, isAcceptingOrders: false, acceptingOrdersReason: null, availability: undefined };
       // Normalize images: API may return imageUrl, frontend uses url
       const images = Array.isArray(data.images)
         ? data.images.map((img: { url?: string; imageUrl?: string; isPrimary?: boolean }) => ({
@@ -267,12 +272,12 @@ export default function ProductDetailPage() {
       setIsFavorite(isFav);
       showToast(
         isFav
-          ? `Saved ${product.seller.businessName} to your favorites!`
-          : `Removed ${product.seller.businessName} from favorites`,
+          ? t('toastSavedFav', { name: product.seller.businessName })
+          : t('toastRemovedFav', { name: product.seller.businessName }),
         'info'
       );
     } catch {
-      showToast('Failed to update favorite', 'error');
+      showToast(t('toastFavFailed'), 'error');
     }
   };
 
@@ -290,7 +295,7 @@ export default function ProductDetailPage() {
       : stockType === 'direct' ? product.stock.direct : product.stock.hub;
 
     if (availableStock < quantity) {
-      showToast('Insufficient stock', 'error');
+      showToast(t('toastInsufficientStock'), 'error');
       return;
     }
 
@@ -324,13 +329,13 @@ export default function ProductDetailPage() {
         subtotal: unitPrice * quantity,
       });
       setJustAddedToCart(true);
-      showToast('Product added to cart. View cart in the sidebar or click the cart icon above.', 'success');
+      showToast(t('toastAddedLong'), 'success');
     } catch (err: any) {
       if (err?.response?.status === 409 || err?.response?.data?.error?.code === 'CART_SELLER_MISMATCH') {
         const details = err?.response?.data?.error?.details;
         setCartConflict({
-          existingSellerName: details?.existingSeller?.name || 'Previous Kitchen',
-          newSellerName: details?.newSeller?.name || product.seller.businessName || 'New Kitchen',
+          existingSellerName: details?.existingSeller?.name || t('previousKitchen'),
+          newSellerName: details?.newSeller?.name || product.seller.businessName || t('newKitchen'),
           onConfirmClearAndAdd: async () => {
             try {
               await cartService.addToCart({
@@ -356,15 +361,15 @@ export default function ProductDetailPage() {
               });
               setCartConflict(null);
               setJustAddedToCart(true);
-              showToast(`Cart replaced with dishes from ${product.seller.businessName}!`, 'success');
+              showToast(t('toastCartReplaced', { kitchen: product.seller.businessName }), 'success');
             } catch {
-              showToast('Failed to replace cart', 'error');
+              showToast(t('toastReplaceCartFailed'), 'error');
             }
           },
           onCancel: () => setCartConflict(null),
         });
       } else {
-        const msg = err?.response?.data?.error?.message || err?.response?.data?.message || err?.message || 'Failed to add to cart';
+        const msg = err?.response?.data?.error?.message || err?.response?.data?.message || err?.message || t('toastAddToCartFailed');
         showToast(msg, 'error');
       }
     } finally {
@@ -391,7 +396,7 @@ export default function ProductDetailPage() {
       if (err?.response?.data?.error?.code === 'CART_SELLER_CONFLICT' || err?.response?.data?.code === 'CART_SELLER_CONFLICT') {
         const conflictDetails = err.response.data.error?.details || err.response.data.details;
         setCartConflict({
-          existingSellerName: conflictDetails?.existingSellerName || 'Another Kitchen',
+          existingSellerName: conflictDetails?.existingSellerName || t('anotherKitchen'),
           newSellerName: product.seller.businessName,
           onConfirmClearAndAdd: async () => {
             try {
@@ -405,13 +410,13 @@ export default function ProductDetailPage() {
               setCartConflict(null);
               router.push('/checkout');
             } catch {
-              showToast('Failed to switch kitchen cart', 'error');
+              showToast(t('toastSwitchKitchenFailed'), 'error');
             }
           },
           onCancel: () => setCartConflict(null),
         });
       } else {
-        const msg = err?.response?.data?.error?.message || err?.response?.data?.message || err?.message || 'Failed to start instant checkout';
+        const msg = err?.response?.data?.error?.message || err?.response?.data?.message || err?.message || t('toastInstantCheckoutFailed');
         showToast(msg, 'error');
       }
     } finally {
@@ -423,15 +428,15 @@ export default function ProductDetailPage() {
     if (isAuthenticated) {
       return (
         <DashboardLayout
-          title="Loading..."
-          subtitle="Please wait"
+          title={t('loadingTitle')}
+          subtitle={t('pleaseWait')}
           sidebarItems={sidebarItems}
           userType="customer"
         >
           <div className="flex items-center justify-center h-64">
             <div className="text-center">
               <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-gray-600 mx-auto mb-4"></div>
-              <p className="text-gray-600">Loading product...</p>
+              <p className="text-gray-600">{t('loadingProduct')}</p>
             </div>
           </div>
         </DashboardLayout>
@@ -441,7 +446,7 @@ export default function ProductDetailPage() {
       <div className="min-h-screen flex items-center justify-center" style={{ background: "var(--cream-50)" }}>
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-gray-600 mx-auto mb-4"></div>
-          <p className="text-gray-600">Loading product...</p>
+          <p className="text-gray-600">{t('loadingProduct')}</p>
         </div>
       </div>
     );
@@ -451,8 +456,8 @@ export default function ProductDetailPage() {
     if (isAuthenticated) {
       return (
         <DashboardLayout
-          title="Product Not Found"
-          subtitle="Sorry, we couldn't find this product"
+          title={t('notFoundTitle')}
+          subtitle={t('notFoundSubtitle')}
           sidebarItems={sidebarItems}
           userType="customer"
         >
@@ -460,11 +465,11 @@ export default function ProductDetailPage() {
             <div className="w-20 h-20 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-6">
               <span className="text-4xl">🔍</span>
             </div>
-            <h2 className="text-2xl font-bold text-gray-900 mb-3">Product Not Found</h2>
-            <p className="text-gray-500 mb-6">The product you're looking for doesn't exist or has been removed.</p>
+            <h2 className="text-2xl font-bold text-gray-900 mb-3">{t('notFoundTitle')}</h2>
+            <p className="text-gray-500 mb-6">{t('notFoundBody')}</p>
             <Link href="/products">
               <Button className="bg-gray-700 hover:bg-gray-800">
-                <span className="mr-2">🛍️</span> Browse Products
+                <span className="me-2">🛍️</span> {t('browseProducts')}
               </Button>
             </Link>
           </div>
@@ -474,9 +479,9 @@ export default function ProductDetailPage() {
     return (
       <div className="min-h-screen flex items-center justify-center" style={{ background: "var(--cream-50)" }}>
         <div className="text-center">
-          <p className="text-gray-600 mb-4">Product not found</p>
+          <p className="text-gray-600 mb-4">{t('notFoundShort')}</p>
           <Link href="/products">
-            <Button className="bg-gray-700 hover:bg-gray-800">Back to Products</Button>
+            <Button className="bg-gray-700 hover:bg-gray-800">{t('backToProducts')}</Button>
           </Link>
         </div>
       </div>
@@ -508,7 +513,7 @@ export default function ProductDetailPage() {
               />
             ) : (
               <div className="text-gray-400 text-sm text-center px-4 py-8">
-                No images attached
+                {t('noImages')}
               </div>
             )}
           </div>
@@ -542,7 +547,7 @@ export default function ProductDetailPage() {
         {/* Breadcrumb */}
         <nav className="flex items-center gap-2 text-sm text-gray-500">
           <Link href="/products" className="hover:text-gray-900 transition-colors">
-            Products
+            {t('breadcrumbProducts')}
           </Link>
           <span aria-hidden>/</span>
           <span className="text-gray-900 truncate">{product.name}</span>
@@ -558,11 +563,13 @@ export default function ProductDetailPage() {
           )}
           <div className="flex flex-wrap items-center gap-2">
             <span className="inline-flex items-center gap-1.5 bg-gray-100 text-gray-700 px-3 py-1.5 rounded-lg text-sm font-medium">
-              {product.ratingAverage.toFixed(1)} · {product.totalReviews} reviews
+              {product.totalReviews > 0
+                ? `★ ${product.ratingAverage.toFixed(1)} · ${t('reviewsCount', { count: product.totalReviews })}`
+                : t('new')}
             </span>
             {(product.stock.hub + product.stock.direct) > 0 && (
               <span className="inline-flex items-center bg-gray-100 text-gray-700 px-3 py-1.5 rounded-lg text-sm font-medium">
-                In stock
+                {t('inStock')}
               </span>
             )}
           </div>
@@ -584,18 +591,18 @@ export default function ProductDetailPage() {
             {catalogPromotions.length > 0 && (
               <span className="text-sm font-medium text-gray-600 bg-white border border-gray-200 px-2.5 py-1 rounded-lg">
                 {catalogPromotions.length === 1
-                  ? getPromotionLabel(catalogPromotions[0])
-                  : catalogPromotions.map(getPromotionLabel).join(' + ')}
+                  ? getPromotionLabel(catalogPromotions[0], t)
+                  : catalogPromotions.map((p) => getPromotionLabel(p, t)).join(' + ')}
               </span>
             )}
             {catalogPromotions.length === 0 &&
               product.originalPrice != null &&
               Math.round(product.originalPrice) > Math.round(product.price) && (
                 <span className="text-sm font-medium text-gray-600 bg-white border border-gray-200 px-2.5 py-1 rounded-lg">
-                  {Math.round((1 - product.price / product.originalPrice) * 100)}% off
+                  {t('pctOff', { value: Math.round((1 - product.price / product.originalPrice) * 100) })}
                 </span>
               )}
-            <span className="text-gray-500 text-sm">per {product.unit}</span>
+            <span className="text-gray-500 text-sm">{t('perUnit', { unit: product.unit })}</span>
           </div>
         </div>
 
@@ -603,7 +610,7 @@ export default function ProductDetailPage() {
         {product.description && (
           <div>
             <h2 className="text-sm font-semibold text-gray-900 uppercase tracking-wider mb-2">
-              Description
+              {t('description')}
             </h2>
             <p className="text-gray-700 leading-relaxed">{product.description}</p>
           </div>
@@ -619,7 +626,7 @@ export default function ProductDetailPage() {
             {product.allergens && (
               <div>
                 <h3 className="text-xs font-semibold text-amber-900 uppercase tracking-wider mb-1">
-                  ⚠️ Allergens
+                  {t('allergens')}
                 </h3>
                 <p className="text-sm text-amber-900">{product.allergens}</p>
               </div>
@@ -639,7 +646,7 @@ export default function ProductDetailPage() {
             {product.ingredients && (
               <div>
                 <h3 className="text-xs font-semibold text-gray-700 uppercase tracking-wider mb-1">
-                  Ingredients
+                  {t('ingredients')}
                 </h3>
                 <p className="text-sm text-gray-700">{product.ingredients}</p>
               </div>
@@ -647,7 +654,7 @@ export default function ProductDetailPage() {
             {product.heatingInstructions && (
               <div>
                 <h3 className="text-xs font-semibold text-gray-700 uppercase tracking-wider mb-1">
-                  Heating Instructions
+                  {t('heating')}
                 </h3>
                 <p className="text-sm text-gray-700">{product.heatingInstructions}</p>
                 {product.heatingInstructionsUrdu && (
@@ -667,13 +674,13 @@ export default function ProductDetailPage() {
               </div>
               <div>
                 <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-0.5">
-                  Home Kitchen
+                  {t('homeKitchen')}
                 </p>
                 <p className="font-bold text-gray-900 flex items-center gap-2">
-                  <span>{product.seller?.businessName ?? 'Seller'}</span>
+                  <span>{product.seller?.businessName ?? t('seller')}</span>
                   {product.seller?.isVerified && (
                     <span className="text-[10px] font-bold text-emerald-800 bg-emerald-100 px-1.5 py-0.5 rounded">
-                      Verified Chef
+                      {t('verifiedChef')}
                     </span>
                   )}
                 </p>
@@ -685,7 +692,7 @@ export default function ProductDetailPage() {
                 type="button"
                 onClick={handleToggleFavorite}
                 className="p-2.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 transition-colors shadow-2xs"
-                title="Save Kitchen to Favorites"
+                title={t('saveKitchenFav')}
               >
                 <Heart
                   className={`w-4 h-4 transition-colors ${
@@ -693,9 +700,9 @@ export default function ProductDetailPage() {
                   }`}
                 />
               </button>
-              <div className="text-right">
-                <p className="text-[10px] text-gray-400 font-bold uppercase">Rating</p>
-                <p className="font-black text-sm text-gray-900">★ {(product.seller?.rating ?? 0).toFixed(1)}</p>
+              <div className="text-end">
+                <p className="text-[10px] text-gray-400 font-bold uppercase">{t('rating')}</p>
+                <p className="font-black text-sm text-gray-900">{product.seller?.rating ? `★ ${product.seller.rating.toFixed(1)}` : t('new')}</p>
               </div>
             </div>
           </div>
@@ -705,7 +712,7 @@ export default function ProductDetailPage() {
             <div className="pt-2 flex items-center gap-2">
               {(product as any).isSameCommunity ? (
                 <span className="px-2.5 py-1 rounded-lg bg-emerald-100 text-emerald-900 text-xs font-black flex items-center gap-1.5">
-                  <span>🏡</span> Hyperlocal: In Your Community
+                  <span>🏡</span> {t('inYourCommunity')}
                 </span>
               ) : (product as any).communityBadge ? (
                 <span className="px-2.5 py-1 rounded-lg bg-orange-100 text-[#FF5500] text-xs font-black flex items-center gap-1.5">
@@ -727,13 +734,22 @@ export default function ProductDetailPage() {
           }`}>
             <div>
               <p className={`text-sm font-semibold ${product.seller.availability.isOpen ? 'text-green-700' : 'text-gray-600'}`}>
-                {product.seller.availability.isOpen ? 'Open now' : `Closed${product.seller.availability.status !== 'closed' ? ` — ${product.seller.availability.status.replace('_', ' ')}` : ''}`}
+                {product.seller.availability.isOpen
+                  ? t('openNowLower')
+                  : product.seller.availability.status !== 'closed'
+                  ? t('closedWithStatus', {
+                      status: (() => {
+                        const key = availabilityKey(product.seller.availability.status);
+                        return key ? t(key) : product.seller.availability.status.replace('_', ' ');
+                      })(),
+                    })
+                  : t('closed')}
               </p>
               {product.seller.availability.isOpen && product.seller.availability.closesAt && (
-                <p className="text-xs text-gray-500">Closes at {formatClock(product.seller.availability.closesAt)}</p>
+                <p className="text-xs text-gray-500">{t('closesAt', { time: formatClock(product.seller.availability.closesAt) })}</p>
               )}
               {!product.seller.availability.isOpen && product.seller.availability.opensAt && (
-                <p className="text-xs text-gray-500">Opens at {formatClock(product.seller.availability.opensAt)}</p>
+                <p className="text-xs text-gray-500">{t('opensAt', { time: formatClock(product.seller.availability.opensAt) })}</p>
               )}
               {!product.seller.availability.isOpen && product.seller.availability.reason && (
                 <p className="text-xs text-gray-500">{product.seller.availability.reason}</p>
@@ -741,7 +757,7 @@ export default function ProductDetailPage() {
             </div>
             {product.seller.preOrderOnly && (
               <span className="text-xs font-medium bg-amber-100 text-amber-800 px-2.5 py-1 rounded-full">
-                Pre-orders only
+                {t('preOrdersOnly')}
               </span>
             )}
           </div>
@@ -749,8 +765,8 @@ export default function ProductDetailPage() {
         {product.seller && (
           <p className={`text-sm font-medium -mt-2 ${product.seller.isAcceptingOrders ? 'text-green-700' : 'text-red-600'}`}>
             {product.seller.isAcceptingOrders
-              ? product.seller.preOrderOnly ? 'Accepting pre-orders' : 'Accepting orders'
-              : product.seller.acceptingOrdersReason || 'Not accepting orders right now'}
+              ? product.seller.preOrderOnly ? t('acceptingPreOrders') : t('acceptingOrders')
+              : product.seller.acceptingOrdersReason || t('notAccepting')}
           </p>
         )}
         {product.seller?.mealCategories && product.seller.mealCategories.length > 0 && (
@@ -767,32 +783,33 @@ export default function ProductDetailPage() {
             honest prompt instead of a guess when we don't. */}
         <div className="rounded-xl border border-gray-100 bg-gray-50 px-4 py-3">
           <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">
-            Delivery to you
+            {t('deliveryToYou')}
           </h3>
           {product.delivery ? (
             <>
               <p className="text-sm text-gray-800">
                 {product.delivery.deliverable
-                  ? `${product.delivery.fee === 0 ? 'Free delivery' : formatPrice(product.delivery.fee) + ' delivery fee'}${
+                  ? `${product.delivery.fee === 0 ? t('freeDelivery') : t('deliveryFeeAmount', { amount: formatPrice(product.delivery.fee) })}${
                       product.estimatedDeliveryMinMinutes != null
-                        ? ` · ${product.estimatedDeliveryMinMinutes}-${product.estimatedDeliveryMaxMinutes} min`
+                        ? ` · ${t('etaMin', { min: product.estimatedDeliveryMinMinutes, max: product.estimatedDeliveryMaxMinutes })}`
                         : ''
-                    }${product.delivery.distanceKm != null ? ` · ${product.delivery.distanceKm} km away` : ''}`
-                  : product.delivery.reason || 'Not deliverable to your saved address'}
+                    }${product.delivery.distanceKm != null ? ` · ${t('kmAway', { km: product.delivery.distanceKm })}` : ''}`
+                  : product.delivery.reason || t('notDeliverable')}
               </p>
               {product.minOrderAmountForDelivery ? (
-                <p className="text-xs text-gray-500 mt-0.5">Minimum order {formatPrice(product.minOrderAmountForDelivery)}</p>
+                <p className="text-xs text-gray-500 mt-0.5">{t('minOrder', { amount: formatPrice(product.minOrderAmountForDelivery) })}</p>
               ) : null}
             </>
           ) : (
             <p className="text-sm text-gray-500">
               {isAuthenticated ? (
                 <>
-                  <Link href="/profile/addresses" className="underline hover:no-underline">Add an address</Link>
-                  {' to see the delivery fee, distance, and estimated delivery time.'}
+                  {t('addAddressBefore')}
+                  <Link href="/profile/addresses" className="underline hover:no-underline">{t('addAddressLink')}</Link>
+                  {t('addAddressAfter')}
                 </>
               ) : (
-                'Sign in and add an address to see the delivery fee, distance, and estimated delivery time.'
+                t('signInAddAddress')
               )}
             </p>
           )}
@@ -802,7 +819,7 @@ export default function ProductDetailPage() {
         <div className="lg:sticky lg:top-24 bg-white rounded-2xl shadow-sm border border-gray-100 p-6 space-y-6">
           {product.variants.length > 0 && (
             <div>
-              <p className="text-sm font-medium text-gray-700 mb-3">Options</p>
+              <p className="text-sm font-medium text-gray-700 mb-3">{t('options')}</p>
               <div className="flex flex-wrap gap-2">
                 <button
                   type="button"
@@ -815,7 +832,7 @@ export default function ProductDetailPage() {
                   }`}
                 >
                   {product.name} ({product.unit}) · {formatPrice(product.price)}
-                  {product.stockQuantity !== undefined && product.stockQuantity <= 0 && ' (out of stock)'}
+                  {product.stockQuantity !== undefined && product.stockQuantity <= 0 && t('outOfStock')}
                 </button>
                 {product.variants.map((v) => (
                   <button
@@ -830,62 +847,62 @@ export default function ProductDetailPage() {
                     }`}
                   >
                     {v.name} · {formatPrice(v.price)}
-                    {v.stockQuantity <= 0 && ' (out of stock)'}
+                    {v.stockQuantity <= 0 && t('outOfStock')}
                   </button>
                 ))}
               </div>
             </div>
           )}
 
-          <h2 className="text-lg font-semibold text-gray-900">Delivery & quantity</h2>
+          <h2 className="text-lg font-semibold text-gray-900">{t('deliveryQty')}</h2>
 
           {/* Delivery type */}
           <div>
-            <p className="text-sm font-medium text-gray-700 mb-3">Delivery type</p>
+            <p className="text-sm font-medium text-gray-700 mb-3">{t('deliveryType')}</p>
             <div className="grid grid-cols-2 gap-3">
               <button
                 type="button"
                 onClick={() => setStockType('hub')}
-                className={`p-4 rounded-xl border-2 text-left transition-all ${
+                className={`p-4 rounded-xl border-2 text-start transition-all ${
                   stockType === 'hub'
                     ? 'border-gray-700 bg-gray-50'
                     : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50/50'
                 }`}
               >
-                <p className="font-semibold text-gray-900">Hub delivery</p>
+                <p className="font-semibold text-gray-900">{t('hubDelivery')}</p>
                 <p className="text-sm text-gray-500 mt-0.5">
                   {product.estimatedDeliveryMinMinutes != null
-                    ? `${product.estimatedDeliveryMinMinutes}-${product.estimatedDeliveryMaxMinutes} min`
-                    : 'Add an address to see ETA'}
+                    ? t('etaMin', { min: product.estimatedDeliveryMinMinutes, max: product.estimatedDeliveryMaxMinutes })
+                    : t('addAddressEta')}
                 </p>
-                <p className="text-xs text-gray-600 mt-1">{product.stock.hub} available</p>
+                <p className="text-xs text-gray-600 mt-1">{t('available', { count: product.stock.hub })}</p>
               </button>
               <button
                 type="button"
                 onClick={() => setStockType('direct')}
-                className={`p-4 rounded-xl border-2 text-left transition-all ${
+                className={`p-4 rounded-xl border-2 text-start transition-all ${
                   stockType === 'direct'
                     ? 'border-gray-700 bg-gray-50'
                     : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50/50'
                 }`}
               >
-                <p className="font-semibold text-gray-900">Direct</p>
-                <p className="text-sm text-gray-500 mt-0.5">Next day</p>
-                <p className="text-xs text-gray-600 mt-1">{product.stock.direct} available</p>
+                <p className="font-semibold text-gray-900">{t('direct')}</p>
+                <p className="text-sm text-gray-500 mt-0.5">{t('nextDay')}</p>
+                <p className="text-xs text-gray-600 mt-1">{t('available', { count: product.stock.direct })}</p>
               </button>
             </div>
           </div>
 
           {/* Quantity */}
           <div>
-            <p className="text-sm font-medium text-gray-700 mb-3">Quantity</p>
+            <p className="text-sm font-medium text-gray-700 mb-3">{t('quantity')}</p>
             <div className="flex items-center gap-3">
               <div className="inline-flex items-center rounded-xl border-2 border-gray-200 bg-gray-50/50 overflow-hidden">
                 <button
                   type="button"
                   onClick={() => setQuantity((q) => Math.max(1, q - 1))}
                   className="w-12 h-12 flex items-center justify-center text-gray-700 hover:bg-gray-100 font-medium text-lg transition-colors"
-                  aria-label="Decrease quantity"
+                  aria-label={t('decreaseQty')}
                 >
                   −
                 </button>
@@ -900,7 +917,7 @@ export default function ProductDetailPage() {
                   onClick={() => setQuantity((q) => Math.min(maxQty, q + 1))}
                   disabled={quantity >= maxQty}
                   className="w-12 h-12 flex items-center justify-center text-gray-700 hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed font-medium text-lg transition-colors"
-                  aria-label="Increase quantity"
+                  aria-label={t('increaseQty')}
                 >
                   +
                 </button>
@@ -912,14 +929,14 @@ export default function ProductDetailPage() {
           {/* Special Instructions (Section 9) */}
           <div className="pt-2">
             <label htmlFor="specialInstructions" className="block text-xs font-bold text-gray-700 mb-1">
-              Special Kitchen Instructions (Optional)
+              {t('specialInstructions')}
             </label>
             <textarea
               id="specialInstructions"
               rows={2}
               value={specialInstructions}
               onChange={(e) => setSpecialInstructions(e.target.value)}
-              placeholder="e.g. Mild spice, extra raita, less oil, no onions..."
+              placeholder={t('specialPlaceholder')}
               className="w-full text-xs p-3 rounded-xl border border-gray-200 focus:border-[#FF5500] focus:ring-1 focus:ring-[#FF5500] outline-none transition-all resize-none bg-white"
             />
           </div>
@@ -933,22 +950,22 @@ export default function ProductDetailPage() {
                 className="w-full h-12 text-sm font-bold bg-[#0C1016] text-white hover:bg-black rounded-xl"
                 disabled={maxQty < quantity || addToCartLoading}
               >
-                {addToCartLoading ? 'Adding…' : `Add to Bag · ${formatPrice(unitPrice * quantity)}`}
+                {addToCartLoading ? t('adding') : t('addToBag', { amount: formatPrice(unitPrice * quantity) })}
               </Button>
               <Button
                 onClick={handleBuyNow}
                 className="w-full h-12 text-sm font-bold bg-gradient-to-r from-[#FF5500] to-[#FF2A00] hover:brightness-110 text-white shadow-sm rounded-xl"
                 disabled={maxQty < quantity || addToCartLoading}
               >
-                ⚡ Instant Buy Now
+                {t('buyNow')}
               </Button>
             </div>
             {justAddedToCart && (
               <p className="text-center text-sm text-gray-600">
                 <Link href="/cart" className="font-medium text-gray-900 underline hover:no-underline">
-                  View cart
+                  {t('viewCart')}
                 </Link>
-                {' — your item is saved there.'}
+                {t('itemSaved')}
               </p>
             )}
           </div>
@@ -957,7 +974,7 @@ export default function ProductDetailPage() {
     </div>
 
     <div className="mt-10">
-      <h2 className="text-xl font-bold text-gray-900 mb-4">Reviews</h2>
+      <h2 className="text-xl font-bold text-gray-900 mb-4">{t('reviews')}</h2>
       <ProductReviews productId={product.id} />
     </div>
     </>
@@ -968,7 +985,7 @@ export default function ProductDetailPage() {
     return (
       <DashboardLayout
         title={product.name}
-        subtitle="Product Details"
+        subtitle={t('productDetails')}
         sidebarItems={sidebarItems}
         userType="customer"
       >
@@ -1000,13 +1017,13 @@ export default function ProductDetailPage() {
             </Link>
             <div className="flex items-center gap-3">
               <Link href="/products" className="text-[13px] font-medium" style={{ color: 'var(--ink-800)' }}>
-                Today's plates
+                {t('todaysPlates')}
               </Link>
               <Link href="/login" className="text-[13px] font-medium" style={{ color: 'var(--ink-800)' }}>
-                Sign in
+                {tc('signIn')}
               </Link>
               <Link href="/register">
-                <Button>Join Nuray</Button>
+                <Button>{t('joinNuray')}</Button>
               </Link>
             </div>
           </div>

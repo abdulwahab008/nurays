@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { homeFor } from '@/lib/utils';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { NurayButton as Button } from '@/components/ui/NurayButton';
@@ -10,6 +11,8 @@ import { authService } from '@/lib/services/auth.service';
 import { useAuthStore } from '@/lib/store/auth-store';
 import { apiClient } from '@/lib/api-client';
 import { BrandLockup } from '@/components/ui/Mark';
+import { useT } from '@/lib/i18n';
+import { authMessages } from '@/lib/i18n/messages/auth';
 import {
   ShoppingCart,
   ChefHat,
@@ -112,6 +115,7 @@ export default function LoginPage() {
   const router = useRouter();
   const { setUser } = useAuthStore();
   const { showToast } = useToast();
+  const t = useT(authMessages);
   const [phoneOrEmail, setPhoneOrEmail] = useState('');
   const [otp, setOtp] = useState('');
   const [password, setPassword] = useState('');
@@ -138,10 +142,7 @@ export default function LoginPage() {
         router.push(acc.targetUrl);
       } else {
         const userType = response.data.user?.userType || response.data.user?.user_type;
-        if (userType === 'admin') router.push('/admin/dashboard');
-        else if (userType === 'seller') router.push('/sellers/dashboard');
-        else if (userType === 'rider') router.push('/riders/dashboard');
-        else router.push('/dashboard');
+        router.push(homeFor(userType));
       }
     } catch (err: any) {
       setError(err.response?.data?.error?.message || err.message || 'Quick login failed');
@@ -173,25 +174,17 @@ export default function LoginPage() {
           setUser(response.data.user);
         }
         
-        showToast('Successfully signed in with Google!', 'success');
+        showToast(t('googleSuccess'), 'success');
         
         if (response.data.requiresEmailVerification && !response.data.user?.emailVerified) {
           router.push('/verify-email-pending');
         } else {
           const userType = response.data.user?.userType || response.data.user?.user_type;
-          if (userType === 'admin') {
-            router.push('/admin/dashboard');
-          } else if (userType === 'seller') {
-            router.push('/sellers/dashboard');
-          } else if (userType === 'rider') {
-            router.push('/riders/dashboard');
-          } else {
-            router.push('/dashboard');
-          }
+          router.push(homeFor(userType));
         }
       }
     } catch (err: any) {
-      const errorMessage = err.response?.data?.error?.message || err.response?.data?.message || 'Google sign-in failed';
+      const errorMessage = err.response?.data?.error?.message || err.response?.data?.message || t('googleFailed');
       setError(errorMessage);
     } finally {
       setLoading(false);
@@ -207,11 +200,11 @@ export default function LoginPage() {
       await authService.loginSendOtp({ phone: phoneOrEmail });
       setStep('verify');
     } catch (err: any) {
-      const errorMessage = err.response?.data?.error?.message || err.response?.data?.message || 'Failed to send OTP';
+      const errorMessage = err.response?.data?.error?.message || err.response?.data?.message || t('errSendOtp');
       const errorCode = err.response?.data?.error?.code;
       
       if (errorCode === 'USER_NOT_FOUND') {
-        setError('No account found with this phone number. Please register first.');
+        setError(t('errNoAccountPhone'));
       } else {
         setError(errorMessage);
       }
@@ -231,23 +224,15 @@ export default function LoginPage() {
       setUser(response.data.user);
       
       const userType = response.data.user?.userType || response.data.user?.user_type;
-      if (userType === 'admin') {
-        router.push('/admin/dashboard');
-      } else if (userType === 'seller') {
-        router.push('/sellers/dashboard');
-      } else if (userType === 'rider') {
-        router.push('/riders/dashboard');
-      } else {
-        router.push('/dashboard');
-      }
+      router.push(homeFor(userType));
     } catch (err: any) {
-      const errorMessage = err.response?.data?.error?.message || err.response?.data?.message || 'OTP verification failed';
+      const errorMessage = err.response?.data?.error?.message || err.response?.data?.message || t('errOtpFailed');
       const errorCode = err.response?.data?.error?.code;
       
       if (errorCode === 'INVALID_OTP' || errorMessage.includes('Invalid OTP')) {
-        setError('Invalid OTP code. Please check and try again.');
+        setError(t('errInvalidOtp'));
       } else if (errorCode === 'OTP_EXPIRED') {
-        setError('OTP has expired. Please request a new one.');
+        setError(t('errOtpExpired'));
       } else {
         setError(errorMessage);
       }
@@ -270,26 +255,18 @@ export default function LoginPage() {
         router.push('/verify-email-pending');
       } else {
         const userType = response.data.user?.userType || response.data.user?.user_type;
-        if (userType === 'admin') {
-          router.push('/admin/dashboard');
-        } else if (userType === 'seller') {
-          router.push('/sellers/dashboard');
-        } else if (userType === 'rider') {
-          router.push('/riders/dashboard');
-        } else {
-          router.push('/dashboard');
-        }
+        router.push(homeFor(userType));
       }
     } catch (err: any) {
-      const errorMessage = err.response?.data?.error?.message || err.response?.data?.message || 'Login failed';
+      const errorMessage = err.response?.data?.error?.message || err.response?.data?.message || t('errLoginFailed');
       const errorCode = err.response?.data?.error?.code;
       
       if (errorCode === 'INVALID_CREDENTIALS' || errorMessage.includes('Invalid email or password')) {
-        setError('Invalid email or password. Please check your credentials and try again.');
+        setError(t('errInvalidCredentials'));
       } else if (errorCode === 'USER_NOT_FOUND') {
-        setError('No account found with this email. Please register first.');
+        setError(t('errNoAccountEmail'));
       } else if (errorCode === 'PASSWORD_NOT_SET') {
-        setError('Password not set for this account. Please use OTP login or reset your password.');
+        setError(t('errPasswordNotSet'));
       } else {
         setError(errorMessage);
       }
@@ -326,7 +303,7 @@ export default function LoginPage() {
               href="/register"
               className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-bold transition-all"
             >
-              <span>New Account? Sign Up</span>
+              <span>{t('newAccountSignUp')}</span>
             </Link>
           </div>
         </div>
@@ -396,7 +373,7 @@ export default function LoginPage() {
                         ) : (
                           <>
                             <span>Sign In</span>
-                            <ArrowRight className="w-3.5 h-3.5" />
+                            <ArrowRight className="rtl:-scale-x-100 w-3.5 h-3.5" />
                           </>
                         )}
                       </button>
@@ -421,7 +398,7 @@ export default function LoginPage() {
               </span>
               <Link
                 href="/dev-login"
-                className="font-bold text-[#FF5500] hover:underline ml-2 flex-shrink-0"
+                className="font-bold text-[#FF5500] hover:underline ms-2 flex-shrink-0"
               >
                 Open Tab Isolator →
               </Link>
@@ -433,10 +410,10 @@ export default function LoginPage() {
           <div className={SHOW_DEMO_LOGIN ? 'lg:col-span-5 flex flex-col justify-center' : 'lg:col-span-12 max-w-md mx-auto w-full flex flex-col justify-center'}>
             <div className="mb-6">
               <h1 className="text-2xl sm:text-3xl font-bold text-slate-900 tracking-tight">
-                Welcome back.
+                {t('welcomeBack')}
               </h1>
               <p className="mt-1 text-xs sm:text-sm text-slate-500 font-medium">
-                Sign in to track orders, manage your kitchen, or start eating.
+                {t('loginSubtitle')}
               </p>
             </div>
 
@@ -452,7 +429,7 @@ export default function LoginPage() {
                 className={tabBase}
                 style={loginMethod === 'otp' ? tabActive : tabInactive}
               >
-                OTP
+                {t('tabOtp')}
               </button>
               <button
                 type="button"
@@ -464,7 +441,7 @@ export default function LoginPage() {
                 className={tabBase}
                 style={loginMethod === 'email' ? tabActive : tabInactive}
               >
-                Email
+                {t('tabEmail')}
               </button>
             </div>
 
@@ -479,7 +456,7 @@ export default function LoginPage() {
                 <form onSubmit={handleSendOtp}>
                   <div className="mb-4">
                     <label htmlFor="phone" className={labelClass}>
-                      Phone Number
+                      {t('phoneNumber')}
                     </label>
                     <input
                       type="tel"
@@ -487,20 +464,21 @@ export default function LoginPage() {
                       value={phoneOrEmail}
                       onChange={(e) => setPhoneOrEmail(e.target.value)}
                       placeholder="+923001234567"
+                      dir="ltr"
                       required
                       className={inputClass}
                       style={inputStyle}
                     />
                   </div>
                   <Button type="submit" className="w-full h-12 text-sm font-bold shadow-md" disabled={loading}>
-                    {loading ? 'Sending...' : 'Send OTP'}
+                    {loading ? t('sending') : t('sendOtp')}
                   </Button>
                 </form>
               ) : (
                 <form onSubmit={handleVerifyOtp}>
                   <div className="mb-4">
                     <label htmlFor="otp" className={labelClass}>
-                      Enter OTP
+                      {t('enterOtp')}
                     </label>
                     <input
                       type="text"
@@ -508,24 +486,25 @@ export default function LoginPage() {
                       value={otp}
                       onChange={(e) => setOtp(e.target.value)}
                       placeholder="123456"
+                      dir="ltr"
                       maxLength={6}
                       required
                       className={`${inputClass} text-center text-2xl tracking-widest font-mono`}
                       style={inputStyle}
                     />
                     <p className="text-xs text-slate-500 mt-2">
-                      OTP sent to {phoneOrEmail}
+                      {t('otpSentTo', { phone: '\u2066' + phoneOrEmail + '\u2069' })}
                     </p>
                   </div>
                   <Button type="submit" className="w-full h-12 text-sm font-bold shadow-md" disabled={loading}>
-                    {loading ? 'Verifying...' : 'Verify & Login'}
+                    {loading ? t('verifying') : t('verifyAndLogin')}
                   </Button>
                   <button
                     type="button"
                     onClick={() => setStep('input')}
                     className="w-full mt-3 text-xs font-semibold text-orange-600 hover:text-orange-700"
                   >
-                    Change Phone Number
+                    {t('changePhone')}
                   </button>
                 </form>
               )
@@ -533,7 +512,7 @@ export default function LoginPage() {
               <form onSubmit={handleEmailLogin}>
                 <div className="mb-4">
                   <label htmlFor="email" className={labelClass}>
-                    Email Address
+                    {t('emailAddress')}
                   </label>
                   <input
                     type="email"
@@ -541,6 +520,7 @@ export default function LoginPage() {
                     value={phoneOrEmail}
                     onChange={(e) => setPhoneOrEmail(e.target.value)}
                     placeholder="your@email.com"
+                    dir="ltr"
                     required
                     className={inputClass}
                     style={inputStyle}
@@ -549,28 +529,28 @@ export default function LoginPage() {
                 <div className="mb-5">
                   <div className="flex items-center justify-between mb-1">
                     <label htmlFor="password" className={labelClass}>
-                      Password
+                      {t('password')}
                     </label>
-                    {SHOW_DEMO_LOGIN && <span className="text-[11px] text-slate-400">Default: Password123!</span>}
+                    {SHOW_DEMO_LOGIN && <span className="text-[11px] text-slate-400">{t('defaultPassword')}</span>}
                   </div>
                   <input
                     type="password"
                     id="password"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
-                    placeholder="Enter your password"
+                    placeholder={t('enterPassword')}
                     required
                     className={inputClass}
                     style={inputStyle}
                   />
-                  <div className="mt-1.5 text-right">
+                  <div className="mt-1.5 text-end">
                     <Link href="/forgot-password" className="text-xs font-semibold text-slate-500 underline hover:text-slate-800">
-                      Forgot password?
+                      {t('forgotPassword')}
                     </Link>
                   </div>
                 </div>
                 <Button type="submit" className="w-full h-12 text-sm font-bold shadow-md" disabled={loading}>
-                  {loading ? 'Logging in...' : 'Login'}
+                  {loading ? t('loggingIn') : t('login')}
                 </Button>
 
                 <div className="relative my-6">
@@ -579,20 +559,20 @@ export default function LoginPage() {
                   </div>
                   <div className="relative flex justify-center">
                     <span className="px-3 text-[11px] uppercase tracking-[0.18em] font-bold text-slate-400 bg-white">
-                      Or continue with
+                      {t('orContinueWith')}
                     </span>
                   </div>
                 </div>
 
-                <GoogleSignInButton onSuccess={handleGoogleSuccess} text="Continue with Google" />
+                <GoogleSignInButton onSuccess={handleGoogleSuccess} text={t('continueWithGoogle')} />
               </form>
             )}
 
             <div className="mt-6 text-center">
               <p className="text-xs text-slate-500">
-                Don't have an account?{' '}
+                {t('noAccount')}{' '}
                 <Link href="/register" className="font-bold text-orange-600 hover:text-orange-700">
-                  Sign up
+                  {t('signUpLink')}
                 </Link>
               </p>
             </div>

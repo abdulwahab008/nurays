@@ -3,6 +3,8 @@
 import { useEffect, useState } from 'react';
 import { apiClient } from '@/lib/api-client';
 import { formatDate } from '@/lib/utils';
+import { useT } from '@/lib/i18n';
+import { browseMessages } from '@/lib/i18n/messages/browse';
 
 interface Review {
   id: string;
@@ -25,8 +27,9 @@ interface ReviewsResponse {
 }
 
 function Stars({ rating }: { rating: number }) {
+  const t = useT(browseMessages);
   return (
-    <span className="text-amber-500" aria-label={`${rating} out of 5 stars`}>
+    <span className="text-amber-500" aria-label={t('starsOutOf5', { rating })}>
       {'★'.repeat(Math.round(rating))}
       <span className="text-gray-300">{'★'.repeat(5 - Math.round(rating))}</span>
     </span>
@@ -34,6 +37,7 @@ function Stars({ rating }: { rating: number }) {
 }
 
 export default function ProductReviews({ productId }: { productId: string }) {
+  const t = useT(browseMessages);
   const [data, setData] = useState<ReviewsResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [page, setPage] = useState(1);
@@ -54,14 +58,14 @@ export default function ProductReviews({ productId }: { productId: string }) {
   }, [productId, page]);
 
   if (loading && !data) {
-    return <div className="text-sm text-gray-500 py-6">Loading reviews...</div>;
+    return <div className="text-sm text-gray-500 py-6">{t('loadingReviews')}</div>;
   }
 
   if (!data || data.summary.totalReviews === 0) {
     return (
       <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-8 text-center">
-        <h3 className="font-semibold text-gray-900 mb-1">No reviews yet</h3>
-        <p className="text-sm text-gray-500">Be the first to review this product after your order is delivered.</p>
+        <h3 className="font-semibold text-gray-900 mb-1">{t('noReviews')}</h3>
+        <p className="text-sm text-gray-500">{t('beFirst')}</p>
       </div>
     );
   }
@@ -74,7 +78,7 @@ export default function ProductReviews({ productId }: { productId: string }) {
           <Stars rating={data.summary.averageRating} />
         </div>
         <div className="text-sm text-gray-500">
-          Based on {data.summary.totalReviews} review{data.summary.totalReviews === 1 ? '' : 's'}
+          {t(data.summary.totalReviews === 1 ? 'basedOnOne' : 'basedOnMany', { count: data.summary.totalReviews })}
         </div>
       </div>
 
@@ -84,14 +88,14 @@ export default function ProductReviews({ productId }: { productId: string }) {
             <div className="flex items-center gap-2 mb-1">
               <span className="font-medium text-gray-900">{review.customerName}</span>
               {review.isVerifiedPurchase && (
-                <span className="text-xs bg-green-50 text-green-700 px-2 py-0.5 rounded-full">Verified purchase</span>
+                <span className="text-xs bg-green-50 text-green-700 px-2 py-0.5 rounded-full">{t('verifiedPurchase')}</span>
               )}
             </div>
             <Stars rating={review.productRating} />
             {review.comment && <p className="text-sm text-gray-700 mt-2">{review.comment}</p>}
             {review.sellerResponse && (
               <div className="mt-2 bg-gray-50 rounded-lg p-3 text-sm text-gray-600">
-                <span className="font-medium text-gray-800">Seller reply: </span>
+                <span className="font-medium text-gray-800">{t('sellerReply')}</span>
                 {review.sellerResponse}
               </div>
             )}

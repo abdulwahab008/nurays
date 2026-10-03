@@ -44,9 +44,9 @@ export const updateOrderItemStatus = async (req: Request, res: Response) => {
   }
 
   const { id } = req.params;
-  const { status, reason } = req.body;
+  const { status, reason, handoverCode } = req.body;
 
-  const item = await sellerOrderService.updateOrderItemStatus(id, req.user.userId, status, reason);
+  const item = await sellerOrderService.updateOrderItemStatus(id, req.user.userId, status, reason, handoverCode);
 
   res.status(200).json({
     success: true,
@@ -118,4 +118,20 @@ export const markOrderReady = async (req: Request, res: Response) => {
     data: result,
   });
 };
+
+/**
+ * Self-delivery / pickup handover for the whole order.
+ * POST /seller/orders/:id/dispatch | /deliver { handoverCode } | /delivery-failed { reason }
+ */
+const selfHandoverAction = (action: 'dispatch' | 'deliver' | 'fail') => async (req: Request, res: Response) => {
+  if (!req.user) throw new AppError('Authentication required', 401, 'AUTH_REQUIRED');
+  const result = await sellerOrderService.selfHandover(req.params.id, req.user.userId, action, {
+    handoverCode: req.body?.handoverCode,
+    reason: req.body?.reason,
+  });
+  res.status(200).json({ success: true, data: result });
+};
+export const dispatchOrder = selfHandoverAction('dispatch');
+export const deliverOrder = selfHandoverAction('deliver');
+export const reportDeliveryFailed = selfHandoverAction('fail');
 

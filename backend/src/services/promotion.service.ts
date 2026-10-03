@@ -355,8 +355,17 @@ export class PromotionService {
   /**
    * Create a promotion for a seller
    */
-  async createForSeller(
-    sellerId: string,
+  async createForSeller(sellerId: string, data: Parameters<PromotionService['createPromotion']>[1]) {
+    return this.createPromotion(sellerId, data);
+  }
+
+  /** A platform promo code: Nuray pays the discount, on any kitchen's order. */
+  async createPlatform(data: Parameters<PromotionService['createPromotion']>[1]) {
+    return this.createPromotion(null, { ...data, applyTo: 'all', productIds: [] });
+  }
+
+  private async createPromotion(
+    sellerId: string | null,
     data: {
       name: string;
       code: string;
@@ -379,9 +388,9 @@ export class PromotionService {
       throw new AppError('This promo code is already in use. Please choose another.', 400, 'CODE_TAKEN');
     }
 
-    const applyTo = data.applyTo === 'selected' && data.productIds?.length ? 'selected' : 'all';
+    const applyTo = sellerId && data.applyTo === 'selected' && data.productIds?.length ? 'selected' : 'all';
     let applicableProductIds: string[] = [];
-    if (applyTo === 'selected' && data.productIds?.length) {
+    if (sellerId && applyTo === 'selected' && data.productIds?.length) {
       const sellerProducts = await prisma.product.findMany({
         where: { sellerId, id: { in: data.productIds } },
         select: { id: true },
@@ -541,7 +550,7 @@ export class PromotionService {
   /**
    * Get one promotion by id (seller only, must own it)
    */
-  async getOneForSeller(sellerId: string, promotionId: string) {
+  async getOneForSeller(sellerId: string | null, promotionId: string) {
     const promotion = await prisma.promotion.findUnique({
       where: { id: promotionId },
     });
@@ -583,7 +592,7 @@ export class PromotionService {
    * Update a promotion (seller only, must own it)
    */
   async updateForSeller(
-    sellerId: string,
+    sellerId: string | null,
     promotionId: string,
     data: {
       name?: string;
@@ -624,7 +633,7 @@ export class PromotionService {
     // (i.e. applyTo was explicitly provided). Omitting applyTo on a partial edit must
     // leave the existing product association alone.
     let applicableProductIds: string[] | undefined;
-    if (data.applyTo === 'selected') {
+    if (data.applyTo === 'selected' && sellerId) {
       if (data.productIds?.length) {
         const sellerProducts = await prisma.product.findMany({
           where: { sellerId, id: { in: data.productIds } },
@@ -657,6 +666,55 @@ export class PromotionService {
       },
     });
     return this.getOneForSeller(sellerId, updated.id);
+  }
+
+  /** Platform promo codes with how often they were used and how much Nuray gave away. */
+  async listPlatform() {
+    const list = await prisma.promotion.findMany({ where: { sellerId: null }, orderBy: { createdAt: 'desc' } });
+    const usage = await prisma.promotionUsage.groupBy({
+      by: ['promotionId'],
+      where: { promotionId: { in: list.map((p) => p.id) } },
+      _sum: { discountApplied: true },
+      _count: { _all: true },
+    });
+    const usageById = new Map(usage.map((u) => [u.promotionId, u]));
+    const now = new Date();
+    return list.map((p) => ({
+      id: p.id,
+      code: p.code,
+      name: p.name,
+      description: p.description,
+      discountType: p.discountType,
+      discountValue: Number(p.discountValue),
+      maxDiscountAmount: p.maxDiscountAmount != null ? Number(p.maxDiscountAmount) : null,
+      minOrderAmount: Number(p.minOrderAmount),
+      usageLimitTotal: p.usageLimitTotal,
+      usageLimitPerUser: p.usageLimitPerUser,
+      validFrom: p.validFrom,
+      validUntil: p.validUntil,
+      isActive: p.isActive,
+      status: !p.isActive ? 'off' : now < p.validFrom ? 'scheduled' : now > p.validUntil ? 'expired' : 'active',
+      timesUsed: usageById.get(p.id)?._count._all ?? 0,
+      discountGiven: Number(usageById.get(p.id)?._sum.discountApplied ?? 0),
+      createdAt: p.createdAt,
+    }));
+  }
+
+  async updatePlatform(promotionId: string, data: Parameters<PromotionService['updateForSeller']>[2]) {
+    // Platform codes apply to every kitchen: no product selection.
+    const { applyTo: _applyTo, productIds: _productIds, ...rest } = data;
+    return this.updateForSeller(null, promotionId, rest);
+  }
+
+  /** A platform code that was never used can be deleted; a used one is switched off instead. */
+  async deletePlatform(promotionId: string) {
+    const promotion = await prisma.promotion.findUnique({ where: { id: promotionId }, include: { _count: { select: { usages: true } } } });
+    if (!promotion || promotion.sellerId !== null) throw new AppError('Promotion not found', 404, 'PROMOTION_NOT_FOUND');
+    if (promotion._count.usages > 0 || promotion.usedCount > 0) {
+      throw new AppError('This code has been used on orders; switch it off instead of deleting it', 409, 'PROMOTION_IN_USE');
+    }
+    await prisma.promotion.delete({ where: { id: promotionId } });
+    return { success: true };
   }
 
   /**

@@ -1,62 +1,70 @@
 /**
- * SMS service – sends OTP and other SMS via Twilio when configured.
- * When Twilio is not configured, logs to console (development).
+ * SMS. Provider (see config/env.ts smsProvider):
+ *  - twilio:  real SMS (TWILIO_ACCOUNT_SID / TWILIO_AUTH_TOKEN / TWILIO_PHONE_NUMBER)
+ *  - console: prints the message to this console; development / test only (refused in production)
+ *  - none:    no SMS at all; anything that needs one fails clearly
+ *
+ * sendSMS reports whether the message was actually handed to the provider, so callers
+ * never tell a user "code sent" when it wasn't.
  */
-
-const TWILIO_ACCOUNT_SID = process.env.TWILIO_ACCOUNT_SID;
-const TWILIO_AUTH_TOKEN = process.env.TWILIO_AUTH_TOKEN;
-const TWILIO_PHONE_NUMBER = process.env.TWILIO_PHONE_NUMBER;
+import { smsProvider } from '../config/env';
 
 let twilioClient: any = null;
 
 function getTwilioClient() {
   if (twilioClient) return twilioClient;
-  if (!TWILIO_ACCOUNT_SID || !TWILIO_AUTH_TOKEN) return null;
+  const sid = process.env.TWILIO_ACCOUNT_SID;
+  const token = process.env.TWILIO_AUTH_TOKEN;
+  if (!sid || !token) return null;
   try {
     // eslint-disable-next-line @typescript-eslint/no-var-requires
     const twilio = require('twilio');
-    twilioClient = twilio(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN);
+    twilioClient = twilio(sid, token, { timeout: 15000 });
     return twilioClient;
   } catch {
     return null;
   }
 }
 
-/**
- * Send an SMS. Uses Twilio if env vars are set; otherwise logs to console.
- * Phone number should be in E.164 format (e.g. +923001234567).
- */
-export async function sendSMS(phone: string, message: string): Promise<boolean> {
-  const client = getTwilioClient();
-  const from = TWILIO_PHONE_NUMBER;
+/** Last 4 digits only, for logs. */
+const maskPhone = (phone: string) => (phone.length > 4 ? `***${phone.slice(-4)}` : '***');
 
-  if (client && from) {
-    try {
-      await client.messages.create({
-        body: message,
-        from,
-        to: phone,
-      });
-      console.log(`📱 SMS sent to ${phone}`);
-      return true;
-    } catch (err) {
-      console.error('Twilio SMS error:', err);
+export async function sendSMS(phone: string, message: string): Promise<boolean> {
+  const provider = smsProvider();
+
+  if (provider === 'twilio') {
+    const client = getTwilioClient();
+    const from = process.env.TWILIO_PHONE_NUMBER;
+    if (!client || !from) {
+      console.error('SMS: Twilio is selected but not configured correctly');
       return false;
     }
+    // One retry for a transient failure (network, 5xx).
+    for (let attempt = 1; attempt <= 2; attempt++) {
+      try {
+        await client.messages.create({ body: message, from, to: phone });
+        return true;
+      } catch (err: any) {
+        const transient = !err?.status || err.status >= 500;
+        console.error(`SMS to ${maskPhone(phone)} failed (attempt ${attempt}): ${err?.message ?? err}`);
+        if (!transient) break;
+      }
+    }
+    return false;
   }
 
-  // No Twilio config – log for development
-  console.log('\n📱 SMS (Console – configure Twilio for real SMS):');
-  console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-  console.log(`To: ${phone}`);
-  console.log(`Message: ${message}`);
-  console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
-  return true;
+  if (provider === 'console') {
+    console.log('\n📱 SMS (console provider, development only)');
+    console.log(`To: ${phone}`);
+    console.log(`Message: ${message}\n`);
+    return true;
+  }
+
+  console.error(`SMS to ${maskPhone(phone)} not sent: no SMS provider is configured (SMS_PROVIDER=none)`);
+  return false;
 }
 
-/**
- * Send OTP message to phone (used by OTP service).
- */
+/** Send OTP message to phone (used by OTP service). */
 export async function sendOTPSMS(phone: string, otpCode: string, _purpose: string): Promise<boolean> {
   const message = `Your Nuray verification code is: ${otpCode}. Valid for 10 minutes. Do not share.`;
   return sendSMS(phone, message);

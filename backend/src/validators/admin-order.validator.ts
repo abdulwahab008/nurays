@@ -11,11 +11,12 @@ export const getAdminOrdersQuerySchema = z.object({
     'dispatched',
     'in_transit',
     'delivered',
+    'delivery_failed',
     'completed',
     'cancelled',
     'refunded',
   ]).optional(),
-  paymentStatus: z.enum(['pending', 'paid', 'failed', 'refunded']).optional(),
+  paymentStatus: z.enum(['pending', 'paid', 'failed', 'refunded', 'refund_pending', 'payment_submitted', 'disputed']).optional(),
   customerId: z.string().uuid().optional(),
   sellerId: z.string().uuid().optional(),
   dateFrom: z.string().optional(),
@@ -66,3 +67,7 @@ export const getAnalyticsQuerySchema = z.object({
   dateTo: z.string().optional(),
 });
 
+
+export const confirmTransferSchema = z.object({
+  note: z.string().trim().max(500).optional(),
+});

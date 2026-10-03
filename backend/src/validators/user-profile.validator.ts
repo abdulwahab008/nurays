@@ -26,3 +26,7 @@ export const addAddressSchema = z.object({
   isDefault: z.boolean().optional(),
 });
 
+// Any subset of the address fields (e.g. just { isDefault: true }).
+export const updateAddressSchema = addAddressSchema.partial().refine((d) => Object.keys(d).length > 0, {
+  message: 'Nothing to update',
+});

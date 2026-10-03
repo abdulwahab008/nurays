@@ -1,7 +1,8 @@
 import prisma from '../config/database';
+import { isStoredFile, storedFileOwner } from '../storage';
 import { AppError } from '../middleware/errorHandler';
 import { communityService } from './community.service';
-import emailService from './email.service';
+import { queueVerificationEmail } from '../jobs/email.jobs';
 import { generateVerificationToken } from '../utils/email-verification';
 
 export class UserProfileService {
@@ -85,9 +86,9 @@ export class UserProfileService {
         }),
       ]);
       try {
-        await emailService.sendVerificationEmail(newEmail, data.fullName || 'there', token);
+        await queueVerificationEmail(userId);
       } catch (err) {
-        console.error(`[updateProfile] Could not send verification email to ${newEmail}`, err);
+        console.error(`[updateProfile] Could not queue the verification email for ${newEmail}`, err);
       }
     }
 
@@ -146,6 +147,11 @@ export class UserProfileService {
    * Update avatar
    */
   async updateAvatar(userId: string, avatarUrl: string) {
+    // A profile photo is shown to other people: it must be one this user uploaded
+    // (POST /upload/avatar), never an arbitrary external link.
+    if (!isStoredFile(avatarUrl, { public: 'avatars' }) || storedFileOwner(avatarUrl) !== userId) {
+      throw new AppError('Please upload your profile photo through the app', 400, 'INVALID_AVATAR_URL');
+    }
     const user = await prisma.user.findUnique({
       where: { id: userId },
     });
@@ -228,39 +234,16 @@ export class UserProfileService {
     communityId?: string;
     isDefault?: boolean;
   }) {
-    // The community decides which sellers deliver here and at what fee: use the
-    // one the buyer picked, otherwise infer it from the address.
-    let communityId: string | null = null;
-    if (data.communityId) {
-      const community = await prisma.community.findFirst({ where: { id: data.communityId, isActive: true } });
-      if (!community) throw new AppError('Community not found', 404, 'COMMUNITY_NOT_FOUND');
-      // The chosen community has to be consistent with the pin: a GPS point that sits
-      // outside it (or resolves to a different community) can't be filed under it,
-      // or the buyer could dodge a seller's per-community rules.
-      if (data.latitude != null && data.longitude != null) {
-        const dist = communityService.distanceToCommunityKm(community, Number(data.latitude), Number(data.longitude));
-        if (dist > community.radiusKm) {
-          throw new AppError('The pinned location is outside the selected community', 400, 'COMMUNITY_LOCATION_MISMATCH');
-        }
+    const communityId = await this.resolveAddressCommunity(userId, data);
+
+    const address = await prisma.$transaction(async (tx) => {
+      // A user's very first address is always their default, regardless of what was passed.
+      const existingCount = await tx.userAddress.count({ where: { userId } });
+      const isDefault = data.isDefault || existingCount === 0;
+      if (isDefault) {
+        await tx.userAddress.updateMany({ where: { userId, isDefault: true }, data: { isDefault: false } });
       }
-      communityId = community.id;
-    } else {
-      communityId = await communityService.resolveCommunityIdForAddress(data, userId);
-    }
-
-    // A user's very first address is always their default, regardless of what was passed.
-    const existingCount = await prisma.userAddress.count({ where: { userId } });
-    const isDefault = data.isDefault || existingCount === 0;
-
-    // If this is set as default, unset other defaults
-    if (isDefault) {
-      await prisma.userAddress.updateMany({
-        where: { userId, isDefault: true },
-        data: { isDefault: false },
-      });
-    }
-
-    const address = await prisma.userAddress.create({
+      return tx.userAddress.create({
       data: {
         userId,
         label: data.label,
@@ -275,8 +258,132 @@ export class UserProfileService {
         communityId,
         isDefault,
       },
+      });
     });
 
+    return this.formatAddress(address);
+  }
+
+  /**
+   * The community an address belongs to decides which sellers deliver there and at
+   * what fee: the one the buyer picked (checked against the map pin), otherwise
+   * inferred from the pin / area.
+   */
+  private async resolveAddressCommunity(
+    userId: string,
+    data: { communityId?: string | null; latitude?: number | null; longitude?: number | null; area?: string | null; city?: string | null }
+  ): Promise<string | null> {
+    if (data.communityId) {
+      const community = await prisma.community.findFirst({ where: { id: data.communityId, isActive: true } });
+      if (!community) throw new AppError('Community not found', 404, 'COMMUNITY_NOT_FOUND');
+      // The chosen community has to be consistent with the pin, or a buyer could file an
+      // address under a community it isn't in and dodge a seller's per-community rules.
+      if (data.latitude != null && data.longitude != null) {
+        const dist = communityService.distanceToCommunityKm(community, Number(data.latitude), Number(data.longitude));
+        if (dist > community.radiusKm) {
+          throw new AppError('The pinned location is outside the selected community', 400, 'COMMUNITY_LOCATION_MISMATCH');
+        }
+      }
+      return community.id;
+    }
+    return communityService.resolveCommunityIdForAddress(
+      { area: data.area ?? undefined, city: data.city ?? undefined, latitude: data.latitude ?? undefined, longitude: data.longitude ?? undefined },
+      userId
+    );
+  }
+
+  /**
+   * Edit an address (any subset of fields). The community is worked out again whenever
+   * the pin, area, city or chosen community changes.
+   */
+  async updateAddress(
+    userId: string,
+    addressId: string,
+    data: Partial<{
+      label: string;
+      addressLine1: string;
+      addressLine2: string;
+      area: string;
+      city: string;
+      postalCode: string;
+      landmark: string;
+      latitude: number;
+      longitude: number;
+      communityId: string;
+      isDefault: boolean;
+    }>
+  ) {
+    const existing = await prisma.userAddress.findFirst({ where: { id: addressId, userId } });
+    if (!existing) throw new AppError('Address not found', 404, 'ADDRESS_NOT_FOUND');
+
+    const locationChanged = ['communityId', 'latitude', 'longitude', 'area', 'city'].some((k) => (data as any)[k] !== undefined);
+    const merged = {
+      communityId: data.communityId !== undefined ? data.communityId : null,
+      latitude: data.latitude !== undefined ? data.latitude : existing.latitude != null ? Number(existing.latitude) : null,
+      longitude: data.longitude !== undefined ? data.longitude : existing.longitude != null ? Number(existing.longitude) : null,
+      area: data.area ?? existing.area,
+      city: data.city ?? existing.city,
+    };
+    const communityId = locationChanged ? await this.resolveAddressCommunity(userId, merged) : existing.communityId;
+
+    const updated = await prisma.$transaction(async (tx) => {
+      if (data.isDefault === true) {
+        await tx.userAddress.updateMany({ where: { userId, isDefault: true, id: { not: addressId } }, data: { isDefault: false } });
+      }
+      return tx.userAddress.update({
+        where: { id: addressId },
+        data: {
+          label: data.label,
+          addressLine1: data.addressLine1,
+          addressLine2: data.addressLine2,
+          area: data.area,
+          city: data.city,
+          postalCode: data.postalCode,
+          landmark: data.landmark,
+          latitude: data.latitude,
+          longitude: data.longitude,
+          communityId,
+          // An address can be made the default; the default can't be "un-set" without
+          // choosing another (there is always one).
+          ...(data.isDefault === true ? { isDefault: true } : {}),
+        },
+      });
+    });
+    return this.formatAddress(updated);
+  }
+
+  /**
+   * Delete an address. Past orders keep their own copy of where they went. If it was
+   * the default, the most recently added remaining address becomes the default.
+   */
+  async deleteAddress(userId: string, addressId: string) {
+    await prisma.$transaction(async (tx) => {
+      const existing = await tx.userAddress.findFirst({ where: { id: addressId, userId } });
+      if (!existing) throw new AppError('Address not found', 404, 'ADDRESS_NOT_FOUND');
+      await tx.userAddress.delete({ where: { id: addressId } });
+      if (existing.isDefault) {
+        const next = await tx.userAddress.findFirst({ where: { userId }, orderBy: { createdAt: 'desc' } });
+        if (next) await tx.userAddress.update({ where: { id: next.id }, data: { isDefault: true } });
+      }
+    });
+    return { deleted: true };
+  }
+
+  private formatAddress(address: {
+    id: string;
+    label: string | null;
+    addressLine1: string;
+    addressLine2: string | null;
+    area: string;
+    city: string;
+    postalCode: string | null;
+    landmark: string | null;
+    isDefault: boolean;
+    communityId: string | null;
+    latitude: unknown;
+    longitude: unknown;
+    createdAt: Date;
+  }) {
     return {
       id: address.id,
       label: address.label,

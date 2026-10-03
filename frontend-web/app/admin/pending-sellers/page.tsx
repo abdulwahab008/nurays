@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/toast';
 import { useAuthStore } from '@/lib/store/auth-store';
 import { apiClient } from '@/lib/api-client';
+import DocumentList from '@/components/admin/DocumentList';
 
 interface PendingSeller {
   id: string;
@@ -18,6 +19,10 @@ interface PendingSeller {
   verificationStatus: string;
   status: string;
   createdAt: string;
+  primaryCommunityName?: string | null;
+  latitude?: number | null;
+  longitude?: number | null;
+  documents: Array<{ id: string; type: string; url: string | null }>;
   user: {
     id: string;
     email: string;
@@ -162,10 +167,30 @@ export default function AdminPendingSellersPage() {
                           {new Date(seller.createdAt).toLocaleDateString()}
                         </span>
                       </div>
+                      <div>
+                        <span className="text-gray-500">Community:</span>{' '}
+                        <span className="font-medium">{seller.primaryCommunityName || 'Not set'}</span>
+                      </div>
+                      <div>
+                        <span className="text-gray-500">Kitchen location:</span>{' '}
+                        {seller.latitude != null && seller.longitude != null ? (
+                          <a
+                            href={`https://www.google.com/maps?q=${seller.latitude},${seller.longitude}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="font-medium underline"
+                          >
+                            Open in Maps
+                          </a>
+                        ) : (
+                          <span className="font-medium">Not set</span>
+                        )}
+                      </div>
                     </div>
+                    <DocumentList documents={seller.documents ?? []} />
                   </div>
 
-                  <div className="flex gap-2 ml-4">
+                  <div className="flex gap-2 ms-4">
                     <Button
                       onClick={() => handleApproveReject(seller.id, 'approve')}
                       disabled={processingId === seller.id}

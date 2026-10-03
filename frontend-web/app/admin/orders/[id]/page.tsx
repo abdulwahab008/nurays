@@ -21,6 +21,11 @@ interface OrderDetail {
   orderStatus: string;
   paymentStatus: string;
   paymentMethod: string;
+  paymentReferenceNumber?: string | null;
+  paymentSenderAccount?: string | null;
+  paymentProofUrl?: string | null;
+  paymentDisputeReason?: string | null;
+  paymentSubmittedAt?: string | null;
   deliveryType: string;
   createdAt: string;
   estimatedDeliveryAt?: string;
@@ -61,6 +66,8 @@ export default function AdminOrderDetailPage() {
   const [cancelReason, setCancelReason] = useState('');
   const [showRefundForm, setShowRefundForm] = useState(false);
   const [refundAmount, setRefundAmount] = useState('');
+  const [confirmNote, setConfirmNote] = useState('');
+  const [confirmingPayment, setConfirmingPayment] = useState(false);
 
   const updateStatus = async () => {
     if (!order || !selectedStatus || selectedStatus === order.orderStatus) return;
@@ -107,6 +114,23 @@ export default function AdminOrderDetailPage() {
       showToast(error.response?.data?.error?.message || 'Failed to retry delivery', 'error');
     } finally {
       setUpdating(false);
+    }
+  };
+
+  // A transfer the kitchen disputed (or hasn't confirmed): support checked it and it arrived.
+  const handleConfirmPayment = async () => {
+    if (!order) return;
+    if (!window.confirm('Confirm that this transfer reached the kitchen? The order is then marked paid.')) return;
+    try {
+      setConfirmingPayment(true);
+      await apiClient.post(`/admin/orders/${order.id}/confirm-payment`, { note: confirmNote.trim() || undefined });
+      showToast('Payment confirmed', 'success');
+      setConfirmNote('');
+      await loadOrder();
+    } catch (error: any) {
+      showToast(error.response?.data?.error?.message || 'Could not confirm the payment', 'error');
+    } finally {
+      setConfirmingPayment(false);
     }
   };
 
@@ -294,6 +318,41 @@ export default function AdminOrderDetailPage() {
                   </div>
                 )}
 
+                {['jazzcash', 'easypaisa', 'bank'].includes(order.paymentMethod) && ['payment_submitted', 'disputed'].includes(order.paymentStatus) && (
+                  <div className={`rounded-lg border p-4 ${order.paymentStatus === 'disputed' ? 'border-red-200 bg-red-50' : 'border-amber-200 bg-amber-50'}`} data-testid="transfer-check">
+                    <h2 className="text-sm font-semibold text-gray-900">
+                      {order.paymentStatus === 'disputed' ? 'The kitchen says this transfer never arrived' : 'Transfer waiting for the kitchen to confirm'}
+                    </h2>
+                    <div className="mt-2 text-sm text-gray-700 space-y-1">
+                      <p>
+                        {order.paymentMethod === 'bank' ? 'Bank transfer' : order.paymentMethod === 'jazzcash' ? 'JazzCash' : 'EasyPaisa'} to the kitchen
+                        {order.paymentSenderAccount ? `, from ${order.paymentSenderAccount}` : ''}
+                        {order.paymentReferenceNumber ? ` · reference ${order.paymentReferenceNumber}` : ''}
+                      </p>
+                      {order.paymentDisputeReason && <p>Kitchen: &ldquo;{order.paymentDisputeReason}&rdquo;</p>}
+                      {order.paymentProofUrl && (
+                        <a href={order.paymentProofUrl} target="_blank" rel="noopener noreferrer" className="underline font-medium">
+                          Open the customer&apos;s receipt
+                        </a>
+                      )}
+                    </div>
+                    <p className="mt-3 text-xs text-gray-600">
+                      Check the receipt with the kitchen&apos;s statement. If the money arrived, confirm it here; if not, cancel the order below.
+                    </p>
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      <input
+                        value={confirmNote}
+                        onChange={(e) => setConfirmNote(e.target.value)}
+                        placeholder="Note (optional), e.g. how it was checked"
+                        className="flex-1 min-w-[220px] px-3 py-2 rounded-lg border border-gray-200 text-sm bg-white"
+                      />
+                      <Button onClick={handleConfirmPayment} disabled={confirmingPayment} className="bg-green-600 hover:bg-green-700 text-white">
+                        {confirmingPayment ? 'Confirming…' : 'Confirm payment received'}
+                      </Button>
+                    </div>
+                  </div>
+                )}
+
                 {order.deliveryAddress && (
                   <div>
                     <h2 className="text-sm font-medium text-gray-500 uppercase mb-2">Delivery Address</h2>
@@ -309,11 +368,11 @@ export default function AdminOrderDetailPage() {
                     <table className="w-full text-sm">
                       <thead className="bg-gray-50">
                         <tr>
-                          <th className="px-4 py-2 text-left font-medium text-gray-600">Product</th>
-                          <th className="px-4 py-2 text-left font-medium text-gray-600">Seller</th>
-                          <th className="px-4 py-2 text-right font-medium text-gray-600">Qty</th>
-                          <th className="px-4 py-2 text-right font-medium text-gray-600">Price</th>
-                          <th className="px-4 py-2 text-right font-medium text-gray-600">Total</th>
+                          <th className="px-4 py-2 text-start font-medium text-gray-600">Product</th>
+                          <th className="px-4 py-2 text-start font-medium text-gray-600">Seller</th>
+                          <th className="px-4 py-2 text-end font-medium text-gray-600">Qty</th>
+                          <th className="px-4 py-2 text-end font-medium text-gray-600">Price</th>
+                          <th className="px-4 py-2 text-end font-medium text-gray-600">Total</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-gray-200">
@@ -321,9 +380,9 @@ export default function AdminOrderDetailPage() {
                           <tr key={item.id}>
                             <td className="px-4 py-3 font-medium text-gray-900">{item.productName}</td>
                             <td className="px-4 py-3 text-gray-600">{item.seller?.businessName || '—'}</td>
-                            <td className="px-4 py-3 text-right">{item.quantity}</td>
-                            <td className="px-4 py-3 text-right">{formatPrice(item.unitPrice)}</td>
-                            <td className="px-4 py-3 text-right font-medium">{formatPrice(item.totalPrice)}</td>
+                            <td className="px-4 py-3 text-end">{item.quantity}</td>
+                            <td className="px-4 py-3 text-end">{formatPrice(item.unitPrice)}</td>
+                            <td className="px-4 py-3 text-end font-medium">{formatPrice(item.totalPrice)}</td>
                           </tr>
                         ))}
                       </tbody>
@@ -513,7 +572,7 @@ export default function AdminOrderDetailPage() {
                         <li key={r.id} className="flex items-center justify-between gap-3 rounded-lg border border-gray-200 px-3 py-2">
                           <div className="min-w-0">
                             <span className="font-medium text-gray-900">{formatPrice(r.amount)}</span>
-                            <span className="ml-2 text-gray-500">
+                            <span className="ms-2 text-gray-500">
                               {r.method === 'wallet' ? 'to wallet' : 'manual transfer'}
                               {r.reference ? ` · ref ${r.reference}` : ''}
                             </span>
@@ -555,7 +614,7 @@ export default function AdminOrderDetailPage() {
                         <li key={i}>
                           <span className="font-medium text-gray-700">{h.status}</span>
                           {h.notes && ` — ${h.notes}`}
-                          <span className="text-gray-400 ml-2">{formatDate(h.createdAt)}</span>
+                          <span className="text-gray-400 ms-2">{formatDate(h.createdAt)}</span>
                         </li>
                       ))}
                     </ul>

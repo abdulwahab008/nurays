@@ -14,12 +14,18 @@ import { NextFunction, Request, Response } from 'express';
 import { authenticate, authorize } from '../middleware/auth.middleware';
 import { validate } from '../middleware/validation.middleware';
 import hubService from '../services/hub.service';
+import { hubsManagedBy } from '../services/admin-places.service';
 import { batchIntakeSchema, batchStatusSchema, temperatureProbeSchema, assignManagerSchema } from '../validators/hub.validator';
 
 const router = Router();
 
 // Public routes
 router.get('/', getHubCenters);
+
+// A hub manager's own hubs (their console)
+router.get('/mine', authenticate, authorize('hub_manager', 'admin'), async (req: Request, res: Response) => {
+  res.status(200).json({ success: true, data: await hubsManagedBy(req.user!.userId) });
+});
 router.get('/:id/inventory', getHubInventory);
 
 // A hub manager may only operate the hub they manage (admins: any hub).

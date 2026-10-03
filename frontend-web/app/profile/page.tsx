@@ -10,6 +10,9 @@ import { useToast } from '@/components/ui/toast';
 import { authService } from '@/lib/services/auth.service';
 import { useAuthStore } from '@/lib/store/auth-store';
 import { DashboardLayout, CUSTOMER_SIDEBAR_ITEMS } from '@/components/layout/DashboardShell';
+import { useT, useLocale, LOCALES, LOCALE_NAMES } from '@/lib/i18n';
+import { commonMessages } from '@/lib/i18n/messages/common';
+import { accountMessages } from '@/lib/i18n/messages/account';
 import {
   Store,
   Bike,
@@ -36,6 +39,13 @@ export default function ProfilePage() {
   const router = useRouter();
   const { isAuthenticated, user, setUser, logout } = useAuthStore();
   const { showToast } = useToast();
+  const t = useT(accountMessages);
+  const tc = useT(commonMessages);
+  const { locale, setLocale } = useLocale();
+  const roleLabel = (type?: string) => {
+    const key = `role.${type || 'customer'}` as keyof typeof accountMessages.en;
+    return key in accountMessages.en ? t(key) : (type as string);
+  };
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
   // Phone verification: a number only counts (for OTP login) once its owner has proven it.
@@ -69,7 +79,7 @@ export default function ProfilePage() {
   const sendPhoneCode = async () => {
     const number = (phoneInput || (hasRealPhone ? profile!.phone : '')).trim();
     if (number.length < 10) {
-      showToast('Enter a valid phone number', 'error');
+      showToast(t('enterValidPhone'), 'error');
       return;
     }
     setPhoneBusy(true);
@@ -77,9 +87,9 @@ export default function ProfilePage() {
       await authService.requestPhoneVerification(number);
       setPhoneInput(number);
       setPhoneCodeSent(true);
-      showToast('Verification code sent', 'success');
+      showToast(t('codeSent'), 'success');
     } catch (err: any) {
-      showToast(err.response?.data?.error?.message || 'Could not send the code', 'error');
+      showToast(err.response?.data?.error?.message || t('codeSendFailed'), 'error');
     } finally {
       setPhoneBusy(false);
     }
@@ -89,13 +99,13 @@ export default function ProfilePage() {
     setPhoneBusy(true);
     try {
       await authService.verifyPhone(phoneInput, phoneCode.trim());
-      showToast('Phone number verified', 'success');
+      showToast(t('phoneVerified'), 'success');
       setVerifyingPhone(false);
       setPhoneCode('');
       setPhoneCodeSent(false);
       loadProfile();
     } catch (err: any) {
-      showToast(err.response?.data?.error?.message || 'That code did not work', 'error');
+      showToast(err.response?.data?.error?.message || t('codeDidNotWork'), 'error');
     } finally {
       setPhoneBusy(false);
     }
@@ -127,24 +137,24 @@ export default function ProfilePage() {
       setProfile(response.data);
       setUser(response.data as any);
       setEditing(false);
-      showToast('Profile updated successfully', 'success');
+      showToast(t('profileUpdated'), 'success');
     } catch (error: any) {
-      showToast(error.response?.data?.error?.message || 'Failed to update profile', 'error');
+      showToast(error.response?.data?.error?.message || t('profileUpdateFailed'), 'error');
     }
   };
 
   if (loading) {
     return (
       <DashboardLayout
-        title="My Profile"
-        subtitle="Manage your account"
+        title={t('myProfile')}
+        subtitle={t('manageAccount')}
         sidebarItems={sidebarItems}
         userType="customer"
       >
         <div className="flex items-center justify-center h-64">
           <div className="text-center">
             <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-green-600 mx-auto mb-4"></div>
-            <p className="text-gray-600">Loading your profile...</p>
+            <p className="text-gray-600">{t('loadingProfile')}</p>
           </div>
         </div>
       </DashboardLayout>
@@ -153,8 +163,8 @@ export default function ProfilePage() {
 
   return (
     <DashboardLayout
-      title="My Profile"
-      subtitle="Manage your account settings"
+      title={t('myProfile')}
+      subtitle={t('manageAccountSettings')}
       sidebarItems={sidebarItems}
       userType="customer"
     >
@@ -183,10 +193,10 @@ export default function ProfilePage() {
                 )}
               </div>
               <h3 className="text-xl font-bold text-gray-900 mb-1">
-                {profile?.profile?.fullName || 'User'}
+                {profile?.profile?.fullName || t('user')}
               </h3>
               <p className="text-gray-500 text-sm mb-4">
-                {profile?.email || profile?.phone || 'Customer'}
+                {profile?.email || profile?.phone || t('role.customer')}
               </p>
               <div className="flex items-center justify-center gap-2 mb-4">
                 <span className={`px-3 py-1 rounded-full text-xs font-medium flex items-center gap-1.5 ${
@@ -197,16 +207,16 @@ export default function ProfilePage() {
                     : 'bg-green-100 text-green-800'
                 }`}>
                   {profile?.userType === 'seller' ? <Store className="w-3.5 h-3.5" /> : profile?.userType === 'rider' ? <Bike className="w-3.5 h-3.5" /> : <ShoppingCart className="w-3.5 h-3.5" />}
-                  <span className="capitalize">{profile?.userType || 'Customer'}</span>
+                  <span className="capitalize">{roleLabel(profile?.userType)}</span>
                 </span>
                 {profile?.isEmailVerified && (
                   <span className="px-3 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800 flex items-center gap-1">
-                    <Check className="w-3 h-3" /> Verified
+                    <Check className="w-3 h-3" /> {t('verified')}
                   </span>
                 )}
               </div>
               <Button variant="outline" className="w-full mb-3 flex items-center justify-center gap-2" size="sm">
-                <Camera className="w-4 h-4" /> Change Photo
+                <Camera className="w-4 h-4" /> {t('changePhoto')}
               </Button>
             </div>
           </div>
@@ -214,7 +224,7 @@ export default function ProfilePage() {
           {/* Quick Links */}
           <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 mt-6">
             <h3 className="font-semibold text-gray-900 mb-4 flex items-center gap-2">
-              <Zap className="w-4 h-4 text-amber-500" /> Quick Links
+              <Zap className="w-4 h-4 text-amber-500" /> {t('quickLinks')}
             </h3>
             <div className="space-y-2">
               <Link href="/profile/addresses" className="flex items-center gap-3 p-3 rounded-xl hover:bg-gray-50 transition-colors group">
@@ -222,20 +232,20 @@ export default function ProfilePage() {
                   <MapPin className="w-5 h-5" />
                 </div>
                 <div className="flex-1">
-                  <p className="font-medium text-gray-900">Addresses</p>
-                  <p className="text-xs text-gray-500">Manage delivery locations</p>
+                  <p className="font-medium text-gray-900">{t('addresses')}</p>
+                  <p className="text-xs text-gray-500">{t('addressesDesc')}</p>
                 </div>
-                <ArrowRight className="w-4 h-4 text-gray-400 group-hover:translate-x-1 transition-transform" />
+                <ArrowRight className="rtl:-scale-x-100 w-4 h-4 text-gray-400 group-hover:translate-x-1 transition-transform" />
               </Link>
               <Link href="/orders" className="flex items-center gap-3 p-3 rounded-xl hover:bg-gray-50 transition-colors group">
                 <div className="w-10 h-10 bg-orange-100 rounded-lg flex items-center justify-center text-orange-600">
                   <Package className="w-5 h-5" />
                 </div>
                 <div className="flex-1">
-                  <p className="font-medium text-gray-900">Order History</p>
-                  <p className="text-xs text-gray-500">View past orders</p>
+                  <p className="font-medium text-gray-900">{t('orderHistory')}</p>
+                  <p className="text-xs text-gray-500">{t('orderHistoryDesc')}</p>
                 </div>
-                <ArrowRight className="w-4 h-4 text-gray-400 group-hover:translate-x-1 transition-transform" />
+                <ArrowRight className="rtl:-scale-x-100 w-4 h-4 text-gray-400 group-hover:translate-x-1 transition-transform" />
               </Link>
               {profile?.userType !== 'seller' && (
                 <Link href="/sellers/register" className="flex items-center gap-3 p-3 rounded-xl hover:bg-gray-50 transition-colors group">
@@ -243,10 +253,10 @@ export default function ProfilePage() {
                     <Store className="w-5 h-5" />
                   </div>
                   <div className="flex-1">
-                    <p className="font-medium text-gray-900">Become a Seller</p>
-                    <p className="text-xs text-gray-500">Start your business</p>
+                    <p className="font-medium text-gray-900">{t('becomeSeller')}</p>
+                    <p className="text-xs text-gray-500">{t('becomeSellerDesc')}</p>
                   </div>
-                  <ArrowRight className="w-4 h-4 text-gray-400 group-hover:translate-x-1 transition-transform" />
+                  <ArrowRight className="rtl:-scale-x-100 w-4 h-4 text-gray-400 group-hover:translate-x-1 transition-transform" />
                 </Link>
               )}
               {profile?.userType === 'seller' && (
@@ -255,10 +265,10 @@ export default function ProfilePage() {
                     <BarChart3 className="w-5 h-5" />
                   </div>
                   <div className="flex-1">
-                    <p className="font-medium text-gray-900">Seller Dashboard</p>
-                    <p className="text-xs text-gray-500">Manage your store</p>
+                    <p className="font-medium text-gray-900">{t('sellerDashboard')}</p>
+                    <p className="text-xs text-gray-500">{t('sellerDashboardDesc')}</p>
                   </div>
-                  <ArrowRight className="w-4 h-4 text-gray-400 group-hover:translate-x-1 transition-transform" />
+                  <ArrowRight className="rtl:-scale-x-100 w-4 h-4 text-gray-400 group-hover:translate-x-1 transition-transform" />
                 </Link>
               )}
             </div>
@@ -272,13 +282,13 @@ export default function ProfilePage() {
             <div className="flex items-center justify-between mb-6">
               <div>
                 <h2 className="text-lg font-bold text-gray-900 flex items-center gap-2">
-                  <User className="w-5 h-5 text-[#FF5500]" /> Personal Information
+                  <User className="w-5 h-5 text-[#FF5500]" /> {t('personalInfo')}
                 </h2>
-                <p className="text-sm text-gray-500">Update your personal details</p>
+                <p className="text-sm text-gray-500">{t('personalInfoDesc')}</p>
               </div>
               {!editing && (
                 <Button variant="outline" onClick={() => setEditing(true)} size="sm" className="flex items-center gap-1.5">
-                  <Pencil className="w-4 h-4" /> Edit
+                  <Pencil className="w-4 h-4" /> {tc('edit')}
                 </Button>
               )}
             </div>
@@ -288,7 +298,7 @@ export default function ProfilePage() {
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Full Name
+                      {t('fullName')}
                     </label>
                     <input
                       type="text"
@@ -296,42 +306,43 @@ export default function ProfilePage() {
                       onChange={(e) => setFormData({ ...formData, fullName: e.target.value })}
                       className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-green-500 transition-all"
                       required
-                      placeholder="Enter your name"
+                      placeholder={t('enterName')}
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">Email</label>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">{t('email')}</label>
                     <input
                       type="email"
                       value={formData.email}
                       onChange={(e) => setFormData({ ...formData, email: e.target.value })}
                       className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-green-500 transition-all"
-                      placeholder="Enter your email"
+                      placeholder={t('enterEmail')}
+                      dir="ltr"
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">City</label>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">{t('city')}</label>
                     <input
                       type="text"
                       value={formData.city}
                       onChange={(e) => setFormData({ ...formData, city: e.target.value })}
                       className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-green-500 transition-all"
-                      placeholder="e.g., Karachi"
+                      placeholder={t('cityPlaceholder')}
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">Area</label>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">{t('area')}</label>
                     <input
                       type="text"
                       value={formData.area}
                       onChange={(e) => setFormData({ ...formData, area: e.target.value })}
                       className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-green-500 transition-all"
-                      placeholder="e.g., DHA Phase 6"
+                      placeholder={t('areaPlaceholder')}
                     />
                   </div>
                   <div className="md:col-span-2">
                     <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Language Preference
+                      {t('languagePreference')}
                     </label>
                     <select
                       value={formData.languagePreference}
@@ -340,14 +351,14 @@ export default function ProfilePage() {
                       }
                       className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-green-500 transition-all"
                     >
-                      <option value="en">English</option>
-                      <option value="ur">Urdu</option>
+                      <option value="en">{t('langEnglish')}</option>
+                      <option value="ur">{t('langUrdu')}</option>
                     </select>
                   </div>
                 </div>
                 <div className="flex gap-3 mt-6">
                   <Button type="submit" className="bg-green-600 hover:bg-green-700 flex items-center gap-1.5">
-                    <Check className="w-4 h-4" /> Save Changes
+                    <Check className="w-4 h-4" /> {t('saveChanges')}
                   </Button>
                   <Button
                     type="button"
@@ -357,24 +368,24 @@ export default function ProfilePage() {
                       loadProfile();
                     }}
                   >
-                    Cancel
+                    {tc('cancel')}
                   </Button>
                 </div>
               </form>
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div className="p-4 bg-gray-50 rounded-xl">
-                  <p className="text-xs text-gray-500 uppercase tracking-wide mb-1">Phone Number</p>
+                  <p className="text-xs text-gray-500 uppercase tracking-wide mb-1">{t('phoneNumber')}</p>
                   <p className="font-semibold text-gray-900 flex items-center gap-2">
                     <Phone className="w-4 h-4 text-slate-500" />
-                    {hasRealPhone ? formatPhoneNumber(profile!.phone) : 'Not provided'}
+                    {hasRealPhone ? <span data-ltr>{formatPhoneNumber(profile!.phone)}</span> : t('notProvided')}
                     {hasRealPhone && (
                       <span
                         className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
                           profile?.phoneVerified ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'
                         }`}
                       >
-                        {profile?.phoneVerified ? 'Verified' : 'Not verified'}
+                        {profile?.phoneVerified ? t('verified') : t('notVerified')}
                       </span>
                     )}
                   </p>
@@ -387,7 +398,7 @@ export default function ProfilePage() {
                       }}
                       className="mt-2 text-xs font-bold text-[#FF5500] hover:underline"
                     >
-                      {hasRealPhone ? 'Verify this number' : 'Add & verify a phone number'}
+                      {hasRealPhone ? t('verifyThisNumber') : t('addVerifyPhone')}
                     </button>
                   )}
                   {verifyingPhone && (
@@ -397,6 +408,7 @@ export default function ProfilePage() {
                         value={phoneInput}
                         onChange={(e) => setPhoneInput(e.target.value)}
                         placeholder="+923001234567"
+                        dir="ltr"
                         disabled={phoneCodeSent}
                         className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded-lg"
                       />
@@ -407,18 +419,19 @@ export default function ProfilePage() {
                           maxLength={6}
                           value={phoneCode}
                           onChange={(e) => setPhoneCode(e.target.value.replace(/\D/g, ''))}
-                          placeholder="6-digit code"
+                          placeholder={t('sixDigitCode')}
+                          dir="ltr"
                           className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded-lg"
                         />
                       )}
                       <div className="flex gap-2">
                         {!phoneCodeSent ? (
                           <button type="button" disabled={phoneBusy} onClick={sendPhoneCode} className="px-3 py-1.5 text-xs font-bold rounded-lg bg-slate-900 text-white disabled:opacity-50">
-                            {phoneBusy ? 'Sending…' : 'Send code'}
+                            {phoneBusy ? t('sending') : t('sendCode')}
                           </button>
                         ) : (
                           <button type="button" disabled={phoneBusy || phoneCode.length !== 6} onClick={confirmPhoneCode} className="px-3 py-1.5 text-xs font-bold rounded-lg bg-emerald-600 text-white disabled:opacity-50">
-                            {phoneBusy ? 'Verifying…' : 'Verify'}
+                            {phoneBusy ? t('verifying') : t('verify')}
                           </button>
                         )}
                         <button
@@ -426,57 +439,89 @@ export default function ProfilePage() {
                           onClick={() => { setVerifyingPhone(false); setPhoneCode(''); setPhoneCodeSent(false); }}
                           className="px-3 py-1.5 text-xs font-bold rounded-lg border border-gray-300"
                         >
-                          Cancel
+                          {tc('cancel')}
                         </button>
                       </div>
                     </div>
                   )}
                 </div>
                 <div className="p-4 bg-gray-50 rounded-xl">
-                  <p className="text-xs text-gray-500 uppercase tracking-wide mb-1">Email Address</p>
+                  <p className="text-xs text-gray-500 uppercase tracking-wide mb-1">{t('emailAddress')}</p>
                   <p className="font-semibold text-gray-900 flex items-center gap-2">
                     <Mail className="w-4 h-4 text-slate-500" />
-                    {profile?.email || 'Not provided'}
+                    {profile?.email ? <span data-ltr>{profile.email}</span> : t('notProvided')}
                   </p>
                 </div>
                 <div className="p-4 bg-gray-50 rounded-xl">
-                  <p className="text-xs text-gray-500 uppercase tracking-wide mb-1">Full Name</p>
+                  <p className="text-xs text-gray-500 uppercase tracking-wide mb-1">{t('fullName')}</p>
                   <p className="font-semibold text-gray-900 flex items-center gap-2">
                     <User className="w-4 h-4 text-slate-500" />
-                    {profile?.profile?.fullName || 'Not set'}
+                    {profile?.profile?.fullName || t('notSet')}
                   </p>
                 </div>
                 <div className="p-4 bg-gray-50 rounded-xl">
-                  <p className="text-xs text-gray-500 uppercase tracking-wide mb-1">Location</p>
+                  <p className="text-xs text-gray-500 uppercase tracking-wide mb-1">{t('location')}</p>
                   <p className="font-semibold text-gray-900 flex items-center gap-2">
                     <MapPin className="w-4 h-4 text-slate-500" />
                     {profile?.profile?.area && profile?.profile?.city
                       ? `${profile.profile.area}, ${profile.profile.city}`
-                      : 'Not set'}
+                      : t('notSet')}
                   </p>
                 </div>
                 <div className="p-4 bg-gray-50 rounded-xl">
-                  <p className="text-xs text-gray-500 uppercase tracking-wide mb-1">Account Type</p>
+                  <p className="text-xs text-gray-500 uppercase tracking-wide mb-1">{t('accountType')}</p>
                   <p className="font-semibold text-gray-900 flex items-center gap-2">
                     {profile?.userType === 'seller' ? <Store className="w-4 h-4 text-purple-600" /> : profile?.userType === 'rider' ? <Bike className="w-4 h-4 text-orange-600" /> : <ShoppingCart className="w-4 h-4 text-green-600" />}
-                    <span className="capitalize">{profile?.userType || 'Customer'}</span>
+                    <span className="capitalize">{roleLabel(profile?.userType)}</span>
                   </p>
                 </div>
                 <div className="p-4 bg-gray-50 rounded-xl">
-                  <p className="text-xs text-gray-500 uppercase tracking-wide mb-1">Language</p>
+                  <p className="text-xs text-gray-500 uppercase tracking-wide mb-1">{t('language')}</p>
                   <p className="font-semibold text-gray-900 flex items-center gap-2">
                     <Globe className="w-4 h-4 text-blue-600" />
-                    {profile?.profile?.languagePreference === 'ur' ? 'Urdu' : 'English'}
+                    {profile?.profile?.languagePreference === 'ur' ? t('langUrdu') : t('langEnglish')}
                   </p>
                 </div>
               </div>
             )}
           </div>
 
+          {/* Language */}
+          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6" data-testid="language-setting">
+            <h2 className="text-lg font-bold text-gray-900 mb-1 flex items-center gap-2">
+              <Globe className="w-5 h-5 text-blue-600" /> {t('appLanguage')}
+            </h2>
+            <p className="text-sm text-gray-500 mb-4">{t('appLanguageDesc')}</p>
+            <div className="grid grid-cols-2 gap-3" role="radiogroup" aria-label={t('appLanguage')}>
+              {LOCALES.map((code) => {
+                const selected = locale === code;
+                return (
+                  <button
+                    key={code}
+                    type="button"
+                    role="radio"
+                    aria-checked={selected}
+                    lang={code}
+                    onClick={() => setLocale(code)}
+                    data-testid={`language-option-${code}`}
+                    className={`flex items-center justify-between gap-2 p-4 rounded-xl border-2 text-start font-semibold transition-colors ${
+                      selected
+                        ? 'border-[#FF5500] bg-orange-50 text-gray-900'
+                        : 'border-gray-200 bg-white text-gray-700 hover:border-gray-300'
+                    }`}
+                  >
+                    <span>{LOCALE_NAMES[code]}</span>
+                    {selected && <Check className="w-4 h-4 text-[#FF5500]" />}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
           {/* Security & Account */}
           <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
             <h2 className="text-lg font-bold text-gray-900 mb-4 flex items-center gap-2">
-              <Lock className="w-5 h-5 text-slate-700" /> Account Security
+              <Lock className="w-5 h-5 text-slate-700" /> {t('accountSecurity')}
             </h2>
             <div className="space-y-3">
               <div className="flex items-center justify-between p-4 bg-gray-50 rounded-xl">
@@ -485,11 +530,11 @@ export default function ProfilePage() {
                     <Key className="w-5 h-5" />
                   </div>
                   <div>
-                    <p className="font-medium text-gray-900">Password</p>
-                    <p className="text-xs text-gray-500">Last changed: Never</p>
+                    <p className="font-medium text-gray-900">{t('password')}</p>
+                    <p className="text-xs text-gray-500">{t('lastChangedNever')}</p>
                   </div>
                 </div>
-                <Button variant="outline" size="sm">Change</Button>
+                <Button variant="outline" size="sm">{t('change')}</Button>
               </div>
               <div className="flex items-center justify-between p-4 bg-gray-50 rounded-xl">
                 <div className="flex items-center gap-3">
@@ -497,18 +542,18 @@ export default function ProfilePage() {
                     <Mail className="w-5 h-5" />
                   </div>
                   <div>
-                    <p className="font-medium text-gray-900">Email Verification</p>
+                    <p className="font-medium text-gray-900">{t('emailVerification')}</p>
                     <p className="text-xs text-gray-500">
-                      {profile?.isEmailVerified ? 'Your email is verified' : 'Verify your email address'}
+                      {profile?.isEmailVerified ? t('emailIsVerified') : t('verifyEmailAddress')}
                     </p>
                   </div>
                 </div>
                 {!profile?.isEmailVerified && (
-                  <Button variant="outline" size="sm">Verify</Button>
+                  <Button variant="outline" size="sm">{t('verify')}</Button>
                 )}
                 {profile?.isEmailVerified && (
                   <span className="text-green-600 font-medium text-sm flex items-center gap-1">
-                    <Check className="w-4 h-4" /> Verified
+                    <Check className="w-4 h-4" /> {t('verified')}
                   </span>
                 )}
               </div>
@@ -518,12 +563,12 @@ export default function ProfilePage() {
           {/* Danger Zone */}
           <div className="bg-white rounded-2xl shadow-sm border border-red-100 p-6">
             <h2 className="text-lg font-bold text-red-600 mb-4 flex items-center gap-2">
-              <AlertTriangle className="w-5 h-5 text-red-600" /> Danger Zone
+              <AlertTriangle className="w-5 h-5 text-red-600" /> {t('dangerZone')}
             </h2>
             <div className="flex items-center justify-between p-4 bg-red-50 rounded-xl">
               <div>
-                <p className="font-medium text-gray-900">Sign Out</p>
-                <p className="text-xs text-gray-500">Sign out from your account</p>
+                <p className="font-medium text-gray-900">{t('signOut')}</p>
+                <p className="text-xs text-gray-500">{t('signOutDesc')}</p>
               </div>
               <Button 
                 variant="outline" 
@@ -534,7 +579,7 @@ export default function ProfilePage() {
                   router.push('/');
                 }}
               >
-                Sign Out
+                {t('signOut')}
               </Button>
             </div>
           </div>

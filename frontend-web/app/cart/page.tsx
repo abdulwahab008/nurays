@@ -29,7 +29,7 @@ import {
   AlertCircle,
 } from 'lucide-react';
 import { cartService, CartResponse } from '@/lib/services/cart.service';
-import { formatPrice, calculateGst } from '@/lib/utils';
+import { formatPrice, imageVariant, orderTotals } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { useAuthStore } from '@/lib/store/auth-store';
 import { useCartStore, CartItem as LocalCartItem } from '@/lib/store/cart-store';
@@ -38,6 +38,9 @@ import { apiClient } from '@/lib/api-client';
 import { useToast } from '@/components/ui/toast';
 import { addressService } from '@/lib/services/address.service';
 import { ConfirmModal } from '@/components/ui/ConfirmModal';
+import { useT } from '@/lib/i18n';
+import { commonMessages } from '@/lib/i18n/messages/common';
+import { checkoutMessages, richText } from '@/lib/i18n/messages/checkout';
 
 interface CatalogPromotion {
   id: string;
@@ -46,10 +49,10 @@ interface CatalogPromotion {
   discountValue: number;
 }
 
-function getPromotionLabel(p: CatalogPromotion): string {
-  if (p.type === 'percentage' && p.discountValue > 0) return `${p.discountValue}% off`;
-  if (p.type === 'fixed' && p.discountValue > 0) return `${formatPrice(p.discountValue)} off`;
-  return p.name || 'Deal';
+function getPromotionLabel(p: CatalogPromotion, t: (key: 'percentOff' | 'amountOff' | 'deal', vars?: Record<string, string | number>) => string): string {
+  if (p.type === 'percentage' && p.discountValue > 0) return t('percentOff', { value: p.discountValue });
+  if (p.type === 'fixed' && p.discountValue > 0) return t('amountOff', { amount: formatPrice(p.discountValue) });
+  return p.name || t('deal');
 }
 
 function getStackedDiscountedPrice(originalPrice: number, promos: CatalogPromotion[]): number {
@@ -103,6 +106,8 @@ function localItemsToCartResponse(localItems: LocalCartItem[]): CartResponse {
 
 export default function CartPage() {
   const router = useRouter();
+  const t = useT(checkoutMessages);
+  const tc = useT(commonMessages);
   const { isAuthenticated } = useAuthStore();
   const { showToast } = useToast();
   const storeItems = useCartStore((s) => s.items);
@@ -144,15 +149,15 @@ export default function CartPage() {
         if (res.data?.success && res.data?.data) {
           setAppliedPromoCode(res.data.data.code);
           setCartPromoInput('');
-          showToast(`Promo "${res.data.data.code}" applied! You save ${formatPrice(res.data.data.discountAmount)}`, 'success');
+          showToast(t('promoAppliedSave', { code: res.data.data.code, amount: formatPrice(res.data.data.discountAmount) }), 'success');
         }
       } else {
         setAppliedPromoCode(code);
         setCartPromoInput('');
-        showToast(`Promo "${code}" applied to tray! It will be verified at checkout.`, 'success');
+        showToast(t('promoAppliedTray', { code }), 'success');
       }
     } catch (err: any) {
-      const msg = err?.response?.data?.error?.message || 'Invalid or expired code';
+      const msg = err?.response?.data?.error?.message || t('invalidCode');
       showToast(msg, 'error');
     } finally {
       setPromoValidating(false);
@@ -331,7 +336,7 @@ export default function CartPage() {
         await cartService.updateCartItem(itemId, quantity);
       }
     } catch (error: any) {
-      showToast(error?.response?.data?.error?.message || 'Could not update quantity', 'error');
+      showToast(error?.response?.data?.error?.message || t('couldNotUpdateQty'), 'error');
       await restoreCart(snapshot);
     } finally {
       setUpdatingItem(null);
@@ -381,7 +386,7 @@ export default function CartPage() {
         await cartService.removeCartItem(itemId);
       }
     } catch (error: any) {
-      showToast(error?.response?.data?.error?.message || 'Failed to remove item', 'error');
+      showToast(error?.response?.data?.error?.message || t('failedRemoveItem'), 'error');
       await restoreCart(snapshot);
     } finally {
       setUpdatingItem(null);
@@ -397,9 +402,9 @@ export default function CartPage() {
       }
       clearCartStore();
       setCart(null);
-      showToast('Tray cleared', 'info');
+      showToast(t('trayCleared'), 'info');
     } catch (error: any) {
-      showToast(error?.response?.data?.error?.message || 'Failed to clear tray', 'error');
+      showToast(error?.response?.data?.error?.message || t('failedClearTray'), 'error');
     } finally {
       setClearingCart(false);
       setShowClearModal(false);
@@ -422,8 +427,7 @@ export default function CartPage() {
   const promotionSavings = hasItems ? Math.max(0, cart.summary.subtotal - discountedSubtotal) : 0;
   const deliveryFee = deliveryEstimate ? deliveryEstimate.deliveryFee : (discountedSubtotal >= 800 ? 0 : 80);
   const isFreeDelivery = deliveryEstimate ? deliveryEstimate.isFree : discountedSubtotal >= 800;
-  const gst = calculateGst(Math.max(0, discountedSubtotal - (cart?.summary.discount || 0)));
-  const displayTotal = discountedSubtotal + (isFreeDelivery ? 0 : deliveryFee) - (cart?.summary.discount || 0) + gst;
+  const { gst, total: displayTotal } = orderTotals(discountedSubtotal - (cart?.summary.discount || 0), isFreeDelivery ? 0 : deliveryFee);
 
   // Free delivery threshold progress (target Rs 800)
   const freeDeliveryThreshold = 800;
@@ -433,16 +437,16 @@ export default function CartPage() {
   if (loading) {
     return (
       <DashboardLayout
-        title="My Tray"
-        subtitle="Reviewing delicious home-prepared meals"
+        title={t('cartTitle')}
+        subtitle={t('cartLoadingSubtitle')}
         sidebarItems={sidebarItems}
         userType="customer"
       >
         <div className="flex items-center justify-center min-h-[400px]">
           <div className="text-center p-8 bg-white rounded-3xl border border-slate-200/80 shadow-xs max-w-sm">
             <div className="w-10 h-10 border-3 border-[#FF5500] border-t-transparent rounded-full animate-spin mx-auto mb-3" />
-            <p className="text-sm font-bold text-slate-900">Loading your food tray...</p>
-            <p className="text-xs text-slate-500 mt-1">Retrieving freshly selected dishes from kitchen</p>
+            <p className="text-sm font-bold text-slate-900">{t('loadingTray')}</p>
+            <p className="text-xs text-slate-500 mt-1">{t('loadingTrayHint')}</p>
           </div>
         </div>
       </DashboardLayout>
@@ -453,8 +457,8 @@ export default function CartPage() {
   if (!hasItems) {
     return (
       <DashboardLayout
-        title="My Tray"
-        subtitle="Your dining cart is currently empty"
+        title={t('cartTitle')}
+        subtitle={t('emptySubtitle')}
         sidebarItems={sidebarItems}
         userType="customer"
       >
@@ -466,53 +470,53 @@ export default function CartPage() {
             {/* Tray Icon */}
             <div className="relative inline-flex items-center justify-center w-24 h-24 rounded-3xl bg-gradient-to-tr from-amber-100 to-orange-100 border border-orange-200/80 shadow-inner mb-5">
               <ShoppingBag className="w-12 h-12 text-[#FF5500]" />
-              <span className="absolute -bottom-1.5 -right-1.5 px-2 py-0.5 rounded-full bg-slate-900 text-white text-[10px] font-black uppercase tracking-wider shadow-xs">
-                0 Items
+              <span className="absolute -bottom-1.5 -end-1.5 px-2 py-0.5 rounded-full bg-slate-900 text-white text-[10px] font-black uppercase tracking-wider shadow-xs">
+                {t('zeroItems')}
               </span>
             </div>
 
             <h2 className="text-2xl sm:text-3xl font-black text-slate-950 tracking-tight mb-2">
-              Your Food Tray is Empty
+              {t('emptyTitle')}
             </h2>
             <p className="text-sm text-slate-600 max-w-md mx-auto leading-relaxed mb-6">
-              Explore authentic certified home cooks, generational family recipes &amp; -18°C sub-zero frozen provisions in your community.
+              {t('emptyText')}
             </p>
 
             {/* Quick Cuisine Shortcut Pills */}
             <div className="mb-8">
               <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block mb-2.5">
-                Popular in your community
+                {t('popularNearby')}
               </span>
               <div className="flex flex-wrap items-center justify-center gap-2 max-w-lg mx-auto">
                 <Link
                   href="/products?category=biryani"
                   className="px-3 py-1.5 rounded-xl bg-white border border-slate-200 text-xs font-semibold text-slate-700 hover:border-[#FF5500] hover:text-[#FF5500] transition-colors shadow-2xs"
                 >
-                  🍛 Dum Biryani
+                  🍛 {t('pill.biryani')}
                 </Link>
                 <Link
                   href="/products?category=paratha"
                   className="px-3 py-1.5 rounded-xl bg-white border border-slate-200 text-xs font-semibold text-slate-700 hover:border-[#FF5500] hover:text-[#FF5500] transition-colors shadow-2xs"
                 >
-                  🫓 Hand-Rolled Parathas
+                  🫓 {t('pill.paratha')}
                 </Link>
                 <Link
                   href="/products?productType=frozen"
                   className="px-3 py-1.5 rounded-xl bg-white border border-slate-200 text-xs font-semibold text-slate-700 hover:border-cyan-500 hover:text-cyan-600 transition-colors shadow-2xs"
                 >
-                  ❄️ Frozen Packs
+                  ❄️ {t('pill.frozen')}
                 </Link>
                 <Link
                   href="/products?category=bbq"
                   className="px-3 py-1.5 rounded-xl bg-white border border-slate-200 text-xs font-semibold text-slate-700 hover:border-[#FF5500] hover:text-[#FF5500] transition-colors shadow-2xs"
                 >
-                  🔥 Smoky Seekh Kebabs
+                  🔥 {t('pill.kebab')}
                 </Link>
                 <Link
                   href="/products?category=desserts"
                   className="px-3 py-1.5 rounded-xl bg-white border border-slate-200 text-xs font-semibold text-slate-700 hover:border-amber-500 hover:text-amber-600 transition-colors shadow-2xs"
                 >
-                  🍯 Matka Kheer
+                  🍯 {t('pill.kheer')}
                 </Link>
               </div>
             </div>
@@ -522,14 +526,14 @@ export default function CartPage() {
               <Link href="/products" className="w-full sm:w-auto">
                 <span className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-8 py-3.5 rounded-2xl bg-gradient-to-r from-[#FF5500] to-[#FF3300] hover:from-[#e04400] hover:to-[#d02800] text-white text-sm font-bold shadow-md hover:shadow-lg transition-all active:scale-95 cursor-pointer">
                   <Sparkles className="w-4 h-4 text-amber-200" />
-                  <span>Discover Dishes &amp; Menus</span>
-                  <ArrowRight className="w-4 h-4" />
+                  <span>{t('discoverDishes')}</span>
+                  <ArrowRight className="rtl:-scale-x-100 w-4 h-4" />
                 </span>
               </Link>
               <Link href="/kitchens" className="w-full sm:w-auto">
                 <span className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-6 py-3.5 rounded-2xl bg-white border border-slate-200 hover:border-slate-300 text-slate-700 text-sm font-bold shadow-2xs hover:bg-slate-50 transition-colors cursor-pointer">
                   <ChefHat className="w-4 h-4 text-slate-400" />
-                  <span>Browse Home Kitchens</span>
+                  <span>{t('browseKitchens')}</span>
                 </span>
               </Link>
             </div>
@@ -544,8 +548,8 @@ export default function CartPage() {
 
   return (
     <DashboardLayout
-      title="My Dining Tray"
-      subtitle={`${cart.items.reduce((s, i) => s + i.quantity, 0)} freshly prepared dish${cart.items.length > 1 ? 'es' : ''} in your tray`}
+      title={t('cartTitleFull')}
+      subtitle={t(cart.items.length > 1 ? 'cartSubtitleMany' : 'cartSubtitleOne', { count: cart.items.reduce((s, i) => s + i.quantity, 0) })}
       sidebarItems={sidebarItems}
       userType="customer"
     >
@@ -570,11 +574,11 @@ export default function CartPage() {
                   )}
                   <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800">
                     <ShieldCheck className="w-3 h-3" />
-                    <span>Single-Kitchen Order</span>
+                    <span>{t('singleKitchenOrder')}</span>
                   </span>
                 </div>
                 <p className="text-xs text-slate-500 mt-1">
-                  Freshly cooked in small domestic batches for optimum hygiene and authentic flavor.
+                  {t('singleKitchenText')}
                 </p>
               </div>
             </div>
@@ -584,8 +588,8 @@ export default function CartPage() {
                 href={`/kitchens/${activeSeller.id}`}
                 className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-white border border-slate-200 hover:border-orange-300 text-xs font-bold text-[#FF5500] shadow-2xs hover:shadow-xs transition-all"
               >
-                <span>Add More Dishes</span>
-                <ChevronRight className="w-3.5 h-3.5" />
+                <span>{t('addMoreDishes')}</span>
+                <ChevronRight className="rtl:-scale-x-100 w-3.5 h-3.5" />
               </Link>
             </div>
           </div>
@@ -597,10 +601,13 @@ export default function CartPage() {
             <span className="font-bold text-slate-800 flex items-center gap-1.5">
               <Truck className="w-4 h-4 text-[#FF5500]" />
               {isFreeDelivery ? (
-                <span className="text-emerald-700 font-extrabold">🎉 You unlocked FREE Delivery!</span>
+                <span className="text-emerald-700 font-extrabold">{t('unlockedFree')}</span>
               ) : (
                 <span>
-                  Add <strong className="text-slate-950 font-black">{formatPrice(freeDeliveryRemaining)}</strong> more to unlock <span className="text-[#FF5500] font-bold">FREE Delivery</span>
+                  {richText(t('addMoreForFree'), {
+                    amount: <strong className="text-slate-950 font-black">{formatPrice(freeDeliveryRemaining)}</strong>,
+                    free: <span className="text-[#FF5500] font-bold">{t('freeDelivery')}</span>,
+                  })}
                 </span>
               )}
             </span>
@@ -628,9 +635,9 @@ export default function CartPage() {
                   <ShoppingCart className="w-4 h-4" />
                 </div>
                 <div>
-                  <h2 className="text-sm font-bold text-slate-900 leading-tight">Selected Dishes</h2>
+                  <h2 className="text-sm font-bold text-slate-900 leading-tight">{t('selectedDishes')}</h2>
                   <span className="text-[11px] text-slate-400">
-                    {cart.items.length} item{cart.items.length > 1 ? 's' : ''} in tray
+                    {t(cart.items.length > 1 ? 'itemsInTrayMany' : 'itemsInTrayOne', { count: cart.items.length })}
                   </span>
                 </div>
               </div>
@@ -641,7 +648,7 @@ export default function CartPage() {
                 className="text-xs font-semibold text-rose-600 hover:text-rose-700 hover:bg-rose-50 px-2.5 py-1.5 rounded-xl transition-colors flex items-center gap-1 cursor-pointer"
               >
                 <Trash2 className="w-3.5 h-3.5" />
-                <span>Clear Tray</span>
+                <span>{t('clearTray')}</span>
               </button>
             </div>
 
@@ -652,7 +659,7 @@ export default function CartPage() {
                 const originalPrice = item.variant?.price ?? item.product.price;
                 const unitPrice = promos.length > 0 ? getStackedDiscountedPrice(originalPrice, promos) : originalPrice;
                 const lineTotal = unitPrice * item.quantity;
-                const promotionLabel = promos.length > 0 ? promos.map(getPromotionLabel).join(' + ') : null;
+                const promotionLabel = promos.length > 0 ? promos.map((p) => getPromotionLabel(p, t)).join(' + ') : null;
                 const isItemUpdating = updatingItem === item.id;
 
                 return (
@@ -668,7 +675,9 @@ export default function CartPage() {
                       >
                         {item.product.image ? (
                           <img
-                            src={item.product.image}
+                            src={imageVariant(item.product.image, 'sm')}
+                            loading="lazy"
+                            decoding="async"
                             alt={item.product.name}
                             className="w-full h-full object-cover group-hover:scale-105 transition-transform"
                           />
@@ -678,19 +687,19 @@ export default function CartPage() {
                           </div>
                         )}
                         <span
-                          className={`absolute bottom-1.5 left-1.5 px-2 py-0.5 rounded-md text-[9px] font-bold text-white shadow-xs flex items-center gap-1 ${
+                          className={`absolute bottom-1.5 start-1.5 px-2 py-0.5 rounded-md text-[9px] font-bold text-white shadow-xs flex items-center gap-1 ${
                             item.stockType === 'hub' ? 'bg-cyan-600' : 'bg-[#FF5500]'
                           }`}
                         >
                           {item.stockType === 'hub' ? (
                             <>
                               <Snowflake className="w-2.5 h-2.5" />
-                              <span>Frozen</span>
+                              <span>{t('frozen')}</span>
                             </>
                           ) : (
                             <>
                               <Flame className="w-2.5 h-2.5" />
-                              <span>Fresh</span>
+                              <span>{t('fresh')}</span>
                             </>
                           )}
                         </span>
@@ -715,7 +724,7 @@ export default function CartPage() {
                             type="button"
                             onClick={() => handleRemoveItem(item.id)}
                             className="w-7 h-7 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 flex items-center justify-center transition-colors shrink-0"
-                            title="Remove dish"
+                            title={t('removeDish')}
                           >
                             <X className="w-4 h-4" />
                           </button>
@@ -735,7 +744,7 @@ export default function CartPage() {
                               type="button"
                               onClick={() => handleUpdateQuantity(item.id, item.quantity - 1)}
                               className="w-7 h-7 rounded-lg bg-white text-slate-800 font-bold hover:bg-slate-200 flex items-center justify-center text-xs shadow-2xs transition-colors"
-                              title="Decrease"
+                              title={t('decrease')}
                             >
                               −
                             </button>
@@ -746,13 +755,13 @@ export default function CartPage() {
                               type="button"
                               onClick={() => handleUpdateQuantity(item.id, item.quantity + 1)}
                               className="w-7 h-7 rounded-lg bg-[#FF5500] text-white font-bold hover:bg-[#e04400] flex items-center justify-center text-xs shadow-2xs transition-colors"
-                              title="Increase"
+                              title={t('increase')}
                             >
                               +
                             </button>
                           </div>
 
-                          <div className="text-right">
+                          <div className="text-end">
                             <span className="text-base font-black text-slate-950 block">
                               {formatPrice(lineTotal)}
                             </span>
@@ -775,16 +784,16 @@ export default function CartPage() {
           <div className="lg:col-span-1 sticky top-20">
             <div className="bg-white rounded-3xl border border-slate-200/90 shadow-sm p-5 sm:p-6 space-y-4">
               <h3 className="text-base font-extrabold text-slate-950 pb-3 border-b border-slate-100 flex items-center justify-between">
-                <span>Order Summary</span>
+                <span>{t('orderSummary')}</span>
                 <span className="text-xs font-semibold text-slate-400">
-                  {cart.items.length} item{cart.items.length > 1 ? 's' : ''}
+                  {t(cart.items.length > 1 ? 'itemsMany' : 'itemsOne', { count: cart.items.length })}
                 </span>
               </h3>
 
               {/* Cost Rows */}
               <div className="space-y-2.5 text-xs">
                 <div className="flex justify-between text-slate-600 font-medium">
-                  <span>Dishes Subtotal</span>
+                  <span>{t('dishesSubtotal')}</span>
                   <span className="font-bold text-slate-900">{formatPrice(discountedSubtotal)}</span>
                 </div>
 
@@ -792,7 +801,7 @@ export default function CartPage() {
                   <div className="flex justify-between text-emerald-600 font-semibold">
                     <span className="flex items-center gap-1">
                       <Tag className="w-3.5 h-3.5" />
-                      <span>Promotions Savings</span>
+                      <span>{t('promotionsSavings')}</span>
                     </span>
                     <span>-{formatPrice(promotionSavings)}</span>
                   </div>
@@ -801,23 +810,23 @@ export default function CartPage() {
                 <div className="flex justify-between text-slate-600 font-medium">
                   <span className="flex items-center gap-1.5">
                     <Snowflake className="w-3.5 h-3.5 text-cyan-600" />
-                    <span>Sub-Zero Insulated Pack</span>
+                    <span>{t('insulatedPack')}</span>
                   </span>
-                  <span className="text-emerald-700 font-bold uppercase text-[10px]">Free</span>
+                  <span className="text-emerald-700 font-bold uppercase text-[10px]">{tc('free')}</span>
                 </div>
 
                 <div className="flex justify-between text-slate-600 font-medium">
                   <span className="flex items-center gap-1.5">
                     <Truck className="w-3.5 h-3.5 text-slate-400" />
-                    <span>Estimated Delivery</span>
+                    <span>{t('estimatedDelivery')}</span>
                   </span>
                   <span className={`font-bold ${isFreeDelivery ? 'text-emerald-600' : 'text-slate-900'}`}>
-                    {isFreeDelivery ? 'FREE' : formatPrice(deliveryFee)}
+                    {isFreeDelivery ? t('freeCaps') : formatPrice(deliveryFee)}
                   </span>
                 </div>
 
                 <div className="flex justify-between text-slate-600 font-medium">
-                  <span>Sindh/Punjab Sales Tax (5% GST)</span>
+                  <span>{t('salesTaxRegional')}</span>
                   <span className="font-bold text-slate-900">{formatPrice(gst)}</span>
                 </div>
               </div>
@@ -826,23 +835,23 @@ export default function CartPage() {
               <div className="pt-2">
                 <div className="p-3 rounded-2xl bg-slate-50 border border-slate-200">
                   <span className="text-[11px] font-bold text-slate-700 uppercase tracking-wider block mb-1.5">
-                    Voucher or Coupon Code
+                    {t('voucherCode')}
                   </span>
                   {appliedPromoCode ? (
                     <div className="flex items-center justify-between bg-white px-3 py-2 rounded-xl border border-emerald-300">
                       <div className="flex items-center gap-1.5">
                         <Check className="w-3.5 h-3.5 text-emerald-600 stroke-[3]" />
-                        <span className="text-xs font-bold text-slate-900 font-mono">{appliedPromoCode}</span>
+                        <span className="text-xs font-bold text-slate-900 font-mono" data-ltr>{appliedPromoCode}</span>
                       </div>
                       <button
                         type="button"
                         onClick={() => {
                           setAppliedPromoCode(null);
-                          showToast('Voucher removed', 'info');
+                          showToast(t('voucherRemoved'), 'info');
                         }}
                         className="text-xs font-bold text-rose-500 hover:text-rose-700"
                       >
-                        Remove
+                        {tc('remove')}
                       </button>
                     </div>
                   ) : (
@@ -851,7 +860,8 @@ export default function CartPage() {
                         type="text"
                         value={cartPromoInput}
                         onChange={(e) => setCartPromoInput(e.target.value.toUpperCase())}
-                        placeholder="e.g. NURAY50"
+                        placeholder={t('promoPlaceholder')}
+                        dir="ltr"
                         className="flex-1 px-3 py-1.5 text-xs border border-slate-200 rounded-xl focus:ring-1 focus:ring-orange-500 focus:outline-none bg-white font-mono uppercase"
                       />
                       <Button
@@ -861,7 +871,7 @@ export default function CartPage() {
                         onClick={handleApplyPromoInCart}
                         className="text-xs font-bold bg-slate-900 hover:bg-[#FF5500] text-white px-3 rounded-xl transition-colors"
                       >
-                        {promoValidating ? '...' : 'Apply'}
+                        {promoValidating ? '...' : t('apply')}
                       </Button>
                     </div>
                   )}
@@ -871,11 +881,11 @@ export default function CartPage() {
               {/* Total Row */}
               <div className="pt-3 border-t border-slate-100">
                 <div className="flex items-baseline justify-between">
-                  <span className="text-sm font-bold text-slate-900">Total Payable</span>
+                  <span className="text-sm font-bold text-slate-900">{t('totalPayable')}</span>
                   <span className="text-2xl font-black text-slate-950">{formatPrice(displayTotal)}</span>
                 </div>
                 <span className="text-[10px] text-slate-400 block mt-0.5">
-                  Includes all food prices, packaging &amp; local sales tax
+                  {t('includesAll')}
                 </span>
               </div>
 
@@ -887,8 +897,8 @@ export default function CartPage() {
                     className="w-full py-4 rounded-2xl bg-gradient-to-r from-[#FF5500] to-[#FF3300] hover:from-[#e04400] hover:to-[#d02800] text-white text-base font-black shadow-md hover:shadow-lg transition-all active:scale-98 flex items-center justify-center gap-2 cursor-pointer"
                   >
                     <ShoppingBag className="w-5 h-5 text-white" />
-                    <span>Proceed to Checkout</span>
-                    <ArrowRight className="w-4 h-4 ml-1" />
+                    <span>{t('proceedCheckout')}</span>
+                    <ArrowRight className="rtl:-scale-x-100 w-4 h-4 ms-1" />
                   </button>
                 </Link>
               ) : (
@@ -897,8 +907,8 @@ export default function CartPage() {
                     type="button"
                     className="w-full py-4 rounded-2xl bg-gradient-to-r from-[#FF5500] to-[#FF3300] hover:from-[#e04400] hover:to-[#d02800] text-white text-base font-black shadow-md hover:shadow-lg transition-all active:scale-98 flex items-center justify-center gap-2 cursor-pointer"
                   >
-                    <span>Sign In to Complete Order</span>
-                    <ArrowRight className="w-4 h-4 ml-1" />
+                    <span>{t('signInToComplete')}</span>
+                    <ArrowRight className="rtl:-scale-x-100 w-4 h-4 ms-1" />
                   </button>
                 </Link>
               )}
@@ -908,8 +918,8 @@ export default function CartPage() {
                   type="button"
                   className="w-full py-2.5 rounded-xl bg-slate-50 hover:bg-slate-100 text-slate-700 text-xs font-bold border border-slate-200 transition-colors flex items-center justify-center gap-1.5"
                 >
-                  <ChevronLeft className="w-3.5 h-3.5" />
-                  <span>Continue Exploring Menus</span>
+                  <ChevronLeft className="rtl:-scale-x-100 w-3.5 h-3.5" />
+                  <span>{t('continueExploring')}</span>
                 </button>
               </Link>
 
@@ -917,11 +927,11 @@ export default function CartPage() {
               <div className="pt-3 border-t border-slate-100 space-y-1.5 text-[11px] text-slate-500 font-medium">
                 <div className="flex items-center gap-2">
                   <ShieldCheck className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-                  <span>100% Halal &amp; Hygiene Verified Domestic Kitchen</span>
+                  <span>{t('trustHalal')}</span>
                 </div>
                 <div className="flex items-center gap-2">
                   <Lock className="w-3.5 h-3.5 text-slate-600 shrink-0" />
-                  <span>Encrypted Bank &amp; Mobile Wallet Checkout</span>
+                  <span>{t('trustEncrypted')}</span>
                 </div>
               </div>
             </div>
@@ -931,10 +941,10 @@ export default function CartPage() {
 
       <ConfirmModal
         isOpen={showClearModal}
-        title="Clear Your Dining Tray?"
-        message="Are you sure you want to remove all dishes from your tray? This will empty your dining tray."
-        confirmText="Yes, Clear Tray"
-        cancelText="Keep Dishes"
+        title={t('clearModalTitle')}
+        message={t('clearModalMessageCart')}
+        confirmText={t('clearModalConfirm')}
+        cancelText={t('clearModalCancel')}
         variant="danger"
         loading={clearingCart}
         onConfirm={handleClearCart}

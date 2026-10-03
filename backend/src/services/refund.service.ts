@@ -1,7 +1,8 @@
 import prisma from '../config/database';
+import { notify } from './notify.service';
 import { AppError } from '../middleware/errorHandler';
 import { parseBreakdown } from '../utils/deliveryEarnings';
-import { GST_RATE } from '../utils/pricing';
+import { GST_RATE, priceOrder } from '../utils/pricing';
 
 type Tx = Parameters<Parameters<typeof prisma.$transaction>[0]>[0];
 
@@ -175,7 +176,7 @@ async function shrinkUnpaidOrder(tx: Tx, order: any) {
   // Legacy orders have no per-seller split, so their delivery fee stays as it was.
   const deliveryFee = breakdown.length ? money(liveBreakdown.reduce((sum, r) => sum + r.fee, 0)) : Number(order.deliveryFee);
 
-  const taxAmount = money((subtotal - discount) * GST_RATE);
+  const { taxAmount, totalAmount } = priceOrder(subtotal - discount, deliveryFee);
   await tx.order.update({
     where: { id: order.id },
     data: {
@@ -184,7 +185,7 @@ async function shrinkUnpaidOrder(tx: Tx, order: any) {
       deliveryFee,
       deliveryFeeBreakdown: breakdown.length ? (liveBreakdown as any) : undefined,
       taxAmount,
-      totalAmount: money(subtotal + deliveryFee - discount + taxAmount),
+      totalAmount,
     },
   });
 }
@@ -246,6 +247,26 @@ export async function refundForCancelledItems(
  * completed, the order's paymentStatus becomes 'refunded'.
  */
 export async function completeRefund(refundId: string, adminId: string, reference?: string) {
+  const refund = await completeRefundRecord(refundId, adminId, reference);
+  // After the commit: tell the customer the money is on its way.
+  const order = await prisma.order.findUnique({ where: { id: refund.orderId }, select: { orderNumber: true, customerId: true } });
+  if (order?.customerId) {
+    await notify({
+      userId: order.customerId,
+      category: 'payments',
+      type: 'payment',
+      title: 'Refund sent',
+      message: `We sent your refund of Rs ${Number(refund.amount).toLocaleString()} for order #${order.orderNumber}${refund.reference ? ` (reference ${refund.reference})` : ''}.`,
+      actionUrl: `/orders/${refund.orderId}`,
+      data: { orderId: refund.orderId, refundId },
+      channels: ['push', 'email'],
+      dedupeKey: `refund:${refundId}:sent`,
+    });
+  }
+  return refund;
+}
+
+async function completeRefundRecord(refundId: string, adminId: string, reference?: string) {
   return prisma.$transaction(async (tx) => {
     const claimed = await tx.refund.updateMany({
       where: { id: refundId, status: 'pending' },
@@ -338,13 +359,32 @@ export async function listRefunds(filters: { status?: string; page?: number; lim
       skip: (page - 1) * limit,
       take: limit,
       include: {
-        order: { select: { orderNumber: true, paymentMethod: true, totalAmount: true, customerId: true } },
+        order: {
+          select: {
+            orderNumber: true,
+            paymentMethod: true,
+            totalAmount: true,
+            customerId: true,
+            // Where the money came from, so a manual refund can go back the same way.
+            paymentSenderAccount: true,
+            paymentReferenceNumber: true,
+            customer: { select: { phone: true, email: true, profile: { select: { fullName: true } } } },
+          },
+        },
       },
     }),
     prisma.refund.count({ where }),
   ]);
   return {
-    refunds: rows.map((r) => ({ ...r, amount: Number(r.amount), order: { ...r.order, totalAmount: Number(r.order.totalAmount) } })),
+    refunds: rows.map((r) => {
+      const { customer, ...order } = r.order;
+      return {
+        ...r,
+        amount: Number(r.amount),
+        order: { ...order, totalAmount: Number(order.totalAmount) },
+        customer: customer ? { name: customer.profile?.fullName ?? null, phone: customer.phone, email: customer.email } : null,
+      };
+    }),
     pagination: { page, limit, total, totalPages: Math.ceil(total / limit) },
   };
 }

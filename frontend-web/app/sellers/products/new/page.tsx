@@ -631,14 +631,14 @@ export default function AddProductPage() {
                 <div key={index} className="relative aspect-square rounded-xl overflow-hidden border-2 border-gray-200 group hover:border-purple-400 transition-all">
                   <img src={img.preview} alt={`Product ${index + 1}`} className="w-full h-full object-cover" />
                   {img.isPrimary && (
-                    <div className="absolute top-2 left-2 bg-gradient-to-r from-purple-500 to-pink-500 text-white text-xs px-2 py-1 rounded-full font-bold shadow-md">
+                    <div className="absolute top-2 start-2 bg-gradient-to-r from-purple-500 to-pink-500 text-white text-xs px-2 py-1 rounded-full font-bold shadow-md">
                       Main Photo
                     </div>
                   )}
                   <button
                     type="button"
                     onClick={() => removeImage(index)}
-                    className="absolute top-2 right-2 bg-red-500 hover:bg-red-600 text-white p-1.5 rounded-full opacity-0 group-hover:opacity-100 transition-all shadow-lg"
+                    className="absolute top-2 end-2 bg-red-500 hover:bg-red-600 text-white p-1.5 rounded-full opacity-0 group-hover:opacity-100 transition-all shadow-lg"
                   >
                     <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                       <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
@@ -728,7 +728,7 @@ export default function AddProductPage() {
             <div className="mb-5">
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 <span>Name in Urdu</span>
-                <span className="text-gray-400 font-normal ml-2">(اختیاری - reaches more customers)</span>
+                <span className="text-gray-400 font-normal ms-2">(اختیاری - reaches more customers)</span>
               </label>
               <input
                 type="text"
@@ -736,7 +736,7 @@ export default function AddProductPage() {
                 onChange={(e) => setFormData({ ...formData, nameUrdu: e.target.value })}
                 placeholder="مثال: چکن سموسہ (12 کا پیک)"
                 maxLength={100}
-                className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent text-right transition-all"
+                className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent text-end transition-all"
                 dir="rtl"
               />
               <p className="text-xs text-blue-600 mt-1 flex items-center gap-1">
@@ -748,7 +748,7 @@ export default function AddProductPage() {
             {/* STEP 1: Product Type Selection - This comes FIRST now */}
             <div className="mb-6">
               <label className="block text-sm font-medium text-gray-700 mb-3">
-                <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-blue-500 text-white text-xs font-bold mr-2">1</span>
+                <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-blue-500 text-white text-xs font-bold me-2">1</span>
                 Product Type <span className="text-red-500">*</span>
               </label>
               <div className="grid grid-cols-2 gap-3">
@@ -768,7 +768,7 @@ export default function AddProductPage() {
                         setFormData({ ...formData, productType: type.value as typeof formData.productType, categoryId: '' });
                         setSelectedParentId(null);
                       }}
-                      className={`p-4 rounded-xl text-left transition-all border-2 ${
+                      className={`p-4 rounded-xl text-start transition-all border-2 ${
                         isSelected
                           ? `${colorClasses[type.color as keyof typeof colorClasses]} shadow-md`
                           : 'bg-gray-50 border-gray-200 hover:border-gray-300'
@@ -789,7 +789,7 @@ export default function AddProductPage() {
             {formData.productType && (
               <div className="mb-6">
                 <label className="block text-sm font-medium text-gray-700 mb-3">
-                  <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-blue-500 text-white text-xs font-bold mr-2">2</span>
+                  <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-blue-500 text-white text-xs font-bold me-2">2</span>
                   Category <span className="text-red-500">*</span>
                 </label>
                 
@@ -818,7 +818,7 @@ export default function AddProductPage() {
                         <span>{cat.iconUrl || '📦'}</span>
                         <span>{cat.name}</span>
                         {cat.children && cat.children.length > 0 && (
-                          <span className="text-xs opacity-70 ml-1">({cat.children.length})</span>
+                          <span className="text-xs opacity-70 ms-1">({cat.children.length})</span>
                         )}
                       </button>
                     ))}
@@ -838,7 +838,7 @@ export default function AddProductPage() {
                 return (
                   <div className="mb-6">
                     <label className="block text-sm font-medium text-gray-700 mb-3">
-                      <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-blue-500 text-white text-xs font-bold mr-2">3</span>
+                      <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-blue-500 text-white text-xs font-bold me-2">3</span>
                       Subcategory in <span className="font-semibold">{parentCat.name}</span>
                     </label>
                     <div className="bg-gray-50 rounded-xl p-4 border border-gray-200">
@@ -1056,7 +1056,7 @@ export default function AddProductPage() {
                   Selling Price <span className="text-red-500">*</span>
                 </label>
                 <div className="relative group">
-                  <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500 font-semibold text-lg">Rs.</span>
+                  <span className="absolute start-4 top-1/2 -translate-y-1/2 text-gray-500 font-semibold text-lg">Rs.</span>
                   <input
                     type="number"
                     id="product-price-input"
@@ -1064,11 +1064,11 @@ export default function AddProductPage() {
                     onChange={(e) => setFormData({ ...formData, price: e.target.value })}
                     placeholder="299"
                     min="0"
-                    step="10"
-                    className="w-full pl-14 pr-4 py-3 text-xl font-bold border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 transition-all group-hover:border-gray-300"
+                    step="any"
+                    className="w-full ps-14 pe-4 py-3 text-xl font-bold border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 transition-all group-hover:border-gray-300"
                   />
                   {formData.price && parseFloat(formData.price) > 0 && (
-                    <div className="absolute -top-2 right-2 bg-emerald-500 text-white text-xs px-2 py-0.5 rounded-full font-medium">
+                    <div className="absolute -top-2 end-2 bg-emerald-500 text-white text-xs px-2 py-0.5 rounded-full font-medium">
                       Customer pays this
                     </div>
                   )}
@@ -1082,15 +1082,15 @@ export default function AddProductPage() {
                   Original Price <span className="text-gray-400 font-normal">(optional - for showing discount)</span>
                 </label>
                 <div className="relative">
-                  <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 text-lg">Rs.</span>
+                  <span className="absolute start-4 top-1/2 -translate-y-1/2 text-gray-400 text-lg">Rs.</span>
                   <input
                     type="number"
                     value={formData.originalPrice}
                     onChange={(e) => setFormData({ ...formData, originalPrice: e.target.value })}
                     placeholder="350"
                     min="0"
-                    step="10"
-                    className="w-full pl-14 pr-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                    step="any"
+                    className="w-full ps-14 pe-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
                   />
                 </div>
                 {discount > 0 ? (
@@ -1115,15 +1115,15 @@ export default function AddProductPage() {
                   </div>
                 </label>
                 <div className="relative">
-                  <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 text-lg">Rs.</span>
+                  <span className="absolute start-4 top-1/2 -translate-y-1/2 text-gray-400 text-lg">Rs.</span>
                   <input
                     type="number"
                     value={formData.costPrice}
                     onChange={(e) => setFormData({ ...formData, costPrice: e.target.value })}
                     placeholder="180"
                     min="0"
-                    step="10"
-                    className="w-full pl-14 pr-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all"
+                    step="any"
+                    className="w-full ps-14 pe-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all"
                   />
                 </div>
                 <p className="text-xs text-gray-500 mt-1">💡 Include: ingredients + packaging + labor + overhead costs</p>
@@ -1175,11 +1175,11 @@ export default function AddProductPage() {
                     onChange={(e) => setFormData({ ...formData, stockQuantity: e.target.value })}
                     placeholder="50"
                     min="1"
-                    step="5"
+                    step="1"
                     className="w-full px-4 py-3 text-lg font-semibold border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
                   />
                   {formData.stockQuantity && parseInt(formData.stockQuantity) > 0 && (
-                    <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                    <div className="absolute end-3 top-1/2 -translate-y-1/2">
                       <span className={`text-xs font-bold px-2 py-1 rounded-full ${
                         parseInt(formData.stockQuantity) > 20 ? 'bg-emerald-100 text-emerald-700' :
                         parseInt(formData.stockQuantity) > 10 ? 'bg-amber-100 text-amber-700' :
@@ -1244,7 +1244,7 @@ export default function AddProductPage() {
                         <h4 className="font-semibold text-gray-900">
                           Variant {index + 1}
                           {variant.isDefault && (
-                            <span className="ml-2 bg-blue-100 text-blue-700 px-2 py-0.5 rounded text-xs">
+                            <span className="ms-2 bg-blue-100 text-blue-700 px-2 py-0.5 rounded text-xs">
                               Default
                             </span>
                           )}
@@ -1294,7 +1294,7 @@ export default function AddProductPage() {
                             value={variant.nameUrdu || ''}
                             onChange={(e) => updateVariant(index, 'nameUrdu', e.target.value)}
                             placeholder="چھوٹا پیک (6 عدد)"
-                            className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm text-right focus:ring-2 focus:ring-purple-500"
+                            className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm text-end focus:ring-2 focus:ring-purple-500"
                             dir="rtl"
                           />
                         </div>
@@ -1305,7 +1305,7 @@ export default function AddProductPage() {
                             Price *
                           </label>
                           <div className="relative">
-                            <span className="absolute left-2 top-1/2 -translate-y-1/2 text-gray-400 text-sm">
+                            <span className="absolute start-2 top-1/2 -translate-y-1/2 text-gray-400 text-sm">
                               Rs.
                             </span>
                             <input
@@ -1314,7 +1314,7 @@ export default function AddProductPage() {
                               onChange={(e) => updateVariant(index, 'price', parseFloat(e.target.value) || 0)}
                               placeholder="300"
                               min="0"
-                              className="w-full pl-10 pr-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-purple-500"
+                              className="w-full ps-10 pe-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-purple-500"
                             />
                           </div>
                         </div>
@@ -1325,7 +1325,7 @@ export default function AddProductPage() {
                             Original Price
                           </label>
                           <div className="relative">
-                            <span className="absolute left-2 top-1/2 -translate-y-1/2 text-gray-400 text-sm">
+                            <span className="absolute start-2 top-1/2 -translate-y-1/2 text-gray-400 text-sm">
                               Rs.
                             </span>
                             <input
@@ -1334,7 +1334,7 @@ export default function AddProductPage() {
                               onChange={(e) => updateVariant(index, 'originalPrice', parseFloat(e.target.value) || undefined)}
                               placeholder="350"
                               min="0"
-                              className="w-full pl-10 pr-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-purple-500"
+                              className="w-full ps-10 pe-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-purple-500"
                             />
                           </div>
                         </div>
@@ -1345,7 +1345,7 @@ export default function AddProductPage() {
                             Your Cost
                           </label>
                           <div className="relative">
-                            <span className="absolute left-2 top-1/2 -translate-y-1/2 text-gray-400 text-sm">
+                            <span className="absolute start-2 top-1/2 -translate-y-1/2 text-gray-400 text-sm">
                               Rs.
                             </span>
                             <input
@@ -1354,7 +1354,7 @@ export default function AddProductPage() {
                               onChange={(e) => updateVariant(index, 'costPrice', parseFloat(e.target.value) || undefined)}
                               placeholder="180"
                               min="0"
-                              className="w-full pl-10 pr-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-purple-500"
+                              className="w-full ps-10 pe-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-purple-500"
                             />
                           </div>
                         </div>
@@ -1410,7 +1410,7 @@ export default function AddProductPage() {
                               <span className="text-gray-600">Profit per unit:</span>
                               <span className="font-bold text-emerald-700">
                                 Rs {(variant.price - variant.costPrice - (variant.price * 0.15)).toFixed(0)}
-                                <span className="ml-1 text-gray-500">
+                                <span className="ms-1 text-gray-500">
                                   ({(((variant.price - variant.costPrice - (variant.price * 0.15)) / variant.price) * 100).toFixed(1)}%)
                                 </span>
                               </span>
@@ -1460,7 +1460,7 @@ export default function AddProductPage() {
                     key={option.value}
                     type="button"
                     onClick={() => setFormData({ ...formData, stockType: option.value as 'direct' | 'hub' | 'both' })}
-                    className={`p-3 rounded-xl border-2 text-left transition-all ${
+                    className={`p-3 rounded-xl border-2 text-start transition-all ${
                       formData.stockType === option.value
                         ? 'border-blue-500 bg-blue-50'
                         : 'border-gray-200 hover:border-gray-300'
@@ -1564,7 +1564,7 @@ export default function AddProductPage() {
                   <span className="flex items-center justify-center gap-2">
                     <span className="text-xl">✨</span>
                     <span>Create Product</span>
-                    <span className="text-xs opacity-75 ml-2 px-2 py-1 bg-white bg-opacity-20 rounded">Ctrl+S</span>
+                    <span className="text-xs opacity-75 ms-2 px-2 py-1 bg-white bg-opacity-20 rounded">Ctrl+S</span>
                   </span>
                 )}
               </Button>

@@ -24,7 +24,8 @@ logs
 *.log
 .DS_Store
 
-# Uploads dir is dev-only (real uploads go to Cloudinary)
+# Local uploads never go into the image: in production they live in object storage
+# (STORAGE_DRIVER=s3) or on the persistent volume mounted at /app/uploads.
 uploads
 
 # Documentation / status files at this directory level

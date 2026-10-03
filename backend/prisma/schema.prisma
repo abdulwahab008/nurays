@@ -2,12 +2,16 @@
 // learn more about it in the docs: https://pris.ly/d/prisma-schema
 
 generator client {
-  provider = "prisma-client-js"
+  provider        = "prisma-client-js"
+  previewFeatures = ["postgresqlExtensions"]
 }
 
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider   = "postgresql"
+  url        = env("DATABASE_URL")
+  // pg_trgm: indexes for the catalog's "contains" search. Bundled with PostgreSQL and
+  // enabled on every major managed service (RDS, Cloud SQL, Azure, Supabase, Neon).
+  extensions = [pg_trgm]
 }
 
 // ============================================
@@ -32,10 +36,13 @@ model User {
   // Sessions issued before this instant are void (set on password reset, Google takeover of an
   // unverified account, phone eviction). Without it a 30-day refresh token outlives all of those.
   tokensValidAfter DateTime? @map("tokens_valid_after")
+  // Which notifications reach this person by push, email and SMS, per kind (null: defaults).
+  notificationPreferences Json? @map("notification_preferences")
   createdAt     DateTime  @default(now()) @map("created_at")
   updatedAt     DateTime  @updatedAt @map("updated_at")
 
   profile       UserProfile?
+  pushSubscriptions PushSubscription[]
   primaryCommunity Community? @relation(fields: [primaryCommunityId], references: [id], onDelete: SetNull)
   addresses     UserAddress[]
   managedHubs   HubCenter[] @relation("HubManager")
@@ -52,6 +59,7 @@ model User {
   activityLogs  UserActivityLog[]
   searchQueries SearchQuery[]
   wallet        Wallet?
+  paymentAttempts PaymentAttempt[]
   emailVerification EmailVerification?
 
   @@index([primaryCommunityId])
@@ -150,6 +158,9 @@ model Seller {
   totalReviews      Int       @default(0) @map("total_reviews")
   totalOrders       Int       @default(0) @map("total_orders")
   totalSales        Decimal   @default(0) @map("total_sales") @db.Decimal(12, 2)
+  // Ranking scores, kept up to date by ranking.service.ts.
+  trendScore        Float     @default(0) @map("trend_score")
+  ratingScore       Float     @default(4) @map("rating_score")
   commissionRate    Decimal   @default(15.00) @map("commission_rate") @db.Decimal(5, 2)
   isVerified        Boolean   @default(false) @map("is_verified")
   isFeatured        Boolean   @default(false) @map("is_featured")
@@ -382,6 +393,11 @@ model Product {
   ratingAverage         Decimal   @default(0) @map("rating_average") @db.Decimal(3, 2)
   totalReviews          Int       @default(0) @map("total_reviews")
   totalOrders           Int       @default(0) @map("total_orders")
+  // Ranking scores, kept up to date by ranking.service.ts (see there for the formulas):
+  // demand over the last two weeks with recent orders counting most, and the rating
+  // pulled towards the average until there are enough reviews to trust it.
+  trendScore            Float     @default(0) @map("trend_score")
+  ratingScore           Float     @default(4) @map("rating_score")
   viewsCount            Int       @default(0) @map("views_count")
   isFeatured            Boolean   @default(false) @map("is_featured")
   isActive              Boolean   @default(true) @map("is_active")
@@ -404,7 +420,13 @@ model Product {
 
   @@index([sellerId])
   @@index([categoryId])
-  @@index([approvalStatus, isActive])
+  // The public catalog's filter, in its default (newest first) order.
+  @@index([approvalStatus, isActive, createdAt(sort: Desc)])
+  @@index([trendScore(sort: Desc)])
+  // Catalog search (case-insensitive "contains") on name, Urdu name and description.
+  @@index([name(ops: raw("gin_trgm_ops"))], type: Gin, map: "products_name_trgm_idx")
+  @@index([nameUrdu(ops: raw("gin_trgm_ops"))], type: Gin, map: "products_name_urdu_trgm_idx")
+  @@index([description(ops: raw("gin_trgm_ops"))], type: Gin, map: "products_description_trgm_idx")
 
   @@map("products")
 }
@@ -597,7 +619,22 @@ model Order {
   paymentConfirmedBy  String?   @map("payment_confirmed_by") // seller, admin
   paymentConfirmedAt  DateTime? @map("payment_confirmed_at")
   paymentDisputeReason String?  @map("payment_dispute_reason")
+  // Who physically received the customer's money, set when the order becomes paid:
+  // 'platform' (wallet / online gateway), 'seller' (transfer into the seller's own account, or
+  // cash at a self-delivery / pickup) or 'rider' (cash to a Nuray rider, owed to the platform).
+  // Seller balances and payouts are computed from this (see seller-balance.service.ts).
+  paymentCollectedBy  String?   @map("payment_collected_by")
   deliveryType        String    @map("delivery_type") // home_delivery, hub_pickup, self_pickup
+  // Who delivers a home delivery: 'platform' (a Nuray rider) or 'self' (the seller). Null for pickups.
+  deliveryProvider    String?   @map("delivery_provider")
+  // The customer's handover code: whoever hands the order over (rider, self-delivering
+  // seller, pickup counter) must enter it. Only the customer is ever shown it; the
+  // Prisma client omits it from every query unless explicitly selected (config/database.ts).
+  handoverCode        String?   @map("handover_code")
+  handoverAttempts    Int       @default(0) @map("handover_attempts")
+  // One checkout attempt = one key (Idempotency-Key header): a retry after a timeout
+  // returns the order already placed instead of creating a duplicate.
+  idempotencyKey      String?   @map("idempotency_key")
   deliveryAddressId   String?   @map("delivery_address_id")
   deliveryAddressSnapshot Json? @map("delivery_address_snapshot")
   hubId               String?   @map("hub_id")
@@ -626,7 +663,9 @@ model Order {
   hubAllocations      HubBatchAllocation[]
   supportTickets      SupportTicket[]
   walletTransactions  WalletTransaction[]
+  paymentAttempts     PaymentAttempt[]
 
+  @@unique([customerId, idempotencyKey])
   @@index([customerId, createdAt])
   @@index([orderStatus])
   @@index([paymentStatus])
@@ -667,7 +706,8 @@ model OrderItem {
   reviews         Review[]
 
   @@index([orderId])
-  @@index([sellerId])
+  // A seller's items by date: daily order caps, dashboards and reports.
+  @@index([sellerId, createdAt])
   @@index([productId])
 
   @@map("order_items")
@@ -708,11 +748,16 @@ model Rider {
   // cannot see or claim any delivery until an admin sets this to "approved".
   verificationStatus String    @default("pending") @map("verification_status")
   rejectionReason    String?   @map("rejection_reason")
+  // Most cash-on-delivery money this rider may hold before depositing it (null = the default,
+  // RIDER_CASH_LIMIT). Cash orders aren't offered beyond it.
+  cashLimit          Decimal?  @map("cash_limit") @db.Decimal(10, 2)
   createdAt          DateTime  @default(now()) @map("created_at")
   updatedAt          DateTime  @updatedAt @map("updated_at")
 
   hub             HubCenter? @relation(fields: [hubId], references: [id], onDelete: SetNull)
   deliveries      Delivery[]
+  ledgerEntries   RiderLedgerEntry[]
+  documents       RiderDocument[]
 
   @@index([status, verificationStatus])
 
@@ -744,15 +789,63 @@ model Delivery {
   deliveryPhotoUrl      String?   @map("delivery_photo_url")
   customerSignature     String?   @map("customer_signature")
   deliveryNotes         String?   @map("delivery_notes")
+  // What the rider is paid for this job, fixed when they claim it, and any route bonus.
+  riderFee              Decimal?  @map("rider_fee") @db.Decimal(10, 2)
+  riderBonus            Decimal?  @map("rider_bonus") @db.Decimal(10, 2)
+  // The rider's last reported position while on this job.
+  riderLatitude         Decimal?  @map("rider_latitude") @db.Decimal(10, 8)
+  riderLongitude        Decimal?  @map("rider_longitude") @db.Decimal(11, 8)
+  riderLocationAt       DateTime? @map("rider_location_at")
   createdAt             DateTime  @default(now()) @map("created_at")
   updatedAt             DateTime  @updatedAt @map("updated_at")
 
   order                 Order     @relation(fields: [orderId], references: [id], onDelete: Cascade)
   rider                 Rider?    @relation(fields: [riderId], references: [id], onDelete: SetNull)
+  riderLedgerEntries    RiderLedgerEntry[]
 
   @@index([riderId, status])
 
   @@map("deliveries")
+}
+
+/// A rider's verification documents: private files only admins (and the rider) can open.
+model RiderDocument {
+  id           String   @id @default(uuid())
+  riderId      String   @map("rider_id")
+  documentType String   @map("document_type") // cnic_front, cnic_back, license
+  documentUrl  String   @map("document_url")
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  rider        Rider    @relation(fields: [riderId], references: [id], onDelete: Cascade)
+
+  @@index([riderId])
+  @@map("rider_documents")
+}
+
+/// A rider's money with the platform, one signed entry per movement. The sum is what the
+/// platform owes the rider (negative: what the rider owes, e.g. cash still to deposit).
+///   delivery_fee +, bonus +, cod_collected - (cash taken at the door), cash_deposit + (handed
+///   in), payout - (paid to the rider), adjustment +/-.
+model RiderLedgerEntry {
+  id         String   @id @default(uuid())
+  riderId    String   @map("rider_id")
+  type       String
+  amount     Decimal  @db.Decimal(10, 2)
+  deliveryId String?  @map("delivery_id")
+  orderId    String?  @map("order_id")
+  reference  String?
+  note       String?
+  createdBy  String?  @map("created_by")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  rider    Rider     @relation(fields: [riderId], references: [id], onDelete: Cascade)
+  delivery Delivery? @relation(fields: [deliveryId], references: [id], onDelete: SetNull)
+
+  // Each delivery earns its fee, bonus and cash entry at most once.
+  @@unique([deliveryId, type])
+  @@index([riderId, createdAt])
+  @@index([riderId, type])
+  @@map("rider_ledger_entries")
 }
 
 // ============================================
@@ -836,6 +929,33 @@ model WalletTransaction {
   @@index([orderId])
 
   @@map("wallet_transactions")
+}
+
+/// One online checkout session at the payment gateway (a Safepay "tracker"), for an order or a
+/// wallet top-up. The amount is fixed when the session starts. It is settled exactly once,
+/// by whichever confirmation arrives first: the customer's signed return or a verified webhook.
+model PaymentAttempt {
+  id         String    @id @default(uuid())
+  purpose    String // order | wallet_topup
+  orderId    String?   @map("order_id")
+  userId     String    @map("user_id")
+  gateway    String    @default("safepay")
+  tracker    String    @unique
+  amount     Decimal   @db.Decimal(10, 2)
+  status     String    @default("pending") // pending | paid | duplicate | expired
+  reference  String?
+  settledVia String?   @map("settled_via") // return | webhook
+  paidAt     DateTime? @map("paid_at")
+  createdAt  DateTime  @default(now()) @map("created_at")
+  updatedAt  DateTime  @updatedAt @map("updated_at")
+
+  order Order? @relation(fields: [orderId], references: [id], onDelete: SetNull)
+  user  User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([orderId])
+  @@index([userId, createdAt])
+  @@index([status, createdAt])
+  @@map("payment_attempts")
 }
 
 model SellerPayout {
@@ -933,6 +1053,23 @@ model PromotionUsage {
 // NOTIFICATIONS
 // ============================================
 
+/// A browser or phone that receives web push notifications for a user.
+model PushSubscription {
+  id         String    @id @default(uuid())
+  userId     String    @map("user_id")
+  endpoint   String    @unique
+  p256dh     String
+  auth       String
+  userAgent  String?   @map("user_agent")
+  createdAt  DateTime  @default(now()) @map("created_at")
+  lastUsedAt DateTime? @map("last_used_at")
+
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("push_subscriptions")
+}
+
 model Notification {
   id        String   @id @default(uuid())
   userId    String   @map("user_id")
@@ -944,6 +1081,8 @@ model Notification {
   isRead    Boolean  @default(false) @map("is_read")
   readAt    DateTime? @map("read_at")
   channel   String   @default("push")
+  // One notification per event (e.g. "order X confirmed, for its customer"), however often it fires.
+  dedupeKey String?  @unique @map("dedupe_key")
   createdAt DateTime @default(now()) @map("created_at")
 
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -1180,7 +1319,8 @@ model Community {
   radiusKm              Float          @default(3.0) @map("radius_km")
   neighborCommunityIds  String[]       @default([]) @map("neighbor_community_ids")
   crossCommunityEnabled Boolean        @default(true) @map("cross_community_enabled")
-  deliveryBaseFee       Decimal        @default(50) @map("delivery_base_fee") @db.Decimal(10, 2)
+  // Nuray rider delivery within this community (fixed); to other communities: crossCommunityBaseFee + distance.
+  deliveryBaseFee       Decimal        @default(100) @map("delivery_base_fee") @db.Decimal(10, 2)
   crossCommunityBaseFee Decimal        @default(150) @map("cross_community_base_fee") @db.Decimal(10, 2)
   isActive              Boolean        @default(true) @map("is_active")
   createdAt             DateTime       @default(now()) @map("created_at")
@@ -1190,8 +1330,29 @@ model Community {
   sellers               Seller[]
   addresses             UserAddress[]
   sellerDeliveries      SellerCommunityDelivery[]
+  pairFeesAsA           CommunityPairFee[]     @relation("PairFeeA")
+  pairFeesAsB           CommunityPairFee[]     @relation("PairFeeB")
 
   @@map("communities")
+}
+
+/// Nuray's delivery price between two communities, set by an admin. Same price both ways:
+/// stored once with community_a_id < community_b_id. Replaces the distance formula for that trip.
+model CommunityPairFee {
+  id           String    @id @default(uuid())
+  communityAId String    @map("community_a_id")
+  communityBId String    @map("community_b_id")
+  fee          Decimal   @db.Decimal(10, 2)
+  updatedBy    String?   @map("updated_by")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
+
+  communityA   Community @relation("PairFeeA", fields: [communityAId], references: [id], onDelete: Cascade)
+  communityB   Community @relation("PairFeeB", fields: [communityBId], references: [id], onDelete: Cascade)
+
+  @@unique([communityAId, communityBId])
+  @@index([communityBId])
+  @@map("community_pair_fees")
 }
 
 // Per-community delivery terms a seller has fixed for themselves. Once a seller

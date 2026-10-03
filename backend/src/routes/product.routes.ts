@@ -6,6 +6,8 @@ import {
   updateProduct,
   deleteProduct,
   getSellerProducts,
+  getRecommendedProducts,
+  getOrderAgainProducts,
 } from '../controllers/product.controller';
 import { validate, validateQuery } from '../middleware/validation.middleware';
 import {
@@ -23,6 +25,9 @@ const router = Router();
 
 // Public routes
 router.get('/', validateQuery(getProductsQuerySchema), getProducts);
+// Personal lists (before /:identifier, which would otherwise catch them).
+router.get('/recommended', optionalAuthenticate, getRecommendedProducts);
+router.get('/order-again', authenticate, getOrderAgainProducts);
 
 // Seller routes - MUST come BEFORE /:identifier to avoid route conflicts
 router.get(

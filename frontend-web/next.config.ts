@@ -14,6 +14,15 @@ const nextConfig: NextConfig = {
         source: '/uploads/:path*',
         destination: `${BACKEND_URL}/uploads/:path*`,
       },
+      // Uploaded media (local storage driver) and short-lived signed links to private files.
+      {
+        source: '/media/:path*',
+        destination: `${BACKEND_URL}/media/:path*`,
+      },
+      {
+        source: '/files/:path*',
+        destination: `${BACKEND_URL}/files/:path*`,
+      },
     ];
   },
 };

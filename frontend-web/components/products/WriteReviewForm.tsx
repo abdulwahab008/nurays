@@ -4,8 +4,12 @@ import { useState } from 'react';
 import { apiClient } from '@/lib/api-client';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/toast';
+import { useT } from '@/lib/i18n';
+import { commonMessages } from '@/lib/i18n/messages/common';
+import { browseMessages } from '@/lib/i18n/messages/browse';
 
 function StarPicker({ value, onChange, label }: { value: number; onChange: (n: number) => void; label: string }) {
+  const t = useT(browseMessages);
   return (
     <div className="flex items-center gap-3">
       <span className="text-sm text-gray-600 w-24">{label}</span>
@@ -16,7 +20,7 @@ function StarPicker({ value, onChange, label }: { value: number; onChange: (n: n
             type="button"
             onClick={() => onChange(n)}
             className={`text-2xl leading-none ${n <= value ? 'text-amber-500' : 'text-gray-300'}`}
-            aria-label={`${n} star${n > 1 ? 's' : ''}`}
+            aria-label={t(n > 1 ? 'starMany' : 'starOne', { n })}
           >
             ★
           </button>
@@ -34,6 +38,8 @@ interface WriteReviewFormProps {
 
 export default function WriteReviewForm({ orderId, orderItemId, productName }: WriteReviewFormProps) {
   const { showToast } = useToast();
+  const t = useT(browseMessages);
+  const tc = useT(commonMessages);
   const [open, setOpen] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const [productRating, setProductRating] = useState(5);
@@ -51,7 +57,7 @@ export default function WriteReviewForm({ orderId, orderItemId, productName }: W
         sellerRating,
         comment: comment.trim() || undefined,
       });
-      showToast('Thanks for your review!', 'success');
+      showToast(t('thanksReview'), 'success');
       setSubmitted(true);
       setOpen(false);
     } catch (error: any) {
@@ -60,7 +66,7 @@ export default function WriteReviewForm({ orderId, orderItemId, productName }: W
         setSubmitted(true);
         setOpen(false);
       } else {
-        showToast(error.response?.data?.error?.message || 'Failed to submit review', 'error');
+        showToast(error.response?.data?.error?.message || t('submitReviewFailed'), 'error');
       }
     } finally {
       setSubmitting(false);
@@ -68,7 +74,7 @@ export default function WriteReviewForm({ orderId, orderItemId, productName }: W
   };
 
   if (submitted) {
-    return <p className="text-xs text-green-600 mt-1">✓ You reviewed this item</p>;
+    return <p className="text-xs text-green-600 mt-1">{t('reviewedItem')}</p>;
   }
 
   if (!open) {
@@ -77,29 +83,29 @@ export default function WriteReviewForm({ orderId, orderItemId, productName }: W
         onClick={() => setOpen(true)}
         className="text-xs font-medium text-gray-700 underline hover:no-underline mt-1"
       >
-        Write a review
+        {t('writeReview')}
       </button>
     );
   }
 
   return (
     <div className="mt-3 p-4 bg-gray-50 rounded-xl space-y-3">
-      <p className="text-sm font-medium text-gray-900">Review {productName}</p>
-      <StarPicker value={productRating} onChange={setProductRating} label="Product" />
-      <StarPicker value={sellerRating} onChange={setSellerRating} label="Seller" />
+      <p className="text-sm font-medium text-gray-900">{t('reviewProduct', { name: productName })}</p>
+      <StarPicker value={productRating} onChange={setProductRating} label={t('ratingProduct')} />
+      <StarPicker value={sellerRating} onChange={setSellerRating} label={t('ratingSeller')} />
       <textarea
         value={comment}
         onChange={(e) => setComment(e.target.value)}
         rows={2}
-        placeholder="Tell other customers about it (optional)"
+        placeholder={t('reviewPlaceholder')}
         className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-gray-400"
       />
       <div className="flex gap-2">
         <Button size="sm" onClick={handleSubmit} disabled={submitting}>
-          {submitting ? 'Submitting...' : 'Submit Review'}
+          {submitting ? t('submitting') : t('submitReview')}
         </Button>
         <Button size="sm" variant="outline" onClick={() => setOpen(false)} disabled={submitting}>
-          Cancel
+          {tc('cancel')}
         </Button>
       </div>
     </div>

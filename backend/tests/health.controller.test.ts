@@ -4,21 +4,26 @@ jest.mock('../src/config/database', () => ({
   __esModule: true,
   default: { $queryRaw: jest.fn() },
 }));
+const redisClient = { ping: jest.fn() };
 jest.mock('../src/config/redis', () => ({
   __esModule: true,
-  default: { ping: jest.fn() },
+  getRedis: jest.fn(() => redisClient),
+}));
+jest.mock('../src/utils/lifecycle', () => ({
+  isShuttingDown: jest.fn(() => false),
 }));
 jest.mock('../src/gateways', () => ({
   getGatewayStatuses: jest.fn(),
 }));
 
-import { healthCheck } from '../src/controllers/health.controller';
+import { healthCheck, liveness, readiness } from '../src/controllers/health.controller';
 import prisma from '../src/config/database';
-import redis from '../src/config/redis';
+import { getRedis } from '../src/config/redis';
+import { isShuttingDown } from '../src/utils/lifecycle';
 import { getGatewayStatuses } from '../src/gateways';
 
 const queryRaw = prisma.$queryRaw as unknown as jest.Mock;
-const ping = redis.ping as unknown as jest.Mock;
+const ping = redisClient.ping as jest.Mock;
 const gatewayStatuses = getGatewayStatuses as jest.Mock;
 
 const GATEWAYS = {
@@ -121,5 +126,58 @@ describe('healthCheck', () => {
     const body = sentBody(res);
     expect(body.data.status).toBe('degraded');
     expect(body.data.services.redis).toBe('unhealthy');
+  });
+});
+
+describe('without Redis configured', () => {
+  beforeEach(() => {
+    queryRaw.mockResolvedValue([{ '?column?': 1 }]);
+    gatewayStatuses.mockReturnValue(GATEWAYS);
+    (getRedis as jest.Mock).mockReturnValueOnce(null);
+  });
+
+  it('reports redis as not configured and the service as ok', async () => {
+    const res = mockRes();
+    await healthCheck({} as Request, res);
+    expect(res.status).toHaveBeenCalledWith(200);
+    expect(sentBody(res).data.status).toBe('ok');
+    expect(sentBody(res).data.services.redis).toBe('not_configured');
+  });
+});
+
+describe('liveness and readiness', () => {
+  beforeEach(() => {
+    queryRaw.mockResolvedValue([{ '?column?': 1 }]);
+    (isShuttingDown as jest.Mock).mockReturnValue(false);
+  });
+
+  it('liveness answers 200 without touching the database', () => {
+    queryRaw.mockClear();
+    const res = mockRes();
+    liveness({} as Request, res);
+    expect(res.status).toHaveBeenCalledWith(200);
+    expect(queryRaw).not.toHaveBeenCalled();
+  });
+
+  it('readiness is 200 when the database answers', async () => {
+    const res = mockRes();
+    await readiness({} as Request, res);
+    expect(res.status).toHaveBeenCalledWith(200);
+    expect(sentBody(res).data.status).toBe('ready');
+  });
+
+  it('readiness is 503 without the database', async () => {
+    queryRaw.mockRejectedValue(new Error('connection refused'));
+    const res = mockRes();
+    await readiness({} as Request, res);
+    expect(res.status).toHaveBeenCalledWith(503);
+  });
+
+  it('readiness is 503 while shutting down, so the load balancer drains this instance', async () => {
+    (isShuttingDown as jest.Mock).mockReturnValue(true);
+    const res = mockRes();
+    await readiness({} as Request, res);
+    expect(res.status).toHaveBeenCalledWith(503);
+    expect(sentBody(res).data.status).toBe('shutting_down');
   });
 });

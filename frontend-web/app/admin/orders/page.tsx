@@ -1,7 +1,7 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import { useState, useEffect, Suspense } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { UserLayout } from '@/components/layout/UserLayout';
 import { Button } from '@/components/ui/button';
@@ -24,8 +24,25 @@ interface AdminOrder {
   itemsCount: number;
 }
 
+const PAYMENT_FILTERS = [
+  ['', 'Any payment'],
+  ['disputed', 'Transfers the kitchen disputed'],
+  ['payment_submitted', 'Receipts waiting for the kitchen'],
+  ['refund_pending', 'Refund being sent'],
+] as const;
+
 export default function AdminOrdersPage() {
+  return (
+    <Suspense fallback={null}>
+      <AdminOrdersContent />
+    </Suspense>
+  );
+}
+
+function AdminOrdersContent() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const [paymentFilter, setPaymentFilter] = useState<string>(searchParams.get('paymentStatus') ?? '');
   const { isAuthenticated, user } = useAuthStore();
   const { showToast } = useToast();
   const [loading, setLoading] = useState(true);
@@ -47,12 +64,20 @@ export default function AdminOrdersPage() {
     }
 
     loadOrders();
-  }, [isAuthenticated, user, filter, page, router]);
+  }, [isAuthenticated, user, filter, paymentFilter, page, router]);
+
+  // The menu's "Transfers to check" link changes the query string on the same page.
+  useEffect(() => {
+    setPaymentFilter(searchParams.get('paymentStatus') ?? '');
+    setPage(1);
+  }, [searchParams]);
 
   const loadOrders = async () => {
     try {
       setLoading(true);
-      const response = await apiClient.get(`/admin/orders?page=${page}&limit=20${filter !== 'all' ? `&orderStatus=${filter}` : ''}`);
+      const response = await apiClient.get(
+        `/admin/orders?page=${page}&limit=20${filter !== 'all' ? `&orderStatus=${filter}` : ''}${paymentFilter ? `&paymentStatus=${paymentFilter}` : ''}`
+      );
       if (response.data.success) {
         setOrders(response.data.data.orders || []);
         setTotalPages(response.data.data.pagination?.totalPages || 1);
@@ -112,6 +137,22 @@ export default function AdminOrdersPage() {
               </button>
             ))}
           </div>
+          <div className="flex gap-2 flex-wrap mt-3 pt-3 border-t border-gray-100">
+            {PAYMENT_FILTERS.map(([value, label]) => (
+              <button
+                key={value || 'any'}
+                onClick={() => {
+                  setPaymentFilter(value);
+                  setPage(1);
+                }}
+                className={`px-3 py-1.5 rounded-md text-sm transition-colors ${
+                  paymentFilter === value ? 'bg-gray-900 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
         </div>
 
         {loading ? (
@@ -132,13 +173,13 @@ export default function AdminOrdersPage() {
                 <table className="w-full">
                   <thead className="bg-gray-50">
                     <tr>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Order #</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Customer</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Amount</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Payment</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Date</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
+                      <th className="px-6 py-3 text-start text-xs font-medium text-gray-500 uppercase">Order #</th>
+                      <th className="px-6 py-3 text-start text-xs font-medium text-gray-500 uppercase">Customer</th>
+                      <th className="px-6 py-3 text-start text-xs font-medium text-gray-500 uppercase">Amount</th>
+                      <th className="px-6 py-3 text-start text-xs font-medium text-gray-500 uppercase">Status</th>
+                      <th className="px-6 py-3 text-start text-xs font-medium text-gray-500 uppercase">Payment</th>
+                      <th className="px-6 py-3 text-start text-xs font-medium text-gray-500 uppercase">Date</th>
+                      <th className="px-6 py-3 text-start text-xs font-medium text-gray-500 uppercase">Actions</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-200">
