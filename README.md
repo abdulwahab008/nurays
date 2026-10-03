@@ -6,7 +6,7 @@ Gulshan-e-Iqbal, and every seller decides, community by community, whether they 
 
 ## What it does
 
-- **Buyers** browse kitchens and dishes for their community, fill a cart (one cart can hold several sellers), pay by
+- **Buyers** browse kitchens and dishes for their community, fill a cart (one kitchen per order: adding a dish from another kitchen asks to start a new cart), pay by
   cash on delivery, online (card, JazzCash or EasyPaisa through Safepay), the Nuray wallet, or a bank/mobile transfer
   to the kitchen, and follow the order live, including the rider's position on a map while it is on the way.
 - **Sellers** run a kitchen: products and variants, stock, orders, earnings, promotions, payouts, and their
@@ -37,8 +37,8 @@ Gulshan-e-Iqbal, and every seller decides, community by community, whether they 
   Settings → Nuray delivery prices). Distance is kitchen to customer, or community centre to centre when either location
   is missing. The kitchen still chooses which communities it serves and its minimum order; its own fees and free-delivery
   offers apply only to self-delivery.
-- In a multi-seller order, each seller's fee is stored in `Order.deliveryFeeBreakdown`, and the ledger splits platform
-  and seller delivery money from it.
+- Each order is from one kitchen. Its delivery fee and who delivers are stored in `Order.deliveryFeeBreakdown` (older
+  multi-kitchen orders have several entries), and the ledger splits platform and seller delivery money from it.
 
 ### Money, in short
 
@@ -56,11 +56,13 @@ Gulshan-e-Iqbal, and every seller decides, community by community, whether they 
 - **Wallet**: customers top up through Safepay, refunds can land in it, and it can pay for orders.
 - **Rider ledger**: every delivery adds the rider's fee; cash collected counts against them until they hand it in.
   Admins "settle up" (cash handed in, pay kept) and record payouts. Riders carrying more cash than their limit
-  (`RIDER_CASH_LIMIT`, adjustable per rider) are only offered prepaid jobs.
+  (`RIDER_CASH_LIMIT`, adjustable per rider) still see cash jobs, but they are flagged and ranked last, and claiming one
+  is refused until they hand cash in.
 - Cancelling a paid order creates a **refund record**: wallet refunds are instant, manual ones wait in admin → Refunds
   until marked sent. Refunds are capped at what was paid.
-- Orders a kitchen doesn't accept within 30 minutes, or online payments never completed, are cancelled automatically
-  (stock returned, refund created), and any delivery job is closed.
+- An order a kitchen doesn't accept within 30 minutes is cancelled automatically, whether or not it was paid (an unpaid
+  online or transfer order therefore goes at 30 minutes, not later); an accepted order whose payment never completed is
+  cancelled after 60. Stock is returned, a refund is created if money was taken, and any delivery job is closed.
 - Completing an order writes immutable ledger entries (customer payment, seller earning, commission, delivery fees).
 
 ## Tech stack
