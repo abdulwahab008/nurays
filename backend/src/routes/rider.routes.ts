@@ -3,6 +3,7 @@ import {
   getAvailableDeliveries,
   getMyDeliveries,
   claimDelivery,
+  releaseDelivery,
   updateDeliveryStatus,
   updateRiderLocation,
   getRiderProfile,
@@ -30,6 +31,7 @@ router.patch('/duty-status', toggleDutyStatus);
 router.get('/deliveries/available', getAvailableDeliveries);
 router.get('/deliveries/mine', getMyDeliveries);
 router.post('/deliveries/:id/claim', claimDelivery);
+router.post('/deliveries/:id/release', releaseDelivery);
 router.patch('/deliveries/:id/status', validate(updateDeliveryStatusSchema), updateDeliveryStatus);
 router.post('/deliveries/:id/location', locationLimiter, updateRiderLocation);
 

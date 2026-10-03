@@ -312,6 +312,9 @@ export class RiderService {
 
   async claimDelivery(userId: string, deliveryId: string, askFee?: number) {
     const rider = await this.requireRider(userId);
+    if (!rider.isAvailable) {
+      throw new AppError('You are off duty. Switch to on duty to take new jobs.', 409, 'RIDER_OFF_DUTY');
+    }
 
     const delivery = await prisma.delivery.findUnique({ where: { id: deliveryId } });
     if (!delivery) {
@@ -459,6 +462,14 @@ export class RiderService {
           'ORDER_ALREADY_TERMINAL'
         );
       }
+      // The food leaves the kitchen only once the kitchen has marked it ready.
+      if ((status === 'picked_up' || status === 'in_transit') && delivery.status !== 'picked_up' && !['ready', 'dispatched', 'in_transit'].includes(order.orderStatus)) {
+        throw new AppError(
+          "The kitchen hasn't marked this order ready yet. Wait for it before picking it up.",
+          409,
+          'FOOD_NOT_READY'
+        );
+      }
       // Food paid online or by transfer leaves the kitchen only once the payment is confirmed.
       if (status === 'picked_up' && order.paymentMethod !== 'cod' && order.paymentStatus !== 'paid') {
         throw new AppError(
@@ -555,6 +566,26 @@ export class RiderService {
     }
 
     return formatDelivery(result.updated);
+  }
+
+  /**
+   * A rider hands a job back before picking the food up: it goes back to the pool for
+   * other riders, with the fee and route bonus cleared (the next rider's claim sets them).
+   */
+  async releaseDelivery(userId: string, deliveryId: string) {
+    const rider = await this.requireRider(userId);
+    const delivery = await prisma.delivery.findUnique({ where: { id: deliveryId }, select: { id: true, orderId: true, riderId: true } });
+    if (!delivery) throw new AppError('Delivery not found', 404, 'DELIVERY_NOT_FOUND');
+    if (delivery.riderId !== rider.id) throw new AppError('This delivery is not assigned to you', 403, 'ACCESS_DENIED');
+    const released = await prisma.delivery.updateMany({
+      where: { id: deliveryId, riderId: rider.id, status: { in: ['assigned', 'arrived_at_pickup'] } },
+      data: { riderId: null, status: 'pending', riderFee: null, riderBonus: null, arrivedAtPickup: null },
+    });
+    if (released.count === 0) {
+      throw new AppError('You can only hand a job back before you pick up the food', 409, 'CANNOT_RELEASE');
+    }
+    realtimeOrderService.emitDeliveryPosted(deliveryId, delivery.orderId);
+    return { released: true };
   }
 
   async getRiderProfile(userId: string) {

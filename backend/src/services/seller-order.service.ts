@@ -438,7 +438,7 @@ export class SellerOrderService {
       const allDelivered = allItems.every((i) => i.status === 'delivered' || i.status === 'cancelled');
       const anyFailed = allItems.some((i) => i.status === 'delivery_failed');
 
-      if (allReady && currentOrderStatus === 'confirmed') {
+      if (allReady && (currentOrderStatus === 'confirmed' || currentOrderStatus === 'preparing')) {
         derivedOrderStatus = 'ready';
         historyNote = 'All items ready for dispatch';
       } else if (allPreparing && currentOrderStatus === 'pending') {

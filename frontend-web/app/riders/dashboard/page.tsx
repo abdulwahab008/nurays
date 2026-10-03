@@ -213,6 +213,21 @@ export default function RiderDashboardPage() {
     }
   };
 
+  // Hand a job back to the pool before the food is picked up
+  const handleRelease = async (delivery: Delivery) => {
+    if (!window.confirm(t('handBackConfirm'))) return;
+    try {
+      setBusyId(delivery.id);
+      await riderService.releaseDelivery(delivery.id);
+      showToast(t('handedBack'), 'info');
+      loadAll(true);
+    } catch (error: any) {
+      showToast(error.response?.data?.error?.message || t('claimFailed'), 'error');
+    } finally {
+      setBusyId(null);
+    }
+  };
+
   // Advance delivery along the real fulfillment lifecycle
   const handleAdvanceStatus = async (delivery: Delivery) => {
     try {
@@ -629,15 +644,27 @@ export default function RiderDashboardPage() {
 
                             {/* STREAMLINED OPERATIONAL ACTIONS */}
                             <div className="bg-slate-50 px-5 py-3.5 border-t border-slate-200 flex flex-wrap items-center justify-between gap-3">
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={() => setReportModalDelivery(delivery)}
-                                disabled={busyId === delivery.id}
-                                className="border-red-200 text-red-600 hover:bg-red-50 text-xs font-semibold"
-                              >
-                                {t('reportIssue')}
-                              </Button>
+                              {delivery.status === 'assigned' ? (
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => handleRelease(delivery)}
+                                  disabled={busyId === delivery.id}
+                                  className="border-slate-300 text-slate-700 hover:bg-slate-100 text-xs font-semibold"
+                                >
+                                  {t('handBack')}
+                                </Button>
+                              ) : (
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => setReportModalDelivery(delivery)}
+                                  disabled={busyId === delivery.id}
+                                  className="border-red-200 text-red-600 hover:bg-red-50 text-xs font-semibold"
+                                >
+                                  {t('reportIssue')}
+                                </Button>
+                              )}
 
                               <Button
                                 onClick={() => handleAdvanceStatus(delivery)}

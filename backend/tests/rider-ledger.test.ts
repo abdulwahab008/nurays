@@ -32,7 +32,7 @@ function ledger(sums: Partial<Record<string, number>>) {
   return Object.entries(sums).map(([type, amount]) => ({ type, _sum: { amount } }));
 }
 
-const approvedRider = { id: 'rider-1', userId: 'user-1', status: 'active', verificationStatus: 'approved', cashLimit: null };
+const approvedRider = { id: 'rider-1', userId: 'user-1', status: 'active', verificationStatus: 'approved', cashLimit: null, isAvailable: true };
 
 beforeEach(() => {
   jest.clearAllMocks();
@@ -161,6 +161,11 @@ describe('claimDelivery and the cash limit', () => {
     mockPrisma.delivery.findUniqueOrThrow.mockResolvedValue({ ...job, status: 'assigned', riderId: 'rider-1', riderFee: 120, riderBonus: 0, order: { orderNumber: 'N1', totalAmount: 3000, paymentMethod: 'cod', orderStatus: 'ready' } });
     // Already carrying 8,000 of the 10,000 default.
     mockPrisma.riderLedgerEntry.groupBy.mockResolvedValue(ledger({ cod_collected: -8000 }));
+  });
+
+  it('refuses a claim from a rider who is off duty', async () => {
+    mockPrisma.rider.findUnique.mockResolvedValue({ ...approvedRider, isAvailable: false });
+    await expect(riderService.claimDelivery('user-1', 'd1')).rejects.toMatchObject({ code: 'RIDER_OFF_DUTY' });
   });
 
   it('refuses a cash order that would take the rider past their limit', async () => {

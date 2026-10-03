@@ -166,6 +166,11 @@ export const riderService = {
     return response.data;
   },
 
+  releaseDelivery: async (deliveryId: string) => {
+    const response = await apiClient.post<ApiResponse<{ released: boolean }>>(`/riders/deliveries/${deliveryId}/release`);
+    return response.data;
+  },
+
   updateDeliveryStatus: async (
     deliveryId: string,
     status:

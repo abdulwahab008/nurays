@@ -24,6 +24,12 @@ export const claimDelivery = async (req: Request, res: Response) => {
   res.status(200).json({ success: true, data: delivery });
 };
 
+export const releaseDelivery = async (req: Request, res: Response) => {
+  if (!req.user) throw new AppError('Authentication required', 401, 'AUTH_REQUIRED');
+  const result = await riderService.releaseDelivery(req.user.userId, req.params.id);
+  res.json({ success: true, message: 'Job handed back', data: result });
+};
+
 export const updateDeliveryStatus = async (req: Request, res: Response) => {
   if (!req.user) throw new AppError('Authentication required', 401, 'AUTH_REQUIRED');
   const delivery = await riderService.updateDeliveryStatus(

@@ -9,6 +9,7 @@ import riderService from './rider.service';
 import { releasePromotionUsage } from './promotion.service';
 import { issueRefund, IssuedRefund } from './refund.service';
 import ledgerService from './ledger.service';
+import { postDeliveryEntries } from './rider-ledger.service';
 import { releaseHubAllocations } from './hub-allocation.service';
 
 // The main happy-path order pipeline — admin can only move an order exactly
@@ -362,6 +363,33 @@ export class AdminOrderService {
     }
     const updatedOrder = await prisma.order.findUniqueOrThrow({ where: { id: orderId } });
     if (isDelivered) {
+      // The rider's job closes with the order (otherwise it keeps taking one of their two
+      // slots), and they are paid their fee and charged the cash as if they had delivered it.
+      try {
+        await prisma.$transaction(async (tx) => {
+          const job = await tx.delivery.findFirst({
+            where: { orderId, riderId: { not: null }, status: { notIn: ['cancelled', 'delivered', 'delivery_failed'] } },
+          });
+          if (!job || !job.riderId) return;
+          const closed = await tx.delivery.updateMany({
+            where: { id: job.id, status: job.status },
+            data: { status: 'delivered', deliveryTime: new Date() },
+          });
+          if (closed.count === 0) return;
+          await tx.rider.update({ where: { id: job.riderId }, data: { totalDeliveries: { increment: 1 } } });
+          await postDeliveryEntries(tx, {
+            riderId: job.riderId,
+            deliveryId: job.id,
+            orderId,
+            orderNumber: updatedOrder.orderNumber,
+            fee: Number(job.riderFee ?? 0),
+            bonus: Number(job.riderBonus ?? 0),
+            cashCollected: isCodDelivery && codCollectorOf(order) === 'rider' ? Number(updatedOrder.totalAmount) : 0,
+          });
+        });
+      } catch (jobErr) {
+        console.error('Failed to close the rider job for order:', orderId, jobErr);
+      }
       try {
         await ledgerService.recordOrderCompletion(orderId);
       } catch (ledgerErr) {
