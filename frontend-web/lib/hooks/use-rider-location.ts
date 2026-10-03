@@ -71,6 +71,12 @@ export function useRiderLocation(deliveryIds: string[], onAutoAdvance?: (status:
       }, due - since);
     };
 
+    // No fix after a while (GPS off, or the permission prompt ignored): say so instead of
+    // "finding your location" forever. A fix arriving later switches it back to sharing.
+    const slowTimer = setTimeout(() => {
+      setReported((prev) => (prev?.key === key ? prev : { key, state: 'unavailable' }));
+    }, 12_000);
+
     const watchId = navigator.geolocation.watchPosition(
       (pos) => {
         setReported((prev) => (prev?.key === key && prev.state === 'sharing' ? prev : { key, state: 'sharing' }));
@@ -84,6 +90,7 @@ export function useRiderLocation(deliveryIds: string[], onAutoAdvance?: (status:
       { enableHighAccuracy: true, maximumAge: 5_000, timeout: 30_000 }
     );
     return () => {
+      clearTimeout(slowTimer);
       navigator.geolocation.clearWatch(watchId);
       if (timer) clearTimeout(timer);
     };

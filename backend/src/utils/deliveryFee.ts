@@ -406,7 +406,7 @@ export interface DeliveryFeeCorridor {
 
 /**
  * The rider's pay for a job: a standard fee (city base rate + Rs 20 per km) and the range a
- * rider may ask for instead (inDrive style: floor protects the rider, ceiling the platform).
+ * rider may ask for instead (floor protects the rider, ceiling the platform).
  * Without both locations no distance is guessed: the standard fee is the base rate.
  */
 export function calculateDeliveryFeeCorridor(

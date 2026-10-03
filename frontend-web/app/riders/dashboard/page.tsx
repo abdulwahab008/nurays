@@ -65,6 +65,7 @@ export default function RiderDashboardPage() {
 
   // Doorstep PIN Handshake Modal state
   const [pinModalDelivery, setPinModalDelivery] = useState<Delivery | null>(null);
+  const [pinLocked, setPinLocked] = useState(false);
   const [pinDigits, setPinDigits] = useState(['', '', '', '']);
   const [verifyingPin, setVerifyingPin] = useState(false);
   const pinInputRefs = [
@@ -245,10 +246,12 @@ export default function RiderDashboardPage() {
         await riderService.updateDeliveryStatus(delivery.id, 'arrived_at_customer');
         showToast(t('toastArrivedDoor'), 'info');
         setPinModalDelivery(delivery);
+        setPinLocked(false);
         setPinDigits(['', '', '', '']);
         setTimeout(() => pinInputRefs[0].current?.focus(), 150);
       } else if (delivery.status === 'arrived_at_customer') {
         setPinModalDelivery(delivery);
+        setPinLocked(false);
         setPinDigits(['', '', '', '']);
         setTimeout(() => pinInputRefs[0].current?.focus(), 150);
       }
@@ -301,6 +304,7 @@ export default function RiderDashboardPage() {
       setActiveTab('history');
       loadAll(true);
     } catch (error: any) {
+      if (error.response?.data?.error?.code === 'HANDOVER_LOCKED') setPinLocked(true);
       showToast(error.response?.data?.error?.message || t('pinInvalid'), 'error');
     } finally {
       setVerifyingPin(false);
@@ -780,9 +784,15 @@ export default function RiderDashboardPage() {
                                     {t('routeMatch', { bonus: d.batchBonus })}
                                   </span>
                                 )}
-                                <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-800">
-                                  {tc('status.ready')}
-                                </span>
+                                {['ready', 'dispatched', 'in_transit'].includes(d.orderStatus ?? '') ? (
+                                  <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-100 text-emerald-800">
+                                    {tc('status.ready')}
+                                  </span>
+                                ) : (
+                                  <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-800">
+                                    {t('stillPreparing')}
+                                  </span>
+                                )}
                               </div>
                             </div>
 
@@ -1069,6 +1079,13 @@ export default function RiderDashboardPage() {
                   />
                 ))}
               </div>
+
+              {pinLocked && (
+                <div className="bg-red-50 border border-red-200 rounded-2xl p-3.5 text-xs text-red-800 space-y-2">
+                  <p className="font-semibold">{t('pinLockedHelp')}</p>
+                  <Link href="/support" className="inline-block font-black underline">{t('pinLockedSupport')}</Link>
+                </div>
+              )}
 
               {/* COD Reminder Banner */}
               {pinModalDelivery.paymentMethod === 'cod' && !!pinModalDelivery.totalAmount && (

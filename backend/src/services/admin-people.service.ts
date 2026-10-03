@@ -1,3 +1,4 @@
+import { realPhoneOrNull } from '../utils/otp';
 import { Prisma } from '@prisma/client';
 import prisma from '../config/database';
 import { AppError } from '../middleware/errorHandler';
@@ -63,7 +64,7 @@ export async function listUsers(opts: { search?: string; type?: string; status?:
     users: users.map((u) => ({
       id: u.id,
       name: u.profile?.fullName ?? null,
-      phone: u.phone,
+      phone: realPhoneOrNull(u.phone),
       email: u.email,
       userType: u.userType,
       status: u.status,

@@ -6,6 +6,7 @@ import ledgerService from './ledger.service';
 import { haversineKm, calculateDeliveryFeeCorridor } from '../utils/deliveryFee';
 import { jobScore } from '../utils/ranking';
 import { newHandoverCode, verifyHandoverCode } from './handover.service';
+import { realPhoneOrNull } from '../utils/otp';
 import { cashLimitOf, listRiderEntries, postDeliveryEntries, riderEarningsSummary, riderMoney } from './rider-ledger.service';
 import { assertOwnDocument } from '../utils/documents';
 import { presentFile } from '../storage';
@@ -303,7 +304,11 @@ export class RiderService {
   async getMyDeliveries(userId: string) {
     const rider = await this.requireRider(userId);
     const deliveries = await prisma.delivery.findMany({
-      where: { riderId: rider.id },
+      // Jobs cancelled more than a day ago are noise; a fresh cancellation stays visible.
+      where: {
+        riderId: rider.id,
+        NOT: { status: 'cancelled', updatedAt: { lt: new Date(Date.now() - 24 * 3600 * 1000) } },
+      },
       include: DELIVERY_INCLUDE,
       orderBy: { createdAt: 'desc' },
     });
@@ -322,7 +327,7 @@ export class RiderService {
     }
 
     // The rider's pay for this job: the standard fee, or their own ask within the allowed
-    // range (inDrive style), fixed now so the job's price can't change under them.
+    // range (within the allowed range), fixed now so the job's price can't change under them.
     const ends = endsOf(delivery);
     const corridor = calculateDeliveryFeeCorridor(ends.pickupLat, ends.pickupLng, ends.deliveryLat, ends.deliveryLng);
     let validatedAskFee: number | undefined;
@@ -601,7 +606,7 @@ export class RiderService {
       id: rider.id,
       // The rider's own details only: no made-up name, phone, vehicle or rating.
       name: user?.profile?.fullName || null,
-      phone: user?.phone || null,
+      phone: realPhoneOrNull(user?.phone),
       vehicleType: rider.vehicleType || null,
       vehicleNumber: rider.vehicleNumber || null,
       city: rider.city || null,

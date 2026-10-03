@@ -1,3 +1,4 @@
+import { realPhoneOrNull } from '../utils/otp';
 import { codCollectorOf } from '../utils/paymentCustody';
 import { presentFile } from '../storage';
 import { cancelOpenDelivery, notifyDeliveryCancelled, CancelledDelivery } from './delivery-lifecycle.service';
@@ -154,7 +155,7 @@ export class AdminOrderService {
           ? {
               id: order.customer.id,
               email: order.customer.email,
-              phone: order.customer.phone,
+              phone: realPhoneOrNull(order.customer.phone),
               profile: order.customer.profile ? { fullName: order.customer.profile.fullName } : undefined,
               name: order.customer.profile?.fullName || null,
             }

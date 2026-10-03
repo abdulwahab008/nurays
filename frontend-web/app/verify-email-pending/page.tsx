@@ -20,6 +20,7 @@ function VerifyEmailPendingContent() {
   
   // Get the next redirect URL (for sellers going to /sellers/register)
   const nextUrl = searchParams.get('next');
+  const isRider = user?.userType === 'rider' || user?.user_type === 'rider' || nextUrl === '/riders/dashboard';
   const isSeller = user?.userType === 'seller' || user?.user_type === 'seller' || nextUrl === '/sellers/register';
 
   useEffect(() => {
@@ -85,6 +86,21 @@ function VerifyEmailPendingContent() {
           </div>
         )}
 
+        {isRider && (
+          <div
+            className="rounded-xl p-4 mb-5 text-start"
+            style={{ background: 'var(--gold-50)', border: '1px solid var(--gold-200)' }}
+          >
+            <p className="eyebrow" style={{ color: 'var(--gold-700)' }}>{t('nextStepsRiders')}</p>
+            <ol className="text-sm mt-2 space-y-1 list-decimal list-inside" style={{ color: 'var(--ink-700)' }}>
+              <li>{t('riderNext1')}</li>
+              <li>{t('riderNext2')}</li>
+              <li>{t('riderNext3')}</li>
+              <li>{t('riderNext4')}</li>
+            </ol>
+          </div>
+        )}
+
         <div
           className="rounded-xl p-4 mb-6 text-start"
           style={{ background: 'var(--cream-100)', border: '1px solid var(--ink-200)' }}
@@ -101,7 +117,13 @@ function VerifyEmailPendingContent() {
           <Button onClick={handleResendEmail} variant="outline" className="w-full" disabled={loading}>
             {loading ? t('sendingEllipsis') : t('resendVerificationEmail')}
           </Button>
-          {isSeller ? (
+          {isRider ? (
+            <Link href="/riders/dashboard">
+              <Button variant="dark" className="w-full">
+                {t('continueRiderApplication')}
+              </Button>
+            </Link>
+          ) : isSeller ? (
             <Link href="/sellers/register">
               <Button variant="dark" className="w-full">
                 {t('continueKitchenRegistration')}

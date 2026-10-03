@@ -348,9 +348,10 @@ An order paid online only becomes visible to the kitchen's payment flow once the
 | `PUT /riders/me/application` | submission limit. `city` (2-60), `vehicleType`: `motorcycle` \| `bicycle` \| `scooter` \| `car` \| `rickshaw`, `vehicleNumber` (2-20); optional `licenseNumber`, `cnicFrontUrl`, `cnicBackUrl`, `licenseUrl` (private refs from `POST /upload/documents`) | the application, back to `pending` review |
 | `PATCH /riders/duty-status` | optional `isAvailable` (boolean; omitted toggles) | `{ isAvailable }` |
 | `GET /riders/deliveries/available` | query `lat`, `lng` (optional; closest pickups first) | open delivery jobs the rider may claim (riders over their cash limit are only offered prepaid jobs) |
-| `GET /riders/deliveries/mine` | none | the rider's jobs |
-| `POST /riders/deliveries/:id/claim` | optional `askFee` (rupees; must lie in the allowed corridor for the job, else 400 `BID_OUT_OF_BOUNDS`) | the claimed delivery. A rider holds at most two active jobs |
-| `PATCH /riders/deliveries/:id/status` | `status`: `arrived_at_pickup` \| `picked_up` \| `in_transit` \| `arrived_at_customer` \| `delivered` \| `delivery_failed`; `reason` (1-500, required for `delivery_failed`); `otp` (4 digits, the customer's handover PIN, for `delivered`) | the delivery |
+| `GET /riders/deliveries/mine` | none | the rider's jobs (cancelled jobs disappear after a day) |
+| `POST /riders/deliveries/:id/claim` | optional `askFee` (rupees; must lie in the allowed corridor for the job, else 400 `BID_OUT_OF_BOUNDS`) | the claimed delivery. A rider holds at most two active jobs; 409 `RIDER_OFF_DUTY` when off duty |
+| `POST /riders/deliveries/:id/release` | none | `{ released: true }`. Hands a job back to the pool before pickup (`assigned` or `arrived_at_pickup`), else 409 `CANNOT_RELEASE` |
+| `PATCH /riders/deliveries/:id/status` | `status`: `arrived_at_pickup` \| `picked_up` \| `in_transit` \| `arrived_at_customer` \| `delivered` \| `delivery_failed`; `reason` (1-500, required for `delivery_failed`); `otp` (4 digits, the customer's handover PIN, for `delivered`). `picked_up` and `in_transit` return 409 `FOOD_NOT_READY` until the kitchen has marked the order ready | the delivery |
 | `POST /riders/deliveries/:id/location` | location limit. Body (not schema-validated): `latitude`, `longitude` (numbers; 400 `INVALID_COORDINATES`) | `{ delivery, currentLocation, distanceToPickupMeters, distanceToDeliveryMeters, isInsidePickupGeofence, isInsideDeliveryGeofence, autoTriggeredStatus }`. 403 if not the rider's job, 409 `DELIVERY_NOT_ACTIVE` once it has finished. Details in the realtime doc |
 
 ## Reviews: `/reviews`
