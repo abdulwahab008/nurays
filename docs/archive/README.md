@@ -12,6 +12,6 @@ documents in [`docs/`](../).
 | `SUMMARY_OF_CHANGES.md`, `PHASE_1_IMPLEMENTATION_COMPLETE.md` | Early change logs |
 | `PRODUCT_MANAGEMENT_ANALYSIS.md` | An early analysis of product features |
 | `QUICK_START_GUIDE.md` | An early "how it works" overview (replaced by the README) |
-| `NURAY_PRODUCT_BLUEPRINT_AND_AUDIT.html`, `generate_blueprint_pdf.py` | A product blueprint and the script that made its PDF |
+| `NURAY_PRODUCT_BLUEPRINT_AND_AUDIT.html`, `NURAY_FOOD_AND_FROST_PRODUCT_BLUEPRINT_AND_AUDIT.pdf`, `generate_blueprint_pdf.py` | A product blueprint, its PDF, and the script that made it |
 | `QA-REPORT.md` | Notes from a recurring QA pass on a local test setup |
 | `EMAIL_VERIFICATION_IMPLEMENTATION.md` | Notes from building email verification |

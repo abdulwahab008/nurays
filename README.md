@@ -285,3 +285,5 @@ All documentation is indexed in [`docs/README.md`](docs/README.md):
   [accounts](docs/ACCOUNT_CREDENTIALS.md), [developer onboarding](docs/DEVELOPER_ONBOARDING.md)
 
 Older planning documents and change logs are kept in [`docs/archive/`](docs/archive/) for reference only.
+
+Contributing: [CONTRIBUTING.md](CONTRIBUTING.md). Reporting a security problem: [SECURITY.md](SECURITY.md).
