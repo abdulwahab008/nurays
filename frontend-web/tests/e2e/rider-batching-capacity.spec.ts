@@ -47,6 +47,6 @@ test('Rider 2-Order Capacity Cap & InDrive Corridor Bidding Verification', async
   await page.waitForTimeout(1000);
 
   // 7. Verify InDrive corridor bidding elements are rendered
-  await expect(page.getByText(/inDrive Regulated Corridor/i).first()).toBeVisible({ timeout: 10_000 });
+  await expect(page.getByText(/Allowed fee range/i).first()).toBeVisible({ timeout: 10_000 });
   await page.screenshot({ path: `${ARTIFACT_DIR}/batching_step2_indrive_bidding_corridor.png` });
 });

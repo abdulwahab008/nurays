@@ -1,3 +1,7 @@
+import { realPhoneOrNull } from '../utils/otp';
+import { codCollectorOf } from '../utils/paymentCustody';
+import { presentFile } from '../storage';
+import { cancelOpenDelivery, notifyDeliveryCancelled, CancelledDelivery } from './delivery-lifecycle.service';
 import prisma from '../config/database';
 import { AppError } from '../middleware/errorHandler';
 import realtimeOrderService from './realtime-order.service';
@@ -6,6 +10,7 @@ import riderService from './rider.service';
 import { releasePromotionUsage } from './promotion.service';
 import { issueRefund, IssuedRefund } from './refund.service';
 import ledgerService from './ledger.service';
+import { postDeliveryEntries } from './rider-ledger.service';
 import { releaseHubAllocations } from './hub-allocation.service';
 
 // The main happy-path order pipeline — admin can only move an order exactly
@@ -150,7 +155,7 @@ export class AdminOrderService {
           ? {
               id: order.customer.id,
               email: order.customer.email,
-              phone: order.customer.phone,
+              phone: realPhoneOrNull(order.customer.phone),
               profile: order.customer.profile ? { fullName: order.customer.profile.fullName } : undefined,
               name: order.customer.profile?.fullName || null,
             }
@@ -263,6 +268,7 @@ export class AdminOrderService {
 
     return {
       ...order,
+      paymentProofUrl: await presentFile(order.paymentProofUrl),
       refunds: order.refunds.map((r) => ({ ...r, amount: Number(r.amount) })),
       subtotal: Number(order.subtotal),
       deliveryFee: Number(order.deliveryFee),
@@ -344,7 +350,7 @@ export class AdminOrderService {
       data: {
         orderStatus: status,
         ...(isDelivered ? { deliveredAt: new Date() } : {}),
-        ...(isCodDelivery ? { paymentStatus: 'paid', paidAt: new Date() } : {}),
+        ...(isCodDelivery ? { paymentStatus: 'paid', paymentCollectedBy: codCollectorOf(order), paidAt: new Date() } : {}),
       },
     });
     if (applied.count === 0) {
@@ -358,6 +364,33 @@ export class AdminOrderService {
     }
     const updatedOrder = await prisma.order.findUniqueOrThrow({ where: { id: orderId } });
     if (isDelivered) {
+      // The rider's job closes with the order (otherwise it keeps taking one of their two
+      // slots), and they are paid their fee and charged the cash as if they had delivered it.
+      try {
+        await prisma.$transaction(async (tx) => {
+          const job = await tx.delivery.findFirst({
+            where: { orderId, riderId: { not: null }, status: { notIn: ['cancelled', 'delivered', 'delivery_failed'] } },
+          });
+          if (!job || !job.riderId) return;
+          const closed = await tx.delivery.updateMany({
+            where: { id: job.id, status: job.status },
+            data: { status: 'delivered', deliveryTime: new Date() },
+          });
+          if (closed.count === 0) return;
+          await tx.rider.update({ where: { id: job.riderId }, data: { totalDeliveries: { increment: 1 } } });
+          await postDeliveryEntries(tx, {
+            riderId: job.riderId,
+            deliveryId: job.id,
+            orderId,
+            orderNumber: updatedOrder.orderNumber,
+            fee: Number(job.riderFee ?? 0),
+            bonus: Number(job.riderBonus ?? 0),
+            cashCollected: isCodDelivery && codCollectorOf(order) === 'rider' ? Number(updatedOrder.totalAmount) : 0,
+          });
+        });
+      } catch (jobErr) {
+        console.error('Failed to close the rider job for order:', orderId, jobErr);
+      }
       try {
         await ledgerService.recordOrderCompletion(orderId);
       } catch (ledgerErr) {
@@ -387,7 +420,8 @@ export class AdminOrderService {
   /**
    * Cancel order (admin)
    */
-  async cancelOrder(orderId: string, adminId: string, reason: string) {
+  async cancelOrder(orderId: string, adminId: string | null, reason: string, opts: { by?: 'admin' | 'system' } = {}) {
+    const by = opts.by ?? 'admin';
     const order = await prisma.order.findUnique({
       where: { id: orderId },
       include: {
@@ -412,6 +446,7 @@ export class AdminOrderService {
 
     // Cancel order and restore stock
     let refundIssued = null as IssuedRefund | null;
+    let cancelledDelivery = null as CancelledDelivery | null;
     const cancelledOrder = await prisma.$transaction(async (tx) => {
       // Claim the cancellation: only one of any concurrent cancel/accept/ready
       // transitions can move the order out of a cancellable status. Without this
@@ -421,12 +456,13 @@ export class AdminOrderService {
         data: {
           orderStatus: 'cancelled',
           cancellationReason: reason,
-          cancelledBy: 'admin',
+          cancelledBy: by,
         },
       });
       if (claimed.count === 0) {
         throw new AppError('Order can no longer be cancelled', 409, 'ORDER_NOT_CANCELLABLE');
       }
+      cancelledDelivery = await cancelOpenDelivery(tx, orderId, reason);
       const updatedOrder = await tx.order.findUniqueOrThrow({ where: { id: orderId } });
 
       // Items already cancelled (e.g. by their seller) were restocked when that
@@ -475,12 +511,12 @@ export class AdminOrderService {
       await releasePromotionUsage(tx, orderId);
 
       // Hub units this order took go back into the batches they came from.
-      await releaseHubAllocations(tx, orderId, { reason: `Order ${order.orderNumber} cancelled by admin`, performedBy: adminId });
+      await releaseHubAllocations(tx, orderId, { reason: `Order ${order.orderNumber} cancelled by ${by}`, performedBy: adminId ?? 'System' });
 
       // If the customer had already paid, the money is owed back: refund it now
       // (wallet) or queue it for the admin to send (everything else).
       refundIssued = await issueRefund(tx, orderId, {
-        reason: `Order cancelled by admin: ${reason}`,
+        reason: `Order cancelled by ${by}: ${reason}`,
         createdBy: adminId,
       });
 
@@ -489,7 +525,7 @@ export class AdminOrderService {
         data: {
           orderId,
           status: 'cancelled',
-          notes: `Cancelled by admin. Reason: ${reason}`,
+          notes: by === 'system' ? `Cancelled automatically. ${reason}` : `Cancelled by admin. Reason: ${reason}`,
           changedBy: adminId,
         },
       });
@@ -498,7 +534,8 @@ export class AdminOrderService {
     });
 
     // Emit order status update
-    await realtimeOrderService.emitOrderStatusUpdate(cancelledOrder.id, 'cancelled', adminId);
+    await realtimeOrderService.emitOrderStatusUpdate(cancelledOrder.id, 'cancelled', adminId ?? 'system');
+    notifyDeliveryCancelled(cancelledDelivery);
 
     return {
       orderId: cancelledOrder.id,

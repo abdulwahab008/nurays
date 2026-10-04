@@ -1,4 +1,4 @@
-# docker-compose for local dev of the FrozenNuray app containers.
+# docker-compose for local dev of the Nuray app containers.
 # Postgres + Redis are expected to run on the host machine (the dev setup
 # you already use); the containers reach them via `host.docker.internal`.
 #
@@ -17,6 +17,8 @@ services:
       dockerfile: Dockerfile
     container_name: nuray-backend
     restart: unless-stopped
+    # Room for the graceful shutdown (drain, finish requests and jobs) before Docker kills it.
+    stop_grace_period: 30s
     ports:
       - "3001:3001"
     env_file:
@@ -27,6 +29,14 @@ services:
       DATABASE_URL: ${DATABASE_URL:-postgresql://apple@host.docker.internal:5432/frozennuray_dev}
       REDIS_URL: ${REDIS_URL:-redis://host.docker.internal:6379}
       FRONTEND_URL: http://frontend:3000
+      # Local storage driver: keep uploads on a named volume so a rebuild doesn't wipe
+      # them. For production, prefer STORAGE_DRIVER=s3 (see backend/.env.example).
+      UPLOADS_DIR: /app/uploads
+      # Apply pending database migrations on start. For a database created before the
+      # migration baseline, run `npm run db:baseline` once first (see backend/prisma/README.md).
+      MIGRATE_ON_START: ${MIGRATE_ON_START:-false}
+    volumes:
+      - uploads:/app/uploads
     extra_hosts:
       # Linux compatibility — Docker Desktop on macOS already maps this.
       - "host.docker.internal:host-gateway"
@@ -45,6 +55,12 @@ services:
         NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:3001/api/v1}
         NEXT_PUBLIC_GOOGLE_CLIENT_ID: ${NEXT_PUBLIC_GOOGLE_CLIENT_ID:-}
         NEXT_PUBLIC_SAFEPAY_SANDBOX: ${NEXT_PUBLIC_SAFEPAY_SANDBOX:-true}
+        NEXT_PUBLIC_WS_URL: ${NEXT_PUBLIC_WS_URL:-}
+        NEXT_PUBLIC_LEGAL_COMPANY_NAME: ${NEXT_PUBLIC_LEGAL_COMPANY_NAME:-}
+        NEXT_PUBLIC_LEGAL_ADDRESS: ${NEXT_PUBLIC_LEGAL_ADDRESS:-}
+        NEXT_PUBLIC_SUPPORT_EMAIL: ${NEXT_PUBLIC_SUPPORT_EMAIL:-}
+        NEXT_PUBLIC_LEGAL_REVIEWED: ${NEXT_PUBLIC_LEGAL_REVIEWED:-false}
+        NEXT_PUBLIC_SENTRY_DSN: ${NEXT_PUBLIC_SENTRY_DSN:-}
     container_name: nuray-frontend
     restart: unless-stopped
     ports:
@@ -52,3 +68,6 @@ services:
     depends_on:
       backend:
         condition: service_healthy
+
+volumes:
+  uploads:

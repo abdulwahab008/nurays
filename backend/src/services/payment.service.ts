@@ -1,524 +1,219 @@
 import prisma from '../config/database';
-import { issueRefund } from './refund.service';
 import { AppError } from '../middleware/errorHandler';
-import { getGateway, getConfiguredGateways } from '../gateways';
+import { getGateway } from '../gateways';
+import { PAYABLE_STATUSES } from '../utils/paymentCustody';
+import { debitWallet, getWallet, listWalletTransactions } from './wallet.service';
+import { onlinePaymentsAvailable, startOrderCheckout } from './online-payment.service';
+
+export { PAYABLE_STATUSES };
 
 const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:3000';
 
-/** Payment states from which a gateway / transfer payment may still be accepted. */
-export const PAYABLE_STATUSES = ['pending', 'failed', 'payment_submitted', 'disputed'];
-
 export class PaymentService {
   /**
-   * Get available payment methods (gateways enabled via env are marked available)
+   * Payment methods and whether each can be used right now.
    */
   async getPaymentMethods() {
-    const configured = getConfiguredGateways();
-    const safepayReady = configured.includes('safepay');
     return [
-      {
-        id: 'jazzcash',
-        name: 'JazzCash',
-        icon: 'https://example.com/icons/jazzcash.png',
-        isAvailable: safepayReady,
-        description: 'Pay via JazzCash mobile wallet',
-      },
-      {
-        id: 'easypaisa',
-        name: 'EasyPaisa',
-        icon: 'https://example.com/icons/easypaisa.png',
-        isAvailable: safepayReady,
-        description: 'Pay via EasyPaisa mobile wallet',
-      },
-      {
-        id: 'bank',
-        name: 'Bank Transfer / IBFT',
-        icon: 'https://example.com/icons/bank.png',
-        isAvailable: configured.includes('bank'),
-        description: 'Pay via bank account (IBFT / 1LINK)',
-      },
-      {
-        id: 'card',
-        name: 'Credit/Debit Card',
-        icon: 'https://example.com/icons/card.png',
-        isAvailable: safepayReady,
-        description: 'Pay via credit or debit card',
-      },
       {
         id: 'cod',
         name: 'Cash on Delivery',
-        icon: 'https://example.com/icons/cod.png',
+        kind: 'cash',
         isAvailable: true,
-        description: 'Pay cash when order is delivered',
-        extraFee: 50,
+        description: 'Pay cash when the order arrives (or when you collect it)',
+      },
+      {
+        id: 'safepay',
+        name: 'Card or mobile wallet (online)',
+        kind: 'online',
+        isAvailable: onlinePaymentsAvailable(),
+        description: 'Pay online by card, JazzCash or EasyPaisa through a secure hosted checkout',
       },
       {
         id: 'wallet',
         name: 'Nuray Wallet',
-        icon: 'https://example.com/icons/wallet.png',
+        kind: 'wallet',
         isAvailable: true,
         description: 'Pay from your wallet balance',
+      },
+      {
+        id: 'jazzcash',
+        name: 'JazzCash transfer to the kitchen',
+        kind: 'manual_transfer',
+        isAvailable: true,
+        description: "Send the amount to the kitchen's own JazzCash account, then upload the receipt",
+      },
+      {
+        id: 'easypaisa',
+        name: 'EasyPaisa transfer to the kitchen',
+        kind: 'manual_transfer',
+        isAvailable: true,
+        description: "Send the amount to the kitchen's own EasyPaisa account, then upload the receipt",
+      },
+      {
+        id: 'bank',
+        name: 'Bank transfer to the kitchen',
+        kind: 'manual_transfer',
+        isAvailable: true,
+        description: "Transfer to the kitchen's own bank account (IBFT / Raast), then upload the receipt",
       },
     ];
   }
 
   /**
-   * Process payment for an order
+   * Pay for an existing order: from the wallet, or by starting an online checkout (the
+   * customer is sent to `redirectUrl`). COD needs nothing now; transfers to the kitchen are
+   * done from the order page.
    */
-  async processPayment(
-    orderId: string,
-    userId: string,
-    paymentMethod: string,
-    _paymentDetails?: any
-  ) {
-    const order = await prisma.order.findUnique({
-      where: { id: orderId },
-      include: {
-        customer: {
-          select: { id: true, email: true },
-        },
-      },
-    });
-
-    if (!order) {
-      throw new AppError('Order not found', 404, 'ORDER_NOT_FOUND');
-    }
-
-    if (order.customerId !== userId) {
-      throw new AppError('Access denied', 403, 'ACCESS_DENIED');
-    }
-
-    if (order.paymentStatus === 'paid') {
-      throw new AppError('Order already paid', 400, 'PAYMENT_ALREADY_PAID');
-    }
-
-    // A refund in progress (or done) means the money is already on its way back: the order
-    // must not be paid for again.
+  async processPayment(orderId: string, userId: string, paymentMethod: string, _paymentDetails?: unknown) {
+    const order = await prisma.order.findUnique({ where: { id: orderId } });
+    if (!order) throw new AppError('Order not found', 404, 'ORDER_NOT_FOUND');
+    if (order.customerId !== userId) throw new AppError('Access denied', 403, 'ACCESS_DENIED');
+    if (order.paymentStatus === 'paid') throw new AppError('Order already paid', 400, 'PAYMENT_ALREADY_PAID');
+    // A refund in progress (or done) means the money is already on its way back.
     if (['refund_pending', 'refunded'].includes(order.paymentStatus)) {
       throw new AppError('This order has been refunded', 400, 'ORDER_REFUNDED');
     }
-
     if (['cancelled', 'refunded'].includes(order.orderStatus)) {
       throw new AppError('Cannot pay for cancelled order', 400, 'ORDER_CANCELLED');
     }
-
     const validMethods = ['jazzcash', 'easypaisa', 'bank', 'card', 'cod', 'wallet', 'safepay'];
     if (!validMethods.includes(paymentMethod)) {
       throw new AppError('Invalid payment method', 400, 'INVALID_PAYMENT_METHOD');
     }
 
-    // Handle wallet payment
     if (paymentMethod === 'wallet') {
-      return await this.processWalletPayment(orderId, userId, Number(order.totalAmount));
+      return this.processWalletPayment(orderId, userId);
     }
 
-    // Handle COD - no payment processing needed
     if (paymentMethod === 'cod') {
-      await prisma.order.update({
-        where: { id: orderId },
-        data: {
-          paymentMethod: 'cod',
-          paymentStatus: 'pending', // Will be marked as paid on delivery
-        },
-      });
+      await prisma.order.update({ where: { id: orderId }, data: { paymentMethod: 'cod', paymentStatus: 'pending' } });
+      return { paymentId: `COD-${orderId}`, status: 'pending', message: 'Payment will be collected on delivery', redirectUrl: null, expiresAt: null };
+    }
 
+    if (paymentMethod === 'safepay' || paymentMethod === 'card') {
+      const checkout = await startOrderCheckout(orderId, userId);
       return {
-        paymentId: `COD-${orderId}`,
+        paymentId: checkout.tracker,
+        token: checkout.tracker,
         status: 'pending',
-        message: 'Payment will be collected on delivery',
-        redirectUrl: null,
-        expiresAt: null,
+        redirectUrl: checkout.redirectUrl,
+        expiresAt: new Date(Date.now() + 30 * 60 * 1000).toISOString(),
+        gateway: 'safepay',
       };
     }
 
-    // Gateway: route jazzcash / easypaisa / card / safepay all through Safepay if it's configured
-    // because Safepay is an aggregator that handles all these methods on one hosted page.
-    const safepayMethods = ['jazzcash', 'easypaisa', 'card', 'safepay'];
-    const gatewayMethod = safepayMethods.includes(paymentMethod) ? 'safepay' : paymentMethod;
-    const gateway = getGateway(gatewayMethod);
-
-    if (gateway?.isConfigured()) {
-      const returnUrl = `${FRONTEND_URL}/payment/return?order_id=${orderId}`;
-      const cancelUrl = `${FRONTEND_URL}/checkout?cancel=1`;
-      const amountPkr = Math.round(Number(order.totalAmount));
-
-      const result = await gateway.createPayment({
-        orderId,
-        orderNumber: order.orderNumber,
-        amountPkr,
-        customerEmail: order.customer?.email ?? undefined,
-        returnUrl,
-        cancelUrl,
-        description: `Order ${order.orderNumber}`,
-      });
-
-      if (!result.success) {
-        throw new AppError(
-          result.message || 'Payment initiation failed',
-          400,
-          result.errorCode || 'GATEWAY_ERROR'
-        );
-      }
-
-      await prisma.order.update({
-        where: { id: orderId },
-        data: {
-          paymentMethod: paymentMethod,
-          paymentTransactionId: result.paymentId,
-        },
-      });
-
-      return {
-        paymentId: result.paymentId,       // this is the Safepay tracker token (beacon)
-        token: result.paymentId,           // alias so frontend can use it clearly
-        status: 'pending',
-        redirectUrl: result.redirectUrl ?? undefined,
-        expiresAt: result.expiresAt?.toISOString() ?? new Date(Date.now() + 15 * 60 * 1000).toISOString(),
-        gateway: gatewayMethod,
-      };
+    // JazzCash / EasyPaisa / bank are transfers into the kitchen's own account, done from the
+    // order page (payment details + receipt upload), unless a bank payment aggregator is
+    // configured. Never a fake payment page.
+    const bankAggregator = getGateway('bank');
+    if (paymentMethod !== 'bank' || !bankAggregator?.isConfigured()) {
+      throw new AppError(
+        "Pay this order by transfer to the kitchen's account from the order page, then upload the receipt.",
+        400,
+        'MANUAL_TRANSFER_METHOD'
+      );
     }
-
-    // Fallback: no gateway configured - return placeholder URL (dev only)
-    const paymentId = `PAY-${Date.now()}-${orderId.substring(0, 8)}`;
-    const redirectUrl = this.generatePaymentUrl(paymentMethod, orderId, paymentId);
-
-    await prisma.order.update({
-      where: { id: orderId },
-      data: { paymentMethod: paymentMethod },
+    const result = await bankAggregator.createPayment({
+      orderId,
+      orderNumber: order.orderNumber,
+      amountPkr: Math.round(Number(order.totalAmount)),
+      returnUrl: `${FRONTEND_URL}/payment/return?order=${orderId}`,
+      cancelUrl: `${FRONTEND_URL}/payment/return?order=${orderId}&result=cancelled`,
+      description: `Order ${order.orderNumber}`,
     });
-
+    if (!result.success) {
+      throw new AppError(result.message || 'Payment initiation failed', 400, result.errorCode || 'GATEWAY_ERROR');
+    }
+    await prisma.order.update({ where: { id: orderId }, data: { paymentMethod: 'bank', paymentTransactionId: result.paymentId } });
     return {
-      paymentId,
+      paymentId: result.paymentId,
+      token: result.paymentId,
       status: 'pending',
-      redirectUrl,
-      expiresAt: new Date(Date.now() + 15 * 60 * 1000).toISOString(),
-      gateway: paymentMethod,
+      redirectUrl: result.redirectUrl ?? undefined,
+      expiresAt: result.expiresAt?.toISOString() ?? new Date(Date.now() + 15 * 60 * 1000).toISOString(),
+      gateway: 'bank',
     };
   }
 
   /**
-   * Process wallet payment
-   *
-   * Concurrency safety: balance check and decrement happen in a single
-   * conditional updateMany (WHERE balance >= amount). If two requests race,
-   * only one row update will affect a row; the other gets count=0 and rolls
-   * back with INSUFFICIENT_BALANCE.
+   * Pay an existing order from the wallet. The order is claimed first (only one concurrent
+   * request can), then the wallet is debited with a conditional update, all in one
+   * transaction: no double debit, no order marked paid without the money.
    */
-  private async processWalletPayment(orderId: string, userId: string, amount: number) {
-    // Ensure wallet exists (outside transaction so we don't hold a lock for a missing-row path)
-    const existing = await prisma.wallet.findUnique({ where: { userId } });
-    if (!existing) {
-      await prisma.wallet.create({
-        data: { userId, balance: 0, currency: 'PKR' },
-      });
-    }
-
-    const paymentId = `WALLET-${Date.now()}`;
-
-    const result = await prisma.$transaction(async (tx) => {
-      // Claim the order first. The "already paid" check in processPayment ran
-      // before this transaction, so two concurrent requests can both pass it;
-      // only one of them can flip paymentStatus here, and the loser aborts
-      // before touching the wallet (no double debit).
+  private async processWalletPayment(orderId: string, userId: string) {
+    return prisma.$transaction(async (tx) => {
+      const order = await tx.order.findUniqueOrThrow({ where: { id: orderId } });
       const claimed = await tx.order.updateMany({
         where: {
           id: orderId,
           customerId: userId,
-          // Only an order still awaiting payment: never one that is paid, or whose money is
-          // being / has been refunded.
           paymentStatus: { in: ['pending', 'failed'] },
           orderStatus: { notIn: ['cancelled', 'refunded'] },
         },
         data: {
           paymentMethod: 'wallet',
           paymentStatus: 'paid',
+          paymentCollectedBy: 'platform',
           paidAt: new Date(),
-          paymentTransactionId: paymentId,
+          paymentTransactionId: `WALLET-${orderId}`,
         },
       });
       if (claimed.count === 0) {
         throw new AppError('Order already paid or no longer payable', 400, 'PAYMENT_ALREADY_PAID');
       }
-
-      // Read the wallet inside the transaction so balanceBefore is consistent
-      // with the decrement we're about to apply.
-      const wallet = await tx.wallet.findUniqueOrThrow({ where: { userId } });
-
-      if (wallet.isLocked) {
-        throw new AppError('Wallet is locked', 400, 'WALLET_LOCKED');
-      }
-
-      const balanceBefore = Number(wallet.balance);
-
-      // Atomic check-and-decrement: only updates if balance is still sufficient.
-      // Two concurrent payments can't both succeed because the second one's
-      // WHERE clause won't match after the first decrement commits.
-      const { count } = await tx.wallet.updateMany({
-        where: { id: wallet.id, balance: { gte: amount } },
-        data: { balance: { decrement: amount } },
+      await debitWallet(tx, {
+        userId,
+        amount: Number(order.totalAmount),
+        orderId,
+        description: `Payment for order ${order.orderNumber}`,
       });
-
-      if (count === 0) {
-        throw new AppError('Insufficient wallet balance', 400, 'INSUFFICIENT_BALANCE');
-      }
-
-      await tx.walletTransaction.create({
-        data: {
-          walletId: wallet.id,
-          orderId,
-          transactionType: 'debit',
-          amount,
-          balanceBefore,
-          balanceAfter: balanceBefore - amount,
-          description: `Payment for order ${orderId}`,
-          status: 'completed',
-        },
-      });
-
-      const updatedOrder = await tx.order.findUniqueOrThrow({ where: { id: orderId } });
-
+      const updated = await tx.order.findUniqueOrThrow({ where: { id: orderId } });
       return {
-        paymentId,
+        paymentId: `WALLET-${orderId}`,
         status: 'completed',
-        orderStatus: updatedOrder.orderStatus,
-        paymentStatus: updatedOrder.paymentStatus,
+        orderStatus: updated.orderStatus,
+        paymentStatus: updated.paymentStatus,
       };
     });
-
-    return result;
   }
 
   /**
-   * Verify payment (called from the post-payment return page).
-   *
-   * Hardened: we never mark an order paid based on the client-supplied
-   * transactionId alone. The order must be located by a server-side lookup,
-   * AND the gateway must confirm the payment AND the gateway-reported amount
-   * must match the order total.
+   * Has this payment come through? Looks up the order by the checkout session (or payment id)
+   * we issued for it. Read-only: online payments are settled only by Safepay's signed return or
+   * a verified webhook, never by a client asking.
    */
   async verifyPayment(paymentId: string, userId: string, transactionId?: string) {
-    // 1. Locate the order. Trust only the relation user→order, not the tx id.
+    const ids = [paymentId, transactionId].filter((v): v is string => !!v);
     let order = null;
-    if (transactionId) {
-      order = await prisma.order.findFirst({
-        where: { paymentTransactionId: transactionId, customerId: userId },
-      });
+    for (const id of ids) {
+      const attempt = await prisma.paymentAttempt.findUnique({ where: { tracker: id }, select: { orderId: true } });
+      order = attempt?.orderId
+        ? await prisma.order.findUnique({ where: { id: attempt.orderId } })
+        : await prisma.order.findFirst({ where: { paymentTransactionId: id, customerId: userId } });
+      if (order) break;
     }
-    if (!order) {
-      // Fallbacks: try paymentId as a stored tx id, or extract orderId from PAY-* format
-      order = await prisma.order.findFirst({
-        where: { paymentTransactionId: paymentId, customerId: userId },
-      });
-    }
-    if (!order) {
-      const orderIdMatch = paymentId.match(/PAY-\d+-(.+)/);
-      if (orderIdMatch) {
-        order = await prisma.order.findUnique({ where: { id: orderIdMatch[1] } });
-      }
-    }
-
-    if (!order) {
-      throw new AppError('Payment not found', 404, 'PAYMENT_NOT_FOUND');
-    }
-    if (order.customerId !== userId) {
-      throw new AppError('Access denied', 403, 'ACCESS_DENIED');
-    }
+    if (!order) throw new AppError('Payment not found', 404, 'PAYMENT_NOT_FOUND');
+    if (order.customerId !== userId) throw new AppError('Access denied', 403, 'ACCESS_DENIED');
     if (['refund_pending', 'refunded'].includes(order.paymentStatus)) {
       throw new AppError('This order has been refunded', 400, 'ORDER_REFUNDED');
     }
-    if (order.paymentStatus === 'paid') {
-      return {
-        paymentStatus: 'completed',
-        orderStatus: order.orderStatus,
-        transactionId: order.paymentTransactionId || paymentId,
-        paidAt: order.paidAt,
-      };
+    if (order.paymentStatus !== 'paid') {
+      throw new AppError('The payment has not been confirmed yet', 400, 'VERIFY_PENDING');
     }
-
-    // 2. Re-verify with the appropriate gateway. Failing closed: if we can't
-    // confirm with the gateway, we refuse to mark the order paid.
-    const paymentTxId = order.paymentTransactionId || paymentId;
-    const legacyMatch = paymentTxId.match(/^(JC|EP|BANK)-/);
-    let gatewayKey: 'jazzcash' | 'easypaisa' | 'bank' | 'safepay' | null = null;
-    if (legacyMatch) {
-      gatewayKey =
-        legacyMatch[1] === 'JC' ? 'jazzcash' : legacyMatch[1] === 'EP' ? 'easypaisa' : 'bank';
-    } else if (!paymentTxId.match(/^(PAY|WALLET|COD)-/)) {
-      // Safepay tokens are tracker UUIDs / sec_* strings; treat anything not
-      // matching the synthetic prefixes as a Safepay tracker.
-      gatewayKey = 'safepay';
-    }
-
-    if (!gatewayKey) {
-      // Synthetic / non-gateway tokens (PAY-*, COD-*) — cannot be verified
-      // by a gateway. Refuse to mark paid; the webhook is the source of truth.
-      throw new AppError(
-        'Payment cannot be verified — awaiting gateway confirmation',
-        400,
-        'VERIFY_PENDING',
-      );
-    }
-
-    const gateway = getGateway(gatewayKey);
-    if (!gateway || !gateway.isConfigured()) {
-      throw new AppError(
-        'Payment gateway not available for verification',
-        503,
-        'GATEWAY_UNAVAILABLE',
-      );
-    }
-
-    const verifyResult = await gateway.verifyPayment({
-      paymentId: paymentTxId,
-      transactionId: transactionId ?? undefined,
-      orderId: order.id,
-    });
-
-    if (!verifyResult.success || verifyResult.status !== 'completed') {
-      throw new AppError(
-        verifyResult.message || 'Payment verification failed',
-        400,
-        verifyResult.errorCode || 'VERIFY_FAILED',
-      );
-    }
-
-    // 3. Amount check. Gateway must have collected at least the order total.
-    if (verifyResult.amountPkr !== undefined) {
-      const expected = Math.round(Number(order.totalAmount));
-      if (Number(verifyResult.amountPkr) < expected) {
-        console.error(
-          `[verifyPayment] Amount mismatch on order ${order.id}: ` +
-            `gateway=${verifyResult.amountPkr} expected=${expected}`,
-        );
-        throw new AppError(
-          'Payment amount does not match the order total',
-          400,
-          'AMOUNT_MISMATCH',
-        );
-      }
-    }
-
-    // 4. Atomic update. The WHERE clause guards against a webhook flipping
-    // the status under us between read and write.
-    // A payment can land after the order was cancelled (the customer was already at the
-    // gateway). The money is real, so it is recorded and immediately refunded; the order
-    // must not be revived to 'confirmed'. The decision is made from the order's CURRENT
-    // state under a row lock — the copy read above can be stale by now.
-    const updateResult = await prisma.$transaction(async (tx) => {
-      await tx.$queryRaw`SELECT id FROM orders WHERE id = ${order.id} FOR UPDATE`;
-      const fresh = await tx.order.findUniqueOrThrow({ where: { id: order.id } });
-      const r = await tx.order.updateMany({
-        where: { id: order.id, paymentStatus: { in: PAYABLE_STATUSES } },
-        data: {
-          paymentStatus: 'paid',
-          paidAt: new Date(),
-          paymentTransactionId: verifyResult.transactionId || paymentTxId,
-          orderStatus: fresh.orderStatus === 'pending' ? 'confirmed' : fresh.orderStatus,
-        },
-      });
-      if (r.count > 0 && ['cancelled', 'refunded'].includes(fresh.orderStatus)) {
-        await issueRefund(tx, order.id, { reason: 'Payment received after the order was cancelled', createdBy: null });
-      }
-      return r;
-    });
-
-    // Either we updated it, or the webhook beat us — both are fine.
-    if (updateResult.count > 0) {
-      await prisma.orderStatusHistory.create({
-        data: {
-          orderId: order.id,
-          status: order.orderStatus === 'pending' ? 'confirmed' : order.orderStatus,
-          notes: 'Payment verified via gateway inquiry',
-          changedBy: userId,
-        },
-      });
-    }
-
-    const finalOrder = await prisma.order.findUnique({ where: { id: order.id } });
     return {
       paymentStatus: 'completed',
-      orderStatus: finalOrder?.orderStatus,
-      transactionId: finalOrder?.paymentTransactionId,
-      paidAt: finalOrder?.paidAt,
+      orderStatus: order.orderStatus,
+      transactionId: order.paymentTransactionId,
+      paidAt: order.paidAt,
     };
   }
 
-  /**
-   * Get wallet balance
-   */
+  /** Wallet balance with the latest movements (the full history is paginated separately). */
   async getWalletBalance(userId: string) {
-    let wallet = await prisma.wallet.findUnique({
-      where: { userId },
-      include: {
-        transactions: {
-          orderBy: { createdAt: 'desc' },
-          take: 10,
-          select: {
-            id: true,
-            transactionType: true,
-            amount: true,
-            balanceAfter: true,
-            description: true,
-            status: true,
-            createdAt: true,
-            orderId: true,
-          },
-        },
-      },
-    });
-
-    if (!wallet) {
-      // Create wallet if doesn't exist
-      wallet = await prisma.wallet.create({
-        data: {
-          userId,
-          balance: 0,
-          currency: 'PKR',
-        },
-        include: {
-          transactions: {
-            orderBy: { createdAt: 'desc' },
-            take: 10,
-            select: {
-              id: true,
-              transactionType: true,
-              amount: true,
-              balanceAfter: true,
-              description: true,
-              status: true,
-              createdAt: true,
-              orderId: true,
-            },
-          },
-        },
-      });
-    }
-
-    return {
-      balance: Number(wallet.balance),
-      currency: wallet.currency,
-      isLocked: wallet.isLocked,
-      recentTransactions: wallet.transactions.map((tx) => ({
-        id: tx.id,
-        type: tx.transactionType,
-        amount: Number(tx.amount),
-        balanceAfter: Number(tx.balanceAfter),
-        description: tx.description,
-        status: tx.status,
-        orderId: tx.orderId,
-        createdAt: tx.createdAt,
-      })),
-    };
-  }
-
-  /**
-   * Generate payment URL (mock implementation)
-   */
-  private generatePaymentUrl(paymentMethod: string, orderId: string, paymentId: string): string {
-    const baseUrl = process.env.PAYMENT_GATEWAY_URL || 'https://payment-gateway.example.com';
-    return `${baseUrl}/pay/${paymentMethod}?order=${orderId}&payment=${paymentId}`;
+    const [wallet, recent] = await Promise.all([getWallet(userId), listWalletTransactions(userId, 1, 10)]);
+    return { ...wallet, recentTransactions: recent.transactions };
   }
 }
 
 export default new PaymentService();
-

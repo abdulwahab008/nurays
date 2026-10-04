@@ -1,19 +1,37 @@
 // Load env BEFORE any other import — modules like utils/jwt validate env at
 // import time and need it populated.
 import 'dotenv/config';
+import './config/check-env';
+// Error tracking starts before everything else so startup errors are reported too.
+import { initSentry, reportError, flushSentry } from './config/sentry';
+import { logger, routeConsoleToLogger } from './utils/logger';
+initSentry();
+routeConsoleToLogger();
 
 import express from 'express';
 import { createServer } from 'http';
-import path from 'path';
 import cors from 'cors';
 import helmet from 'helmet';
-import morgan from 'morgan';
 import socketManager from './config/socket';
+import { fileRoutes } from './storage/serve';
 import { checkAndCreateStockAlerts } from './services/stock-alert.service';
 import hubService from './services/hub.service';
+import { recomputeRankings } from './services/ranking.service';
+import { scheduleJob, stopScheduler } from './jobs/scheduler';
+import { startWorkers, stopWorkers } from './jobs/queue';
+import './jobs/email.jobs';
+import prisma from './config/database';
+import { closeRedis } from './config/redis';
+import { markShuttingDown, isShuttingDown } from './utils/lifecycle';
+import { apiLimiter } from './middleware/rateLimiter';
+import { requestId, httpLogger } from './middleware/requestContext';
+import { isProduction } from './config/env';
+import { sweepStaleOrders, purgeExpiredSecrets } from './services/order-maintenance.service';
+import { expireAbandonedAttempts } from './services/online-payment.service';
 import { errorHandler } from './middleware/errorHandler';
 import { notFoundHandler } from './middleware/notFoundHandler';
 import healthRoutes from './routes/health.routes';
+import statsRoutes from './routes/stats.routes';
 import authRoutes from './routes/auth.routes';
 import productRoutes from './routes/product.routes';
 import productVariantRoutes from './routes/product-variant.routes';
@@ -62,37 +80,23 @@ app.use(cors({
   origin: process.env.CORS_ORIGIN || 'http://localhost:3000',
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'Idempotency-Key', 'X-Request-Id'],
+  exposedHeaders: ['X-Request-Id'],
 }));
-app.use(morgan('combined')); // Logging
+// Request id on every log line and error response, then one log line per request.
+app.use(requestId);
+app.use(httpLogger);
 
-// Parse JSON. For webhook routes we also capture the raw Buffer so HMAC
-// signature checks can verify the exact bytes Safepay sent.
-app.use(express.json({
-  limit: '10mb',
-  verify: (req, _res, buf) => {
-    if ((req as express.Request).path?.endsWith('/safepay-webhook')) {
-      (req as express.Request & { rawBody?: Buffer }).rawBody = buf;
-    }
-  },
-}));
+app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
-// Serve static files (uploaded images) - with CORS headers
-app.use(
-  '/uploads',
-  express.static(path.join(__dirname, '../uploads'), {
-    // Uploads are images only. Never let a browser sniff one into something
-    // executable, and never render uploaded files as documents.
-    setHeaders: (res) => {
-      res.setHeader('X-Content-Type-Options', 'nosniff');
-      res.setHeader('Content-Security-Policy', "default-src 'none'; img-src 'self'; style-src 'unsafe-inline'; sandbox");
-    },
-  })
-);
+// Uploaded files: public media, signed private files, legacy /uploads (see storage/serve.ts).
+app.use(fileRoutes());
 
-// Routes
+// Routes. Health checks stay outside the flood limit (load balancers poll them).
 app.use(`/api/${API_VERSION}/health`, healthRoutes);
+app.use('/api', apiLimiter);
+app.use(`/api/${API_VERSION}/stats`, statsRoutes);
 app.use(`/api/${API_VERSION}/auth`, authRoutes);
 app.use(`/api/${API_VERSION}/upload`, uploadRoutes);
 app.use(`/api/${API_VERSION}/products`, productRoutes);
@@ -140,22 +144,75 @@ httpServer.listen(PORT, () => {
   console.log(`🔗 API Base URL: http://localhost:${PORT}/api/${API_VERSION}`);
   console.log(`🔌 WebSocket server initialized`);
 
+  // Background jobs. Each run holds a Postgres advisory lock, so with several app
+  // instances only one runs a given job at a time (jobs/scheduler.ts).
   // Safety-net sweep for stock alerts an order-time check might have missed
-  // (e.g. a threshold lowered after the fact). Real-time alerting on order
-  // creation (order.service.ts) is the primary path; this just catches up.
-  // ponytail: setInterval is the whole scheduler — swap for a real job queue
-  // if more background jobs show up.
-  checkAndCreateStockAlerts().catch((err) => console.error('Stock alert sweep failed:', err));
-  setInterval(() => {
-    checkAndCreateStockAlerts().catch((err) => console.error('Stock alert sweep failed:', err));
-  }, 6 * 60 * 60 * 1000);
+  // (e.g. a threshold lowered after the fact); real-time alerting on order creation
+  // is the primary path.
+  scheduleJob('stock-alerts', 6 * 60 * 60 * 1000, () => checkAndCreateStockAlerts());
+  // Hub batches past their expiry stop showing as available.
+  scheduleJob('hub-expiry', 60 * 60 * 1000, () => hubService.expireStaleBatches());
+  // Orders nobody is moving forward release their stock and the customer's money.
+  scheduleJob('stale-orders', 2 * 60 * 1000, () => sweepStaleOrders());
+  // Old one-time codes and used / expired reset tokens.
+  scheduleJob('purge-expired-secrets', 6 * 60 * 60 * 1000, () => purgeExpiredSecrets());
+  // Online checkout sessions nobody completed (a late payment confirmation still settles).
+  scheduleJob('expire-payment-attempts', 15 * 60 * 1000, () => expireAbandonedAttempts());
+  // Trending and rating scores the listings sort by (recent orders fade over days, so this
+  // keeps them current even when nobody orders).
+  scheduleJob('ranking-scores', 15 * 60 * 1000, () => recomputeRankings());
 
-  // Hub batches past their expiry stop showing as available (hourly).
-  const sweepHubExpiry = () =>
-    hubService.expireStaleBatches().catch((err) => console.error('Hub expiry sweep failed:', err));
-  sweepHubExpiry();
-  setInterval(sweepHubExpiry, 60 * 60 * 1000);
+  // Background jobs (emails, notifications). With Redis every instance takes queued jobs.
+  startWorkers();
 });
+
+/**
+ * Graceful shutdown (deploys, scaling down): report not-ready so the load balancer stops
+ * sending traffic, finish in-flight requests and running jobs, then close connections.
+ * Forced exit if that takes too long.
+ */
+const SHUTDOWN_GRACE_MS = Number(process.env.SHUTDOWN_GRACE_MS) || 25_000;
+// How long readiness reports 503 before the listener closes, so a load balancer stops
+// routing here first (its health-check interval or so).
+const SHUTDOWN_DRAIN_MS = Number(process.env.SHUTDOWN_DRAIN_MS ?? (isProduction() ? 5_000 : 0));
+
+async function shutdown(signal: string, exitCode = 0) {
+  if (isShuttingDown()) return;
+  markShuttingDown();
+  console.log(`${signal} received: shutting down`);
+  const forced = setTimeout(() => {
+    console.error('Shutdown took too long; exiting.');
+    process.exit(1);
+  }, SHUTDOWN_GRACE_MS);
+  forced.unref();
+
+  stopScheduler();
+  if (SHUTDOWN_DRAIN_MS > 0) await new Promise((resolve) => setTimeout(resolve, SHUTDOWN_DRAIN_MS));
+  // Stop accepting connections; in-flight requests finish. Live sockets never end on their
+  // own, so they are closed (clients reconnect to another instance).
+  const httpClosed = new Promise<void>((resolve) => httpServer.close(() => resolve()));
+  await socketManager.close().catch((err) => console.error('Closing sockets failed:', err));
+  await httpClosed;
+  await stopWorkers().catch((err) => console.error('Stopping job workers failed:', err));
+  await Promise.allSettled([prisma.$disconnect(), closeRedis(), flushSentry()]);
+  console.log('Shutdown complete');
+  process.exit(exitCode);
+}
+
+// A forgotten .catch() on a background promise must not take the server down: log and report it.
+process.on('unhandledRejection', (reason) => {
+  logger.error({ err: reason }, 'Unhandled promise rejection');
+  reportError(reason, { kind: 'unhandledRejection' });
+});
+// After an uncaught exception the process state is unknown: report it, then shut down cleanly.
+process.on('uncaughtException', (err) => {
+  logger.fatal({ err }, 'Uncaught exception');
+  reportError(err, { kind: 'uncaughtException' });
+  void shutdown('uncaughtException', 1);
+});
+
+process.on('SIGTERM', () => void shutdown('SIGTERM'));
+process.on('SIGINT', () => void shutdown('SIGINT'));
 
 export default app;
 

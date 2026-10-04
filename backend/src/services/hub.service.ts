@@ -560,16 +560,15 @@ export class HubService {
   }
 
   /**
-   * A hub manager may only operate the hub they manage (admins: any). Hubs with no
-   * manager assigned yet stay open to any hub manager so existing deployments keep
-   * working until an admin assigns one.
+   * A hub manager may only operate the hubs assigned to them (admins: any). A hub with no
+   * manager yet is run by admins until one is assigned (Admin > Hubs).
    */
   async assertHubAccess(hubId: string, user: { userId?: string; id?: string; userType: string }) {
     if (user.userType === 'admin') return;
     const hub = await prisma.hubCenter.findUnique({ where: { id: hubId }, select: { managerId: true } });
     if (!hub) throw new AppError('Hub center not found', 404, 'HUB_NOT_FOUND');
     const uid = user.userId ?? user.id;
-    if (hub.managerId && hub.managerId !== uid) {
+    if (!hub.managerId || hub.managerId !== uid) {
       throw new AppError('You do not manage this hub', 403, 'HUB_ACCESS_DENIED');
     }
   }

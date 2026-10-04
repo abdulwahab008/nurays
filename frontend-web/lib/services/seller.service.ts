@@ -42,7 +42,7 @@ export interface PublicSeller {
   coverImageUrl?: string | null;
   ratingAverage: number;
   totalReviews: number;
-  minPrepTimeMinutes: number;
+  minPrepTimeMinutes: number | null;
   minOrderAmountForDelivery?: number | null;
   freeDeliveryThreshold?: number | null;
   deliveryFeeType?: string | null;

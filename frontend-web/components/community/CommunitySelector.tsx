@@ -6,6 +6,8 @@ import { useCommunityStore } from '@/lib/store/community-store';
 import { Community, communityService } from '@/lib/services/community.service';
 import { useAuthStore } from '@/lib/store/auth-store';
 import { useToast } from '@/components/ui/toast';
+import { useT } from '@/lib/i18n';
+import { shellMessages } from '@/lib/i18n/messages/shell';
 import { MapPin, Navigation, Search, X, Check, ChevronDown, Sparkles } from 'lucide-react';
 
 interface CommunitySelectorProps {
@@ -15,6 +17,7 @@ interface CommunitySelectorProps {
 const CORE_LAHORE_SLUGS = ['askari-11', 'askari-10', 'dha-phase-5', 'dha-phase-6', 'dha-9-town'];
 
 export function CommunitySelector({ variant = 'navbar' }: CommunitySelectorProps) {
+  const t = useT(shellMessages);
   const [localIsOpen, setLocalIsOpen] = useState(false);
   const [mounted, setMounted] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
@@ -78,7 +81,7 @@ export function CommunitySelector({ variant = 'navbar' }: CommunitySelectorProps
   const handleSelect = async (comm: Community) => {
     setSelectedCommunity(comm);
     handleClose();
-    showToast(`Location set to ${comm.name}`, 'info');
+    showToast(t('locationSet', { name: comm.name }), 'info');
 
     if (isAuthenticated) {
       try {
@@ -93,10 +96,10 @@ export function CommunitySelector({ variant = 'navbar' }: CommunitySelectorProps
   const handleGPSDetect = async () => {
     const detected = await detectCommunityFromGPS();
     if (detected) {
-      showToast(`Detected location: ${detected.name}!`, 'success');
+      showToast(t('locationDetected', { name: detected.name }), 'success');
       handleClose();
     } else {
-      showToast('Could not access GPS. Please pick your society below.', 'error');
+      showToast(t('gpsFailed'), 'error');
     }
   };
 
@@ -145,14 +148,14 @@ export function CommunitySelector({ variant = 'navbar' }: CommunitySelectorProps
       <button
         type="button"
         onClick={() => setLocalIsOpen(true)}
-        className={`group inline-flex items-center gap-2.5 rounded-full border transition-all text-left ${
+        className={`group inline-flex items-center gap-2.5 rounded-full border transition-all text-start ${
           variant === 'navbar'
             ? 'px-3.5 py-1.5 border-orange-200/90 bg-orange-50/90 hover:bg-orange-100 hover:border-orange-300 text-slate-900 shadow-xs active:scale-95'
             : variant === 'hero'
             ? 'px-4 py-2 border-[#FF5500]/40 bg-[#FF5500]/10 hover:bg-[#FF5500]/20 text-white shadow-lg active:scale-95'
             : 'px-2.5 py-1 text-xs border-slate-200 bg-slate-50 hover:bg-slate-100 text-slate-900'
         }`}
-        title="Change Delivery Location"
+        title={t('changeLocation')}
       >
         <span className="relative flex h-2.5 w-2.5 shrink-0">
           <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#FF5500] opacity-75"></span>
@@ -164,14 +167,14 @@ export function CommunitySelector({ variant = 'navbar' }: CommunitySelectorProps
               variant === 'navbar' ? 'text-orange-700' : 'text-slate-400'
             }`}
           >
-            Delivering to
+            {selectedCommunity ? t('deliveringTo') : t('yourArea')}
           </span>
           <span
             className={`text-xs sm:text-sm font-extrabold truncate max-w-[130px] sm:max-w-[170px] leading-tight ${
               variant === 'navbar' ? 'text-slate-900' : 'text-white'
             }`}
           >
-            {selectedCommunity ? selectedCommunity.name : 'Askari 11'}
+            {selectedCommunity ? selectedCommunity.name : t('chooseArea')}
           </span>
         </div>
         <ChevronDown
@@ -197,16 +200,16 @@ export function CommunitySelector({ variant = 'navbar' }: CommunitySelectorProps
               <div className="flex items-center justify-between pb-3.5 border-b border-slate-100">
                 <div>
                   <h3 className="text-lg sm:text-xl font-bold text-slate-900">
-                    Delivery Location
+                    {t('deliveryLocation')}
                   </h3>
                   <p className="text-xs text-slate-500 mt-0.5">
-                    Select your society for instant home kitchen menus &amp; express delivery
+                    {t('deliveryLocationSub')}
                   </p>
                 </div>
                 <button
                   type="button"
                   onClick={handleClose}
-                  aria-label="Close dialog"
+                  aria-label={t('closeDialog')}
                   className="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 hover:text-slate-800 flex items-center justify-center transition-all active:scale-95"
                 >
                   <X className="w-4 h-4" />
@@ -221,15 +224,15 @@ export function CommunitySelector({ variant = 'navbar' }: CommunitySelectorProps
                   </div>
                   <div className="min-w-0">
                     <p className="text-[10px] font-bold text-orange-800 uppercase tracking-wider">
-                      Current Location
+                      {t('currentLocation')}
                     </p>
                     <p className="text-xs font-bold text-slate-900 truncate">
-                      {selectedCommunity ? `${selectedCommunity.name}, ${selectedCommunity.city}` : 'Askari 11, Lahore'}
+                      {selectedCommunity ? `${selectedCommunity.name}, ${selectedCommunity.city}` : t('noAreaYet')}
                     </p>
                   </div>
                 </div>
                 <span className="text-[11px] font-bold text-emerald-700 bg-emerald-100/80 px-2 py-0.5 rounded-full shrink-0">
-                  Active
+                  {t('active')}
                 </span>
               </div>
 
@@ -248,28 +251,29 @@ export function CommunitySelector({ variant = 'navbar' }: CommunitySelectorProps
                       <Navigation className="w-3.5 h-3.5" />
                     )}
                   </div>
-                  <span>{isDetecting ? 'Detecting your GPS location...' : 'Use My Current GPS Location'}</span>
+                  <span>{isDetecting ? t('detectingGps') : t('useGps')}</span>
                 </div>
-                <span className="text-[11px] font-bold text-[#FF5500] group-hover:translate-x-0.5 transition-transform">
-                  Detect →
+                <span className="text-[11px] font-bold text-[#FF5500] group-hover:translate-x-0.5 rtl:group-hover:-translate-x-0.5 transition-transform">
+                  {t('detect')}
                 </span>
               </button>
 
               {/* Minimal Search Bar */}
               <div className="relative mt-3">
-                <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                <Search className="w-4 h-4 text-slate-400 absolute start-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
                 <input
                   type="text"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder="Search society (e.g. Askari 11, DHA Phase 6, 9 Town)..."
-                  className="w-full h-10 pl-9 pr-8 rounded-xl bg-slate-50 border border-slate-200 text-xs font-medium text-slate-900 placeholder:text-slate-400 focus:bg-white focus:border-[#FF5500] focus:ring-1 focus:ring-[#FF5500] outline-none transition"
+                  placeholder={t('searchSociety')}
+                  className="w-full h-10 ps-9 pe-8 rounded-xl bg-slate-50 border border-slate-200 text-xs font-medium text-slate-900 placeholder:text-slate-400 focus:bg-white focus:border-[#FF5500] focus:ring-1 focus:ring-[#FF5500] outline-none transition"
                 />
                 {searchQuery && (
                   <button
                     type="button"
                     onClick={() => setSearchQuery('')}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                    aria-label={t('clearSearch')}
+                    className="absolute end-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
                   >
                     <X className="w-3.5 h-3.5" />
                   </button>
@@ -286,7 +290,7 @@ export function CommunitySelector({ variant = 'navbar' }: CommunitySelectorProps
                     <Sparkles className="w-4 h-4 text-amber-600 shrink-0" />
                     <div>
                       <p className="text-[10px] font-bold text-amber-800 uppercase tracking-wider">
-                        Smart Match Detected
+                        {t('smartMatch')}
                       </p>
                       <p className="text-xs font-bold text-slate-900">
                         {smartMatch.community.name} ({smartMatch.community.city})
@@ -294,17 +298,17 @@ export function CommunitySelector({ variant = 'navbar' }: CommunitySelectorProps
                     </div>
                   </div>
                   <span className="px-2.5 py-1 rounded-xl bg-[#FF5500] text-white text-[11px] font-bold">
-                    Select
+                    {t('select')}
                   </span>
                 </div>
               )}
 
               {/* Community List */}
-              <div className="mt-3.5 max-h-[260px] overflow-y-auto space-y-1.5 pr-0.5 custom-scrollbar">
+              <div className="mt-3.5 max-h-[260px] overflow-y-auto space-y-1.5 pe-0.5 custom-scrollbar">
                 {filteredList ? (
                   filteredList.length === 0 ? (
                     <div className="py-6 text-center text-xs text-slate-400">
-                      No matching societies found. Try &ldquo;Askari 11&rdquo; or &ldquo;DHA Phase 6&rdquo;.
+                      {t('noSocieties')}
                     </div>
                   ) : (
                     filteredList.map((comm) => renderCommunityRow(comm))
@@ -313,7 +317,7 @@ export function CommunitySelector({ variant = 'navbar' }: CommunitySelectorProps
                   <>
                     <div className="px-1 py-1">
                       <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
-                        Lahore Communities
+                        {t('lahoreCommunities')}
                       </p>
                     </div>
                     {coreCommunities.map((comm) => renderCommunityRow(comm))}
@@ -326,7 +330,7 @@ export function CommunitySelector({ variant = 'navbar' }: CommunitySelectorProps
                           onClick={() => setShowOtherCities(!showOtherCities)}
                           className="w-full py-2 text-center text-xs font-semibold text-slate-500 hover:text-slate-800 flex items-center justify-center gap-1 transition"
                         >
-                          <span>{showOtherCities ? 'Hide Other Societies' : `Show More Societies (${otherCommunities.length})`}</span>
+                          <span>{showOtherCities ? t('hideOther') : t('showMore', { count: otherCommunities.length })}</span>
                           <ChevronDown className={`w-3.5 h-3.5 transition-transform ${showOtherCities ? 'rotate-180' : ''}`} />
                         </button>
 
@@ -354,13 +358,13 @@ export function CommunitySelector({ variant = 'navbar' }: CommunitySelectorProps
         key={comm.id}
         type="button"
         onClick={() => handleSelect(comm)}
-        className={`w-full text-left px-3.5 py-2.5 rounded-xl border transition flex items-center justify-between ${
+        className={`w-full text-start px-3.5 py-2.5 rounded-xl border transition flex items-center justify-between ${
           isSelected
             ? 'border-[#FF5500] bg-orange-50/70 shadow-2xs'
             : 'border-slate-200/70 hover:border-slate-300 hover:bg-slate-50'
         }`}
       >
-        <div className="min-w-0 pr-2">
+        <div className="min-w-0 pe-2">
           <div className="flex items-center gap-2">
             <span className="text-xs font-bold text-slate-900 truncate">
               {comm.name}
@@ -370,7 +374,7 @@ export function CommunitySelector({ variant = 'navbar' }: CommunitySelectorProps
             </span>
           </div>
           <p className="text-[11px] text-slate-400 truncate mt-0.5">
-            {comm.areaDescription || 'Domestic Home Kitchens Network'}
+            {comm.areaDescription || t('defaultArea')}
           </p>
         </div>
 
@@ -381,7 +385,7 @@ export function CommunitySelector({ variant = 'navbar' }: CommunitySelectorProps
             </span>
           ) : (
             <span className="text-xs font-bold text-slate-400 hover:text-slate-600">
-              Select
+              {t('select')}
             </span>
           )}
         </div>

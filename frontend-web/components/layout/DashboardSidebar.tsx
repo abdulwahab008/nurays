@@ -3,6 +3,8 @@
 import { useEffect, useState, Suspense } from 'react';
 import Link from 'next/link';
 import { usePathname, useSearchParams } from 'next/navigation';
+import { useT } from '@/lib/i18n';
+import { navMessages } from '@/lib/i18n/messages/nav';
 import { useAuthStore } from '@/lib/store/auth-store';
 
 export interface SubItem {
@@ -22,7 +24,7 @@ export interface SidebarItem {
 
 interface DashboardSidebarProps {
   items: SidebarItem[];
-  userType: 'customer' | 'seller' | 'admin' | 'rider';
+  userType: 'customer' | 'seller' | 'admin' | 'rider' | 'hub_manager';
 }
 
 // Clean SVG icons for each menu item (semantic keys & backwards-compatible emoji keys)
@@ -237,6 +239,8 @@ const DefaultIcon: React.FC<{ className?: string }> = ({ className }) => (
 
 function DashboardSidebarContent({ items, userType }: DashboardSidebarProps) {
   const pathname = usePathname();
+  const tNav = useT(navMessages);
+  const label = (name: string) => tNav(name as keyof typeof navMessages.en);
   const searchParams = useSearchParams();
   const queryString = searchParams?.toString() || '';
   const currentHref = queryString ? `${pathname}?${queryString}` : pathname;
@@ -296,6 +300,8 @@ function DashboardSidebarContent({ items, userType }: DashboardSidebarProps) {
     ? 'seller'
     : pathname.startsWith('/admin')
     ? 'admin'
+    : pathname === '/hub' || pathname.startsWith('/hub/')
+    ? 'hub_manager'
     : userType;
 
   const getUserTypeLabel = () => {
@@ -303,6 +309,7 @@ function DashboardSidebarContent({ items, userType }: DashboardSidebarProps) {
       case 'admin': return 'Administrator';
       case 'seller': return 'Seller';
       case 'rider': return 'Rider Fleet';
+      case 'hub_manager': return 'Hub manager';
       default: return 'Customer';
     }
   };
@@ -319,13 +326,13 @@ function DashboardSidebarContent({ items, userType }: DashboardSidebarProps) {
 
   return (
     <aside
-      className="w-64 h-full overflow-y-auto bg-white border-r border-slate-200"
+      className="w-64 h-full overflow-y-auto bg-white border-e border-slate-200"
     >
       <div className="px-4 py-6">
 
         {/* Menu Label */}
         <div className="px-3 mb-2">
-          <span className="eyebrow">Menu</span>
+          <span className="eyebrow">{tNav('menu')}</span>
         </div>
 
         {/* Navigation Items */}
@@ -355,7 +362,7 @@ function DashboardSidebarContent({ items, userType }: DashboardSidebarProps) {
                         className="w-5 h-5 flex-shrink-0"
                       />
                     )}
-                    <span className="flex-1 text-[14px]">{item.name}</span>
+                    <span className="flex-1 text-[14px]">{label(item.name)}</span>
                     {item.badge !== undefined && item.badge > 0 && (
                       <span
                         className="text-xs font-medium px-2 py-0.5 rounded-full min-w-[20px] text-center"
@@ -370,8 +377,8 @@ function DashboardSidebarContent({ items, userType }: DashboardSidebarProps) {
                     <button
                       type="button"
                       onClick={(e) => toggleExpand(item.name, e)}
-                      aria-label={isExpanded ? `Collapse ${item.name}` : `Expand ${item.name}`}
-                      className="p-2 mr-1 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-lg transition-colors cursor-pointer"
+                      aria-label={tNav(isExpanded ? 'collapse' : 'expand', { name: label(item.name) })}
+                      className="p-2 me-1 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-lg transition-colors cursor-pointer"
                     >
                       <svg
                         className={`w-3.5 h-3.5 transition-transform duration-200 ${isExpanded ? 'rotate-180' : ''}`}
@@ -387,7 +394,7 @@ function DashboardSidebarContent({ items, userType }: DashboardSidebarProps) {
                 </div>
 
                 {hasSubItems && isExpanded && (
-                  <div className="ml-5 pl-3.5 py-1 space-y-1 border-l-2 border-slate-200">
+                  <div className="ms-5 ps-3.5 py-1 space-y-1 border-s-2 border-slate-200">
                     {item.subItems!.map((sub) => {
                       const isSubActive = isItemActive(sub.href);
                       return (
@@ -413,7 +420,7 @@ function DashboardSidebarContent({ items, userType }: DashboardSidebarProps) {
                               }`}
                             />
                           )}
-                          <span className="flex-1 truncate">{sub.name}</span>
+                          <span className="flex-1 truncate">{label(sub.name)}</span>
                           {sub.badge !== undefined && sub.badge > 0 && (
                             <span
                               className="text-[10px] font-bold px-1.5 py-0.5 rounded-full"
@@ -439,52 +446,22 @@ function DashboardSidebarContent({ items, userType }: DashboardSidebarProps) {
               <svg className="w-4 h-4 text-emerald-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75m-3-7.036A11.959 11.959 0 013.598 6 11.99 11.99 0 003 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285z" />
               </svg>
-              Fleet SOS &amp; Support
+              {tNav('riderHelpTitle')}
             </h4>
             <p className="text-[11px] mb-3 text-slate-600 font-medium">
-              Road emergency or dispute? Contact central dispatch immediately.
+              {tNav('riderHelpText')}
             </p>
-            <a
-              href="tel:02111168729"
+            <Link
+              href="/support"
               className="flex items-center justify-center gap-1.5 w-full py-2 text-xs font-bold rounded-xl transition-all active:scale-95 shadow-sm bg-emerald-600 hover:bg-emerald-700 text-white"
             >
               <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 6.75c0 8.284 6.716 15 15 15h2.25a2.25 2.25 0 002.25-2.25v-1.372c0-.516-.351-.966-.852-1.091l-4.423-1.106c-.44-.11-.902.055-1.173.417l-.97 1.293c-.282.376-.769.542-1.21.38a12.035 12.035 0 01-7.143-7.143c-.162-.441.004-.928.38-1.21l1.293-.97c.363-.271.527-.734.417-1.173L6.963 3.102a1.125 1.125 0 00-1.091-.852H4.5A2.25 2.25 0 002.25 4.5v2.25z" />
+                <path strokeLinecap="round" strokeLinejoin="round" d="M8.625 12a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0H8.25m4.125 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0H12m4.125 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0h-.375M21 12c0 4.556-4.03 8.25-9 8.25a9.764 9.764 0 01-2.555-.337A5.972 5.972 0 015.41 20.97a5.969 5.969 0 01-.474-.065 4.48 4.48 0 00.978-2.025c.09-.457-.133-.901-.467-1.226C3.93 16.178 3 14.189 3 12c0-4.556 4.03-8.25 9-8.25s9 3.694 9 8.25z" />
               </svg>
-              Call Dispatch (24/7)
-            </a>
+              {tNav('contactSupport')}
+            </Link>
           </div>
-        ) : effectiveUserType === 'seller' ? (
-          <div className="mt-8 p-4 rounded-2xl bg-slate-50 border border-slate-200">
-            <h4 className="font-bold text-xs mb-1 text-slate-900 flex items-center gap-1.5">
-              <svg className="w-4 h-4 text-slate-700" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 21v-7.5a.75.75 0 01.75-.75h3a.75.75 0 01.75.75V21m-4.5 0H2.36m11.14 0H18m0 0h3.64m-1.39 0V9.349m-16.5 11.65V9.35m0 0a3.001 3.001 0 003.75-.615A2.993 2.993 0 009.75 9.75c.896 0 1.7-.393 2.25-1.016a2.993 2.993 0 002.25 1.016c.896 0 1.7-.393 2.25-1.016a3.001 3.001 0 003.75.614m-16.5 0a3.004 3.004 0 01-.621-4.72L4.318 3.44A1.5 1.5 0 015.378 3h13.243a1.5 1.5 0 011.06.44l1.19 1.189a3 3 0 01-.621 4.72M6.75 21V17.25" />
-              </svg>
-              Partner Kitchen Hub
-            </h4>
-            <p className="text-[11px] text-slate-500 font-medium">
-              Need fresh ingredients or cold storage space? Request allocation at your hub.
-            </p>
-          </div>
-        ) : (
-          <div className="mt-8 p-4 rounded-2xl bg-gradient-to-br from-orange-50/80 to-amber-50/60 border border-orange-200/70 shadow-xs">
-            <h4 className="font-bold text-xs mb-1 text-slate-900 flex items-center gap-1.5">
-              <svg className="w-4 h-4 text-[#FF5500]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M21 11.25v8.25a1.5 1.5 0 01-1.5 1.5H4.5a1.5 1.5 0 01-1.5-1.5v-8.25M12 4.875A2.625 2.625 0 109.375 7.5H12m0-2.625V7.5m0-2.625A2.625 2.625 0 1114.625 7.5H12m0 0V21m-8.625-9.75h17.25c.621 0 1.125-.504 1.125-1.125v-1.5c0-.621-.504-1.125-1.125-1.125H3.375c-.621 0-1.125.504-1.125 1.125v1.5c0 .621.504 1.125 1.125 1.125z" />
-              </svg>
-              Refer a food lover
-            </h4>
-            <p className="text-[11px] mb-3 text-slate-600 font-medium">
-              Share Nuray &amp; get Rs 250 wallet credit on their first order.
-            </p>
-            <button className="flex items-center justify-center gap-1 w-full py-2 text-xs font-bold rounded-xl transition-all active:scale-95 shadow-xs bg-[#FF5500] hover:bg-[#E04400] text-white">
-              <span>Invite Friends</span>
-              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
-              </svg>
-            </button>
-          </div>
-        )}
+        ) : null}
       </div>
     </aside>
   );
@@ -492,7 +469,7 @@ function DashboardSidebarContent({ items, userType }: DashboardSidebarProps) {
 
 function SidebarSkeleton({ items }: { items: SidebarItem[] }) {
   return (
-    <aside className="w-64 h-full overflow-y-auto bg-white border-r border-slate-200">
+    <aside className="w-64 h-full overflow-y-auto bg-white border-e border-slate-200">
       <div className="px-4 py-6">
         <div className="mb-8 p-4 rounded-2xl bg-slate-50 border border-slate-100 flex items-center gap-3">
           <div className="w-10 h-10 rounded-2xl bg-slate-200 animate-pulse" />

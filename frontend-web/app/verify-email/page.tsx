@@ -8,12 +8,15 @@ import { useToast } from '@/components/ui/toast';
 import { apiClient } from '@/lib/api-client';
 import { authService } from '@/lib/services/auth.service';
 import { useAuthStore } from '@/lib/store/auth-store';
+import { useT } from '@/lib/i18n';
+import { authMessages } from '@/lib/i18n/messages/auth';
 
 function VerifyEmailContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { isAuthenticated, user, setUser } = useAuthStore();
   const { showToast } = useToast();
+  const t = useT(authMessages);
   const [status, setStatus] = useState<'verifying' | 'success' | 'error' | 'expired'>('verifying');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
@@ -24,7 +27,7 @@ function VerifyEmailContent() {
     const token = searchParams.get('token');
     if (!token) {
       setStatus('error');
-      setError('No verification token provided');
+      setError(t('noToken'));
       setLoading(false);
       return;
     }
@@ -54,7 +57,7 @@ function VerifyEmailContent() {
         setStatus('expired');
       } else {
         setStatus('error');
-        setError(err.response?.data?.error?.message || 'Verification failed');
+        setError(err.response?.data?.error?.message || t('verificationFailedMsg'));
       }
     } finally {
       setLoading(false);
@@ -69,9 +72,9 @@ function VerifyEmailContent() {
 
     try {
       await apiClient.post('/auth/resend-verification');
-      showToast('Verification email sent! Please check your inbox.', 'success');
+      showToast(t('verificationEmailSent'), 'success');
     } catch (err: any) {
-      showToast(err.response?.data?.error?.message || 'Failed to resend email', 'error');
+      showToast(err.response?.data?.error?.message || t('resendEmailFailed'), 'error');
     }
   };
 
@@ -88,10 +91,10 @@ function VerifyEmailContent() {
               style={{ borderColor: 'var(--forest-500)' }}
             />
             <h1 className={headingClass} style={{ color: 'var(--ink-900)' }}>
-              Verifying your email
+              {t('verifyingEmail')}
             </h1>
             <p className={bodyClass} style={{ color: 'var(--ink-500)' }}>
-              One moment…
+              {t('oneMoment')}
             </p>
           </>
         )}
@@ -107,23 +110,23 @@ function VerifyEmailContent() {
               </svg>
             </div>
             <h1 className={headingClass} style={{ color: 'var(--ink-900)' }}>
-              Welcome to Nuray.
+              {t('welcomeToNuray')}
             </h1>
             <p className={bodyClass} style={{ color: 'var(--ink-500)' }}>
               {isSeller
-                ? 'Your email is verified. Complete your kitchen profile to start selling.'
-                : 'Your email is verified. The taste of home, delivered cold.'}
+                ? t('verifiedSeller')
+                : t('verifiedCustomer')}
             </p>
             {isSeller ? (
               <Link href="/sellers/register">
                 <Button size="lg" className="w-full" variant="dark">
-                  Complete kitchen profile
+                  {t('completeKitchenProfile')}
                 </Button>
               </Link>
             ) : (
               <Link href="/products">
                 <Button size="lg" className="w-full">
-                  Browse today&apos;s plates
+                  {t('browsePlates')}
                 </Button>
               </Link>
             )}
@@ -142,7 +145,7 @@ function VerifyEmailContent() {
               </svg>
             </div>
             <h1 className={headingClass} style={{ color: 'var(--ink-900)' }}>
-              Verification failed.
+              {t('verificationFailed')}
             </h1>
             <p className={bodyClass} style={{ color: 'var(--ink-500)' }}>
               {error}
@@ -150,15 +153,15 @@ function VerifyEmailContent() {
             {isAuthenticated ? (
               <div className="space-y-2">
                 <Button onClick={handleResendEmail} variant="outline" className="w-full">
-                  Resend verification email
+                  {t('resendVerificationEmail')}
                 </Button>
                 <Link href="/products">
-                  <Button className="w-full">Continue to Nuray</Button>
+                  <Button className="w-full">{t('continueToNuray')}</Button>
                 </Link>
               </div>
             ) : (
               <Link href="/login">
-                <Button className="w-full">Sign in</Button>
+                <Button className="w-full">{t('signIn')}</Button>
               </Link>
             )}
           </>
@@ -176,19 +179,19 @@ function VerifyEmailContent() {
               </svg>
             </div>
             <h1 className={headingClass} style={{ color: 'var(--ink-900)' }}>
-              Link expired.
+              {t('linkExpired')}
             </h1>
             <p className={bodyClass} style={{ color: 'var(--ink-500)' }}>
-              This verification link is no longer valid. Request a new one.
+              {t('linkExpiredBody')}
             </p>
             {isAuthenticated ? (
               <Button onClick={handleResendEmail} className="w-full" size="lg">
-                Resend verification email
+                {t('resendVerificationEmail')}
               </Button>
             ) : (
               <Link href="/login">
                 <Button className="w-full" size="lg">
-                  Sign in to resend
+                  {t('signInToResend')}
                 </Button>
               </Link>
             )}
@@ -199,13 +202,18 @@ function VerifyEmailContent() {
   );
 }
 
+function LoadingText() {
+  const t = useT(authMessages);
+  return <p className="text-gray-600">{t('loadingDots')}</p>;
+}
+
 export default function VerifyEmailPage() {
   return (
     <Suspense fallback={
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
         <div className="text-center">
           <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-green-600 mx-auto mb-4"></div>
-          <p className="text-gray-600">Loading...</p>
+          <LoadingText />
         </div>
       </div>
     }>

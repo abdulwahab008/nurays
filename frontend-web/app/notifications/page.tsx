@@ -9,6 +9,9 @@ import { useAuthStore } from '@/lib/store/auth-store';
 import { formatDate } from '@/lib/utils';
 import { apiClient } from '@/lib/api-client';
 import { useToast } from '@/components/ui/toast';
+import { useT } from '@/lib/i18n';
+import { commonMessages } from '@/lib/i18n/messages/common';
+import { accountMessages } from '@/lib/i18n/messages/account';
 import {
   Package,
   Tag,
@@ -34,6 +37,8 @@ export default function NotificationsPage() {
   const router = useRouter();
   const { isAuthenticated, user } = useAuthStore();
   const { showToast } = useToast();
+  const t = useT(accountMessages);
+  const tc = useT(commonMessages);
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [filter, setFilter] = useState<'all' | 'unread'>('all');
   const [loading, setLoading] = useState(true);
@@ -72,8 +77,8 @@ export default function NotificationsPage() {
       const isNetwork = error?.message === 'Network Error' || error?.code === 'ERR_NETWORK';
       setLoadError(
         isNetwork
-          ? 'Could not reach the server. Check your connection and that the API is running.'
-          : error?.response?.data?.error?.message || 'Failed to load notifications.'
+          ? t('networkError')
+          : error?.response?.data?.error?.message || t('loadNotificationsFailed')
       );
     } finally {
       setLoading(false);
@@ -121,10 +126,10 @@ export default function NotificationsPage() {
     try {
       await apiClient.patch('/notifications/read-all');
       setNotifications(prev => prev.map(n => ({ ...n, isRead: true })));
-      showToast('All notifications marked as read', 'success');
+      showToast(t('allMarkedRead'), 'success');
     } catch {
       setNotifications(prev => prev.map(n => ({ ...n, isRead: true })));
-      showToast('All notifications marked as read', 'success');
+      showToast(t('allMarkedRead'), 'success');
     }
   };
 
@@ -144,8 +149,8 @@ export default function NotificationsPage() {
 
   return (
     <DashboardLayout
-      title="Notifications"
-      subtitle={`${unreadCount} unread notification${unreadCount !== 1 ? 's' : ''}`}
+      title={t('notifications')}
+      subtitle={t(unreadCount !== 1 ? 'unreadMany' : 'unreadOne', { count: unreadCount })}
       sidebarItems={sidebarItems}
       userType="customer"
     >
@@ -160,7 +165,7 @@ export default function NotificationsPage() {
                 : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
             }`}
           >
-            All ({notifications.length})
+            {t('filterAll', { count: notifications.length })}
           </button>
           <button
             onClick={() => setFilter('unread')}
@@ -170,28 +175,33 @@ export default function NotificationsPage() {
                 : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
             }`}
           >
-            Unread ({unreadCount})
+            {t('filterUnread', { count: unreadCount })}
           </button>
         </div>
-        {unreadCount > 0 && (
-          <Button variant="outline" onClick={markAllAsRead} className="text-sm">
-            <CheckCheck className="w-4 h-4 mr-2" /> Mark all as read
-          </Button>
-        )}
+        <div className="flex items-center gap-2">
+          <Link href="/notifications/settings" className="text-sm font-medium text-slate-600 hover:text-slate-900 underline">
+            {t('settings')}
+          </Link>
+          {unreadCount > 0 && (
+            <Button variant="outline" onClick={markAllAsRead} className="text-sm">
+              <CheckCheck className="w-4 h-4 me-2" /> {t('markAllRead')}
+            </Button>
+          )}
+        </div>
       </div>
 
       {/* Notifications List */}
       {loadError && (
         <div className="mb-4 p-4 bg-red-50 border border-red-100 rounded-xl text-red-800 text-sm flex items-center justify-between gap-4">
           <span>{loadError}</span>
-          <Button variant="outline" size="sm" onClick={loadNotifications}>Retry</Button>
+          <Button variant="outline" size="sm" onClick={loadNotifications}>{t('retry')}</Button>
         </div>
       )}
       {loading ? (
         <div className="flex items-center justify-center h-64">
           <div className="text-center">
             <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-green-600 mx-auto mb-4"></div>
-            <p className="text-gray-600">Loading notifications...</p>
+            <p className="text-gray-600">{t('loadingNotifications')}</p>
           </div>
         </div>
       ) : filteredNotifications.length === 0 ? (
@@ -200,12 +210,12 @@ export default function NotificationsPage() {
             <BellOff className="w-10 h-10" />
           </div>
           <h2 className="text-xl font-bold text-gray-900 mb-2">
-            {filter === 'unread' ? 'All caught up!' : 'No notifications yet'}
+            {filter === 'unread' ? t('allCaughtUp') : t('noNotifications')}
           </h2>
           <p className="text-gray-500">
             {filter === 'unread'
-              ? "You've read all your notifications."
-              : "You'll see order updates and promotions here."}
+              ? t('readAll')
+              : t('notificationsWillAppear')}
           </p>
         </div>
       ) : (
@@ -214,7 +224,7 @@ export default function NotificationsPage() {
             <div
               key={notification.id}
               className={`bg-white rounded-2xl border p-4 transition-all hover:shadow-sm ${
-                !notification.isRead ? 'border-l-4 border-l-green-500' : 'border-gray-100'
+                !notification.isRead ? 'border-s-4 border-s-green-500' : 'border-gray-100'
               }`}
             >
               <div className="flex items-start gap-4">
@@ -238,13 +248,14 @@ export default function NotificationsPage() {
                           onClick={() => markAsRead(notification.id)}
                           className="text-xs text-green-600 hover:text-green-700 font-medium"
                         >
-                          Mark read
+                          {t('markRead')}
                         </button>
                       )}
                       <button
                         onClick={() => deleteNotificationLocal(notification.id)}
                         className="p-1 rounded-lg text-gray-400 hover:text-red-500 hover:bg-gray-50 transition-colors"
-                        title="Delete"
+                        title={tc('delete')}
+                        aria-label={tc('delete')}
                       >
                         <X className="w-4 h-4" />
                       </button>
@@ -255,8 +266,8 @@ export default function NotificationsPage() {
                       href={notification.link}
                       className="inline-flex items-center gap-1 mt-3 text-sm text-green-600 hover:text-green-700 font-medium"
                     >
-                      <span>View details</span>
-                      <ArrowRight className="w-4 h-4" />
+                      <span>{t('viewDetails')}</span>
+                      <ArrowRight className="rtl:-scale-x-100 w-4 h-4" />
                     </Link>
                   )}
                 </div>
@@ -268,12 +279,12 @@ export default function NotificationsPage() {
 
       {/* Notification Settings */}
       <div className="mt-8 bg-white rounded-2xl border border-gray-100 p-6">
-        <h3 className="font-semibold text-gray-900 mb-4">Notification Preferences</h3>
+        <h3 className="font-semibold text-gray-900 mb-4">{t('notificationPreferences')}</h3>
         <div className="space-y-4">
           {[
-            { id: 'orders', label: 'Order updates', desc: 'Get notified about order status changes', icon: Package, color: 'text-blue-600 bg-blue-50' },
-            { id: 'promos', label: 'Promotions & offers', desc: 'Receive special deals and discounts', icon: Tag, color: 'text-amber-600 bg-amber-50' },
-            { id: 'delivery', label: 'Delivery updates', desc: 'Real-time delivery tracking alerts', icon: Truck, color: 'text-green-600 bg-green-50' },
+            { id: 'orders', label: t('prefOrders'), desc: t('prefOrdersDesc'), icon: Package, color: 'text-blue-600 bg-blue-50' },
+            { id: 'promos', label: t('prefPromos'), desc: t('prefPromosDesc'), icon: Tag, color: 'text-amber-600 bg-amber-50' },
+            { id: 'delivery', label: t('prefDelivery'), desc: t('prefDeliveryDesc'), icon: Truck, color: 'text-green-600 bg-green-50' },
           ].map((pref) => {
             const Icon = pref.icon;
             return (

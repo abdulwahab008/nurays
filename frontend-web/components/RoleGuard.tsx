@@ -6,7 +6,7 @@ import { useAuthStore } from '@/lib/store/auth-store';
 import { useAuthInit } from '@/lib/hooks/use-auth-init';
 
 interface RoleGuardProps {
-  allowedRoles: Array<'customer' | 'seller' | 'admin'>;
+  allowedRoles: Array<'customer' | 'seller' | 'admin' | 'rider' | 'hub_manager'>;
   /** Where to send unauthenticated users. */
   redirectUnauthenticated: string;
   /** Where to send users with the wrong role. */
@@ -44,7 +44,7 @@ export function RoleGuard({
     }
 
     const role = user?.userType ?? user?.user_type;
-    if (!role || !allowedRoles.includes(role as 'customer' | 'seller' | 'admin')) {
+    if (!role || !allowedRoles.includes(role as (typeof allowedRoles)[number])) {
       setDecision('deny');
       router.replace(redirectWrongRole);
       return;

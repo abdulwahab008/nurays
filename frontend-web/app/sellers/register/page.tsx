@@ -8,44 +8,47 @@ import { useToast } from '@/components/ui/toast';
 import { useAuthStore } from '@/lib/store/auth-store';
 import { apiClient } from '@/lib/api-client';
 import LocationMap from '@/components/ui/LocationMap';
+import FileUploadField from '@/components/ui/FileUploadField';
+import { useT } from '@/lib/i18n';
+import { joinMessages, type JoinMessageKey } from '@/lib/i18n/messages/join';
 
-const COMMUNITIES = [
-  'Askari 11, Karachi',
-  'DHA Phase 5, Karachi',
-  'Bahria Town, Karachi',
-  'Gulshan-e-Iqbal, Karachi',
-  'Clifton, Karachi',
-  'PECHS, Karachi',
-  'Askari 10, Lahore',
-  'DHA Phase 6, Lahore',
+interface CommunityOption {
+  id: string;
+  name: string;
+  city: string;
+  centerLatitude: number;
+  centerLongitude: number;
+}
+
+
+const BUSINESS_TYPES: { id: string; title: JoinMessageKey; desc: JoinMessageKey }[] = [
+  { id: 'home_kitchen', title: 'bt.home_kitchen', desc: 'bt.home_kitchen.desc' },
+  { id: 'restaurant', title: 'bt.restaurant', desc: 'bt.restaurant.desc' },
+  { id: 'bakery', title: 'bt.bakery', desc: 'bt.bakery.desc' },
+  { id: 'cafe', title: 'bt.cafe', desc: 'bt.cafe.desc' },
+  { id: 'cloud_kitchen', title: 'bt.cloud_kitchen', desc: 'bt.cloud_kitchen.desc' },
 ];
 
-const BUSINESS_TYPES = [
-  { id: 'home_kitchen', title: 'Home Kitchen', desc: 'Homemade traditional recipes cooked in home kitchen' },
-  { id: 'restaurant', title: 'Restaurant / Eatery', desc: 'Dine-in or commercial restaurant branch' },
-  { id: 'bakery', title: 'Bakery & Confectionery', desc: 'Fresh baked goods, cakes & treats' },
-  { id: 'cafe', title: 'Cafe & Beverages', desc: 'Artisanal coffee, shakes & fast snacks' },
-  { id: 'cloud_kitchen', title: 'Cloud / Dark Kitchen', desc: 'Delivery-only commercial cooking facility' },
-];
-
-const FOOD_CATEGORIES = [
-  'Biryani',
-  'Burgers',
-  'Karahi & Handi',
-  'Pizza',
-  'Pasta',
-  'Curries',
-  'Parathas & Rolls',
-  'Kebabs & BBQ',
-  'Desserts & Sweets',
-  'Beverages & Shakes',
-  'Snacks & Appetizers',
+// The value is what gets saved (in English); the key is what the applicant reads.
+const FOOD_CATEGORIES: { value: string; key: JoinMessageKey }[] = [
+  { value: 'Biryani', key: 'cat.biryani' },
+  { value: 'Burgers', key: 'cat.burgers' },
+  { value: 'Karahi & Handi', key: 'cat.karahi' },
+  { value: 'Pizza', key: 'cat.pizza' },
+  { value: 'Pasta', key: 'cat.pasta' },
+  { value: 'Curries', key: 'cat.curries' },
+  { value: 'Parathas & Rolls', key: 'cat.parathas' },
+  { value: 'Kebabs & BBQ', key: 'cat.kebabs' },
+  { value: 'Desserts & Sweets', key: 'cat.desserts' },
+  { value: 'Beverages & Shakes', key: 'cat.beverages' },
+  { value: 'Snacks & Appetizers', key: 'cat.snacks' },
 ];
 
 export default function SellerRegisterPage() {
   const router = useRouter();
   const { isAuthenticated, user } = useAuthStore();
   const { showToast } = useToast();
+  const t = useT(joinMessages);
   const [loading, setLoading] = useState(false);
   const [sellerInfo, setSellerInfo] = useState<any>(null);
   const [loadingSellerInfo, setLoadingSellerInfo] = useState(true);
@@ -60,12 +63,13 @@ export default function SellerRegisterPage() {
     phone: '',
     email: '',
     description: '',
-    primaryCommunityName: 'Askari 11, Karachi',
+    communityId: '',
+    primaryCommunityName: '',
     houseOrUnitNumber: '',
     address: '',
-    latitude: 24.9125,
-    longitude: 67.115,
-    mealCategories: ['Biryani', 'Burgers'],
+    latitude: null as number | null,
+    longitude: null as number | null,
+    mealCategories: [] as string[],
     deliveryModes: ['delivery', 'pickup'],
     bankAccountName: '',
     bankAccountNumber: '',
@@ -74,13 +78,21 @@ export default function SellerRegisterPage() {
     easypaisaNumber: '',
     coverImageUrl: '',
     kitchenVideoUrl: '',
-    cnicFrontUrl: '',
-    cnicBackUrl: '',
-    kitchenPhotoUrls: [] as string[],
+    cnicFrontUrl: null as string | null,
+    cnicBackUrl: null as string | null,
+    kitchenPhotoUrls: [null, null] as Array<string | null>,
     agreeToTerms: false,
   });
 
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [communities, setCommunities] = useState<CommunityOption[]>([]);
+
+  useEffect(() => {
+    apiClient
+      .get('/communities')
+      .then((res) => setCommunities(res.data.data || []))
+      .catch(() => setCommunities([]));
+  }, []);
 
   useEffect(() => {
     const token = typeof window !== 'undefined' ? (sessionStorage.getItem('access_token') || localStorage.getItem('access_token')) : null;
@@ -105,7 +117,8 @@ export default function SellerRegisterPage() {
           businessNameUrdu: seller.businessNameUrdu || '',
           businessType: seller.businessType || 'home_kitchen',
           description: seller.description || '',
-          primaryCommunityName: seller.primaryCommunityName || 'Askari 11, Karachi',
+          primaryCommunityName: seller.primaryCommunityName || '',
+          communityId: seller.communityId || '',
           coverImageUrl: seller.coverImageUrl || '',
           kitchenVideoUrl: seller.kitchenVideoUrl || '',
         }));
@@ -150,63 +163,16 @@ export default function SellerRegisterPage() {
             longitude: Number(pos.coords.longitude.toFixed(6)),
           }));
           setDetectingGps(false);
-          showToast('📍 GPS coordinates detected successfully!', 'success');
+          showToast(t('reg.gpsDetected'), 'success');
         },
         () => {
-          // Fallback to Askari 11 Karachi
-          setFormData(prev => ({ ...prev, latitude: 24.9125, longitude: 67.115 }));
           setDetectingGps(false);
-          showToast('GPS access denied. Defaulted to Askari 11 Karachi.', 'info');
+          showToast(t('reg.gpsBlocked'), 'info');
         }
       );
     } else {
       setDetectingGps(false);
-      showToast('Geolocation not supported in this browser.', 'info');
-    }
-  };
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    const newErrors: Record<string, string> = {};
-
-    if (!formData.businessName.trim() || formData.businessName.length < 3) {
-      newErrors.businessName = 'Business name must be at least 3 characters';
-    }
-    if (!formData.primaryCommunityName) {
-      newErrors.primaryCommunityName = 'Please select a serving community';
-    }
-    if (!formData.agreeToTerms && (!sellerInfo || sellerInfo.verificationStatus === 'rejected')) {
-      newErrors.agreeToTerms = 'You must agree to the Terms & Conditions';
-    }
-
-    if (Object.keys(newErrors).length > 0) {
-      setErrors(newErrors);
-      showToast('Please fix the errors in the form', 'error');
-      return;
-    }
-
-    try {
-      setLoading(true);
-      const payload = {
-        ...formData,
-        coverImageUrl: formData.coverImageUrl || 'https://images.unsplash.com/photo-1555396273-367ea4eb4db5?w=800&q=80',
-        cnicFrontUrl: formData.cnicFrontUrl || 'https://images.unsplash.com/photo-1589829545856-d10d557cf95f?w=600&q=80',
-        cnicBackUrl: formData.cnicBackUrl || 'https://images.unsplash.com/photo-1589829545856-d10d557cf95f?w=600&q=80',
-        kitchenPhotoUrls: formData.kitchenPhotoUrls.length > 0 
-          ? formData.kitchenPhotoUrls 
-          : ['https://images.unsplash.com/photo-1556910103-1c02745aae4d?w=800&q=80'],
-      };
-
-      const response = await apiClient.post('/sellers/register', payload);
-      if (response.data.success) {
-        showToast(response.data.message || 'Application submitted successfully for review!', 'success');
-        await loadSellerInfo();
-        setIsEditing(false);
-      }
-    } catch (error: any) {
-      showToast(error.response?.data?.error?.message || error.response?.data?.message || 'Failed to submit application', 'error');
-    } finally {
-      setLoading(false);
+      showToast(t('reg.gpsUnsupported'), 'info');
     }
   };
 
@@ -214,16 +180,70 @@ export default function SellerRegisterPage() {
   const isPending = sellerInfo?.verificationStatus === 'pending';
   const isRejected = sellerInfo?.verificationStatus === 'rejected';
 
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const newErrors: Record<string, string> = {};
+
+    if (!formData.businessName.trim() || formData.businessName.length < 3) {
+      newErrors.businessName = t('errNameShort');
+    }
+    if (!formData.communityId) {
+      newErrors.primaryCommunityName = t('reg.errCommunity');
+    }
+    if (formData.latitude == null || formData.longitude == null) {
+      newErrors.location = t('reg.errLocation');
+    }
+    if (!isRejected && (!formData.cnicFrontUrl || !formData.cnicBackUrl)) {
+      newErrors.cnic = t('reg.errCnic');
+    }
+    if (!formData.agreeToTerms && (!sellerInfo || sellerInfo.verificationStatus === 'rejected')) {
+      newErrors.agreeToTerms = t('reg.errTerms');
+    }
+
+    if (Object.keys(newErrors).length > 0) {
+      setErrors(newErrors);
+      showToast(t('reg.fixErrors'), 'error');
+      return;
+    }
+
+    try {
+      setLoading(true);
+      // Only real uploads: nothing is filled in on the applicant's behalf.
+      const payload = {
+        ...formData,
+        latitude: formData.latitude ?? undefined,
+        longitude: formData.longitude ?? undefined,
+        communityId: formData.communityId || undefined,
+        coverImageUrl: formData.coverImageUrl || undefined,
+        cnicFrontUrl: formData.cnicFrontUrl || undefined,
+        cnicBackUrl: formData.cnicBackUrl || undefined,
+        kitchenPhotoUrls: formData.kitchenPhotoUrls.filter((u): u is string => !!u),
+      };
+
+      const response = await apiClient.post('/sellers/register', payload);
+      if (response.data.success) {
+        showToast(response.data.message || t('reg.submitted'), 'success');
+        await loadSellerInfo();
+        setIsEditing(false);
+      }
+    } catch (error: any) {
+      showToast(error.response?.data?.error?.message || error.response?.data?.message || t('reg.submitFailed'), 'error');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+
   return (
     <div className="min-h-screen bg-slate-50 py-10 px-4 sm:px-6 lg:px-8">
       <div className="max-w-4xl mx-auto">
         {/* Navigation & Header */}
         <div className="flex items-center justify-between mb-8">
           <Link href="/dashboard" className="text-sm font-semibold text-orange-600 hover:text-orange-700 flex items-center gap-1">
-            ← Back to Customer Dashboard
+            {t('reg.back')}
           </Link>
           <span className="text-xs font-bold uppercase tracking-wider px-3 py-1 bg-orange-100 text-orange-800 rounded-full">
-            Seller Portal Onboarding
+            {t('reg.portalBadge')}
           </span>
         </div>
 
@@ -238,15 +258,15 @@ export default function SellerRegisterPage() {
                       ✓
                     </div>
                     <div>
-                      <h2 className="text-lg font-bold text-emerald-900">Seller Account Active &amp; Approved</h2>
-                      <p className="text-sm text-emerald-700">Your kitchen is verified and ready to accept hungry community customers.</p>
+                      <h2 className="text-lg font-bold text-emerald-900">{t('reg.approvedTitle')}</h2>
+                      <p className="text-sm text-emerald-700">{t('reg.approvedBody')}</p>
                     </div>
                   </div>
                   <Button
                     onClick={() => router.push('/sellers/dashboard')}
                     className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl px-6 py-2.5 shadow-md shadow-emerald-200"
                   >
-                    Open Seller Dashboard →
+                    {t('reg.openDashboard')}
                   </Button>
                 </div>
               </div>
@@ -260,11 +280,11 @@ export default function SellerRegisterPage() {
                   </div>
                   <div className="flex-1">
                     <div className="flex items-center justify-between">
-                      <h2 className="text-lg font-bold text-amber-900">Application Pending Admin Review</h2>
-                      <span className="text-xs font-semibold bg-amber-200 text-amber-800 px-3 py-1 rounded-full">Under Verification</span>
+                      <h2 className="text-lg font-bold text-amber-900">{t('reg.pendingTitle')}</h2>
+                      <span className="text-xs font-semibold bg-amber-200 text-amber-800 px-3 py-1 rounded-full">{t('reg.pendingBadge')}</span>
                     </div>
                     <p className="text-sm text-amber-700 mt-1">
-                      Our safety and hygiene compliance team is verifying your kitchen documents and location details. You will receive an update shortly.
+                      {t('reg.pendingBody')}
                     </p>
                   </div>
                 </div>
@@ -279,9 +299,9 @@ export default function SellerRegisterPage() {
                       ✕
                     </div>
                     <div>
-                      <h2 className="text-lg font-bold text-rose-900">Application Requires Attention</h2>
+                      <h2 className="text-lg font-bold text-rose-900">{t('reg.rejectedTitle')}</h2>
                       <p id="rejection-reason-text" className="text-sm text-rose-700 mt-0.5">
-                        <span className="font-semibold">Rejection Reason:</span> {sellerInfo.rejectionReason || 'Incomplete or unverified information.'}
+                        <span className="font-semibold">{t('reg.rejectionReason')}</span> {sellerInfo.rejectionReason || t('reg.rejectionDefault')}
                       </p>
                     </div>
                   </div>
@@ -290,7 +310,7 @@ export default function SellerRegisterPage() {
                     onClick={() => setIsEditing(true)}
                     className="bg-rose-600 hover:bg-rose-700 text-white font-bold rounded-xl px-5 py-2.5 shadow-md shadow-rose-200"
                   >
-                    Fix &amp; Resubmit Application
+                    {t('reg.fixResubmit')}
                   </Button>
                 </div>
               </div>
@@ -303,10 +323,10 @@ export default function SellerRegisterPage() {
           <form onSubmit={handleSubmit} className="bg-white rounded-3xl shadow-xl border border-slate-100 p-8 sm:p-10 space-y-8">
             <div>
               <h1 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight">
-                {isRejected ? 'Update & Resubmit Seller Application' : 'Become a Home Chef / Kitchen Partner'}
+                {isRejected ? t('reg.titleResubmit') : t('reg.title')}
               </h1>
               <p className="text-slate-500 text-sm mt-1">
-                Launch your culinary venture on Nuray. Reach thousands of residents in your community with zero upfront overhead.
+                {t('reg.intro')}
               </p>
             </div>
 
@@ -314,13 +334,13 @@ export default function SellerRegisterPage() {
             <div className="space-y-4 pt-4 border-t border-slate-100">
               <h2 className="text-base font-bold text-slate-900 flex items-center gap-2">
                 <span className="w-6 h-6 rounded-full bg-orange-100 text-orange-600 flex items-center justify-center text-xs">1</span>
-                Kitchen Profile &amp; Business Type
+                {t('reg.s1')}
               </h2>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
-                    Business / Kitchen Name (English) <span className="text-rose-500">*</span>
+                    {t('reg.nameEn')} <span className="text-rose-500">*</span>
                   </label>
                   <input
                     id="business-name-input"
@@ -328,7 +348,7 @@ export default function SellerRegisterPage() {
                     name="businessName"
                     value={formData.businessName}
                     onChange={handleInputChange}
-                    placeholder="e.g. Grandma's Secret Kitchen"
+                    placeholder={t('reg.nameEnPh')}
                     className={`w-full px-4 py-3 rounded-xl border bg-slate-50 text-slate-900 font-medium text-sm focus:outline-none focus:ring-2 focus:ring-orange-500 transition-all ${
                       errors.businessName ? 'border-rose-400 bg-rose-50' : 'border-slate-200'
                     }`}
@@ -338,7 +358,7 @@ export default function SellerRegisterPage() {
 
                 <div>
                   <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
-                    Kitchen Name (Urdu - Optional)
+                    {t('reg.nameUr')}
                   </label>
                   <input
                     id="business-name-urdu-input"
@@ -354,7 +374,7 @@ export default function SellerRegisterPage() {
 
               <div>
                 <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">
-                  Select Operating Business Type
+                  {t('reg.selectType')}
                 </label>
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
                   {BUSINESS_TYPES.map(bt => (
@@ -362,16 +382,16 @@ export default function SellerRegisterPage() {
                       key={bt.id}
                       type="button"
                       onClick={() => setFormData(prev => ({ ...prev, businessType: bt.id }))}
-                      className={`p-3.5 rounded-2xl border text-left transition-all ${
+                      className={`p-3.5 rounded-2xl border text-start transition-all ${
                         formData.businessType === bt.id
                           ? 'border-orange-500 bg-orange-50/50 shadow-sm'
                           : 'border-slate-200 hover:border-slate-300 bg-white'
                       }`}
                     >
                       <p className={`font-bold text-sm ${formData.businessType === bt.id ? 'text-orange-950' : 'text-slate-900'}`}>
-                        {bt.title}
+                        {t(bt.title)}
                       </p>
-                      <p className="text-xs text-slate-500 mt-1 leading-snug">{bt.desc}</p>
+                      <p className="text-xs text-slate-500 mt-1 leading-snug">{t(bt.desc)}</p>
                     </button>
                   ))}
                 </div>
@@ -379,14 +399,14 @@ export default function SellerRegisterPage() {
 
               <div>
                 <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
-                  Chef Bio &amp; Food Story
+                  {t('reg.bio')}
                 </label>
                 <textarea
                   name="description"
                   value={formData.description}
                   onChange={handleInputChange}
                   rows={3}
-                  placeholder="Share what makes your food authentic, signature recipes, and heritage cooking methods..."
+                  placeholder={t('reg.bioPh')}
                   className="w-full px-4 py-3 rounded-xl border border-slate-200 bg-slate-50 text-slate-900 font-medium text-sm focus:outline-none focus:ring-2 focus:ring-orange-500 transition-all"
                 />
               </div>
@@ -396,30 +416,42 @@ export default function SellerRegisterPage() {
             <div className="space-y-4 pt-4 border-t border-slate-100">
               <h2 className="text-base font-bold text-slate-900 flex items-center gap-2">
                 <span className="w-6 h-6 rounded-full bg-orange-100 text-orange-600 flex items-center justify-center text-xs">2</span>
-                Community &amp; Location Detection
+                {t('reg.s2')}
               </h2>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
-                    Primary Community Hub <span className="text-rose-500">*</span>
+                    {t('reg.community')} <span className="text-rose-500">*</span>
                   </label>
                   <select
                     id="community-select"
-                    name="primaryCommunityName"
-                    value={formData.primaryCommunityName}
-                    onChange={handleInputChange}
+                    name="communityId"
+                    value={formData.communityId}
+                    onChange={(e) => {
+                      const c = communities.find((x) => x.id === e.target.value);
+                      setFormData((prev) => ({ ...prev, communityId: e.target.value, primaryCommunityName: c ? `${c.name}, ${c.city}` : '' }));
+                      setErrors((prev) => {
+                        const n = { ...prev };
+                        delete n.primaryCommunityName;
+                        return n;
+                      });
+                    }}
                     className="w-full px-4 py-3 rounded-xl border border-slate-200 bg-slate-50 text-slate-900 font-medium text-sm focus:outline-none focus:ring-2 focus:ring-orange-500 transition-all"
                   >
-                    {COMMUNITIES.map(comm => (
-                      <option key={comm} value={comm}>{comm}</option>
+                    <option value="">{communities.length ? t('reg.chooseCommunity') : t('reg.loadingCommunities')}</option>
+                    {communities.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.name}, {c.city}
+                      </option>
                     ))}
                   </select>
+                  {errors.primaryCommunityName && <p className="text-rose-500 text-xs font-medium mt-1">{errors.primaryCommunityName}</p>}
                 </div>
 
                 <div>
                   <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
-                    House / Shop / Unit Number <span className="text-rose-500">*</span>
+                    {t('reg.house')} <span className="text-rose-500">*</span>
                   </label>
                   <input
                     id="house-unit-input"
@@ -427,7 +459,7 @@ export default function SellerRegisterPage() {
                     name="houseOrUnitNumber"
                     value={formData.houseOrUnitNumber}
                     onChange={handleInputChange}
-                    placeholder="e.g. Villa 14-B, Street 3"
+                    placeholder={t('reg.housePh')}
                     className="w-full px-4 py-3 rounded-xl border border-slate-200 bg-slate-50 text-slate-900 font-medium text-sm focus:outline-none focus:ring-2 focus:ring-orange-500 transition-all"
                   />
                 </div>
@@ -437,15 +469,19 @@ export default function SellerRegisterPage() {
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
                   <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">
-                    Kitchen Location on Map
+                    {t('reg.mapLabel')}
                   </label>
-                  <span className="font-mono text-xs text-slate-500 font-medium">
-                    {formData.latitude?.toFixed(4)}, {formData.longitude?.toFixed(4)}
+                  <span className="font-mono text-xs text-slate-500 font-medium" data-ltr>
+                    {formData.latitude != null && formData.longitude != null ? `${formData.latitude.toFixed(4)}, ${formData.longitude.toFixed(4)}` : t('reg.notPicked')}
                   </span>
                 </div>
                 <LocationMap
-                  center={{ lat: formData.latitude || 24.9125, lng: formData.longitude || 67.115 }}
-                  markerPosition={formData.latitude ? { lat: formData.latitude, lng: formData.longitude } : null}
+                  center={(() => {
+                    if (formData.latitude != null && formData.longitude != null) return { lat: formData.latitude, lng: formData.longitude };
+                    const c = communities.find((x) => x.id === formData.communityId);
+                    return c ? { lat: c.centerLatitude, lng: c.centerLongitude } : { lat: 31.5204, lng: 74.3587 };
+                  })()}
+                  markerPosition={formData.latitude != null && formData.longitude != null ? { lat: formData.latitude, lng: formData.longitude } : null}
                   height="260px"
                   onLocationSelect={(coords) => {
                     setFormData(prev => ({
@@ -454,8 +490,18 @@ export default function SellerRegisterPage() {
                       longitude: Number(coords.lng.toFixed(6)),
                       address: coords.address || prev.address,
                     }));
+                    setErrors((prev) => {
+                      const n = { ...prev };
+                      delete n.location;
+                      return n;
+                    });
                   }}
                 />
+                {errors.location ? (
+                  <p className="text-rose-500 text-xs font-medium">{errors.location}</p>
+                ) : (
+                  <p className="text-xs text-slate-500">{t('reg.mapHelp')}</p>
+                )}
               </div>
             </div>
 
@@ -463,11 +509,11 @@ export default function SellerRegisterPage() {
             <div className="space-y-4 pt-4 border-t border-slate-100">
               <h2 className="text-base font-bold text-slate-900 flex items-center gap-2">
                 <span className="w-6 h-6 rounded-full bg-orange-100 text-orange-600 flex items-center justify-center text-xs">3</span>
-                Food Categories &amp; Specialities
+                {t('reg.s3')}
               </h2>
 
               <div className="flex flex-wrap gap-2">
-                {FOOD_CATEGORIES.map(cat => {
+                {FOOD_CATEGORIES.map(({ value: cat, key: catKey }) => {
                   const selected = formData.mealCategories.includes(cat);
                   return (
                     <button
@@ -481,7 +527,7 @@ export default function SellerRegisterPage() {
                       }`}
                     >
                       {selected ? '✓ ' : '+ '}
-                      {cat}
+                      {t(catKey)}
                     </button>
                   );
                 })}
@@ -492,13 +538,13 @@ export default function SellerRegisterPage() {
             <div className="space-y-4 pt-4 border-t border-slate-100">
               <h2 className="text-base font-bold text-slate-900 flex items-center gap-2">
                 <span className="w-6 h-6 rounded-full bg-orange-100 text-orange-600 flex items-center justify-center text-xs">4</span>
-                Payout Account &amp; Digital Wallets
+                {t('reg.s4')}
               </h2>
 
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <div>
                   <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
-                    Bank Name
+                    {t('bankName')}
                   </label>
                   <input
                     id="bank-name-input"
@@ -506,14 +552,14 @@ export default function SellerRegisterPage() {
                     name="bankName"
                     value={formData.bankName}
                     onChange={handleInputChange}
-                    placeholder="e.g. Meezan Bank, HBL"
+                    placeholder={t('reg.bankNamePh')}
                     className="w-full px-4 py-3 rounded-xl border border-slate-200 bg-slate-50 text-slate-900 font-medium text-sm focus:outline-none focus:ring-2 focus:ring-orange-500 transition-all"
                   />
                 </div>
 
                 <div>
                   <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
-                    Account Title
+                    {t('accountTitle')}
                   </label>
                   <input
                     id="bank-account-name-input"
@@ -521,16 +567,17 @@ export default function SellerRegisterPage() {
                     name="bankAccountName"
                     value={formData.bankAccountName}
                     onChange={handleInputChange}
-                    placeholder="Account holder name"
+                    placeholder={t('reg.accountTitlePh')}
                     className="w-full px-4 py-3 rounded-xl border border-slate-200 bg-slate-50 text-slate-900 font-medium text-sm focus:outline-none focus:ring-2 focus:ring-orange-500 transition-all"
                   />
                 </div>
 
                 <div>
                   <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
-                    Account / IBAN Number
+                    {t('reg.accountNumber')}
                   </label>
                   <input
+                    dir="ltr"
                     id="bank-account-input"
                     type="text"
                     name="bankAccountNumber"
@@ -545,9 +592,10 @@ export default function SellerRegisterPage() {
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
-                    JazzCash Account Number
+                    {t('reg.jazzcash')}
                   </label>
                   <input
+                    dir="ltr"
                     id="jazzcash-input"
                     type="text"
                     name="jazzcashNumber"
@@ -560,9 +608,10 @@ export default function SellerRegisterPage() {
 
                 <div>
                   <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
-                    EasyPaisa Account Number
+                    {t('reg.easypaisa')}
                   </label>
                   <input
+                    dir="ltr"
                     id="easypaisa-input"
                     type="text"
                     name="easypaisaNumber"
@@ -579,40 +628,57 @@ export default function SellerRegisterPage() {
             <div className="space-y-4 pt-4 border-t border-slate-100">
               <h2 className="text-base font-bold text-slate-900 flex items-center gap-2">
                 <span className="w-6 h-6 rounded-full bg-orange-100 text-orange-600 flex items-center justify-center text-xs">5</span>
-                Identity &amp; Kitchen Hygiene Proofs
+                {t('reg.s5')}
               </h2>
 
+              <p className="text-xs text-slate-500">
+                {t('reg.docsNote')}
+                {isRejected ? t('reg.docsNoteRejected') : ''}
+              </p>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
-                    CNIC Front Image URL
-                  </label>
-                  <input
-                    id="cnic-front-input"
-                    type="text"
-                    name="cnicFrontUrl"
-                    value={formData.cnicFrontUrl}
-                    onChange={handleInputChange}
-                    placeholder="https://example.com/cnic-front.jpg"
-                    className="w-full px-4 py-3 rounded-xl border border-slate-200 bg-slate-50 text-slate-900 font-medium text-sm focus:outline-none focus:ring-2 focus:ring-orange-500 transition-all"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
-                    Kitchen Photo URL
-                  </label>
-                  <input
-                    id="kitchen-photo-input"
-                    type="text"
-                    name="coverImageUrl"
-                    value={formData.coverImageUrl}
-                    onChange={handleInputChange}
-                    placeholder="https://example.com/kitchen.jpg"
-                    className="w-full px-4 py-3 rounded-xl border border-slate-200 bg-slate-50 text-slate-900 font-medium text-sm focus:outline-none focus:ring-2 focus:ring-orange-500 transition-all"
-                  />
-                </div>
+                <FileUploadField
+                  kind="document"
+                  label={t('reg.cnicFront')}
+                  required={!isRejected}
+                  value={formData.cnicFrontUrl}
+                  onChange={(v) => setFormData((prev) => ({ ...prev, cnicFrontUrl: v }))}
+                  onFileText={isRejected ? t('reg.onFileLast') : undefined}
+                  testId="cnic-front-upload"
+                />
+                <FileUploadField
+                  kind="document"
+                  label={t('reg.cnicBack')}
+                  required={!isRejected}
+                  value={formData.cnicBackUrl}
+                  onChange={(v) => setFormData((prev) => ({ ...prev, cnicBackUrl: v }))}
+                  onFileText={isRejected ? t('reg.onFileLast') : undefined}
+                  testId="cnic-back-upload"
+                />
               </div>
+              {errors.cnic && <p className="text-rose-500 text-xs font-medium">{errors.cnic}</p>}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {formData.kitchenPhotoUrls.map((url, i) => (
+                  <FileUploadField
+                    key={i}
+                    kind="document"
+                    label={t('reg.kitchenPhoto', { n: i + 1 })}
+                    hint={i === 0 ? t('reg.kitchenPhotoHint') : t('reg.optional')}
+                    value={url}
+                    onChange={(v) =>
+                      setFormData((prev) => ({ ...prev, kitchenPhotoUrls: prev.kitchenPhotoUrls.map((x, j) => (j === i ? v : x)) }))
+                    }
+                    testId={`kitchen-photo-${i + 1}`}
+                  />
+                ))}
+              </div>
+              <FileUploadField
+                kind="cover"
+                label={t('reg.cover')}
+                hint={t('reg.coverHint')}
+                value={formData.coverImageUrl || null}
+                onChange={(v) => setFormData((prev) => ({ ...prev, coverImageUrl: v ?? '' }))}
+                testId="cover-upload"
+              />
             </div>
 
             {/* Section 6: Terms Acceptance & Submit */}
@@ -627,7 +693,7 @@ export default function SellerRegisterPage() {
                   className="mt-1 w-5 h-5 rounded text-orange-500 focus:ring-orange-400 border-slate-300"
                 />
                 <span className="text-xs text-slate-600 leading-relaxed">
-                  I agree to Nuray Food's <span className="font-bold text-slate-900">Food Safety, Hygiene Verification &amp; Platform Commission Terms</span>. I declare that food prepared meets community quality standards.
+                  {t('reg.terms1')}<span className="font-bold text-slate-900">{t('reg.termsBold')}</span>{t('reg.terms2')}
                 </span>
               </label>
               {errors.agreeToTerms && <p className="text-rose-500 text-xs font-medium">{errors.agreeToTerms}</p>}
@@ -640,10 +706,10 @@ export default function SellerRegisterPage() {
                   className="w-full py-4 bg-orange-500 hover:bg-orange-600 text-white font-black text-base rounded-2xl shadow-lg shadow-orange-200 transition-all duration-200"
                 >
                   {loading 
-                    ? 'Submitting Application...' 
-                    : isRejected 
-                    ? 'Resubmit Application for Approval →' 
-                    : 'Submit Application for Approval →'}
+                    ? t('reg.submitting')
+                    : isRejected
+                    ? t('reg.resubmit')
+                    : t('reg.submit')}
                 </Button>
               </div>
             </div>

@@ -8,12 +8,15 @@ import { useCommunityStore } from '@/lib/store/community-store';
 import { useToast } from '@/components/ui/toast';
 import { Button } from '@/components/ui/button';
 import { formatPrice } from '@/lib/utils';
+import { useT } from '@/lib/i18n';
+import { browseMessages, businessTypeKey } from '@/lib/i18n/messages/browse';
 
 export default function FavoritesPage() {
   const [favorites, setFavorites] = useState<FavoriteSellerItem[]>([]);
   const [loading, setLoading] = useState(true);
   const { selectedCommunity } = useCommunityStore();
   const { showToast } = useToast();
+  const t = useT(browseMessages);
 
   const fetchFavorites = async () => {
     setLoading(true);
@@ -24,7 +27,7 @@ export default function FavoritesPage() {
       setFavorites(items);
     } catch (err: any) {
       console.error(err);
-      showToast('Could not load favorite kitchens', 'error');
+      showToast(t('favLoadFailed'), 'error');
     } finally {
       setLoading(false);
     }
@@ -38,16 +41,16 @@ export default function FavoritesPage() {
     try {
       await favoriteService.removeFavorite(sellerId);
       setFavorites((prev) => prev.filter((f) => f.sellerId !== sellerId));
-      showToast(`Removed "${name}" from favorites`, 'info');
+      showToast(t('favRemovedQuoted', { name }), 'info');
     } catch (err: any) {
-      showToast('Failed to remove favorite', 'error');
+      showToast(t('favRemoveFailed'), 'error');
     }
   };
 
   return (
     <DashboardLayout
-      title="Favorite Kitchens"
-      subtitle="Quick access to your saved community home chefs, bakeries, and restaurants"
+      title={t('favTitle')}
+      subtitle={t('favSubtitle')}
       sidebarItems={CUSTOMER_SIDEBAR_ITEMS}
       userType="customer"
     >
@@ -57,15 +60,15 @@ export default function FavoritesPage() {
           <div>
             <div className="flex items-center gap-2">
               <span className="text-xl">❤️</span>
-              <h2 className="text-xl sm:text-2xl font-black">Your Saved Kitchens</h2>
+              <h2 className="text-xl sm:text-2xl font-black">{t('favSaved')}</h2>
             </div>
             <p className="text-xs sm:text-sm text-neutral-400 mt-1">
-              Never lose your favorite local biryani makers, paratha masters, or home bakers.
+              {t('favNeverLose')}
             </p>
           </div>
           <Link href="/products">
             <Button className="flame-btn px-5 py-2.5 text-xs font-bold uppercase tracking-wider rounded-xl">
-              Explore More Kitchens
+              {t('favExplore')}
             </Button>
           </Link>
         </div>
@@ -82,13 +85,13 @@ export default function FavoritesPage() {
             <div className="w-16 h-16 rounded-full bg-rose-50 text-rose-500 flex items-center justify-center text-3xl mx-auto mb-4">
               🤍
             </div>
-            <h3 className="text-lg font-bold text-neutral-900">No favorite kitchens saved yet</h3>
+            <h3 className="text-lg font-bold text-neutral-900">{t('favNone')}</h3>
             <p className="text-sm text-neutral-500 max-w-md mx-auto mt-1 mb-6">
-              When browsing community kitchens in {selectedCommunity?.name || 'your community'}, tap the heart icon on any kitchen to save it here for fast reordering.
+              {t('favEmptyHint', { area: selectedCommunity?.name || t('favYourCommunity') })}
             </p>
             <Link href="/products">
               <Button className="flame-btn px-6 py-2.5 text-sm font-semibold rounded-xl">
-                Browse Community Kitchens
+                {t('favBrowse')}
               </Button>
             </Link>
           </div>
@@ -116,8 +119,8 @@ export default function FavoritesPage() {
                   <button
                     type="button"
                     onClick={() => handleRemove(fav.sellerId, fav.businessName)}
-                    className="absolute top-3 right-3 p-2 rounded-full bg-black/60 backdrop-blur-sm text-rose-500 hover:bg-black/90 hover:scale-110 transition"
-                    title="Remove from favorites"
+                    className="absolute top-3 end-3 p-2 rounded-full bg-black/60 backdrop-blur-sm text-rose-500 hover:bg-black/90 hover:scale-110 transition"
+                    title={t('favRemoveTitle')}
                   >
                     <svg className="w-4 h-4 fill-rose-500" viewBox="0 0 24 24">
                       <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z" />
@@ -125,7 +128,7 @@ export default function FavoritesPage() {
                   </button>
 
                   {/* Status badge */}
-                  <div className="absolute bottom-3 left-3">
+                  <div className="absolute bottom-3 start-3">
                     <span
                       className={`text-[11px] font-bold px-2.5 py-1 rounded-full backdrop-blur-md shadow ${
                         fav.availability.isOpen
@@ -133,7 +136,7 @@ export default function FavoritesPage() {
                           : 'bg-neutral-900/90 text-neutral-300'
                       }`}
                     >
-                      {fav.availability.isOpen ? 'Open for Orders' : 'Closed'}
+                      {fav.availability.isOpen ? t('favOpen') : t('closed')}
                     </span>
                   </div>
                 </div>
@@ -148,7 +151,7 @@ export default function FavoritesPage() {
                       <div className="flex items-center gap-1 bg-amber-50 px-2 py-0.5 rounded-md border border-amber-200/60 shrink-0">
                         <span className="text-amber-500 text-xs">★</span>
                         <span className="text-xs font-bold text-amber-900">
-                          {fav.ratingAverage > 0 ? fav.ratingAverage.toFixed(1) : 'New'}
+                          {fav.ratingAverage > 0 ? fav.ratingAverage.toFixed(1) : t('new')}
                         </span>
                       </div>
                     </div>
@@ -160,16 +163,19 @@ export default function FavoritesPage() {
                         </span>
                       )}
                       {fav.distanceKm != null && (
-                        <span>• {fav.distanceKm} km away</span>
+                        <span>• {t('kmAway', { km: fav.distanceKm })}</span>
                       )}
-                      <span className="capitalize">• {fav.businessType.replace('_', ' ')}</span>
+                      <span className="capitalize">• {(() => {
+                        const key = businessTypeKey(fav.businessType);
+                        return key ? t(key) : fav.businessType.replace('_', ' ');
+                      })()}</span>
                     </div>
 
                     {/* Sample Menu Items */}
                     {fav.sampleProducts.length > 0 && (
                       <div className="mt-3 pt-3 border-t border-neutral-100">
                         <p className="text-[11px] font-semibold text-neutral-400 uppercase tracking-wider mb-1.5">
-                          Popular Dishes
+                          {t('favPopular')}
                         </p>
                         <div className="space-y-1">
                           {fav.sampleProducts.map((dish) => (
@@ -186,7 +192,7 @@ export default function FavoritesPage() {
                   <div className="mt-4 pt-3 border-t border-neutral-100">
                     <Link href={`/products?sellerId=${fav.sellerId}`} className="block">
                       <Button className="w-full flame-btn py-2 text-xs font-bold uppercase tracking-wider rounded-xl">
-                        View Menu & Order
+                        {t('favViewMenu')}
                       </Button>
                     </Link>
                   </div>

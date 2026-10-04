@@ -3,6 +3,8 @@
 import { useEffect } from 'react';
 import { AlertTriangle, Trash2, X } from 'lucide-react';
 import { Button } from './button';
+import { useT } from '@/lib/i18n';
+import { shellMessages } from '@/lib/i18n/messages/shell';
 
 interface ConfirmModalProps {
   isOpen: boolean;
@@ -20,13 +22,14 @@ export function ConfirmModal({
   isOpen,
   title,
   message,
-  confirmText = 'Confirm',
-  cancelText = 'Cancel',
+  confirmText,
+  cancelText,
   variant = 'danger',
   loading = false,
   onConfirm,
   onCancel,
 }: ConfirmModalProps) {
+  const t = useT(shellMessages);
   useEffect(() => {
     if (!isOpen) return;
 
@@ -80,13 +83,13 @@ export function ConfirmModal({
             disabled={loading}
             onClick={onCancel}
             className="w-8 h-8 rounded-full text-slate-400 hover:text-slate-600 hover:bg-slate-100 flex items-center justify-center transition-colors disabled:opacity-50 cursor-pointer"
-            aria-label="Close"
+            aria-label={t('close')}
           >
             <X className="w-4 h-4" />
           </button>
         </div>
 
-        <p className="text-xs text-slate-600 leading-relaxed mb-6 pl-14">{message}</p>
+        <p className="text-xs text-slate-600 leading-relaxed mb-6 ps-14">{message}</p>
 
         <div className="flex items-center justify-end gap-3 pt-2">
           <Button
@@ -97,7 +100,7 @@ export function ConfirmModal({
             onClick={onCancel}
             className="rounded-xl px-4 text-xs font-semibold text-slate-700 hover:bg-slate-100 cursor-pointer"
           >
-            {cancelText}
+            {cancelText ?? t('cancel')}
           </Button>
           <Button
             type="button"
@@ -113,10 +116,10 @@ export function ConfirmModal({
             {loading ? (
               <div className="flex items-center gap-1.5">
                 <div className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                <span>Clearing…</span>
+                <span>{t('clearing')}</span>
               </div>
             ) : (
-              confirmText
+              confirmText ?? t('confirm')
             )}
           </Button>
         </div>

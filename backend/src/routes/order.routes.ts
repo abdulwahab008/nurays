@@ -17,6 +17,7 @@ import {
   getOrdersQuerySchema,
 } from '../validators/order.validator';
 import { authenticate } from '../middleware/auth.middleware';
+import { orderLimiter, messageLimiter, submissionLimiter } from '../middleware/rateLimiter';
 
 const router = Router();
 
@@ -24,7 +25,7 @@ const router = Router();
 router.use(authenticate);
 
 // Create order
-router.post('/', validate(createOrderSchema), createOrder);
+router.post('/', orderLimiter, validate(createOrderSchema), createOrder);
 
 // Get user orders
 router.get('/me', validateQuery(getOrdersQuerySchema), getMyOrders);
@@ -37,12 +38,12 @@ router.post('/:id/cancel', validate(cancelOrderSchema), cancelOrder);
 
 // Manual online payment details & submission
 router.get('/:id/payment-details', getSellerPaymentDetails);
-router.post('/:id/submit-payment', submitManualPayment);
+router.post('/:id/submit-payment', submissionLimiter, submitManualPayment);
 router.post('/:id/confirm-payment', confirmManualPayment);
 
 // In-app order messages (buyer <-> seller/rider)
 router.get('/:id/messages', getOrderMessages);
-router.post('/:id/messages', sendOrderMessage);
+router.post('/:id/messages', messageLimiter, sendOrderMessage);
 
 export default router;
 

@@ -670,19 +670,19 @@ export default function EditProductPage() {
                 <div key={index} className="relative aspect-square rounded-xl overflow-hidden border-2 border-gray-200 group">
                   <img src={img.preview} alt={`Product ${index + 1}`} className="w-full h-full object-cover" />
                   {img.isPrimary && (
-                    <div className="absolute top-2 left-2 bg-blue-500 text-white text-xs px-2 py-1 rounded-full font-medium">
+                    <div className="absolute top-2 start-2 bg-blue-500 text-white text-xs px-2 py-1 rounded-full font-medium">
                       Main
                     </div>
                   )}
                   {img.isExisting && (
-                    <div className="absolute bottom-2 left-2 bg-gray-800 text-white text-xs px-2 py-1 rounded-full opacity-75">
+                    <div className="absolute bottom-2 start-2 bg-gray-800 text-white text-xs px-2 py-1 rounded-full opacity-75">
                       Existing
                     </div>
                   )}
                   <button
                     type="button"
                     onClick={() => removeImage(index)}
-                    className="absolute top-2 right-2 bg-red-500 text-white p-1.5 rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
+                    className="absolute top-2 end-2 bg-red-500 text-white p-1.5 rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
                   >
                     <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                       <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
@@ -743,7 +743,7 @@ export default function EditProductPage() {
                 value={formData.nameUrdu}
                 onChange={(e) => setFormData({ ...formData, nameUrdu: e.target.value })}
                 placeholder="مثال: چکن سموسہ (12 کا پیک)"
-                className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent text-right"
+                className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent text-end"
                 dir="rtl"
               />
             </div>
@@ -771,7 +771,7 @@ export default function EditProductPage() {
                           setSelectedParentId(null);
                         }
                       }}
-                      className={`p-3 rounded-xl text-left transition-all ${
+                      className={`p-3 rounded-xl text-start transition-all ${
                         formData.productType === type.value
                           ? 'bg-blue-50 border-2 border-blue-500 shadow-md'
                           : 'bg-gray-50 border-2 border-gray-200 hover:border-gray-300'
@@ -818,7 +818,7 @@ export default function EditProductPage() {
                         <span>{cat.iconUrl || '📦'}</span>
                         <span>{cat.name}</span>
                         {cat.children && cat.children.length > 0 && (
-                          <span className="text-xs opacity-70 ml-1">({cat.children.length})</span>
+                          <span className="text-xs opacity-70 ms-1">({cat.children.length})</span>
                         )}
                       </button>
                     ))}
@@ -980,14 +980,14 @@ export default function EditProductPage() {
                   Selling Price <span className="text-red-500">*</span>
                 </label>
                 <div className="relative">
-                  <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500 font-semibold">Rs.</span>
+                  <span className="absolute start-4 top-1/2 -translate-y-1/2 text-gray-500 font-semibold">Rs.</span>
                   <input
                     type="number"
                     value={formData.price}
                     onChange={(e) => setFormData({ ...formData, price: e.target.value })}
                     placeholder="0"
                     min="0"
-                    className="w-full pl-14 pr-4 py-3 text-xl font-bold border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    className="w-full ps-14 pe-4 py-3 text-xl font-bold border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   />
                 </div>
               </div>
@@ -998,14 +998,14 @@ export default function EditProductPage() {
                   Original Price <span className="text-gray-400 font-normal">(if discounted)</span>
                 </label>
                 <div className="relative">
-                  <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400">Rs.</span>
+                  <span className="absolute start-4 top-1/2 -translate-y-1/2 text-gray-400">Rs.</span>
                   <input
                     type="number"
                     value={formData.originalPrice}
                     onChange={(e) => setFormData({ ...formData, originalPrice: e.target.value })}
                     placeholder="0"
                     min="0"
-                    className="w-full pl-14 pr-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    className="w-full ps-14 pe-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   />
                 </div>
                 {discount > 0 && (
@@ -1021,14 +1021,14 @@ export default function EditProductPage() {
                   Your Cost Price <span className="text-gray-400 font-normal">(for profit tracking - not shown to customers)</span>
                 </label>
                 <div className="relative">
-                  <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400">Rs.</span>
+                  <span className="absolute start-4 top-1/2 -translate-y-1/2 text-gray-400">Rs.</span>
                   <input
                     type="number"
                     value={formData.costPrice}
                     onChange={(e) => setFormData({ ...formData, costPrice: e.target.value })}
                     placeholder="What it costs you to make/buy"
                     min="0"
-                    className="w-full pl-14 pr-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    className="w-full ps-14 pe-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   />
                 </div>
                 <p className="text-xs text-gray-400 mt-1">Include ingredients, packaging, labor costs</p>
@@ -1117,7 +1117,7 @@ export default function EditProductPage() {
                         <h4 className="font-semibold text-gray-900">
                           {variant.id ? `Variant ${index + 1}` : `New Variant ${index + 1}`}
                           {variant.isDefault && (
-                            <span className="ml-2 bg-blue-100 text-blue-700 px-2 py-0.5 rounded text-xs">
+                            <span className="ms-2 bg-blue-100 text-blue-700 px-2 py-0.5 rounded text-xs">
                               Default
                             </span>
                           )}
@@ -1165,7 +1165,7 @@ export default function EditProductPage() {
                             value={variant.nameUrdu || ''}
                             onChange={(e) => updateVariant(index, 'nameUrdu', e.target.value)}
                             placeholder="چھوٹا پیک (6 عدد)"
-                            className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm text-right focus:ring-2 focus:ring-purple-500"
+                            className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm text-end focus:ring-2 focus:ring-purple-500"
                             dir="rtl"
                           />
                         </div>
@@ -1175,7 +1175,7 @@ export default function EditProductPage() {
                             Price *
                           </label>
                           <div className="relative">
-                            <span className="absolute left-2 top-1/2 -translate-y-1/2 text-gray-400 text-sm">
+                            <span className="absolute start-2 top-1/2 -translate-y-1/2 text-gray-400 text-sm">
                               Rs.
                             </span>
                             <input
@@ -1184,7 +1184,7 @@ export default function EditProductPage() {
                               onChange={(e) => updateVariant(index, 'price', parseFloat(e.target.value) || 0)}
                               placeholder="300"
                               min="0"
-                              className="w-full pl-10 pr-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-purple-500"
+                              className="w-full ps-10 pe-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-purple-500"
                             />
                           </div>
                         </div>
@@ -1194,7 +1194,7 @@ export default function EditProductPage() {
                             Original Price
                           </label>
                           <div className="relative">
-                            <span className="absolute left-2 top-1/2 -translate-y-1/2 text-gray-400 text-sm">
+                            <span className="absolute start-2 top-1/2 -translate-y-1/2 text-gray-400 text-sm">
                               Rs.
                             </span>
                             <input
@@ -1203,7 +1203,7 @@ export default function EditProductPage() {
                               onChange={(e) => updateVariant(index, 'originalPrice', parseFloat(e.target.value) || undefined)}
                               placeholder="350"
                               min="0"
-                              className="w-full pl-10 pr-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-purple-500"
+                              className="w-full ps-10 pe-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-purple-500"
                             />
                           </div>
                         </div>
@@ -1213,7 +1213,7 @@ export default function EditProductPage() {
                             Your Cost
                           </label>
                           <div className="relative">
-                            <span className="absolute left-2 top-1/2 -translate-y-1/2 text-gray-400 text-sm">
+                            <span className="absolute start-2 top-1/2 -translate-y-1/2 text-gray-400 text-sm">
                               Rs.
                             </span>
                             <input
@@ -1222,7 +1222,7 @@ export default function EditProductPage() {
                               onChange={(e) => updateVariant(index, 'costPrice', parseFloat(e.target.value) || undefined)}
                               placeholder="180"
                               min="0"
-                              className="w-full pl-10 pr-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-purple-500"
+                              className="w-full ps-10 pe-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-purple-500"
                             />
                           </div>
                         </div>
@@ -1274,7 +1274,7 @@ export default function EditProductPage() {
                               <span className="text-gray-600">Profit per unit:</span>
                               <span className="font-bold text-emerald-700">
                                 Rs {(variant.price - variant.costPrice - (variant.price * 0.15)).toFixed(0)}
-                                <span className="ml-1 text-gray-500">
+                                <span className="ms-1 text-gray-500">
                                   ({(((variant.price - variant.costPrice - (variant.price * 0.15)) / variant.price) * 100).toFixed(1)}%)
                                 </span>
                               </span>
@@ -1321,7 +1321,7 @@ export default function EditProductPage() {
                     key={option.value}
                     type="button"
                     onClick={() => setFormData({ ...formData, stockType: option.value as 'direct' | 'hub' | 'both' })}
-                    className={`p-3 rounded-xl border-2 text-left transition-all ${
+                    className={`p-3 rounded-xl border-2 text-start transition-all ${
                       formData.stockType === option.value
                         ? 'border-blue-500 bg-blue-50'
                         : 'border-gray-200 hover:border-gray-300'
@@ -1422,7 +1422,7 @@ export default function EditProductPage() {
                 </span>
               ) : (
                 <>
-                  <span className="mr-2">💾</span>
+                  <span className="me-2">💾</span>
                   Save Changes
                 </>
               )}

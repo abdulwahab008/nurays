@@ -7,7 +7,7 @@
 jest.mock('../src/config/database', () => ({
   __esModule: true,
   default: {
-    order: { findUnique: jest.fn() },
+    order: { findUnique: jest.fn(), updateMany: jest.fn() },
     delivery: { findUnique: jest.fn(), create: jest.fn() },
   },
 }));
@@ -33,6 +33,7 @@ function order(items: ReturnType<typeof item>[]) {
 
 beforeEach(() => {
   db.order.findUnique.mockReset();
+  db.order.updateMany.mockReset().mockResolvedValue({ count: 0 });
   db.delivery.findUnique.mockReset().mockResolvedValue(null);
   db.delivery.create.mockReset().mockResolvedValue({});
 });
@@ -56,5 +57,23 @@ describe('ensureDeliveryForOrder — delivery provider', () => {
     expect(db.delivery.create).toHaveBeenCalledTimes(1);
     // pickup is the platform-delivered seller, not the self-delivering one
     expect(db.delivery.create.mock.calls[0][0].data.pickupAddress).toBe('Fleet Kitchen');
+  });
+
+  it("follows the provider snapshotted on the order, not the seller's current setting", async () => {
+    db.order.findUnique.mockResolvedValue({ ...order([item('platform')]), deliveryProvider: 'self' });
+    await riderService.ensureDeliveryForOrder('order-1');
+    expect(db.delivery.create).not.toHaveBeenCalled();
+  });
+
+  it('creates no rider job for a cancelled order', async () => {
+    db.order.findUnique.mockResolvedValue({ ...order([item('platform')]), orderStatus: 'cancelled' });
+    await riderService.ensureDeliveryForOrder('order-1');
+    expect(db.delivery.create).not.toHaveBeenCalled();
+  });
+
+  it("never copies the customer's handover code onto the rider's job", async () => {
+    db.order.findUnique.mockResolvedValue(order([item('platform')]));
+    await riderService.ensureDeliveryForOrder('order-1');
+    expect(db.delivery.create.mock.calls[0][0].data).not.toHaveProperty('deliveryOtp');
   });
 });

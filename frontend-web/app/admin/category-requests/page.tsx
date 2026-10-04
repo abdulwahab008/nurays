@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { DashboardLayout } from '@/components/layout/DashboardShell';
+import { DashboardLayout, ADMIN_SIDEBAR_ITEMS } from '@/components/layout/DashboardShell';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/toast';
 import { useAuthStore } from '@/lib/store/auth-store';
@@ -34,17 +34,6 @@ interface CategoryRequest {
   };
 }
 
-const sidebarItems = [
-  { name: 'Dashboard', href: '/admin/dashboard', icon: '' },
-  { name: 'Orders', href: '/admin/orders', icon: '' },
-  { name: 'Products', href: '/admin/products', icon: '' },
-  { name: 'Categories', href: '/admin/categories', icon: '' },
-  { name: 'Category Requests', href: '/admin/category-requests', icon: '' },
-  { name: 'Sellers', href: '/admin/sellers', icon: '' },
-  { name: 'Pending Sellers', href: '/admin/pending-sellers', icon: '' },
-  { name: 'Analytics', href: '/admin/analytics', icon: '' },
-  { name: 'Settings', href: '/admin/settings', icon: '' },
-];
 
 const productTypeLabels: Record<string, { label: string; icon: string; color: string }> = {
   frozen: { label: 'Frozen', icon: '❄️', color: 'blue' },
@@ -163,7 +152,7 @@ export default function CategoryRequestsPage() {
   };
 
   return (
-    <DashboardLayout sidebarItems={sidebarItems} title="Category Requests" userType="admin">
+    <DashboardLayout sidebarItems={ADMIN_SIDEBAR_ITEMS} title="Category Requests" userType="admin">
       <div className="max-w-6xl mx-auto">
         {/* Header */}
         <div className="mb-6">
@@ -198,7 +187,7 @@ export default function CategoryRequestsPage() {
           <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-8">
             <div className="flex items-center justify-center">
               <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
-              <span className="ml-3 text-gray-600">Loading requests...</span>
+              <span className="ms-3 text-gray-600">Loading requests...</span>
             </div>
           </div>
         ) : requests.length === 0 ? (
@@ -298,7 +287,7 @@ export default function CategoryRequestsPage() {
 
                     {/* Right: Actions */}
                     {request.status === 'pending' && (
-                      <div className="flex flex-col gap-2 ml-4">
+                      <div className="flex flex-col gap-2 ms-4">
                         <Button
                           onClick={() => handleApprove(request)}
                           disabled={actionLoading}

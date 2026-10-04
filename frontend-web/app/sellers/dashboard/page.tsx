@@ -1,5 +1,6 @@
 'use client';
 
+import PushPrompt from '@/components/notifications/PushPrompt';
 import { useState, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
@@ -10,6 +11,9 @@ import { useAuthStore } from '@/lib/store/auth-store';
 import { apiClient } from '@/lib/api-client';
 import { formatPrice } from '@/lib/utils';
 import { SellerOnboardingModal } from '@/components/SellerOnboardingModal';
+import { useT } from '@/lib/i18n';
+import { commonMessages } from '@/lib/i18n/messages/common';
+import { kitchenOrderMessages, kitchenStatusLabel } from '@/lib/i18n/messages/kitchen-orders';
 
 // Professional SVG Icons
 const Icons = {
@@ -137,6 +141,8 @@ function SellerDashboardContent() {
   const searchParams = useSearchParams();
   const { isAuthenticated, user } = useAuthStore();
   const { showToast } = useToast();
+  const t = useT(kitchenOrderMessages);
+  const tc = useT(commonMessages);
   const [loading, setLoading] = useState(true);
   const [dashboard, setDashboard] = useState<SellerDashboard | null>(null);
   const [showOnboarding, setShowOnboarding] = useState(false);
@@ -154,7 +160,7 @@ function SellerDashboardContent() {
     const role = user?.userType || user?.user_type;
     if (role !== 'seller' && role !== 'admin') {
       router.push('/dashboard');
-      showToast('Access denied. Kitchen account required.', 'error');
+      showToast(t('accessDenied'), 'error');
       return;
     }
 
@@ -187,7 +193,7 @@ function SellerDashboardContent() {
         return; // Don't show error toast for this case
       }
       
-      const errorMessage = error.response?.data?.error?.message || error.response?.data?.message || 'Failed to load dashboard';
+      const errorMessage = error.response?.data?.error?.message || error.response?.data?.message || t('dash.loadFailed');
       showToast(errorMessage, 'error');
     } finally {
       setLoading(false);
@@ -206,10 +212,10 @@ function SellerDashboardContent() {
           isStoreOpen: res.data.data.isOpen,
           availabilityOverride: res.data.data.availabilityOverride,
         } : prev);
-        showToast(res.data.message || (res.data.data.isOpen ? 'Store is now OPEN' : 'Store is now CLOSED'), 'success');
+        showToast(res.data.message || (res.data.data.isOpen ? t('dash.storeOpenToast') : t('dash.storeClosedToast')), 'success');
       }
     } catch (err: any) {
-      showToast(err.response?.data?.error?.message || 'Failed to toggle store status', 'error');
+      showToast(err.response?.data?.error?.message || t('dash.toggleFailed'), 'error');
     } finally {
       setTogglingLive(false);
     }
@@ -219,13 +225,13 @@ function SellerDashboardContent() {
     setShowOnboarding(false);
     setNeedsOnboarding(false);
     loadDashboard();
-    showToast('🎉 Seller profile created! Your application is under review.', 'success');
+    showToast(t('dash.onboardingDone'), 'success');
   };
 
   const handleOnboardingClose = () => {
     if (needsOnboarding) {
       // If they haven't completed onboarding, show a warning
-      if (confirm('You need to complete your seller profile to start selling. Are you sure you want to close?')) {
+      if (confirm(t('dash.onboardingCloseConfirm'))) {
         setShowOnboarding(false);
         router.push('/products');
       }
@@ -238,11 +244,11 @@ function SellerDashboardContent() {
 
   const getVerificationBadge = (status: string) => {
     if (status === 'approved') {
-      return <span className="px-3 py-1 bg-gray-200 text-gray-800 text-xs font-medium rounded-full">Approved</span>;
+      return <span className="px-3 py-1 bg-gray-200 text-gray-800 text-xs font-medium rounded-full">{t('dash.badgeApproved')}</span>;
     } else if (status === 'pending') {
-      return <span className="px-3 py-1 bg-gray-100 text-gray-700 text-xs font-medium rounded-full">Pending</span>;
+      return <span className="px-3 py-1 bg-gray-100 text-gray-700 text-xs font-medium rounded-full">{t('dash.badgePending')}</span>;
     } else if (status === 'rejected') {
-      return <span className="px-3 py-1 bg-gray-200 text-gray-700 text-xs font-medium rounded-full">Rejected</span>;
+      return <span className="px-3 py-1 bg-gray-200 text-gray-700 text-xs font-medium rounded-full">{t('dash.badgeRejected')}</span>;
     }
     return null;
   };
@@ -254,8 +260,8 @@ function SellerDashboardContent() {
   if (loading) {
     return (
       <DashboardLayout
-        title="Seller Dashboard"
-        subtitle="Loading your dashboard..."
+        title={t('dash.title')}
+        subtitle={t('dash.loadingSubtitle')}
         sidebarItems={sidebarItems}
         userType="seller"
       >
@@ -275,8 +281,8 @@ function SellerDashboardContent() {
           onComplete={handleOnboardingComplete}
         />
         <DashboardLayout
-          title="Seller Dashboard"
-          subtitle="Complete your seller registration"
+          title={t('dash.title')}
+          subtitle={t('dash.registerSubtitle')}
           sidebarItems={sidebarItems}
           userType="seller"
         >
@@ -286,15 +292,15 @@ function SellerDashboardContent() {
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M13 10V3L4 14h7v7l9-11h-7z" />
               </svg>
             </div>
-            <h3 className="text-xl font-bold text-gray-900 mb-2">Complete Your Seller Profile</h3>
+            <h3 className="text-xl font-bold text-gray-900 mb-2">{t('dash.completeProfileTitle')}</h3>
             <p className="text-gray-600 mb-6 max-w-md mx-auto">
-              You're just a few steps away from starting to sell your delicious homemade food on Nuray!
+              {t('dash.completeProfileBody')}
             </p>
             <Button 
               onClick={() => setShowOnboarding(true)}
               className="bg-gray-700 hover:bg-gray-800 text-white px-8 py-3"
             >
-              Start Seller Registration
+              {t('dash.startRegistration')}
             </Button>
           </div>
         </DashboardLayout>
@@ -312,26 +318,29 @@ function SellerDashboardContent() {
       />
       
       <DashboardLayout
-        title="Seller Dashboard"
-        subtitle={`Welcome, ${dashboard?.businessName || 'Seller'}${dashboard?.businessNameUrdu ? ` (${dashboard.businessNameUrdu})` : ''}`}
+        title={t('dash.title')}
+        subtitle={t('dash.welcome', { name: `${dashboard?.businessName || t('dash.sellerFallback')}${dashboard?.businessNameUrdu ? ` (${dashboard.businessNameUrdu})` : ''}` })}
         sidebarItems={sidebarItems}
         userType="seller"
       >
+        {dashboard?.verificationStatus === 'approved' && (
+          <PushPrompt text={t('dash.pushText')} />
+        )}
         {/* Verification Status / Rejection Banner */}
         {dashboard && dashboard.verificationStatus === 'rejected' && (
           <div className="mb-6 bg-rose-50 border border-rose-200 rounded-2xl p-5 shadow-sm flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
             <div>
               <div className="flex items-center gap-2">
                 <span className="w-6 h-6 rounded-full bg-rose-500 text-white flex items-center justify-center text-xs font-bold">✕</span>
-                <h3 className="text-base font-bold text-rose-900">Seller Application Requires Attention</h3>
+                <h3 className="text-base font-bold text-rose-900">{t('dash.rejectedTitle')}</h3>
               </div>
               <p className="text-sm text-rose-700 mt-1 font-medium">
-                <span className="font-bold">Reason:</span> {dashboard.rejectionReason || 'Please verify kitchen details and documents.'}
+                <span className="font-bold">{t('dash.reasonLabel')}</span> {dashboard.rejectionReason || t('dash.rejectedFallback')}
               </p>
             </div>
             <Link href="/sellers/register">
               <Button className="bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs px-5 py-2.5 rounded-xl shadow-sm">
-                Fix &amp; Resubmit Application →
+                {t('dash.fixResubmit')}
               </Button>
             </Link>
           </div>
@@ -342,10 +351,10 @@ function SellerDashboardContent() {
             <div>
               <div className="flex items-center gap-2">
                 <span className="w-6 h-6 rounded-full bg-amber-500 text-white flex items-center justify-center text-xs font-bold">⏳</span>
-                <h3 className="text-base font-bold text-amber-900">Seller Application Under Review</h3>
+                <h3 className="text-base font-bold text-amber-900">{t('dash.reviewTitle')}</h3>
               </div>
               <p className="text-sm text-amber-700 mt-1 font-medium">
-                Our team is reviewing your profile and hygiene documents. Your kitchen will go live as soon as approved!
+                {t('dash.reviewBody')}
               </p>
             </div>
             {getVerificationBadge('pending')}
@@ -368,7 +377,7 @@ function SellerDashboardContent() {
                 }`}
               >
                 <span className={`w-2 h-2 rounded-full ${dashboard.isStoreOpen ? 'bg-emerald-500 animate-pulse' : 'bg-slate-400'}`} />
-                <span>{dashboard.isStoreOpen ? 'Kitchen Open (Accepting Orders)' : 'Kitchen Closed'}</span>
+                <span>{dashboard.isStoreOpen ? t('dash.kitchenOpen') : t('dash.kitchenClosed')}</span>
               </button>
 
               {dashboard.primaryCommunityName && (
@@ -382,12 +391,12 @@ function SellerDashboardContent() {
             <div className="flex items-center gap-2">
               <Link href="/sellers/products/new">
                 <Button className="bg-[#FF5500] hover:bg-[#e04400] text-white font-bold text-xs rounded-xl px-4 py-2 shadow-xs">
-                  + Add Food Item
+                  {t('dash.addFoodItem')}
                 </Button>
               </Link>
               <Link href="/sellers/orders">
                 <Button variant="outline" className="font-semibold text-xs rounded-xl px-4 py-2 border-slate-200 text-slate-700">
-                  Kitchen Orders
+                  {t('dash.kitchenOrders')}
                 </Button>
               </Link>
             </div>
@@ -401,9 +410,9 @@ function SellerDashboardContent() {
           <div className="bg-white rounded-2xl p-4 sm:p-5 border border-slate-200/90 shadow-xs hover:border-slate-300 transition-colors">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1">Today's Sales</p>
+                <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1">{t('dash.todaySales')}</p>
                 <p className="text-xl sm:text-2xl font-black text-slate-900">{formatPrice(dashboard.overview.todaySales ?? 0)}</p>
-                <p className="text-[11px] text-slate-400 mt-1">{dashboard.overview.todayOrders ?? 0} orders today</p>
+                <p className="text-[11px] text-slate-400 mt-1">{t('dash.ordersToday', { count: dashboard.overview.todayOrders ?? 0 })}</p>
               </div>
               <div className="w-10 h-10 bg-orange-50 text-orange-600 rounded-xl flex items-center justify-center font-bold text-base">
                 ₨
@@ -415,9 +424,9 @@ function SellerDashboardContent() {
           <div className="bg-white rounded-2xl p-4 sm:p-5 border border-slate-200/90 shadow-xs hover:border-slate-300 transition-colors">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1">In Kitchen</p>
+                <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1">{t('dash.inKitchen')}</p>
                 <p className="text-xl sm:text-2xl font-black text-slate-900">{dashboard.overview.activeOrders ?? 0}</p>
-                <p className="text-[11px] text-purple-600 font-semibold mt-1">Active orders</p>
+                <p className="text-[11px] text-purple-600 font-semibold mt-1">{t('dash.activeOrders')}</p>
               </div>
               <div className="w-10 h-10 bg-purple-50 text-purple-600 rounded-xl flex items-center justify-center">
                 {Icons.orders}
@@ -429,9 +438,9 @@ function SellerDashboardContent() {
           <div className="bg-white rounded-2xl p-4 sm:p-5 border border-slate-200/90 shadow-xs hover:border-slate-300 transition-colors">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1">Menu Dishes</p>
+                <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1">{t('dash.menuDishes')}</p>
                 <p className="text-xl sm:text-2xl font-black text-slate-900">{dashboard.overview.totalProducts ?? 0}</p>
-                <p className="text-[11px] text-slate-400 mt-1">Active dishes</p>
+                <p className="text-[11px] text-slate-400 mt-1">{t('dash.activeDishes')}</p>
               </div>
               <div className="w-10 h-10 bg-blue-50 text-blue-600 rounded-xl flex items-center justify-center">
                 {Icons.products}
@@ -443,9 +452,9 @@ function SellerDashboardContent() {
           <div className="bg-white rounded-2xl p-4 sm:p-5 border border-slate-200/90 shadow-xs hover:border-slate-300 transition-colors">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1">Total Earnings</p>
+                <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1">{t('dash.totalEarnings')}</p>
                 <p className="text-xl sm:text-2xl font-black text-emerald-700">{formatPrice(dashboard.overview.totalEarnings ?? 0)}</p>
-                <p className="text-[11px] text-slate-400 mt-1">Pending: {formatPrice(dashboard.overview.pendingPayout ?? 0)}</p>
+                <p className="text-[11px] text-slate-400 mt-1">{t('dash.pendingAmount', { amount: formatPrice(dashboard.overview.pendingPayout ?? 0) })}</p>
               </div>
               <div className="w-10 h-10 bg-emerald-50 text-emerald-700 rounded-xl flex items-center justify-center">
                 {Icons.earnings}
@@ -465,11 +474,11 @@ function SellerDashboardContent() {
                 <div className="w-10 h-10 bg-gray-100 rounded-xl flex items-center justify-center text-gray-600">
                   {Icons.orders}
                 </div>
-                <h2 className="text-lg font-bold text-gray-900">Recent Orders</h2>
+                <h2 className="text-lg font-bold text-gray-900">{t('dash.recentOrders')}</h2>
               </div>
               <Link href="/sellers/orders">
                 <Button variant="outline" size="sm" className="text-sm hover:bg-gray-50">
-                  View All
+                  {t('dash.viewAll')}
                 </Button>
               </Link>
             </div>
@@ -479,8 +488,8 @@ function SellerDashboardContent() {
             {dashboard.recentOrders.length === 0 ? (
               <div className="text-center py-12">
                 <div className="text-gray-300 mb-4">{Icons.package}</div>
-                <p className="text-gray-500 font-medium">No orders yet</p>
-                <p className="text-gray-400 text-sm mt-1">Orders will appear here when customers place them</p>
+                <p className="text-gray-500 font-medium">{t('dash.noOrders')}</p>
+                <p className="text-gray-400 text-sm mt-1">{t('dash.noOrdersHint')}</p>
               </div>
             ) : (
               <div className="space-y-3">
@@ -493,15 +502,15 @@ function SellerDashboardContent() {
                     <div className="flex items-center justify-between">
                       <div className="flex-1">
                         <div className="flex items-center gap-2 mb-1">
-                          <h3 className="font-semibold text-gray-900">#{order.orderNumber}</h3>
+                          <h3 className="font-semibold text-gray-900"><span data-ltr>#{order.orderNumber}</span></h3>
                           <span className={`px-2.5 py-1 rounded-full text-xs font-medium ${getStatusColor(order.orderStatus)}`}>
-                            {order.orderStatus.replace('_', ' ')}
+                            {kitchenStatusLabel(order.orderStatus, t, tc)}
                           </span>
                         </div>
                         <p className="text-sm text-gray-600">{order.productName} × {order.quantity}</p>
                         <p className="text-sm font-bold text-gray-900 mt-1">{formatPrice(order.totalPrice)}</p>
                       </div>
-                      <svg className="w-5 h-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <svg className="w-5 h-5 text-gray-400 rtl:-scale-x-100" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
                       </svg>
                     </div>
@@ -520,11 +529,11 @@ function SellerDashboardContent() {
                 <div className="w-10 h-10 bg-gray-100 rounded-xl flex items-center justify-center text-gray-600">
                   {Icons.warning}
                 </div>
-                <h2 className="text-lg font-bold text-gray-900">Low Stock Alert</h2>
+                <h2 className="text-lg font-bold text-gray-900">{t('dash.lowStock')}</h2>
               </div>
               <Link href="/sellers/products">
                 <Button variant="outline" size="sm" className="text-sm hover:bg-gray-50">
-                  Manage
+                  {t('dash.manage')}
                 </Button>
               </Link>
             </div>
@@ -536,15 +545,15 @@ function SellerDashboardContent() {
                 <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4 text-gray-600">
                   {Icons.check}
                 </div>
-                <p className="text-gray-500 font-medium">All products are well stocked</p>
-                <p className="text-gray-400 text-sm mt-1">You're doing great! Keep it up.</p>
+                <p className="text-gray-500 font-medium">{t('dash.allStocked')}</p>
+                <p className="text-gray-400 text-sm mt-1">{t('dash.allStockedHint')}</p>
               </div>
             ) : (
               <div className="space-y-3">
                 {dashboard.lowStockProducts.map((product) => (
                   <Link
                     key={product.id}
-                    href={`/sellers/products/${product.id}`}
+                    href={`/sellers/products/${product.id}/edit`}
                     className="flex items-center gap-4 border border-gray-100 rounded-xl p-4 hover:shadow-md hover:border-gray-200 transition-all duration-200 bg-gray-50/50 hover:bg-white"
                   >
                     <div className="w-14 h-14 bg-gray-100 rounded-xl flex items-center justify-center overflow-hidden flex-shrink-0">
@@ -560,11 +569,11 @@ function SellerDashboardContent() {
                         <svg className="w-4 h-4 text-gray-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
                         </svg>
-                        Only {product.stockQuantity} left
+                        {t('dash.onlyLeft', { count: product.stockQuantity })}
                       </p>
                     </div>
                     <Button size="sm" className="bg-gray-700 hover:bg-gray-800 text-white">
-                      Restock
+                      {t('dash.restock')}
                     </Button>
                   </Link>
                 ))}
@@ -577,7 +586,7 @@ function SellerDashboardContent() {
 
       {/* Quick Actions - Enhanced */}
       <div className="mt-8 bg-white rounded-2xl shadow-sm p-6 border border-gray-100">
-        <h2 className="text-lg font-bold text-gray-900 mb-5">Quick Actions</h2>
+        <h2 className="text-lg font-bold text-gray-900 mb-5">{t('dash.quickActions')}</h2>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           <Link href="/sellers/products/new" className="group">
             <div className="flex items-center gap-4 p-4 rounded-xl border-2 border-dashed border-gray-200 hover:border-gray-400 hover:bg-gray-50 transition-all duration-200">
@@ -585,8 +594,8 @@ function SellerDashboardContent() {
                 {Icons.add}
               </div>
               <div>
-                <p className="font-semibold text-gray-900">Add Product</p>
-                <p className="text-sm text-gray-500">Create new listing</p>
+                <p className="font-semibold text-gray-900">{t('dash.addProduct')}</p>
+                <p className="text-sm text-gray-500">{t('dash.addProductHint')}</p>
               </div>
             </div>
           </Link>
@@ -597,8 +606,8 @@ function SellerDashboardContent() {
                 {Icons.view}
               </div>
               <div>
-                <p className="font-semibold text-gray-900">View Orders</p>
-                <p className="text-sm text-gray-500">Manage all orders</p>
+                <p className="font-semibold text-gray-900">{t('dash.viewOrders')}</p>
+                <p className="text-sm text-gray-500">{t('dash.viewOrdersHint')}</p>
               </div>
             </div>
           </Link>
@@ -609,8 +618,8 @@ function SellerDashboardContent() {
                 {Icons.money}
               </div>
               <div>
-                <p className="font-semibold text-gray-900">Request Payout</p>
-                <p className="text-sm text-gray-500">Withdraw earnings</p>
+                <p className="font-semibold text-gray-900">{t('dash.requestPayout')}</p>
+                <p className="text-sm text-gray-500">{t('dash.requestPayoutHint')}</p>
               </div>
             </div>
           </Link>
@@ -621,8 +630,8 @@ function SellerDashboardContent() {
                 {Icons.analytics}
               </div>
               <div>
-                <p className="font-semibold text-gray-900">View Analytics</p>
-                <p className="text-sm text-gray-500">Sales insights</p>
+                <p className="font-semibold text-gray-900">{t('dash.viewAnalytics')}</p>
+                <p className="text-sm text-gray-500">{t('dash.viewAnalyticsHint')}</p>
               </div>
             </div>
           </Link>

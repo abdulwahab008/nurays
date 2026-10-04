@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800;900&family=Geist:wght@300;400;500;600;700&family=Geist+Mono:wght@400;500;600&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800;900&family=Geist:wght@300;400;500;600;700&family=Geist+Mono:wght@400;500;600&family=Noto+Nastaliq+Urdu:wght@400;500;600;700&display=swap');
 @import "tailwindcss";
 @import "leaflet/dist/leaflet.css";
 
@@ -136,6 +136,34 @@ html, body {
 
 * {
   border-color: var(--border-hair);
+}
+
+/* ============================================================
+   URDU (lang="ur", dir="rtl")
+   Latin text and digits stay in Plus Jakarta; Urdu falls through to Nastaliq.
+   Nastaliq sits tall, so lines get more room, and letter-spacing would break
+   the joined letters apart.
+   ============================================================ */
+html[lang="ur"] {
+  --font-ui: 'Plus Jakarta Sans', 'Noto Nastaliq Urdu', serif;
+  --font-display: 'Plus Jakarta Sans', 'Noto Nastaliq Urdu', serif;
+  --font-sans: 'Plus Jakarta Sans', 'Noto Nastaliq Urdu', serif;
+}
+html[lang="ur"] body {
+  line-height: 1.9;
+}
+html[lang="ur"] *:not(code):not(pre):not(input) {
+  letter-spacing: 0 !important;
+}
+html[lang="ur"] :is(h1, h2, h3, h4, h5, h6, p, span, a, button, label, li, td, th, dt, dd, div)[class*="leading-"] {
+  line-height: 1.8;
+}
+/* Maps, phone numbers, codes and amounts read left to right in either language. */
+html[dir="rtl"] .leaflet-container,
+html[dir="rtl"] [data-ltr] {
+  direction: ltr;
+  /* Isolate it too: without this an inline "#FN123" still gets its "#" moved to the end. */
+  unicode-bidi: isolate;
 }
 
 h1, h2, h3, h4, h5, h6 {
@@ -428,4 +456,19 @@ h1, h2, h3, h4, h5, h6 {
 [class*="scrollbar-none"] {
   -ms-overflow-style: none !important;
   scrollbar-width: none !important;
+}
+
+/* Dashboard menu: a slide-in drawer below lg (from the start side, so the right in Urdu). */
+@media (max-width: 1023.98px) {
+  .nuray-drawer {
+    transform: translateX(-100%);
+    transition: transform 200ms ease;
+  }
+  html[dir="rtl"] .nuray-drawer {
+    transform: translateX(100%);
+  }
+  .nuray-drawer[data-open="true"],
+  html[dir="rtl"] .nuray-drawer[data-open="true"] {
+    transform: none;
+  }
 }

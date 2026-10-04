@@ -3,34 +3,42 @@ import {
   getPaymentMethods,
   processPayment,
   verifyPayment,
+  getOrderPaymentStatus,
   getWalletBalance,
+  getWalletTransactions,
+  topUpWallet,
+  safepayReturn,
   safepayWebhook,
 } from '../controllers/payment.controller';
 import { authenticate } from '../middleware/auth.middleware';
 import { validate } from '../middleware/validation.middleware';
-import { processPaymentSchema, verifyPaymentSchema } from '../validators/payment.validator';
+import { submissionLimiter } from '../middleware/rateLimiter';
+import { processPaymentSchema, verifyPaymentSchema, walletTopupSchema } from '../validators/payment.validator';
 
 const router = Router();
 
 // Public routes (no auth)
 router.get('/methods', getPaymentMethods);
 
-// Safepay webhook — must be public, Safepay calls this from their server
-// express.json() is applied globally BUT we also need the raw body for HMAC verification.
-// The rawBody is attached in index.ts before express.json() runs.
+// Safepay: where the customer comes back after paying (signed), and its server-to-server
+// webhook (signed). Both settle the checkout session once.
+router.get('/safepay/return', safepayReturn);
+router.post('/safepay/return', safepayReturn);
 router.post('/safepay-webhook', safepayWebhook);
 
 // All other routes require authentication
 router.use(authenticate);
 
-// Process payment
-router.post('/process', validate(processPaymentSchema), processPayment);
+// Pay an order: from the wallet, or start an online checkout
+router.post('/process', submissionLimiter, validate(processPaymentSchema), processPayment);
 
-// Verify payment
+// Has an order's payment come through? (read-only)
 router.post('/verify', validate(verifyPaymentSchema), verifyPayment);
+router.get('/orders/:orderId/status', getOrderPaymentStatus);
 
-// Get wallet balance
+// Wallet
 router.get('/wallet', getWalletBalance);
+router.get('/wallet/transactions', getWalletTransactions);
+router.post('/wallet/topup', submissionLimiter, validate(walletTopupSchema), topUpWallet);
 
 export default router;
-

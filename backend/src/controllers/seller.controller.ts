@@ -1,3 +1,4 @@
+import { Prisma } from '@prisma/client';
 import { Request, Response } from 'express';
 import sellerService from '../services/seller.service';
 import { AppError } from '../middleware/errorHandler';
@@ -196,7 +197,7 @@ export const toggleStoreLive = async (req: Request, res: Response) => {
 };
 
 export const getPublicSellers = async (req: Request, res: Response) => {
-  const { communityId, city, businessType, search, limit } = req.query;
+  const { communityId, city, businessType, search, limit, sort } = req.query;
 
   const whereClause: any = {
     isVerified: true,
@@ -228,10 +229,18 @@ export const getPublicSellers = async (req: Request, res: Response) => {
     ];
   }
 
+  // trending: kitchens people are ordering from now (see utils/ranking.ts), only those with
+  // real recent demand. Otherwise best rated first, by the review-count-aware score.
+  if (sort === 'trending') whereClause.trendScore = { gt: 0 };
+  const orderBy: Prisma.SellerOrderByWithRelationInput[] =
+    sort === 'trending'
+      ? [{ trendScore: 'desc' }, { ratingScore: 'desc' }, { id: 'asc' }]
+      : [{ ratingScore: 'desc' }, { trendScore: 'desc' }, { id: 'asc' }];
+
   const sellers = await prisma.seller.findMany({
     where: whereClause,
     take: limit ? Math.min(Number(limit), 50) : 30,
-    orderBy: { ratingAverage: 'desc' },
+    orderBy,
     include: {
       user: {
         select: {
@@ -264,6 +273,7 @@ export const getPublicSellers = async (req: Request, res: Response) => {
           id: true,
           name: true,
           price: true,
+          originalPrice: true,
           productType: true,
           preparationTime: true,
           images: {
@@ -290,9 +300,12 @@ export const getPublicSellers = async (req: Request, res: Response) => {
     businessNameUrdu: s.businessNameUrdu,
     description: s.description,
     coverImageUrl: s.coverImageUrl,
-    ratingAverage: Number(s.ratingAverage) || 4.8,
+    // Real rating only: 0 with no reviews (the UI shows "New"), never a made-up 4.8.
+    ratingAverage: Number(s.ratingAverage) || 0,
     totalReviews: s.totalReviews || s._count.reviews || 0,
-    minPrepTimeMinutes: s.minPrepTimeMinutes || 25,
+    trendScore: Math.round(s.trendScore * 100) / 100,
+    // null when the kitchen hasn't set one: the UI shows nothing rather than a guess.
+    minPrepTimeMinutes: s.minPrepTimeMinutes ?? null,
     minOrderAmountForDelivery: s.minOrderAmountForDelivery != null ? Number(s.minOrderAmountForDelivery) : null,
     freeDeliveryThreshold: s.freeDeliveryThreshold != null ? Number(s.freeDeliveryThreshold) : null,
     deliveryFeeType: s.deliveryFeeType || null,
@@ -320,6 +333,7 @@ export const getPublicSellers = async (req: Request, res: Response) => {
       id: p.id,
       name: p.name,
       price: Number(p.price),
+      originalPrice: p.originalPrice != null ? Number(p.originalPrice) : null,
       productType: p.productType,
       images: p.images.map((img) => img.imageUrl),
       preparationTime: p.preparationTime,
@@ -433,9 +447,9 @@ export const getPublicSellerById = async (req: Request, res: Response) => {
     businessNameUrdu: seller.businessNameUrdu,
     description: seller.description,
     coverImageUrl: seller.coverImageUrl,
-    ratingAverage: Number(seller.ratingAverage) || 4.8,
+    ratingAverage: Number(seller.ratingAverage) || 0,
     totalReviews: seller.totalReviews || seller.reviews.length || 0,
-    minPrepTimeMinutes: seller.minPrepTimeMinutes || 25,
+    minPrepTimeMinutes: seller.minPrepTimeMinutes ?? null,
     minOrderAmountForDelivery: seller.minOrderAmountForDelivery != null ? Number(seller.minOrderAmountForDelivery) : null,
     freeDeliveryThreshold: seller.freeDeliveryThreshold != null ? Number(seller.freeDeliveryThreshold) : null,
     deliveryFeeType: seller.deliveryFeeType || null,
@@ -483,7 +497,7 @@ export const getPublicSellerById = async (req: Request, res: Response) => {
     })),
     reviews: seller.reviews.map((r) => ({
       id: r.id,
-      rating: r.sellerRating || r.productRating || 5,
+      rating: r.sellerRating ?? r.productRating ?? null,
       comment: r.comment,
       createdAt: r.createdAt,
       author: r.customer?.profile?.fullName || 'Verified Buyer',

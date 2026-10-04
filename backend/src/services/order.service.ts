@@ -1,19 +1,78 @@
 import { randomInt } from 'crypto';
 import prisma from '../config/database';
+import { getPlatformDeliveryPricing } from './delivery-pricing.service';
 import { AppError } from '../middleware/errorHandler';
 import realtimeOrderService from './realtime-order.service';
 import { SELLER_COMMUNITY_DELIVERY_SELECT } from '../utils/sellerDeliverySelect';
 import { communityService } from './community.service';
 import { eligibleSubtotalForPromotion, isItemEligibleForPromotion, releasePromotionUsage } from './promotion.service';
-import { GST_RATE, allocateDiscount } from '../utils/pricing';
+import { allocateDiscount, priceOrder } from '../utils/pricing';
 import { issueRefund, IssuedRefund } from './refund.service';
 import { allocateHubStock, releaseHubAllocations } from './hub-allocation.service';
 import { DeliveryFeeShare } from '../utils/deliveryEarnings';
-import { isOwnUploadPath } from '../utils/uploadPaths';
-import { getDeliveryFeeForSeller } from '../utils/deliveryFee';
+import { isStoredFile, isPrivateRef, storedFileOwner, presentFile } from '../storage';
+import { getDeliveryFeeForSeller, haversineKm } from '../utils/deliveryFee';
 import { createStockAlert } from './stock-alert.service';
 import promotionService from './promotion.service';
 import { isAcceptingOrders, validateOrderTiming } from './availability.service';
+import { SELLER_DIRECT_METHODS } from '../utils/paymentCustody';
+import ledgerService from './ledger.service';
+import { newHandoverCode } from './handover.service';
+import { cancelOpenDelivery, notifyDeliveryCancelled, CancelledDelivery } from './delivery-lifecycle.service';
+import { debitWallet } from './wallet.service';
+import { notify } from './notify.service';
+
+/** The kitchen a customer pays directly by transfer (the first item's seller). */
+async function payeeSellerUserId(orderId: string): Promise<string | null> {
+  const item = await prisma.orderItem.findFirst({
+    where: { orderId },
+    orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+    select: { seller: { select: { userId: true } } },
+  });
+  return item?.seller.userId ?? null;
+}
+
+// Once the food has left the kitchen, the customer can see where the rider is.
+const ON_THE_WAY_STATUSES = ['picked_up', 'in_transit', 'arrived_at_customer'];
+
+/**
+ * What a party to an order sees of its delivery. The rider's pay is between the rider and
+ * the platform. The rider's position is shown only while the food is on its way (never
+ * afterwards), and only to the customer, the rider and admins.
+ */
+function presentDelivery<
+  D extends {
+    status: string;
+    riderFee: unknown;
+    riderBonus: unknown;
+    riderLatitude: unknown;
+    riderLongitude: unknown;
+    riderLocationAt: Date | null;
+    deliveryLatitude: unknown;
+    deliveryLongitude: unknown;
+    rider: Record<string, unknown> | null;
+  },
+>(delivery: D, viewer: { canSeePay: boolean; canSeeLocation: boolean; riderFirstName: string | null }) {
+  const { riderFee, riderBonus, riderLatitude, riderLongitude, riderLocationAt, ...rest } = delivery;
+  const live = viewer.canSeeLocation && ON_THE_WAY_STATUSES.includes(delivery.status) && riderLatitude != null && riderLongitude != null;
+  const doorKnown = delivery.deliveryLatitude != null && delivery.deliveryLongitude != null;
+  return {
+    ...rest,
+    rider: delivery.rider ? { ...delivery.rider, name: viewer.riderFirstName } : null,
+    ...(viewer.canSeePay ? { riderFee: riderFee != null ? Number(riderFee) : null, riderBonus: riderBonus != null ? Number(riderBonus) : null } : {}),
+    riderLocation: live
+      ? {
+          latitude: Number(riderLatitude),
+          longitude: Number(riderLongitude),
+          updatedAt: riderLocationAt,
+          // How far the rider is from the door, when the door's location is known.
+          distanceKm: doorKnown
+            ? Math.round(haversineKm(Number(riderLatitude), Number(riderLongitude), Number(delivery.deliveryLatitude), Number(delivery.deliveryLongitude)) * 10) / 10
+            : null,
+        }
+      : null,
+  };
+}
 
 export class OrderService {
   /**
@@ -106,8 +165,19 @@ export class OrderService {
       paymentMethod: string;
       promotionCode?: string;
       deliveryInstructions?: string;
-    }
+    },
+    opts: { idempotencyKey?: string } = {}
   ) {
+    // A retried checkout (same Idempotency-Key) gets the order it already placed.
+    const idempotencyKey = opts.idempotencyKey || null;
+    if (idempotencyKey) {
+      const existing = await prisma.order.findUnique({
+        where: { customerId_idempotencyKey: { customerId, idempotencyKey } },
+        select: { id: true },
+      });
+      if (existing) return this.loadPlacedOrder(existing.id);
+    }
+
     // Verify customer exists
     const customer = await prisma.user.findUnique({
       where: { id: customerId },
@@ -253,6 +323,24 @@ export class OrderService {
       });
     }
 
+    // One kitchen per order. The cart already enforces it; the API must too: a manual
+    // transfer goes to one seller's account, and payouts, refunds and delivery are all
+    // settled per order.
+    if (sellersInOrder.size > 1) {
+      throw new AppError(
+        'An order can only contain items from one kitchen. Please place a separate order for each kitchen.',
+        400,
+        'MULTI_SELLER_ORDER'
+      );
+    }
+    // A seller ordering from their own kitchen could confirm a transfer that never
+    // happened, mark it delivered and draw a payout (or leave themselves reviews).
+    for (const seller of sellersInOrder.values()) {
+      if (seller.userId === customerId) {
+        throw new AppError("You can't place an order with your own kitchen", 400, 'SELF_ORDER');
+      }
+    }
+
     // Every seller in the order must currently be accepting orders — schedule,
     // manual override, order cutoff, daily cap, and pre-order-only are all
     // enforced here rather than trusting whatever the browsing page displayed.
@@ -325,7 +413,6 @@ export class OrderService {
           freeDeliveryThreshold: true,
           allowedPostalCodes: true,
           deliveryZones: true,
-          deliveryProvider: true,
           ...SELLER_COMMUNITY_DELIVERY_SELECT,
         },
       });
@@ -347,6 +434,7 @@ export class OrderService {
         communityId: resolvedCommunityId,
       communityUnresolved: !resolvedCommunityId,
       };
+      const pricing = await getPlatformDeliveryPricing();
       let total = 0;
       for (const seller of sellers) {
         const hubId = sellerToHubId.get(seller.id) ?? null;
@@ -356,7 +444,7 @@ export class OrderService {
         const sellerSubtotal = orderItems
           .filter((i) => i.sellerId === seller.id)
           .reduce((sum, i) => sum + i.totalPrice, 0);
-        const result = getDeliveryFeeForSeller(seller, addr, originLat, originLng, sellerSubtotal);
+        const result = getDeliveryFeeForSeller(seller, addr, originLat, originLng, sellerSubtotal, { pricing, forcePlatform: !!hub });
         if (!result.deliverable) {
           throw new AppError(`${seller.businessName}: ${result.reason}`, 400, 'ADDRESS_NOT_DELIVERABLE');
         }
@@ -444,28 +532,47 @@ export class OrderService {
             const shares = allocateDiscount(eligibleItems.map((i) => ({ total: i.totalPrice })), discountAmount);
             eligibleItems.forEach((i, idx) => {
               i.promoDiscount = shares[idx];
+              // A seller's own code is funded by the seller: their share (and the commission
+              // on it) is worked out on what the customer actually pays for the item. A
+              // platform code is funded by the platform, so the seller's share is unchanged.
+              if (promotion.sellerId) {
+                const net = i.totalPrice - i.promoDiscount;
+                i.commissionAmount = net * (Number(i.commissionRate) / 100);
+                i.sellerPayout = net - i.commissionAmount;
+              }
             });
           }
         }
       }
     }
 
-    // Calculate tax (5% GST for Pakistan)
-    const taxAmount = (subtotal - discountAmount) * GST_RATE;
+    // Who delivers (snapshotted, so a seller changing their setting later doesn't move
+    // existing orders): hub stock always goes with a platform rider.
+    const onlySeller = sellersInOrder.values().next().value;
+    const deliveryProvider =
+      data.deliveryType !== 'home_delivery'
+        ? null
+        : orderItems.some((i) => i.fulfillmentType === 'hub') || onlySeller?.deliveryProvider !== 'self'
+          ? 'platform'
+          : 'self';
 
-    // Calculate total
-    const totalAmount = subtotal + deliveryFee - discountAmount + taxAmount;
+    // 5% GST on the goods after discounts; the total in whole rupees (see priceOrder).
+    const { taxAmount, totalAmount } = priceOrder(subtotal - discountAmount, deliveryFee);
 
     // Create order with items in transaction (retried with a new number on a clash)
-    const order = await this.withOrderNumber((orderNumber) => prisma.$transaction(async (tx) => {
+    let order: Awaited<ReturnType<typeof placeOrder>>;
+    const placeOrder = () => this.withOrderNumber((orderNumber) => prisma.$transaction(async (tx) => {
       // Create order
       const newOrder = await tx.order.create({
         data: {
           orderNumber,
           customerId,
+          idempotencyKey,
+          handoverCode: newHandoverCode(),
           subtotal,
           deliveryFee,
           deliveryFeeBreakdown: deliveryFeeBreakdown as any,
+          deliveryProvider,
           discountAmount,
           taxAmount,
           totalAmount,
@@ -669,15 +776,60 @@ export class OrderService {
         });
       }
 
+      // Paying from the Nuray Wallet: the debit commits with the order or not at all, so an
+      // order is never left waiting for wallet money that isn't there.
+      if (data.paymentMethod === 'wallet') {
+        await debitWallet(tx, {
+          userId: customerId,
+          amount: Number(newOrder.totalAmount),
+          orderId: newOrder.id,
+          description: `Payment for order ${newOrder.orderNumber}`,
+        });
+        await tx.order.update({
+          where: { id: newOrder.id },
+          data: { paymentStatus: 'paid', paymentCollectedBy: 'platform', paidAt: new Date(), paymentTransactionId: `WALLET-${newOrder.id}` },
+        });
+      }
+
       return { order: newOrder, items: createdItems, updatedProducts };
     }));
+    try {
+      order = await placeOrder();
+    } catch (err: any) {
+      // The same checkout submitted twice at once: the other request placed it.
+      const target = String(err?.meta?.target ?? '');
+      if (idempotencyKey && err?.code === 'P2002' && /idempotency/i.test(target)) {
+        const existing = await prisma.order.findUnique({
+          where: { customerId_idempotencyKey: { customerId, idempotencyKey } },
+          select: { id: true },
+        });
+        if (existing) return this.loadPlacedOrder(existing.id);
+      }
+      throw err;
+    }
 
-    // Emit new order notification
-    await realtimeOrderService.emitNewOrderNotification(order.order.id);
+    // The order is committed: nothing after this point may fail the request (a client
+    // that saw an error would retry and, without a key, place it twice).
+    try {
+      await realtimeOrderService.emitNewOrderNotification(order.order.id);
+    } catch (err) {
+      console.error(`New-order notification failed for ${order.order.id}:`, err);
+    }
 
-    // Fire low-stock / out-of-stock alerts for any product this order just depleted.
-    // Done outside the transaction since it's not order-critical and sends email.
-    for (const p of order.updatedProducts) {
+    // Low-stock / out-of-stock alerts (may send email): in the background, never
+    // holding up the customer's checkout.
+    void this.raiseStockAlerts(order.updatedProducts).catch((err) =>
+      console.error('Stock alerts after order failed:', err)
+    );
+
+    return this.loadPlacedOrder(order.order.id);
+  }
+
+  /** Low-stock / out-of-stock alerts for products an order just depleted. */
+  private async raiseStockAlerts(
+    updatedProducts: Array<{ id: string; sellerId: string; variantId: string | null; stockQuantity: number; stockThreshold: number | null }>
+  ) {
+    for (const p of updatedProducts) {
       let threshold = p.stockThreshold ?? 10;
       if (p.stockThreshold == null) {
         const seller = await prisma.seller.findUnique({
@@ -707,9 +859,12 @@ export class OrderService {
       }
     }
 
-    // Get full order with relations
+  }
+
+  /** The placed order with what the checkout response needs. */
+  private async loadPlacedOrder(orderId: string) {
     const fullOrder = await prisma.order.findUnique({
-      where: { id: order.order.id },
+      where: { id: orderId },
       include: {
         items: {
           include: {
@@ -843,6 +998,7 @@ export class OrderService {
     });
 
     const isAdmin = user?.userType === 'admin';
+    const viewerRider = await prisma.rider.findUnique({ where: { userId }, select: { id: true } });
 
     const order = await prisma.order.findFirst({
       where: {
@@ -913,8 +1069,34 @@ export class OrderService {
       throw new AppError('Order not found', 404, 'ORDER_NOT_FOUND');
     }
 
+    // The handover code is shown to the customer only: the rider or seller who hands the
+    // order over has to get it from them.
+    const handover =
+      order.customerId === userId
+        ? await prisma.order.findUnique({ where: { id: order.id }, select: { handoverCode: true } })
+        : null;
+
+    const isOrderRider = !!viewerRider && order.delivery?.riderId === viewerRider.id;
+    // The customer is told their rider's first name.
+    const riderUserId = order.delivery?.riderId
+      ? (await prisma.rider.findUnique({ where: { id: order.delivery.riderId }, select: { userId: true } }))?.userId
+      : null;
+    const riderFullName = riderUserId
+      ? (await prisma.userProfile.findUnique({ where: { userId: riderUserId }, select: { fullName: true } }))?.fullName
+      : null;
+
     return {
       ...order,
+      delivery: order.delivery
+        ? presentDelivery(order.delivery, {
+            canSeePay: isAdmin || isOrderRider,
+            canSeeLocation: isAdmin || isOrderRider || order.customerId === userId,
+            riderFirstName: riderFullName?.trim().split(/\s+/)[0] || null,
+          })
+        : null,
+      ...(handover ? { handoverCode: handover.handoverCode } : {}),
+      // The receipt is private: the viewer (already checked above) gets a short-lived link.
+      paymentProofUrl: await presentFile(order.paymentProofUrl),
       subtotal: Number(order.subtotal),
       deliveryFee: Number(order.deliveryFee),
       discountAmount: Number(order.discountAmount),
@@ -952,6 +1134,7 @@ export class OrderService {
 
     // Cancel order and restore stock
     let refundIssued = null as IssuedRefund | null;
+    let cancelledDelivery = null as CancelledDelivery | null;
     const cancelledOrder = await prisma.$transaction(async (tx) => {
       // Claim the cancellation: the "still pending" check above ran before this
       // transaction, so a seller accepting at the same instant (or a second
@@ -965,6 +1148,7 @@ export class OrderService {
           cancelledBy: 'customer',
         },
       });
+      if (claimed.count > 0) cancelledDelivery = await cancelOpenDelivery(tx, orderId, `Cancelled by the customer: ${reason}`);
       if (claimed.count === 0) {
         throw new AppError('Order can no longer be cancelled', 409, 'ORDER_NOT_CANCELLABLE');
       }
@@ -1039,6 +1223,7 @@ export class OrderService {
 
     // Emit order status update
     await realtimeOrderService.emitOrderStatusUpdate(cancelledOrder.id, 'cancelled', userId);
+    notifyDeliveryCancelled(cancelledDelivery);
 
     return {
       orderId: cancelledOrder.id,
@@ -1176,7 +1361,12 @@ export class OrderService {
       throw new AppError('A payment reference number is required', 400, 'REFERENCE_REQUIRED');
     }
     // A proof is a link to an uploaded file — never an inline data: payload.
-    if (data.proofUrl && !isOwnUploadPath(data.proofUrl)) {
+    // And it must be a receipt this customer uploaded (stored privately).
+    if (
+      data.proofUrl &&
+      (!isStoredFile(data.proofUrl, { private: 'proofs' }) ||
+        (isPrivateRef(data.proofUrl) && storedFileOwner(data.proofUrl) !== userId))
+    ) {
       throw new AppError('Invalid payment proof link', 400, 'INVALID_PROOF_URL');
     }
 
@@ -1215,6 +1405,20 @@ export class OrderService {
 
     // Notify via realtime
     await realtimeOrderService.emitOrderStatusUpdate(orderId, order.orderStatus, userId);
+    // The kitchen the money went to checks its account.
+    const payee = await payeeSellerUserId(orderId);
+    if (payee) {
+      await notify({
+        userId: payee,
+        category: 'payments',
+        type: 'payment',
+        title: `Check a payment: order #${updated.orderNumber}`,
+        message: `The customer says they sent Rs ${Number(updated.totalAmount).toLocaleString()} (reference ${data.referenceNumber}). Confirm it once it's in your account.`,
+        actionUrl: `/sellers/orders/${orderId}`,
+        data: { orderId },
+        channels: ['push', 'email'],
+      });
+    }
 
     return {
       success: true,
@@ -1256,7 +1460,7 @@ export class OrderService {
     if (order.items[0]?.sellerId !== seller.id) {
       throw new AppError('Only the seller receiving this payment can confirm it', 403, 'NOT_PAYEE');
     }
-    if (['cancelled', 'refunded'].includes(order.orderStatus) || ['cod', 'wallet'].includes(order.paymentMethod)) {
+    if (['cancelled', 'refunded'].includes(order.orderStatus) || !SELLER_DIRECT_METHODS.includes(order.paymentMethod)) {
       throw new AppError('This order has no manual payment to confirm', 400, 'NOT_MANUAL_PAYMENT');
     }
 
@@ -1269,6 +1473,8 @@ export class OrderService {
       where: { id: orderId, paymentStatus: 'payment_submitted' },
       data: {
         paymentStatus: newPaymentStatus,
+        // The transfer went into the seller's own account.
+        paymentCollectedBy: confirmed ? 'seller' : undefined,
         paymentConfirmedBy: confirmed ? 'seller' : undefined,
         paymentConfirmedAt: confirmed ? new Date() : undefined,
         paidAt: confirmed ? new Date() : undefined,
@@ -1295,7 +1501,40 @@ export class OrderService {
       },
     });
 
+    // A transfer confirmed after the order was already delivered posts its ledger
+    // entries now (they're only posted once the money is actually in).
+    if (confirmed && ['delivered', 'completed'].includes(updated.orderStatus)) {
+      await ledgerService.recordOrderCompletion(orderId).catch((err) =>
+        console.error(`Ledger posting failed for order ${orderId}:`, err)
+      );
+    }
+
     await realtimeOrderService.emitOrderStatusUpdate(orderId, order.orderStatus, sellerUserId);
+    if (updated.customerId) {
+      await notify(
+        confirmed
+          ? {
+              userId: updated.customerId,
+              category: 'payments',
+              type: 'payment',
+              title: 'Payment confirmed',
+              message: `The kitchen confirmed your payment for order #${updated.orderNumber}.`,
+              actionUrl: `/orders/${orderId}`,
+              data: { orderId },
+              channels: ['push'],
+            }
+          : {
+              userId: updated.customerId,
+              category: 'payments',
+              type: 'payment',
+              title: "The kitchen couldn't find your payment",
+              message: `For order #${updated.orderNumber}: "${disputeReason || 'Payment not received'}". Check the transfer and send the receipt again, or contact support.`,
+              actionUrl: `/orders/${orderId}`,
+              data: { orderId },
+              channels: ['push', 'email', 'sms'],
+            }
+      );
+    }
 
     return {
       success: true,
@@ -1303,6 +1542,74 @@ export class OrderService {
       paymentStatus: updated.paymentStatus,
       confirmed,
     };
+  }
+
+  /**
+   * An admin settles a transfer the kitchen disputed (or hasn't confirmed yet) after checking
+   * the receipt with both sides: the money is in the kitchen's account after all. The order
+   * is then paid, with the money held by the kitchen.
+   */
+  async adminConfirmManualPayment(orderId: string, adminId: string, note?: string) {
+    const order = await prisma.order.findUnique({ where: { id: orderId }, select: { id: true, orderStatus: true, paymentMethod: true } });
+    if (!order) throw new AppError('Order not found', 404, 'ORDER_NOT_FOUND');
+    if (['cancelled', 'refunded'].includes(order.orderStatus) || !SELLER_DIRECT_METHODS.includes(order.paymentMethod)) {
+      throw new AppError('This order has no transfer to confirm', 400, 'NOT_MANUAL_PAYMENT');
+    }
+    const now = new Date();
+    // Only from a reported transfer: never over a refund or an already settled payment.
+    const applied = await prisma.order.updateMany({
+      where: { id: orderId, paymentStatus: { in: ['payment_submitted', 'disputed'] } },
+      data: {
+        paymentStatus: 'paid',
+        paymentCollectedBy: 'seller',
+        paymentConfirmedBy: 'admin',
+        paymentConfirmedAt: now,
+        paidAt: now,
+        paymentDisputeReason: null,
+      },
+    });
+    if (applied.count === 0) {
+      throw new AppError('Only a transfer the customer reported (and the kitchen confirmed or disputed) can be confirmed', 409, 'NO_PAYMENT_SUBMITTED');
+    }
+    await prisma.orderStatusHistory.create({
+      data: {
+        orderId,
+        status: order.orderStatus,
+        notes: `Payment confirmed by Nuray support${note?.trim() ? `: ${note.trim()}` : ''}`,
+        changedBy: adminId,
+      },
+    });
+    if (['delivered', 'completed'].includes(order.orderStatus)) {
+      await ledgerService.recordOrderCompletion(orderId).catch((err) => console.error(`Ledger posting failed for order ${orderId}:`, err));
+    }
+    await realtimeOrderService.emitOrderStatusUpdate(orderId, order.orderStatus, adminId);
+    const settled = await prisma.order.findUnique({ where: { id: orderId }, select: { orderNumber: true, customerId: true } });
+    if (settled?.customerId) {
+      await notify({
+        userId: settled.customerId,
+        category: 'payments',
+        type: 'payment',
+        title: 'Payment confirmed',
+        message: `Nuray support confirmed your payment for order #${settled.orderNumber}.`,
+        actionUrl: `/orders/${orderId}`,
+        data: { orderId },
+        channels: ['push', 'email'],
+      });
+    }
+    const payee = await payeeSellerUserId(orderId);
+    if (payee && settled) {
+      await notify({
+        userId: payee,
+        category: 'payments',
+        type: 'payment',
+        title: `Payment confirmed: order #${settled.orderNumber}`,
+        message: `Nuray support checked the transfer for order #${settled.orderNumber}: it reached your account, so the order is paid.`,
+        actionUrl: `/sellers/orders/${orderId}`,
+        data: { orderId },
+        channels: ['push', 'email'],
+      });
+    }
+    return { orderId, paymentStatus: 'paid' };
   }
 
   /**
@@ -1347,7 +1654,7 @@ export class OrderService {
     void role;
     const readCondition = { senderId: { not: userId } };
 
-    await prisma.orderMessage.updateMany({
+    const markedRead = await prisma.orderMessage.updateMany({
       where: {
         orderId,
         ...readCondition,
@@ -1358,6 +1665,7 @@ export class OrderService {
         readAt: new Date(),
       },
     });
+    if (markedRead.count > 0) void realtimeOrderService.emitMessagesRead(orderId, userId);
 
     const messages = await prisma.orderMessage.findMany({
       where: { orderId },
@@ -1378,7 +1686,7 @@ export class OrderService {
       },
     });
 
-    return messages.map((m) => ({
+    return Promise.all(messages.map(async (m) => ({
       id: m.id,
       orderId: m.orderId,
       senderId: m.senderId,
@@ -1387,13 +1695,13 @@ export class OrderService {
       senderAvatar: m.sender.profile?.avatarUrl || null,
       message: m.message,
       messageType: m.messageType || 'text',
-      mediaUrl: m.mediaUrl || null,
+      mediaUrl: await presentFile(m.mediaUrl),
       duration: m.duration || null,
       isRead: m.isRead,
       readAt: m.readAt,
       createdAt: m.createdAt,
       isMe: m.senderId === userId,
-    }));
+    })));
   }
 
   /**
@@ -1494,6 +1802,8 @@ export class OrderService {
       },
     });
 
+    void realtimeOrderService.emitOrderMessage(orderId, orderMsg.id, userId, effectiveRole);
+
     return {
       id: orderMsg.id,
       orderId: orderMsg.orderId,
@@ -1503,7 +1813,7 @@ export class OrderService {
       senderAvatar: orderMsg.sender.profile?.avatarUrl || null,
       message: orderMsg.message,
       messageType: orderMsg.messageType,
-      mediaUrl: orderMsg.mediaUrl,
+      mediaUrl: await presentFile(orderMsg.mediaUrl),
       duration: orderMsg.duration,
       isRead: orderMsg.isRead,
       readAt: orderMsg.readAt,

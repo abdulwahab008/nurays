@@ -34,6 +34,9 @@ import { useSocket } from '@/lib/hooks/use-socket';
 import { useToast } from '@/components/ui/toast';
 import { cartService } from '@/lib/services/cart.service';
 import { apiClient } from '@/lib/api-client';
+import { useT } from '@/lib/i18n';
+import { commonMessages, statusKey } from '@/lib/i18n/messages/common';
+import { ordersMessages } from '@/lib/i18n/messages/orders';
 
 export default function OrdersPage() {
   return (
@@ -67,6 +70,8 @@ function OrdersContent() {
   const [searchQuery, setSearchQuery] = useState('');
   const [reorderingId, setReorderingId] = useState<string | null>(null);
   const mountedRef = useRef(false);
+  const t = useT(ordersMessages);
+  const tc = useT(commonMessages);
 
   const sidebarItems = CUSTOMER_SIDEBAR_ITEMS;
 
@@ -120,13 +125,18 @@ function OrdersContent() {
       );
       if (data.status === 'cancelled') {
         showToast(
-          `Order #${data.orderNumber ?? data.orderId} has been cancelled.`,
+          t('list.toastCancelled', { number: data.orderNumber ?? data.orderId }),
           'error',
           10000
         );
       } else {
         showToast(
-          `Order #${data.orderNumber ?? data.orderId} status: ${String(data.status).replace(/_/g, ' ')}`,
+          t('list.toastStatus', {
+            number: data.orderNumber ?? data.orderId,
+            status: statusKey(String(data.status)) in commonMessages.en
+              ? tc(statusKey(String(data.status)))
+              : String(data.status).replace(/_/g, ' '),
+          }),
           'info'
         );
       }
@@ -135,7 +145,7 @@ function OrdersContent() {
       mountedRef.current = false;
       unsubscribe?.();
     };
-  }, [onOrderStatusUpdate, showToast]);
+  }, [onOrderStatusUpdate, showToast, t, tc]);
 
   const PAGE_SIZE = 20;
 
@@ -168,7 +178,7 @@ function OrdersContent() {
     e.stopPropagation();
     setReorderingId(order.id);
     try {
-      showToast('Adding order items to tray...', 'info');
+      showToast(t('list.toastAddingToTray'), 'info');
       let items = (order as any).items || [];
       if (!items.length || !items[0]?.productId) {
         try {
@@ -190,7 +200,7 @@ function OrdersContent() {
           });
         }
       }
-      showToast('Items added to your tray! Redirecting...', 'success');
+      showToast(t('list.toastAddedToTray'), 'success');
       router.push('/cart');
     } catch {
       router.push(`/orders/${order.id}`);
@@ -270,28 +280,28 @@ function OrdersContent() {
     switch (status) {
       case 'pending':
         return {
-          label: 'Order Placed',
+          label: t('list.badge.pending'),
           color: 'bg-amber-50 text-amber-800 border-amber-200/80',
           dotColor: 'bg-amber-500',
           icon: <Clock className="w-3.5 h-3.5" />,
         };
       case 'confirmed':
         return {
-          label: 'Chef Confirmed',
+          label: t('list.badge.confirmed'),
           color: 'bg-blue-50 text-blue-800 border-blue-200/80',
           dotColor: 'bg-blue-500',
           icon: <Sparkles className="w-3.5 h-3.5" />,
         };
       case 'preparing':
         return {
-          label: 'Preparing in Kitchen',
+          label: t('list.badge.preparing'),
           color: 'bg-purple-50 text-purple-800 border-purple-200/80',
           dotColor: 'bg-purple-500',
           icon: <ChefHat className="w-3.5 h-3.5" />,
         };
       case 'ready':
         return {
-          label: 'Ready for Dispatch',
+          label: t('list.badge.ready'),
           color: 'bg-indigo-50 text-indigo-800 border-indigo-200/80',
           dotColor: 'bg-indigo-500',
           icon: <Package className="w-3.5 h-3.5" />,
@@ -299,7 +309,7 @@ function OrdersContent() {
       case 'dispatched':
       case 'in_transit':
         return {
-          label: 'On the Way',
+          label: t('list.badge.onTheWay'),
           color: 'bg-orange-50 text-orange-800 border-orange-200/80',
           dotColor: 'bg-[#FF5500]',
           icon: <Truck className="w-3.5 h-3.5" />,
@@ -307,21 +317,21 @@ function OrdersContent() {
       case 'delivered':
       case 'completed':
         return {
-          label: 'Delivered',
+          label: t('list.badge.delivered'),
           color: 'bg-emerald-50 text-emerald-800 border-emerald-200/80',
           dotColor: 'bg-emerald-500',
           icon: <CheckCircle2 className="w-3.5 h-3.5" />,
         };
       case 'cancelled':
         return {
-          label: 'Cancelled',
+          label: t('list.badge.cancelled'),
           color: 'bg-rose-50 text-rose-800 border-rose-200/80',
           dotColor: 'bg-rose-500',
           icon: <XCircle className="w-3.5 h-3.5" />,
         };
       default:
         return {
-          label: status.replace(/_/g, ' '),
+          label: statusKey(status) in commonMessages.en ? tc(statusKey(status)) : status.replace(/_/g, ' '),
           color: 'bg-slate-50 text-slate-800 border-slate-200',
           dotColor: 'bg-slate-400',
           icon: <Clock className="w-3.5 h-3.5" />,
@@ -351,8 +361,8 @@ function OrdersContent() {
 
   return (
     <DashboardLayout
-      title="My Orders"
-      subtitle="Track live preparations, dispatch status & view order receipts"
+      title={t('list.title')}
+      subtitle={t('list.subtitle')}
       sidebarItems={sidebarItems}
       userType="customer"
     >
@@ -368,14 +378,14 @@ function OrdersContent() {
                 <Receipt className="w-5 h-5" />
               </div>
               <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">
-                Lifetime
+                {t('list.lifetime')}
               </span>
             </div>
             <div className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight">
               {totalOrdersCount}
             </div>
             <div className="text-xs sm:text-sm font-semibold text-slate-500 mt-0.5">
-              Total Placed
+              {t('list.totalPlaced')}
             </div>
           </div>
 
@@ -388,11 +398,11 @@ function OrdersContent() {
               {inProgressCount > 0 ? (
                 <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 text-[10px] font-bold">
                   <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-ping" />
-                  Live Cooking
+                  {t('list.liveCooking')}
                 </span>
               ) : (
                 <span className="text-[11px] font-bold text-amber-400 uppercase tracking-wider">
-                  Active
+                  {t('list.active')}
                 </span>
               )}
             </div>
@@ -400,7 +410,7 @@ function OrdersContent() {
               {inProgressCount}
             </div>
             <div className="text-xs sm:text-sm font-semibold text-amber-700/80 mt-0.5">
-              Kitchen Prep
+              {t('list.kitchenPrep')}
             </div>
           </div>
 
@@ -413,11 +423,11 @@ function OrdersContent() {
               {onTheWayCount > 0 ? (
                 <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-orange-100 text-[#FF5500] text-[10px] font-bold">
                   <span className="w-1.5 h-1.5 rounded-full bg-[#FF5500] animate-ping" />
-                  Rider Dispatched
+                  {t('list.riderDispatched')}
                 </span>
               ) : (
                 <span className="text-[11px] font-bold text-orange-400 uppercase tracking-wider">
-                  Transit
+                  {t('list.transit')}
                 </span>
               )}
             </div>
@@ -425,7 +435,7 @@ function OrdersContent() {
               {onTheWayCount}
             </div>
             <div className="text-xs sm:text-sm font-semibold text-orange-700/80 mt-0.5">
-              On the Way
+              {t('list.onTheWay')}
             </div>
           </div>
 
@@ -436,14 +446,14 @@ function OrdersContent() {
                 <CheckCircle2 className="w-5 h-5" />
               </div>
               <span className="text-[11px] font-bold text-emerald-600 uppercase tracking-wider">
-                Fulfilled
+                {t('list.fulfilled')}
               </span>
             </div>
             <div className="text-2xl sm:text-3xl font-black text-emerald-900 tracking-tight">
               {deliveredCount}
             </div>
             <div className="text-xs sm:text-sm font-semibold text-emerald-700/80 mt-0.5">
-              Delivered Meals
+              {t('list.deliveredMeals')}
             </div>
           </div>
         </div>
@@ -455,15 +465,15 @@ function OrdersContent() {
           {/* Segmented Filter Pills */}
           <div className="flex items-center gap-1.5 overflow-x-auto p-1 scrollbar-none">
             {[
-              { id: 'all', label: 'All Orders', count: totalOrdersCount },
+              { id: 'all', label: t('list.tab.all'), count: totalOrdersCount },
               {
                 id: 'active',
-                label: 'Active Orders',
+                label: t('list.tab.active'),
                 count: inProgressCount + onTheWayCount,
                 hasDot: inProgressCount + onTheWayCount > 0,
               },
-              { id: 'past', label: 'Past Orders', count: deliveredCount },
-              { id: 'cancelled', label: 'Cancelled', count: cancelledCount },
+              { id: 'past', label: t('list.tab.past'), count: deliveredCount },
+              { id: 'cancelled', label: t('list.tab.cancelled'), count: cancelledCount },
             ].map((tab) => {
               const active = filter === tab.id;
               return (
@@ -500,18 +510,19 @@ function OrdersContent() {
 
           {/* Quick Search */}
           <div className="relative min-w-[220px] sm:min-w-[260px] px-1 sm:px-0">
-            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+            <Search className="absolute start-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
             <input
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search by order # or dish..."
-              className="w-full pl-9 pr-3.5 py-2 rounded-xl text-xs sm:text-sm bg-slate-50 border border-slate-200/90 text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-[#FF5500]/20 focus:border-[#FF5500] transition-all"
+              placeholder={t('list.searchPlaceholder')}
+              className="w-full ps-9 pe-3.5 py-2 rounded-xl text-xs sm:text-sm bg-slate-50 border border-slate-200/90 text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-[#FF5500]/20 focus:border-[#FF5500] transition-all"
             />
             {searchQuery && (
               <button
                 onClick={() => setSearchQuery('')}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-slate-400 hover:text-slate-600"
+                aria-label={t('list.clearSearch')}
+                className="absolute end-3 top-1/2 -translate-y-1/2 text-xs text-slate-400 hover:text-slate-600"
               >
                 ✕
               </button>
@@ -525,8 +536,8 @@ function OrdersContent() {
         {loading ? (
           <div className="bg-white rounded-3xl p-12 text-center border border-slate-200/80 shadow-xs">
             <div className="w-10 h-10 border-3 border-[#FF5500] border-t-transparent rounded-full animate-spin mx-auto mb-3" />
-            <p className="text-sm font-bold text-slate-800">Retrieving your orders...</p>
-            <p className="text-xs text-slate-400 mt-1">Connecting to kitchen order ledger</p>
+            <p className="text-sm font-bold text-slate-800">{t('list.loadingTitle')}</p>
+            <p className="text-xs text-slate-400 mt-1">{t('list.loadingSub')}</p>
           </div>
         ) : filteredOrders.length === 0 ? (
           /* Empty State */
@@ -536,22 +547,22 @@ function OrdersContent() {
             </div>
             <h3 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight mb-2">
               {searchQuery
-                ? 'No matching orders found'
+                ? t('list.emptySearchTitle')
                 : filter === 'all'
-                ? 'No orders placed yet'
-                : `No ${filter.replace(/_/g, ' ')} orders`}
+                ? t('list.emptyAllTitle')
+                : t(`list.emptyTitle.${filter as 'active' | 'past' | 'cancelled'}`)}
             </h3>
             <p className="text-xs sm:text-sm text-slate-500 max-w-md mx-auto mb-6 leading-relaxed">
               {searchQuery
-                ? `No orders matching "${searchQuery}". Try searching for another order number or dish.`
+                ? t('list.emptySearchBody', { query: searchQuery })
                 : filter === 'all'
-                ? 'Order authentic generational dishes & sub-zero provisions from verified home chefs.'
-                : `You currently have no orders categorized as ${filter}. Check other tabs or explore our kitchens.`}
+                ? t('list.emptyAllBody')
+                : t(`list.emptyBody.${filter as 'active' | 'past' | 'cancelled'}`)}
             </p>
             <div className="flex items-center justify-center gap-3">
               <Link href="/dashboard">
                 <Button className="bg-[#FF5500] hover:bg-[#e04b00] text-white font-bold px-6 py-2.5 rounded-2xl shadow-sm">
-                  <ShoppingBag className="w-4 h-4 mr-2" /> Explore Kitchens &amp; Dishes
+                  <ShoppingBag className="w-4 h-4 me-2" /> {t('list.exploreKitchens')}
                 </Button>
               </Link>
             </div>
@@ -591,7 +602,7 @@ function OrdersContent() {
                           href={`/orders/${order.id}`}
                           className="text-base sm:text-lg font-black text-slate-900 hover:text-[#FF5500] transition-colors flex items-center gap-1.5"
                         >
-                          <span>Order #{order.orderNumber}</span>
+                          <span>{t('list.orderNumber', { number: order.orderNumber })}</span>
                           <ExternalLink className="w-3.5 h-3.5 opacity-0 group-hover:opacity-100 transition-opacity text-slate-400" />
                         </Link>
 
@@ -612,7 +623,7 @@ function OrdersContent() {
                           }`}
                         >
                           <CreditCard className="w-3 h-3" />
-                          {order.paymentStatus === 'paid' ? 'Paid' : 'Payment: Pending'}
+                          {order.paymentStatus === 'paid' ? t('list.paid') : t('list.paymentPending')}
                         </span>
                       </div>
 
@@ -628,14 +639,14 @@ function OrdersContent() {
                       <div className="bg-gradient-to-r from-slate-50/80 to-orange-50/40 rounded-2xl p-3.5 border border-slate-100">
                         <div className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-2 flex items-center gap-1.5">
                           <Flame className="w-3.5 h-3.5 text-[#FF5500]" />
-                          Live Kitchen Tracking
+                          {t('list.liveTracking')}
                         </div>
                         <div className="grid grid-cols-4 gap-2 relative">
                           {[
-                            { stepNum: 1, name: 'Received', icon: Clock },
-                            { stepNum: 2, name: 'Confirmed', icon: Sparkles },
-                            { stepNum: 3, name: 'Cooking', icon: ChefHat },
-                            { stepNum: 4, name: 'On Way', icon: Truck },
+                            { stepNum: 1, name: t('list.step.received'), icon: Clock },
+                            { stepNum: 2, name: t('list.step.confirmed'), icon: Sparkles },
+                            { stepNum: 3, name: t('list.step.cooking'), icon: ChefHat },
+                            { stepNum: 4, name: t('list.step.onWay'), icon: Truck },
                           ].map((st, idx) => {
                             const isDone = step >= st.stepNum;
                             const isCurrent = step === st.stepNum;
@@ -685,23 +696,23 @@ function OrdersContent() {
                                   {it.quantity || 1}×
                                 </span>
                                 <span className="truncate max-w-[180px] sm:max-w-[240px]">
-                                  {it.productName || it.name || (it.product && it.product.name) || 'Delicious Dish'}
+                                  {it.productName || it.name || (it.product && it.product.name) || t('list.dishFallback')}
                                 </span>
                               </div>
                             ))}
                           </div>
                         ) : (
                           <div className="text-xs text-slate-500 font-medium">
-                            {itemCount} item{itemCount !== 1 ? 's' : ''} in this order
+                            {itemCount !== 1 ? t('list.itemsInOrder', { count: itemCount }) : t('list.oneItemInOrder')}
                           </div>
                         )}
                       </div>
 
                       {/* Amount and CTAs */}
                       <div className="flex items-center justify-between sm:justify-end gap-3 sm:gap-4 pt-2 sm:pt-0 border-t sm:border-t-0 border-slate-100">
-                        <div className="text-left sm:text-right">
+                        <div className="text-start sm:text-end">
                           <span className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider">
-                            Order Total
+                            {t('list.orderTotal')}
                           </span>
                           <span className="text-lg sm:text-2xl font-black text-slate-950 tracking-tight">
                             {formatPrice(order.totalAmount)}
@@ -715,10 +726,10 @@ function OrdersContent() {
                               onClick={(e) => handleReorder(e, order)}
                               disabled={reorderingId === order.id}
                               className="inline-flex items-center gap-1.5 px-3 sm:px-3.5 py-2 rounded-xl text-xs font-bold text-[#FF5500] bg-orange-50 hover:bg-[#FF5500] hover:text-white border border-orange-200/80 transition-all cursor-pointer shadow-2xs"
-                              title="Reorder this entire meal into your tray"
+                              title={t('list.reorderTitle')}
                             >
                               <RotateCcw className={`w-3.5 h-3.5 ${reorderingId === order.id ? 'animate-spin' : ''}`} />
-                              <span>Reorder</span>
+                              <span>{t('list.reorder')}</span>
                             </button>
                           )}
 
@@ -726,8 +737,8 @@ function OrdersContent() {
                             href={`/orders/${order.id}`}
                             className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold bg-slate-900 hover:bg-slate-800 text-white transition-all shadow-xs"
                           >
-                            <span>Details</span>
-                            <ArrowRight className="w-3.5 h-3.5 group-hover:translate-x-0.5 transition-transform" />
+                            <span>{t('list.details')}</span>
+                            <ArrowRight className="rtl:-scale-x-100 w-3.5 h-3.5 group-hover:translate-x-0.5 transition-transform" />
                           </Link>
                         </div>
                       </div>
@@ -746,11 +757,11 @@ function OrdersContent() {
               disabled={loadingMore}
               className="px-6 py-2.5 rounded-xl text-sm font-bold bg-slate-900 hover:bg-slate-800 text-white"
             >
-              {loadingMore ? 'Loading…' : `Load more orders (${orders.length} of ${totalOrdersCount})`}
+              {loadingMore ? tc('loading') : t('list.loadMore', { loaded: orders.length, total: totalOrdersCount })}
             </Button>
             {filter !== 'all' && (
               <p className="text-xs text-slate-400 mt-2">
-                Showing matches among the orders loaded so far.
+                {t('list.filterNote')}
               </p>
             )}
           </div>

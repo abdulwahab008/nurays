@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import adminOrderService from '../services/admin-order.service';
+import orderService from '../services/order.service';
 import { AppError } from '../middleware/errorHandler';
 import { completeRefund as completeRefundRecord, dismissRefund as dismissRefundRecord, listRefunds as listRefundRecords } from '../services/refund.service';
 
@@ -177,3 +178,9 @@ export const getOrderStatistics = async (req: Request, res: Response) => {
   });
 };
 
+
+export const confirmTransfer = async (req: Request, res: Response) => {
+  if (!req.user) throw new AppError('Authentication required', 401, 'AUTH_REQUIRED');
+  const result = await orderService.adminConfirmManualPayment(req.params.id, req.user.userId, req.body?.note);
+  res.status(200).json({ success: true, message: 'Payment confirmed', data: result });
+};

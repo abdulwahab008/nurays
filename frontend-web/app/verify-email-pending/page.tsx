@@ -7,16 +7,20 @@ import { NurayButton as Button } from '@/components/ui/NurayButton';
 import { useToast } from '@/components/ui/toast';
 import { authService } from '@/lib/services/auth.service';
 import { useAuthStore } from '@/lib/store/auth-store';
+import { useT } from '@/lib/i18n';
+import { authMessages } from '@/lib/i18n/messages/auth';
 
 function VerifyEmailPendingContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { isAuthenticated, user } = useAuthStore();
   const { showToast } = useToast();
+  const t = useT(authMessages);
   const [loading, setLoading] = useState(false);
   
   // Get the next redirect URL (for sellers going to /sellers/register)
   const nextUrl = searchParams.get('next');
+  const isRider = user?.userType === 'rider' || user?.user_type === 'rider' || nextUrl === '/riders/dashboard';
   const isSeller = user?.userType === 'seller' || user?.user_type === 'seller' || nextUrl === '/sellers/register';
 
   useEffect(() => {
@@ -29,9 +33,9 @@ function VerifyEmailPendingContent() {
     setLoading(true);
     try {
       await authService.resendVerificationEmail();
-      showToast('Verification email sent! Please check your inbox.', 'success');
+      showToast(t('verificationEmailSent'), 'success');
     } catch (err: any) {
-      showToast(err.response?.data?.error?.message || 'Failed to resend email', 'error');
+      showToast(err.response?.data?.error?.message || t('resendEmailFailed'), 'error');
     } finally {
       setLoading(false);
     }
@@ -57,62 +61,88 @@ function VerifyEmailPendingContent() {
           className="font-display italic text-[36px] mb-3 leading-tight"
           style={{ color: 'var(--ink-900)' }}
         >
-          Check your email.
+          {t('checkEmail')}
         </h1>
         <p className="text-[15px] mb-3" style={{ color: 'var(--ink-600)' }}>
-          We've sent a verification link to{' '}
-          <strong style={{ color: 'var(--ink-900)' }}>{user?.email || 'your email'}</strong>.
+          {t('sentLinkPrefix')}{' '}
+          <strong style={{ color: 'var(--ink-900)' }} data-ltr={user?.email ? '' : undefined}>{user?.email || t('yourEmail')}</strong>{t('sentLinkSuffix')}
         </p>
         <p className="text-sm mb-7" style={{ color: 'var(--ink-500)' }}>
-          Click the link to activate your account. It expires in 24 hours.
+          {t('clickLink')}
         </p>
 
         {isSeller && (
           <div
-            className="rounded-xl p-4 mb-5 text-left"
+            className="rounded-xl p-4 mb-5 text-start"
             style={{ background: 'var(--gold-50)', border: '1px solid var(--gold-200)' }}
           >
-            <p className="eyebrow" style={{ color: 'var(--gold-700)' }}>Next steps for sellers</p>
+            <p className="eyebrow" style={{ color: 'var(--gold-700)' }}>{t('nextStepsSellers')}</p>
             <ol className="text-sm mt-2 space-y-1 list-decimal list-inside" style={{ color: 'var(--ink-700)' }}>
-              <li>Verify your email by clicking the link</li>
-              <li>Complete your kitchen profile</li>
-              <li>Upload CNIC and kitchen photos for verification</li>
-              <li>Start listing your dishes</li>
+              <li>{t('pendingStep1')}</li>
+              <li>{t('pendingStep2')}</li>
+              <li>{t('pendingStep3')}</li>
+              <li>{t('pendingStep4')}</li>
+            </ol>
+          </div>
+        )}
+
+        {isRider && (
+          <div
+            className="rounded-xl p-4 mb-5 text-start"
+            style={{ background: 'var(--gold-50)', border: '1px solid var(--gold-200)' }}
+          >
+            <p className="eyebrow" style={{ color: 'var(--gold-700)' }}>{t('nextStepsRiders')}</p>
+            <ol className="text-sm mt-2 space-y-1 list-decimal list-inside" style={{ color: 'var(--ink-700)' }}>
+              <li>{t('riderNext1')}</li>
+              <li>{t('riderNext2')}</li>
+              <li>{t('riderNext3')}</li>
+              <li>{t('riderNext4')}</li>
             </ol>
           </div>
         )}
 
         <div
-          className="rounded-xl p-4 mb-6 text-left"
+          className="rounded-xl p-4 mb-6 text-start"
           style={{ background: 'var(--cream-100)', border: '1px solid var(--ink-200)' }}
         >
-          <p className="eyebrow" style={{ color: 'var(--ink-700)' }}>Didn't get the email?</p>
+          <p className="eyebrow" style={{ color: 'var(--ink-700)' }}>{t('didntGetEmail')}</p>
           <ul className="text-sm mt-2 space-y-1 list-disc list-inside" style={{ color: 'var(--ink-600)' }}>
-            <li>Check your spam folder</li>
-            <li>Confirm the email address is correct</li>
-            <li>Wait a couple of minutes, then resend</li>
+            <li>{t('tipSpam')}</li>
+            <li>{t('tipAddress')}</li>
+            <li>{t('tipWait')}</li>
           </ul>
         </div>
 
         <div className="space-y-2">
           <Button onClick={handleResendEmail} variant="outline" className="w-full" disabled={loading}>
-            {loading ? 'Sending…' : 'Resend verification email'}
+            {loading ? t('sendingEllipsis') : t('resendVerificationEmail')}
           </Button>
-          {isSeller ? (
+          {isRider ? (
+            <Link href="/riders/dashboard">
+              <Button variant="dark" className="w-full">
+                {t('continueRiderApplication')}
+              </Button>
+            </Link>
+          ) : isSeller ? (
             <Link href="/sellers/register">
               <Button variant="dark" className="w-full">
-                Continue to kitchen registration
+                {t('continueKitchenRegistration')}
               </Button>
             </Link>
           ) : (
             <Link href="/products">
-              <Button className="w-full">Browse today's plates</Button>
+              <Button className="w-full">{t('browsePlates')}</Button>
             </Link>
           )}
         </div>
       </div>
     </div>
   );
+}
+
+function LoadingText() {
+  const t = useT(authMessages);
+  return <p style={{ color: 'var(--ink-500)' }}>{t('loading')}</p>;
 }
 
 export default function VerifyEmailPendingPage() {
@@ -125,7 +155,7 @@ export default function VerifyEmailPendingPage() {
               className="animate-spin rounded-full h-16 w-16 border-b-2 mx-auto mb-4"
               style={{ borderColor: 'var(--forest-500)' }}
             />
-            <p style={{ color: 'var(--ink-500)' }}>Loading…</p>
+            <LoadingText />
           </div>
         </div>
       }

@@ -8,8 +8,17 @@ export function cn(...inputs: ClassValue[]) {
 // Must match the tax calculation in backend/src/services/order.service.ts (createOrder)
 export const GST_RATE = 0.05;
 
-export function calculateGst(subtotalAfterDiscount: number): number {
-  return Math.round(subtotalAfterDiscount * GST_RATE * 100) / 100;
+
+/**
+ * GST and total exactly as the server prices an order (backend utils/pricing.ts priceOrder):
+ * GST on the goods after discounts, the total rounded to whole rupees, GST taking the rounding.
+ */
+export function orderTotals(goodsAfterDiscount: number, deliveryFee: number): { gst: number; total: number } {
+  const goods = Math.max(0, goodsAfterDiscount);
+  const total = Math.round(goods + deliveryFee + goods * GST_RATE);
+  const gst = Math.round((total - goods - deliveryFee) * 100) / 100;
+  if (gst < 0) return { gst: 0, total: Math.round((goods + deliveryFee) * 100) / 100 };
+  return { gst, total };
 }
 
 export function formatPrice(price: number | string | undefined | null): string {
@@ -21,12 +30,17 @@ export function formatPrice(price: number | string | undefined | null): string {
   }).format(isNaN(num) ? 0 : num);
 }
 
+/** Dates follow the page's language (Urdu month names, Western digits as on Pakistani apps). */
+function dateLocale(): string {
+  return typeof document !== 'undefined' && document.documentElement.lang === 'ur' ? 'ur-PK-u-nu-latn' : 'en-PK';
+}
+
 export function formatDate(date: string | Date | undefined | null): string {
   if (!date) return '—';
   try {
     const d = new Date(date);
     if (isNaN(d.getTime())) return '—';
-    return new Intl.DateTimeFormat('en-PK', {
+    return new Intl.DateTimeFormat(dateLocale(), {
       year: 'numeric',
       month: 'long',
       day: 'numeric',
@@ -41,7 +55,7 @@ export function formatDateTime(date: string | Date | undefined | null): string {
   try {
     const d = new Date(date);
     if (isNaN(d.getTime())) return '—';
-    return new Intl.DateTimeFormat('en-PK', {
+    return new Intl.DateTimeFormat(dateLocale(), {
       year: 'numeric',
       month: 'short',
       day: 'numeric',
@@ -69,3 +83,40 @@ export function maskPhoneNumber(phone: string): string {
   return phone;
 }
 
+
+/**
+ * A smaller stored size of an uploaded photo. Uploads are stored in three sizes
+ * ("...-lg.webp", "-md.webp", "-sm.webp"); lists should load "md" or "sm" instead of
+ * the full photo. Older images (and external ones) are returned unchanged.
+ */
+export function imageVariant(url: string | null | undefined, size: 'sm' | 'md' | 'lg'): string | undefined {
+  if (!url) return undefined;
+  return url.replace(/-(lg|md|sm)\.webp(\?.*)?$/, `-${size}.webp$2`);
+}
+
+/**
+ * A rating to show, or null when there isn't one yet (no reviews): show "New" instead of
+ * inventing a number.
+ */
+export function displayRating(rating: number | string | null | undefined, reviewCount?: number | null): string | null {
+  const r = Number(rating);
+  if (!Number.isFinite(r) || r <= 0) return null;
+  if (reviewCount != null && reviewCount <= 0) return null;
+  return r.toFixed(1);
+}
+
+/** Where each kind of account lands after signing in. */
+export function homeFor(userType?: string | null): string {
+  switch (userType) {
+    case 'admin':
+      return '/admin/dashboard';
+    case 'seller':
+      return '/sellers/dashboard';
+    case 'rider':
+      return '/riders/dashboard';
+    case 'hub_manager':
+      return '/hub';
+    default:
+      return '/dashboard';
+  }
+}

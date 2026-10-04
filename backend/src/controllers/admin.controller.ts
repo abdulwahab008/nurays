@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import adminService from '../services/admin.service';
+import prisma from '../config/database';
 import { AppError } from '../middleware/errorHandler';
 
 export const getPendingSellers = async (_req: Request, res: Response) => {
@@ -191,3 +192,43 @@ export const moderateProduct = async (req: Request, res: Response) => {
   });
 };
 
+
+/** The audit trail of admin changes, newest first, filterable by record, admin or action. */
+export const getAuditLogs = async (req: Request, res: Response) => {
+  const page = Math.max(1, parseInt(String(req.query.page ?? '1'), 10) || 1);
+  const limit = Math.min(100, Math.max(1, parseInt(String(req.query.limit ?? '50'), 10) || 50));
+  const str = (v: unknown) => (typeof v === 'string' && v.trim() ? v.trim() : undefined);
+  const where = {
+    ...(str(req.query.entityType) ? { entityType: str(req.query.entityType) } : {}),
+    ...(str(req.query.entityId) ? { entityId: str(req.query.entityId) } : {}),
+    ...(str(req.query.userId) ? { userId: str(req.query.userId) } : {}),
+    ...(str(req.query.action) ? { action: { contains: str(req.query.action)!, mode: 'insensitive' as const } } : {}),
+  };
+  const [logs, total] = await Promise.all([
+    prisma.auditLog.findMany({
+      where,
+      orderBy: { createdAt: 'desc' },
+      skip: (page - 1) * limit,
+      take: limit,
+      include: { user: { select: { id: true, email: true, profile: { select: { fullName: true } } } } },
+    }),
+    prisma.auditLog.count({ where }),
+  ]);
+  res.status(200).json({
+    success: true,
+    data: {
+      logs: logs.map((l) => ({
+        id: l.id,
+        action: l.action,
+        entityType: l.entityType,
+        entityId: l.entityId,
+        responseStatus: l.responseStatus,
+        requestData: l.requestData,
+        ipAddress: l.ipAddress,
+        createdAt: l.createdAt,
+        admin: l.user ? { id: l.user.id, name: l.user.profile?.fullName ?? null, email: l.user.email } : null,
+      })),
+      pagination: { page, limit, total, totalPages: Math.ceil(total / limit) },
+    },
+  });
+};

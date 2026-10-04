@@ -32,6 +32,7 @@ export const CUSTOMER_SIDEBAR_ITEMS: SidebarItem[] = [
   },
   { name: 'Favorite Kitchens', href: '/favorites', icon: 'favorites' },
   { name: 'My Orders', href: '/orders', icon: 'orders' },
+  { name: 'Nuray Wallet', href: '/wallet', icon: 'earnings' },
   { name: 'My Cart', href: '/cart', icon: 'cart' },
   { name: 'My Profile', href: '/profile', icon: 'profile' },
   { name: 'Saved Addresses', href: '/profile/addresses', icon: 'addresses' },
@@ -42,7 +43,7 @@ export const RIDER_SIDEBAR_ITEMS: SidebarItem[] = [
   { name: 'Fleet Dashboard', href: '/riders/dashboard', icon: 'dashboard' },
   { name: 'Active Runs', href: '/riders/dashboard#active', icon: 'orders' },
   { name: 'Available Pool', href: '/riders/dashboard#available', icon: 'addresses' },
-  { name: 'Cash in Hand', href: '/riders/dashboard#cash', icon: 'earnings' },
+  { name: 'Earnings & Cash', href: '/riders/earnings', icon: 'earnings' },
   { name: 'Help & Support', href: '/support', icon: 'support' },
 ];
 
@@ -66,12 +67,70 @@ export const SELLER_SIDEBAR_ITEMS: SidebarItem[] = [
   { name: 'Settings', href: '/sellers/settings', icon: 'settings' },
 ];
 
+/** Every admin page, one menu for all of them. */
+export const ADMIN_SIDEBAR_ITEMS: SidebarItem[] = [
+  { name: 'Dashboard', href: '/admin/dashboard', icon: 'dashboard' },
+  {
+    name: 'Orders',
+    href: '/admin/orders',
+    icon: 'orders',
+    subItems: [
+      { name: 'All orders', href: '/admin/orders' },
+      { name: 'Transfers to check', href: '/admin/orders?paymentStatus=disputed' },
+      { name: 'Refunds', href: '/admin/refunds' },
+    ],
+  },
+  {
+    name: 'Kitchens',
+    href: '/admin/sellers',
+    icon: 'kitchens',
+    subItems: [
+      { name: 'All kitchens', href: '/admin/sellers' },
+      { name: 'Applications', href: '/admin/pending-sellers' },
+      { name: 'Dishes', href: '/admin/products' },
+      { name: 'Categories', href: '/admin/categories' },
+      { name: 'Category requests', href: '/admin/category-requests' },
+    ],
+  },
+  {
+    name: 'Riders',
+    href: '/admin/riders',
+    icon: 'delivery',
+    subItems: [
+      { name: 'Riders & cash', href: '/admin/riders' },
+      { name: 'Applications', href: '/admin/riders?tab=applications' },
+    ],
+  },
+  { name: 'People', href: '/admin/users', icon: 'profile' },
+  {
+    name: 'Hubs',
+    href: '/admin/hubs',
+    icon: 'coldchain',
+    subItems: [
+      { name: 'Operations', href: '/admin/hubs' },
+      { name: 'Hubs & managers', href: '/admin/hubs/manage' },
+    ],
+  },
+  { name: 'Communities', href: '/admin/communities', icon: 'addresses' },
+  { name: 'Promo codes', href: '/admin/promotions', icon: 'promotions' },
+  { name: 'Payouts', href: '/admin/payouts', icon: 'earnings' },
+  { name: 'Support', href: '/admin/support', icon: 'support' },
+  { name: 'Analytics', href: '/admin/analytics', icon: 'analytics' },
+  { name: 'Audit log', href: '/admin/audit-log', icon: 'inventory' },
+  { name: 'Settings', href: '/admin/settings', icon: 'settings' },
+];
+
+export const HUB_MANAGER_SIDEBAR_ITEMS: SidebarItem[] = [
+  { name: 'My hubs', href: '/hub', icon: 'coldchain' },
+  { name: 'Help & Support', href: '/support', icon: 'support' },
+];
+
 interface DashboardShellProps {
   children: ReactNode;
   title: string;
   subtitle?: string;
   sidebarItems: SidebarItem[];
-  userType: 'customer' | 'seller' | 'admin' | 'rider';
+  userType: 'customer' | 'seller' | 'admin' | 'rider' | 'hub_manager';
 }
 
 export function DashboardShell({
@@ -113,7 +172,7 @@ export function DashboardShell({
           }}
         />
         <div
-          className="nuray-drawer fixed top-16 bottom-0 left-0 z-50 w-64"
+          className="nuray-drawer fixed top-16 bottom-0 start-0 z-50 w-64"
           data-open={open ? 'true' : 'false'}
           onClick={() => setOpen(false)}
         >
@@ -121,7 +180,7 @@ export function DashboardShell({
         </div>
 
         <main
-          className="lg:ml-64 px-4 sm:px-6 lg:px-10 py-6 lg:py-10 min-h-[calc(100vh-4rem)] bg-[#FAFAFA]"
+          className="lg:ms-64 px-4 sm:px-6 lg:px-10 py-6 lg:py-10 min-h-[calc(100vh-4rem)] bg-[#FAFAFA]"
         >
           {title && (
             <div className="mb-6 sm:mb-8">

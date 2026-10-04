@@ -1,3 +1,7 @@
+import { codCollectorOf, deliveryProviderOf } from '../utils/paymentCustody';
+import { verifyHandoverCode } from './handover.service';
+import { presentFile } from '../storage';
+import { cancelOpenDelivery, notifyDeliveryCancelled, CancelledDelivery } from './delivery-lifecycle.service';
 import prisma from '../config/database';
 import { AppError } from '../middleware/errorHandler';
 import realtimeOrderService from './realtime-order.service';
@@ -88,6 +92,9 @@ export class SellerOrderService {
             paymentProofUrl: true,
             paymentNotes: true,
             paymentSubmittedAt: true,
+            deliveryType: true,
+            deliveryProvider: true,
+            deliveryFeeBreakdown: true,
             deliveryAddress: {
               select: {
                 area: true,
@@ -145,9 +152,14 @@ export class SellerOrderService {
             paymentReferenceNumber: item.order.paymentReferenceNumber,
             paymentSenderName: item.order.paymentSenderName,
             paymentSenderAccount: item.order.paymentSenderAccount,
-            paymentProofUrl: item.order.paymentProofUrl,
+            paymentProofUrl: item.order.paymentProofUrl, // presented below
             paymentNotes: item.order.paymentNotes,
             paymentSubmittedAt: item.order.paymentSubmittedAt,
+            deliveryType: item.order.deliveryType,
+            // Who hands the order over: the kitchen itself (self-delivery or pickup) or a Nuray rider.
+            sellerHandsOver:
+              item.order.deliveryType === 'self_pickup' ||
+              deliveryProviderOf(item.order, seller.deliveryProvider) === 'self',
             customerName: item.order.customer?.profile?.fullName || 'Customer',
             customerPhone: item.order.customer?.phone,
             deliveryAddress: item.order.deliveryAddress,
@@ -176,6 +188,8 @@ export class SellerOrderService {
     });
 
     const orders = Array.from(orderMap.values());
+    // Payment receipts are private: this seller gets short-lived links to their orders' receipts.
+    for (const o of orders) o.order.paymentProofUrl = await presentFile(o.order.paymentProofUrl);
 
     // Get total count
     const totalWhere: any = { ...where };
@@ -272,6 +286,9 @@ export class SellerOrderService {
 
     return {
       ...order,
+      paymentProofUrl: await presentFile(order.paymentProofUrl),
+      sellerHandsOver:
+        order.deliveryType === 'self_pickup' || deliveryProviderOf(order, seller.deliveryProvider) === 'self',
       subtotal: Number(order.subtotal),
       deliveryFee: Number(order.deliveryFee),
       discountAmount: Number(order.discountAmount),
@@ -294,7 +311,8 @@ export class SellerOrderService {
     orderItemId: string,
     sellerId: string,
     status: string,
-    reason?: string
+    reason?: string,
+    handoverCode?: string
   ) {
     // Get seller by userId
     const seller = await prisma.seller.findUnique({
@@ -349,6 +367,34 @@ export class SellerOrderService {
     if (status === 'delivered' && ['refund_pending', 'refunded'].includes(orderItem.order.paymentStatus)) {
       throw new AppError('This order has been refunded and cannot be marked delivered', 400, 'ORDER_REFUNDED');
     }
+    // Handing the order over is the seller's step only when they deliver it themselves
+    // (or the customer collects it from them). A Nuray rider's delivery is completed by
+    // the rider with the customer's code; a seller marking it delivered would release
+    // earnings for food that may never have arrived.
+    if (['dispatched', 'in_transit', 'delivered', 'delivery_failed'].includes(status)) {
+      const sellerHandsOver =
+        orderItem.order.deliveryType === 'self_pickup' ||
+        deliveryProviderOf(orderItem.order, seller.deliveryProvider) === 'self';
+      if (!sellerHandsOver) {
+        throw new AppError(
+          'A Nuray rider delivers this order. It is marked delivered when the rider hands it over.',
+          403,
+          'PLATFORM_DELIVERY'
+        );
+      }
+    }
+    // The customer's code proves the food actually reached them.
+    if (status === 'delivered') {
+      await verifyHandoverCode(orderItem.orderId, handoverCode);
+    }
+    // Online and transfer payments must be confirmed before the food leaves the kitchen.
+    if (['ready', 'dispatched'].includes(status) && orderItem.order.paymentMethod !== 'cod' && orderItem.order.paymentStatus !== 'paid') {
+      throw new AppError(
+        "The customer's payment hasn't been confirmed yet. Confirm (or dispute) the transfer before handing the order over.",
+        409,
+        'PAYMENT_NOT_CONFIRMED'
+      );
+    }
     if (!ALLOWED_TRANSITIONS[orderItem.status]?.includes(status)) {
       throw new AppError(
         `Cannot move an item from "${orderItem.status}" to "${status}"`,
@@ -392,7 +438,7 @@ export class SellerOrderService {
       const allDelivered = allItems.every((i) => i.status === 'delivered' || i.status === 'cancelled');
       const anyFailed = allItems.some((i) => i.status === 'delivery_failed');
 
-      if (allReady && currentOrderStatus === 'confirmed') {
+      if (allReady && (currentOrderStatus === 'confirmed' || currentOrderStatus === 'preparing')) {
         derivedOrderStatus = 'ready';
         historyNote = 'All items ready for dispatch';
       } else if (allPreparing && currentOrderStatus === 'pending') {
@@ -401,6 +447,13 @@ export class SellerOrderService {
       } else if (status === 'confirmed' && currentOrderStatus === 'pending') {
         derivedOrderStatus = 'confirmed';
         historyNote = 'Order confirmed by seller';
+      } else if (
+        status === 'dispatched' &&
+        allItems.every((i) => i.status === 'dispatched' || i.status === 'cancelled') &&
+        currentOrderStatus === 'ready'
+      ) {
+        derivedOrderStatus = 'dispatched';
+        historyNote = 'Out for delivery with the kitchen';
       } else if (status === 'delivery_failed' && anyFailed && currentOrderStatus !== 'delivery_failed') {
         derivedOrderStatus = 'delivery_failed';
         historyNote = `Seller reported a failed self-delivery: ${reason}`;
@@ -427,7 +480,7 @@ export class SellerOrderService {
           data: {
             orderStatus: derivedOrderStatus,
             ...(derivedOrderStatus === 'delivered' ? { deliveredAt: new Date() } : {}),
-            ...(isCodPayment ? { paymentStatus: 'paid', paidAt: new Date() } : {}),
+            ...(isCodPayment ? { paymentStatus: 'paid', paymentCollectedBy: codCollectorOf(orderItem.order), paidAt: new Date() } : {}),
           },
         });
         if (applied.count > 0) {
@@ -585,12 +638,14 @@ export class SellerOrderService {
         orderFullyCancelled: allCancelled,
       });
 
+      let cancelledDelivery: CancelledDelivery | null = null;
       if (allCancelled) {
         await tx.order.update({
           where: { id: orderItem.orderId },
           data: { orderStatus: 'cancelled' },
         });
         await releasePromotionUsage(tx, orderItem.orderId);
+        cancelledDelivery = await cancelOpenDelivery(tx, orderItem.orderId, 'All items cancelled by the kitchen');
         await tx.orderStatusHistory.create({
           data: {
             orderId: orderItem.orderId,
@@ -601,11 +656,12 @@ export class SellerOrderService {
         });
       }
 
-      return { updatedItem, allCancelled };
+      return { updatedItem, allCancelled, cancelledDelivery };
     });
 
     if (result.allCancelled) {
       await realtimeOrderService.emitOrderStatusUpdate(orderItem.orderId, 'cancelled', sellerId);
+      notifyDeliveryCancelled(result.cancelledDelivery);
     }
     await realtimeOrderService.emitOrderItemStatusUpdate(orderItemId, 'cancelled', seller.id);
 
@@ -759,7 +815,7 @@ export class SellerOrderService {
 
     const rejectionNote = reason?.trim() || 'Kitchen unavailable';
 
-    const fullyCancelled = await prisma.$transaction(async (tx) => {
+    const outcome = await prisma.$transaction(async (tx) => {
       // Lock the order row FIRST. Customer/admin cancels take the order lock and then touch the
       // items; taking item locks first here would deadlock against them (Postgres aborts one with
       // a 500). One lock order everywhere: order, then items.
@@ -828,8 +884,10 @@ export class SellerOrderService {
         where: { orderId: order.id, status: { notIn: ['cancelled'] } },
       });
       const allGone = stillLive === 0;
+      let cancelledDelivery: CancelledDelivery | null = null;
 
       if (allGone) {
+        cancelledDelivery = await cancelOpenDelivery(tx, order.id, `Rejected by kitchen: ${rejectionNote}`);
         await tx.order.updateMany({
           where: { id: order.id, orderStatus: { in: ['pending', 'confirmed', 'preparing', 'ready'] } },
           data: {
@@ -860,12 +918,14 @@ export class SellerOrderService {
         },
       });
 
-      return allGone;
+      return { allGone, cancelledDelivery };
     });
 
-    if (fullyCancelled) {
+    if (outcome.allGone) {
       await realtimeOrderService.emitOrderStatusUpdate(order.id, 'cancelled', sellerUserId);
+      notifyDeliveryCancelled(outcome.cancelledDelivery);
     }
+    const fullyCancelled = outcome.allGone;
 
     return {
       orderId: order.id,
@@ -875,6 +935,52 @@ export class SellerOrderService {
         ? 'Order rejected successfully and customer notified'
         : 'Your items were rejected; the other kitchens on this order are unaffected',
     };
+  }
+
+  /**
+   * A kitchen that delivers the order itself (or hands it over at its counter) moves it
+   * forward as a whole: out for delivery, delivered (with the customer's code) or
+   * delivery failed. Each step runs the same guarded per-item transition as the item
+   * endpoint, so all the rules (who may hand over, payment confirmed, the code) apply.
+   */
+  async selfHandover(
+    orderId: string,
+    sellerUserId: string,
+    action: 'dispatch' | 'deliver' | 'fail',
+    opts: { handoverCode?: string; reason?: string } = {}
+  ) {
+    const seller = await prisma.seller.findUnique({ where: { userId: sellerUserId } });
+    if (!seller) throw new AppError('Seller not found', 404, 'SELLER_NOT_FOUND');
+    const items = await prisma.orderItem.findMany({
+      where: { orderId, sellerId: seller.id, status: { notIn: ['cancelled', 'delivered'] } },
+      orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+      select: { id: true, status: true },
+    });
+    if (items.length === 0) throw new AppError('No open items of yours on this order', 404, 'ORDER_NOT_FOUND');
+
+    if (action === 'dispatch') {
+      for (const item of items) {
+        if (item.status === 'ready') await this.updateOrderItemStatus(item.id, sellerUserId, 'dispatched');
+        else if (item.status !== 'dispatched' && item.status !== 'in_transit') {
+          throw new AppError('Mark the order ready before sending it out', 400, 'INVALID_STATUS_TRANSITION');
+        }
+      }
+    } else if (action === 'deliver') {
+      for (const item of items) {
+        if (item.status === 'ready') await this.updateOrderItemStatus(item.id, sellerUserId, 'dispatched');
+        await this.updateOrderItemStatus(item.id, sellerUserId, 'delivered', undefined, opts.handoverCode);
+      }
+    } else {
+      if (!opts.reason || opts.reason.trim().length < 3) {
+        throw new AppError('Say why the delivery failed', 400, 'REASON_REQUIRED');
+      }
+      for (const item of items) {
+        if (item.status === 'ready') await this.updateOrderItemStatus(item.id, sellerUserId, 'dispatched');
+        await this.updateOrderItemStatus(item.id, sellerUserId, 'delivery_failed', opts.reason.trim());
+      }
+    }
+    const order = await prisma.order.findUniqueOrThrow({ where: { id: orderId }, select: { id: true, orderStatus: true } });
+    return { orderId: order.id, orderStatus: order.orderStatus };
   }
 
   /**
@@ -920,6 +1026,14 @@ export class SellerOrderService {
     if (!['confirmed', 'preparing'].includes(order.orderStatus)) {
       throw new AppError(`Cannot mark ready an order with status: ${order.orderStatus}`, 400, 'INVALID_STATUS');
     }
+    // Online and transfer payments must be confirmed before the food is handed over.
+    if (order.paymentMethod !== 'cod' && order.paymentStatus !== 'paid') {
+      throw new AppError(
+        "The customer's payment hasn't been confirmed yet. Confirm (or dispute) the transfer before marking the order ready.",
+        409,
+        'PAYMENT_NOT_CONFIRMED'
+      );
+    }
 
     await prisma.$transaction(async (tx) => {
       const claimed = await tx.order.updateMany({
@@ -944,6 +1058,14 @@ export class SellerOrderService {
         },
       });
     });
+
+    // Make sure a rider job exists (idempotent). Accepting normally creates it, but if that
+    // failed, a ready order with no job could never be picked up.
+    try {
+      await riderService.ensureDeliveryForOrder(order.id, 0);
+    } catch (err) {
+      console.warn('Rider dispatch warning during markOrderReady:', err);
+    }
 
     await realtimeOrderService.emitOrderStatusUpdate(order.id, 'ready', sellerUserId);
 

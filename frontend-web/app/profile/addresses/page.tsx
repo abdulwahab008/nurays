@@ -6,8 +6,17 @@ import dynamic from 'next/dynamic';
 import { userProfileService, Address } from '@/lib/services/user-profile.service';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/toast';
+import { apiClient } from '@/lib/api-client';
 import { useAuthStore } from '@/lib/store/auth-store';
 import { DashboardLayout, CUSTOMER_SIDEBAR_ITEMS } from '@/components/layout/DashboardShell';
+import { useT } from '@/lib/i18n';
+import { commonMessages } from '@/lib/i18n/messages/common';
+import { accountMessages } from '@/lib/i18n/messages/account';
+
+function MapLoading() {
+  const t = useT(accountMessages);
+  return <p className="text-gray-600 font-medium">{t('loadingMap')}</p>;
+}
 
 // Dynamically import the map component (no SSR)
 const LocationMap = dynamic(() => import('@/components/ui/LocationMap'), {
@@ -16,7 +25,7 @@ const LocationMap = dynamic(() => import('@/components/ui/LocationMap'), {
     <div className="bg-gray-100 rounded-xl flex items-center justify-center h-[300px]">
       <div className="text-center">
         <div className="w-12 h-12 border-4 border-orange-500 border-t-transparent rounded-full animate-spin mx-auto mb-3"></div>
-        <p className="text-gray-600 font-medium">Loading map...</p>
+        <MapLoading />
       </div>
     </div>
   ),
@@ -42,12 +51,12 @@ import {
   FileText,
 } from 'lucide-react';
 
-// Address type labels with icons
+// Address type labels with icons (label is what the API stores; labelKey is what we show)
 const addressTypes = [
-  { id: 'home', label: 'Home', icon: Home, color: 'from-blue-500 to-blue-600' },
-  { id: 'work', label: 'Work', icon: Briefcase, color: 'from-purple-500 to-purple-600' },
-  { id: 'other', label: 'Other', icon: MapPin, color: 'from-gray-500 to-gray-600' },
-];
+  { id: 'home', label: 'Home', labelKey: 'type.home', icon: Home, color: 'from-blue-500 to-blue-600' },
+  { id: 'work', label: 'Work', labelKey: 'type.work', icon: Briefcase, color: 'from-purple-500 to-purple-600' },
+  { id: 'other', label: 'Other', labelKey: 'type.other', icon: MapPin, color: 'from-gray-500 to-gray-600' },
+] as const;
 
 // Popular areas by city for quick selection
 const popularAreasByCity: Record<string, string[]> = {
@@ -83,6 +92,13 @@ export default function AddressesPage() {
   const router = useRouter();
   const { isAuthenticated } = useAuthStore();
   const { showToast } = useToast();
+  const t = useT(accountMessages);
+  const tc = useT(commonMessages);
+  // A saved label we know (Home/Work/Other) is shown in the current language; anything else as typed.
+  const addressLabel = (label?: string | null) => {
+    const known = addressTypes.find((a) => a.label.toLowerCase() === label?.toLowerCase() || a.id === label?.toLowerCase());
+    return known ? t(known.labelKey) : label;
+  };
   const [addresses, setAddresses] = useState<Address[]>([]);
   const [loading, setLoading] = useState(true);
   const [showAddForm, setShowAddForm] = useState(false);
@@ -110,7 +126,8 @@ export default function AddressesPage() {
   const sidebarItems = CUSTOMER_SIDEBAR_ITEMS;
 
   useEffect(() => {
-    if (!isAuthenticated) {
+    // The saved session loads a moment after the page; a stored token means "signed in".
+    if (!isAuthenticated && !apiClient.getAccessToken()) {
       router.push('/login');
       return;
     }
@@ -210,12 +227,12 @@ export default function AddressesPage() {
   // Detect current location using GPS
   const detectCurrentLocation = useCallback(() => {
     if (!navigator.geolocation) {
-      showToast('Geolocation is not supported by your browser', 'error');
+      showToast(t('geoUnsupported'), 'error');
       return;
     }
 
     setDetectingLocation(true);
-    showToast('Detecting your location...', 'info');
+    showToast(t('detectingLocation'), 'info');
     
     navigator.geolocation.getCurrentPosition(
       async (position) => {
@@ -252,7 +269,7 @@ export default function AddressesPage() {
               postalCode: addr.postcode || prev.postalCode,
             }));
             
-            showToast(`Location detected: ${matchedCity}!`, 'success');
+            showToast(t('locationDetectedCity', { city: matchedCity }), 'success');
           } else {
             // No address data, use coordinate-based city detection
             const coordCity = detectCityFromCoords(latitude, longitude);
@@ -262,7 +279,7 @@ export default function AddressesPage() {
               longitude: longitude.toString(),
               city: coordCity || prev.city,
             }));
-            showToast(`Location detected${coordCity ? `: ${coordCity}` : ''}! Please fill in address details.`, 'success');
+            showToast(coordCity ? t('locationDetectedCityFill', { city: coordCity }) : t('locationDetectedFill'), 'success');
           }
         } catch (error) {
           console.error('Reverse geocoding error:', error);
@@ -274,7 +291,7 @@ export default function AddressesPage() {
             longitude: longitude.toString(),
             city: coordCity || prev.city,
           }));
-          showToast(`Location detected${coordCity ? `: ${coordCity}` : ''}! Please fill in address details.`, 'success');
+          showToast(coordCity ? t('locationDetectedCityFill', { city: coordCity }) : t('locationDetectedFill'), 'success');
         }
         
         setDetectingLocation(false);
@@ -282,16 +299,16 @@ export default function AddressesPage() {
       },
       (error) => {
         console.error('Error getting location:', error);
-        let errorMessage = 'Unable to detect location.';
+        let errorMessage = t('locUnable');
         switch (error.code) {
           case error.PERMISSION_DENIED:
-            errorMessage = 'Location permission denied. Please enable location access in your browser.';
+            errorMessage = t('locDenied');
             break;
           case error.POSITION_UNAVAILABLE:
-            errorMessage = 'Location information unavailable. Please try again.';
+            errorMessage = t('locUnavailable');
             break;
           case error.TIMEOUT:
-            errorMessage = 'Location request timed out. Please try again.';
+            errorMessage = t('locTimeout');
             break;
         }
         showToast(errorMessage, 'error');
@@ -299,7 +316,7 @@ export default function AddressesPage() {
       },
       { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
     );
-  }, [showToast]);
+  }, [showToast, t]);
 
   // Handle area input with suggestions based on selected city
   const handleAreaChange = (value: string) => {
@@ -325,7 +342,7 @@ export default function AddressesPage() {
     e.preventDefault();
     try {
       const addressData = {
-        label: addressTypes.find(t => t.id === formData.label)?.label || formData.label,
+        label: addressTypes.find(a => a.id === formData.label)?.label || formData.label,
         addressLine1: formData.addressLine1,
         addressLine2: formData.addressLine2,
         area: formData.area,
@@ -333,46 +350,51 @@ export default function AddressesPage() {
         postalCode: formData.postalCode,
         landmark: formData.landmark,
         isDefault: formData.isDefault,
+        // The map pin decides which community (and so which kitchens and fees) the
+        // address belongs to; the server works the community out from it.
+        ...(formData.latitude && formData.longitude
+          ? { latitude: parseFloat(formData.latitude), longitude: parseFloat(formData.longitude) }
+          : {}),
       };
 
       if (editingAddress) {
         await userProfileService.updateAddress(editingAddress.id, addressData);
-        showToast('Address updated successfully', 'success');
+        showToast(t('addressUpdated'), 'success');
       } else {
         await userProfileService.addAddress(addressData);
-        showToast('Address added successfully', 'success');
+        showToast(t('addressAdded'), 'success');
       }
       
       resetForm();
       loadAddresses();
     } catch (error: any) {
-      showToast(error.response?.data?.error?.message || 'Failed to save address', 'error');
+      showToast(error.response?.data?.error?.message || t('addressSaveFailed'), 'error');
     }
   };
 
   const handleDeleteAddress = async (addressId: string) => {
-    if (!confirm('Are you sure you want to delete this address?')) return;
+    if (!confirm(t('confirmDeleteAddress'))) return;
     try {
       await userProfileService.deleteAddress(addressId);
-      showToast('Address deleted', 'success');
+      showToast(t('addressDeleted'), 'success');
       loadAddresses();
     } catch (error: any) {
-      showToast(error.response?.data?.error?.message || 'Failed to delete address', 'error');
+      showToast(error.response?.data?.error?.message || t('addressDeleteFailed'), 'error');
     }
   };
 
   const handleSetDefault = async (addressId: string) => {
     try {
       await userProfileService.setDefaultAddress(addressId);
-      showToast('Default address updated', 'success');
+      showToast(t('defaultUpdated'), 'success');
       loadAddresses();
     } catch (error: any) {
-      showToast(error.response?.data?.error?.message || 'Failed to update', 'error');
+      showToast(error.response?.data?.error?.message || t('updateFailed'), 'error');
     }
   };
 
   const handleEditAddress = (address: Address) => {
-    const typeId = addressTypes.find(t => t.label.toLowerCase() === address.label?.toLowerCase())?.id || 'other';
+    const typeId = addressTypes.find(a => a.label.toLowerCase() === address.label?.toLowerCase())?.id || 'other';
     setFormData({
       label: typeId,
       addressLine1: address.addressLine1 || '',
@@ -383,8 +405,8 @@ export default function AddressesPage() {
       landmark: address.landmark || '',
       isDefault: address.isDefault || false,
       deliveryInstructions: '',
-      latitude: '',
-      longitude: '',
+      latitude: address.coordinates ? String(address.coordinates.latitude) : '',
+      longitude: address.coordinates ? String(address.coordinates.longitude) : '',
     });
     setEditingAddress(address);
     setShowAddForm(true);
@@ -412,15 +434,15 @@ export default function AddressesPage() {
   if (loading) {
     return (
       <DashboardLayout
-        title="My Addresses"
-        subtitle="Manage your delivery addresses"
+        title={t('myAddresses')}
+        subtitle={t('manageDeliveryAddresses')}
         sidebarItems={sidebarItems}
         userType="customer"
       >
         <div className="flex items-center justify-center h-64">
           <div className="text-center">
             <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-orange-500 mx-auto mb-4"></div>
-            <p className="text-gray-600">Loading addresses...</p>
+            <p className="text-gray-600">{t('loadingAddresses')}</p>
           </div>
         </div>
       </DashboardLayout>
@@ -429,8 +451,8 @@ export default function AddressesPage() {
 
   return (
     <DashboardLayout
-      title="My Addresses"
-      subtitle="Manage your delivery locations"
+      title={t('myAddresses')}
+      subtitle={t('manageDeliveryLocations')}
       sidebarItems={sidebarItems}
       userType="customer"
     >
@@ -443,7 +465,7 @@ export default function AddressesPage() {
             </div>
             <div>
               <p className="text-2xl font-bold text-gray-900">{addresses.length}</p>
-              <p className="text-sm text-gray-500">Saved Addresses</p>
+              <p className="text-sm text-gray-500">{t('savedAddresses')}</p>
             </div>
           </div>
         </div>
@@ -455,9 +477,9 @@ export default function AddressesPage() {
             </div>
             <div>
               <p className="text-2xl font-bold text-gray-900">
-                {addresses.find(a => a.isDefault)?.label || 'None'}
+                {addressLabel(addresses.find(a => a.isDefault)?.label) || t('none')}
               </p>
-              <p className="text-sm text-gray-500">Default Address</p>
+              <p className="text-sm text-gray-500">{t('defaultAddress')}</p>
             </div>
           </div>
         </div>
@@ -465,11 +487,12 @@ export default function AddressesPage() {
         <div className="bg-gradient-to-r from-orange-500 to-red-500 rounded-2xl p-5 shadow-lg">
           <div className="flex items-center justify-between">
             <div className="text-white">
-              <p className="font-bold text-lg">Add New Address</p>
-              <p className="text-sm text-white/80">Use GPS or enter manually</p>
+              <p className="font-bold text-lg">{t('addNewAddress')}</p>
+              <p className="text-sm text-white/80">{t('gpsOrManual')}</p>
             </div>
             <button
               onClick={() => { resetForm(); setShowAddForm(true); }}
+              aria-label={t('addNewAddress')}
               className="w-12 h-12 bg-white/10 hover:bg-white/20 rounded-xl flex items-center justify-center transition-all hover:scale-105 text-white"
             >
               <Plus className="w-6 h-6" />
@@ -489,12 +512,13 @@ export default function AddressesPage() {
                   {editingAddress ? <Pencil className="w-5 h-5" /> : <MapPin className="w-5 h-5" />}
                 </div>
                 <div className="text-white">
-                  <h2 className="font-bold text-lg">{editingAddress ? 'Edit Address' : 'Add New Address'}</h2>
-                  <p className="text-sm text-white/80">Fill in your delivery location details</p>
+                  <h2 className="font-bold text-lg">{editingAddress ? t('editAddress') : t('addNewAddress')}</h2>
+                  <p className="text-sm text-white/80">{t('fillLocationDetails')}</p>
                 </div>
               </div>
               <button
                 onClick={resetForm}
+                aria-label={tc('close')}
                 className="w-10 h-10 bg-white/10 hover:bg-white/20 rounded-xl flex items-center justify-center transition-all text-white"
               >
                 <X className="w-5 h-5" />
@@ -507,7 +531,7 @@ export default function AddressesPage() {
             <div className="mb-6">
               <p className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-1.5">
                 <Navigation className="w-4 h-4 text-[#FF5500]" />
-                Quick Location Options
+                {t('quickLocationOptions')}
               </p>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <button
@@ -523,9 +547,9 @@ export default function AddressesPage() {
                       <Navigation className="w-5 h-5" />
                     )}
                   </div>
-                  <div className="text-left">
-                    <p className="font-semibold text-blue-800">Use My Current Location</p>
-                    <p className="text-xs text-blue-600">Auto-detect via GPS</p>
+                  <div className="text-start">
+                    <p className="font-semibold text-blue-800">{t('useCurrentLocation')}</p>
+                    <p className="text-xs text-blue-600">{t('autoDetectGps')}</p>
                   </div>
                 </button>
 
@@ -537,9 +561,9 @@ export default function AddressesPage() {
                   <div className="w-10 h-10 bg-green-500 rounded-xl flex items-center justify-center group-hover:scale-110 transition-transform text-white">
                     <MapIcon className="w-5 h-5" />
                   </div>
-                  <div className="text-left">
-                    <p className="font-semibold text-green-800">Pick from Map</p>
-                    <p className="text-xs text-green-600">Select location visually</p>
+                  <div className="text-start">
+                    <p className="font-semibold text-green-800">{t('pickFromMap')}</p>
+                    <p className="text-xs text-green-600">{t('selectVisually')}</p>
                   </div>
                 </button>
               </div>
@@ -583,13 +607,13 @@ export default function AddressesPage() {
                           postalCode: addr.postcode || prev.postalCode,
                         }));
                         
-                        showToast(`${matchedCity} selected!`, 'success');
+                        showToast(t('citySelected', { city: matchedCity }), 'success');
                       } else {
                         // No address data, use coordinate-based detection
                         const coordCity = detectCityFromCoords(coords.lat, coords.lng);
                         if (coordCity) {
                           setFormData(prev => ({ ...prev, city: coordCity }));
-                          showToast(`${coordCity} selected!`, 'success');
+                          showToast(t('citySelected', { city: coordCity }), 'success');
                         }
                       }
                     } catch (error) {
@@ -598,7 +622,7 @@ export default function AddressesPage() {
                       const coordCity = detectCityFromCoords(coords.lat, coords.lng);
                       if (coordCity) {
                         setFormData(prev => ({ ...prev, city: coordCity }));
-                        showToast(`${coordCity} selected!`, 'success');
+                        showToast(t('citySelected', { city: coordCity }), 'success');
                       }
                     }
                   }}
@@ -609,9 +633,9 @@ export default function AddressesPage() {
                   <div className="flex items-center gap-2 text-sm text-gray-600">
                     <MapPin className="w-4 h-4 text-[#FF5500]" />
                     {formData.latitude ? (
-                      <span>Selected: {parseFloat(formData.latitude).toFixed(4)}, {parseFloat(formData.longitude).toFixed(4)}</span>
+                      <span>{t('selectedLabel')} <span data-ltr>{parseFloat(formData.latitude).toFixed(4)}, {parseFloat(formData.longitude).toFixed(4)}</span></span>
                     ) : (
-                      <span>Click on map to select location</span>
+                      <span>{t('clickMapToSelect')}</span>
                     )}
                   </div>
                   <button
@@ -619,7 +643,7 @@ export default function AddressesPage() {
                     onClick={() => setShowMap(false)}
                     className="text-sm text-orange-600 font-semibold hover:text-orange-700 flex items-center gap-1"
                   >
-                    <Check className="w-4 h-4" /> Confirm Location
+                    <Check className="w-4 h-4" /> {t('confirmLocation')}
                   </button>
                 </div>
               </div>
@@ -628,7 +652,7 @@ export default function AddressesPage() {
             {/* Address Type Selection */}
             <div className="mb-6">
               <p className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-1.5">
-                <Tag className="w-4 h-4 text-[#FF5500]" /> Address Type
+                <Tag className="w-4 h-4 text-[#FF5500]" /> {t('addressType')}
               </p>
               <div className="flex gap-3">
                 {addressTypes.map((type) => {
@@ -649,7 +673,7 @@ export default function AddressesPage() {
                       </div>
                       <p className={`font-semibold text-sm ${
                         formData.label === type.id ? 'text-orange-700' : 'text-gray-700'
-                      }`}>{type.label}</p>
+                      }`}>{t(type.labelKey)}</p>
                     </button>
                   );
                 })}
@@ -661,7 +685,7 @@ export default function AddressesPage() {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-semibold text-gray-700 mb-2">
-                    City <span className="text-red-500">*</span>
+                    {t('city')} <span className="text-red-500">*</span>
                   </label>
                   <select
                     value={formData.city}
@@ -676,7 +700,7 @@ export default function AddressesPage() {
                 
                 <div className="relative">
                   <label className="block text-sm font-semibold text-gray-700 mb-2">
-                    Area / Locality <span className="text-red-500">*</span>
+                    {t('areaLocality')} <span className="text-red-500">*</span>
                   </label>
                   <input
                     type="text"
@@ -684,7 +708,7 @@ export default function AddressesPage() {
                     onChange={(e) => handleAreaChange(e.target.value)}
                     onFocus={() => formData.area && setShowSuggestions(searchSuggestions.length > 0)}
                     onBlur={() => setTimeout(() => setShowSuggestions(false), 200)}
-                    placeholder="e.g., DHA Phase 5, Gulshan"
+                    placeholder={t('areaLocalityPlaceholder')}
                     required
                     className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all"
                   />
@@ -696,7 +720,7 @@ export default function AddressesPage() {
                           key={area}
                           type="button"
                           onClick={() => selectArea(area)}
-                          className="w-full px-4 py-3 text-left hover:bg-orange-50 transition-colors flex items-center gap-2"
+                          className="w-full px-4 py-3 text-start hover:bg-orange-50 transition-colors flex items-center gap-2"
                         >
                           <MapPin className="w-4 h-4 text-gray-400 shrink-0" />
                           <span className="text-gray-700">{area}</span>
@@ -710,13 +734,13 @@ export default function AddressesPage() {
               {/* Street Address */}
               <div>
                 <label className="block text-sm font-semibold text-gray-700 mb-2">
-                  Street Address <span className="text-red-500">*</span>
+                  {t('streetAddress')} <span className="text-red-500">*</span>
                 </label>
                 <input
                   type="text"
                   value={formData.addressLine1}
                   onChange={(e) => setFormData({ ...formData, addressLine1: e.target.value })}
-                  placeholder="House/Building number, Street name"
+                  placeholder={t('streetAddressPlaceholder')}
                   required
                   className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all"
                 />
@@ -725,13 +749,13 @@ export default function AddressesPage() {
               {/* Flat/Floor */}
               <div>
                 <label className="block text-sm font-semibold text-gray-700 mb-2">
-                  Flat / Floor / Building (Optional)
+                  {t('flatFloor')}
                 </label>
                 <input
                   type="text"
                   value={formData.addressLine2}
                   onChange={(e) => setFormData({ ...formData, addressLine2: e.target.value })}
-                  placeholder="e.g., Apartment 4B, 2nd Floor, XYZ Building"
+                  placeholder={t('flatFloorPlaceholder')}
                   className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all"
                 />
               </div>
@@ -740,25 +764,25 @@ export default function AddressesPage() {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-semibold text-gray-700 mb-2">
-                    Nearby Landmark
+                    {t('nearbyLandmark')}
                   </label>
                   <input
                     type="text"
                     value={formData.landmark}
                     onChange={(e) => setFormData({ ...formData, landmark: e.target.value })}
-                    placeholder="e.g., Near KFC, Opposite Park Tower"
+                    placeholder={t('landmarkPlaceholder')}
                     className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all"
                   />
                 </div>
                 <div>
                   <label className="block text-sm font-semibold text-gray-700 mb-2">
-                    Postal Code
+                    {t('postalCode')}
                   </label>
                   <input
                     type="text"
                     value={formData.postalCode}
                     onChange={(e) => setFormData({ ...formData, postalCode: e.target.value })}
-                    placeholder="e.g., 75500"
+                    placeholder={t('postalCodePlaceholder')}
                     className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all"
                   />
                 </div>
@@ -768,12 +792,12 @@ export default function AddressesPage() {
               <div>
                 <label className="block text-sm font-semibold text-gray-700 mb-2 flex items-center gap-1.5">
                   <Truck className="w-4 h-4 text-slate-500" />
-                  Delivery Instructions (Optional)
+                  {t('deliveryInstructions')}
                 </label>
                 <textarea
                   value={formData.deliveryInstructions}
                   onChange={(e) => setFormData({ ...formData, deliveryInstructions: e.target.value })}
-                  placeholder="e.g., Ring the bell twice, Leave at the gate, Call before arriving..."
+                  placeholder={t('deliveryInstructionsPlaceholder')}
                   rows={3}
                   className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all resize-none"
                 />
@@ -788,9 +812,9 @@ export default function AddressesPage() {
                   onChange={(e) => setFormData({ ...formData, isDefault: e.target.checked })}
                   className="w-5 h-5 text-orange-500 rounded border-gray-300 focus:ring-orange-500 cursor-pointer"
                 />
-                <label htmlFor="isDefault" className="ml-3 cursor-pointer">
-                  <span className="font-semibold text-gray-800">Set as default delivery address</span>
-                  <p className="text-gray-500 text-sm">This will be auto-selected at checkout</p>
+                <label htmlFor="isDefault" className="ms-3 cursor-pointer">
+                  <span className="font-semibold text-gray-800">{t('setDefaultDelivery')}</span>
+                  <p className="text-gray-500 text-sm">{t('autoSelectedCheckout')}</p>
                 </label>
               </div>
 
@@ -801,14 +825,14 @@ export default function AddressesPage() {
                   onClick={resetForm}
                   className="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-700 py-3"
                 >
-                  Cancel
+                  {tc('cancel')}
                 </Button>
                 <Button 
                   type="submit" 
                   className="flex-1 bg-gradient-to-r from-orange-500 to-red-500 hover:from-orange-600 hover:to-red-600 text-white py-3 shadow-lg shadow-orange-500/30 flex items-center justify-center gap-2"
                 >
                   {editingAddress ? <Check className="w-4 h-4" /> : <Plus className="w-4 h-4" />}
-                  {editingAddress ? 'Update Address' : 'Save Address'}
+                  {editingAddress ? t('updateAddress') : t('saveAddress')}
                 </Button>
               </div>
             </form>
@@ -822,26 +846,26 @@ export default function AddressesPage() {
           <div className="w-24 h-24 bg-gradient-to-br from-orange-100 to-red-100 rounded-full flex items-center justify-center mx-auto mb-6 text-[#FF5500]">
             <MapPin className="w-12 h-12" />
           </div>
-          <h2 className="text-2xl font-bold text-gray-900 mb-2">No addresses saved yet</h2>
+          <h2 className="text-2xl font-bold text-gray-900 mb-2">{t('noAddresses')}</h2>
           <p className="text-gray-500 mb-6 max-w-md mx-auto">
-            Add your delivery addresses to make checkout faster and ensure your food arrives at the right place!
+            {t('noAddressesDesc')}
           </p>
           <Button 
             onClick={() => setShowAddForm(true)} 
             className="bg-gradient-to-r from-orange-500 to-red-500 hover:from-orange-600 hover:from-red-600 shadow-lg shadow-orange-500/30 flex items-center gap-2 mx-auto"
           >
-            <Plus className="w-4 h-4" /> Add Your First Address
+            <Plus className="w-4 h-4" /> {t('addFirstAddress')}
           </Button>
         </div>
       ) : (
         <div className="space-y-4">
           <div className="flex items-center justify-between mb-2">
-            <h3 className="font-bold text-gray-900">Saved Addresses ({addresses.length})</h3>
+            <h3 className="font-bold text-gray-900">{t('savedAddressesCount', { count: addresses.length })}</h3>
           </div>
           
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
             {addresses.map((address) => {
-              const typeInfo = addressTypes.find(t => t.id === address.label?.toLowerCase() || t.label.toLowerCase() === address.label?.toLowerCase()) || addressTypes[2];
+              const typeInfo = addressTypes.find(a => a.id === address.label?.toLowerCase() || a.label.toLowerCase() === address.label?.toLowerCase()) || addressTypes[2];
               const TypeIcon = typeInfo.icon;
               return (
                 <div
@@ -859,10 +883,10 @@ export default function AddressesPage() {
                         <TypeIcon className="w-5 h-5" />
                       </div>
                       <div>
-                        <h4 className="font-bold text-gray-900 capitalize">{address.label || 'Address'}</h4>
+                        <h4 className="font-bold text-gray-900 capitalize">{addressLabel(address.label) || t('address')}</h4>
                         {address.isDefault && (
                           <span className="text-xs bg-orange-100 text-orange-700 px-2 py-0.5 rounded-full font-medium flex items-center gap-1 mt-0.5">
-                            <Check className="w-3 h-3" /> Default
+                            <Check className="w-3 h-3" /> {t('default')}
                           </span>
                         )}
                       </div>
@@ -874,7 +898,7 @@ export default function AddressesPage() {
                         <button 
                           onClick={() => handleSetDefault(address.id)}
                           className="p-2 text-gray-400 hover:text-orange-600 hover:bg-orange-50 rounded-lg transition-colors"
-                          title="Set as default"
+                          title={t('setAsDefault')}
                         >
                           <Star className="w-4 h-4 text-amber-500" />
                         </button>
@@ -882,14 +906,14 @@ export default function AddressesPage() {
                       <button 
                         onClick={() => handleEditAddress(address)}
                         className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
-                        title="Edit"
+                        title={tc('edit')}
                       >
                         <Pencil className="w-4 h-4 text-slate-600" />
                       </button>
                       <button 
                         onClick={() => handleDeleteAddress(address.id)}
                         className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                        title="Delete"
+                        title={tc('delete')}
                       >
                         <Trash2 className="w-4 h-4 text-rose-500" />
                       </button>
@@ -929,7 +953,7 @@ export default function AddressesPage() {
       {/* Tips Section */}
       <div className="mt-8 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-2xl p-6 border border-blue-100">
         <h3 className="font-bold text-blue-900 mb-4 flex items-center gap-2">
-          <Lightbulb className="w-5 h-5 text-amber-500" /> Tips for Better Delivery
+          <Lightbulb className="w-5 h-5 text-amber-500" /> {t('tipsTitle')}
         </h3>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <div className="flex items-start gap-3">
@@ -937,8 +961,8 @@ export default function AddressesPage() {
               <MapPin className="w-4 h-4" />
             </div>
             <div>
-              <p className="font-medium text-blue-800 text-sm">Add Landmarks</p>
-              <p className="text-xs text-blue-600">Help riders find you faster</p>
+              <p className="font-medium text-blue-800 text-sm">{t('tipLandmarks')}</p>
+              <p className="text-xs text-blue-600">{t('tipLandmarksDesc')}</p>
             </div>
           </div>
           <div className="flex items-start gap-3">
@@ -946,8 +970,8 @@ export default function AddressesPage() {
               <Bell className="w-4 h-4" />
             </div>
             <div>
-              <p className="font-medium text-blue-800 text-sm">Keep Phone On</p>
-              <p className="text-xs text-blue-600">Rider may call on arrival</p>
+              <p className="font-medium text-blue-800 text-sm">{t('tipPhone')}</p>
+              <p className="text-xs text-blue-600">{t('tipPhoneDesc')}</p>
             </div>
           </div>
           <div className="flex items-start gap-3">
@@ -955,8 +979,8 @@ export default function AddressesPage() {
               <FileText className="w-4 h-4" />
             </div>
             <div>
-              <p className="font-medium text-blue-800 text-sm">Add Instructions</p>
-              <p className="text-xs text-blue-600">Gate code, bell, etc.</p>
+              <p className="font-medium text-blue-800 text-sm">{t('tipInstructions')}</p>
+              <p className="text-xs text-blue-600">{t('tipInstructionsDesc')}</p>
             </div>
           </div>
         </div>

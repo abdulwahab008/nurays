@@ -1,6 +1,6 @@
 import axios, { AxiosInstance, AxiosError, AxiosRequestConfig, InternalAxiosRequestConfig } from 'axios';
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api/v1';
+import { API_BASE_URL } from './config';
 
 // Endpoints that must never trigger a refresh-token retry. /auth/refresh
 // itself is the obvious one; logging in/out shouldn't retry either.
@@ -143,6 +143,7 @@ class ApiClient {
     sessionStorage.removeItem('tab_isolated');
     localStorage.removeItem('access_token');
     localStorage.removeItem('refresh_token');
+    window.dispatchEvent(new CustomEvent('auth:tokens-changed'));
   }
 
   setToken(token: string, isolated = false): void {
@@ -153,6 +154,7 @@ class ApiClient {
     } else {
       localStorage.setItem('access_token', token);
     }
+    window.dispatchEvent(new CustomEvent('auth:tokens-changed'));
   }
 
   setTokens(accessToken: string, refreshToken: string, isolated = false): void {
@@ -216,3 +218,9 @@ export interface ApiError {
   timestamp?: string;
 }
 
+
+/** The server's message for a failed request, or `fallback` when there isn't one. */
+export function apiErrorMessage(err: unknown, fallback: string): string {
+  if (axios.isAxiosError<ApiError>(err)) return err.response?.data?.error?.message || fallback;
+  return fallback;
+}
