@@ -14,7 +14,7 @@
     "@hookform/resolvers": "^5.2.2",
     "@react-oauth/google": "^0.12.2",
     "@sentry/browser": "^11.2.0",
-    "@types/leaflet": "^1.9.21",
+    "@types/leaflet": "^1.9.22",
     "axios": "^1.13.2",
     "clsx": "^2.1.1",
     "leaflet": "^1.9.4",
