@@ -124,18 +124,31 @@ export async function dispatchDelivery(deliveryId: string): Promise<DispatchResu
       where: { id: deliveryId, riderId: null, status: 'pending' },
       data: { riderId: rider.id, status: 'assigned', riderFee: corridor.standardFee, riderBonus: bonus, assignmentMode: 'auto' },
     });
-    return claimed.count === 1;
+    return claimed.count === 1 ? { bonus } : false;
   });
   if (!done) return { assigned: false, reason: 'lost_race' };
 
-  await announceAssignment(job, rider.userId);
+  await announceAssignment(job, rider.userId, corridor.standardFee + done.bonus);
   return { assigned: true, riderId: rider.id, reason: choice.reason };
 }
 
-async function announceAssignment(job: JobRow, riderUserId: string) {
+async function announceAssignment(job: JobRow, riderUserId: string, riderPay: number) {
   void realtimeOrderService.emitDeliveryClaimed(job.id, job.orderId);
-  socketManager.emitToUser(riderUserId, 'delivery:assigned', { deliveryId: job.id, orderId: job.orderId });
   const cod = job.order.paymentMethod === 'cod' && job.order.paymentStatus !== 'paid';
+  const activeNow = await prisma.delivery.count({ where: { rider: { userId: riderUserId }, status: { in: ACTIVE } } });
+  socketManager.emitToUser(riderUserId, 'delivery:assigned', { deliveryId: job.id, orderId: job.orderId });
+  // The rider's screen pops this up, even while they are already carrying another job.
+  socketManager.emitToUser(riderUserId, 'delivery:offered', {
+    deliveryId: job.id,
+    orderId: job.orderId,
+    orderNumber: job.order.orderNumber,
+    pickupAddress: job.pickupAddress,
+    deliveryAddress: job.deliveryAddress,
+    cashToCollect: cod ? Math.round(Number(job.order.totalAmount)) : 0,
+    riderFee: riderPay,
+    activeJobs: activeNow,
+    mode: 'auto',
+  });
   await notify({
     userId: riderUserId,
     category: 'deliveries',

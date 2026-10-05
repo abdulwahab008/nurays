@@ -5,6 +5,7 @@ import { GoogleOAuthProvider } from "@react-oauth/google";
 import { ToastProvider } from "@/components/ui/toast";
 import { AuthProvider } from "@/components/AuthProvider";
 import { SellerNewOrderNotification } from "@/components/SellerNewOrderNotification";
+import { RiderNewJobNotification } from "@/components/RiderNewJobNotification";
 import { CustomerOrderNotification } from "@/components/CustomerOrderNotification";
 import { LocaleProvider } from "@/lib/i18n";
 import { DEFAULT_LOCALE, dirFor, isLocale, LOCALE_COOKIE } from "@/lib/i18n/config";
@@ -44,6 +45,7 @@ export default async function RootLayout({
         <ToastProvider>
           <AuthProvider>
             <SellerNewOrderNotification />
+            <RiderNewJobNotification />
             <CustomerOrderNotification />
             {googleClientId ? (
               <GoogleOAuthProvider clientId={googleClientId}>

@@ -61,6 +61,17 @@ describe('chooseRider', () => {
     expect(chooseRider(job, [rider('any')])).toEqual({ riderId: 'any', reason: 'available' });
   });
 
+  it('a rider who already has one job (going elsewhere) still gets new orders until they have two', () => {
+    const elsewhere = carrying({ dropoff: pt(25.3, 67.6), pickup: pt(25.3, 67.6), dropoffCommunityId: 'x', pickupCommunityId: 'x' });
+    expect(chooseRider(job, [rider('oneInLine', { communityId: 'askari', active: [elsewhere] })])?.riderId).toBe('oneInLine');
+  });
+
+  it('but an idle rider in the same community is preferred over one already carrying a job', () => {
+    const elsewhere = carrying({ dropoff: pt(25.3, 67.6), pickup: pt(25.3, 67.6), dropoffCommunityId: 'x', pickupCommunityId: 'x' });
+    const choice = chooseRider(job, [rider('busy', { communityId: 'askari', active: [elsewhere] }), rider('idle', { communityId: 'askari' })]);
+    expect(choice?.riderId).toBe('idle');
+  });
+
   it('a rider with two jobs is never chosen', () => {
     expect(chooseRider(job, [rider('busy', { communityId: 'askari', active: [carrying(), carrying()] })])).toBeNull();
   });

@@ -160,7 +160,7 @@ When a kitchen accepts an order, the job is assigned at once, with no accept ste
 3. a rider who serves the drop-off community;
 4. any rider with room.
 
-Within a step, fewer active jobs first, then fewer deliveries today. Never chosen: a rider who is off duty, has two jobs, would pass their cash limit, or handed this job back. Fee, bonus and `assignmentMode = 'auto'` are set on assignment; the rider gets a push, a live event and an in-app notification.
+Within a step, fewer active jobs first, then fewer deliveries today. Never chosen: a rider who is off duty, has two jobs, would pass their cash limit, or handed this job back. A rider who already has one job still gets new ones (up to two). Fee, bonus and `assignmentMode = 'auto'` are set on assignment; the rider gets a push and an in-app notification, and a pop-up with a chime on their screen (`delivery:offered`, `RiderNewJobNotification`). A job left in the open pool pops up a lighter alert only for riders who are on duty and have a free slot.
 
 If nobody can take it, the job stays in the open pool (any rider may still claim it) and is tried again every minute, when a rider finishes a job, goes on duty, hands a job back, or an admin changes a rider's community. `AUTO_ASSIGN_ENABLED=false` turns assignment off (riders claim from the pool only).
 
