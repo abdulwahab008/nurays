@@ -23,6 +23,7 @@ import {
   createRiderPayout,
   createRiderAdjustment,
   updateRiderCashLimit,
+  updateRiderCommunity,
 } from '../controllers/admin-rider.controller';
 import {
   getUsers,
@@ -63,6 +64,7 @@ import {
   riderSettlementSchema,
   riderAdjustmentSchema,
   riderCashLimitSchema,
+  riderCommunitySchema,
   accountStatusSchema,
   hubManagerSchema,
   createCommunitySchema,
@@ -112,6 +114,7 @@ router.post('/riders/:id/settlements', validate(riderSettlementSchema), createRi
 router.post('/riders/:id/payouts', validate(riderCashMovementSchema), createRiderPayout);
 router.post('/riders/:id/adjustments', validate(riderAdjustmentSchema), createRiderAdjustment);
 router.patch('/riders/:id/cash-limit', validate(riderCashLimitSchema), updateRiderCashLimit);
+router.patch('/riders/:id/community', validate(riderCommunitySchema), updateRiderCommunity);
 
 router.post('/riders/:id/status', validate(accountStatusSchema), updateRiderStatus);
 

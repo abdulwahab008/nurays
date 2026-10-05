@@ -68,6 +68,8 @@ export const riderCashLimitSchema = z.object({
   cashLimit: z.number().finite().min(0).max(1_000_000).nullable(),
 });
 
+export const riderCommunitySchema = z.object({ communityId: z.string().uuid().nullable() });
+
 // People
 export const accountStatusSchema = z.object({ status: z.enum(['active', 'suspended']) });
 export const hubManagerSchema = z.object({ identifier: z.string().trim().min(3, 'Enter an email address or phone number').max(120) });

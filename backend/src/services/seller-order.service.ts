@@ -10,7 +10,7 @@ import { releasePromotionUsage } from './promotion.service';
 import { refundForCancelledItems } from './refund.service';
 import ledgerService from './ledger.service';
 import { releaseHubAllocations } from './hub-allocation.service';
-import { selfDeliveryFeeFor } from '../utils/deliveryEarnings';
+import { selfDeliveryFeeFor, sellerPaidDeliveryFor } from '../utils/deliveryEarnings';
 
 export class SellerOrderService {
   /**
@@ -300,6 +300,8 @@ export class SellerOrderService {
         payout: sellerPayout,
         // Delivery fee this seller keeps because they deliver the order themselves.
         deliveryFeeKept: selfDeliveryFeeFor(order.deliveryFeeBreakdown, order.items[0]?.sellerId ?? ''),
+        // Nuray's delivery fee for a Nuray rider, paid by the kitchen out of its earnings.
+        deliveryFeePaid: sellerPaidDeliveryFor(order.deliveryFeeBreakdown, order.items[0]?.sellerId ?? ''),
       },
     };
   }

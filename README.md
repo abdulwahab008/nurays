@@ -9,9 +9,9 @@ Gulshan-e-Iqbal, and every seller decides, community by community, whether they 
 - **Buyers** browse kitchens and dishes for their community, fill a cart (one kitchen per order: adding a dish from another kitchen asks to start a new cart), pay by
   cash on delivery, online (card, JazzCash or EasyPaisa through Safepay), the Nuray wallet, or a bank/mobile transfer
   to the kitchen, and follow the order live, including the rider's position on a map while it is on the way.
-- **Sellers** run a kitchen: products and variants, stock, orders, earnings, promotions, payouts, and their
+- **Sellers** run a kitchen: products and variants (each dish on a **fixed**, **weekly** or **daily** menu), stock, orders, earnings, promotions, payouts, and their
   **delivery terms per community** (see below). New orders arrive live, with push, email and SMS alerts.
-- **Riders** apply with their documents, claim delivery jobs, share their location while delivering, confirm delivery
+- **Riders** apply with their documents, are assigned jobs automatically (each rider serves a community; orders going the same way are batched; jobs nobody can take stay in an open pool to claim), share their location while delivering, confirm delivery
   with the customer's PIN, and see their earnings and the cash they hold.
 - **Hub centers** hold cold-chain stock (batches with expiry dates, temperature logs) for products fulfilled from a hub;
   each hub's assigned manager runs it from `/hub`.
@@ -30,7 +30,7 @@ Gulshan-e-Iqbal, and every seller decides, community by community, whether they 
   that matches no community cannot order from a seller with community rules until the buyer picks one.
 - The seller picks **who delivers**: the Nuray rider fleet or **self-delivery** (the seller keeps the fee they
   charged; no rider job is created). Items fulfilled from a hub are always delivered by the platform.
-- **Nuray's delivery prices** (when a Nuray rider delivers; the fee is platform revenue): within a community, the fixed
+- **Nuray's delivery prices** (when a Nuray rider delivers; the fee is platform revenue, **paid by the kitchen** out of its earnings, so delivery is free for the customer): within a community, the fixed
   fee an admin sets for that community (admin → Communities); between two communities an admin has priced as a pair
   (admin → Communities → "Prices between two communities"), that price in both directions; to any other community, that community's base fee for
   other communities plus a per-km rate beyond the included km, rounded up to Rs 10, up to a maximum distance (admin →

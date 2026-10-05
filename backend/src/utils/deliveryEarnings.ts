@@ -7,12 +7,18 @@
  * is theirs and the platform takes no cut. The split is snapshotted on the order
  * at creation (Order.deliveryFeeBreakdown) so later changes to a seller's
  * delivery provider don't rewrite history.
+ *
+ * Who pays: for a Nuray rider's delivery the KITCHEN pays Nuray the fee (paidBy 'seller': taken
+ * from the kitchen's payout, nothing added to the customer's bill). A self-delivering kitchen's fee
+ * is charged to the customer and kept by the kitchen (paidBy 'customer').
  */
 
 export interface DeliveryFeeShare {
   sellerId: string;
   fee: number;
   provider: 'platform' | 'self';
+  /** Who pays the fee: the kitchen (Nuray rider) or the customer (self-delivery; older orders). */
+  paidBy?: 'seller' | 'customer';
 }
 
 const money = (n: number) => Math.round(n * 100) / 100;
@@ -25,6 +31,7 @@ export function parseBreakdown(raw: unknown): DeliveryFeeShare[] {
       sellerId: String(r.sellerId ?? ''),
       fee: Number(r.fee) || 0,
       provider: (r.provider === 'self' ? 'self' : 'platform') as 'platform' | 'self',
+      paidBy: (r.paidBy === 'seller' ? 'seller' : 'customer') as 'seller' | 'customer',
     }))
     .filter((r) => r.sellerId && r.fee > 0);
 }
@@ -34,6 +41,15 @@ export function selfDeliveryFeeFor(breakdown: unknown, sellerId: string): number
   return money(
     parseBreakdown(breakdown)
       .filter((r) => r.provider === 'self' && r.sellerId === sellerId)
+      .reduce((sum, r) => sum + r.fee, 0)
+  );
+}
+
+/** What a kitchen pays Nuray for the rider delivery of this order (taken from its payout). */
+export function sellerPaidDeliveryFor(breakdown: unknown, sellerId: string): number {
+  return money(
+    parseBreakdown(breakdown)
+      .filter((r) => r.paidBy === 'seller' && r.sellerId === sellerId)
       .reduce((sum, r) => sum + r.fee, 0)
   );
 }

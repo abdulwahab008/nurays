@@ -115,6 +115,19 @@ export class LedgerService {
           description: `Delivery & cold-chain fulfillment fee for Order #${order.orderNumber}`,
         });
       }
+      // 5. A kitchen that pays Nuray's delivery fee: it comes off what Nuray owes the kitchen.
+      for (const share of liveBreakdown.filter((r) => r.paidBy === 'seller')) {
+        entries.push({
+          orderId,
+          transactionType: 'seller_delivery_charge',
+          accountType: 'liability',
+          entryType: 'debit',
+          amount: share.fee,
+          currency: 'PKR',
+          description: `Delivery fee paid by the kitchen for Order #${order.orderNumber}, taken from its earnings`,
+          sellerId: share.sellerId,
+        });
+      }
       for (const share of selfDeliveryShares) {
         entries.push({
           orderId,

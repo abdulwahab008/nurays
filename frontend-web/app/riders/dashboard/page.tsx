@@ -537,6 +537,11 @@ export default function RiderDashboardPage() {
                                       return k ? t(k) : delivery.status.replace(/_/g, ' ');
                                     })()}
                                   </span>
+                                  {delivery.assignmentMode === 'auto' && (
+                                    <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-blue-500/20 text-blue-200 border border-blue-400/40">
+                                      {t('autoAssigned')}
+                                    </span>
+                                  )}
                                 </div>
                               </div>
 
@@ -615,7 +620,7 @@ export default function RiderDashboardPage() {
                                   </div>
                                 </div>
                                 <a
-                                  href={`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(delivery.pickupAddress)}`}
+                                  href={delivery.pickupMapsUrl ?? `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(delivery.pickupAddress)}`}
                                   target="_blank"
                                   rel="noopener noreferrer"
                                   className="px-2.5 py-1 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-[11px] font-bold shadow-xs whitespace-nowrap transition-all flex items-center gap-1"
@@ -630,13 +635,31 @@ export default function RiderDashboardPage() {
                                   <div>
                                     <span className="text-[10px] uppercase font-bold text-emerald-900 block">{t('dropoffCustomer')}</span>
                                     <p className="text-xs font-bold text-slate-800 mt-0.5">{delivery.deliveryAddress}</p>
+                                    {delivery.dropoffDetails && (
+                                      <p className="text-[11px] text-slate-600 mt-1 space-y-0.5">
+                                        {delivery.dropoffDetails.houseNumber && <span className="block">{t('houseNo')}: {delivery.dropoffDetails.houseNumber}</span>}
+                                        {delivery.dropoffDetails.addressLine2 && <span className="block">{delivery.dropoffDetails.addressLine2}</span>}
+                                        {delivery.dropoffDetails.landmark && <span className="block">{t('landmark')}: {delivery.dropoffDetails.landmark}</span>}
+                                        {delivery.dropoffDetails.instructions && <span className="block font-semibold text-amber-700">{t('customerNote')}: {delivery.dropoffDetails.instructions}</span>}
+                                      </p>
+                                    )}
+                                    {delivery.customer && (
+                                      <p className="text-[11px] text-slate-700 mt-1.5 flex flex-wrap items-center gap-2">
+                                        <span className="font-bold">{delivery.customer.name || t('customer')}</span>
+                                        {delivery.customer.phone && (
+                                          <a href={`tel:${delivery.customer.phone}`} data-ltr className="px-2 py-0.5 rounded-md bg-emerald-600 text-white font-bold">
+                                            📞 {delivery.customer.phone}
+                                          </a>
+                                        )}
+                                      </p>
+                                    )}
                                     <span className="inline-block text-[10px] text-emerald-700 mt-1 font-medium bg-emerald-100/70 px-2 py-0.5 rounded">
                                       {t('doorstepPin')}
                                     </span>
                                   </div>
                                 </div>
                                 <a
-                                  href={`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(delivery.deliveryAddress)}`}
+                                  href={delivery.dropoffMapsUrl ?? `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(delivery.deliveryAddress)}`}
                                   target="_blank"
                                   rel="noopener noreferrer"
                                   className="px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-[11px] font-bold shadow-xs whitespace-nowrap transition-all flex items-center gap-1"

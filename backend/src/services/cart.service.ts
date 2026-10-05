@@ -2,6 +2,7 @@ import prisma from '../config/database';
 import { getPlatformDeliveryPricing } from './delivery-pricing.service';
 import { AppError } from '../middleware/errorHandler';
 import { getDeliveryFeeForSeller } from '../utils/deliveryFee';
+import { isOnMenu } from '../utils/menu';
 import { SELLER_COMMUNITY_DELIVERY_SELECT } from '../utils/sellerDeliverySelect';
 import { communityService } from './community.service';
 import { sellableBatchWhere } from '../utils/hubStock';
@@ -268,11 +269,14 @@ export class CartService {
     if (undeliverable.length > 0) {
       return { deliveryFee: 0, isFree: false, isDeliverable: false, reason: undeliverable.join('; ') };
     }
-    const deliveryFee = [...sellerResults.values()].reduce((a, b) => a + b.fee, 0);
+    // A fee priced by Nuray is for a Nuray rider and is paid by the kitchen, not the customer.
+    const all = [...sellerResults.values()];
+    const deliveryFee = all.filter((r) => r.pricing == null).reduce((a, b) => a + b.fee, 0);
+    const paidByKitchen = all.filter((r) => r.pricing != null).reduce((a, b) => a + b.fee, 0);
     const isFree = deliveryFee === 0;
     let reason: string | null = null;
-    if (isFree && sellerResults.size > 0) reason = 'Free delivery to your area';
-    return { deliveryFee, isFree, isDeliverable: true, reason };
+    if (isFree && sellerResults.size > 0) reason = paidByKitchen > 0 ? 'Free delivery: the kitchen covers it' : 'Free delivery to your area';
+    return { deliveryFee, isFree, isDeliverable: true, reason, kitchenPaysDelivery: paidByKitchen > 0 };
   }
 
   /**
@@ -308,6 +312,10 @@ export class CartService {
 
     if (!product.isActive || product.approvalStatus !== 'approved') {
       throw new AppError('Product is not available', 400, 'PRODUCT_UNAVAILABLE');
+    }
+    // Weekly and daily dishes can only be ordered on the days they are on the menu.
+    if (!isOnMenu(product)) {
+      throw new AppError(`${product.name} is not on the menu today`, 400, 'NOT_ON_MENU_TODAY');
     }
 
     // Rule 8: A cart belongs to one seller at a time.
@@ -622,6 +630,10 @@ export class CartService {
       // Check if product still exists and is active
       if (!item.product.isActive || item.product.approvalStatus !== 'approved') {
         errors.push(`${item.product.name} is no longer available`);
+        continue;
+      }
+      if (!isOnMenu(item.product)) {
+        errors.push(`${item.product.name} is not on the menu today`);
         continue;
       }
 

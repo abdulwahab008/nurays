@@ -5,6 +5,7 @@ import { searchRankedProductIds } from './ranking.service';
 import { AppError } from '../middleware/errorHandler';
 import { computeSellerAvailability, isAcceptingOrders } from './availability.service';
 import { getDeliveryFeeForSeller, haversineKm } from '../utils/deliveryFee';
+import { isOnMenu, menuNote, normalizeMenuInput, onMenuWhere } from '../utils/menu';
 import { SELLER_COMMUNITY_DELIVERY_SELECT } from '../utils/sellerDeliverySelect';
 import { isUploadedBy } from '../utils/uploadPaths';
 import { isStoredFile } from '../storage';
@@ -323,6 +324,8 @@ export class ProductService {
     where.approvalStatus = 'approved';
     // ...nor a product from a suspended/inactive seller.
     where.seller = { status: 'active' };
+    // ...and only dishes that are on the menu today (fixed, today's weekday, or today's daily menu).
+    where.AND = [...(Array.isArray(where.AND) ? where.AND : where.AND ? [where.AND] : []), onMenuWhere()];
 
     if (filters.mealCategory) {
       where.seller.mealCategories = { has: filters.mealCategory };
@@ -680,6 +683,8 @@ export class ProductService {
     // expose only an explicit public subset, and the product's cost price only
     // to its owner.
     const { seller: fullSeller, costPrice: rawCostPrice, ...productFields } = product;
+    const availableToday = isOnMenu(product);
+    const menuLabel = menuNote(product);
     const publicSeller = {
       id: fullSeller.id,
       businessName: fullSeller.businessName,
@@ -712,6 +717,9 @@ export class ProductService {
 
     return {
       ...productFields,
+      // Whether the dish can be ordered today, and when it is on the menu (for the page to say so).
+      availableToday,
+      menuLabel,
       price: Number(product.price),
       originalPrice: product.originalPrice ? Number(product.originalPrice) : null,
       ...(isOwner ? { costPrice: rawCostPrice ? Number(rawCostPrice) : null } : {}),
@@ -773,6 +781,9 @@ export class ProductService {
     preparationTime?: number;  // Minutes for made-to-order items
     images?: string[];
     tags?: string[];
+    menuType?: string;
+    availableDays?: number[];
+    menuDate?: string | null;
   }) {
     // Verify seller exists
     const seller = await prisma.seller.findUnique({
@@ -817,6 +828,7 @@ export class ProductService {
         productType: data.productType || 'frozen',  // Default to frozen for backward compatibility
         shelfLifeHours: data.shelfLifeHours,  // For fresh items
         preparationTime: data.preparationTime,  // For made-to-order items
+        ...normalizeMenuInput({ menuType: data.menuType, availableDays: data.availableDays, menuDate: data.menuDate }),
         approvalStatus: 'pending', // Awaits admin moderation
         isActive: false, // Not visible to customers until approved
         images: data.images
@@ -902,11 +914,16 @@ export class ProductService {
       delete data.images;
     }
 
+    // Menu type, days and date are checked together and saved as columns.
+    const { menuType, availableDays, menuDate, ...rest } = data;
+    const menu = menuType !== undefined || availableDays !== undefined || menuDate !== undefined ? normalizeMenuInput({ menuType, availableDays, menuDate }, product) : {};
+
     // Update product - no re-approval needed
     const updatedProduct = await prisma.product.update({
       where: { id: productId },
       data: {
-        ...data,
+        ...rest,
+        ...menu,
         slug,
         // Keep current approval status and active state
         // Unless explicitly changed via isActive field

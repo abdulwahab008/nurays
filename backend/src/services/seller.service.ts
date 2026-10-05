@@ -733,6 +733,8 @@ export class SellerService {
         codCommissionOwed,
         owedToPlatform: codCommissionOwed,
         availableForPayout: Math.max(0, availableForPayout),
+        // Your share of cash orders whose cash a Nuray rider has not handed in yet.
+        awaitingRiderCash: balance.awaitingRiderCash,
         rating: Number(seller.ratingAverage),
         totalReviews: seller.totalReviews,
         todaySales,

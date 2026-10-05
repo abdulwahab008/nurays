@@ -174,7 +174,13 @@ async function shrinkUnpaidOrder(tx: Tx, order: any) {
   const breakdown = parseBreakdown(order.deliveryFeeBreakdown);
   const liveBreakdown = breakdown.filter((r) => liveSellers.has(r.sellerId));
   // Legacy orders have no per-seller split, so their delivery fee stays as it was.
-  const deliveryFee = breakdown.length ? money(liveBreakdown.reduce((sum, r) => sum + r.fee, 0)) : Number(order.deliveryFee);
+  // The customer's delivery fee is only the shares they pay; a kitchen-paid fee is not on their bill.
+  const deliveryFee = breakdown.length
+    ? money(liveBreakdown.filter((r) => r.paidBy !== 'seller').reduce((sum, r) => sum + r.fee, 0))
+    : Number(order.deliveryFee);
+  const sellerDeliveryCharge = breakdown.length
+    ? money(liveBreakdown.filter((r) => r.paidBy === 'seller').reduce((sum, r) => sum + r.fee, 0))
+    : Number(order.sellerDeliveryCharge ?? 0);
 
   const { taxAmount, totalAmount } = priceOrder(subtotal - discount, deliveryFee);
   await tx.order.update({
@@ -183,6 +189,7 @@ async function shrinkUnpaidOrder(tx: Tx, order: any) {
       subtotal,
       discountAmount: discount,
       deliveryFee,
+      sellerDeliveryCharge,
       deliveryFeeBreakdown: breakdown.length ? (liveBreakdown as any) : undefined,
       taxAmount,
       totalAmount,
@@ -229,7 +236,7 @@ export async function refundForCancelledItems(
     const live = allItems.filter((i: any) => i.sellerId === sellerId && i.status !== 'cancelled').length;
     if (live === 0) {
       deliveryBack += parseBreakdown(order.deliveryFeeBreakdown)
-        .filter((r) => r.sellerId === sellerId)
+        .filter((r) => r.sellerId === sellerId && r.paidBy !== 'seller')
         .reduce((sum, r) => sum + r.fee, 0);
     }
   }

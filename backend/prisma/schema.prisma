@@ -400,6 +400,11 @@ model Product {
   ratingScore           Float     @default(4) @map("rating_score")
   viewsCount            Int       @default(0) @map("views_count")
   isFeatured            Boolean   @default(false) @map("is_featured")
+  // Menu type: "fixed" (always on the menu), "weekly" (only on available_days, 0 = Sunday ... 6 = Saturday,
+  // Pakistan time) or "daily" (only on the date the kitchen put it on the menu, menu_date).
+  menuType              String    @default("fixed") @map("menu_type")
+  availableDays         Int[]     @default([]) @map("available_days")
+  menuDate              DateTime? @map("menu_date") @db.Date
   isActive              Boolean   @default(true) @map("is_active")
   approvalStatus        String    @default("pending") @map("approval_status") // pending, approved, rejected
   rejectionReason       String?   @map("rejection_reason")
@@ -602,6 +607,8 @@ model Order {
   // Snapshot of how deliveryFee splits per seller at order time: [{ sellerId, fee, provider: 'platform' | 'self' }].
   // A self-delivering seller keeps their own fee; null on orders from before this existed (all treated as platform).
   deliveryFeeBreakdown Json?    @map("delivery_fee_breakdown")
+  // Nuray's delivery fee for this order when the kitchen pays it (taken from the kitchen's payout; the customer pays no delivery fee).
+  sellerDeliveryCharge Decimal   @default(0) @map("seller_delivery_charge") @db.Decimal(10, 2)
   discountAmount      Decimal   @default(0) @map("discount_amount") @db.Decimal(10, 2)
   taxAmount           Decimal   @default(0) @map("tax_amount") @db.Decimal(10, 2)
   tipAmount           Decimal?  @default(0) @map("tip_amount") @db.Decimal(10, 2)
@@ -751,15 +758,19 @@ model Rider {
   // Most cash-on-delivery money this rider may hold before depositing it (null = the default,
   // RIDER_CASH_LIMIT). Cash orders aren't offered beyond it.
   cashLimit          Decimal?  @map("cash_limit") @db.Decimal(10, 2)
+  // The community this rider serves (an admin sets it): new jobs in or near it go to them first.
+  communityId        String?   @map("community_id")
   createdAt          DateTime  @default(now()) @map("created_at")
   updatedAt          DateTime  @updatedAt @map("updated_at")
 
+  community       Community? @relation(fields: [communityId], references: [id], onDelete: SetNull)
   hub             HubCenter? @relation(fields: [hubId], references: [id], onDelete: SetNull)
   deliveries      Delivery[]
   ledgerEntries   RiderLedgerEntry[]
   documents       RiderDocument[]
 
   @@index([status, verificationStatus])
+  @@index([communityId])
 
   @@map("riders")
 }
@@ -792,6 +803,10 @@ model Delivery {
   // What the rider is paid for this job, fixed when they claim it, and any route bonus.
   riderFee              Decimal?  @map("rider_fee") @db.Decimal(10, 2)
   riderBonus            Decimal?  @map("rider_bonus") @db.Decimal(10, 2)
+  // How the rider got the job: "auto" (the system picked them) or "claimed" (they took it from the pool).
+  assignmentMode        String?   @map("assignment_mode")
+  // Riders who handed this job back: auto-assignment skips them.
+  releasedRiderIds      String[]  @default([]) @map("released_rider_ids")
   // The rider's last reported position while on this job.
   riderLatitude         Decimal?  @map("rider_latitude") @db.Decimal(10, 8)
   riderLongitude        Decimal?  @map("rider_longitude") @db.Decimal(11, 8)
@@ -1329,6 +1344,7 @@ model Community {
   users                 User[]
   sellers               Seller[]
   addresses             UserAddress[]
+  riders                Rider[]
   sellerDeliveries      SellerCommunityDelivery[]
   pairFeesAsA           CommunityPairFee[]     @relation("PairFeeA")
   pairFeesAsB           CommunityPairFee[]     @relation("PairFeeB")

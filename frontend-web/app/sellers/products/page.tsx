@@ -26,6 +26,9 @@ interface Product {
   unit?: string;
   isActive: boolean;
   approvalStatus: 'pending' | 'approved' | 'rejected';
+  menuType?: 'fixed' | 'weekly' | 'daily';
+  availableDays?: number[];
+  menuDate?: string | null;
   images?: Array<{ imageUrl: string; isPrimary: boolean }>;
   category?: { name: string };
 }
@@ -188,6 +191,20 @@ function SellerProductsContent() {
       showToast(error.response?.data?.error?.message || 'Failed to update product', 'error');
     }
   };
+
+  // A daily dish is on the menu only on the days the kitchen puts it there.
+  const handleTodaysMenu = async (productId: string, on: boolean) => {
+    try {
+      await apiClient.patch(`/products/${productId}`, { menuDate: on ? 'today' : null });
+      showToast(on ? "Added to today's menu" : "Taken off today's menu", 'success');
+      loadProducts();
+    } catch (error: any) {
+      showToast(error.response?.data?.error?.message || 'Failed to update the menu', 'error');
+    }
+  };
+
+  const onTodaysMenu = (p: Product) =>
+    !!p.menuDate && p.menuDate.slice(0, 10) === new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Karachi' }).format(new Date());
 
   const handleQuickStockUpdate = async (productId: string, newStock: number) => {
     if (newStock < 0) {
@@ -913,6 +930,23 @@ function SellerProductsContent() {
                           </svg>
                         </button>
                       </Link>
+
+                      {/* Daily menu: on today's menu or not; weekly: which days */}
+                      {product.menuType === 'daily' && (
+                        <button
+                          onClick={() => handleTodaysMenu(product.id, !onTodaysMenu(product))}
+                          className={`px-2.5 py-1 rounded-xl border text-[11px] font-bold ${onTodaysMenu(product) ? 'bg-emerald-600 text-white border-emerald-600' : 'bg-white text-slate-700 border-slate-300'}`}
+                          title="Daily menu"
+                          data-testid="todays-menu-toggle"
+                        >
+                          {onTodaysMenu(product) ? "✓ On today's menu" : "Put on today's menu"}
+                        </button>
+                      )}
+                      {product.menuType === 'weekly' && (
+                        <span className="px-2.5 py-1 rounded-xl bg-blue-50 text-blue-700 border border-blue-200 text-[11px] font-bold">
+                          {(product.availableDays ?? []).map((d) => ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][d]).join(', ')}
+                        </span>
+                      )}
 
                       {/* Live / Hide Toggle */}
                       <button

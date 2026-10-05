@@ -66,6 +66,10 @@ export const createProductSchema = z.object({
   stockType: z.enum(['direct', 'hub', 'both']),
   images: z.array(z.string().min(1)).optional(), // Allow both URLs and local paths
   tags: z.array(z.string()).optional(),
+  // When the dish can be ordered: always (fixed), on chosen weekdays (weekly, 0 = Sunday), or on the date put on the menu (daily).
+  menuType: z.enum(['fixed', 'weekly', 'daily']).optional(),
+  availableDays: z.array(z.number().int().min(0).max(6)).max(7).optional(),
+  menuDate: z.union([z.literal('today'), z.null(), z.string().regex(/^\d{4}-\d{2}-\d{2}$/)]).optional(),
 });
 
 export const updateProductSchema = createProductSchema.partial();

@@ -196,7 +196,8 @@ Each cancellation goes through the admin cancel path with `by: system`, so stock
 
 1. **Posting.** `ensureDeliveryForOrder` runs when the kitchen accepts (and again on ready, idempotently): for a live home-delivery order that needs a platform rider and has no job yet, it creates a `Delivery` with `status: pending` (pickup at the kitchen, drop-off at the address, coordinates where known) and emits `delivery:new` to riders. Riders can therefore see a job while the food is still being prepared, so they can travel to the kitchen in parallel.
 2. **Listing** (`GET /riders/deliveries/available`). Only approved, active riders. Jobs are ranked by `jobScore` (`utils/ranking.ts`): jobs along the route of the one job the rider already carries, pickup closeness, waiting time, and pay per km. A cash job that would push the rider over their cash limit is flagged and ranked lower.
-3. **Claiming** (`POST /riders/deliveries/:id/claim`), with the rider row locked:
+3. **Automatic assignment.** As soon as the job is created, `dispatch.service.ts` tries to give it to a rider (batching with a rider already going the same way, then the community's own riders, then anyone with room; rules in BUSINESS_RULES.md section 4). The rider is told by push and a live event. If nobody can take it, it stays in the pool and is retried every minute and whenever a rider frees up.
+   **Claiming** from the open pool (`POST /riders/deliveries/:id/claim`) is the fallback, with the rider row locked:
    - the rider must be on duty (`RIDER_OFF_DUTY`);
    - at most 2 active jobs (`RIDER_CAPACITY_REACHED`);
    - the order must still be live and the job `pending`;
@@ -204,6 +205,7 @@ Each cancellation goes through the admin cancel path with `by: system`, so stock
    - the rider's pay is fixed now: the standard fee (city base rate plus Rs 20 per km, at least Rs 120) or the rider's own ask inside a corridor (about 85% of the standard fee up to +Rs 120 or 140%), otherwise `BID_OUT_OF_BOUNDS`. A route bonus is added when this job lies along the rider's one active job;
    - the claim is a conditional update, so two riders cannot both win (`ALREADY_CLAIMED`).
    Other riders get `delivery:removed`; the order's parties get `delivery:assigned`.
+   The rider sees the customer's name, phone and exact spot (house, landmark, delivery note) only once the job is theirs and still running.
    Before picking the food up, a rider can hand the job back (`POST /riders/deliveries/:id/release`): it returns to the pool with the fee and bonus cleared. Pickup and transit are refused until the kitchen has marked the order ready (`FOOD_NOT_READY`). If an admin marks an order delivered, the rider's job is closed with it and their fee, bonus and cash entries are posted.
 4. **Steps** (`PATCH /riders/deliveries/:id/status`), only the assigned rider, only these transitions:
 

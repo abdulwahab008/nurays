@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/toast';
 import { useAuthStore } from '@/lib/store/auth-store';
 import { apiClient } from '@/lib/api-client';
+import MenuTypeField, { DEFAULT_MENU, MenuType, MenuValue, menuError, menuPayload } from '@/components/sellers/MenuTypeField';
 
 const sidebarItems = SELLER_SIDEBAR_ITEMS;
 
@@ -55,6 +56,9 @@ interface Product {
   ingredients?: string;
   dietaryInfo?: string[];
   isActive: boolean;
+  menuType?: string;
+  availableDays?: number[];
+  menuDate?: string | null;
   images?: Array<{ id: string; imageUrl: string; isPrimary: boolean }>;
   category?: { id: string; name: string; parentId?: string };
 }
@@ -100,6 +104,7 @@ export default function EditProductPage() {
   const [deletedVariantIds, setDeletedVariantIds] = useState<string[]>([]);
   
   // Form data
+  const [menu, setMenu] = useState<MenuValue>(DEFAULT_MENU);
   const [formData, setFormData] = useState({
     name: '',
     nameUrdu: '',
@@ -311,6 +316,12 @@ export default function EditProductPage() {
           setCustomUnit(productUnit);
         }
         
+        const todayKarachi = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Karachi' }).format(new Date());
+        setMenu({
+          menuType: ((product.menuType as MenuType) || 'fixed'),
+          availableDays: product.availableDays ?? [],
+          onTodaysMenu: !!product.menuDate && product.menuDate.slice(0, 10) === todayKarachi,
+        });
         setFormData({
           name: product.name || '',
           nameUrdu: product.nameUrdu || '',
@@ -483,6 +494,13 @@ export default function EditProductPage() {
         .filter(img => img.isExisting && img.url)
         .map(img => img.url!);
 
+      const menuProblem = menuError(menu);
+      if (menuProblem) {
+        showToast(menuProblem, 'error');
+        setSaving(false);
+        return;
+      }
+
       // Prepare update data
       const productData = {
         name: formData.name.trim(),
@@ -502,6 +520,7 @@ export default function EditProductPage() {
         dietaryInfo: formData.isHalal ? ['Halal'] : [],
         isActive: formData.isActive,
         images: [...existingImageUrls, ...newImageUrls],
+        ...menuPayload(menu),
       };
 
       console.log('Updating product:', productData);
@@ -1334,6 +1353,8 @@ export default function EditProductPage() {
                 ))}
               </div>
             </div>
+
+            <MenuTypeField value={menu} onChange={setMenu} />
 
             {/* Price Preview */}
             {formData.price && (

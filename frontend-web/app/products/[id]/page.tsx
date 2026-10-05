@@ -51,6 +51,8 @@ function getStackedDiscountedPrice(originalPrice: number, promos: CatalogPromoti
 
 interface ProductDetail {
   id: string;
+  availableToday?: boolean;
+  menuLabel?: string | null;
   name: string;
   nameUrdu?: string;
   description: string;
@@ -943,19 +945,24 @@ export default function ProductDetailPage() {
 
           {/* Action Buttons: Add to Bag & Buy Now */}
           <div className="pt-2 space-y-2">
+            {product.menuLabel && (
+              <p className={`text-sm font-semibold rounded-xl px-3 py-2 ${product.availableToday === false ? 'bg-amber-50 text-amber-800 border border-amber-200' : 'bg-emerald-50 text-emerald-800 border border-emerald-200'}`} data-testid="menu-note">
+                {product.availableToday === false ? t('notOnMenuToday', { days: product.menuLabel }) : t('onMenuNote', { days: product.menuLabel })}
+              </p>
+            )}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <Button
                 onClick={handleAddToCart}
                 variant="dark"
                 className="w-full h-12 text-sm font-bold bg-[#0C1016] text-white hover:bg-black rounded-xl"
-                disabled={maxQty < quantity || addToCartLoading}
+                disabled={maxQty < quantity || addToCartLoading || product.availableToday === false}
               >
                 {addToCartLoading ? t('adding') : t('addToBag', { amount: formatPrice(unitPrice * quantity) })}
               </Button>
               <Button
                 onClick={handleBuyNow}
                 className="w-full h-12 text-sm font-bold bg-gradient-to-r from-[#FF5500] to-[#FF2A00] hover:brightness-110 text-white shadow-sm rounded-xl"
-                disabled={maxQty < quantity || addToCartLoading}
+                disabled={maxQty < quantity || addToCartLoading || product.availableToday === false}
               >
                 {t('buyNow')}
               </Button>

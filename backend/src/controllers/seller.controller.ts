@@ -4,6 +4,7 @@ import sellerService from '../services/seller.service';
 import { AppError } from '../middleware/errorHandler';
 import prisma from '../config/database';
 import { computeSellerAvailability } from '../services/availability.service';
+import { onMenuWhere } from '../utils/menu';
 
 export const getCurrentSeller = async (req: Request, res: Response) => {
   if (!req.user) {
@@ -267,7 +268,7 @@ export const getPublicSellers = async (req: Request, res: Response) => {
         },
       },
       products: {
-        where: { isActive: true, approvalStatus: 'approved' },
+        where: { isActive: true, approvalStatus: 'approved', ...onMenuWhere() },
         take: 4,
         select: {
           id: true,
@@ -286,7 +287,7 @@ export const getPublicSellers = async (req: Request, res: Response) => {
       },
       _count: {
         select: {
-          products: { where: { isActive: true, approvalStatus: 'approved' } },
+          products: { where: { isActive: true, approvalStatus: 'approved', ...onMenuWhere() } },
           reviews: true,
         },
       },
@@ -390,7 +391,7 @@ export const getPublicSellerById = async (req: Request, res: Response) => {
         },
       },
       products: {
-        where: { isActive: true, approvalStatus: 'approved' },
+        where: { isActive: true, approvalStatus: 'approved', ...onMenuWhere() },
         orderBy: { createdAt: 'desc' },
         include: {
           category: {

@@ -284,6 +284,9 @@ CREATE TABLE "products" (
     "rating_score" DOUBLE PRECISION NOT NULL DEFAULT 4,
     "views_count" INTEGER NOT NULL DEFAULT 0,
     "is_featured" BOOLEAN NOT NULL DEFAULT false,
+    "menu_type" TEXT NOT NULL DEFAULT 'fixed',
+    "available_days" INTEGER[] DEFAULT ARRAY[]::INTEGER[],
+    "menu_date" DATE,
     "is_active" BOOLEAN NOT NULL DEFAULT true,
     "approval_status" TEXT NOT NULL DEFAULT 'pending',
     "rejection_reason" TEXT,
@@ -415,6 +418,7 @@ CREATE TABLE "orders" (
     "subtotal" DECIMAL(10,2) NOT NULL,
     "delivery_fee" DECIMAL(10,2) NOT NULL DEFAULT 0,
     "delivery_fee_breakdown" JSONB,
+    "seller_delivery_charge" DECIMAL(10,2) NOT NULL DEFAULT 0,
     "discount_amount" DECIMAL(10,2) NOT NULL DEFAULT 0,
     "tax_amount" DECIMAL(10,2) NOT NULL DEFAULT 0,
     "tip_amount" DECIMAL(10,2) DEFAULT 0,
@@ -510,6 +514,7 @@ CREATE TABLE "riders" (
     "verification_status" TEXT NOT NULL DEFAULT 'pending',
     "rejection_reason" TEXT,
     "cash_limit" DECIMAL(10,2),
+    "community_id" TEXT,
     "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updated_at" TIMESTAMP(3) NOT NULL,
 
@@ -544,6 +549,8 @@ CREATE TABLE "deliveries" (
     "delivery_notes" TEXT,
     "rider_fee" DECIMAL(10,2),
     "rider_bonus" DECIMAL(10,2),
+    "assignment_mode" TEXT,
+    "released_rider_ids" TEXT[] DEFAULT ARRAY[]::TEXT[],
     "rider_latitude" DECIMAL(10,8),
     "rider_longitude" DECIMAL(11,8),
     "rider_location_at" TIMESTAMP(3),
@@ -1189,6 +1196,9 @@ CREATE UNIQUE INDEX "riders_user_id_key" ON "riders"("user_id");
 CREATE INDEX "riders_status_verification_status_idx" ON "riders"("status", "verification_status");
 
 -- CreateIndex
+CREATE INDEX "riders_community_id_idx" ON "riders"("community_id");
+
+-- CreateIndex
 CREATE UNIQUE INDEX "deliveries_orderId_key" ON "deliveries"("orderId");
 
 -- CreateIndex
@@ -1463,6 +1473,9 @@ ALTER TABLE "order_items" ADD CONSTRAINT "order_items_hub_id_fkey" FOREIGN KEY (
 
 -- AddForeignKey
 ALTER TABLE "order_status_history" ADD CONSTRAINT "order_status_history_order_id_fkey" FOREIGN KEY ("order_id") REFERENCES "orders"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "riders" ADD CONSTRAINT "riders_community_id_fkey" FOREIGN KEY ("community_id") REFERENCES "communities"("id") ON DELETE SET NULL ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "riders" ADD CONSTRAINT "riders_hub_id_fkey" FOREIGN KEY ("hub_id") REFERENCES "hub_centers"("id") ON DELETE SET NULL ON UPDATE CASCADE;

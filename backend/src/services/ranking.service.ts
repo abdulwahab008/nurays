@@ -9,6 +9,7 @@ import {
   TREND,
   trendScores,
 } from '../utils/ranking';
+import { onMenuWhere } from '../utils/menu';
 
 /**
  * Ranking: trending kitchens and dishes, trustworthy ratings, search relevance and
@@ -142,7 +143,7 @@ export async function searchRankedProductIds(terms: string[], max = 500): Promis
 async function visibleDishes(ids: string[]) {
   if (ids.length === 0) return [];
   return prisma.product.findMany({
-    where: { id: { in: ids }, isActive: true, approvalStatus: 'approved', seller: { status: 'active' } },
+    where: { id: { in: ids }, isActive: true, approvalStatus: 'approved', seller: { status: 'active' }, ...onMenuWhere() },
     select: { id: true, sellerId: true, categoryId: true, trendScore: true },
   });
 }

@@ -12,6 +12,7 @@ import { allocateHubStock, releaseHubAllocations } from './hub-allocation.servic
 import { DeliveryFeeShare } from '../utils/deliveryEarnings';
 import { isStoredFile, isPrivateRef, storedFileOwner, presentFile } from '../storage';
 import { getDeliveryFeeForSeller, haversineKm } from '../utils/deliveryFee';
+import { assertOnMenu } from '../utils/menu';
 import { createStockAlert } from './stock-alert.service';
 import promotionService from './promotion.service';
 import { isAcceptingOrders, validateOrderTiming } from './availability.service';
@@ -255,6 +256,8 @@ export class OrderService {
       if (!product.isActive || product.approvalStatus !== 'approved') {
         throw new AppError(`Product ${product.name} is not available`, 400, 'PRODUCT_UNAVAILABLE');
       }
+      // A weekly or daily dish must be on the menu on the day it is ordered for (the delivery slot's day, else today).
+      assertOnMenu(product, data.deliverySlotDate ? new Date(data.deliverySlotDate) : new Date());
 
       sellersInOrder.set(product.seller.id, product.seller);
 
@@ -380,6 +383,8 @@ export class OrderService {
 
     // Calculate delivery fee: per-seller (free in their areas, fixed or distance-based outside), then sum
     let deliveryFee: number;
+    // What the kitchen pays Nuray for a Nuray rider's delivery (the customer pays no delivery fee for it).
+    let sellerDeliveryCharge = 0;
     const deliveryFeeBreakdown: DeliveryFeeShare[] = [];
     if (data.deliveryType === 'home_delivery' && !deliveryAddress) {
       // The delivery address carries the buyer's community, which decides whether
@@ -448,12 +453,16 @@ export class OrderService {
         if (!result.deliverable) {
           throw new AppError(`${seller.businessName}: ${result.reason}`, 400, 'ADDRESS_NOT_DELIVERABLE');
         }
-        total += result.fee;
+        // A fee priced by Nuray (result.pricing) is for a Nuray rider: the kitchen pays it.
+        const paidByKitchen = result.pricing != null;
+        if (paidByKitchen) sellerDeliveryCharge += result.fee;
+        else total += result.fee;
         if (result.fee > 0) {
           deliveryFeeBreakdown.push({
             sellerId: seller.id,
             fee: result.fee,
-            provider: seller.deliveryProvider === 'self' ? 'self' : 'platform',
+            provider: paidByKitchen ? 'platform' : 'self',
+            paidBy: paidByKitchen ? 'seller' : 'customer',
           });
         }
       }
@@ -571,6 +580,7 @@ export class OrderService {
           handoverCode: newHandoverCode(),
           subtotal,
           deliveryFee,
+          sellerDeliveryCharge,
           deliveryFeeBreakdown: deliveryFeeBreakdown as any,
           deliveryProvider,
           discountAmount,

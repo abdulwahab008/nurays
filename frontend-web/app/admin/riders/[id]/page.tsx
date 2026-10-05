@@ -25,6 +25,7 @@ interface RiderMoneyDetail extends RiderMoneySummary {
     totalDeliveries: number;
     ratingAverage: number;
     cashLimitIsDefault: boolean;
+    communityId?: string | null;
   };
   entries: RiderLedgerEntry[];
   pagination: { page: number; totalPages: number; total: number };
@@ -53,6 +54,8 @@ export default function AdminRiderMoneyPage() {
   const [adjAmount, setAdjAmount] = useState('');
   const [adjNote, setAdjNote] = useState('');
   const [limit, setLimit] = useState('');
+  const [communities, setCommunities] = useState<Array<{ id: string; name: string }>>([]);
+  const [communityId, setCommunityId] = useState('');
 
   const load = useCallback(async () => {
     try {
@@ -63,6 +66,7 @@ export default function AdminRiderMoneyPage() {
       setEntries(d.entries);
       setPage(1);
       setLimit(d.rider.cashLimitIsDefault ? '' : String(d.cashLimit));
+      setCommunityId(d.rider.communityId ?? '');
     } catch (error) {
       setLoadError(apiErrorMessage(error, 'Failed to load this rider'));
     }
@@ -71,6 +75,13 @@ export default function AdminRiderMoneyPage() {
   useEffect(() => {
     load();
   }, [load]);
+
+  useEffect(() => {
+    apiClient
+      .get('/admin/communities')
+      .then((res) => setCommunities((res.data.data ?? []).map((c: { id: string; name: string }) => ({ id: c.id, name: c.name }))))
+      .catch(() => {});
+  }, []);
 
   const loadMore = async () => {
     try {
@@ -314,6 +325,30 @@ export default function AdminRiderMoneyPage() {
               >
                 {busy === 'adjust' ? 'Recording…' : 'Record correction'}
               </Button>
+            </section>
+
+            <section className="bg-white border border-gray-200 rounded-lg p-5 space-y-3">
+              <h2 className="font-bold text-gray-900">Community served</h2>
+              <p className="text-xs text-gray-500">
+                New delivery jobs in or from this community are assigned to this rider first (a rider with room, nearest to a trip they already carry first).
+              </p>
+              <div className="flex gap-2">
+                <select value={communityId} onChange={(e) => setCommunityId(e.target.value)} className="flex-1 px-3 py-2 rounded-lg border border-gray-200 text-sm" data-testid="admin-rider-community">
+                  <option value="">No community (any job)</option>
+                  {communities.map((c) => (
+                    <option key={c.id} value={c.id}>{c.name}</option>
+                  ))}
+                </select>
+                <Button
+                  variant="outline"
+                  disabled={busy !== null}
+                  onClick={() =>
+                    submit('community', () => apiClient.patch(`/admin/riders/${riderId}/community`, { communityId: communityId || null }), 'Community updated', () => {})
+                  }
+                >
+                  {busy === 'community' ? 'Saving…' : 'Save'}
+                </Button>
+              </div>
             </section>
 
             <section className="bg-white border border-gray-200 rounded-lg p-5 space-y-3">

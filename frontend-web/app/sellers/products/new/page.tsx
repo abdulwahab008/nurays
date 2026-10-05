@@ -9,6 +9,7 @@ import { useToast } from '@/components/ui/toast';
 import { useAuthStore } from '@/lib/store/auth-store';
 import { apiClient } from '@/lib/api-client';
 import { CategoryRequestModal } from '@/components/CategoryRequestModal';
+import MenuTypeField, { DEFAULT_MENU, MenuValue, menuError, menuPayload } from '@/components/sellers/MenuTypeField';
 
 const sidebarItems = SELLER_SIDEBAR_ITEMS;
 
@@ -72,6 +73,7 @@ export default function AddProductPage() {
   }>>([]);
   
   // Simple form data
+  const [menu, setMenu] = useState<MenuValue>(DEFAULT_MENU);
   const [formData, setFormData] = useState({
     name: '',
     nameUrdu: '',
@@ -350,6 +352,11 @@ export default function AddProductPage() {
       showToast('Please enter product name', 'error');
       return;
     }
+    const menuProblem = menuError(menu);
+    if (menuProblem) {
+      showToast(menuProblem, 'error');
+      return;
+    }
     if (!formData.categoryId) {
       showToast('Please select a category', 'error');
       return;
@@ -413,6 +420,7 @@ export default function AddProductPage() {
         ingredients: formData.ingredients?.trim() || undefined,
         dietaryInfo: formData.isHalal ? ['Halal'] : [],
         images: imageUrls,
+        ...menuPayload(menu),
       };
 
       console.log('Sending product data:', productData);
@@ -1473,6 +1481,8 @@ export default function AddProductPage() {
                 ))}
               </div>
             </div>
+
+            <MenuTypeField value={menu} onChange={setMenu} />
 
             {/* Price Preview */}
             {formData.price && (

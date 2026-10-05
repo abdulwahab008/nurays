@@ -1,5 +1,5 @@
 import prisma from '../config/database';
-import { selfDeliveryFeeFor } from '../utils/deliveryEarnings';
+import { selfDeliveryFeeFor, sellerPaidDeliveryFor } from '../utils/deliveryEarnings';
 import { collectorOf } from '../utils/paymentCustody';
 
 type Tx = Parameters<Parameters<typeof prisma.$transaction>[0]>[0];
@@ -18,6 +18,11 @@ export interface SellerBalance {
    * when the platform owes them on those orders (e.g. a discount the platform funded).
    */
   sellerOwesPlatform: number;
+  /**
+   * The seller's share of cash orders whose cash a Nuray rider still holds. It becomes
+   * withdrawable (moves into platformOwesSeller) as the rider hands the cash in.
+   */
+  awaitingRiderCash: number;
   /** Payouts completed. */
   paidOut: number;
   /** Payouts requested and not yet completed. */
@@ -35,7 +40,9 @@ export interface SellerBalance {
  * when they deliver it themselves. Only a delivered order that is still paid
  * earns E; a cancelled or fully refunded one earns nothing.
  *
- *  - platform / rider collected: the platform owes the seller E.
+ *  - platform collected: the platform owes the seller E.
+ *  - rider collected: the platform owes the seller E once the rider has handed that cash in;
+ *    until then it is shown as awaitingRiderCash.
  *  - seller collected (they hold the full total T): the seller owes T - E. That
  *    covers commission, the platform delivery fee and tax, and also any refund the
  *    platform sent the customer, so the platform is never out of pocket for money
@@ -44,6 +51,38 @@ export interface SellerBalance {
  * Orders can only have one seller now; for older multi-seller orders the money
  * went to the first item's seller, who therefore owes the others' share.
  */
+/**
+ * Which cash orders a rider has handed the money in for. Cash handed in is counted against the
+ * rider's cash orders oldest first, so an order is covered once the deposits reach it.
+ * Returns the order ids that are covered; an order with no cash entry (old data) counts as covered.
+ */
+async function ordersWithCashHandedIn(client: Client, orderIds: string[]): Promise<Set<string>> {
+  const covered = new Set(orderIds);
+  if (orderIds.length === 0) return covered;
+  const mine = await client.riderLedgerEntry.findMany({
+    where: { orderId: { in: orderIds }, type: 'cod_collected' },
+    select: { riderId: true },
+    distinct: ['riderId'],
+  });
+  for (const { riderId } of mine) {
+    const [collected, deposits] = await Promise.all([
+      client.riderLedgerEntry.findMany({
+        where: { riderId, type: 'cod_collected' },
+        select: { orderId: true, amount: true },
+        orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+      }),
+      client.riderLedgerEntry.aggregate({ where: { riderId, type: 'cash_deposit' }, _sum: { amount: true } }),
+    ]);
+    const deposited = Number(deposits._sum.amount ?? 0);
+    let running = 0;
+    for (const entry of collected) {
+      running += Math.abs(Number(entry.amount));
+      if (entry.orderId && running > deposited + 0.005) covered.delete(entry.orderId);
+    }
+  }
+  return covered;
+}
+
 export async function computeSellerBalance(client: Client, sellerId: string): Promise<SellerBalance> {
   const orders = await client.order.findMany({
     where: {
@@ -74,7 +113,13 @@ export async function computeSellerBalance(client: Client, sellerId: string): Pr
     },
   });
 
+  const cashByRider = orders
+    .filter((o) => (o.orderStatus === 'delivered' || o.orderStatus === 'completed') && o.paymentStatus === 'paid' && collectorOf(o) === 'rider')
+    .map((o) => o.id);
+  const cashHandedIn = await ordersWithCashHandedIn(client, cashByRider);
+
   let totalEarnings = 0;
+  let awaitingRiderCash = 0;
   let platformOwesSeller = 0;
   let sellerOwesPlatform = 0;
 
@@ -84,12 +129,14 @@ export async function computeSellerBalance(client: Client, sellerId: string): Pr
     const entitlement = earned
       ? o.items
           .filter((i) => i.sellerId === sellerId && i.status !== 'cancelled')
-          .reduce((sum, i) => sum + Number(i.sellerPayout), 0) + selfDeliveryFeeFor(o.deliveryFeeBreakdown, sellerId)
+          .reduce((sum, i) => sum + Number(i.sellerPayout), 0) + selfDeliveryFeeFor(o.deliveryFeeBreakdown, sellerId) - sellerPaidDeliveryFor(o.deliveryFeeBreakdown, sellerId)
       : 0;
     if (earned) totalEarnings += entitlement;
 
     if (collectorOf(o) !== 'seller') {
-      platformOwesSeller += entitlement;
+      // A rider's cash order is paid out once the rider has handed that cash in.
+      if (earned && collectorOf(o) === 'rider' && !cashHandedIn.has(o.id)) awaitingRiderCash += entitlement;
+      else platformOwesSeller += entitlement;
       continue;
     }
 
@@ -120,6 +167,7 @@ export async function computeSellerBalance(client: Client, sellerId: string): Pr
     totalEarnings: money(totalEarnings),
     platformOwesSeller: money(platformOwesSeller),
     sellerOwesPlatform: money(sellerOwesPlatform),
+    awaitingRiderCash: money(awaitingRiderCash),
     paidOut: money(paidOut),
     pendingPayout: money(pendingPayout),
     available: money(platformOwesSeller - sellerOwesPlatform - paidOut - pendingPayout),

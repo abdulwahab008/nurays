@@ -57,6 +57,7 @@ import supportRoutes from './routes/support.routes';
 import uploadRoutes from './routes/upload.routes';
 import communityRoutes from './routes/community.routes';
 import favoriteRoutes from './routes/favorite.routes';
+import { dispatchWaiting } from './services/dispatch.service';
 
 const app = express();
 const httpServer = createServer(app);
@@ -153,6 +154,7 @@ httpServer.listen(PORT, () => {
   // Hub batches past their expiry stop showing as available.
   scheduleJob('hub-expiry', 60 * 60 * 1000, () => hubService.expireStaleBatches());
   // Orders nobody is moving forward release their stock and the customer's money.
+  scheduleJob('dispatch-waiting', 60 * 1000, () => dispatchWaiting());
   scheduleJob('stale-orders', 2 * 60 * 1000, () => sweepStaleOrders());
   // Old one-time codes and used / expired reset tokens.
   scheduleJob('purge-expired-secrets', 6 * 60 * 60 * 1000, () => purgeExpiredSecrets());

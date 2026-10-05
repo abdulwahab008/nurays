@@ -303,6 +303,7 @@ export async function riderMoneyForAdmin(riderId: string, page = 1) {
       totalDeliveries: rider.totalDeliveries,
       ratingAverage: Number(rider.ratingAverage),
       cashLimitIsDefault: rider.cashLimit == null,
+      communityId: rider.communityId,
     },
     ...summary,
     ...history,

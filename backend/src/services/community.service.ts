@@ -1,6 +1,7 @@
 import prisma from '../config/database';
 import { AppError } from '../middleware/errorHandler';
 import { haversineKm } from '../utils/deliveryFee';
+import { onMenuWhere } from '../utils/menu';
 
 export class CommunityService {
   /**
@@ -72,7 +73,7 @@ export class CommunityService {
               },
             },
             products: {
-              where: { isActive: true, approvalStatus: 'approved' },
+              where: { isActive: true, approvalStatus: 'approved', ...onMenuWhere() },
               select: {
                 id: true,
                 name: true,
