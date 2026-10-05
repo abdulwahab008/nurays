@@ -2,6 +2,8 @@ import { Request, Response } from 'express';
 import authService from '../services/auth.service';
 import googleAuthService from '../services/google-auth.service';
 import { AppError } from '../middleware/errorHandler';
+import prisma from '../config/database';
+import { recordAudit } from '../middleware/audit';
 
 export const requestOTP = async (req: Request, res: Response) => {
   const { phone, purpose } = req.body;
@@ -159,9 +161,12 @@ export const loginWithGoogle = async (req: Request, res: Response) => {
   });
 };
 
-export const logout = async (_req: Request, res: Response) => {
-  // In a stateless JWT system, logout is handled client-side
-  // You can implement token blacklisting here if needed
+export const logout = async (req: Request, res: Response) => {
+  // An admin's logout ends every session they have: a stolen token stops working at once.
+  if (req.user?.userType === 'admin') {
+    await prisma.user.update({ where: { id: req.user.userId }, data: { tokensValidAfter: new Date() } });
+    void recordAudit({ userId: req.user.userId, action: 'auth:LOGOUT', entityType: 'user', entityId: req.user.userId, ipAddress: req.ip, responseStatus: 200 });
+  }
 
   res.status(200).json({
     success: true,

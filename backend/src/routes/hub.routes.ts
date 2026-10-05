@@ -12,6 +12,7 @@ import {
 } from '../controllers/hub.controller';
 import { NextFunction, Request, Response } from 'express';
 import { authenticate, authorize } from '../middleware/auth.middleware';
+import { auditWrites } from '../middleware/audit';
 import { validate } from '../middleware/validation.middleware';
 import hubService from '../services/hub.service';
 import { hubsManagedBy } from '../services/admin-places.service';
@@ -34,7 +35,7 @@ const hubAccess = (req: Request, _res: Response, next: NextFunction) => {
 };
 
 // Hub operations & admin routes
-const ops = [authenticate, authorize('admin', 'hub_manager'), hubAccess];
+const ops = [authenticate, authorize('admin', 'hub_manager'), auditWrites('hub'), hubAccess];
 router.get('/:id/stats', ...ops, getHubStats);
 router.get('/:id/batches', ...ops, getHubBatches);
 router.post('/:id/intake', ...ops, validate(batchIntakeSchema), recordBatchIntake);
@@ -43,6 +44,6 @@ router.post('/:id/temperature-logs', ...ops, validate(temperatureProbeSchema), r
 router.get('/:id/temperature-logs', ...ops, getTemperatureLogs);
 
 // Admin: assign (or clear) a hub's manager
-router.put('/:id/manager', authenticate, authorize('admin'), validate(assignManagerSchema), assignHubManager);
+router.put('/:id/manager', authenticate, authorize('admin'), auditWrites('admin'), validate(assignManagerSchema), assignHubManager);
 
 export default router;

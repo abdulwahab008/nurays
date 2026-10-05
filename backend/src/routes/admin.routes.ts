@@ -15,6 +15,7 @@ import {
   getPendingRiders,
   approveRejectRider,
   getAuditLogs,
+  exportAuditLogs,
 } from '../controllers/admin.controller';
 import {
   getRidersMoney,
@@ -48,7 +49,7 @@ import {
   deletePlatformPromotion,
 } from '../controllers/admin-tools.controller';
 import { createPromotionSchema, updatePromotionSchema } from '../validators/promotion.validator';
-import { auditWrites } from '../middleware/audit';
+import { auditDenied, auditWrites } from '../middleware/audit';
 import { adminGetTickets, adminGetTicketDetail, adminReplyToTicket } from '../controllers/support.controller';
 import { authenticate, authorize } from '../middleware/auth.middleware';
 import { validate } from '../middleware/validation.middleware';
@@ -79,11 +80,13 @@ import { adminReplySchema } from '../validators/support.validator';
 const router = Router();
 
 // All routes require admin authentication
+router.use(auditDenied('admin'));
 router.use(authenticate);
 router.use(authorize('admin'));
 router.use(auditWrites('admin'));
 
 router.get('/audit-logs', getAuditLogs);
+router.get('/audit-logs/export', exportAuditLogs);
 
 // Get pending sellers
 router.get('/pending-sellers', getPendingSellers);

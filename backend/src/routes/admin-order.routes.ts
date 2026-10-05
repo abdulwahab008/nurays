@@ -26,11 +26,12 @@ import {
   confirmTransferSchema,
 } from '../validators/admin-order.validator';
 import { authenticate, authorize } from '../middleware/auth.middleware';
-import { auditWrites } from '../middleware/audit';
+import { auditDenied, auditWrites } from '../middleware/audit';
 
 const router = Router();
 
 // All admin order routes require authentication and admin role
+router.use(auditDenied('admin'));
 router.use(authenticate);
 router.use(authorize('admin'));
 router.use(auditWrites('admin'));

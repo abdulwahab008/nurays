@@ -21,5 +21,7 @@ export const addMessageSchema = z.object({
 export const adminReplySchema = z.object({
   message: z.string().min(1, 'Message cannot be empty'),
   status: z.enum(['open', 'in_progress', 'resolved', 'closed']).optional(),
+  // An internal note is only seen by admins; a normal reply is sent to the customer.
+  internal: z.boolean().optional(),
 });
 

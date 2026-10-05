@@ -123,6 +123,18 @@ export class AdminService {
       });
     }
 
+    void notify({
+      userId: seller.userId,
+      category: 'orders',
+      type: 'account',
+      title: approved ? 'Your kitchen was approved' : 'Your kitchen application was not approved',
+      message: approved ? 'You can now list dishes and take orders.' : `Reason: ${notes || 'Application rejected'}`,
+      actionUrl: '/sellers/dashboard',
+      data: { sellerId },
+      channels: ['push', 'email'],
+      dedupeKey: `seller-review:${sellerId}:${approved ? 'approved' : 'rejected'}`,
+    });
+
     return {
       sellerId: updatedSeller.id,
       verificationStatus: updatedSeller.verificationStatus,
@@ -379,6 +391,18 @@ export class AdminService {
       },
     });
 
+    void notify({
+      userId: rider.userId,
+      category: 'deliveries',
+      type: 'account',
+      title: approved ? 'Your rider application was approved' : 'Your rider application was not approved',
+      message: approved ? 'You can go on duty and take deliveries.' : `Reason: ${reason || 'Application rejected'}. You can fix it and apply again.`,
+      actionUrl: '/riders/dashboard',
+      data: { riderId },
+      channels: ['push', 'email'],
+      dedupeKey: `rider-review:${riderId}:${approved ? 'approved' : 'rejected'}`,
+    });
+
     return {
       riderId: updated.id,
       verificationStatus: updated.verificationStatus,
@@ -400,6 +424,18 @@ export class AdminService {
     const updated = await prisma.seller.update({
       where: { id: sellerId },
       data: { status },
+    });
+
+    void notify({
+      userId: seller.userId,
+      category: 'orders',
+      type: 'account',
+      title: status === 'suspended' ? 'Your kitchen was suspended' : 'Your kitchen is active again',
+      message: status === 'suspended' ? 'Your dishes are hidden and you cannot take new orders. Contact support for details.' : 'You can take orders again.',
+      actionUrl: '/sellers/dashboard',
+      data: { sellerId },
+      channels: ['push', 'email'],
+      dedupeKey: `seller-status:${sellerId}:${status}:${Date.now()}`,
     });
 
     return {

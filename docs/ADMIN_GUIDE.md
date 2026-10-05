@@ -153,7 +153,7 @@ Create a code: code (upper-case, no spaces), name for your records, % off or Rs 
 
 ## Support
 
-`/admin/support`. Customer support tickets; filter open, in progress, resolved, closed, all. Open a ticket to read the conversation, then reply and choose the status to set with the reply. Replying assigns the ticket to you; setting "resolved" records the time.
+`/admin/support`. Customer support tickets; filter open, in progress, resolved, closed, all. Search by subject, ticket number, order number or customer, and filter by priority. Open a ticket to read the conversation (it links to the order). Reply and choose the status to set with the reply: the customer is notified of every reply. Tick **Internal note** to write a note only admins see (shown in amber); status changes are kept in the history as internal lines. Replying assigns the ticket to you; setting "resolved" records the time. The order page shows the complaints raised on that order.
 
 ## Analytics
 
@@ -161,7 +161,9 @@ Create a code: code (upper-case, no spaces), name for your records, % off or Rs 
 
 ## Audit log
 
-`/admin/audit-log`. Every change made in the admin console, including attempts that were refused: who, what action on which record, the fields they sent (passwords, codes and tokens are redacted) and the outcome. Reading screens is not logged. Filter by area (orders, refunds, riders, kitchens, people, payouts, hubs, communities, promo codes, settings) or by a record id (for example an order id).
+`/admin/audit-log`. Every change made in the admin console, including attempts that were refused: who, what action on which record, the fields they sent (passwords, codes and tokens are redacted) and the outcome. Reading screens is not logged. Filter by area (orders, refunds, riders, kitchens, people, payouts, hubs, communities, promo codes, settings, support, categories, refused access, sign-ins), by a record id (for example an order id), by date range and by result (done or refused). **Export CSV** downloads what the filters show (at most 5,000 rows); the export is itself logged. Refused attempts at the admin area and admin sign-ins, wrong passwords, lockouts and logouts are recorded too. Rows cannot be edited or deleted.
+
+An order's page has an **Investigation** section: the rider and their phone, complaints on the order, payment attempts, wallet movements, ledger and rider-ledger entries, and every admin action taken on it. The status history names who made each change.
 
 ## Settings
 

@@ -31,10 +31,14 @@ const AREAS = [
   ['communities', 'Communities'],
   ['promotions', 'Promo codes'],
   ['settings', 'Settings'],
+  ['support', 'Support'],
+  ['categories', 'Categories'],
+  ['access', 'Refused access'],
+  ['user', 'Sign-ins'],
 ] as const;
 
 /** "admin:POST /riders/:id/payouts" -> "POST riders/:id/payouts" */
-const describe = (action: string) => action.replace(/^admin:/, '').replace(' /', ' ');
+const describe = (action: string) => action.replace(/^(admin|hub|admin-as-seller):/, (m) => (m === 'admin:' ? '' : m)).replace(' /', ' ');
 
 /** Every change an admin made: who, what, on which record, with what, and whether it worked. */
 export default function AdminAuditLogPage() {
@@ -44,6 +48,9 @@ export default function AdminAuditLogPage() {
   const [area, setArea] = useState('');
   const [entityId, setEntityId] = useState('');
   const [query, setQuery] = useState('');
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
+  const [result, setResult] = useState('');
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [open, setOpen] = useState<string | null>(null);
@@ -52,7 +59,7 @@ export default function AdminAuditLogPage() {
     try {
       setLoading(true);
       const res = await apiClient.get('/admin/audit-logs', {
-        params: { entityType: area || undefined, entityId: query || undefined, page, limit: 50 },
+        params: { entityType: area || undefined, entityId: query || undefined, dateFrom: dateFrom || undefined, dateTo: dateTo ? `${dateTo}T23:59:59` : undefined, result: result || undefined, page, limit: 50 },
       });
       setEntries(res.data.data.logs);
       setTotalPages(res.data.data.pagination.totalPages || 1);
@@ -61,7 +68,21 @@ export default function AdminAuditLogPage() {
     } finally {
       setLoading(false);
     }
-  }, [area, query, page, showToast]);
+  }, [area, query, dateFrom, dateTo, result, page, showToast]);
+
+  const exportCsv = async () => {
+    try {
+      const res = await apiClient.get('/admin/audit-logs/export', { params: { entityType: area || undefined, entityId: query || undefined, dateFrom: dateFrom || undefined, dateTo: dateTo ? `${dateTo}T23:59:59` : undefined, result: result || undefined }, responseType: 'blob' });
+      const url = URL.createObjectURL(res.data);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'audit-log.csv';
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      showToast(apiErrorMessage(error, 'Could not export the audit log'), 'error');
+    }
+  };
 
   useEffect(() => {
     load();
@@ -102,6 +123,23 @@ export default function AdminAuditLogPage() {
               Filter
             </Button>
           </form>
+        </div>
+
+        <div className="flex flex-wrap items-end gap-3 text-sm">
+          <label className="flex flex-col text-xs text-gray-500">From
+            <input type="date" value={dateFrom} onChange={(e) => { setDateFrom(e.target.value); setPage(1); }} className="px-2 py-1.5 rounded-lg border border-gray-200 text-sm text-gray-900" data-testid="audit-from" />
+          </label>
+          <label className="flex flex-col text-xs text-gray-500">To
+            <input type="date" value={dateTo} onChange={(e) => { setDateTo(e.target.value); setPage(1); }} className="px-2 py-1.5 rounded-lg border border-gray-200 text-sm text-gray-900" data-testid="audit-to" />
+          </label>
+          <label className="flex flex-col text-xs text-gray-500">Result
+            <select value={result} onChange={(e) => { setResult(e.target.value); setPage(1); }} className="px-2 py-1.5 rounded-lg border border-gray-200 text-sm text-gray-900" data-testid="audit-result">
+              <option value="">All</option>
+              <option value="ok">Done</option>
+              <option value="refused">Refused</option>
+            </select>
+          </label>
+          <Button type="button" variant="outline" size="sm" onClick={exportCsv} data-testid="audit-export">Export CSV</Button>
         </div>
 
         <div className="bg-white border border-gray-200 rounded-lg overflow-x-auto">

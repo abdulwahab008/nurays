@@ -141,12 +141,36 @@ code locks (423) and an admin has to complete the handover.
 
 ## Audit log
 
-`middleware/audit.ts`, applied to `admin.routes.ts` and `admin-order.routes.ts`. Every non-GET request there is
-written to `audit_logs` after the response: user, action (`admin:METHOD /path`), entity id, IP, user agent, the
-request body (secret-looking fields such as passwords, tokens and codes redacted; strings truncated; nested depth
-and key counts capped) and the response status, including failed attempts. Reads are not logged. Admin actions
-exposed elsewhere (for example hub-manager assignment, `PUT /hubs/:id/manager`) are not part of this log. Admins can
-read it in the admin area.
+`middleware/audit.ts`. Every non-GET request on the admin routers, and on the other routes an admin can use
+(categories, category requests, hub operations and hub manager assignment, deleting product images, and an admin
+acting as a kitchen on `/seller/orders/*`), is written to `audit_logs` after the response: user, action
+(`admin:METHOD /path`, or `hub:`, `admin-as-seller:`), entity id, IP, user agent, the request body (secret-looking
+fields such as passwords, tokens and codes redacted; strings truncated; nested depth and key counts capped) and the
+response status, including failed attempts.
+
+Also recorded:
+
+- **Refused access** to the admin area (no token, bad token, or not an admin): `admin:DENIED METHOD /path`, with the
+  user if there was one.
+- **Admin sign-in events**: `auth:LOGIN`, `auth:LOGIN_FAILED`, `auth:LOGIN_LOCKED`, `auth:LOGIN_REFUSED_OTP`,
+  `auth:LOGOUT`.
+- **Exports of the audit log itself** (`admin:EXPORT audit-logs`).
+
+**Append-only.** A database trigger (migration `audit_log_append_only`) refuses every UPDATE and DELETE on
+`audit_logs`, including from the application's own database user. The one allowed change is detaching an account's
+rows (`user_id` set to NULL) when that account is deleted. Rows are written after the response, outside the
+mutation's transaction, so a crash in between can lose a row. Reads are not logged.
+
+Admins read and filter it (area, record id, date range, result) and export a CSV (at most 5,000 rows) from the admin
+area.
+
+## Admin accounts
+
+Admin accounts are created out of band (`scripts/create-admin.js`), never through registration. They sign in with
+**email and password only**: SMS-code login and Google sign-in are refused (`ADMIN_PASSWORD_ONLY`). After **5 wrong
+passwords** the account is locked for 15 minutes (`ACCOUNT_LOCKED`, counted from the audit log). **Logging out ends
+every session** the admin has (`tokensValidAfter`). Every admin has the same permissions; there are no roles,
+second approvals or two-factor codes yet (see Limitations).
 
 ## Secrets and configuration
 
@@ -197,5 +221,5 @@ anything else: orders, ledger entries, chat, uploaded documents and receipts are
 - **Legacy public files.** Receipts and chat media uploaded before the storage layer sit under `/uploads` and are
   public by URL; new ones are private. `backend/scripts/migrate-private-uploads.ts` exists for moving them.
 - **`create-admin.js` prints the password it was given** and, for an existing email, resets that account's password.
-- **The audit log covers the two admin routers only**, not other privileged actions.
+- **All admins are equal.** There are no separate roles (finance, support), no limits or second approval on refunds, payouts and rider corrections, and no two-factor sign-in. Reading screens (customer details, payment proofs, rider money) is not logged.
 - **The frontend stores tokens in browser storage** like most SPAs, so an XSS bug would expose them.

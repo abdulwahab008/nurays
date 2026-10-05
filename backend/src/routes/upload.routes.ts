@@ -10,6 +10,7 @@ import {
 } from '../controllers/upload.controller';
 import { imageUpload, singleFileUpload, documentUpload } from '../services/upload.service';
 import { authenticate, authorize } from '../middleware/auth.middleware';
+import { auditWrites } from '../middleware/audit';
 import { uploadLimiter } from '../middleware/rateLimiter';
 
 const router = Router();
@@ -18,8 +19,8 @@ router.use(authenticate);
 
 // Product images (up to 4), sellers only
 router.post('/product-images', authorize('seller'), uploadLimiter, imageUpload.array('images', 4), uploadProductImages);
-router.delete('/product-images', authorize('seller', 'admin'), deleteProductImage);
-router.delete('/product-images/:filename', authorize('seller', 'admin'), deleteProductImage);
+router.delete('/product-images', authorize('seller', 'admin'), auditWrites('admin', { onlyAdmins: true }), deleteProductImage);
+router.delete('/product-images/:filename', authorize('seller', 'admin'), auditWrites('admin', { onlyAdmins: true }), deleteProductImage);
 
 // Payment receipt (customers paying by transfer)
 router.post('/payment-proof', uploadLimiter, singleFileUpload.single('proof'), uploadPaymentProof);

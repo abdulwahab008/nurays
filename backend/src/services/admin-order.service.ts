@@ -89,17 +89,11 @@ export class AdminOrderService {
         where: { userId: filters.sellerId },
       });
 
-      if (seller) {
-        const orderIds = await prisma.orderItem.findMany({
-          where: { sellerId: seller.id },
-          select: { orderId: true },
-          distinct: ['orderId'],
-        });
-
-        where.id = {
-          in: orderIds.map((item) => item.orderId),
-        };
-      }
+      // An unknown seller filters to nothing (it used to be ignored, listing every order).
+      const orderIds = seller
+        ? await prisma.orderItem.findMany({ where: { sellerId: seller.id }, select: { orderId: true }, distinct: ['orderId'] })
+        : [];
+      where.id = { in: orderIds.map((item) => item.orderId) };
     }
 
     const [orders, total] = await Promise.all([
@@ -266,9 +260,34 @@ export class AdminOrderService {
       throw new AppError('Order not found', 404, 'ORDER_NOT_FOUND');
     }
 
+    // Everything else that happened around this order, for investigating a complaint or a dispute.
+    const actorIds = [...new Set(order.statusHistory.map((h) => h.changedBy).filter((id): id is string => !!id))];
+    const [actors, riderUser, paymentAttempts, walletTransactions, ledgerEntries, riderLedgerEntries, tickets, adminActions] = await Promise.all([
+      actorIds.length ? prisma.user.findMany({ where: { id: { in: actorIds } }, select: { id: true, userType: true, email: true, profile: { select: { fullName: true } } } }) : Promise.resolve([]),
+      order.delivery?.rider ? prisma.rider.findUnique({ where: { id: order.delivery.rider.id }, select: { vehicleType: true, vehicleNumber: true, userId: true } }) : Promise.resolve(null),
+      prisma.paymentAttempt.findMany({ where: { orderId }, orderBy: { createdAt: 'asc' }, select: { id: true, gateway: true, tracker: true, amount: true, status: true, settledVia: true, paidAt: true, createdAt: true } }),
+      prisma.walletTransaction.findMany({ where: { orderId }, orderBy: { createdAt: 'asc' }, select: { id: true, transactionType: true, amount: true, status: true, description: true, createdAt: true } }),
+      prisma.ledgerEntry.findMany({ where: { orderId }, orderBy: { createdAt: 'asc' }, select: { id: true, transactionType: true, accountType: true, entryType: true, amount: true, description: true, createdAt: true } }),
+      prisma.riderLedgerEntry.findMany({ where: { orderId }, orderBy: { createdAt: 'asc' }, select: { id: true, type: true, amount: true, note: true, createdAt: true } }),
+      prisma.supportTicket.findMany({ where: { orderId }, orderBy: { createdAt: 'desc' }, select: { id: true, ticketNumber: true, subject: true, status: true, priority: true, createdAt: true } }),
+      prisma.auditLog.findMany({ where: { entityId: orderId }, orderBy: { createdAt: 'asc' }, take: 50, select: { id: true, action: true, responseStatus: true, requestData: true, createdAt: true, user: { select: { email: true, profile: { select: { fullName: true } } } } } }),
+    ]);
+    const riderPerson = riderUser ? await prisma.user.findUnique({ where: { id: riderUser.userId }, select: { phone: true, email: true, profile: { select: { fullName: true } } } }) : null;
+    const actorName = new Map(actors.map((a) => [a.id, `${a.profile?.fullName || a.email || a.id} (${a.userType})`]));
+
     return {
       ...order,
       paymentProofUrl: await presentFile(order.paymentProofUrl),
+      statusHistory: order.statusHistory.map((h) => ({ ...h, changedByName: h.changedBy ? actorName.get(h.changedBy) ?? null : null })),
+      investigation: {
+        rider: riderUser ? { name: riderPerson?.profile?.fullName ?? null, phone: realPhoneOrNull(riderPerson?.phone), email: riderPerson?.email ?? null, vehicle: [riderUser.vehicleType, riderUser.vehicleNumber].filter(Boolean).join(' ') } : null,
+        paymentAttempts: paymentAttempts.map((a) => ({ ...a, amount: Number(a.amount) })),
+        walletTransactions: walletTransactions.map((w) => ({ ...w, amount: Number(w.amount) })),
+        ledgerEntries: ledgerEntries.map((l) => ({ ...l, amount: Number(l.amount) })),
+        riderLedgerEntries: riderLedgerEntries.map((l) => ({ ...l, amount: Number(l.amount) })),
+        supportTickets: tickets,
+        adminActions: adminActions.map((a) => ({ id: a.id, action: a.action, status: a.responseStatus, details: a.requestData, createdAt: a.createdAt, admin: a.user?.profile?.fullName || a.user?.email || null })),
+      },
       refunds: order.refunds.map((r) => ({ ...r, amount: Number(r.amount) })),
       subtotal: Number(order.subtotal),
       deliveryFee: Number(order.deliveryFee),
@@ -610,7 +629,7 @@ export class AdminOrderService {
    *     gateway dashboard until the refund API is wired up. Marking it as
    *     `refunded` here without moving cash would lie to customers.
    */
-  async processRefund(orderId: string, adminId: string, refundAmount?: number) {
+  async processRefund(orderId: string, adminId: string, refundAmount?: number, reason?: string) {
     const order = await prisma.order.findUnique({ where: { id: orderId } });
     if (!order) {
       throw new AppError('Order not found', 404, 'ORDER_NOT_FOUND');
@@ -625,7 +644,7 @@ export class AdminOrderService {
       throw new AppError('Cancel this order to refund it', 400, 'USE_CANCEL_ENDPOINT');
     }
 
-    const refund = refundAmount || Number(order.totalAmount);
+    const refund = refundAmount ?? Number(order.totalAmount);
     const orderTotal = Number(order.totalAmount);
     if (refund <= 0 || refund > orderTotal) {
       throw new AppError(
@@ -644,7 +663,7 @@ export class AdminOrderService {
     const issued = await prisma.$transaction(async (tx) => {
       const r = await issueRefund(tx, orderId, {
         amount: refund,
-        reason: 'Refund processed by admin',
+        reason: reason?.trim() ? `Refund processed by admin: ${reason.trim()}` : 'Refund processed by admin',
         createdBy: adminId,
       });
       if (!r) {
@@ -893,7 +912,12 @@ export class AdminOrderService {
         },
         {} as Record<string, number>
       ),
-      revenueByDay: revenueByDay,
+      // COUNT/SUM come back from raw SQL as BigInt/Decimal, which JSON cannot carry.
+      revenueByDay: (revenueByDay as Array<{ date: Date; orders: bigint | number; revenue: unknown }>).map((row) => ({
+        date: row.date instanceof Date ? row.date.toISOString().slice(0, 10) : String(row.date),
+        orders: Number(row.orders),
+        revenue: Number(row.revenue ?? 0),
+      })),
     };
   }
 

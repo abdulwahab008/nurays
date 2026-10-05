@@ -76,6 +76,9 @@ export class GoogleAuthService {
         if (user.status !== 'active') {
           throw new AppError('Account is not active', 403, 'ACCOUNT_NOT_ACTIVE');
         }
+        if (user.userType === 'admin') {
+          throw new AppError('Admin accounts sign in with email and password.', 403, 'ADMIN_PASSWORD_ONLY');
+        }
         // User exists, log them in
         // Since they're logging in with Google, their email is verified by Google
         // Update email verification status and last login

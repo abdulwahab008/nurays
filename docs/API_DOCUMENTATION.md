@@ -461,7 +461,7 @@ Outside the API rate limit (load balancers poll these).
 
 ## Admin: `/admin`
 
-Every route under `/admin` needs role `admin` (`admin.routes.ts`, `admin-order.routes.ts`). Both routers are mounted at `/admin`, and every non-GET request is written to the audit log (`middleware/audit.ts`): who, action, record, the body (with passwords, tokens and handover codes redacted) and the response status. Reads are not logged.
+Every route under `/admin` needs role `admin` (`admin.routes.ts`, `admin-order.routes.ts`). Both routers are mounted at `/admin`, and every non-GET request is written to the audit log (`middleware/audit.ts`): who, action, record, the body (with passwords, tokens and handover codes redacted) and the response status. Requests refused with 401/403 are logged as `admin:DENIED`. Reads are not logged. Admin-only routes elsewhere (categories, category requests, hub operations, an admin acting through `/seller/orders/*`) are logged too.
 
 ### Orders, refunds and analytics
 
@@ -563,15 +563,16 @@ Same body schemas as seller promotions (see Promotions), but the discount is pai
 
 | Method and path | Body / query | Returns |
 |---|---|---|
-| `GET /admin/support/tickets` | query `status`, `page`, `limit` | tickets with pagination |
-| `GET /admin/support/tickets/:id` | none | one ticket with messages |
-| `POST /admin/support/tickets/:id/reply` | `message` (min 1), optional `status` (`open` \| `in_progress` \| `resolved` \| `closed`) | 201 the ticket |
+| `GET /admin/support/tickets` | query `status`, `priority`, `assignedTo` (admin id or `unassigned`), `search` (subject, ticket number, order number, customer), `page`, `limit` | tickets with pagination (each with `orderNumber`, `assignedTo`) |
+| `GET /admin/support/tickets/:id` | none | one ticket with messages, including internal notes and status-change lines (`isInternal`) |
+| `POST /admin/support/tickets/:id/reply` | `message` (min 1), optional `status` (`open` \| `in_progress` \| `resolved` \| `closed`), optional `internal` (true: an admin-only note, the customer is not told and never sees it) | 201 the ticket. A normal reply notifies the customer |
 
 ### Audit log
 
 | Method and path | Query | Returns |
 |---|---|---|
-| `GET /admin/audit-logs` | `page`, `limit` (default 50, max 100), `entityType`, `entityId`, `userId`, `action` (contains, case-insensitive) | `{ logs: [{ id, action, entityType, entityId, responseStatus, requestData, ipAddress, createdAt, admin: { id, name, email } }], pagination }`, newest first |
+| `GET /admin/audit-logs/export` | the same filters | a CSV file (at most 5,000 rows); the export is logged |
+| `GET /admin/audit-logs` | `page`, `limit` (default 50, max 100), `entityType`, `entityId`, `userId`, `action` (contains, case-insensitive), `dateFrom`, `dateTo`, `result` (`ok` \| `refused`) | `{ logs: [{ id, action, entityType, entityId, responseStatus, requestData, ipAddress, createdAt, admin: { id, name, email } }], pagination }`, newest first |
 
 ## Limitations
 

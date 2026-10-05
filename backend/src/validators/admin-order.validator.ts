@@ -19,8 +19,8 @@ export const getAdminOrdersQuerySchema = z.object({
   paymentStatus: z.enum(['pending', 'paid', 'failed', 'refunded', 'refund_pending', 'payment_submitted', 'disputed']).optional(),
   customerId: z.string().uuid().optional(),
   sellerId: z.string().uuid().optional(),
-  dateFrom: z.string().optional(),
-  dateTo: z.string().optional(),
+  dateFrom: z.string().refine((d) => !Number.isNaN(Date.parse(d)), 'Invalid dateFrom').optional(),
+  dateTo: z.string().refine((d) => !Number.isNaN(Date.parse(d)), 'Invalid dateTo').optional(),
   orderNumber: z.string().optional(),
 });
 
@@ -46,6 +46,8 @@ export const cancelOrderSchema = z.object({
 
 export const processRefundSchema = z.object({
   refundAmount: z.number().positive().optional(),
+  // Why the refund is given; kept on the refund and in the audit log.
+  reason: z.string().trim().min(3).max(300).optional(),
 });
 
 export const completeRefundSchema = z.object({
@@ -63,8 +65,8 @@ export const listRefundsQuerySchema = z.object({
 });
 
 export const getAnalyticsQuerySchema = z.object({
-  dateFrom: z.string().optional(),
-  dateTo: z.string().optional(),
+  dateFrom: z.string().refine((d) => !Number.isNaN(Date.parse(d)), 'Invalid dateFrom').optional(),
+  dateTo: z.string().refine((d) => !Number.isNaN(Date.parse(d)), 'Invalid dateTo').optional(),
 });
 
 

@@ -7,6 +7,7 @@ import { randomBytes, createHash } from 'crypto';
 import otpService from './otp.service';
 import { queueVerificationEmail, queuePasswordResetEmail } from '../jobs/email.jobs';
 import adminService from './admin.service';
+import { recordAudit } from '../middleware/audit';
 import { generateVerificationToken } from '../utils/email-verification';
 
 /** A unique stand-in number for an account with no (or an evicted) real phone. Never a real number: +999 isn't assigned. */
@@ -16,6 +17,10 @@ const placeholderPhone = (seed: string): string =>
 
 /** A valid bcrypt hash of a random string, for equalising login timing when the account doesn't exist. */
 const DUMMY_PASSWORD_HASH = bcrypt.hashSync(randomBytes(16).toString('hex'), 10);
+
+/** An admin account is locked for a while after this many wrong passwords. */
+const ADMIN_MAX_FAILED_LOGINS = 5;
+const ADMIN_LOCK_MINUTES = 15;
 
 export class AuthService {
   /**
@@ -352,9 +357,24 @@ export class AuthService {
         throw new AppError('Password not set. Please use phone login or reset password', 400, 'PASSWORD_NOT_SET');
       }
 
+      // Admin accounts: locked after repeated wrong passwords (counted from the audit log).
+      const isAdmin = user.userType === 'admin';
+      if (isAdmin) {
+        const since = new Date(Date.now() - ADMIN_LOCK_MINUTES * 60 * 1000);
+        const lastOk = await prisma.auditLog.findFirst({ where: { action: 'auth:LOGIN', userId: user.id, createdAt: { gte: since } }, orderBy: { createdAt: 'desc' }, select: { createdAt: true } });
+        const failures = await prisma.auditLog.count({
+          where: { action: 'auth:LOGIN_FAILED', entityId: user.id, createdAt: { gte: lastOk?.createdAt ?? since } },
+        });
+        if (failures >= ADMIN_MAX_FAILED_LOGINS) {
+          void recordAudit({ action: 'auth:LOGIN_LOCKED', entityType: 'user', entityId: user.id, responseStatus: 429 });
+          throw new AppError(`Too many wrong passwords. This account is locked for ${ADMIN_LOCK_MINUTES} minutes.`, 429, 'ACCOUNT_LOCKED');
+        }
+      }
+
       // Verify password
       const isPasswordValid = await bcrypt.compare(otpCodeOrPassword, user.passwordHash);
       if (!isPasswordValid) {
+        if (isAdmin) await recordAudit({ action: 'auth:LOGIN_FAILED', entityType: 'user', entityId: user.id, responseStatus: 401 });
         throw new AppError('Invalid email or password', 401, 'INVALID_CREDENTIALS');
       }
 
@@ -383,6 +403,7 @@ export class AuthService {
         where: { id: user.id },
         data: { lastLoginAt: new Date() },
       });
+      if (isAdmin) await recordAudit({ userId: user.id, action: 'auth:LOGIN', entityType: 'user', entityId: user.id, responseStatus: 200 });
 
       return {
         user: {
@@ -427,6 +448,12 @@ export class AuthService {
 
       if (user.status !== 'active') {
         throw new AppError(`Account is ${user.status}`, 403, 'ACCOUNT_SUSPENDED');
+      }
+
+      // An SMS code (open to SIM swaps) is not enough for an admin account: password only.
+      if (user.userType === 'admin') {
+        void recordAudit({ action: 'auth:LOGIN_REFUSED_OTP', entityType: 'user', entityId: user.id, responseStatus: 403 });
+        throw new AppError('Admin accounts sign in with email and password.', 403, 'ADMIN_PASSWORD_ONLY');
       }
 
       // OTP proves the caller controls this number — but not that the ACCOUNT's owner does. If

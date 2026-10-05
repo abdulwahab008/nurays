@@ -20,12 +20,15 @@ import {
   deliveryFailedSchema,
 } from '../validators/seller-order.validator';
 import { authenticate, authorize, blockSuspendedSeller } from '../middleware/auth.middleware';
+import { auditWrites } from '../middleware/audit';
 
 const router = Router();
 
 // All seller order routes require authentication and seller or admin role
 router.use(authenticate);
 router.use(authorize('seller', 'admin'));
+// An admin acting as the kitchen on an order is recorded (a seller's own actions are not).
+router.use(auditWrites('admin-as-seller', { onlyAdmins: true }));
 router.use(blockSuspendedSeller);
 
 // Get seller orders

@@ -45,9 +45,64 @@ function routeParams(routePath: string, originalUrl: string): Record<string, str
   return params;
 }
 
-export function auditWrites(area: string) {
+/** Write one audit row. Never throws: an audit failure must not fail what it records. */
+export function recordAudit(entry: {
+  userId?: string | null;
+  action: string;
+  entityType?: string | null;
+  entityId?: string | null;
+  ipAddress?: string | null;
+  userAgent?: string | null;
+  data?: unknown;
+  responseStatus?: number | null;
+}) {
+  const body = entry.data && typeof entry.data === 'object' ? sanitize(entry.data) : undefined;
+  return prisma.auditLog
+    .create({
+      data: {
+        userId: entry.userId ?? null,
+        action: entry.action,
+        entityType: entry.entityType ?? null,
+        entityId: entry.entityId ?? null,
+        ipAddress: entry.ipAddress ?? null,
+        userAgent: entry.userAgent?.slice(0, 500) ?? null,
+        ...(body !== undefined ? { requestData: body as Prisma.InputJsonValue } : {}),
+        responseStatus: entry.responseStatus ?? null,
+      },
+    })
+    .catch((err) => logger.error({ err }, 'Could not write the audit log'));
+}
+
+/**
+ * Put first on an admin router, before authenticate: records a request refused with 401 or 403
+ * (no or bad token, or not an admin), so probing the admin area leaves a trail. Any method.
+ */
+export function auditDenied(area: string) {
+  return (req: Request, res: Response, next: NextFunction) => {
+    res.on('finish', () => {
+      if (res.statusCode !== 401 && res.statusCode !== 403) return;
+      const marked = req as Request & { auditRecorded?: boolean };
+      if (marked.auditRecorded) return;
+      marked.auditRecorded = true;
+      const path = req.originalUrl.split('?')[0];
+      void recordAudit({
+        userId: req.user?.userId ?? null,
+        action: `${area}:DENIED ${req.method} ${path}`,
+        entityType: 'access',
+        ipAddress: req.ip ?? null,
+        userAgent: req.get('user-agent'),
+        responseStatus: res.statusCode,
+      });
+    });
+    next();
+  };
+}
+
+export function auditWrites(area: string, opts: { onlyAdmins?: boolean } = {}) {
   return (req: Request, res: Response, next: NextFunction) => {
     if (req.method === 'GET' || req.method === 'HEAD' || req.method === 'OPTIONS') return next();
+    // Routes shared with other roles (a seller's orders, a hub's stock) record only an admin acting on them.
+    if (opts.onlyAdmins && req.user?.userType !== 'admin') return next();
     // Several admin routers share a mount point: a request passing through more than one is
     // still recorded once.
     const marked = req as Request & { auditRecorded?: boolean };
