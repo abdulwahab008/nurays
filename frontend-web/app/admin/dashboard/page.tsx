@@ -64,6 +64,12 @@ export default function AdminDashboardPage() {
       return;
     }
 
+    // The dashboard shows platform figures; staff without that access start at their approvals.
+    if (user?.permissions && !user.permissions.includes('read.finance')) {
+      router.replace('/admin/approvals');
+      return;
+    }
+
     loadDashboardData();
   }, [isAuthenticated, user, router]);
 

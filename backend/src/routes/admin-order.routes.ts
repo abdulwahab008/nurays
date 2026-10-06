@@ -27,6 +27,7 @@ import {
 } from '../validators/admin-order.validator';
 import { authenticate, authorize } from '../middleware/auth.middleware';
 import { auditDenied, auditWrites } from '../middleware/audit';
+import { enforceStaffPermissions } from '../middleware/staff';
 
 const router = Router();
 
@@ -34,6 +35,7 @@ const router = Router();
 router.use(auditDenied('admin'));
 router.use(authenticate);
 router.use(authorize('admin'));
+router.use(enforceStaffPermissions);
 router.use(auditWrites('admin'));
 
 // Get platform analytics

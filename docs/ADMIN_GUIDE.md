@@ -2,7 +2,19 @@
 
 For the people who run Nuray day to day. Every screen below lives under `/admin` (code: `frontend-web/app/admin/*`). All admin API routes require an admin account and every change (anything that is not a read) is written to the audit log. The numbers behind the rules mentioned here are in `BUSINESS_RULES.md`.
 
-Sign in at `/admin/login`. The menu on the left is the list of screens below, in the same order.
+Sign in at `/admin/login`. The menu on the left is the list of screens below, in the same order, limited to what your role may use.
+
+## Roles
+
+There is one **super admin** (full access). The super admin adds the other staff at `/admin/staff`: an **admin** (runs operations and money) or a **customer support** person (resolves complaints and looks things up; no money, no approvals, no settings, no audit log). Support staff start at Approvals and see only complaints and failed deliveries there. Details and the exact permissions: `SECURITY_AND_COMPLIANCE.md`, "Staff roles".
+
+### Staff: `/admin/staff` (super admin only)
+
+Add a person (name, email, role, first password of at least 12 characters that you give them yourself), change their role, suspend or reactivate, reset their password, or remove their staff access (the account becomes an ordinary customer account). Any of these signs them out immediately. The super admin row and your own row cannot be changed here.
+
+### Approvals: `/admin/approvals`
+
+One page for everything waiting on a decision, with how long the oldest has waited: kitchen applications, rider applications, new or changed dishes, category requests, payout requests, refunds, transfers to check, failed deliveries and complaints. A role sees only the queues it can act on. Admins and the super admin also get an in-app notification when a kitchen applies, a rider applies, a dish is added or changed, or a category is requested.
 
 ## Dashboard
 
@@ -58,7 +70,7 @@ New kitchens get the commission rate from Settings at the time they register (se
 
 ## Dishes (moderation)
 
-`/admin/products`. Every new dish starts as `pending` and is not visible to customers until approved. Filter: all, pending, approved, rejected.
+`/admin/products`. Every new dish starts as `pending` and is not visible to customers until approved. Filter: all, pending, approved, rejected. When a kitchen later changes what a dish *is* (name, description, category, type, ingredients, allergens, heating instructions, dietary tags or photos), it goes back to `pending` and off the store until staff approve again; price, stock and menu days are the kitchen's to change freely.
 
 - **Approve**: the dish becomes active and the kitchen is notified.
 - **Reject** (reason optional, defaults to "Product rejected"): the dish is switched off and the kitchen gets the reason by push.

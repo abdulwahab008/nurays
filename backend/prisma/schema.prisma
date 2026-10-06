@@ -24,6 +24,8 @@ model User {
   email         String?   @unique
   passwordHash  String?   @map("password_hash")
   userType      String    @map("user_type") // customer, seller, admin, hub_manager, rider
+  // Staff accounts are userType "admin" with a role: super_admin (exactly one), admin or support.
+  staffRole     String?   @map("staff_role")
   status        String    @default("active") // active, suspended, banned, deleted
   emailVerified Boolean   @default(false) @map("email_verified")
   // A phone only counts once its owner has proven it with an OTP. Defaulting to true let anyone

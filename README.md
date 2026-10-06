@@ -148,7 +148,7 @@ After `npm run seed:e2e`:
 | Customer | register at `/register` | works immediately |
 | Rider | register at `/register`, then fill in the rider application (vehicle, CNIC, licence photos) | needs admin approval at `/admin/riders` → Applications |
 | Hub manager | an admin assigns an existing account at `/admin/hubs/manage` | `/hub` |
-| Admin | none by default; create one with `node scripts/create-admin.js <email> <password> <name>` (from `backend/`) | http://localhost:3000/admin/login |
+| Super admin (the only one) | none by default; create it with `node scripts/create-admin.js <email> <password> <name>` (from `backend/`), then add admins and support staff at `/admin/staff` | http://localhost:3000/admin/login |
 
 See [`docs/ACCOUNT_CREDENTIALS.md`](docs/ACCOUNT_CREDENTIALS.md) for how each role is created and approved.
 

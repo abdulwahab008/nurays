@@ -50,6 +50,7 @@ import {
 } from '../controllers/admin-tools.controller';
 import { createPromotionSchema, updatePromotionSchema } from '../validators/promotion.validator';
 import { auditDenied, auditWrites } from '../middleware/audit';
+import { enforceStaffPermissions } from '../middleware/staff';
 import { adminGetTickets, adminGetTicketDetail, adminReplyToTicket } from '../controllers/support.controller';
 import { authenticate, authorize } from '../middleware/auth.middleware';
 import { validate } from '../middleware/validation.middleware';
@@ -66,6 +67,9 @@ import {
   riderAdjustmentSchema,
   riderCashLimitSchema,
   riderCommunitySchema,
+  createStaffSchema,
+  staffRoleSchema,
+  staffPasswordSchema,
   accountStatusSchema,
   hubManagerSchema,
   createCommunitySchema,
@@ -76,6 +80,7 @@ import {
   assignHubManagerSchema,
 } from '../validators/admin.validator';
 import { adminReplySchema } from '../validators/support.validator';
+import { getStaff, postStaff, patchStaffRole, postStaffStatus, postStaffPassword, deleteStaff, getApprovalQueues } from '../controllers/admin-staff.controller';
 
 const router = Router();
 
@@ -83,7 +88,16 @@ const router = Router();
 router.use(auditDenied('admin'));
 router.use(authenticate);
 router.use(authorize('admin'));
+router.use(enforceStaffPermissions);
 router.use(auditWrites('admin'));
+
+router.get('/approvals', getApprovalQueues);
+router.get('/staff', getStaff);
+router.post('/staff', validate(createStaffSchema), postStaff);
+router.patch('/staff/:id', validate(staffRoleSchema), patchStaffRole);
+router.post('/staff/:id/status', validate(accountStatusSchema), postStaffStatus);
+router.post('/staff/:id/password', validate(staffPasswordSchema), postStaffPassword);
+router.delete('/staff/:id', deleteStaff);
 
 router.get('/audit-logs', getAuditLogs);
 router.get('/audit-logs/export', exportAuditLogs);

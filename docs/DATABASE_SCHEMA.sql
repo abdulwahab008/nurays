@@ -17,6 +17,7 @@ CREATE TABLE "users" (
     "email" TEXT,
     "password_hash" TEXT,
     "user_type" TEXT NOT NULL,
+    "staff_role" TEXT,
     "status" TEXT NOT NULL DEFAULT 'active',
     "email_verified" BOOLEAN NOT NULL DEFAULT false,
     "phone_verified" BOOLEAN NOT NULL DEFAULT false,

@@ -567,6 +567,20 @@ Same body schemas as seller promotions (see Promotions), but the discount is pai
 | `GET /admin/support/tickets/:id` | none | one ticket with messages, including internal notes and status-change lines (`isInternal`) |
 | `POST /admin/support/tickets/:id/reply` | `message` (min 1), optional `status` (`open` \| `in_progress` \| `resolved` \| `closed`), optional `internal` (true: an admin-only note, the customer is not told and never sees it) | 201 the ticket. A normal reply notifies the customer |
 
+### Staff and approvals
+
+| Method and path | Body | Returns |
+|---|---|---|
+| `GET /admin/approvals` | | `{ items: [{ key, label, href, count, oldestWaitingSince }], total }`, only the queues the caller's role can act on |
+| `GET /admin/staff` | | all staff with `role`, `permissions`, `status`, `lastLoginAt` (super admin only) |
+| `POST /admin/staff` | `email`, `fullName`, `role` (`admin` \| `support`), `password` (min 12) | 201 the new member |
+| `PATCH /admin/staff/:id` | `role` | the member; their sessions end |
+| `POST /admin/staff/:id/status` | `status` (`active` \| `suspended`) | the member; suspending ends their sessions |
+| `POST /admin/staff/:id/password` | `password` (min 12) | sets a new password and ends their sessions |
+| `DELETE /admin/staff/:id` | | removes staff access (account becomes a customer) |
+
+The super admin and your own account cannot be changed. Login and `GET /auth/me` return `staffRole` and `permissions` for staff. A role that may not do something gets 403 `INSUFFICIENT_STAFF_ROLE` with `details.permission`.
+
 ### Audit log
 
 | Method and path | Query | Returns |

@@ -6,6 +6,8 @@ import { AppError } from '../middleware/errorHandler';
 import { computeSellerAvailability, isAcceptingOrders } from './availability.service';
 import { getDeliveryFeeForSeller, haversineKm } from '../utils/deliveryFee';
 import { isOnMenu, menuNote, normalizeMenuInput, onMenuWhere } from '../utils/menu';
+import { notifyApprovers } from './approvals.service';
+import { notifySeller } from './notify.service';
 import { SELLER_COMMUNITY_DELIVERY_SELECT } from '../utils/sellerDeliverySelect';
 import { isUploadedBy } from '../utils/uploadPaths';
 import { isStoredFile } from '../storage';
@@ -240,6 +242,23 @@ function expandSearchTerms(search: string): string[] {
     }
   }
   return Array.from(terms);
+}
+
+/** Edits to these change what customers are told about the dish, so an approved dish goes back to review. */
+const REVIEWED_FIELDS = ['name', 'nameUrdu', 'description', 'descriptionUrdu', 'categoryId', 'productType', 'ingredients', 'allergens', 'heatingInstructions', 'heatingInstructionsUrdu'] as const;
+const fileName = (url: string) => decodeURIComponent(url.split('?')[0].split('/').pop() ?? url);
+
+export function contentChanged(existing: Record<string, any>, data: Record<string, any>, existingImageUrls: string[]): boolean {
+  for (const f of REVIEWED_FIELDS) {
+    if (data[f] !== undefined && String(data[f] ?? '') !== String(existing[f] ?? '')) return true;
+  }
+  if (data.dietaryInfo !== undefined && JSON.stringify([...(data.dietaryInfo ?? [])].sort()) !== JSON.stringify([...(existing.dietaryInfo ?? [])].sort())) return true;
+  if (data.images !== undefined) {
+    const next = (data.images as string[]).map(fileName).sort();
+    const prev = existingImageUrls.map(fileName).sort();
+    if (JSON.stringify(next) !== JSON.stringify(prev)) return true;
+  }
+  return false;
 }
 
 export class ProductService {
@@ -858,7 +877,9 @@ export class ProductService {
     for (let attempt = 1; ; attempt++) {
       const slug = await this.uniqueSlug(data.name, seller.id);
       try {
-        return await createRow(slug);
+        const created = await createRow(slug);
+        notifyApprovers({ title: 'New dish to approve', message: `"${created.name}" was added and is waiting for approval.`, actionUrl: '/admin/products', dedupeKey: `product-new:${created.id}` });
+        return created;
       } catch (err: any) {
         const target = String(err?.meta?.target ?? '');
         if (err?.code !== 'P2002' || !/slug/i.test(target) || attempt >= 5) throw err;
@@ -883,6 +904,13 @@ export class ProductService {
     if (!product) {
       throw new AppError('Product not found or access denied', 404, 'PRODUCT_NOT_FOUND');
     }
+
+    // An approved (or rejected) dish whose content changed goes back to review; the kitchen's price, stock
+    // and menu changes do not need one.
+    const existingImages = data.images !== undefined ? await prisma.productImage.findMany({ where: { productId }, select: { imageUrl: true } }) : [];
+    const needsReview =
+      (product.approvalStatus === 'approved' || product.approvalStatus === 'rejected') &&
+      contentChanged(product, data, existingImages.map((i) => i.imageUrl));
 
     // If name changed, update slug
     let slug = product.slug;
@@ -924,6 +952,7 @@ export class ProductService {
       data: {
         ...rest,
         ...menu,
+        ...(needsReview ? { approvalStatus: 'pending', rejectionReason: null } : {}),
         slug,
         // Keep current approval status and active state
         // Unless explicitly changed via isActive field
@@ -935,6 +964,10 @@ export class ProductService {
       },
     });
 
+    if (needsReview) {
+      notifyApprovers({ title: 'A dish was changed and needs review', message: `"${updatedProduct.name}" was edited by its kitchen.`, actionUrl: '/admin/products', dedupeKey: `product-review:${productId}:${Date.now()}` });
+      void notifySeller(product.sellerId, { title: 'Your changes are under review', message: `"${updatedProduct.name}" is hidden from customers until staff approve the changes.`, actionUrl: '/sellers/products' });
+    }
     return updatedProduct;
   }
 

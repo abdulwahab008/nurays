@@ -12,6 +12,7 @@ import { realPhoneOrNull } from '../utils/otp';
 import { cashLimitOf, listRiderEntries, postDeliveryEntries, riderEarningsSummary, riderMoney } from './rider-ledger.service';
 import { assertOwnDocument } from '../utils/documents';
 import { presentFile } from '../storage';
+import { notifyApprovers } from './approvals.service';
 
 // Delivery.status lifecycle:
 // pending (unclaimed) -> assigned (claimed) -> arrived_at_pickup -> picked_up -> in_transit -> arrived_at_customer -> delivered (with OTP).
@@ -696,6 +697,7 @@ export class RiderService {
         },
       });
     });
+    notifyApprovers({ title: 'New rider application', message: `A rider (${data.city.trim()}) sent their application and documents.`, actionUrl: '/admin/riders?tab=applications', dedupeKey: `rider-application:${rider.id}:${Date.now()}` });
     return this.getMyApplication(userId);
   }
 

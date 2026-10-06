@@ -17,6 +17,8 @@ export interface SidebarItem {
   icon: string;
   badge?: number;
   subItems?: SubItem[];
+  /** Staff permission needed to see this item (admin menu only). */
+  needs?: string;
 }
 
 export const CUSTOMER_SIDEBAR_ITEMS: SidebarItem[] = [
@@ -69,7 +71,8 @@ export const SELLER_SIDEBAR_ITEMS: SidebarItem[] = [
 
 /** Every admin page, one menu for all of them. */
 export const ADMIN_SIDEBAR_ITEMS: SidebarItem[] = [
-  { name: 'Dashboard', href: '/admin/dashboard', icon: 'dashboard' },
+  { name: 'Dashboard', href: '/admin/dashboard', icon: 'dashboard', needs: 'read.finance' },
+  { name: 'Approvals', href: '/admin/approvals', icon: 'inventory' },
   {
     name: 'Orders',
     href: '/admin/orders',
@@ -101,7 +104,7 @@ export const ADMIN_SIDEBAR_ITEMS: SidebarItem[] = [
       { name: 'Applications', href: '/admin/riders?tab=applications' },
     ],
   },
-  { name: 'People', href: '/admin/users', icon: 'profile' },
+  { name: 'People', href: '/admin/users', icon: 'profile', needs: 'read.core' },
   {
     name: 'Hubs',
     href: '/admin/hubs',
@@ -112,13 +115,20 @@ export const ADMIN_SIDEBAR_ITEMS: SidebarItem[] = [
     ],
   },
   { name: 'Communities', href: '/admin/communities', icon: 'addresses' },
-  { name: 'Promo codes', href: '/admin/promotions', icon: 'promotions' },
-  { name: 'Payouts', href: '/admin/payouts', icon: 'earnings' },
+  { name: 'Promo codes', href: '/admin/promotions', icon: 'promotions', needs: 'read.core' },
+  { name: 'Payouts', href: '/admin/payouts', icon: 'earnings', needs: 'read.finance' },
   { name: 'Support', href: '/admin/support', icon: 'support' },
-  { name: 'Analytics', href: '/admin/analytics', icon: 'analytics' },
-  { name: 'Audit log', href: '/admin/audit-log', icon: 'inventory' },
-  { name: 'Settings', href: '/admin/settings', icon: 'settings' },
+  { name: 'Analytics', href: '/admin/analytics', icon: 'analytics', needs: 'read.finance' },
+  { name: 'Audit log', href: '/admin/audit-log', icon: 'inventory', needs: 'audit.read' },
+  { name: 'Settings', href: '/admin/settings', icon: 'settings', needs: 'read.finance' },
+  { name: 'Staff', href: '/admin/staff', icon: 'profile', needs: 'staff.manage' },
 ];
+
+/** The admin menu limited to what this staff member may open. */
+export function adminSidebarFor(permissions: string[] | undefined): SidebarItem[] {
+  const has = (needs?: string) => !needs || (permissions ?? []).includes(needs);
+  return ADMIN_SIDEBAR_ITEMS.filter((i) => has(i.needs));
+}
 
 export const HUB_MANAGER_SIDEBAR_ITEMS: SidebarItem[] = [
   { name: 'My hubs', href: '/hub', icon: 'coldchain' },

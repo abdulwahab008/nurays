@@ -20,6 +20,14 @@ describe('legacy (typ-less) tokens', () => {
   });
 });
 
+describe('isTokenRevoked to the millisecond', () => {
+  it('a token issued a moment before the revocation is void, one issued a moment after is not (same second)', () => {
+    const at = new Date(1_700_000_000_500);
+    expect(isTokenRevoked({ iat: 1_700_000_000, iatMs: 1_700_000_000_100 }, at)).toBe(true);
+    expect(isTokenRevoked({ iat: 1_700_000_000, iatMs: 1_700_000_000_900 }, at)).toBe(false);
+  });
+});
+
 describe('isTokenRevoked', () => {
   const now = Math.floor(Date.now() / 1000);
 

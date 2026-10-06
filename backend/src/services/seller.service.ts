@@ -6,6 +6,7 @@ import adminService from './admin.service';
 import { computeSellerAvailability } from './availability.service';
 import { computeSellerBalance } from './seller-balance.service';
 import { assertOwnDocument, assertOwnPublicImage } from '../utils/documents';
+import { notifyApprovers } from './approvals.service';
 
 /** Shared shape for the business-operations fields — read by getSellerProfile, written by updateSellerProfile. */
 function formatBusinessOperationsFields(seller: {
@@ -217,6 +218,7 @@ export class SellerService {
       });
     }
 
+    notifyApprovers({ title: 'New kitchen application', message: `${data.businessName} applied to sell on Nuray.`, actionUrl: '/admin/pending-sellers', dedupeKey: `seller-application:${seller.id}` });
     return {
       sellerId: seller.id,
       verificationStatus: seller.verificationStatus,

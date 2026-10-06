@@ -5,7 +5,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { LanguageSwitcher } from '@/components/i18n/LanguageSwitcher';
 import { DashboardSidebar } from './DashboardSidebar';
-import { ADMIN_SIDEBAR_ITEMS } from './DashboardShell';
+import { adminSidebarFor } from './DashboardShell';
 import { DashboardNavbar } from './DashboardNavbar';
 import { useAuthStore } from '@/lib/store/auth-store';
 import { useEffect, useState } from 'react';
@@ -63,7 +63,7 @@ export function UserLayout({ children, showSidebar = true, showNavbar = true }: 
     { name: 'Dashboard', href: '/riders/dashboard', icon: '📊' },
   ];
 
-  const adminSidebarItems = ADMIN_SIDEBAR_ITEMS;
+  const adminSidebarItems = adminSidebarFor(user?.permissions);
 
   // Get appropriate sidebar items based on user type
   const getSidebarItems = (): SidebarItem[] => {

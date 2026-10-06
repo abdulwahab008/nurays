@@ -1,5 +1,6 @@
 import prisma from '../config/database';
 import { notifySeller } from './notify.service';
+import { notifyApprovers } from './approvals.service';
 
 interface CreateCategoryRequestData {
   sellerId: string;
@@ -55,6 +56,7 @@ class CategoryRequestService {
       }
     }
 
+    notifyApprovers({ title: 'New category request', message: `A kitchen asked for the category "${data.name}".`, actionUrl: '/admin/category-requests', dedupeKey: `category-request:${data.sellerId}:${data.name.toLowerCase()}:${Date.now()}` });
     return prisma.categoryRequest.create({
       data: {
         sellerId: data.sellerId,

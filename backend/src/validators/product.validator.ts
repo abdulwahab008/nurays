@@ -72,7 +72,10 @@ export const createProductSchema = z.object({
   menuDate: z.union([z.literal('today'), z.null(), z.string().regex(/^\d{4}-\d{2}-\d{2}$/)]).optional(),
 });
 
-export const updateProductSchema = createProductSchema.partial();
+// An update only changes what it sends: the create schema's default productType must not be applied.
+export const updateProductSchema = createProductSchema
+  .extend({ productType: z.enum(['frozen', 'fresh', 'ready_to_eat', 'ready_to_cook']).optional() })
+  .partial();
 
 export const getSellerProductsQuerySchema = z.object({
   page: z.string().optional().transform((val) => (val ? parseInt(val, 10) : 1)),

@@ -35,7 +35,7 @@ const uniq = () => `${Date.now()}${++n}`;
 
 async function mkUser(type = 'customer') {
   const u = uniq();
-  return prisma.user.create({ data: { phone: `+92300${u.slice(-8)}`, email: `u${u}@t.test`, userType: type } as any });
+  return prisma.user.create({ data: { phone: `+92300${u.slice(-8)}`, email: `u${u}@t.test`, userType: type, ...(type === 'admin' ? { staffRole: 'admin' } : {}) } as any });
 }
 async function mkSeller(opts: any = {}) {
   const user = await mkUser('seller');

@@ -8,10 +8,11 @@ import otpService from './otp.service';
 import { queueVerificationEmail, queuePasswordResetEmail } from '../jobs/email.jobs';
 import adminService from './admin.service';
 import { recordAudit } from '../middleware/audit';
+import { permissionsFor } from '../utils/permissions';
 import { generateVerificationToken } from '../utils/email-verification';
 
 /** A unique stand-in number for an account with no (or an evicted) real phone. Never a real number: +999 isn't assigned. */
-const placeholderPhone = (seed: string): string =>
+export const placeholderPhone = (seed: string): string =>
   `+999${Buffer.from(seed.toLowerCase()).toString('base64').replace(/[^A-Za-z0-9]/g, '').slice(0, 8)}${Date.now().toString().slice(-8)}${randomBytes(3).toString('hex')}`;
 
 
@@ -411,6 +412,8 @@ export class AuthService {
           phone: user.phone,
           email: user.email,
           userType: user.userType,
+          staffRole: user.staffRole,
+          permissions: permissionsFor(user.staffRole),
           status: user.status,
           profile: user.profile,
           emailVerified: user.emailVerified,
@@ -490,6 +493,8 @@ export class AuthService {
           phone: user.phone,
           email: user.email,
           userType: user.userType,
+          staffRole: user.staffRole,
+          permissions: permissionsFor(user.staffRole),
           status: user.status,
           profile: user.profile,
           emailVerified: user.emailVerified,
@@ -715,6 +720,8 @@ export class AuthService {
       phone: user.phone,
       email: user.email,
       userType: user.userType,
+      staffRole: user.staffRole,
+      permissions: permissionsFor(user.staffRole),
       status: user.status,
       emailVerified: user.emailVerified,
       phoneVerified: user.phoneVerified,

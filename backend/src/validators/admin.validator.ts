@@ -116,3 +116,13 @@ const hubFields = {
 export const createHubSchema = z.object(hubFields).partial().required({ name: true, code: true, city: true, area: true, address: true, latitude: true, longitude: true, capacityCubicFeet: true });
 export const updateHubSchema = z.object(hubFields).partial();
 export const assignHubManagerSchema = z.object({ managerId: z.string().uuid().nullable() });
+
+// Staff (super admin only)
+export const createStaffSchema = z.object({
+  email: z.string().trim().email().max(200),
+  fullName: z.string().trim().min(2).max(120),
+  role: z.enum(['admin', 'support']),
+  password: z.string().min(12, 'Use at least 12 characters').max(200),
+});
+export const staffRoleSchema = z.object({ role: z.enum(['admin', 'support']) });
+export const staffPasswordSchema = z.object({ password: z.string().min(12, 'Use at least 12 characters').max(200) });

@@ -20,6 +20,7 @@ export interface SidebarItem {
   icon: string;
   badge?: number;
   subItems?: SubItem[];
+  needs?: string;
 }
 
 interface DashboardSidebarProps {
@@ -237,7 +238,7 @@ const DefaultIcon: React.FC<{ className?: string }> = ({ className }) => (
   </svg>
 );
 
-function DashboardSidebarContent({ items, userType }: DashboardSidebarProps) {
+function DashboardSidebarContent({ items: allItems, userType }: DashboardSidebarProps) {
   const pathname = usePathname();
   const tNav = useT(navMessages);
   const label = (name: string) => tNav(name as keyof typeof navMessages.en);
@@ -245,6 +246,8 @@ function DashboardSidebarContent({ items, userType }: DashboardSidebarProps) {
   const queryString = searchParams?.toString() || '';
   const currentHref = queryString ? `${pathname}?${queryString}` : pathname;
   const { user } = useAuthStore();
+  // Staff only see the pages their role may open (the server enforces it too).
+  const items = userType === 'admin' ? allItems.filter((i) => !i.needs || (user?.permissions ?? []).includes(i.needs)) : allItems;
 
   const [expandedItems, setExpandedItems] = useState<Record<string, boolean>>({});
 

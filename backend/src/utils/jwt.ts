@@ -17,19 +17,21 @@ export interface JWTPayload {
   phone: string;
   /** Token purpose. Access and refresh tokens share a secret, so this keeps one from standing in for the other. */
   typ?: 'access' | 'refresh';
+  /** Issue time in milliseconds: revocation is exact to the millisecond, not the second. */
+  iatMs?: number;
   /** Issued-at / expiry (seconds), added by jsonwebtoken. */
   iat?: number;
   exp?: number;
 }
 
 export const generateToken = (payload: JWTPayload): string => {
-  return jwt.sign({ ...payload, typ: 'access' }, JWT_SECRET, {
+  return jwt.sign({ ...payload, typ: 'access', iatMs: Date.now() }, JWT_SECRET, {
     expiresIn: JWT_EXPIRES_IN,
   } as jwt.SignOptions);
 };
 
 export const generateRefreshToken = (payload: JWTPayload): string => {
-  return jwt.sign({ ...payload, typ: 'refresh' }, JWT_SECRET, {
+  return jwt.sign({ ...payload, typ: 'refresh', iatMs: Date.now() }, JWT_SECRET, {
     expiresIn: JWT_REFRESH_EXPIRES_IN,
   } as jwt.SignOptions);
 };
@@ -82,8 +84,11 @@ const LEGACY_REFRESH_MIN_LIFETIME_SECONDS = 2 * 24 * 60 * 60;
  * ownership change (password reset, takeover of an unverified account, phone eviction): every
  * token issued before it stops working, access and refresh alike.
  */
-export const isTokenRevoked = (payload: { iat?: number }, tokensValidAfter?: Date | null): boolean => {
+export const isTokenRevoked = (payload: { iat?: number; iatMs?: number }, tokensValidAfter?: Date | null): boolean => {
   if (!tokensValidAfter) return false;
+  // Newer tokens carry their issue time to the millisecond, so a session started a moment before the
+  // revocation is voided and one started a moment after is not.
+  if (typeof payload.iatMs === 'number') return payload.iatMs < tokensValidAfter.getTime();
   if (!payload.iat) return true; // can't prove it's newer
   return payload.iat < Math.floor(tokensValidAfter.getTime() / 1000);
 };

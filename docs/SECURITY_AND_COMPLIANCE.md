@@ -41,7 +41,7 @@ Code: `backend/src/services/auth.service.ts`, `utils/jwt.ts`, `middleware/auth.m
 
 ## Roles and authorization
 
-Roles: `customer`, `seller`, `rider`, `admin`, `hub_manager`.
+Roles: `customer`, `seller`, `rider`, `admin`, `hub_manager`. Admin accounts carry a staff role (`super_admin`, `admin`, `support`), see Admin accounts.
 
 - **Middleware** (`middleware/auth.middleware.ts`): `authenticate`, `authorize(...roles)` (403
   `INSUFFICIENT_PERMISSIONS`), `requireSeller` (approved and active seller), `blockSuspendedSeller`. Whole routers
@@ -166,11 +166,29 @@ area.
 
 ## Admin accounts
 
-Admin accounts are created out of band (`scripts/create-admin.js`), never through registration. They sign in with
+Admin accounts are never created through registration. The first one (the super admin) is made with
+`scripts/create-admin.js`; every other staff member is added by the super admin at `/admin/staff`. They sign in with
 **email and password only**: SMS-code login and Google sign-in are refused (`ADMIN_PASSWORD_ONLY`). After **5 wrong
 passwords** the account is locked for 15 minutes (`ACCOUNT_LOCKED`, counted from the audit log). **Logging out ends
-every session** the admin has (`tokensValidAfter`). Every admin has the same permissions; there are no roles,
-second approvals or two-factor codes yet (see Limitations).
+every session** the admin has (`tokensValidAfter`). Second approvals and two-factor codes do not exist yet (see
+Limitations).
+
+### Staff roles
+
+Staff are users with `user_type = 'admin'` and a `staff_role` (database CHECK keeps the two in step):
+
+| Role | How many | What it can do |
+|---|---|---|
+| `super_admin` | exactly one (partial unique index `users_one_super_admin`) | everything, and only this role adds, changes, suspends or removes staff, edits settings or corrects a rider balance by hand |
+| `admin` | any | day to day operations: approvals, orders, people, refunds, payouts, settling with riders, places, promo codes, complaints, reads the audit log |
+| `support` | any | the customer support person: looks things up and handles complaints (reply, internal notes, resolve). Cannot move money, approve anyone, change orders, or see applicants' ID documents, settings, analytics or the audit log |
+
+Enforcement is on the server, table driven (`utils/permissions.ts`, `middleware/staff.ts`): every `/admin` request is
+matched to a permission; a write no rule names needs `ops.write`, a read no rule names needs `read.core`, so a route
+added later is closed to support staff by default. A refusal is 403 `INSUFFICIENT_STAFF_ROLE` and is written to the
+audit log. Changing a role, suspending or removing staff ends their sessions at once (millisecond-exact `iatMs` check).
+The super admin account cannot be changed through the app. The admin menu and pages only show what a role may use,
+but that is convenience, not the security boundary.
 
 ## Secrets and configuration
 
