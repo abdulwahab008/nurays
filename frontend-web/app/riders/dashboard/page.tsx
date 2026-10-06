@@ -658,6 +658,9 @@ export default function RiderDashboardPage() {
                                     </span>
                                   </div>
                                 </div>
+                                {delivery.deliveryLatitude == null && (
+                                  <p className="text-[11px] font-semibold text-amber-700" data-testid="no-map-pin">{t('noMapPin')}</p>
+                                )}
                                 <a
                                   href={delivery.dropoffMapsUrl ?? `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(delivery.deliveryAddress)}`}
                                   target="_blank"

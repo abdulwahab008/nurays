@@ -1,4 +1,5 @@
 import prisma from '../config/database';
+import { logger } from '../utils/logger';
 import { AppError } from '../middleware/errorHandler';
 import socketManager from '../config/socket';
 import realtimeOrderService from './realtime-order.service';
@@ -102,7 +103,10 @@ export async function dispatchDelivery(deliveryId: string): Promise<DispatchResu
     { ...endsWithCommunities(job), cashToTake: cod ? Number(job.order.totalAmount) : 0 },
     candidates
   );
-  if (!choice) return { assigned: false, reason: 'no_eligible_rider' };
+  if (!choice) {
+    logger.debug({ deliveryId, candidates: riders.length }, 'Delivery left in the open pool: no rider can take it');
+    return { assigned: false, reason: 'no_eligible_rider' };
+  }
 
   const rider = riders.find((r) => r.id === choice.riderId)!;
   const e = endsOf(job);
@@ -128,6 +132,7 @@ export async function dispatchDelivery(deliveryId: string): Promise<DispatchResu
   });
   if (!done) return { assigned: false, reason: 'lost_race' };
 
+  logger.info({ deliveryId, orderId: job.orderId, riderId: rider.id, reason: choice.reason, candidates: riders.length, bonus: done.bonus }, 'Delivery auto-assigned');
   await announceAssignment(job, rider.userId, corridor.standardFee + done.bonus);
   return { assigned: true, riderId: rider.id, reason: choice.reason };
 }
@@ -188,7 +193,7 @@ export async function dispatchWaiting(limit = 50): Promise<number> {
     try {
       if ((await dispatchDelivery(id)).assigned) assigned++;
     } catch (err) {
-      console.error('Dispatch failed for delivery', id, err);
+      logger.error({ err, deliveryId: id }, 'Dispatch failed');
     }
   }
   return assigned;
@@ -197,5 +202,5 @@ export async function dispatchWaiting(limit = 50): Promise<number> {
 /** Fire and forget: dispatching must never fail what triggered it. */
 export function dispatchSoon(deliveryId?: string) {
   const run = deliveryId ? dispatchDelivery(deliveryId) : dispatchWaiting();
-  void run.catch((err) => console.error('Dispatch failed:', err));
+  void run.catch((err) => logger.error({ err }, 'Dispatch failed'));
 }

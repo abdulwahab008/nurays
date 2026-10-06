@@ -1,5 +1,7 @@
 'use client';
 
+import { MAP_TILE_URL, MAP_ATTRIBUTION, MAP_MAX_ZOOM } from '@/lib/map-config';
+
 import { useEffect, useRef, useState, useCallback } from 'react';
 import dynamic from 'next/dynamic';
 import { Search, Navigation, MapPin, Loader2, Check } from 'lucide-react';
@@ -89,10 +91,7 @@ function LocationMapInner({
           L.control.zoom({ position: 'topright' }).addTo(map);
 
           // Tile Layer: OpenStreetMap with clean styling
-          L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-            attribution: '&copy; OpenStreetMap',
-            maxZoom: 19,
-          }).addTo(map);
+L.tileLayer(MAP_TILE_URL, { attribution: MAP_ATTRIBUTION, maxZoom: MAP_MAX_ZOOM }).addTo(map);
 
           // Minimalist custom pin
           const pinIcon = L.divIcon({

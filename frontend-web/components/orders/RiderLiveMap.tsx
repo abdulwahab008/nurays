@@ -1,5 +1,7 @@
 'use client';
 
+import { MAP_TILE_URL, MAP_ATTRIBUTION, MAP_MAX_ZOOM } from '@/lib/map-config';
+
 import { useEffect, useRef } from 'react';
 import { useT } from '@/lib/i18n';
 import { ordersMessages } from '@/lib/i18n/messages/orders';
@@ -52,7 +54,7 @@ export default function RiderLiveMap({ rider, destination, height = '260px' }: P
 
       const start = riderRef.current;
       const map = L.map(containerRef.current, { zoomControl: true, attributionControl: true }).setView([start.latitude, start.longitude], 15);
-      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '&copy; OpenStreetMap', maxZoom: 19 }).addTo(map);
+L.tileLayer(MAP_TILE_URL, { attribution: MAP_ATTRIBUTION, maxZoom: MAP_MAX_ZOOM }).addTo(map);
 
       riderMarkerRef.current = L.marker([start.latitude, start.longitude], {
         icon: L.divIcon({ className: 'rider-live-pin', html: riderIconHtml, iconSize: [36, 36], iconAnchor: [18, 18] }),

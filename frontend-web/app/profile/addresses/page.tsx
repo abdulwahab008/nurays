@@ -340,6 +340,11 @@ export default function AddressesPage() {
 
   const handleAddAddress = async (e: React.FormEvent) => {
     e.preventDefault();
+    // Without a pin the rider only gets words, and the address cannot be matched to a community.
+    if (!formData.latitude || !formData.longitude) {
+      showToast(t('pinRequired'), 'error');
+      return;
+    }
     try {
       const addressData = {
         label: addressTypes.find(a => a.id === formData.label)?.label || formData.label,

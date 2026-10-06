@@ -111,6 +111,8 @@ All `NEXT_PUBLIC_*` values are inlined into the JavaScript at build time. Changi
 | `NEXT_PUBLIC_LEGAL_COMPANY_NAME`, `NEXT_PUBLIC_LEGAL_ADDRESS`, `NEXT_PUBLIC_SUPPORT_EMAIL` | set before launch | Shown on the Terms, Privacy and Refund pages; bracketed placeholders appear until set. |
 | `NEXT_PUBLIC_LEGAL_REVIEWED` | no | Set `true` once a lawyer has reviewed the text to remove the "draft" notice. |
 | `NEXT_PUBLIC_ENABLE_DEMO_LOGIN` | no | Never `true` on a real site; it shows one-click demo accounts. |
+| `NEXT_PUBLIC_MAP_TILE_URL`, `NEXT_PUBLIC_MAP_ATTRIBUTION` | production | Build time. Map tiles default to the public OpenStreetMap server, whose policy allows only light use: set a tile provider you have an account with (its `{z}/{x}/{y}` URL and required attribution). |
+| `NOMINATIM_BASE_URL` | production | Server-side. Geocoder for address search and map-pin lookups; defaults to public Nominatim (one request a second, answers cached 10 minutes). Use your own or a paid one at real traffic. |
 | `NOMINATIM_USER_AGENT` | recommended | Server-side only (runtime, not build time). Contact string for OpenStreetMap's geocoder. |
 
 The Dockerfile and compose file also pass `NEXT_PUBLIC_SAFEPAY_SANDBOX`; nothing in the frontend code reads it.
