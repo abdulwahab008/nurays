@@ -1,5 +1,6 @@
 'use client';
 
+import { StackedTables } from './StackedTables';
 import { ReactNode } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import Link from 'next/link';
@@ -171,7 +172,7 @@ export function UserLayout({ children, showSidebar = true, showNavbar = true }: 
             </div>
           </nav>
         )}
-        <main>{children}</main>
+        <StackedTables /><main>{children}</main>
       </div>
     );
   }
@@ -206,6 +207,7 @@ export function UserLayout({ children, showSidebar = true, showNavbar = true }: 
             </div>
           </>
         )}
+        <StackedTables />
         <main className={`min-w-0 ${showSidebar ? 'lg:ms-64' : ''} p-4 sm:p-6`}>{children}</main>
       </div>
     </div>

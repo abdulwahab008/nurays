@@ -203,7 +203,7 @@ export default function SupportPage() {
       <div id="support-tabs" className="flex gap-2 mb-6 scroll-mt-24">
         <button
           onClick={() => setActiveTab('faq')}
-          className={`px-6 py-2.5 rounded-xl font-bold text-xs transition-all cursor-pointer flex items-center gap-2 ${
+          className={`px-3 sm:px-6 py-2.5 rounded-xl font-bold text-xs transition-all cursor-pointer flex items-center gap-2 ${
             activeTab === 'faq'
               ? 'bg-[#FF5500] text-white shadow-sm'
               : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
@@ -213,7 +213,7 @@ export default function SupportPage() {
         </button>
         <button
           onClick={() => setActiveTab('contact')}
-          className={`px-6 py-2.5 rounded-xl font-bold text-xs transition-all cursor-pointer flex items-center gap-2 ${
+          className={`px-3 sm:px-6 py-2.5 rounded-xl font-bold text-xs transition-all cursor-pointer flex items-center gap-2 ${
             activeTab === 'contact'
               ? 'bg-[#FF5500] text-white shadow-sm'
               : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
@@ -223,7 +223,7 @@ export default function SupportPage() {
         </button>
         <button
           onClick={() => setActiveTab('tickets')}
-          className={`px-6 py-2.5 rounded-xl font-bold text-xs transition-all cursor-pointer flex items-center gap-2 ${
+          className={`px-3 sm:px-6 py-2.5 rounded-xl font-bold text-xs transition-all cursor-pointer flex items-center gap-2 ${
             activeTab === 'tickets'
               ? 'bg-[#FF5500] text-white shadow-sm'
               : 'bg-slate-100 text-slate-700 hover:bg-slate-200'

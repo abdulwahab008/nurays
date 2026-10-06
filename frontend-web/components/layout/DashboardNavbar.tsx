@@ -358,11 +358,11 @@ export function DashboardNavbar({ title, subtitle, userType = 'customer', onMenu
         )}
         
         {/* Right Side - Actions */}
-        <div className="flex items-center gap-1.5 sm:gap-2">
+        <div className="flex items-center gap-1 sm:gap-2 min-w-0">
 
           {/* Community Selector - Only for customers */}
           {isCustomer && (
-            <div className="flex items-center">
+            <div className="flex items-center min-w-0 max-w-[34vw] sm:max-w-none">
               <CommunitySelector variant="navbar" />
             </div>
           )}
@@ -410,7 +410,7 @@ export function DashboardNavbar({ title, subtitle, userType = 'customer', onMenu
             </>
           )}
 
-          <LanguageSwitcher className="px-2" />
+          <LanguageSwitcher className="px-2 max-[420px]:[&>span]:hidden" />
 
           {/* Notifications Panel */}
           <div className="relative" ref={notificationRef}>
@@ -531,7 +531,7 @@ export function DashboardNavbar({ title, subtitle, userType = 'customer', onMenu
               </Link>
             </div>
           ) : (
-            <div className="relative ms-2" ref={dropdownRef}>
+            <div className="relative ms-0 sm:ms-2" ref={dropdownRef}>
               <button 
                 type="button"
                 onClick={() => setShowDropdown(!showDropdown)}
@@ -548,7 +548,7 @@ export function DashboardNavbar({ title, subtitle, userType = 'customer', onMenu
                 <span className="hidden sm:block text-gray-700 text-sm font-bold">
                   {user?.profile?.fullName?.split(' ')[0] || t('user')}
                 </span>
-                <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg className="w-4 h-4 text-gray-400 max-[380px]:hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                 </svg>
               </button>

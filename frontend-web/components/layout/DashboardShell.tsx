@@ -1,5 +1,6 @@
 'use client';
 
+import { StackedTables } from './StackedTables';
 import { ReactNode, useState, useEffect } from 'react';
 import { DashboardSidebar } from './DashboardSidebar';
 import { DashboardNavbar } from './DashboardNavbar';
@@ -188,6 +189,8 @@ export function DashboardShell({
         >
           <DashboardSidebar items={sidebarItems} userType={userType} />
         </div>
+
+        <StackedTables />
 
         <main
           className="lg:ms-64 px-4 sm:px-6 lg:px-10 py-6 lg:py-10 min-h-[calc(100vh-4rem)] bg-[#FAFAFA]"

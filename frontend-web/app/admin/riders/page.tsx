@@ -161,7 +161,7 @@ function RidersMoney() {
           </button>
         ))}
         <form
-          className="ms-auto flex gap-2"
+          className="ms-auto flex gap-2 w-full sm:w-auto [&>input]:min-w-0 [&>input]:flex-1"
           onSubmit={(e) => {
             e.preventDefault();
             setQuery(search.trim());

@@ -1281,9 +1281,9 @@ function ProductsContent() {
     <div className="min-h-screen bg-[#F8FAFC] text-[#0F172A] pb-24">
       {/* Dedicated Public Catalog Header */}
       <header className="sticky top-0 z-40 bg-white/95 backdrop-blur-md border-b border-slate-200/80 shadow-2xs">
-        <div className="max-w-[1440px] mx-auto px-4 sm:px-8 h-16 flex items-center justify-between gap-4">
-          <div className="flex items-center gap-6">
-            <Link href="/" className="hover:opacity-95 transition-opacity">
+        <div className="max-w-[1440px] mx-auto px-3 sm:px-8 h-16 flex items-center justify-between gap-2 sm:gap-4">
+          <div className="flex items-center gap-6 min-w-0">
+            <Link href="/" className="hover:opacity-95 transition-opacity shrink-0">
               <BrandLockup markSize={32} wordSize={22} />
             </Link>
             <div className="hidden sm:block">
@@ -1291,7 +1291,7 @@ function ProductsContent() {
             </div>
           </div>
 
-          <div className="flex items-center gap-2.5">
+          <div className="flex items-center gap-1 sm:gap-2.5 shrink-0">
             <Link
               href="/cart"
               className="relative flex items-center justify-center w-9 h-9 rounded-xl bg-slate-100 hover:bg-slate-200/80 border border-slate-200/80 transition-colors"
@@ -1305,12 +1305,12 @@ function ProductsContent() {
             </Link>
             <Link
               href="/login"
-              className="h-9 inline-flex items-center px-3.5 rounded-xl text-xs font-semibold text-slate-700 hover:bg-slate-100 transition-colors"
+              className="h-9 inline-flex items-center px-2 sm:px-3.5 rounded-xl text-xs font-semibold text-slate-700 hover:bg-slate-100 transition-colors"
             >
               {t('signInCaps')}
             </Link>
             <Link href="/register">
-              <span className="flame-btn h-9 px-4 text-xs font-bold rounded-xl">{t('joinNuray')}</span>
+              <span className="flame-btn h-9 px-3 sm:px-4 text-xs font-bold rounded-xl">{t('joinNuray')}</span>
             </Link>
           </div>
         </div>

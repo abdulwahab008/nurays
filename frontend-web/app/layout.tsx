@@ -1,3 +1,4 @@
+import { ImageFallback } from '@/components/ImageFallback';
 import type { Metadata, Viewport } from "next";
 import { cookies } from "next/headers";
 import { Plus_Jakarta_Sans, Geist_Mono } from "next/font/google";
@@ -54,6 +55,7 @@ export default async function RootLayout({
         <LocaleProvider initialLocale={locale}>
         <ToastProvider>
           <AuthProvider>
+            <ImageFallback />
             <SellerNewOrderNotification />
             <RiderNewJobNotification />
             <CustomerOrderNotification />

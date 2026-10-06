@@ -128,8 +128,8 @@ export default function AdminStaffPage() {
                 {members.map((m) => {
                   const locked = m.role === 'super_admin' || m.id === user?.id;
                   return (
-                    <li key={m.id} className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
-                      <div>
+                    <li key={m.id} className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-gray-200 bg-white p-4 shadow-sm min-w-0">
+                      <div className="min-w-0 max-w-full break-words">
                         <p className="font-semibold text-gray-900">
                           {m.name ?? m.email}{' '}
                           <span className="ms-1 rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-700">{ROLE_LABEL[m.role]}</span>

@@ -472,3 +472,73 @@ h1, h2, h3, h4, h5, h6 {
     transform: none;
   }
 }
+
+/* ---- Phones: tables become cards, touch targets are big enough ---- */
+@media (max-width: 767px) {
+  main table.stack-table,
+  main table.stack-table tbody,
+  main table.stack-table tr,
+  main table.stack-table td {
+    display: block;
+    width: 100%;
+  }
+  main table.stack-table thead {
+    display: none;
+  }
+  main table.stack-table tr {
+    margin: 0 0 0.75rem;
+    padding: 0.5rem 0.875rem;
+    border: 1px solid #e2e8f0;
+    border-radius: 14px;
+    background: #fff;
+    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+  }
+  main table.stack-table td {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 1rem;
+    padding: 0.4rem 0;
+    border: 0;
+    text-align: end;
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+  main table.stack-table td[data-label]::before {
+    content: attr(data-label);
+    flex-shrink: 0;
+    max-width: 45%;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: #64748b;
+    text-align: start;
+  }
+}
+
+@media (pointer: coarse) {
+  button:not([class*="rounded-full"]),
+  [role="button"],
+  select,
+  input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="hidden"]) {
+    min-height: 40px;
+  }
+  /* Menu and toggle controls inside the sidebar */
+  .nuray-drawer button {
+    min-width: 40px;
+    min-height: 40px;
+  }
+}
+
+/* A frame whose photo did not load */
+.img-failed {
+  background: linear-gradient(135deg, #f1f5f9, #e2e8f0);
+}
+
+/* Headings take the colour of a dark panel they sit in (the global heading colour was making them dark on dark) */
+.text-white :is(h1, h2, h3, h4, h5, h6):not([class*="text-"]),
+[class*="bg-slate-9"] :is(h1, h2, h3, h4, h5, h6):not([class*="text-"]),
+[class*="bg-gray-9"] :is(h1, h2, h3, h4, h5, h6):not([class*="text-"]) {
+  color: inherit;
+}

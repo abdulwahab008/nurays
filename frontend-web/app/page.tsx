@@ -1110,7 +1110,7 @@ export default function Home() {
                 <Flame className="w-3 h-3 text-orange-200" />
                 <span>{t('b1Tag')}</span>
               </span>
-              <h2 className="text-xl sm:text-2xl font-bold tracking-tight leading-tight">
+              <h2 className="text-xl sm:text-2xl font-bold tracking-tight leading-tight text-white">
                 {t('b1Title')}
               </h2>
               <p className="text-xs text-orange-100 mt-1 max-w-[260px] font-normal leading-relaxed">
@@ -1135,7 +1135,7 @@ export default function Home() {
                 <ChefHat className="w-3 h-3 text-amber-200" />
                 <span>{t('b2Tag')}</span>
               </span>
-              <h2 className="text-xl sm:text-2xl font-bold tracking-tight leading-tight">
+              <h2 className="text-xl sm:text-2xl font-bold tracking-tight leading-tight text-white">
                 {t('b2Title')}
               </h2>
               <p className="text-xs text-amber-100 mt-1 max-w-[260px] font-normal leading-relaxed">
@@ -1160,7 +1160,7 @@ export default function Home() {
                 <Snowflake className="w-3 h-3 text-cyan-200" />
                 <span>{t('b3Tag')}</span>
               </span>
-              <h2 className="text-xl sm:text-2xl font-bold tracking-tight leading-tight">
+              <h2 className="text-xl sm:text-2xl font-bold tracking-tight leading-tight text-white">
                 {t('b3Title')}
               </h2>
               <p className="text-xs text-cyan-100 mt-1 max-w-[260px] font-normal leading-relaxed">

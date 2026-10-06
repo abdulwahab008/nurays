@@ -461,7 +461,7 @@ export default function RiderDashboardPage() {
               <div className="bg-white rounded-2xl p-1.5 shadow-sm border border-slate-200 flex items-center gap-1">
                 <button
                   onClick={() => setActiveTab('active')}
-                  className={`flex-1 py-2.5 px-4 rounded-xl text-xs font-black tracking-wide transition-all flex items-center justify-center gap-2 ${
+                  className={`flex-1 py-2.5 px-2 sm:px-4 min-w-0 rounded-xl text-xs font-black tracking-wide transition-all flex items-center justify-center gap-2 ${
                     activeTab === 'active'
                       ? 'bg-slate-900 text-white shadow-sm'
                       : 'text-slate-600 hover:bg-slate-100'
@@ -477,7 +477,7 @@ export default function RiderDashboardPage() {
 
                 <button
                   onClick={() => setActiveTab('available')}
-                  className={`flex-1 py-2.5 px-4 rounded-xl text-xs font-black tracking-wide transition-all flex items-center justify-center gap-2 ${
+                  className={`flex-1 py-2.5 px-2 sm:px-4 min-w-0 rounded-xl text-xs font-black tracking-wide transition-all flex items-center justify-center gap-2 ${
                     activeTab === 'available'
                       ? 'bg-slate-900 text-white shadow-sm'
                       : 'text-slate-600 hover:bg-slate-100'
@@ -493,7 +493,7 @@ export default function RiderDashboardPage() {
 
                 <button
                   onClick={() => setActiveTab('history')}
-                  className={`flex-1 py-2.5 px-4 rounded-xl text-xs font-black tracking-wide transition-all flex items-center justify-center gap-2 ${
+                  className={`flex-1 py-2.5 px-2 sm:px-4 min-w-0 rounded-xl text-xs font-black tracking-wide transition-all flex items-center justify-center gap-2 ${
                     activeTab === 'history'
                       ? 'bg-slate-900 text-white shadow-sm'
                       : 'text-slate-600 hover:bg-slate-100'
