@@ -302,6 +302,12 @@ export default function CheckoutPage() {
       return;
     }
 
+    // A pin is how the rider finds the door; older addresses saved without one must get it first.
+    if (!addresses.find((a) => a.id === selectedAddress)?.coordinates) {
+      showToast(t('addressNeedsPin'), 'warning');
+      return;
+    }
+
     if (!cart?.items?.length) {
       showToast(t('trayEmptyWarning'), 'warning');
       return;
@@ -556,6 +562,11 @@ export default function CheckoutPage() {
                               <span className="px-1.5 py-0.2 rounded text-[9px] font-bold bg-slate-100 text-slate-600 border border-slate-200">
                                 {t('addressDefault')}
                               </span>
+                            )}
+                            {!address.coordinates && (
+                              <Link href="/profile/addresses" className="px-1.5 py-0.2 rounded text-[9px] font-bold bg-amber-100 text-amber-800 border border-amber-200" data-testid="address-no-pin">
+                                {t('addressNoPin')}
+                              </Link>
                             )}
                           </div>
                           <p className="text-xs text-slate-600 leading-relaxed truncate">
