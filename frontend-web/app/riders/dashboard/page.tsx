@@ -196,9 +196,13 @@ export default function RiderDashboardPage() {
 
   // Claim delivery from pool (with optional inDrive askFee)
   const handleClaim = async (deliveryId: string, askFee?: number) => {
+    // Accepting a job starts the trip to the kitchen: open Google Maps (window opened inside the tap, see handleAdvanceStatus).
+    const job = available.find((a) => a.id === deliveryId);
+    const nav = job ? window.open('', '_blank') : null;
     try {
       setBusyId(deliveryId);
       await riderService.claimDelivery(deliveryId, askFee);
+      if (nav && job) nav.location.href = navUrlFor({ ...job, status: 'assigned' } as Delivery);
       showToast(
         askFee
           ? t('claimedCustom', { fee: askFee })
@@ -208,6 +212,7 @@ export default function RiderDashboardPage() {
       setActiveTab('active');
       loadAll(true);
     } catch (error: any) {
+      nav?.close();
       showToast(error.response?.data?.error?.message || t('claimFailed'), 'error');
     } finally {
       setBusyId(null);
@@ -229,8 +234,18 @@ export default function RiderDashboardPage() {
     }
   };
 
+  // The leg the rider is on: to the kitchen until the food is picked up, then to the customer.
+  const headingToCustomer = (d: Delivery) => ['picked_up', 'in_transit', 'arrived_at_customer'].includes(d.status);
+  const navUrlFor = (d: Delivery) =>
+    headingToCustomer(d)
+      ? d.dropoffMapsUrl ?? `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(d.deliveryAddress)}&travelmode=two-wheeler`
+      : d.pickupMapsUrl ?? `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(d.pickupAddress)}&travelmode=two-wheeler`;
+
   // Advance delivery along the real fulfillment lifecycle
   const handleAdvanceStatus = async (delivery: Delivery) => {
+    // Leaving the kitchen with the food: open directions to the customer. The window is opened now,
+    // inside the tap, because browsers block pop-ups opened after a network call.
+    const nav = delivery.status === 'picked_up' ? window.open('', '_blank') : null;
     try {
       setBusyId(delivery.id);
       if (delivery.status === 'assigned') {
@@ -242,6 +257,7 @@ export default function RiderDashboardPage() {
       } else if (delivery.status === 'picked_up') {
         await riderService.updateDeliveryStatus(delivery.id, 'in_transit');
         showToast(t('toastDeparted'), 'info');
+        if (nav) nav.location.href = navUrlFor(delivery);
       } else if (delivery.status === 'in_transit') {
         await riderService.updateDeliveryStatus(delivery.id, 'arrived_at_customer');
         showToast(t('toastArrivedDoor'), 'info');
@@ -257,6 +273,7 @@ export default function RiderDashboardPage() {
       }
       loadAll(true);
     } catch (error: any) {
+      nav?.close();
       showToast(error.response?.data?.error?.message || t('statusUpdateFailed'), 'error');
     } finally {
       setBusyId(null);
@@ -605,6 +622,22 @@ export default function RiderDashboardPage() {
                                 </div>
                               </div>
                             </div>
+
+                            {/* START NAVIGATION: opens Google Maps for the current leg */}
+                            {delivery.status !== 'arrived_at_customer' && delivery.status !== 'arrived_at_pickup' && (
+                              <div className="px-5 pt-4">
+                                <a
+                                  href={navUrlFor(delivery)}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  data-testid="start-navigation"
+                                  className="flex items-center justify-center gap-2 w-full py-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-black shadow-md"
+                                >
+                                  {headingToCustomer(delivery) ? t('startNavCustomer') : t('startNavKitchen')}
+                                </a>
+                                <p className="text-[10px] text-slate-500 text-center mt-1">{t('navHint')}</p>
+                              </div>
+                            )}
 
                             {/* ROUTE NODES (PICKUP & DROPOFF) */}
                             <div className="p-5 grid grid-cols-1 md:grid-cols-2 gap-4">

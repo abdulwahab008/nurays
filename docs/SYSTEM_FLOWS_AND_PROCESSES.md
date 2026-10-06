@@ -186,6 +186,10 @@ Each cancellation goes through the admin cancel path with `by: system`, so stock
 
 ## 9. Delivery
 
+### Navigation for the rider
+
+Each active job card has a green **Start** button for the current leg: to the kitchen until the food is picked up, then to the customer. It opens Google Maps (the app on a phone) with turn-by-turn directions to the exact map pin, in two-wheeler mode. Accepting a job from the open pool opens the route to the kitchen straight away, and tapping "Depart with the order" opens the route to the customer. A job whose address has no pin shows a note to use the address text and call the customer.
+
 ### Who delivers
 
 - **Nuray rider** (`deliveryProvider: platform`, always for hub stock): a `Delivery` row is created and posted to the rider pool.

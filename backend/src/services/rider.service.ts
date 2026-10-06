@@ -65,7 +65,8 @@ const LOCATION_MIN_INTERVAL_MS = 3_000;
 
 function mapsUrl(lat: number | null, lng: number | null, text: string | null | undefined): string {
   const destination = lat != null && lng != null ? `${lat},${lng}` : encodeURIComponent(text ?? '');
-  return `https://www.google.com/maps/dir/?api=1&destination=${destination}`;
+  // two-wheeler: bike routes (shortcuts, narrow lanes) rather than car-only roads.
+  return `https://www.google.com/maps/dir/?api=1&destination=${destination}&travelmode=two-wheeler`;
 }
 
 function formatDelivery(delivery: DeliveryWithOrder & {
