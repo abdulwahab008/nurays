@@ -1,3 +1,4 @@
+import { maskEmail } from '../utils/mask';
 import prisma from '../config/database';
 import { generateToken, generateRefreshToken, tokenTtlSeconds, isTokenRevoked, JWTPayload } from '../utils/jwt';
 import { formatPhoneNumber, isValidPhoneNumber } from '../utils/otp';
@@ -621,7 +622,7 @@ export class AuthService {
     try {
       await queuePasswordResetEmail(user.id);
     } catch (err) {
-      console.error(`[forgotPassword] Could not queue the reset email for ${normalizedEmail}`, err);
+      console.error(`[forgotPassword] Could not queue the reset email for ${maskEmail(normalizedEmail)}`, err);
     }
   }
 
@@ -636,6 +637,7 @@ export class AuthService {
     const tokenHash = createHash('sha256').update(token).digest('hex');
     const passwordHash = await bcrypt.hash(newPassword, 10);
 
+    let resetUserId: string | null = null;
     await prisma.$transaction(async (tx) => {
       const used = await tx.passwordReset.updateMany({
         where: { tokenHash, usedAt: null, expiresAt: { gt: new Date() } },
@@ -645,6 +647,7 @@ export class AuthService {
         throw new AppError('This reset link is invalid or has expired', 400, 'INVALID_RESET_TOKEN');
       }
       const reset = await tx.passwordReset.findUniqueOrThrow({ where: { tokenHash } });
+      resetUserId = reset.userId;
       await tx.user.update({
         where: { id: reset.userId },
         data: {
@@ -655,6 +658,8 @@ export class AuthService {
         },
       });
     });
+    // Every session ends with a password reset: leave a trail of who and when.
+    if (resetUserId) void recordAudit({ userId: resetUserId, action: 'auth:PASSWORD_RESET', entityType: 'user', entityId: resetUserId, responseStatus: 200 });
   }
 
   /**

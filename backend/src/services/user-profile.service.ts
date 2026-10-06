@@ -1,3 +1,4 @@
+import { maskEmail } from '../utils/mask';
 import prisma from '../config/database';
 import { isStoredFile, storedFileOwner } from '../storage';
 import { AppError } from '../middleware/errorHandler';
@@ -88,7 +89,7 @@ export class UserProfileService {
       try {
         await queueVerificationEmail(userId);
       } catch (err) {
-        console.error(`[updateProfile] Could not queue the verification email for ${newEmail}`, err);
+        console.error(`[updateProfile] Could not queue the verification email for ${maskEmail(newEmail)}`, err);
       }
     }
 

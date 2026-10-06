@@ -217,6 +217,8 @@ return a generic message plus a request id. The frontend sends the JWT in the `A
 
 ## Data retention
 
+What to keep, for how long, and what to alert on is in [OPERATIONS_AND_LOGGING.md](OPERATIONS_AND_LOGGING.md).
+
 The `purge-expired-secrets` job (every 6 hours, `order-maintenance.service.ts`) deletes OTP records older than 24
 hours and password-reset tokens that expired more than 24 hours ago or were used more than 24 hours ago. The
 stale-order sweep cancels unaccepted and unpaid orders (see the deployment guide). There is no automatic deletion of

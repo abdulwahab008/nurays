@@ -26,6 +26,7 @@ import { markShuttingDown, isShuttingDown } from './utils/lifecycle';
 import { apiLimiter } from './middleware/rateLimiter';
 import { requestId, httpLogger } from './middleware/requestContext';
 import { isProduction } from './config/env';
+import { logOpsSnapshot } from './services/ops-snapshot.service';
 import { sweepStaleOrders, purgeExpiredSecrets } from './services/order-maintenance.service';
 import { expireAbandonedAttempts } from './services/online-payment.service';
 import { errorHandler } from './middleware/errorHandler';
@@ -162,6 +163,7 @@ httpServer.listen(PORT, () => {
   scheduleJob('expire-payment-attempts', 15 * 60 * 1000, () => expireAbandonedAttempts());
   // Trending and rating scores the listings sort by (recent orders fade over days, so this
   // keeps them current even when nobody orders).
+  scheduleJob('ops-snapshot', 5 * 60 * 1000, () => logOpsSnapshot());
   scheduleJob('ranking-scores', 15 * 60 * 1000, () => recomputeRankings());
 
   // Background jobs (emails, notifications). With Redis every instance takes queued jobs.

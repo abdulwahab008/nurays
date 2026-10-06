@@ -3,6 +3,8 @@ import type { Request, Response, NextFunction } from 'express';
 import pinoHttp from 'pino-http';
 import { logger, requestContext } from '../utils/logger';
 
+const SLOW_MS = Number(process.env.SLOW_REQUEST_MS) || 2000;
+const tookMs = (req: unknown) => Date.now() - ((req as { startedAt?: number }).startedAt ?? Date.now());
 const VALID_ID = /^[A-Za-z0-9._:-]{1,100}$/;
 
 /**
@@ -13,7 +15,8 @@ const VALID_ID = /^[A-Za-z0-9._:-]{1,100}$/;
 export function requestId(req: Request, res: Response, next: NextFunction) {
   const incoming = req.get('x-request-id');
   const id = incoming && VALID_ID.test(incoming) ? incoming : randomUUID();
-  (req as Request & { id: string }).id = id;
+  (req as Request & { id: string; startedAt: number }).id = id;
+  (req as Request & { startedAt: number }).startedAt = Date.now();
   res.setHeader('X-Request-Id', id);
   requestContext.run({ requestId: id }, () => next());
 }
@@ -23,7 +26,9 @@ export const httpLogger = pinoHttp({
   logger,
   genReqId: (req) => (req as unknown as { id?: string }).id ?? randomUUID(),
   autoLogging: { ignore: (req) => (req.url ?? '').includes('/health') },
-  customLogLevel: (_req, res, err) => (err || res.statusCode >= 500 ? 'error' : res.statusCode >= 400 ? 'warn' : 'info'),
+  // A request slower than SLOW_REQUEST_MS (default 2 s) is logged as a warning so it can be alerted on.
+  customLogLevel: (req, res, err) => (err || res.statusCode >= 500 ? 'error' : res.statusCode >= 400 || tookMs(req) > SLOW_MS ? 'warn' : 'info'),
+  customProps: (req) => ({ slow: tookMs(req) > SLOW_MS || undefined }),
   serializers: {
     req: (req) => ({ method: req.method, url: req.url }),
     res: (res) => ({ statusCode: res.statusCode }),

@@ -1,3 +1,4 @@
+import { recordAudit } from '../middleware/audit';
 import prisma from '../config/database';
 import { getPlatformDeliveryPricing } from './delivery-pricing.service';
 import { platformDeliveryFee } from '../utils/deliveryFee';
@@ -996,6 +997,15 @@ export class SellerService {
         },
       });
 
+    });
+
+    void recordAudit({
+      userId: seller.userId,
+      action: 'seller:PAYOUT_REQUESTED',
+      entityType: 'seller_payout',
+      entityId: payout.id,
+      data: { sellerId, amount: data.amount, payoutMethod: data.payoutMethod },
+      responseStatus: 201,
     });
 
     return {
