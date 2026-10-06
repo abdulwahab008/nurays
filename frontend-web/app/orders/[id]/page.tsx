@@ -708,7 +708,7 @@ function OrderDetailContent() {
                       </p>
                     </div>
                     <div className="bg-white border-2 border-amber-500 px-5 py-2 rounded-xl text-center shadow-inner">
-                      <span className="text-[10px] uppercase font-bold text-muted-foreground block">{t('detail.pinLabel')}</span>
+                      <span className="text-[11px] uppercase font-bold text-muted-foreground block">{t('detail.pinLabel')}</span>
                       <span data-ltr className="text-3xl font-mono font-black tracking-widest text-amber-600">{order.delivery.otp}</span>
                     </div>
                   </div>
@@ -963,7 +963,7 @@ function OrderDetailContent() {
           <div>
             <div className="flex items-center gap-2 mb-1">
               <span className="text-2xl font-black tracking-tight text-slate-950">NURAY FOOD &amp; FROST</span>
-              <span className="text-[10px] font-black bg-emerald-100 text-emerald-900 px-2 py-0.5 rounded-full uppercase">{t('receipt.verifiedKitchen')}</span>
+              <span className="text-[11px] font-black bg-emerald-100 text-emerald-900 px-2 py-0.5 rounded-full uppercase">{t('receipt.verifiedKitchen')}</span>
             </div>
             <p className="text-xs text-slate-600">{t('receipt.network')}</p>
             <p className="text-[11px] text-slate-500 font-medium">{t('receipt.officialInvoice')}</p>
@@ -978,7 +978,7 @@ function OrderDetailContent() {
         {/* Kitchen & Customer Credentials */}
         <div className="grid grid-cols-2 gap-6 border-b border-slate-200 pb-4 mb-5 text-xs">
           <div>
-            <span className="text-[10px] font-black uppercase text-slate-400 tracking-wider block mb-1">
+            <span className="text-[11px] font-black uppercase text-slate-400 tracking-wider block mb-1">
               {t('receipt.preparedBy')}
             </span>
             <h4 className="font-extrabold text-sm text-slate-900">{sellerName}</h4>
@@ -987,7 +987,7 @@ function OrderDetailContent() {
           </div>
 
           <div>
-            <span className="text-[10px] font-black uppercase text-slate-400 tracking-wider block mb-1">
+            <span className="text-[11px] font-black uppercase text-slate-400 tracking-wider block mb-1">
               {t('receipt.billedTo')}
             </span>
             <h4 className="font-extrabold text-sm text-slate-900">{customerName}</h4>
@@ -1015,7 +1015,7 @@ function OrderDetailContent() {
                   <td className="py-2.5 px-2 font-semibold">
                     <span className="font-bold text-slate-900 block">{item.productName}</span>
                     {item.variantName && (
-                      <span className="text-[10px] text-slate-500 font-medium">{item.variantName}</span>
+                      <span className="text-[11px] text-slate-500 font-medium">{item.variantName}</span>
                     )}
                   </td>
                   <td className="py-2.5 px-2 text-center font-bold">{item.quantity}</td>
@@ -1033,7 +1033,7 @@ function OrderDetailContent() {
         <div className="grid grid-cols-2 gap-6 border-t-2 border-slate-800 pt-4 mb-6 text-xs">
           {/* Payment Method Statement */}
           <div className="space-y-2">
-            <span className="text-[10px] font-black uppercase text-slate-400 tracking-wider block">
+            <span className="text-[11px] font-black uppercase text-slate-400 tracking-wider block">
               {t('receipt.paymentDetails')}
             </span>
             <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-200 space-y-1.5">
@@ -1058,7 +1058,7 @@ function OrderDetailContent() {
               {order.paymentProofUrl && (
                 <div className="pt-2 border-t border-slate-200 flex items-center gap-2">
                   <span className="text-xs">🧾</span>
-                  <span className="text-[10px] text-emerald-800 font-bold">
+                  <span className="text-[11px] text-emerald-800 font-bold">
                     {t('receipt.proofArchived')}
                   </span>
                 </div>
@@ -1096,10 +1096,10 @@ function OrderDetailContent() {
         </div>
 
         {/* Footer & Watermark */}
-        <div className="border-t border-slate-200 pt-4 text-center text-[10px] text-slate-500 space-y-1">
+        <div className="border-t border-slate-200 pt-4 text-center text-[11px] text-slate-500 space-y-1">
           <p className="font-extrabold text-slate-700">{t('receipt.thanks')}</p>
           <p>{t('receipt.support')}</p>
-          <p className="text-[9px] text-slate-400">{t('receipt.computerGenerated')}</p>
+          <p className="text-[11px] text-slate-400">{t('receipt.computerGenerated')}</p>
         </div>
       </div>
 
@@ -1150,12 +1150,12 @@ function OrderDetailContent() {
                 {/* Details */}
                 <div className="grid grid-cols-2 gap-4 text-xs">
                   <div>
-                    <span className="text-[10px] uppercase font-bold text-slate-400 block">{t('receipt.soldBy')}</span>
+                    <span className="text-[11px] uppercase font-bold text-slate-400 block">{t('receipt.soldBy')}</span>
                     <span className="font-bold text-slate-900 block">{sellerName}</span>
                     <span className="text-slate-500 text-[11px]">{t('receipt.communityKitchen')}</span>
                   </div>
                   <div>
-                    <span className="text-[10px] uppercase font-bold text-slate-400 block">{t('receipt.deliveredTo')}</span>
+                    <span className="text-[11px] uppercase font-bold text-slate-400 block">{t('receipt.deliveredTo')}</span>
                     <span className="font-bold text-slate-900 block">{customerName}</span>
                     <span className="text-slate-500 text-[11px]">{order.delivery.address}</span>
                   </div>

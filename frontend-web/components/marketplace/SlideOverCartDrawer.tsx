@@ -233,7 +233,7 @@ export function SlideOverCartDrawer({ isOpen, onClose }: SlideOverCartDrawerProp
                     <Bike className="w-3.5 h-3.5 text-slate-400" />
                     <span>{tc('delivery')}</span>
                     {deliveryFee === 0 && (
-                      <span className="text-[10px] font-bold uppercase text-emerald-700 bg-emerald-100 px-1.5 py-0.2 rounded">
+                      <span className="text-[11px] font-bold uppercase text-emerald-700 bg-emerald-100 px-1.5 py-0.2 rounded">
                         {t('freeTag')}
                       </span>
                     )}
@@ -267,7 +267,7 @@ export function SlideOverCartDrawer({ isOpen, onClose }: SlideOverCartDrawerProp
                 </Link>
               </div>
 
-              <p className="text-[10px] text-center text-slate-400 font-medium flex items-center justify-center gap-1">
+              <p className="text-[11px] text-center text-slate-400 font-medium flex items-center justify-center gap-1">
                 <ShieldCheck className="w-3 h-3 text-slate-400 inline" />
                 <span>{t('protected')}</span>
               </p>

@@ -553,7 +553,7 @@ export default function HubOperationsConsole({ mode }: { mode: 'admin' | 'manage
           >
             <span>📦</span>
             <span>Cold Batch Intake & Inspection</span>
-            <span className="text-[10px] bg-cyan-100 text-cyan-800 font-bold px-1.5 py-0.5 rounded-full">
+            <span className="text-[11px] bg-cyan-100 text-cyan-800 font-bold px-1.5 py-0.5 rounded-full">
               ≤ -18°C
             </span>
           </button>
@@ -568,7 +568,7 @@ export default function HubOperationsConsole({ mode }: { mode: 'admin' | 'manage
             <span>❄️</span>
             <span>FEFO Batch Queue & Inventory</span>
             {batchSummary?.totalBatches > 0 && (
-              <span className="text-[10px] bg-slate-200 text-slate-800 font-bold px-1.5 py-0.5 rounded-full">
+              <span className="text-[11px] bg-slate-200 text-slate-800 font-bold px-1.5 py-0.5 rounded-full">
                 {batchSummary.totalBatches}
               </span>
             )}
@@ -584,7 +584,7 @@ export default function HubOperationsConsole({ mode }: { mode: 'admin' | 'manage
             <span>🌡️</span>
             <span>Temperature Probe Logs & Alerts</span>
             {tempStats?.breachCount ? (
-              <span className="text-[10px] bg-rose-100 text-rose-700 font-bold px-1.5 py-0.5 rounded-full">
+              <span className="text-[11px] bg-rose-100 text-rose-700 font-bold px-1.5 py-0.5 rounded-full">
                 {tempStats.breachCount} Alerts
               </span>
             ) : null}

@@ -324,7 +324,7 @@ L.tileLayer(MAP_TILE_URL, { attribution: MAP_ATTRIBUTION, maxZoom: MAP_MAX_ZOOM 
             type="button"
             onClick={() => handleSearch()}
             disabled={isSearching || !searchQuery.trim()}
-            className="absolute end-1 top-1 px-2.5 py-1 bg-slate-900 hover:bg-slate-800 disabled:opacity-40 text-white text-[10px] font-bold rounded-lg transition-colors cursor-pointer"
+            className="absolute end-1 top-1 px-2.5 py-1 bg-slate-900 hover:bg-slate-800 disabled:opacity-40 text-white text-[11px] font-bold rounded-lg transition-colors cursor-pointer"
           >
             {isSearching ? <Loader2 className="w-3 h-3 animate-spin" /> : tc('search')}
           </button>
@@ -354,7 +354,7 @@ L.tileLayer(MAP_TILE_URL, { attribution: MAP_ATTRIBUTION, maxZoom: MAP_MAX_ZOOM 
             ) : (
               <Navigation className="w-3.5 h-3.5" />
             )}
-            <span className="text-[10px] font-semibold hidden sm:inline">{t('myLocation')}</span>
+            <span className="text-[11px] font-semibold hidden sm:inline">{t('myLocation')}</span>
           </button>
         </div>
       </div>
@@ -379,7 +379,7 @@ L.tileLayer(MAP_TILE_URL, { attribution: MAP_ATTRIBUTION, maxZoom: MAP_MAX_ZOOM 
           <span>{t('mapHint')}</span>
         </span>
         {currentCoords && (
-          <span className="font-mono font-medium text-slate-700 bg-slate-100 px-2 py-0.5 rounded text-[10px]" data-ltr>
+          <span className="font-mono font-medium text-slate-700 bg-slate-100 px-2 py-0.5 rounded text-[11px]" data-ltr>
             {currentCoords.lat.toFixed(4)}, {currentCoords.lng.toFixed(4)}
           </span>
         )}

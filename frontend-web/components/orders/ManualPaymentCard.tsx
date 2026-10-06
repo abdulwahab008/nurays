@@ -244,7 +244,7 @@ export default function ManualPaymentCard({
               <h4 className="font-black text-base text-amber-950">
                 {t('proofSubmitted')}
               </h4>
-              <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black bg-amber-200 text-amber-900">
+              <span className="px-2.5 py-0.5 rounded-full text-[11px] font-black bg-amber-200 text-amber-900">
                 {t('awaitingVerification')}
               </span>
             </div>
@@ -258,7 +258,7 @@ export default function ManualPaymentCard({
         <div className="bg-white rounded-2xl border border-amber-200/80 p-4 space-y-3">
           <div className="flex items-center justify-between flex-wrap gap-2">
             <div>
-              <span className="text-[10px] uppercase font-bold text-slate-400 block tracking-wider">
+              <span className="text-[11px] uppercase font-bold text-slate-400 block tracking-wider">
                 {t('refMethod')}
               </span>
               <span className="font-semibold text-xs text-slate-800">
@@ -312,7 +312,7 @@ export default function ManualPaymentCard({
       {/* Header */}
       <div className="flex items-start justify-between gap-4">
         <div>
-          <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-orange-100 text-[#FF5500] text-[10px] font-black uppercase tracking-wider mb-1.5">
+          <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-orange-100 text-[#FF5500] text-[11px] font-black uppercase tracking-wider mb-1.5">
             {t('directBadge')}
           </div>
           <h3 className="text-lg font-black text-slate-900">
@@ -449,7 +449,7 @@ export default function ManualPaymentCard({
                             <span className="font-black text-xs text-slate-900 block truncate">
                               {acc.provider}
                             </span>
-                            <span className="text-[10px] text-slate-500 font-mono block truncate" data-ltr>
+                            <span className="text-[11px] text-slate-500 font-mono block truncate" data-ltr>
                               {acc.accountNumber}
                             </span>
                           </div>
@@ -473,7 +473,7 @@ export default function ManualPaymentCard({
               <div>
                 <label className="block text-xs font-black text-slate-900 mb-1.5 flex items-center justify-between">
                   <span>{t('screenshotLabel')}</span>
-                  <span className="text-[10px] font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-md">
+                  <span className="text-[11px] font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-md">
                     {t('recommended')}
                   </span>
                 </label>
@@ -498,7 +498,7 @@ export default function ManualPaymentCard({
                       <p className="text-xs font-black text-slate-800 group-hover:text-[#FF5500] transition-colors">
                         {t('tapToUpload')}
                       </p>
-                      <p className="text-[10px] text-slate-400 mt-0.5">
+                      <p className="text-[11px] text-slate-400 mt-0.5">
                         {t('supportsFormats')}
                       </p>
                     </div>
@@ -516,7 +516,7 @@ export default function ManualPaymentCard({
                       <p className="text-xs font-black text-slate-900 truncate">
                         {screenshotFile?.name || 'receipt-screenshot.png'}
                       </p>
-                      <p className="text-[10px] text-emerald-600 font-bold mt-0.5 flex items-center gap-1">
+                      <p className="text-[11px] text-emerald-600 font-bold mt-0.5 flex items-center gap-1">
                         {uploadingImage ? (
                           <>
                             <span className="w-2.5 h-2.5 border-2 border-emerald-600 border-t-transparent rounded-full animate-spin" />

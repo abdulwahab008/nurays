@@ -223,7 +223,7 @@ export function CommunitySelector({ variant = 'navbar' }: CommunitySelectorProps
                     <MapPin className="w-4 h-4" />
                   </div>
                   <div className="min-w-0">
-                    <p className="text-[10px] font-bold text-orange-800 uppercase tracking-wider">
+                    <p className="text-[11px] font-bold text-orange-800 uppercase tracking-wider">
                       {t('currentLocation')}
                     </p>
                     <p className="text-xs font-bold text-slate-900 truncate">
@@ -289,7 +289,7 @@ export function CommunitySelector({ variant = 'navbar' }: CommunitySelectorProps
                   <div className="flex items-center gap-2.5">
                     <Sparkles className="w-4 h-4 text-amber-600 shrink-0" />
                     <div>
-                      <p className="text-[10px] font-bold text-amber-800 uppercase tracking-wider">
+                      <p className="text-[11px] font-bold text-amber-800 uppercase tracking-wider">
                         {t('smartMatch')}
                       </p>
                       <p className="text-xs font-bold text-slate-900">
@@ -316,7 +316,7 @@ export function CommunitySelector({ variant = 'navbar' }: CommunitySelectorProps
                 ) : (
                   <>
                     <div className="px-1 py-1">
-                      <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                      <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">
                         {t('lahoreCommunities')}
                       </p>
                     </div>
@@ -369,7 +369,7 @@ export function CommunitySelector({ variant = 'navbar' }: CommunitySelectorProps
             <span className="text-xs font-bold text-slate-900 truncate">
               {comm.name}
             </span>
-            <span className="text-[10px] font-medium px-1.5 py-0.2 rounded bg-slate-100 text-slate-600 shrink-0">
+            <span className="text-[11px] font-medium px-1.5 py-0.2 rounded bg-slate-100 text-slate-600 shrink-0">
               {comm.city}
             </span>
           </div>

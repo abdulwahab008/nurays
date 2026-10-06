@@ -471,7 +471,7 @@ export default function CheckoutPage() {
             <div>
               <div className="flex items-center gap-2">
                 <span className="text-xs font-bold text-slate-900">{sellerTitle}</span>
-                <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                <span className="px-2 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
                   {t('singleKitchenBatch')}
                 </span>
               </div>
@@ -559,12 +559,12 @@ export default function CheckoutPage() {
                           <div className="flex items-center gap-2 mb-0.5">
                             <span className="text-xs font-bold text-slate-900">{address.label || t('addressHome')}</span>
                             {address.isDefault && (
-                              <span className="px-1.5 py-0.2 rounded text-[9px] font-bold bg-slate-100 text-slate-600 border border-slate-200">
+                              <span className="px-1.5 py-0.2 rounded text-[11px] font-bold bg-slate-100 text-slate-600 border border-slate-200">
                                 {t('addressDefault')}
                               </span>
                             )}
                             {!address.coordinates && (
-                              <Link href="/profile/addresses" className="px-1.5 py-0.2 rounded text-[9px] font-bold bg-amber-100 text-amber-800 border border-amber-200" data-testid="address-no-pin">
+                              <Link href="/profile/addresses" className="px-1.5 py-0.2 rounded text-[11px] font-bold bg-amber-100 text-amber-800 border border-amber-200" data-testid="address-no-pin">
                                 {t('addressNoPin')}
                               </Link>
                             )}
@@ -678,7 +678,7 @@ export default function CheckoutPage() {
                     <div className="flex-1">
                       <div className="flex items-center gap-2">
                         <span className="text-xs font-bold text-slate-900">{t('codTitle')}</span>
-                        <span className="px-2 py-0.2 rounded-full text-[9px] font-bold bg-amber-100 text-amber-800">
+                        <span className="px-2 py-0.2 rounded-full text-[11px] font-bold bg-amber-100 text-amber-800">
                           {t('recommended')}
                         </span>
                       </div>
@@ -793,7 +793,7 @@ export default function CheckoutPage() {
                     <div className="flex-1">
                       <div className="flex items-center gap-2">
                         <span className="text-xs font-bold text-slate-900">{t('bankTitle')}</span>
-                        <span className="px-2 py-0.2 rounded-full text-[9px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-200">
+                        <span className="px-2 py-0.2 rounded-full text-[11px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-200">
                           {t('directToChef')}
                         </span>
                       </div>
@@ -817,7 +817,7 @@ export default function CheckoutPage() {
                           </div>
                           <div className="flex items-center justify-between gap-2">
                             <div>
-                              <span className="text-slate-400 text-[10px] block">{t('accountIban')}</span>
+                              <span className="text-slate-400 text-[11px] block">{t('accountIban')}</span>
                               <span className="font-mono text-xs font-bold text-amber-400 tracking-wider" data-ltr>
                                 {sellerAccountNumber}
                               </span>
@@ -861,7 +861,7 @@ export default function CheckoutPage() {
                           placeholder={t('txnRefPlaceholder')}
                           className="w-full px-3 py-1.5 text-xs border border-slate-300 rounded-xl outline-none focus:ring-2 focus:ring-[#FF5500] bg-white"
                         />
-                        <p className="text-[10px] text-slate-500 mt-1">
+                        <p className="text-[11px] text-slate-500 mt-1">
                           {t('uploadLater')}
                         </p>
                       </div>
@@ -909,7 +909,7 @@ export default function CheckoutPage() {
                           </div>
                           <div className="flex items-center justify-between gap-2">
                             <div>
-                              <span className="text-red-300 text-[10px] block">{t('jazzNumber')}</span>
+                              <span className="text-red-300 text-[11px] block">{t('jazzNumber')}</span>
                               <span className="font-mono text-sm font-bold text-amber-300 tracking-wide" data-ltr>
                                 {sellerJazzCash}
                               </span>
@@ -999,7 +999,7 @@ export default function CheckoutPage() {
                           </div>
                           <div className="flex items-center justify-between gap-2">
                             <div>
-                              <span className="text-emerald-300 text-[10px] block">{t('easyNumber')}</span>
+                              <span className="text-emerald-300 text-[11px] block">{t('easyNumber')}</span>
                               <span className="font-mono text-sm font-bold text-amber-300 tracking-wide" data-ltr>
                                 {sellerEasyPaisa}
                               </span>
@@ -1088,10 +1088,10 @@ export default function CheckoutPage() {
                         <div className="flex-1 min-w-0">
                           <p className="text-xs font-bold text-slate-900 truncate">{item.product.name}</p>
                           {item.variant && (
-                            <p className="text-[10px] text-slate-500 truncate">{item.variant.name}</p>
+                            <p className="text-[11px] text-slate-500 truncate">{item.variant.name}</p>
                           )}
                           {label && (
-                            <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-700 bg-emerald-50 px-1.5 py-0.2 rounded mt-0.5">
+                            <span className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-700 bg-emerald-50 px-1.5 py-0.2 rounded mt-0.5">
                               <Tag className="w-2.5 h-2.5" />
                               {label}
                             </span>
@@ -1100,7 +1100,7 @@ export default function CheckoutPage() {
                         <div className="text-end shrink-0">
                           <span className="text-xs font-black text-slate-900">{formatPrice(lineTotal)}</span>
                           {promos.length > 0 && base > unitPrice && (
-                            <p className="text-[10px] text-slate-400 line-through">
+                            <p className="text-[11px] text-slate-400 line-through">
                               {formatPrice(base * item.quantity)}
                             </p>
                           )}
@@ -1257,7 +1257,7 @@ export default function CheckoutPage() {
                 <div className="pt-3 border-t border-slate-200/80 flex items-baseline justify-between">
                   <div>
                     <span className="text-sm font-black text-slate-900 block">{t('totalPayable')}</span>
-                    <span className="text-[10px] text-slate-400">{t('includesDeliveryTax')}</span>
+                    <span className="text-[11px] text-slate-400">{t('includesDeliveryTax')}</span>
                   </div>
                   <span className="text-xl font-black text-[#FF5500]">{formatPrice(totalPayable)}</span>
                 </div>

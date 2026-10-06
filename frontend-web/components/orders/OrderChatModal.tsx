@@ -145,7 +145,7 @@ function VoiceNotePlayer({
 
       {/* Progress & Waveform */}
       <div className="flex-1 space-y-1.5 cursor-pointer" onClick={handleSeek}>
-        <div className="flex items-center justify-between text-[10px] font-bold opacity-80">
+        <div className="flex items-center justify-between text-[11px] font-bold opacity-80">
           <span className="flex items-center gap-1">
             <Mic className="w-3 h-3" />
             <span>{t('chat.voiceNote')}</span>
@@ -167,7 +167,7 @@ function VoiceNotePlayer({
       {/* Speed Button */}
       <button
         onClick={cycleSpeed}
-        className={`text-[10px] font-black px-1.5 py-0.5 rounded-md border shrink-0 ${
+        className={`text-[11px] font-black px-1.5 py-0.5 rounded-md border shrink-0 ${
           isMeBubble
             ? 'border-white/30 hover:bg-white/10 text-white'
             : 'border-slate-300 hover:bg-slate-200 text-slate-700'
@@ -410,7 +410,7 @@ export default function OrderChatModal({
                 <h3 className="font-black text-sm text-white truncate max-w-[200px] md:max-w-[260px]">
                   {t('chat.chatWith', { name: targetName })}
                 </h3>
-                <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-white/10 text-slate-300" data-ltr>
+                <span className="px-2 py-0.5 rounded-full text-[11px] font-black bg-white/10 text-slate-300" data-ltr>
                   #{orderNumber}
                 </span>
               </div>
@@ -450,7 +450,7 @@ export default function OrderChatModal({
 
         {/* Quick Suggestion Chips */}
         <div className="px-3 py-2 bg-slate-100/70 border-b border-slate-200/60 overflow-x-auto flex items-center gap-1.5 scrollbar-none">
-          <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider shrink-0 flex items-center gap-1 ps-1">
+          <span className="text-[11px] font-black text-slate-400 uppercase tracking-wider shrink-0 flex items-center gap-1 ps-1">
             <Sparkles className="w-3 h-3 text-amber-500" />
             {t('chat.quick')}
           </span>
@@ -512,8 +512,8 @@ export default function OrderChatModal({
                 <div key={msg.id} className={`flex flex-col ${isMe ? 'items-end' : 'items-start'}`}>
                   {/* Sender Name & Time */}
                   <div className="flex items-center gap-1.5 mb-1 px-1">
-                    <span className="text-[10px] font-extrabold text-slate-400">{senderLabel}</span>
-                    <span className="text-[9px] text-slate-400">
+                    <span className="text-[11px] font-extrabold text-slate-400">{senderLabel}</span>
+                    <span className="text-[11px] text-slate-400">
                       {new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                     </span>
                   </div>

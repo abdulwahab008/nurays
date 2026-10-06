@@ -426,7 +426,7 @@ function DashboardSidebarContent({ items: allItems, userType }: DashboardSidebar
                           <span className="flex-1 truncate">{label(sub.name)}</span>
                           {sub.badge !== undefined && sub.badge > 0 && (
                             <span
-                              className="text-[10px] font-bold px-1.5 py-0.5 rounded-full"
+                              className="text-[11px] font-bold px-1.5 py-0.5 rounded-full"
                               style={{ background: accentColor, color: '#FFFFFF' }}
                             >
                               {sub.badge}
@@ -482,7 +482,7 @@ function SidebarSkeleton({ items }: { items: SidebarItem[] }) {
           </div>
         </div>
         <div className="px-3 mb-2">
-          <span className="text-[10px] font-bold tracking-wider uppercase text-slate-400">Menu</span>
+          <span className="text-[11px] font-bold tracking-wider uppercase text-slate-400">Menu</span>
         </div>
         <nav className="space-y-1">
           {items.map((item) => (

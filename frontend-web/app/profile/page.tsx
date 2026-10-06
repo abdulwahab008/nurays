@@ -381,7 +381,7 @@ export default function ProfilePage() {
                     {hasRealPhone ? <span data-ltr>{formatPhoneNumber(profile!.phone)}</span> : t('notProvided')}
                     {hasRealPhone && (
                       <span
-                        className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                        className={`text-[11px] font-bold px-2 py-0.5 rounded-full ${
                           profile?.phoneVerified ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'
                         }`}
                       >

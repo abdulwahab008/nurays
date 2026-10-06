@@ -1044,7 +1044,7 @@ export default function SellerPromotionsPage() {
                       </div>
 
                       <div>
-                        <span className="text-[10px] font-black uppercase tracking-widest text-orange-200">
+                        <span className="text-[11px] font-black uppercase tracking-widest text-orange-200">
                           {promo.type === 'percentage'
                             ? 'DISCOUNT VOUCHER'
                             : promo.type === 'fixed'

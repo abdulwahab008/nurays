@@ -675,13 +675,13 @@ export default function ProductDetailPage() {
                 👩‍🍳
               </div>
               <div>
-                <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-0.5">
+                <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-0.5">
                   {t('homeKitchen')}
                 </p>
                 <p className="font-bold text-gray-900 flex items-center gap-2">
                   <span>{product.seller?.businessName ?? t('seller')}</span>
                   {product.seller?.isVerified && (
-                    <span className="text-[10px] font-bold text-emerald-800 bg-emerald-100 px-1.5 py-0.5 rounded">
+                    <span className="text-[11px] font-bold text-emerald-800 bg-emerald-100 px-1.5 py-0.5 rounded">
                       {t('verifiedChef')}
                     </span>
                   )}
@@ -703,7 +703,7 @@ export default function ProductDetailPage() {
                 />
               </button>
               <div className="text-end">
-                <p className="text-[10px] text-gray-400 font-bold uppercase">{t('rating')}</p>
+                <p className="text-[11px] text-gray-400 font-bold uppercase">{t('rating')}</p>
                 <p className="font-black text-sm text-gray-900">{product.seller?.rating ? `★ ${product.seller.rating.toFixed(1)}` : t('new')}</p>
               </div>
             </div>

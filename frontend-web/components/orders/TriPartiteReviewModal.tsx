@@ -170,7 +170,7 @@ export default function TriPartiteReviewModal({
             <span className="text-xl">⭐</span>
             <div>
               <h3 className="font-black text-sm text-white">{t('review.title')}</h3>
-              <p className="text-[10px] text-slate-400 font-medium">{t('review.orderNumber', { number: orderNumber })}</p>
+              <p className="text-[11px] text-slate-400 font-medium">{t('review.orderNumber', { number: orderNumber })}</p>
             </div>
           </div>
           <button
@@ -208,7 +208,7 @@ export default function TriPartiteReviewModal({
               </div>
               {renderStars(foodRating, setFoodRating)}
               {reviewableItems.length > 0 && (
-                <p className="text-[10px] text-slate-500 font-medium">
+                <p className="text-[11px] text-slate-500 font-medium">
                   {t('review.appliesTo', { items: reviewableItems.map((item) => item.productName).join(', ') })}
                 </p>
               )}
@@ -221,7 +221,7 @@ export default function TriPartiteReviewModal({
                   <Award className="w-4 h-4 text-purple-600" />
                   <span className="font-black text-xs text-slate-900">{t('review.kitchen')}</span>
                 </div>
-                <span className="text-[10px] text-slate-400 font-bold">{sellerName}</span>
+                <span className="text-[11px] text-slate-400 font-bold">{sellerName}</span>
               </div>
               {renderStars(sellerRating, setSellerRating)}
             </div>
@@ -234,7 +234,7 @@ export default function TriPartiteReviewModal({
                     <Bike className="w-4 h-4 text-blue-600" />
                     <span className="font-black text-xs text-slate-900">{t('review.rider')}</span>
                   </div>
-                  <span className="text-[10px] text-slate-400 font-bold">{riderName}</span>
+                  <span className="text-[11px] text-slate-400 font-bold">{riderName}</span>
                 </div>
                 {renderStars(riderRating, setRiderRating)}
               </div>

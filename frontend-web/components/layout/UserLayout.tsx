@@ -32,6 +32,16 @@ export function UserLayout({ children, showSidebar = true, showNavbar = true }: 
   const router = useRouter();
   const t = useT(shellMessages);
   const [mounted, setMounted] = useState(false);
+  const [drawerOpen, setDrawerOpen] = useState(false);
+
+  // Close the phone menu after navigating, and stop the page scrolling behind it while it is open.
+  useEffect(() => setDrawerOpen(false), [pathname]);
+  useEffect(() => {
+    document.body.style.overflow = drawerOpen ? 'hidden' : '';
+    return () => {
+      document.body.style.overflow = '';
+    };
+  }, [drawerOpen]);
 
   // Wait for hydration to complete
   useEffect(() => {
@@ -169,14 +179,35 @@ export function UserLayout({ children, showSidebar = true, showNavbar = true }: 
   // For authenticated users, show full layout with sidebar
   return (
     <div className="min-h-screen" style={{ background: 'var(--cream-50)' }}>
-      {showNavbar && <DashboardNavbar title="Nuray" />}
-      <div className="flex pt-16">
-        {showSidebar && <DashboardSidebar items={getSidebarItems()} userType={userType as 'customer' | 'seller' | 'admin' | 'rider'} />}
-        <main className={`flex-1 ${showSidebar ? 'ms-64' : ''} p-6`}>
-          {children}
-        </main>
+      {showNavbar && (
+        <DashboardNavbar
+          title="Nuray"
+          userType={userType as 'customer' | 'seller' | 'admin' | 'rider'}
+          onMenuToggle={() => setDrawerOpen((v) => !v)}
+          drawerOpen={drawerOpen}
+        />
+      )}
+      <div className="pt-16">
+        {showSidebar && (
+          <>
+            {/* Sidebar: fixed on lg+, a slide-out drawer on phones and tablets (same as DashboardLayout) */}
+            <div
+              className="fixed inset-0 z-40 lg:hidden transition-opacity duration-200"
+              style={{ background: 'rgba(15,23,42,0.6)', opacity: drawerOpen ? 1 : 0, pointerEvents: drawerOpen ? 'auto' : 'none' }}
+              onClick={() => setDrawerOpen(false)}
+              aria-hidden={!drawerOpen}
+            />
+            <div
+              className="nuray-drawer fixed top-16 bottom-0 start-0 z-50 w-64"
+              data-open={drawerOpen ? 'true' : 'false'}
+              onClick={() => setDrawerOpen(false)}
+            >
+              <DashboardSidebar items={getSidebarItems()} userType={userType as 'customer' | 'seller' | 'admin' | 'rider'} />
+            </div>
+          </>
+        )}
+        <main className={`min-w-0 ${showSidebar ? 'lg:ms-64' : ''} p-4 sm:p-6`}>{children}</main>
       </div>
     </div>
   );
 }
-

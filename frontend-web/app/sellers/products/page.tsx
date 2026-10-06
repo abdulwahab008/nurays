@@ -808,7 +808,7 @@ function SellerProductsContent() {
                           </span>
                           <span className="font-black text-emerald-700">
                             {formatPrice(product.price - product.costPrice - product.price * 0.15)}
-                            <span className="text-[10px] font-bold text-emerald-600 ms-1">
+                            <span className="text-[11px] font-bold text-emerald-600 ms-1">
                               ({(
                                 ((product.price - product.costPrice - product.price * 0.15) / product.price) *
                                 100

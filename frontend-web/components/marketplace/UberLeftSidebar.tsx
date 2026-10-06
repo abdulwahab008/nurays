@@ -102,7 +102,7 @@ export function UberLeftSidebar({
                 <p className="text-xs font-bold text-slate-900 truncate">
                   {user.profile?.fullName || t('customer')}
                 </p>
-                <p className="text-[10px] text-slate-500 font-medium truncate" data-ltr>
+                <p className="text-[11px] text-slate-500 font-medium truncate" data-ltr>
                   {user.email}
                 </p>
               </div>
@@ -113,7 +113,7 @@ export function UberLeftSidebar({
           <div className="flex-1 overflow-y-auto p-3 space-y-5">
             {/* Primary Platform Feeds */}
             <div className="space-y-0.5">
-              <p className="px-2.5 text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1.5">
+              <p className="px-2.5 text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-1.5">
                 {t('discover')}
               </p>
               {mainNavItems.map((item) => {
@@ -139,7 +139,7 @@ export function UberLeftSidebar({
 
             {/* Quick Cuisines */}
             <div className="space-y-1">
-              <p className="px-2.5 text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1.5">
+              <p className="px-2.5 text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-1.5">
                 {t('popularSearches')}
               </p>
               <div className="grid grid-cols-2 gap-1 px-0.5">
@@ -159,7 +159,7 @@ export function UberLeftSidebar({
 
             {/* Customer Account & Orders */}
             <div className="space-y-0.5 pt-3 border-t border-slate-100">
-              <p className="px-2.5 text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1.5">
+              <p className="px-2.5 text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-1.5">
                 {t('account')}
               </p>
               {isAuthenticated ? (
@@ -216,7 +216,7 @@ export function UberLeftSidebar({
 
             {/* Portals */}
             <div className="pt-3 border-t border-slate-100 space-y-0.5">
-              <p className="px-2.5 text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1.5">
+              <p className="px-2.5 text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-1.5">
                 {t('portals')}
               </p>
               <Link

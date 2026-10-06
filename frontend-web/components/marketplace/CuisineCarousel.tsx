@@ -157,7 +157,7 @@ export function CuisineCarousel({ selectedCuisine, onSelectCuisine }: CuisineCar
                   {cuisineLabel(item)}
                 </span>
                 {item.badge && (
-                  <span className="inline-block text-[9px] font-semibold uppercase tracking-wider text-slate-500 bg-slate-100 px-1.5 py-0.2 rounded">
+                  <span className="inline-block text-[11px] font-semibold uppercase tracking-wider text-slate-500 bg-slate-100 px-1.5 py-0.2 rounded">
                     {t('badgeFrozen')}
                   </span>
                 )}

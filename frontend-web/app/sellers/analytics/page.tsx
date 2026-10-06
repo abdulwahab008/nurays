@@ -329,7 +329,7 @@ export default function SellerAnalyticsPage() {
                   <span className="text-slate-500">
                     {completedOrders} completed of {totalOrders}
                   </span>
-                  <span className={`px-2 py-0.5 rounded-full font-bold text-[10px] ${
+                  <span className={`px-2 py-0.5 rounded-full font-bold text-[11px] ${
                     fulfillmentRate >= 95
                       ? 'bg-emerald-100 text-emerald-800'
                       : fulfillmentRate >= 80
@@ -369,7 +369,7 @@ export default function SellerAnalyticsPage() {
                     <h3 className="text-lg font-black text-slate-900 tracking-tight">
                       Revenue Velocity & Trajectory
                     </h3>
-                    <span className="px-2.5 py-1 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-800 text-[10px] font-bold">
+                    <span className="px-2.5 py-1 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-800 text-[11px] font-bold">
                       PKR Daily
                     </span>
                   </div>
@@ -434,7 +434,7 @@ export default function SellerAnalyticsPage() {
                       className="absolute z-20 pointer-events-none bg-slate-900 text-white text-xs rounded-xl p-2.5 shadow-xl transition-all duration-75 -translate-x-1/2 -translate-y-full mb-2"
                       style={{ left: `${activeTooltip.x}%`, top: `${activeTooltip.y}px` }}
                     >
-                      <p className="font-semibold text-slate-400 text-[10px]">{activeTooltip.date}</p>
+                      <p className="font-semibold text-slate-400 text-[11px]">{activeTooltip.date}</p>
                       <p className="font-bold text-emerald-400 text-sm mt-0.5">{formatPrice(activeTooltip.revenue)}</p>
                       <div className="w-2 h-2 bg-slate-900 rotate-45 absolute -bottom-1 left-1/2 -translate-x-1/2" />
                     </div>
@@ -609,7 +609,7 @@ export default function SellerAnalyticsPage() {
                             x={cx}
                             y="285"
                             textAnchor="middle"
-                            className="text-[10px] fill-slate-400 font-medium"
+                            className="text-[11px] fill-slate-400 font-medium"
                           >
                             {d.label}
                           </text>
@@ -807,7 +807,7 @@ export default function SellerAnalyticsPage() {
             <div className="bg-slate-900 text-white rounded-3xl p-6 sm:p-8 shadow-md">
               <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
                 <div>
-                  <span className="px-3 py-1 rounded-full bg-orange-500 text-white font-bold text-[10px] uppercase tracking-wider">
+                  <span className="px-3 py-1 rounded-full bg-orange-500 text-white font-bold text-[11px] uppercase tracking-wider">
                     Seller Studio Shortcuts
                   </span>
                   <h3 className="text-lg sm:text-xl font-black mt-2 tracking-tight">

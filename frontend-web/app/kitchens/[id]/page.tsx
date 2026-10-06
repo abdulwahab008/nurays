@@ -468,7 +468,7 @@ export default function KitchenStorefrontPage() {
             <ShoppingBag className="w-3.5 h-3.5" />
             <span>{tk('cart')}</span>
             {cartCount > 0 && (
-              <span className="w-4 h-4 rounded-full bg-[#FF5500] text-white flex items-center justify-center text-[10px] font-bold">
+              <span className="w-4 h-4 rounded-full bg-[#FF5500] text-white flex items-center justify-center text-[11px] font-bold">
                 {cartCount}
               </span>
             )}
@@ -642,7 +642,7 @@ export default function KitchenStorefrontPage() {
                 <div className="flex flex-wrap items-center gap-2 mb-1">
                   {kitchen.statusText && (
                     <span
-                      className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider ${
+                      className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-bold uppercase tracking-wider ${
                         isOpenNow
                           ? 'bg-emerald-100 text-emerald-800'
                           : 'bg-rose-100 text-rose-800'
@@ -657,12 +657,12 @@ export default function KitchenStorefrontPage() {
                     </span>
                   )}
                   {kitchen.hoursText && (
-                    <span className="px-2.5 py-0.5 rounded-full bg-orange-100 text-[#FF5500] text-[10px] font-bold">
+                    <span className="px-2.5 py-0.5 rounded-full bg-orange-100 text-[#FF5500] text-[11px] font-bold">
                       {kitchen.hoursText}
                     </span>
                   )}
                   {kitchen.preOrderOnly && kitchen.availability?.status !== 'preorder_only' && (
-                    <span className="px-2.5 py-0.5 rounded-full bg-orange-100 text-[#FF5500] text-[10px] font-bold">
+                    <span className="px-2.5 py-0.5 rounded-full bg-orange-100 text-[#FF5500] text-[11px] font-bold">
                       {tb('preOrdersOnly')}
                     </span>
                   )}
@@ -745,11 +745,11 @@ export default function KitchenStorefrontPage() {
               </div>
               <div>
                 <div className="flex items-center gap-2 flex-wrap mb-1">
-                  <span className="px-2.5 py-0.5 rounded-full bg-red-100 text-red-800 text-[10px] font-bold uppercase tracking-wider">
+                  <span className="px-2.5 py-0.5 rounded-full bg-red-100 text-red-800 text-[11px] font-bold uppercase tracking-wider">
                     {tk('closedInstant')}
                   </span>
                   {kitchen.preOrderOnly && (
-                    <span className="px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-[10px] font-bold uppercase tracking-wider">
+                    <span className="px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-[11px] font-bold uppercase tracking-wider">
                       {tk('acceptingPreOrders')}
                     </span>
                   )}
@@ -903,12 +903,12 @@ export default function KitchenStorefrontPage() {
                           className="w-full h-full group-hover:scale-105 transition-transform"
                         />
                         {dish.originalPrice != null && (
-                          <span className="absolute top-2 start-2 px-2 py-0.5 rounded-md bg-black/75 text-white text-[9px] font-bold tracking-wide backdrop-blur-xs">
+                          <span className="absolute top-2 start-2 px-2 py-0.5 rounded-md bg-black/75 text-white text-[11px] font-bold tracking-wide backdrop-blur-xs">
                             {tk('specialDeal')}
                           </span>
                         )}
                         <span
-                          className={`absolute bottom-2 start-2 px-2 py-0.5 rounded-md text-[10px] font-bold flex items-center gap-1 ${
+                          className={`absolute bottom-2 start-2 px-2 py-0.5 rounded-md text-[11px] font-bold flex items-center gap-1 ${
                             dish.isFrozen
                               ? 'bg-cyan-600 text-white'
                               : 'bg-[#FF5500] text-white'
@@ -951,7 +951,7 @@ export default function KitchenStorefrontPage() {
                               )}
                             </div>
                             {dish.prepTime && (
-                              <span className="text-[10px] text-slate-400 font-medium block">
+                              <span className="text-[11px] text-slate-400 font-medium block">
                                 {dish.prepTime}
                               </span>
                             )}
@@ -1014,7 +1014,7 @@ export default function KitchenStorefrontPage() {
         <div className="bg-white rounded-3xl p-6 sm:p-8 border border-slate-200/90 shadow-2xs">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-6 border-b border-slate-100">
             <div>
-              <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-amber-100 text-amber-900 text-[10px] font-bold uppercase tracking-wider mb-1">
+              <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-amber-100 text-amber-900 text-[11px] font-bold uppercase tracking-wider mb-1">
                 <MessageSquare className="w-3 h-3 text-amber-600" />
                 <span>{tk('verifiedFeedback')}</span>
               </div>
@@ -1069,7 +1069,7 @@ export default function KitchenStorefrontPage() {
                             <span className="text-xs font-bold text-slate-900 block leading-tight">
                               {rev.author}
                             </span>
-                            <span className="text-[10px] text-emerald-700 font-semibold inline-flex items-center gap-0.5">
+                            <span className="text-[11px] text-emerald-700 font-semibold inline-flex items-center gap-0.5">
                               <Check className="w-2.5 h-2.5" />
                               <span>{tk('verifiedCustomer')}</span>
                             </span>
@@ -1099,7 +1099,7 @@ export default function KitchenStorefrontPage() {
                       )}
                     </div>
 
-                    <div className="mt-3 pt-2 border-t border-slate-200/60 text-[10px] text-slate-400">
+                    <div className="mt-3 pt-2 border-t border-slate-200/60 text-[11px] text-slate-400">
                       {new Date(rev.createdAt).toLocaleDateString('en-US', {
                         month: 'short',
                         day: 'numeric',

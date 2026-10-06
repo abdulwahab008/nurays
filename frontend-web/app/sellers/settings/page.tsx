@@ -474,7 +474,7 @@ export default function SellerSettingsPage() {
                       className="px-2.5 py-1 rounded-lg text-xs font-medium border bg-slate-800 text-white border-slate-800 transition-colors flex items-center gap-1.5"
                     >
                       <span>{cat}</span>
-                      <span className="text-[10px] text-slate-400">✕</span>
+                      <span className="text-[11px] text-slate-400">✕</span>
                     </button>
                   ))}
               </div>
@@ -542,7 +542,7 @@ export default function SellerSettingsPage() {
                         }
                         className="w-full ps-3 pe-10 py-1.5 text-xs font-bold border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-[#FF5500]"
                       />
-                      <span className="absolute end-3 top-2 text-[10px] text-slate-400 font-medium">PKR</span>
+                      <span className="absolute end-3 top-2 text-[11px] text-slate-400 font-medium">PKR</span>
                     </div>
                   </div>
 
@@ -562,7 +562,7 @@ export default function SellerSettingsPage() {
                         }
                         className="w-full ps-3 pe-8 py-1.5 text-xs font-bold border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-[#FF5500]"
                       />
-                      <span className="absolute end-3 top-2 text-[10px] text-slate-400 font-medium">KM</span>
+                      <span className="absolute end-3 top-2 text-[11px] text-slate-400 font-medium">KM</span>
                     </div>
                   </div>
                 </div>

@@ -216,7 +216,7 @@ function DevLoginContent() {
                       </div>
                     </div>
                     <span
-                      className={`text-[10px] font-black tracking-widest px-2.5 py-1 rounded-full border ${role.badgeColor}`}
+                      className={`text-[11px] font-black tracking-widest px-2.5 py-1 rounded-full border ${role.badgeColor}`}
                     >
                       {role.badge}
                     </span>

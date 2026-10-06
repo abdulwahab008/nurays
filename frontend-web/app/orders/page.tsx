@@ -396,7 +396,7 @@ function OrdersContent() {
                 <ChefHat className="w-5 h-5" />
               </div>
               {inProgressCount > 0 ? (
-                <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 text-[10px] font-bold">
+                <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 text-[11px] font-bold">
                   <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-ping" />
                   {t('list.liveCooking')}
                 </span>
@@ -421,7 +421,7 @@ function OrdersContent() {
                 <Truck className="w-5 h-5" />
               </div>
               {onTheWayCount > 0 ? (
-                <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-orange-100 text-[#FF5500] text-[10px] font-bold">
+                <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-orange-100 text-[#FF5500] text-[11px] font-bold">
                   <span className="w-1.5 h-1.5 rounded-full bg-[#FF5500] animate-ping" />
                   {t('list.riderDispatched')}
                 </span>
@@ -692,7 +692,7 @@ function OrdersContent() {
                                 key={it.id ?? iIdx}
                                 className="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl bg-slate-50 border border-slate-200/70 text-xs font-bold text-slate-800"
                               >
-                                <span className="w-5 h-5 rounded-md bg-white border border-slate-200 flex items-center justify-center text-[10px] font-black text-[#FF5500]">
+                                <span className="w-5 h-5 rounded-md bg-white border border-slate-200 flex items-center justify-center text-[11px] font-black text-[#FF5500]">
                                   {it.quantity || 1}×
                                 </span>
                                 <span className="truncate max-w-[180px] sm:max-w-[240px]">
@@ -711,7 +711,7 @@ function OrdersContent() {
                       {/* Amount and CTAs */}
                       <div className="flex items-center justify-between sm:justify-end gap-3 sm:gap-4 pt-2 sm:pt-0 border-t sm:border-t-0 border-slate-100">
                         <div className="text-start sm:text-end">
-                          <span className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                          <span className="block text-[11px] font-bold text-slate-400 uppercase tracking-wider">
                             {t('list.orderTotal')}
                           </span>
                           <span className="text-lg sm:text-2xl font-black text-slate-950 tracking-tight">

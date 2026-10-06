@@ -489,7 +489,7 @@ export function DashboardNavbar({ title, subtitle, userType = 'customer', onMenu
                             <p className={`text-xs font-semibold truncate ${!notif.isRead ? 'text-gray-900' : 'text-gray-700'}`}>
                               {notif.title}
                             </p>
-                            <span className="text-[10px] text-gray-400 shrink-0">
+                            <span className="text-[11px] text-gray-400 shrink-0">
                               {formatRelativeTime(notif.createdAt, t)}
                             </span>
                           </div>
@@ -560,7 +560,7 @@ export function DashboardNavbar({ title, subtitle, userType = 'customer', onMenu
                   <div className="flex items-center justify-between gap-2">
                     <p className="text-gray-900 font-bold truncate text-sm">{user?.profile?.fullName || t('user')}</p>
                     <span
-                      className="px-2 py-0.5 text-[10px] font-black rounded-full uppercase tracking-wider shrink-0"
+                      className="px-2 py-0.5 text-[11px] font-black rounded-full uppercase tracking-wider shrink-0"
                       style={{
                         background: isSeller ? 'var(--ink-100)' : isAdmin ? 'var(--gold-50)' : isRider ? '#ECFDF5' : 'var(--forest-50)',
                         color: isSeller ? 'var(--ink-700)' : isAdmin ? 'var(--gold-700)' : isRider ? '#065F46' : 'var(--forest-700)',

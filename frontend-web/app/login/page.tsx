@@ -315,7 +315,7 @@ export default function LoginPage() {
           <div className="lg:col-span-7 bg-slate-50/80 rounded-2xl p-5 sm:p-6 border border-slate-200/70">
             <div className="flex items-center justify-between mb-4">
               <div>
-                <span className="text-[10px] font-bold tracking-wider text-[#FF5500] bg-orange-100/80 px-2.5 py-0.5 rounded-full uppercase">
+                <span className="text-[11px] font-bold tracking-wider text-[#FF5500] bg-orange-100/80 px-2.5 py-0.5 rounded-full uppercase">
                   Instant Access
                 </span>
                 <h2 className="text-lg font-bold text-slate-900 mt-2 flex items-center gap-2">
@@ -349,7 +349,7 @@ export default function LoginPage() {
                           {acc.id === 'rider' && <Bike className="w-4 h-4 text-blue-600" />}
                           {acc.id === 'admin' && <ShieldCheck className="w-4 h-4 text-purple-600" />}
                         </div>
-                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${acc.badgeClass}`}>
+                        <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full border ${acc.badgeClass}`}>
                           {acc.badge}
                         </span>
                       </div>
