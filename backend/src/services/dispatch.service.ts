@@ -4,7 +4,7 @@ import { AppError } from '../middleware/errorHandler';
 import socketManager from '../config/socket';
 import realtimeOrderService from './realtime-order.service';
 import { notify } from './notify.service';
-import { cashLimitOf, riderMoney } from './rider-ledger.service';
+import { cashLimitOf, riderMoney, riderMoneyMany } from './rider-ledger.service';
 import { calculateDeliveryFeeCorridor } from '../utils/deliveryFee';
 import { cashToCollect, endsOf, routeMatch } from '../utils/riderJobs';
 import { chooseRider, DispatchCandidate, JobEnds, MAX_ACTIVE_JOBS } from '../utils/dispatch';
@@ -78,15 +78,16 @@ export async function dispatchDelivery(deliveryId: string): Promise<DispatchResu
   const riderIds = riders.map((r) => r.id);
   const startOfDay = new Date();
   startOfDay.setHours(0, 0, 0, 0);
-  const [activeJobs, doneToday] = await Promise.all([
+  const [activeJobs, doneToday, moneyByRider] = await Promise.all([
     prisma.delivery.findMany({ where: { riderId: { in: riderIds }, status: { in: ACTIVE } }, include: JOB_INCLUDE }),
     prisma.delivery.groupBy({ by: ['riderId'], where: { riderId: { in: riderIds }, status: 'delivered', deliveryTime: { gte: startOfDay } }, _count: { _all: true } }),
+    riderMoneyMany(prisma, riderIds),
   ]);
 
   const candidates: DispatchCandidate[] = [];
   for (const r of riders) {
     const mine = activeJobs.filter((d) => d.riderId === r.id);
-    const { cashHeld } = await riderMoney(prisma, r.id);
+    const cashHeld = moneyByRider.get(r.id)?.cashHeld ?? 0;
     candidates.push({
       id: r.id,
       communityId: r.communityId,
