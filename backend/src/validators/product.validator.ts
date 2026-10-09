@@ -1,8 +1,8 @@
 import { z } from 'zod';
 
 export const getProductsQuerySchema = z.object({
-  page: z.string().optional().transform((val) => (val ? parseInt(val, 10) : 1)),
-  limit: z.string().optional().transform((val) => (val ? parseInt(val, 10) : 20)),
+  page: z.coerce.number().int().min(1).optional(),
+  limit: z.coerce.number().int().min(1).max(100).optional(),
   categoryId: z.string().uuid().optional(),
   sellerId: z.string().uuid().optional(),
   city: z.string().optional(),
@@ -78,8 +78,8 @@ export const updateProductSchema = createProductSchema
   .partial();
 
 export const getSellerProductsQuerySchema = z.object({
-  page: z.string().optional().transform((val) => (val ? parseInt(val, 10) : 1)),
-  limit: z.string().optional().transform((val) => (val ? parseInt(val, 10) : 20)),
+  page: z.coerce.number().int().min(1).optional(),
+  limit: z.coerce.number().int().min(1).max(100).optional(),
   isActive: z.string().optional().transform((val) => (val === 'true' ? true : val === 'false' ? false : undefined)),
   approvalStatus: z.enum(['pending', 'approved', 'rejected']).optional(),
   productType: z.enum(['frozen', 'fresh', 'ready_to_eat', 'ready_to_cook']).optional(),

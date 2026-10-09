@@ -326,14 +326,21 @@ export class PromotionService {
     });
 
     // Filter promotions user hasn't exceeded usage limit for
+    // One grouped count instead of one COUNT per promotion.
+    const usedByPromotion = new Map<string, number>(
+      availablePromotions.length
+        ? (
+            await prisma.promotionUsage.groupBy({
+              by: ['promotionId'],
+              where: { userId, promotionId: { in: availablePromotions.map((p) => p.id) } },
+              _count: { _all: true },
+            })
+          ).map((r) => [r.promotionId, r._count._all] as [string, number])
+        : []
+    );
     const userAvailablePromotions = [];
     for (const promo of availablePromotions) {
-      const userUsage = await prisma.promotionUsage.count({
-        where: {
-          promotionId: promo.id,
-          userId,
-        },
-      });
+      const userUsage = usedByPromotion.get(promo.id) ?? 0;
 
       if (userUsage < promo.usageLimitPerUser) {
         userAvailablePromotions.push({

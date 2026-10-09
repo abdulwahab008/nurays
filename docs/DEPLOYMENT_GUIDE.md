@@ -8,7 +8,7 @@ Every backend setting is documented in [`backend/.env.example`](../backend/.env.
 
 | Piece | Notes |
 |---|---|
-| Backend (Node 20, Express) | Stateless; run one or more instances behind a load balancer. Port 3001 in the Docker image. Serves the REST API under `/api/v1` and Socket.IO on the same port. |
+| Backend (Node 22, Express) | Stateless; run one or more instances behind a load balancer. Port 3001 in the Docker image. Serves the REST API under `/api/v1` and Socket.IO on the same port. |
 | Frontend (Next.js 16) | `output: "standalone"` server on port 3000. It also proxies `/uploads`, `/media` and `/files` to the backend (`frontend-web/next.config.ts`), using `NEXT_PUBLIC_API_URL` at build time. |
 | PostgreSQL 15+ | Must allow `CREATE EXTENSION pg_trgm` (the baseline migration creates it; search typo tolerance uses it). |
 | Redis 7+ | Required in production (see "Several instances"). |
@@ -19,8 +19,10 @@ Every backend setting is documented in [`backend/.env.example`](../backend/.env.
 | VAPID keys | Optional. Without them there is no web push. |
 | Sentry (or GlitchTip) | Optional error tracking, backend and browser. |
 
-Put TLS in front of both services. The backend sets `trust proxy` to 1, so there must be exactly one proxy hop
-between the internet and the app (`backend/src/index.ts`); rate limits key on the client IP it reports.
+Put TLS in front of both services and send `Strict-Transport-Security: max-age=31536000; includeSubDomains` from
+the TLS terminator once every hostname is served over https (the apps do not set it themselves, so a plain-http
+staging host is never locked out). The backend trusts `TRUST_PROXY` hops (default 1), so the number of proxies
+between the internet and the app must match (`backend/src/index.ts`); rate limits key on the client IP it reports.
 
 Browser-facing hostnames: the website (`FRONTEND_URL`, also `CORS_ORIGIN`) and the API (`BASE_URL`). The backend
 allows exactly one CORS origin, so serve the site from a single origin.
@@ -39,10 +41,10 @@ Required means the server will not start in production without it (see "Startup 
 | `DATABASE_URL` | yes | PostgreSQL connection string. |
 | `REDIS_URL` | yes (production) | |
 | `JWT_SECRET` | yes | 32+ characters, not a placeholder in production. `openssl rand -hex 32`. |
-| `JWT_EXPIRES_IN`, `JWT_REFRESH_EXPIRES_IN` | no | Defaults in `.env.example`: `24h`, `30d`. |
+| `JWT_EXPIRES_IN`, `JWT_REFRESH_EXPIRES_IN` | no | Defaults: `1h` (the app renews it with the refresh token) and `30d`. |
 | `GOOGLE_CLIENT_ID` | no | Google sign-in; see [GOOGLE_OAUTH_SETUP.md](GOOGLE_OAUTH_SETUP.md). |
 | `FRONTEND_URL` | yes (production) | Must be `https://`. Used in email links. |
-| `CORS_ORIGIN` | no, but set it | The one browser origin allowed for HTTP and Socket.IO. Defaults to `http://localhost:3000`, so production must set it. |
+| `CORS_ORIGIN` | yes | The one browser origin allowed for HTTP and Socket.IO, an https:// origin (normally the same as `FRONTEND_URL`). Production refuses to start without it. |
 | `BASE_URL` | when Safepay is on | The API's public `https://` URL. |
 
 ### Email (one of two)
@@ -206,6 +208,17 @@ mandatory in production):
   in the process that queued it and is lost if that process dies.
 - Timed sweeps (below) take a Postgres advisory lock per job, so only one instance runs a given sweep at a time.
 - Files: with `STORAGE_DRIVER=local` every instance needs the same volume. Use `s3` once you run more than one.
+- Behind a load balancer or CDN: `TRUST_PROXY` is the number of proxy hops in front of the API (default `1`; `2`
+  behind a CDN plus a load balancer; `0` when exposed directly; or an address list such as `loopback, 10.0.0.0/8`).
+  Getting it wrong either rate-limits everyone as one address or lets a client spoof its address. Idle keep-alive
+  connections are held for `KEEP_ALIVE_TIMEOUT_MS` (default 65 000 ms): keep it above the balancer's idle timeout
+  (60 s on AWS ALB and most nginx setups) or the balancer will hit sockets the API has just closed and answer 502.
+- Database connections: Prisma opens a pool per instance, sized by default from the host's CPU count
+  (`2 × cores + 1`), not from how many instances run. Set it explicitly on `DATABASE_URL`
+  (`?connection_limit=10&pool_timeout=10`) and keep `instances × connection_limit + 10` below PostgreSQL's
+  `max_connections` (100 by default). Beyond about five instances put PgBouncer (transaction mode) in front
+  and add `&pgbouncer=true`. The load test in `docs/PRODUCTION_READINESS_AUDIT.md` showed that a larger pool
+  does not make the API faster on 4 cores: the limit there is CPU, so scale instances, not the pool.
 
 ## Background jobs
 

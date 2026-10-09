@@ -1,4 +1,5 @@
 import { Request, Response } from 'express';
+import { qstr } from '../utils/query';
 import adminService from '../services/admin.service';
 import prisma from '../config/database';
 import { AppError } from '../middleware/errorHandler';
@@ -25,8 +26,8 @@ export const getSellerById = async (req: Request, res: Response) => {
 
 export const getAllSellers = async (req: Request, res: Response) => {
   const filters = {
-    status: req.query.status as string | undefined,
-    verificationStatus: req.query.verificationStatus as string | undefined,
+    status: qstr(req.query.status),
+    verificationStatus: qstr(req.query.verificationStatus),
     page: req.query.page ? parseInt(req.query.page as string) : undefined,
     limit: req.query.limit ? parseInt(req.query.limit as string) : undefined,
   };
@@ -99,7 +100,7 @@ export const approveRejectRider = async (req: Request, res: Response) => {
 
 export const getPayouts = async (req: Request, res: Response) => {
   const filters = {
-    status: req.query.status as string | undefined,
+    status: qstr(req.query.status),
     page: req.query.page ? parseInt(req.query.page as string) : undefined,
     limit: req.query.limit ? parseInt(req.query.limit as string) : undefined,
   };
@@ -163,7 +164,7 @@ export const updateSettings = async (req: Request, res: Response) => {
 
 export const getProductsForModeration = async (req: Request, res: Response) => {
   const filters = {
-    status: (req.query.moderationStatus as string) || (req.query.status as string) || undefined,
+    status: qstr(req.query.moderationStatus) || qstr(req.query.status),
     page: req.query.page ? parseInt(req.query.page as string) : undefined,
     limit: req.query.limit ? parseInt(req.query.limit as string) : undefined,
   };
@@ -226,7 +227,12 @@ export const exportAuditLogs = async (req: Request, res: Response) => {
     take: 5000,
     include: { user: { select: { email: true } } },
   });
-  const cell = (v: unknown) => `"${String(v ?? '').replace(/"/g, '""').replace(/\r?\n/g, ' ')}"`;
+  // A cell that starts like a formula gets a leading apostrophe, so a spreadsheet shows it as text.
+  const cell = (v: unknown) => {
+    let text = String(v ?? '').replace(/\r?\n/g, ' ');
+    if (/^[=+\-@\t\r]/.test(text)) text = `'${text}`;
+    return `"${text.replace(/"/g, '""')}"`;
+  };
   const lines = [['time', 'admin', 'action', 'record_type', 'record_id', 'status', 'ip', 'details'].join(',')].concat(
     rows.map((l) => [l.createdAt.toISOString(), l.user?.email, l.action, l.entityType, l.entityId, l.responseStatus, l.ipAddress, l.requestData ? JSON.stringify(l.requestData) : ''].map(cell).join(','))
   );

@@ -7,6 +7,7 @@ import {
   addAddress,
   updateAddress,
   deleteAddress,
+  deleteOwnAccountHandler,
 } from '../controllers/user-profile.controller';
 import { authenticate } from '../middleware/auth.middleware';
 import { validate } from '../middleware/validation.middleware';
@@ -15,6 +16,7 @@ import {
   updateAvatarSchema,
   addAddressSchema,
   updateAddressSchema,
+  deleteAccountSchema,
 } from '../validators/user-profile.validator';
 
 const router = Router();
@@ -27,6 +29,9 @@ router.get('/me', getCurrentUserProfile);
 
 // Update profile
 router.patch('/me', validate(updateProfileSchema), updateProfile);
+
+// Close the account (self-service, required by the app stores)
+router.delete('/me', validate(deleteAccountSchema), deleteOwnAccountHandler);
 
 // Update avatar
 router.post('/me/avatar', validate(updateAvatarSchema), updateAvatar);

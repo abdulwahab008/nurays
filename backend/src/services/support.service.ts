@@ -1,6 +1,7 @@
 import { Prisma } from '@prisma/client';
 import { randomInt } from 'crypto';
 import prisma from '../config/database';
+import { pageArgs } from '../utils/pagination';
 import { AppError } from '../middleware/errorHandler';
 import { notify } from './notify.service';
 
@@ -77,9 +78,7 @@ export class SupportService {
       limit?: number;
     }
   ) {
-    const page = filters.page || 1;
-    const limit = Math.min(filters.limit || 20, 100);
-    const skip = (page - 1) * limit;
+    const { page, limit, skip } = pageArgs(filters.page, filters.limit);
 
     const where: Prisma.SupportTicketWhereInput = {
       userId,
@@ -217,9 +216,7 @@ export class SupportService {
    * List all tickets (admin)
    */
   async adminGetTickets(filters: { status?: string; priority?: string; assignedTo?: string; search?: string; page?: number; limit?: number }) {
-    const page = filters.page || 1;
-    const limit = Math.min(filters.limit || 20, 100);
-    const skip = (page - 1) * limit;
+    const { page, limit, skip } = pageArgs(filters.page, filters.limit);
 
     const where: Prisma.SupportTicketWhereInput = {};
     if (filters.status) where.status = filters.status;

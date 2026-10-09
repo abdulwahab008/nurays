@@ -48,12 +48,20 @@ class ApiClient {
 
         const url = original.url ?? '';
         if (NO_REFRESH_PATHS.some((p) => url.includes(p))) {
-          this.handleAuthFailure();
+          // A wrong password on the login form is not the end of the session someone already has.
+          if (url.includes('/auth/refresh') || url.includes('/auth/logout')) this.handleAuthFailure();
           return Promise.reject(error);
         }
 
         original._retried = true;
-        const newAccessToken = await this.refreshAccessToken();
+        let newAccessToken: string | null;
+        try {
+          newAccessToken = await this.refreshAccessToken();
+        } catch {
+          // The refresh could not be answered (offline, timeout, server error): the session is
+          // still valid, only this request failed. Keep the tokens for the next attempt.
+          return Promise.reject(error);
+        }
         if (!newAccessToken) {
           this.handleAuthFailure();
           return Promise.reject(error);
@@ -69,6 +77,7 @@ class ApiClient {
    * Refresh access token, dedup-ed across concurrent 401s.
    * Returns the new access token, or null if refresh failed.
    */
+  /** Resolves null when the server refused the refresh token; rejects when it could not be asked. */
   private async refreshAccessToken(): Promise<string | null> {
     if (this.refreshPromise) return this.refreshPromise;
 
@@ -92,8 +101,12 @@ class ApiClient {
 
         this.setTokens(accessToken, newRefresh ?? refreshToken);
         return accessToken;
-      } catch {
-        return null;
+      } catch (err) {
+        // null = the server refused the refresh token (expired, revoked, malformed): sign out.
+        // Anything else (no network, timeout, 5xx) is thrown so the caller leaves the session alone.
+        const status = axios.isAxiosError(err) ? err.response?.status : undefined;
+        if (status === 400 || status === 401 || status === 403) return null;
+        throw err;
       } finally {
         // Allow future refreshes after this one settles.
         setTimeout(() => {

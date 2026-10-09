@@ -3,6 +3,7 @@ import authService from '../services/auth.service';
 import googleAuthService from '../services/google-auth.service';
 import { AppError } from '../middleware/errorHandler';
 import prisma from '../config/database';
+import socketManager from '../config/socket';
 import { recordAudit } from '../middleware/audit';
 
 export const requestOTP = async (req: Request, res: Response) => {
@@ -162,10 +163,15 @@ export const loginWithGoogle = async (req: Request, res: Response) => {
 };
 
 export const logout = async (req: Request, res: Response) => {
-  // An admin's logout ends every session they have: a stolen token stops working at once.
-  if (req.user?.userType === 'admin') {
+  // Logging out ends every session the account has, on every device: a copied token (and the
+  // 30-day refresh token with it) stops working at once. Tokens are stateless, so this is the
+  // only way a sign-out can mean anything.
+  if (req.user) {
     await prisma.user.update({ where: { id: req.user.userId }, data: { tokensValidAfter: new Date() } });
-    void recordAudit({ userId: req.user.userId, action: 'auth:LOGOUT', entityType: 'user', entityId: req.user.userId, ipAddress: req.ip, responseStatus: 200 });
+    socketManager.disconnectUser(req.user.userId);
+    if (req.user.userType === 'admin') {
+      void recordAudit({ userId: req.user.userId, action: 'auth:LOGOUT', entityType: 'user', entityId: req.user.userId, ipAddress: req.ip, responseStatus: 200 });
+    }
   }
 
   res.status(200).json({

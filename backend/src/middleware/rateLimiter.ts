@@ -4,6 +4,7 @@ import rateLimit, { ipKeyGenerator } from 'express-rate-limit';
 import { RedisStore, type RedisReply } from 'rate-limit-redis';
 import { isProduction } from '../config/env';
 import { getRedis } from '../config/redis';
+import { verifyToken } from '../utils/jwt';
 
 /**
  * Counters live in Redis when it is configured, so every app instance enforces the same
@@ -37,7 +38,36 @@ function store(name: string) {
 /** Signed-in callers by account (many people can share one mobile-network IP), others by IP. */
 const byUserOrIp = (req: Request) => req.user?.userId ?? ipKeyGenerator(req.ip ?? '');
 
-function limiter(name: string, opts: { windowMs: number; limit: number; message: string; perUser?: boolean }) {
+/**
+ * The same, for limiters that run before authenticate(): a valid bearer token names the
+ * account (a pure signature check, no database), anything else is counted by IP.
+ */
+export const byTokenOrIp = (req: Request) => {
+  const header = req.headers.authorization;
+  if (typeof header === 'string' && header.startsWith('Bearer ')) {
+    try {
+      return `u:${verifyToken(header.slice(7)).userId}`;
+    } catch {
+      /* expired or forged: counted with the address it came from */
+    }
+  }
+  return ipKeyGenerator(req.ip ?? '');
+};
+
+/**
+ * Credential guessing is one attacker trying one account: counted per address and
+ * account together, so a whole mobile network is not locked out by one person's typos
+ * and one address cannot try many accounts freely.
+ */
+export const byIpAndAccount = (req: Request) => {
+  const account = typeof req.body?.phoneOrEmail === 'string' ? req.body.phoneOrEmail.trim().toLowerCase() : '';
+  return `${ipKeyGenerator(req.ip ?? '')}:${account}`;
+};
+
+function limiter(
+  name: string,
+  opts: { windowMs: number; limit: number; message: string; perUser?: boolean; keyGenerator?: (req: Request) => string; skipSuccessfulRequests?: boolean }
+) {
   return rateLimit({
     windowMs: opts.windowMs,
     limit: opts.limit,
@@ -45,7 +75,8 @@ function limiter(name: string, opts: { windowMs: number; limit: number; message:
     legacyHeaders: false,
     passOnStoreError: true,
     store: store(name),
-    ...(opts.perUser ? { keyGenerator: byUserOrIp } : {}),
+    ...(opts.keyGenerator ? { keyGenerator: opts.keyGenerator } : opts.perUser ? { keyGenerator: byUserOrIp } : {}),
+    ...(opts.skipSuccessfulRequests ? { skipSuccessfulRequests: true } : {}),
     message: { success: false, error: { message: opts.message, code: 'RATE_LIMITED' } },
   });
 }
@@ -53,20 +84,24 @@ function limiter(name: string, opts: { windowMs: number; limit: number; message:
 const MINUTE = 60 * 1000;
 
 /**
- * Flood protection for the whole API, per IP. Deliberately generous: Pakistani mobile
- * networks put many customers behind one address.
+ * Flood protection for the whole API: signed-in traffic per account, the rest per IP.
+ * Deliberately generous: Pakistani mobile networks put many customers behind one address.
  */
 export const apiLimiter = limiter('api', {
   windowMs: MINUTE,
   limit: isProduction() ? 1200 : 100_000,
+  keyGenerator: byTokenOrIp,
   message: 'Too many requests. Please slow down.',
 });
 
-// Brute-force protection on login: same IP can't hammer credentials.
+// Brute-force protection on login: failed attempts per address and account. Signing in
+// successfully costs nothing, so a shared address never runs out of logins.
 export const loginLimiter = limiter('login', {
   windowMs: 15 * MINUTE,
   // Relaxed only in development / test; any other NODE_ENV gets the real limit.
   limit: isProduction() ? 10 : 1000,
+  keyGenerator: byIpAndAccount,
+  skipSuccessfulRequests: true,
   message: 'Too many login attempts. Please try again later.',
 });
 

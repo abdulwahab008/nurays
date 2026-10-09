@@ -1,5 +1,6 @@
 import { maskEmail } from '../utils/mask';
 import prisma from '../config/database';
+import bcrypt from 'bcrypt';
 import { isStoredFile, storedFileOwner } from '../storage';
 import { AppError } from '../middleware/errorHandler';
 import { communityService } from './community.service';
@@ -46,6 +47,7 @@ export class UserProfileService {
    * Update user profile
    */
   async updateProfile(userId: string, data: {
+    currentPassword?: string;
     fullName?: string;
     email?: string;
     city?: string;
@@ -66,6 +68,12 @@ export class UserProfileService {
     // when they signed in with Google.)
     const newEmail = data.email?.toLowerCase().trim();
     if (newEmail && newEmail !== user.email) {
+      // A token alone must not be able to re-point the account (and then its password-reset
+      // links) at another address: the password is asked for again, when there is one.
+      if (user.passwordHash) {
+        if (!data.currentPassword) throw new AppError('Enter your password to change the email address', 400, 'PASSWORD_REQUIRED');
+        if (!(await bcrypt.compare(data.currentPassword, user.passwordHash))) throw new AppError('Wrong password', 401, 'INVALID_PASSWORD');
+      }
       // Check if email is already taken
       const existingUser = await prisma.user.findUnique({
         where: { email: newEmail },

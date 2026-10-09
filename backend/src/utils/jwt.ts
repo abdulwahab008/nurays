@@ -8,7 +8,8 @@ if (process.env.JWT_SECRET.length < 32) {
 }
 
 const JWT_SECRET = process.env.JWT_SECRET;
-const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '24h';
+// Short-lived: the client renews it with the refresh token, so a copied access token is useful for an hour, not a day.
+const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '1h';
 const JWT_REFRESH_EXPIRES_IN = process.env.JWT_REFRESH_EXPIRES_IN || '30d';
 
 export interface JWTPayload {
@@ -48,7 +49,7 @@ export const verifyToken = (token: string): JWTPayload => {
   } catch (error) {
     throw new Error('Invalid or expired token');
   }
-  if (decoded.typ === 'refresh') {
+  if (decoded.typ !== 'access') {
     throw new Error('Invalid or expired token');
   }
   return decoded;
@@ -66,18 +67,10 @@ export const verifyRefreshToken = (token: string): JWTPayload => {
     throw new Error('Invalid or expired token');
   }
   if (decoded.typ === 'refresh') return decoded;
-  // Refresh tokens issued before `typ` existed carry none. Keep honouring them — but only if
-  // they look like a refresh token (their lifetime is days, an access token's is hours), so a
-  // legacy ACCESS token still can't be used to mint refresh tokens — and so deploying this
-  // doesn't force every logged-in user to sign in again.
-  if (decoded.typ === undefined && decoded.iat && decoded.exp && decoded.exp - decoded.iat > LEGACY_REFRESH_MIN_LIFETIME_SECONDS) {
-    return decoded;
-  }
+  // A token that does not say it is a refresh token is not one (every token issued since the
+  // `typ` claim was introduced carries it; nothing older is still valid).
   throw new Error('Invalid or expired token');
 };
-
-/** A pre-`typ` token with at least this lifetime is treated as a refresh token. */
-const LEGACY_REFRESH_MIN_LIFETIME_SECONDS = 2 * 24 * 60 * 60;
 
 /**
  * Has this session been revoked? `tokensValidAfter` is set when the account's credentials or

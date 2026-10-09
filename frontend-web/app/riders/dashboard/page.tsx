@@ -11,6 +11,7 @@ import { formatPrice, displayRating } from '@/lib/utils';
 import { apiClient } from '@/lib/api-client';
 import { useLiveRefresh } from '@/lib/hooks/use-live-refresh';
 import { useRiderLocation, LocationSharing } from '@/lib/hooks/use-rider-location';
+import { alternativeMapsLink, canNavigateTo, googleMapsDirectionsUrl, mobilePlatform, NavDestination } from '@/lib/navigation-links';
 import Link from 'next/link';
 import RiderApplicationForm from '@/components/riders/RiderApplicationForm';
 import { useT } from '@/lib/i18n';
@@ -236,10 +237,54 @@ export default function RiderDashboardPage() {
 
   // The leg the rider is on: to the kitchen until the food is picked up, then to the customer.
   const headingToCustomer = (d: Delivery) => ['picked_up', 'in_transit', 'arrived_at_customer'].includes(d.status);
-  const navUrlFor = (d: Delivery) =>
+  // Where this leg goes: the saved map pin when there is one, otherwise the address text.
+  const navDestinationFor = (d: Delivery): NavDestination =>
     headingToCustomer(d)
-      ? d.dropoffMapsUrl ?? `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(d.deliveryAddress)}&travelmode=two-wheeler`
-      : d.pickupMapsUrl ?? `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(d.pickupAddress)}&travelmode=two-wheeler`;
+      ? { latitude: d.deliveryLatitude ?? null, longitude: d.deliveryLongitude ?? null, text: d.deliveryAddress }
+      : { latitude: d.pickupLatitude ?? null, longitude: d.pickupLongitude ?? null, text: d.pickupAddress };
+  const navUrlFor = (d: Delivery) =>
+    (headingToCustomer(d) ? d.dropoffMapsUrl : d.pickupMapsUrl) ?? googleMapsDirectionsUrl(navDestinationFor(d));
+  // Navigation is offered while the rider is travelling: to the kitchen, or with the food to the customer.
+  const NAVIGABLE_STATUSES = ['assigned', 'picked_up', 'in_transit'];
+  const canStartNavigation = (d: Delivery) => NAVIGABLE_STATUSES.includes(d.status) && canNavigateTo(navDestinationFor(d));
+  const [navBusyId, setNavBusyId] = useState<string | null>(null);
+  const platform = mobilePlatform();
+
+  /**
+   * Start navigation. The window is opened inside the tap (browsers block pop-ups opened after a
+   * network call), then the job is re-read from the server: a job that was cancelled, reassigned or
+   * finished since the screen last refreshed must not send the rider anywhere. Opening the maps app
+   * changes nothing about the job: arriving and handing over are still the rider's own taps.
+   */
+  const handleStartNavigation = async (delivery: Delivery, event: React.MouseEvent<HTMLAnchorElement>) => {
+    event.preventDefault();
+    if (navBusyId) return; // a second tap while the first is still checking
+    setNavBusyId(delivery.id);
+    const nav = window.open('', '_blank');
+    try {
+      const fresh = (await riderService.getMyDeliveries()).data?.find((d: Delivery) => d.id === delivery.id);
+      if (!fresh || !NAVIGABLE_STATUSES.includes(fresh.status)) {
+        nav?.close();
+        showToast(t('navNotAvailable'), 'error');
+        loadAll(true);
+        return;
+      }
+      if (!canNavigateTo(navDestinationFor(fresh))) {
+        nav?.close();
+        showToast(t('navNoDestination'), 'error');
+        return;
+      }
+      const url = navUrlFor(fresh);
+      if (nav) nav.location.href = url;
+      else window.location.assign(url); // pop-up blocked: leave for the maps app, the rider comes back with the back button
+    } catch {
+      // Offline or the server did not answer: the link's own href still opens the last known destination.
+      nav?.close();
+      window.location.assign(navUrlFor(delivery));
+    } finally {
+      setNavBusyId(null);
+    }
+  };
 
   // Advance delivery along the real fulfillment lifecycle
   const handleAdvanceStatus = async (delivery: Delivery) => {
@@ -623,19 +668,31 @@ export default function RiderDashboardPage() {
                               </div>
                             </div>
 
-                            {/* START NAVIGATION: opens Google Maps for the current leg */}
-                            {delivery.status !== 'arrived_at_customer' && delivery.status !== 'arrived_at_pickup' && (
+                            {/* START NAVIGATION: opens the maps app for the current leg (checked against the server first) */}
+                            {NAVIGABLE_STATUSES.includes(delivery.status) && (
                               <div className="px-5 pt-4">
                                 <a
                                   href={navUrlFor(delivery)}
                                   target="_blank"
                                   rel="noopener noreferrer"
                                   data-testid="start-navigation"
-                                  className="flex items-center justify-center gap-2 w-full py-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-black shadow-md"
+                                  aria-disabled={!canStartNavigation(delivery) || navBusyId === delivery.id}
+                                  onClick={(e) => (canStartNavigation(delivery) ? handleStartNavigation(delivery, e) : e.preventDefault())}
+                                  className={`flex items-center justify-center gap-2 w-full py-3 rounded-xl text-white text-sm font-black shadow-md ${
+                                    canStartNavigation(delivery) && navBusyId !== delivery.id ? 'bg-emerald-600 hover:bg-emerald-700' : 'bg-slate-400 cursor-not-allowed'
+                                  }`}
                                 >
-                                  {headingToCustomer(delivery) ? t('startNavCustomer') : t('startNavKitchen')}
+                                  {navBusyId === delivery.id ? t('processing') : headingToCustomer(delivery) ? t('startNavCustomer') : t('startNavKitchen')}
                                 </a>
                                 <p className="text-[11px] text-slate-500 text-center mt-1">{t('navHint')}</p>
+                                {(() => {
+                                  const alt = alternativeMapsLink(navDestinationFor(delivery), platform);
+                                  return alt ? (
+                                    <a href={alt.url} target="_blank" rel="noopener noreferrer" data-testid="alt-navigation" className="block text-center text-[11px] font-semibold text-emerald-700 underline mt-1">
+                                      {alt.kind === 'apple' ? t('openInAppleMaps') : t('openInOtherMaps')}
+                                    </a>
+                                  ) : null;
+                                })()}
                               </div>
                             )}
 

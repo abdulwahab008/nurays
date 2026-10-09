@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import userProfileService from '../services/user-profile.service';
 import { AppError } from '../middleware/errorHandler';
+import { deleteOwnAccount } from '../services/account-deletion.service';
 
 export const getCurrentUserProfile = async (req: Request, res: Response) => {
   if (!req.user) {
@@ -86,4 +87,12 @@ export const deleteAddress = async (req: Request, res: Response) => {
   }
   await userProfileService.deleteAddress(req.user.userId, req.params.id);
   res.status(200).json({ success: true, message: 'Address deleted' });
+};
+
+export const deleteOwnAccountHandler = async (req: Request, res: Response) => {
+  if (!req.user) {
+    throw new AppError('Authentication required', 401, 'AUTH_REQUIRED');
+  }
+  const result = await deleteOwnAccount(req.user.userId, req.body?.password);
+  res.status(200).json({ success: true, data: result, message: 'Your account has been closed' });
 };

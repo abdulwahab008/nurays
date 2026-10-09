@@ -22,6 +22,9 @@ function metersBetween(a: { latitude: number; longitude: number }, b: { latitude
  * each of them: the customer sees it once the food is on its way, and arriving at the kitchen
  * or the customer's door moves the job on by itself (onAutoAdvance then reloads the jobs).
  * Sends every 10 s, or after 3 s once the rider has moved 30 m. Nothing is shared without a job.
+ * Browsers only run this while the dashboard is in front: when the rider comes back from Google
+ * Maps the watch is restarted and a fix sent at once, and the screen is kept awake meanwhile.
+ * True background tracking (dashboard closed) needs a native wrapper; see the launch plan.
  */
 export function useRiderLocation(deliveryIds: string[], onAutoAdvance?: (status: string) => void): LocationSharing {
   // What the current watch reported, tagged with the jobs it was for.
@@ -77,22 +80,61 @@ export function useRiderLocation(deliveryIds: string[], onAutoAdvance?: (status:
       setReported((prev) => (prev?.key === key ? prev : { key, state: 'unavailable' }));
     }, 12_000);
 
-    const watchId = navigator.geolocation.watchPosition(
-      (pos) => {
-        setReported((prev) => (prev?.key === key && prev.state === 'sharing' ? prev : { key, state: 'sharing' }));
-        consider({ latitude: pos.coords.latitude, longitude: pos.coords.longitude });
-      },
-      (err) => {
-        if (err.code === err.PERMISSION_DENIED) setReported({ key, state: 'denied' });
-        else if (err.code === err.POSITION_UNAVAILABLE) setReported({ key, state: 'unavailable' });
-        // A timeout just means no fix yet; the watch keeps trying.
-      },
-      { enableHighAccuracy: true, maximumAge: 5_000, timeout: 30_000 }
-    );
+    const onPosition = (pos: GeolocationPosition) => {
+      setReported((prev) => (prev?.key === key && prev.state === 'sharing' ? prev : { key, state: 'sharing' }));
+      consider({ latitude: pos.coords.latitude, longitude: pos.coords.longitude });
+    };
+    const onError = (err: GeolocationPositionError) => {
+      if (err.code === err.PERMISSION_DENIED) setReported({ key, state: 'denied' });
+      else if (err.code === err.POSITION_UNAVAILABLE) setReported({ key, state: 'unavailable' });
+      // A timeout just means no fix yet; the watch keeps trying.
+    };
+    const WATCH_OPTIONS: PositionOptions = { enableHighAccuracy: true, maximumAge: 5_000, timeout: 30_000 };
+    let watchId = navigator.geolocation.watchPosition(onPosition, onError, WATCH_OPTIONS);
+
+    // Keep the screen on while a job is running and the dashboard is in front: a phone that
+    // locks itself stops reporting. Not granted (unsupported, low battery): the watch still runs.
+    let wakeLock: WakeLockSentinel | null = null;
+    const keepAwake = async () => {
+      try {
+        if (!navigator.wakeLock || wakeLock || document.visibilityState !== 'visible') return;
+        wakeLock = await navigator.wakeLock.request('screen');
+        wakeLock.addEventListener('release', () => {
+          wakeLock = null;
+        });
+      } catch {
+        wakeLock = null;
+      }
+    };
+    void keepAwake();
+
+    // Back on the dashboard (from Google Maps, the lock screen or another app): browsers pause
+    // or drop a position watch while the page is hidden, so start a fresh one and send where
+    // the rider is right away rather than waiting for the next movement.
+    const onVisibilityChange = () => {
+      if (document.visibilityState !== 'visible') return;
+      navigator.geolocation.clearWatch(watchId);
+      watchId = navigator.geolocation.watchPosition(onPosition, onError, WATCH_OPTIONS);
+      navigator.geolocation.getCurrentPosition(
+        (pos) => {
+          setReported((prev) => (prev?.key === key && prev.state === 'sharing' ? prev : { key, state: 'sharing' }));
+          send({ latitude: pos.coords.latitude, longitude: pos.coords.longitude });
+        },
+        () => {},
+        { enableHighAccuracy: true, maximumAge: 0, timeout: 15_000 }
+      );
+      void keepAwake();
+    };
+    document.addEventListener('visibilitychange', onVisibilityChange);
+
     return () => {
       clearTimeout(slowTimer);
+      document.removeEventListener('visibilitychange', onVisibilityChange);
       navigator.geolocation.clearWatch(watchId);
       if (timer) clearTimeout(timer);
+      const held = wakeLock;
+      wakeLock = null;
+      held?.release().catch(() => {});
     };
   }, [key, supported]);
 

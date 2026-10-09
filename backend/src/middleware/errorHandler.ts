@@ -38,6 +38,11 @@ export const toAppError = (err: any): Error | AppError => {
     }
   }
 
+  // Express decodes path parameters before the route runs: malformed percent-encoding is a bad request.
+  if (err instanceof URIError) {
+    return new AppError('The request path is not valid', 400, 'INVALID_PATH');
+  }
+
   // body-parser
   if (err?.type === 'entity.too.large') {
     return new AppError('Request body is too large', 413, 'PAYLOAD_TOO_LARGE');

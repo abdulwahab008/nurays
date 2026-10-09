@@ -29,7 +29,8 @@ function close() {
 
 function open(token: string): Socket {
   const next = io(socketUrl(), {
-    auth: { token },
+    // Read at every (re)connect: access tokens are short-lived and the client renews them.
+    auth: (cb) => cb({ token: apiClient.getAccessToken() ?? token }),
     transports: ['websocket', 'polling'],
   });
   next.on('connect', notify);

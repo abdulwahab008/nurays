@@ -1,6 +1,10 @@
 'use client';
 
 import { MAP_TILE_URL, MAP_ATTRIBUTION, MAP_MAX_ZOOM } from '@/lib/map-config';
+import 'leaflet/dist/leaflet.css';
+import markerIcon from 'leaflet/dist/images/marker-icon.png';
+import markerIcon2x from 'leaflet/dist/images/marker-icon-2x.png';
+import markerShadow from 'leaflet/dist/images/marker-shadow.png';
 
 import { useEffect, useRef, useState, useCallback } from 'react';
 import dynamic from 'next/dynamic';
@@ -61,22 +65,15 @@ function LocationMapInner({
     const initMap = async () => {
       try {
         const L = (await import('leaflet')).default;
-        // Dynamically ensure CSS is present
-        if (!document.getElementById('leaflet-css')) {
-          const link = document.createElement('link');
-          link.id = 'leaflet-css';
-          link.rel = 'stylesheet';
-          link.href = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css';
-          document.head.appendChild(link);
-        }
 
         if (!isMounted || !mapRef.current) return;
 
+        // Marker images come from our own build, not a CDN (works offline, no third party).
         delete (L.Icon.Default.prototype as any)._getIconUrl;
         L.Icon.Default.mergeOptions({
-          iconRetinaUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png',
-          iconUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png',
-          shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
+          iconRetinaUrl: markerIcon2x.src,
+          iconUrl: markerIcon.src,
+          shadowUrl: markerShadow.src,
         });
 
         if (!mapInstanceRef.current && mapRef.current) {

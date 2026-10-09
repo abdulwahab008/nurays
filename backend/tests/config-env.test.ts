@@ -6,6 +6,7 @@ const goodProd = {
   REDIS_URL: 'redis://redis:6379',
   JWT_SECRET: 'f3a9c2e1b7d4a6f8c0e2b4d6a8f0c2e4b6d8f0a2c4e6b8d0f2a4c6e8b0d2f4a6',
   FRONTEND_URL: 'https://nuray.pk',
+  CORS_ORIGIN: 'https://nuray.pk',
   SMTP_HOST: 'smtp.example.com',
   SMTP_USER: 'u',
   SMTP_PASSWORD: 'p',
@@ -42,6 +43,11 @@ describe('startup configuration', () => {
     expect(p).toMatch(/SMS is not configured/);
     expect(p).toMatch(/REDIS_URL/);
     expect(p).toMatch(/https/);
+  });
+
+  it('refuses production without CORS_ORIGIN, or with a plain-http one', () => {
+    expect(configProblems({ ...goodProd, CORS_ORIGIN: '' }).join('\n')).toMatch(/CORS_ORIGIN is required/);
+    expect(configProblems({ ...goodProd, CORS_ORIGIN: 'http://nuray.pk' }).join('\n')).toMatch(/CORS_ORIGIN must be an https/);
   });
 
   it('never allows the console SMS provider (codes in logs) in production', () => {

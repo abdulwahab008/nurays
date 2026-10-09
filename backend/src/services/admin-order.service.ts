@@ -1,8 +1,10 @@
 import { realPhoneOrNull } from '../utils/otp';
 import { codCollectorOf } from '../utils/paymentCustody';
 import { presentFile } from '../storage';
-import { cancelOpenDelivery, notifyDeliveryCancelled, CancelledDelivery } from './delivery-lifecycle.service';
+import { cancelOpenDelivery, notifyDeliveryCancelled, reopenDeliveryData, CancelledDelivery } from './delivery-lifecycle.service';
+import { dispatchSoon } from './dispatch.service';
 import prisma from '../config/database';
+import { pageArgs } from '../utils/pagination';
 import { AppError } from '../middleware/errorHandler';
 import realtimeOrderService from './realtime-order.service';
 import socketManager from '../config/socket';
@@ -55,9 +57,7 @@ export class AdminOrderService {
     dateTo?: string;
     orderNumber?: string;
   }) {
-    const page = filters.page || 1;
-    const limit = Math.min(filters.limit || 20, 100);
-    const skip = (page - 1) * limit;
+    const { page, limit, skip } = pageArgs(filters.page, filters.limit);
 
     const where: any = {};
 
@@ -90,10 +90,8 @@ export class AdminOrderService {
       });
 
       // An unknown seller filters to nothing (it used to be ignored, listing every order).
-      const orderIds = seller
-        ? await prisma.orderItem.findMany({ where: { sellerId: seller.id }, select: { orderId: true }, distinct: ['orderId'] })
-        : [];
-      where.id = { in: orderIds.map((item) => item.orderId) };
+      if (seller) where.items = { some: { sellerId: seller.id } };
+      else where.id = { in: [] };
     }
 
     const [orders, total] = await Promise.all([
@@ -518,13 +516,6 @@ export class AdminOrderService {
         }
       }
 
-      // Remove inventory reservations
-      await tx.inventoryReservation.deleteMany({
-        where: {
-          reservationType: 'order',
-          reservationId: orderId,
-        },
-      });
 
       // A cancelled order shouldn't keep consuming the promo's quota.
       await releasePromotionUsage(tx, orderId);
@@ -593,10 +584,11 @@ export class AdminOrderService {
       select: { rider: { select: { userId: true } } },
     });
 
-    await prisma.$transaction(async (tx) => {
+    const reopened = await prisma.$transaction(async (tx) => {
+      const previous = await tx.delivery.findUnique({ where: { orderId }, select: { id: true, riderId: true } });
       await tx.delivery.updateMany({
         where: { orderId },
-        data: { riderId: null, status: 'pending', pickupTime: null, deliveryNotes: null },
+        data: { ...reopenDeliveryData(previous?.riderId), deliveryNotes: null },
       });
       await tx.order.update({ where: { id: orderId }, data: { orderStatus: 'ready' } });
       await tx.orderItem.updateMany({
@@ -611,10 +603,16 @@ export class AdminOrderService {
           changedBy: adminId,
         },
       });
+      return previous;
     });
 
     if (previousRider?.rider?.userId) socketManager.removeUserFromOrder(previousRider.rider.userId, orderId);
     await realtimeOrderService.emitOrderStatusUpdate(orderId, 'ready', adminId);
+    // Offer it to a rider now rather than on the next sweep (never the one it failed with).
+    if (reopened?.id) {
+      realtimeOrderService.emitDeliveryPosted(reopened.id, orderId);
+      dispatchSoon(reopened.id);
+    }
     return { orderId, status: 'ready' };
   }
 

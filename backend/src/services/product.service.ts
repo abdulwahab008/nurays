@@ -1,5 +1,7 @@
 import { Prisma } from '@prisma/client';
+import { logger } from '../utils/logger';
 import prisma from '../config/database';
+import { pageArgs } from '../utils/pagination';
 import { getPlatformDeliveryPricing } from './delivery-pricing.service';
 import { searchRankedProductIds } from './ranking.service';
 import { AppError } from '../middleware/errorHandler';
@@ -687,11 +689,13 @@ export class ProductService {
       throw new AppError('Product not found', 404, 'PRODUCT_NOT_FOUND');
     }
 
-    // Increment view count
-    await prisma.product.update({
-      where: { id: product.id },
-      data: { viewsCount: { increment: 1 } },
-    });
+    // Count the view without holding the response or rewriting the row (updated_at stays
+    // what the kitchen last changed); a kitchen looking at its own dish is not a view.
+    if (!isOwner) {
+      void prisma
+        .$executeRaw`UPDATE products SET views_count = views_count + 1 WHERE id = ${product.id}`
+        .catch((err: unknown) => logger.warn({ err, productId: product.id }, 'view count not recorded'));
+    }
 
     // Format images with full URLs
     const baseUrl = process.env.BASE_URL || 'http://localhost:3001';
@@ -1005,9 +1009,7 @@ export class ProductService {
     isActive?: boolean;
     approvalStatus?: string;
   }) {
-    const page = filters.page || 1;
-    const limit = Math.min(filters.limit || 20, 100);
-    const skip = (page - 1) * limit;
+    const { page, limit, skip } = pageArgs(filters.page, filters.limit);
 
     const seller = await prisma.seller.findUnique({
       where: { userId: sellerId },

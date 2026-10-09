@@ -141,6 +141,11 @@ async function main() {
   const rr = await Promise.all(custs.map((c) => order(c.id, [{ productId: p.id, quantity: 1 }], { promotionCode: 'ONLY1' }).then((r: any) => Number(r.order.discountAmount), (e: any) => e.code)));
   const used = (await prisma.promotion.findUnique({ where: { id: limited.id } }))!.usedCount;
   ok('usage-limited promo cannot be overshot by parallel orders', used <= 1 && rr.filter((x) => x === 10).length <= 1, `${rr} used=${used}`);
+  const perUser = await prisma.promotion.create({ data: { code: 'PERUSER1', name: 'one per person', discountType: 'fixed', discountValue: 10, validFrom: new Date(Date.now() - 1e6), validUntil: new Date(Date.now() + 1e9), usageLimitPerUser: 1 } as any });
+  const onePerson = await mkUser();
+  const fiveProds = await Promise.all([1, 2, 3, 4, 5].map(() => mkProduct(seller.id, 20, 100)));
+  const pr5 = await Promise.all(fiveProds.map((fp) => order(onePerson.id, [{ productId: fp.id, quantity: 1 }], { promotionCode: 'PERUSER1' }).then((r: any) => Number(r.order.discountAmount), (e: any) => e.code)));
+  ok('a one-per-person code cannot be used twice by racing checkouts', pr5.filter((x) => x === 10).length === 1 && (await prisma.promotionUsage.count({ where: { promotionId: perUser.id, userId: onePerson.id } })) === 1, `${pr5}`);
 
   // ---- 11. manual payment guards ----
   const sellerRow = await prisma.seller.findUnique({ where: { id: seller.id } });
@@ -150,9 +155,15 @@ async function main() {
   ok('submit requires a reference', (await code(orderService.submitManualPayment(m.id, cust.id, { referenceNumber: '  ' } as any))) === 'REFERENCE_REQUIRED');
   ok('submit rejects data: proof', (await code(orderService.submitManualPayment(m.id, cust.id, { referenceNumber: 'TID1', proofUrl: 'data:image/png;base64,AAAA' }))) === 'INVALID_PROOF_URL');
   ok('submit ok', (await code(orderService.submitManualPayment(m.id, cust.id, { referenceNumber: 'TID1', proofUrl: '/uploads/products/x.png' }))) === 'OK');
+  ok('a reported transfer cannot be switched to cash on delivery', (await code(paymentService.processPayment(m.id, cust.id, 'cod'))) === 'PAYMENT_STATE_CONFLICT' && (await prisma.order.findUnique({ where: { id: m.id } }))!.paymentStatus === 'payment_submitted');
   ok('other seller cannot confirm', (await code(orderService.confirmManualPayment(m.id, (await prisma.seller.findUnique({ where: { id: sellerB.id } }))!.userId, true))) !== 'OK');
   ok('payee seller confirms', (await code(orderService.confirmManualPayment(m.id, sellerRow!.userId, true))) === 'OK');
   ok('confirm twice is refused', (await code(orderService.confirmManualPayment(m.id, sellerRow!.userId, true))) === 'NO_PAYMENT_SUBMITTED');
+  await prisma.order.update({ where: { id: m.id }, data: { orderStatus: 'delivered' } });
+  await adminOrderService.processRefund(m.id, admin.id);
+  const mRefund = await prisma.refund.findFirst({ where: { orderId: m.id, status: 'pending' } });
+  await dismissRefund(mRefund!.id, admin.id, 'customer withdrew the complaint');
+  ok('dismissing a refund on an order that was really paid leaves it paid (the kitchen keeps its earning)', (await prisma.order.findUnique({ where: { id: m.id } }))!.paymentStatus === 'paid');
 
   // ---- 12. payment details: real accounts only ----
   const bare: any = await orderService.getSellerPaymentDetails(m.id, cust.id);
@@ -181,6 +192,11 @@ async function main() {
   const earned = Number((await prisma.orderItem.findFirst({ where: { orderId: po.id } }))!.sellerPayout);
   const reqs = await Promise.all([1, 2, 3].map(() => (require('../src/services/seller.service').default).requestPayout(sp.id, { amount: earned, payoutMethod: 'bank_transfer', accountNumber: '1' }).then(() => 'OK', (e: any) => e.code)));
   ok('concurrent payout requests cannot exceed earnings', reqs.filter((r) => r === 'OK').length === 1, `${reqs} earned=${earned}`);
+  const payoutReq = await prisma.sellerPayout.findFirst({ where: { sellerId: sp.id, status: 'pending' } });
+  await adminOrderService.processRefund(po.id, admin.id);
+  const { default: adminSvcForPayout } = require('../src/services/admin.service');
+  ok('a payout is not completed once a refund has taken the money back', (await code(adminSvcForPayout.completePayout(payoutReq!.id, 'T-late'))) === 'PAYOUT_EXCEEDS_BALANCE');
+  ok('it can be failed instead', (await code(adminSvcForPayout.failPayout(payoutReq!.id, 'refunded'))) === 'OK');
 
   // ---- 16. refunds on cancelled PAID orders ----
   const rc = await mkUser();
@@ -366,6 +382,8 @@ async function main() {
   const pl50: any = (await order(custC.id, [{ productId: csProd.id, quantity: 1 }], { paymentMethod: 'cod', promotionCode: 'PLHALF' + promoTag })).order;
   const pl50Item = await prisma.orderItem.findFirst({ where: { orderId: pl50.id } });
   ok('a platform-funded code leaves the seller\'s share untouched', Number(pl50Item!.sellerPayout) === 900, `payout=${pl50Item!.sellerPayout}`);
+  ok('an unknown code is refused instead of silently charging full price', (await code(order(custC.id, [{ productId: csProd.id, quantity: 1 }], { promotionCode: 'NOSUCHCODE9' }))) === 'INVALID_PROMO_CODE');
+  ok('a switched-off code is refused too', (await code(order(custC.id, [{ productId: csProd.id, quantity: 1 }], { promotionCode: 'CSHALF' + promoTag }))) === 'PROMO_INACTIVE');
 
   // only the party that hands the order over can mark it delivered
   const platformDelivered = await homeOrder([{ productId: sp2.id, quantity: 1 }], 'cod');
@@ -744,6 +762,8 @@ async function main() {
   // FEFO allocation: earliest SELLABLE batch first; the <24h batch (earliest expiry) is skipped
   const hc = await mkUser();
   const hubOrder = (qty: number, uid = hc.id) => orderService.createOrder(uid, { items: [{ productId: hubProd.id, quantity: qty, stockType: 'hub', hubId: hub.id }], deliveryType: 'self_pickup', paymentMethod: 'cod' } as any) as Promise<any>;
+  const directP = await mkProduct(seller.id, 5, 100);
+  ok('a hub id on an item the kitchen ships itself is refused (it would re-price the delivery as Nuray\'s)', (await code(orderService.createOrder(hc.id, { items: [{ productId: directP.id, quantity: 1, hubId: hub.id }], deliveryType: 'self_pickup', paymentMethod: 'cod' } as any))) === 'HUB_NOT_APPLICABLE');
   const ho1 = await hubOrder(7);
   const [qa, qb, qc] = [await batchOf('A'), await batchOf('B'), await batchOf('C')];
   ok('FEFO takes the earliest sellable batch first and never the nearly-expired one', qa!.quantity === 0 && qa!.status === 'reserved' && qb!.quantity === 3 && qc!.quantity === 50, `A=${qa!.quantity} B=${qb!.quantity} C=${qc!.quantity}`);
@@ -983,7 +1003,7 @@ async function main() {
   ok('the new password works after a reset', (await authService.login(rEmail, 'brand-new-pass', 'email').then(() => 'OK', (e: any) => e.code)) === 'OK');
   ok('the old password no longer works', (await authService.login(rEmail, 'secret123', 'email').then(() => 'OK', (e: any) => e.code)) === 'INVALID_CREDENTIALS');
   ok('a reset link is single-use', (await authService.resetPassword(token, 'another-pass-1').then(() => 'OK', (e: any) => e.code)) === 'INVALID_RESET_TOKEN');
-  ok('every session issued before the reset is voided (old refresh token)', (await authService.refreshToken(oldRefresh).then(() => 'OK', (e: any) => e.code)) === 'INVALID_REFRESH_TOKEN');
+  ok('every session issued before the reset is voided (old refresh token)', (await authService.refreshToken(oldRefresh).then(() => 'OK', (e: any) => e.code)) === 'SESSION_REVOKED');
   const expTok = 'exp' + 'y'.repeat(40) + uniq();
   await prisma.passwordReset.create({ data: { userId: rReg.user.id, tokenHash: hash(expTok), expiresAt: new Date(Date.now() - 1000) } });
   ok('an expired reset link is refused', (await authService.resetPassword(expTok, 'another-pass-2').then(() => 'OK', (e: any) => e.code)) === 'INVALID_RESET_TOKEN');
@@ -996,7 +1016,7 @@ async function main() {
   await sleep(1100);
   await authService.requestOTP(sqPhone, 'registration');
   await reg(`own${uniq()}@t.test`, sqPhone, await lastOtp(sqPhone, 'registration'));
-  ok('the squatter\'s sessions are voided when the real owner claims the number', (await authService.refreshToken(sq.tokens.refresh_token).then(() => 'OK', (e: any) => e.code)) === 'INVALID_REFRESH_TOKEN');
+  ok('the squatter\'s sessions are voided when the real owner claims the number', (await authService.refreshToken(sq.tokens.refresh_token).then(() => 'OK', (e: any) => e.code)) === 'SESSION_REVOKED');
 
   // eviction + create are one transaction: a failing create leaves the squatter untouched
   const keepPhone = pn();
@@ -1016,7 +1036,8 @@ async function main() {
   // email change = unverified until the new address is confirmed
   await prisma.user.update({ where: { id: rReg.user.id }, data: { emailVerified: true } });
   const newMail = `Changed${uniq()}@T.test`;
-  await userProfileService.updateProfile(rReg.user.id, { email: newMail });
+  ok('changing the email needs the password (a token alone cannot re-point the account)', (await code(userProfileService.updateProfile(rReg.user.id, { email: newMail }))) === 'PASSWORD_REQUIRED');
+  await userProfileService.updateProfile(rReg.user.id, { email: newMail, currentPassword: 'brand-new-pass' });
   const afterMail = await prisma.user.findUnique({ where: { id: rReg.user.id }, include: { emailVerification: true } });
   ok('changing the email lowercases it, un-verifies it and issues a verification token', afterMail!.email === newMail.toLowerCase() && afterMail!.emailVerified === false && afterMail!.emailVerification?.email === newMail.toLowerCase());
 

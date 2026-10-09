@@ -6,6 +6,7 @@ import { UserLayout } from '@/components/layout/UserLayout';
 import { useToast } from '@/components/ui/toast';
 import { apiClient, apiErrorMessage } from '@/lib/api-client';
 import { useAuthStore } from '@/lib/store/auth-store';
+import { useLiveRefresh } from '@/lib/hooks/use-live-refresh';
 
 interface Queue {
   key: string;
@@ -47,9 +48,9 @@ export default function AdminApprovalsPage() {
 
   useEffect(() => {
     load();
-    const timer = setInterval(load, 30000);
-    return () => clearInterval(timer);
   }, [load]);
+  // Refreshes when something new arrives for a decision, when the tab comes back, and on a slow timer.
+  useLiveRefresh(load, { events: ['order:new', 'order:status:update', 'notification:new', 'delivery:new'], intervalMs: 60_000 });
 
   return (
     <UserLayout showSidebar showNavbar>

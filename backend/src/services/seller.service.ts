@@ -341,7 +341,12 @@ export class SellerService {
     if (data.businessNameUrdu !== undefined) updateData.businessNameUrdu = data.businessNameUrdu;
     if (data.description !== undefined) updateData.description = data.description;
     if (data.kitchenVideoUrl !== undefined) updateData.kitchenVideoUrl = data.kitchenVideoUrl || null;
-    if (data.coverImageUrl !== undefined) updateData.coverImageUrl = data.coverImageUrl || null;
+    // A cover photo shown on public pages must be the kitchen's own upload, as at registration
+    // (a hot-linked image could change after approval or track visitors).
+    if (data.coverImageUrl !== undefined) {
+      updateData.coverImageUrl =
+        data.coverImageUrl && data.coverImageUrl !== seller.coverImageUrl ? assertOwnPublicImage(data.coverImageUrl, userId, 'covers', 'cover photo') : data.coverImageUrl || null;
+    }
     if (data.jazzcashNumber !== undefined) updateData.jazzcashNumber = data.jazzcashNumber || null;
     if (data.jazzcashAccountTitle !== undefined) updateData.jazzcashAccountTitle = data.jazzcashAccountTitle || null;
     if (data.easypaisaNumber !== undefined) updateData.easypaisaNumber = data.easypaisaNumber || null;
@@ -573,47 +578,34 @@ export class SellerService {
       throw new AppError('Seller not found', 404, 'SELLER_NOT_FOUND');
     }
 
-    // Get order statistics
-    const orderItems = await prisma.orderItem.findMany({
-      where: { sellerId },
-      include: {
-        order: {
-          select: {
-            id: true,
-            orderStatus: true,
-            paymentStatus: true,
-            paymentMethod: true,
-            deliveryFeeBreakdown: true,
-            createdAt: true,
-          },
-        },
-      },
-    });
+    // Today's stats
+    const startOfToday = new Date();
+    startOfToday.setHours(0, 0, 0, 0);
 
-    // "Active" means still in progress toward delivery — a cancelled or
-    // refunded/refund_pending order isn't going anywhere, so it's excluded
-    // from both active and pending.
-    const TERMINAL_STATUSES = ['delivered', 'completed', 'cancelled', 'refunded', 'refund_pending'];
-    const activeOrders = orderItems.filter(
-      (item) => !TERMINAL_STATUSES.includes(item.order.orderStatus)
-    ).length;
-
-    const pendingOrders = orderItems.filter(
-      (item) => item.order.orderStatus === 'pending' || item.order.orderStatus === 'preparing'
-    ).length;
-
-    // Earnings require BOTH the order having actually arrived (delivered/completed)
-    // AND the payment having actually been collected — a delivered order whose
-    // online payment never completed (or was refunded after delivery) hasn't
-    // actually earned the seller anything yet.
-    // Cancelled items (a seller's rejected lines, refunded to the customer) never count:
-    // an order can still be delivered by the other sellers in it.
-    const completedItems = orderItems.filter(
-      (item) =>
-        item.status !== 'cancelled' &&
-        (item.order.orderStatus === 'delivered' || item.order.orderStatus === 'completed') &&
-        item.order.paymentStatus === 'paid'
-    );
+    // Order statistics in one aggregate over the kitchen's lines (not the whole history in memory).
+    // "Active" means still in progress toward delivery — a cancelled or refunded/refund_pending
+    // order isn't going anywhere, so it's excluded from both active and pending.
+    // Earnings require BOTH the order having actually arrived (delivered/completed) AND the
+    // payment having actually been collected — a delivered order whose online payment never
+    // completed (or was refunded after delivery) hasn't earned the seller anything yet.
+    // Cancelled items (a seller's rejected lines, refunded to the customer) never count: an
+    // order can still be delivered by the other sellers in it.
+    const [stats] = await prisma.$queryRaw<
+      Array<{ active_orders: number; pending_orders: number; gross_sales: number; platform_fees: number; today_orders: number; today_sales: number }>
+    >`
+      SELECT
+        COUNT(*) FILTER (WHERE o.order_status NOT IN ('delivered', 'completed', 'cancelled', 'refunded', 'refund_pending'))::int AS active_orders,
+        COUNT(*) FILTER (WHERE o.order_status IN ('pending', 'preparing'))::int AS pending_orders,
+        COALESCE(SUM(oi.total_price) FILTER (WHERE oi.status <> 'cancelled' AND o.order_status IN ('delivered', 'completed') AND o.payment_status = 'paid'), 0)::float8 AS gross_sales,
+        COALESCE(SUM(oi.commission_amount) FILTER (WHERE oi.status <> 'cancelled' AND o.order_status IN ('delivered', 'completed') AND o.payment_status = 'paid'), 0)::float8 AS platform_fees,
+        COUNT(DISTINCT o.id) FILTER (WHERE o.created_at >= ${startOfToday})::int AS today_orders,
+        COALESCE(SUM(oi.total_price) FILTER (WHERE o.created_at >= ${startOfToday}), 0)::float8 AS today_sales
+      FROM order_items oi
+      JOIN orders o ON o.id = oi.order_id
+      WHERE oi.seller_id = ${sellerId}
+    `;
+    const activeOrders = Number(stats?.active_orders ?? 0);
+    const pendingOrders = Number(stats?.pending_orders ?? 0);
 
     // Balance from who actually holds each order's money (see seller-balance.service.ts).
     const balance = await computeSellerBalance(prisma, sellerId);
@@ -690,19 +682,12 @@ export class SellerService {
       take: 5,
     });
 
-    // Today's stats
-    const startOfToday = new Date();
-    startOfToday.setHours(0, 0, 0, 0);
-
-    const todayItems = orderItems.filter(
-      (item) => new Date(item.order.createdAt) >= startOfToday
-    );
-    const todayOrders = new Set(todayItems.map((i) => i.order.id)).size;
-    const todaySales = todayItems.reduce((sum, item) => sum + Number(item.totalPrice), 0);
+    const todayOrders = Number(stats?.today_orders ?? 0);
+    const todaySales = Number(stats?.today_sales ?? 0);
 
     // Lifetime Gross & Commission
-    const grossSales = completedItems.reduce((sum, item) => sum + Number(item.totalPrice), 0);
-    const platformFees = completedItems.reduce((sum, item) => sum + Number(item.commissionAmount), 0);
+    const grossSales = Number(stats?.gross_sales ?? 0);
+    const platformFees = Number(stats?.platform_fees ?? 0);
 
     const paidSettlement = balance.paidOut;
 

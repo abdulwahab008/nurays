@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState, useRef } from 'react';
+import { getStackedDiscountedPrice } from '@/lib/pricing';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import {
@@ -51,19 +52,6 @@ function getPromotionLabel(p: CatalogPromotion, t: (key: 'percentOff' | 'amountO
   if (p.type === 'percentage' && p.discountValue > 0) return t('percentOff', { value: p.discountValue });
   if (p.type === 'fixed' && p.discountValue > 0) return t('amountOff', { amount: formatPrice(p.discountValue) });
   return p.name || t('deal');
-}
-
-function getStackedDiscountedPrice(originalPrice: number, promos: CatalogPromotion[]): number {
-  if (!promos?.length) return originalPrice;
-  const sorted = [...promos].sort((a, b) =>
-    a.type === 'percentage' && b.type === 'fixed' ? -1 : a.type === 'fixed' && b.type === 'percentage' ? 1 : 0
-  );
-  const result = sorted.reduce((price, p) => {
-    if (p.type === 'percentage' && p.discountValue > 0) return price * (1 - p.discountValue / 100);
-    if (p.type === 'fixed' && p.discountValue > 0) return Math.max(0, price - p.discountValue);
-    return price;
-  }, originalPrice);
-  return Math.round(result);
 }
 
 export default function CheckoutPage() {

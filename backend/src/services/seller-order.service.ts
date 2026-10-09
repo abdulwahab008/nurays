@@ -3,6 +3,7 @@ import { verifyHandoverCode } from './handover.service';
 import { presentFile } from '../storage';
 import { cancelOpenDelivery, notifyDeliveryCancelled, CancelledDelivery } from './delivery-lifecycle.service';
 import prisma from '../config/database';
+import { pageArgs } from '../utils/pagination';
 import { AppError } from '../middleware/errorHandler';
 import realtimeOrderService from './realtime-order.service';
 import riderService from './rider.service';
@@ -36,9 +37,7 @@ export class SellerOrderService {
       throw new AppError('Seller not found', 404, 'SELLER_NOT_FOUND');
     }
 
-    const page = filters.page || 1;
-    const limit = Math.min(filters.limit || 20, 100);
-    const skip = (page - 1) * limit;
+    const { page, limit, skip } = pageArgs(filters.page, filters.limit);
 
     // Build where clause for order items
     const where: any = {
@@ -608,13 +607,6 @@ export class SellerOrderService {
             totalOrders: { decrement: 1 },
           },
         });
-        await tx.inventoryReservation.deleteMany({
-          where: {
-            productId: orderItem.productId,
-            reservationType: 'order',
-            reservationId: orderItem.orderId,
-          },
-        });
       }
 
       const remaining = await tx.orderItem.findMany({
@@ -860,13 +852,6 @@ export class SellerOrderService {
             data: {
               ...(item.variantId ? {} : { stockQuantity: { increment: item.quantity } }),
               totalOrders: { decrement: 1 },
-            },
-          });
-          await tx.inventoryReservation.deleteMany({
-            where: {
-              productId: item.productId,
-              reservationType: 'order',
-              reservationId: order.id,
             },
           });
         }

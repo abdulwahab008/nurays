@@ -61,8 +61,9 @@ export const deleteVariant = async (req: Request, res: Response) => {
 };
 
 export const getProductVariants = async (req: Request, res: Response) => {
+  if (!req.user) throw new AppError('Authentication required', 401, 'AUTH_REQUIRED');
   const { productId } = req.params;
-  const variants = await productVariantService.getProductVariants(productId);
+  const variants = await productVariantService.getProductVariants(productId, { userId: req.user.userId, userType: req.user.userType });
 
   res.status(200).json({
     success: true,
@@ -71,8 +72,9 @@ export const getProductVariants = async (req: Request, res: Response) => {
 };
 
 export const getVariant = async (req: Request, res: Response) => {
+  if (!req.user) throw new AppError('Authentication required', 401, 'AUTH_REQUIRED');
   const { variantId } = req.params;
-  const variant = await productVariantService.getVariantById(variantId);
+  const variant = await productVariantService.getVariantById(variantId, { userId: req.user.userId, userType: req.user.userType });
 
   res.status(200).json({
     success: true,

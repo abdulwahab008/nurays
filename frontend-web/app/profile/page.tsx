@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { apiClient } from '@/lib/api-client';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { userProfileService, UserProfile } from '@/lib/services/user-profile.service';
@@ -38,6 +39,33 @@ import {
 export default function ProfilePage() {
   const router = useRouter();
   const { isAuthenticated, user, setUser, logout } = useAuthStore();
+  const [deleting, setDeleting] = useState(false);
+
+  // Closing the account: typed confirmation, then the password if the server asks for one.
+  const handleDeleteAccount = async () => {
+    if (window.prompt(t('deleteConfirmPrompt')) !== 'DELETE') return;
+    const attempt = async (password?: string) => {
+      await userProfileService.deleteAccount(password);
+      showToast(t('accountDeleted'), 'success');
+      logout();
+      router.push('/');
+    };
+    try {
+      setDeleting(true);
+      try {
+        await attempt();
+      } catch (error: any) {
+        if (error?.response?.data?.error?.code !== 'PASSWORD_REQUIRED') throw error;
+        const password = window.prompt(t('deletePasswordPrompt'));
+        if (!password) return;
+        await attempt(password);
+      }
+    } catch (error: any) {
+      showToast(error?.response?.data?.error?.message || error?.message || 'Could not close the account', 'error');
+    } finally {
+      setDeleting(false);
+    }
+  };
   const { showToast } = useToast();
   const t = useT(accountMessages);
   const tc = useT(commonMessages);
@@ -66,7 +94,7 @@ export default function ProfilePage() {
   const sidebarItems = CUSTOMER_SIDEBAR_ITEMS;
 
   useEffect(() => {
-    const token = typeof window !== 'undefined' ? (sessionStorage.getItem('access_token') || localStorage.getItem('access_token')) : null;
+    const token = apiClient.getAccessToken();
     if (!token && !isAuthenticated) {
       router.push('/login');
       return;
@@ -133,7 +161,18 @@ export default function ProfilePage() {
   const handleUpdateProfile = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      const response = await userProfileService.updateProfile(formData);
+      // Changing the email re-points the account: the server asks for the password when there is one.
+      const emailChanged = !!profile && formData.email.trim().toLowerCase() !== (profile.email || '').toLowerCase();
+      const submit = (currentPassword?: string) => userProfileService.updateProfile(currentPassword ? { ...formData, currentPassword } : formData);
+      let response;
+      try {
+        response = await submit();
+      } catch (error: any) {
+        if (!emailChanged || error?.response?.data?.error?.code !== 'PASSWORD_REQUIRED') throw error;
+        const currentPassword = window.prompt(t('emailChangePasswordPrompt'));
+        if (!currentPassword) return;
+        response = await submit(currentPassword);
+      }
       setProfile(response.data);
       setUser(response.data as any);
       setEditing(false);
@@ -580,6 +619,22 @@ export default function ProfilePage() {
                 }}
               >
                 {t('signOut')}
+              </Button>
+            </div>
+            <div className="flex items-center justify-between gap-3 p-4 bg-red-50 rounded-xl mt-3">
+              <div className="min-w-0">
+                <p className="font-medium text-gray-900">{t('deleteAccount')}</p>
+                <p className="text-xs text-gray-500">{t('deleteAccountDesc')}</p>
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                className="border-red-300 text-red-700 hover:bg-red-100 shrink-0"
+                data-testid="delete-account"
+                disabled={deleting}
+                onClick={handleDeleteAccount}
+              >
+                {t('deleteAccount')}
               </Button>
             </div>
           </div>

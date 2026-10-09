@@ -2,12 +2,12 @@ import { z } from 'zod';
 
 export const approveRejectSellerSchema = z.object({
   approved: z.boolean(),
-  notes: z.string().optional(),
+  notes: z.string().max(1000).optional(),
 });
 
 export const moderateProductSchema = z.object({
   approved: z.boolean(),
-  reason: z.string().optional(),
+  reason: z.string().max(1000).optional(),
 });
 
 export const updateSellerStatusSchema = z.object({
@@ -16,15 +16,15 @@ export const updateSellerStatusSchema = z.object({
 
 export const approveRejectRiderSchema = z.object({
   approved: z.boolean(),
-  reason: z.string().optional(),
+  reason: z.string().max(1000).optional(),
 });
 
 export const completePayoutSchema = z.object({
-  transactionId: z.string().optional(),
+  transactionId: z.string().max(100).optional(),
 });
 
 export const failPayoutSchema = z.object({
-  reason: z.string().min(1, 'A reason is required'),
+  reason: z.string().min(1, 'A reason is required').max(1000),
 });
 
 export const updateSettingsSchema = z.object({

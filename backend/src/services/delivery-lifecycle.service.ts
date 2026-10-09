@@ -30,6 +30,28 @@ export async function cancelOpenDelivery(tx: Tx, orderId: string, reason: string
 }
 
 /** After the commit: tell the assigned rider (and the rider pool) the job is gone. */
+/**
+ * What a job looks like when it goes back to the pool: no rider, no pay or bonus set for one,
+ * nothing of the previous rider's trip (arrival times, last position, pickup time) left on it,
+ * and the rider who had it on the list of riders it is not offered to again.
+ */
+export function reopenDeliveryData(previousRiderId?: string | null) {
+  return {
+    riderId: null,
+    status: 'pending' as const,
+    riderFee: null,
+    riderBonus: null,
+    assignmentMode: null,
+    arrivedAtPickup: null,
+    arrivedAtCustomer: null,
+    pickupTime: null,
+    riderLatitude: null,
+    riderLongitude: null,
+    riderLocationAt: null,
+    ...(previousRiderId ? { releasedRiderIds: { push: previousRiderId } } : {}),
+  };
+}
+
 export function notifyDeliveryCancelled(cancelled: CancelledDelivery | null): void {
   if (!cancelled) return;
   try {

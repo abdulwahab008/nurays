@@ -1,4 +1,5 @@
 import { Request, Response } from 'express';
+import { qstr } from '../utils/query';
 import * as stockAlertService from '../services/stock-alert.service';
 import { AppError } from '../middleware/errorHandler';
 import prisma from '../config/database';
@@ -20,7 +21,7 @@ export const getStockAlerts = async (req: Request, res: Response) => {
   const filters = {
     isRead: req.query.isRead === 'true' ? true : req.query.isRead === 'false' ? false : undefined,
     isDismissed: req.query.isDismissed === 'true' ? true : req.query.isDismissed === 'false' ? false : undefined,
-    alertType: req.query.alertType as 'low_stock' | 'out_of_stock' | undefined,
+    alertType: (['low_stock', 'out_of_stock'].includes(qstr(req.query.alertType) ?? '') ? qstr(req.query.alertType) : undefined) as 'low_stock' | 'out_of_stock' | undefined,
   };
 
   const alerts = await stockAlertService.getSellerStockAlerts(seller.id, filters);

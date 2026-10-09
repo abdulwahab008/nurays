@@ -10,7 +10,7 @@ Field lists come from the zod schemas in `backend/src/validators/*.ts`. Where a 
 
 `/api/v1` (the version comes from `API_VERSION`, default `v1`; the port from `PORT`, `3001` in `backend/.env.example`). Every path below is relative to it. The frontend takes it from `NEXT_PUBLIC_API_URL`. `GET /` (outside `/api/v1`) returns `{ success, message: "Nuray API", version, timestamp }`.
 
-Request bodies are JSON (limit 10 MB), except uploads (multipart) and the Safepay return (form post). CORS allows the `CORS_ORIGIN` origin with the headers `Content-Type`, `Authorization`, `Idempotency-Key`, `X-Request-Id`, and exposes `X-Request-Id`.
+Request bodies are JSON (limit 1 MB), except uploads (multipart) and the Safepay return (form post). CORS allows the `CORS_ORIGIN` origin with the headers `Content-Type`, `Authorization`, `Idempotency-Key`, `X-Request-Id`, and exposes `X-Request-Id`.
 
 ### Authentication
 
@@ -140,7 +140,8 @@ All routes need authentication (`user-profile.routes.ts`).
 | Method and path | Body / notes | Returns |
 |---|---|---|
 | `GET /users/me` | none | the user's profile |
-| `PATCH /users/me` | optional `fullName` (min 2), `email`, `city`, `area`, `languagePreference`: `en` \| `ur` | updated profile |
+| `PATCH /users/me` | optional `fullName` (min 2), `email`, `city`, `area`, `languagePreference`: `en` \| `ur`; `currentPassword` is required when `email` changes on an account that has a password (400 `PASSWORD_REQUIRED`, 401 `INVALID_PASSWORD`) | updated profile; a changed email is unverified until confirmed |
+| `DELETE /users/me` | `confirm: "DELETE"`, `password` (required when the account has one) | closes the account (see Security: account closure); 409 `OPEN_ORDERS` \| `WALLET_BALANCE` \| `ACTIVE_DELIVERIES` \| `RIDER_BALANCE` \| `PENDING_PAYOUT`, 403 `STAFF_ACCOUNT` |
 | `POST /users/me/avatar` | `avatarUrl` (a URL; upload the image first with `POST /upload/avatar`) | updated avatar |
 | `GET /users/me/addresses` | none | the user's addresses (bare array) |
 | `POST /users/me/addresses` | `addressLine1` (min 5), `area` (min 2), `city` (min 2); optional `label`, `addressLine2`, `postalCode`, `landmark`, `latitude` (-90..90), `longitude` (-180..180), `communityId`, `isDefault` | 201 the address |
@@ -280,7 +281,7 @@ All routes need authentication (`order.routes.ts`, `order.validator.ts`). Access
 
 | Method and path | Body / query | Returns |
 |---|---|---|
-| `POST /orders` | order limit, `Idempotency-Key`. Body: `items[]` (min 1; each `productId` uuid, `quantity` int >0, optional `variantId`, `stockType`, `hubId`), `deliveryType`: `home_delivery` \| `hub_pickup` \| `self_pickup`, `paymentMethod`: `jazzcash` \| `easypaisa` \| `bank` \| `cod` \| `wallet` \| `card` \| `safepay`; optional `deliveryAddressId` (uuid), `hubId`, `deliverySlotDate`, `deliverySlotTime`, `promotionCode`, `deliveryInstructions` (max 500) | 201 `{ order: { id, orderNumber, totalAmount, paymentMethod, paymentStatus, orderStatus, items }, payment: { gateway, status: "pending" } }`. For an online payment, follow with `POST /payments/process`. Totals are whole rupees |
+| `POST /orders` | order limit, `Idempotency-Key`. Body: `items[]` (min 1; each `productId` uuid, `quantity` int >0, optional `variantId`, `stockType`, `hubId`), `deliveryType`: `home_delivery` \| `hub_pickup` \| `self_pickup`, `paymentMethod`: `jazzcash` \| `easypaisa` \| `bank` \| `cod` \| `wallet` \| `card` \| `safepay`; optional `deliveryAddressId` (uuid), `hubId`, `deliverySlotDate`, `deliverySlotTime`, `promotionCode` (refused with `INVALID_PROMO_CODE` \| `PROMO_INACTIVE` \| `PROMO_EXPIRED` \| `PROMO_LIMIT_REACHED` \| `PROMO_ALREADY_USED` \| `MIN_ORDER_NOT_MET` \| `PROMO_NOT_APPLICABLE` when it cannot be used), `deliveryInstructions` (max 500). An item `hubId` is only allowed on hub stock (`HUB_NOT_APPLICABLE` otherwise) | 201 `{ order: { id, orderNumber, totalAmount, paymentMethod, paymentStatus, orderStatus, items }, payment: { gateway, status: "pending" } }`. For an online payment, follow with `POST /payments/process`. Totals are whole rupees |
 | `GET /orders/me` | query `page`, `limit`, `status` (`pending` ... `cancelled`, `refunded`) | `{ orders, pagination, statusCounts }` where `statusCounts` is the count per order status across the whole history |
 | `GET /orders/:id` | none | full order (items, delivery, payment, status history) |
 | `POST /orders/:id/cancel` | `reason` (5-500) | cancels. Customers can only cancel while the order is `pending` (400 `ORDER_NOT_CANCELLABLE` otherwise); stock is restored and a refund created if it was paid |
@@ -549,7 +550,7 @@ Same body schemas as seller promotions (see Promotions), but the discount is pai
 | Method and path | Body / query | Returns |
 |---|---|---|
 | `GET /admin/payouts` | query `status`, `page`, `limit` | payout requests with pagination |
-| `POST /admin/payouts/:id/complete` | optional `transactionId` | marks paid |
+| `POST /admin/payouts/:id/complete` | optional `transactionId` | marks paid; 409 `PAYOUT_EXCEEDS_BALANCE` when a refund since the request means the kitchen's balance no longer covers it (fail it instead) |
 | `POST /admin/payouts/:id/fail` | `reason` (required) | marks failed |
 
 ### Settings

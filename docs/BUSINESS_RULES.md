@@ -25,6 +25,8 @@ tax    = total - goods - deliveryFee                      // takes the rounding,
 Code: `backend/src/services/order.service.ts` (`createOrder`), `promotion.service.ts`.
 
 - Catalog deals are applied to item prices first. A promo code is applied after that, and the same promotion cannot be applied twice.
+- A code that is unknown, switched off, expired, used up (in total or by this customer) or below its minimum order is **refused at checkout** (`INVALID_PROMO_CODE`, `PROMO_INACTIVE`, `PROMO_EXPIRED`, `PROMO_LIMIT_REACHED`, `PROMO_ALREADY_USED`, `MIN_ORDER_NOT_MET`), the same answers as `/promotions/validate`; the order is never placed at full price with a code the customer typed.
+- Usage limits are re-checked inside the order transaction under a row lock on the promotion, so two checkouts racing each other cannot both use a one-per-person code or overshoot a total limit (codes and catalog deals alike).
 - A percentage code: `eligible subtotal x value / 100`, capped by the code's maximum discount. A fixed code: its value. Never more than the eligible subtotal. The code must be active, inside its dates, over its minimum order and under its usage limits (total and per customer).
 - A kitchen's own code only discounts that kitchen's items, and the kitchen funds it: commission and payout are worked out on the price after the discount.
 - A platform code (admin, Promo codes screen) is funded by Nuray: the kitchen's payout and commission are unchanged.
@@ -228,7 +230,7 @@ Code: `backend/src/services/refund.service.ts`, `admin-order.service.ts`.
   - Paid with the wallet: credited to the customer's wallet immediately, status `completed`.
   - Anything else (Safepay, transfer, cash that was collected): a `pending` refund the admin has to send by hand, then mark sent (with a reference), or dismiss.
 - Cancelling a paid order refunds it fully through the same code. A transfer the customer reported but nobody confirmed (`payment_submitted`) also queues a refund, labelled "UNCONFIRMED TRANSFER - verify receipt first", so an admin can check the account and dismiss it if nothing arrived.
-- Dismissing a pending refund sets it to `failed` (it stops counting). If nothing else stands on the order, the order's payment becomes `failed`.
+- Dismissing a pending refund sets it to `failed` (it stops counting). If nothing else stands on the order, the order's payment goes back to `paid` when its money had been confirmed (the kitchen keeps its earning), and to `failed` only for a transfer that never arrived.
 - Order payment states: when a refund covers the whole total, the order goes to `refunded` (wallet) or `refund_pending` (manual); when the last pending refund is completed, `refund_pending` becomes `refunded`.
 - Manual refund from the order page is only for orders that are no longer in flight (delivered, completed, failed, etc.). An order that is pending through in transit must be cancelled instead.
 - Items cancelled by a kitchen on a paid order: refund = `sum( (item.totalPrice - item.promoDiscount) x 1.05 )` for those items, plus the kitchen's delivery fee once none of its items remain. Older orders without per-item discount shares use a proportional split of `total - deliveryFee`. If the whole order ends up cancelled, everything unrefunded is refunded.

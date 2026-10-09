@@ -69,7 +69,7 @@ Gulshan-e-Iqbal, and every seller decides, community by community, whether they 
 
 | Layer | What |
 |---|---|
-| Backend | Node.js 20, Express 5, TypeScript, Prisma 6, PostgreSQL, Redis (ioredis, BullMQ jobs, Socket.IO adapter, rate limits), Socket.IO, Zod, pino logs, Sentry |
+| Backend | Node.js 22, Express 5, TypeScript, Prisma 6, PostgreSQL, Redis (ioredis, BullMQ jobs, Socket.IO adapter, rate limits), Socket.IO, Zod, pino logs, Sentry |
 | Files | local disk or any S3-compatible store (S3, R2, B2, MinIO); images resized to WebP with sharp; private files behind signed links |
 | Notifications | in-app + live socket, web push (VAPID), email (SMTP/Gmail), SMS (Twilio) |
 | Frontend | Next.js 16 (App Router), React 19, Tailwind CSS 4, Zustand, React Hook Form, Leaflet, Socket.IO client; English and Urdu (RTL) |
@@ -105,7 +105,7 @@ docker-compose.yml                       backend + frontend containers
 
 ### Prerequisites
 
-- Node.js 20+
+- Node.js 22+
 - PostgreSQL 15+ (with the bundled `pg_trgm` extension, as on every major managed service)
 - Redis 7+: required in production, optional in development
 

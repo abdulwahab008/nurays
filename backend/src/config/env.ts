@@ -77,6 +77,11 @@ export function configProblems(env: NodeJS.ProcessEnv = process.env): string[] {
     if (env.FRONTEND_URL && !/^https:\/\//.test(env.FRONTEND_URL)) {
       problems.push('FRONTEND_URL must be an https:// URL in production.');
     }
+    // Without it the API and the realtime server only accept http://localhost:3000: the real site cannot sign in.
+    need('CORS_ORIGIN', 'the browser origin allowed to call the API, normally the same as FRONTEND_URL');
+    if (env.CORS_ORIGIN && !/^https:\/\//.test(env.CORS_ORIGIN.trim())) {
+      problems.push('CORS_ORIGIN must be an https:// origin in production.');
+    }
 
     const email = emailProvider(env);
     if (email !== 'gmail' && email !== 'smtp') {

@@ -1,4 +1,5 @@
 import prisma from '../config/database';
+import { pageArgs } from '../utils/pagination';
 import { refreshRatingScores } from './ranking.service';
 import { AppError } from '../middleware/errorHandler';
 
@@ -121,9 +122,7 @@ export class ReviewService {
       rating?: number;
     }
   ) {
-    const page = filters.page || 1;
-    const limit = Math.min(filters.limit || 10, 50);
-    const skip = (page - 1) * limit;
+    const { page, limit, skip } = pageArgs(filters.page, filters.limit, 10, 50);
 
     const where: any = {
       productId,

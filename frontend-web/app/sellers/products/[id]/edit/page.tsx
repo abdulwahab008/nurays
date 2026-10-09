@@ -523,7 +523,6 @@ export default function EditProductPage() {
         ...menuPayload(menu),
       };
 
-      console.log('Updating product:', productData);
       const response = await apiClient.patch(`/products/${productId}`, productData);
 
       if (response.data.success) {

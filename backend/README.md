@@ -1,6 +1,6 @@
 # Nuray backend
 
-The API behind Nuray, a community food marketplace for Pakistan: Node.js 20, Express 5, TypeScript, Prisma 6 on
+The API behind Nuray, a community food marketplace for Pakistan: Node.js 22, Express 5, TypeScript, Prisma 6 on
 PostgreSQL, Redis (BullMQ jobs, Socket.IO adapter, rate limits; optional in development), Socket.IO, Zod, pino. Routes
 are mounted under `/api/v1`; health is `/api/v1/health`.
 

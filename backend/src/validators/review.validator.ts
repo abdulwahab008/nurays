@@ -6,7 +6,7 @@ export const addReviewSchema = z.object({
   productRating: z.number().min(1).max(5),
   sellerRating: z.number().min(1).max(5),
   deliveryRating: z.number().min(1).max(5).optional(),
-  comment: z.string().optional(),
+  comment: z.string().max(1000).optional(),
   photos: z.array(z.string().url('Invalid photo URL')).optional(),
 });
 

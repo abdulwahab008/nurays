@@ -2,7 +2,6 @@
 
 import { useState, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
-import Image from 'next/image';
 import { DashboardLayout, ADMIN_SIDEBAR_ITEMS, HUB_MANAGER_SIDEBAR_ITEMS } from '@/components/layout/DashboardShell';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/toast';
@@ -844,11 +843,12 @@ export default function HubOperationsConsole({ mode }: { mode: 'admin' | 'manage
                     <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 flex items-center gap-4">
                       <div className="w-16 h-16 rounded-lg bg-gray-200 flex-shrink-0 relative overflow-hidden border border-gray-300">
                         {selectedProduct.primaryImage?.imageUrl ? (
-                          <Image
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img
                             src={selectedProduct.primaryImage.imageUrl}
                             alt={selectedProduct.name}
-                            fill
-                            className="object-cover"
+                            loading="lazy"
+                            className="absolute inset-0 w-full h-full object-cover"
                           />
                         ) : (
                           <div className="w-full h-full flex items-center justify-center text-2xl">🍲</div>
@@ -1184,11 +1184,12 @@ export default function HubOperationsConsole({ mode }: { mode: 'admin' | 'manage
                             <div className="flex items-center gap-3">
                               <div className="w-10 h-10 rounded-lg bg-gray-100 relative overflow-hidden flex-shrink-0 border border-gray-200">
                                 {batch.product.image ? (
-                                  <Image
+                                  // eslint-disable-next-line @next/next/no-img-element
+                                  <img
                                     src={batch.product.image}
                                     alt={batch.product.name}
-                                    fill
-                                    className="object-cover"
+                                    loading="lazy"
+                                    className="absolute inset-0 w-full h-full object-cover"
                                   />
                                 ) : (
                                   <div className="w-full h-full flex items-center justify-center text-base">

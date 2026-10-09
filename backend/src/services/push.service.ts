@@ -70,6 +70,7 @@ export async function sendPushToUser(userId: string, payload: PushPayload): Prom
       await webpush.sendNotification({ endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth } }, JSON.stringify(payload), {
         TTL: 60 * 60 * 24,
         urgency: 'high',
+        timeout: 10_000,
       });
       delivered++;
       await prisma.pushSubscription.update({ where: { id: sub.id }, data: { lastUsedAt: new Date() } }).catch(() => undefined);
