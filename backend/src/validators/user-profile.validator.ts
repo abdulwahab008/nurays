@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { PAKISTAN_BOUNDS, PIN_OUTSIDE } from '../utils/geo';
 
 export const updateProfileSchema = z.object({
   fullName: z.string().min(2, 'Full name must be at least 2 characters').max(120).optional(),
@@ -22,8 +23,9 @@ export const addAddressSchema = z.object({
   city: z.string().min(2, 'City is required').max(100),
   postalCode: z.string().max(20).optional(),
   landmark: z.string().max(300).optional(),
-  latitude: z.number().min(-90).max(90).optional(),
-  longitude: z.number().min(-180).max(180).optional(),
+  // Nuray delivers in Pakistan: a pin anywhere else is a mis-drop, not a door.
+  latitude: z.number().min(PAKISTAN_BOUNDS.minLat, PIN_OUTSIDE).max(PAKISTAN_BOUNDS.maxLat, PIN_OUTSIDE).optional(),
+  longitude: z.number().min(PAKISTAN_BOUNDS.minLng, PIN_OUTSIDE).max(PAKISTAN_BOUNDS.maxLng, PIN_OUTSIDE).optional(),
   communityId: z.string().min(1).optional(),
   isDefault: z.boolean().optional(),
 });

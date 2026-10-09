@@ -1,6 +1,7 @@
 import { Prisma } from '@prisma/client';
 import prisma from '../config/database';
 import socketManager from '../config/socket';
+import { reopenDeliveryData } from './delivery-lifecycle.service';
 import { AppError } from '../middleware/errorHandler';
 import realtimeOrderService from './realtime-order.service';
 import ledgerService from './ledger.service';
@@ -267,6 +268,8 @@ export class RiderService {
       where: { riderId: null, status: 'pending', order: { orderStatus: { notIn: ['cancelled', 'refunded', 'delivered', 'completed'] } } },
       include: DELIVERY_INCLUDE,
       orderBy: { createdAt: 'asc' },
+      // The oldest open jobs; a pool deeper than this is an operations problem, not a list.
+      take: 100,
     });
 
     // With exactly one active job, jobs along the same route earn a bonus.
@@ -321,6 +324,8 @@ export class RiderService {
       },
       include: DELIVERY_INCLUDE,
       orderBy: { createdAt: 'desc' },
+      // Every running job plus recent history; earnings has the full ledger.
+      take: 200,
     });
     return deliveries.map(formatDelivery);
   }
@@ -479,9 +484,19 @@ export class RiderService {
         );
       }
       // The food leaves the kitchen only once the kitchen has marked it ready.
-      if ((status === 'picked_up' || status === 'in_transit') && delivery.status !== 'picked_up' && !['ready', 'dispatched', 'in_transit'].includes(order.orderStatus)) {
+      const kitchenReady = ['ready', 'dispatched', 'in_transit'].includes(order.orderStatus);
+      if ((status === 'picked_up' || status === 'in_transit') && delivery.status !== 'picked_up' && !kitchenReady) {
         throw new AppError(
           "The kitchen hasn't marked this order ready yet. Wait for it before picking it up.",
+          409,
+          'FOOD_NOT_READY'
+        );
+      }
+      // A delivery can only fail once there is food to deliver: before that, a rider who cannot
+      // wait hands the job back (release) and the kitchen keeps cooking for the next rider.
+      if (status === 'delivery_failed' && delivery.status === 'arrived_at_pickup' && !kitchenReady) {
+        throw new AppError(
+          "The kitchen hasn't marked this order ready yet. Hand the job back instead of failing it.",
           409,
           'FOOD_NOT_READY'
         );
@@ -597,7 +612,7 @@ export class RiderService {
     if (delivery.riderId !== rider.id) throw new AppError('This delivery is not assigned to you', 403, 'ACCESS_DENIED');
     const released = await prisma.delivery.updateMany({
       where: { id: deliveryId, riderId: rider.id, status: { in: ['assigned', 'arrived_at_pickup'] } },
-      data: { riderId: null, status: 'pending', riderFee: null, riderBonus: null, assignmentMode: null, arrivedAtPickup: null, releasedRiderIds: { push: rider.id } },
+      data: reopenDeliveryData(rider.id),
     });
     if (released.count === 0) {
       throw new AppError('You can only hand a job back before you pick up the food', 409, 'CANNOT_RELEASE');

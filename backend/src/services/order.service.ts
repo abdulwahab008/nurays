@@ -42,15 +42,29 @@ const ON_THE_WAY_STATUSES = ['picked_up', 'in_transit', 'arrived_at_customer'];
  * the platform. The rider's position is shown only while the food is on its way (never
  * afterwards), and only to the customer, the rider and admins.
  */
-/** The order as the rider carrying it may see it: payment-submission details and internal keys removed. */
-function stripForRider<T extends Record<string, unknown>>(order: T): T {
+const RIDER_JOB_RUNNING = ['assigned', 'arrived_at_pickup', 'picked_up', 'in_transit', 'arrived_at_customer'];
+
+/**
+ * The order as the rider carrying it may see it: payment-submission details and internal keys
+ * removed. The customer's door (address, pin, instructions) is theirs only while the job is
+ * running; once it is delivered, failed or cancelled the rider keeps the area and city only,
+ * the same as the rider endpoints.
+ */
+function stripForRider<T extends Record<string, unknown>>(order: T, jobRunning: boolean): T {
   const {
     paymentReferenceNumber: _r, paymentSenderName: _n, paymentSenderAccount: _a, paymentNotes: _p, paymentDisputeReason: _d,
     paymentTransactionId: _t, paymentConfirmedBy: _c, paymentSubmittedAt: _s, paymentConfirmedAt: _ca, idempotencyKey: _k,
     deliveryFeeBreakdown: _f, sellerDeliveryCharge: _sc, ...rest
   } = order as Record<string, unknown>;
   const address = rest.deliveryAddress as Record<string, unknown> | null | undefined;
-  if (address && typeof address === 'object') {
+  const snapshot = rest.deliveryAddressSnapshot as Record<string, unknown> | null | undefined;
+  if (!jobRunning) {
+    const areaOnly = (src: Record<string, unknown> | null | undefined) =>
+      src && typeof src === 'object' ? { area: src.area ?? null, city: src.city ?? null } : null;
+    rest.deliveryAddress = areaOnly(address);
+    rest.deliveryAddressSnapshot = areaOnly(snapshot);
+    rest.deliveryInstructions = null;
+  } else if (address && typeof address === 'object') {
     const { userId: _u, ...addr } = address;
     rest.deliveryAddress = addr;
   }
@@ -1134,7 +1148,7 @@ export class OrderService {
     // A rider delivering the order needs the food, the door, the amount to collect and how it is
     // paid; not the customer's bank details, receipt, the kitchen's fee breakdown or internal keys.
     const riderOnly = isOrderRider && !isAdmin && order.customerId !== userId && !isSeller;
-    const forViewer = riderOnly ? stripForRider(order) : order;
+    const forViewer = riderOnly ? stripForRider(order, RIDER_JOB_RUNNING.includes(order.delivery?.status ?? '')) : order;
 
     return {
       ...forViewer,

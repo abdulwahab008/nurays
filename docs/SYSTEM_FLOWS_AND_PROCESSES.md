@@ -188,7 +188,7 @@ Each cancellation goes through the admin cancel path with `by: system`, so stock
 
 ### Navigation for the rider
 
-Each active job card has a green **Start** button for the current leg: to the kitchen until the food is picked up, then to the customer. It opens Google Maps (the app on a phone) with turn-by-turn directions to the exact map pin, in two-wheeler mode. Accepting a job from the open pool opens the route to the kitchen straight away, and tapping "Depart with the order" opens the route to the customer. A job whose address has no pin shows a note to use the address text and call the customer.
+Each active job card has a green **Start** button for the current leg: to the kitchen until the food is picked up, then to the customer. Before anything opens, the app re-checks with the server that the job is still assigned to this rider and still running; a job that was cancelled or reassigned meanwhile shows a message instead. It then opens Google Maps (the app on a phone) with turn-by-turn directions to the exact map pin, letting Maps pick the travel mode, with an Apple Maps / other-app link underneath for phones without Google Maps. Accepting a job from the open pool opens the route to the kitchen straight away, and tapping "Depart with the order" opens the route to the customer. A job whose address has no pin cannot start navigation: the card shows the address text and the customer's number to call. The rider's own position is shared only while the dashboard is in front (coming back from Maps restarts it and sends a fix at once); the dashboard keeps the screen awake while a job is running.
 
 ### Who delivers
 

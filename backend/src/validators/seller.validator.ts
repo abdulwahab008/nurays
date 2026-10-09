@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { PAKISTAN_BOUNDS, PIN_OUTSIDE } from '../utils/geo';
 
 export const registerSellerSchema = z.object({
   businessName: z.string().min(3, 'Business name must be at least 3 characters').max(120),
@@ -12,8 +13,8 @@ export const registerSellerSchema = z.object({
   kitchenPhotoUrls: z.array(z.string().max(400)).max(20).optional(),
   communityId: z.string().max(100).optional(),
   primaryCommunityName: z.string().max(120).optional(),
-  latitude: z.number().optional(),
-  longitude: z.number().optional(),
+  latitude: z.number().min(PAKISTAN_BOUNDS.minLat, PIN_OUTSIDE).max(PAKISTAN_BOUNDS.maxLat, PIN_OUTSIDE).optional(),
+  longitude: z.number().min(PAKISTAN_BOUNDS.minLng, PIN_OUTSIDE).max(PAKISTAN_BOUNDS.maxLng, PIN_OUTSIDE).optional(),
   address: z.string().max(300).optional(),
   houseOrUnitNumber: z.string().max(50).optional(),
   mealCategories: z.array(z.string().max(50)).max(20).optional(),
@@ -78,8 +79,8 @@ export const updateSellerSchema = z.object({
   enableStockAlerts: z.boolean().optional(),
   freeDeliveryAreas: z.array(z.string()).optional().nullable(),
   freeDeliveryRadiusKm: z.number().min(0).optional().nullable(),
-  latitude: z.number().min(-90).max(90).optional().nullable(),
-  longitude: z.number().min(-180).max(180).optional().nullable(),
+  latitude: z.number().min(PAKISTAN_BOUNDS.minLat, PIN_OUTSIDE).max(PAKISTAN_BOUNDS.maxLat, PIN_OUTSIDE).optional().nullable(),
+  longitude: z.number().min(PAKISTAN_BOUNDS.minLng, PIN_OUTSIDE).max(PAKISTAN_BOUNDS.maxLng, PIN_OUTSIDE).optional().nullable(),
   deliveryFeeType: z.enum(['fixed', 'distance']).or(z.literal('')).optional().nullable(),
   deliveryFeeFixed: z.number().int().min(0).optional().nullable(),
   deliveryFeeBase: z.number().int().min(0).optional().nullable(),

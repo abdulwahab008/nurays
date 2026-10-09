@@ -1,4 +1,5 @@
 import { realPhoneOrNull } from '../utils/otp';
+import { reopenDeliveryData } from './delivery-lifecycle.service';
 import { Prisma } from '@prisma/client';
 import prisma from '../config/database';
 import socketManager from '../config/socket';
@@ -131,7 +132,7 @@ export async function setRiderStatus(riderId: string, status: string) {
     if (toRelease.length) {
       await tx.delivery.updateMany({
         where: { id: { in: toRelease.map((d) => d.id) }, riderId, status: { in: ['assigned', 'arrived_at_pickup'] } },
-        data: { riderId: null, status: 'pending', riderFee: null, riderBonus: null, assignmentMode: null, arrivedAtPickup: null, riderLatitude: null, riderLongitude: null, riderLocationAt: null },
+        data: reopenDeliveryData(riderId),
       });
     }
     const withFood = await tx.delivery.findMany({
