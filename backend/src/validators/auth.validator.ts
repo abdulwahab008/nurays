@@ -7,7 +7,7 @@ export const requestOTPSchema = z.object({
 
 export const registerSchema = z.object({
   email: z.string().email('Invalid email format'),
-  password: z.string().min(8, 'Password must be at least 8 characters'),
+  password: z.string().min(8, 'Password must be at least 8 characters').max(200),
   // 'admin' and 'hub_manager' are privileged roles and must never be
   // self-registerable — those accounts are provisioned out-of-band.
   // 'rider' can self-register but starts unverified (see auth.service.ts).

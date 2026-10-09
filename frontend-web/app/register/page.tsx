@@ -102,7 +102,7 @@ function RegisterForm() {
       return;
     }
 
-    if (formData.password.length < 6) {
+    if (formData.password.length < 8) {
       setError(t('passwordMin6'));
       return;
     }
@@ -328,7 +328,7 @@ function RegisterForm() {
               onChange={(e) => setFormData({ ...formData, password: e.target.value })}
               placeholder={t('atLeast6')}
               required
-              minLength={6}
+              minLength={8}
               className={inputClass}
               style={inputStyle}
             />
@@ -359,7 +359,7 @@ function RegisterForm() {
               onChange={(e) => setFormData({ ...formData, confirmPassword: e.target.value })}
               placeholder={t('confirmYourPassword')}
               required
-              minLength={6}
+              minLength={8}
               className={inputClass}
               style={inputStyle}
             />

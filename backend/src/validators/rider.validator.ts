@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { PAKISTAN_BOUNDS, PIN_OUTSIDE } from '../utils/geo';
 
 export const updateDeliveryStatusSchema = z.object({
   status: z.enum([
@@ -31,9 +32,10 @@ export const riderApplicationSchema = z.object({
 
 export const dutyStatusSchema = z.object({ isAvailable: z.boolean().optional() });
 
+// A rider's reported position must be where Nuray operates: anything else is a bad fix, not a trip.
 export const riderLocationSchema = z.object({
-  latitude: z.coerce.number().min(-90).max(90),
-  longitude: z.coerce.number().min(-180).max(180),
+  latitude: z.coerce.number().min(PAKISTAN_BOUNDS.minLat, PIN_OUTSIDE).max(PAKISTAN_BOUNDS.maxLat, PIN_OUTSIDE),
+  longitude: z.coerce.number().min(PAKISTAN_BOUNDS.minLng, PIN_OUTSIDE).max(PAKISTAN_BOUNDS.maxLng, PIN_OUTSIDE),
 });
 
 export const claimDeliverySchema = z.object({ askFee: z.number().positive().max(100000).optional() });
