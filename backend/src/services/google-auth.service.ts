@@ -3,6 +3,9 @@ import { isProduction } from '../config/env';
 import { generateToken, generateRefreshToken, tokenTtlSeconds, JWTPayload } from '../utils/jwt';
 import { AppError } from '../middleware/errorHandler';
 
+/** How long a Google call may take before sign-in gives up (Google is normally well under a second). */
+const GOOGLE_TIMEOUT_MS = 10_000;
+
 export class GoogleAuthService {
   /**
    * Authenticate user with Google OAuth token
@@ -24,6 +27,7 @@ export class GoogleAuthService {
           method: 'POST',
           headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
           body: new URLSearchParams({ access_token: accessToken }),
+          signal: AbortSignal.timeout(GOOGLE_TIMEOUT_MS),
         });
         if (!infoRes.ok) {
           throw new AppError('Invalid Google access token', 401, 'INVALID_GOOGLE_TOKEN');
@@ -38,6 +42,7 @@ export class GoogleAuthService {
       // so the token doesn't end up in proxy/access logs).
       const response = await fetch('https://www.googleapis.com/oauth2/v2/userinfo', {
         headers: { Authorization: `Bearer ${accessToken}` },
+        signal: AbortSignal.timeout(GOOGLE_TIMEOUT_MS),
       });
 
       if (!response.ok) {
@@ -198,6 +203,9 @@ export class GoogleAuthService {
     } catch (error: any) {
       if (error instanceof AppError) {
         throw error;
+      }
+      if (error?.name === 'TimeoutError' || error?.name === 'AbortError') {
+        throw new AppError('Google sign-in is temporarily unavailable', 503, 'GOOGLE_UNAVAILABLE');
       }
       console.error('Google authentication error:', error);
       throw new AppError('Google authentication failed', 401, 'GOOGLE_AUTH_FAILED');

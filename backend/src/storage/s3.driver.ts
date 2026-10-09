@@ -1,4 +1,5 @@
 import { DeleteObjectCommand, GetObjectCommand, PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
+import { NodeHttpHandler } from '@smithy/node-http-handler';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import type { StorageDriver, Visibility } from './types';
 
@@ -30,6 +31,8 @@ export class S3Storage implements StorageDriver {
       region: cfg.region,
       endpoint: cfg.endpoint,
       forcePathStyle: cfg.forcePathStyle,
+      // An upload that hangs must fail, not hold the request (and the worker) open for good.
+      requestHandler: new NodeHttpHandler({ connectionTimeout: 5_000, requestTimeout: 30_000 }),
       credentials:
         cfg.accessKeyId && cfg.secretAccessKey
           ? { accessKeyId: cfg.accessKeyId, secretAccessKey: cfg.secretAccessKey }

@@ -19,8 +19,10 @@ Every backend setting is documented in [`backend/.env.example`](../backend/.env.
 | VAPID keys | Optional. Without them there is no web push. |
 | Sentry (or GlitchTip) | Optional error tracking, backend and browser. |
 
-Put TLS in front of both services. The backend sets `trust proxy` to 1, so there must be exactly one proxy hop
-between the internet and the app (`backend/src/index.ts`); rate limits key on the client IP it reports.
+Put TLS in front of both services and send `Strict-Transport-Security: max-age=31536000; includeSubDomains` from
+the TLS terminator once every hostname is served over https (the apps do not set it themselves, so a plain-http
+staging host is never locked out). The backend trusts `TRUST_PROXY` hops (default 1), so the number of proxies
+between the internet and the app must match (`backend/src/index.ts`); rate limits key on the client IP it reports.
 
 Browser-facing hostnames: the website (`FRONTEND_URL`, also `CORS_ORIGIN`) and the API (`BASE_URL`). The backend
 allows exactly one CORS origin, so serve the site from a single origin.

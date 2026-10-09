@@ -27,7 +27,11 @@ class SocketManager {
     // With Redis, events emitted on any instance reach clients connected to every instance
     // (and room operations like socketsLeave apply everywhere). Without it, only this one.
     if (redisUrl()) {
-      this.io.adapter(createAdapter(newRedisConnection('socket-pub'), newRedisConnection('socket-sub')));
+      // The adapter publishes without awaiting; while Redis is down commands wait in the
+      // offline queue and flush on reconnect instead of failing one by one into Sentry.
+      const pub = newRedisConnection('socket-pub', { maxRetriesPerRequest: null });
+      const sub = newRedisConnection('socket-sub', { maxRetriesPerRequest: null });
+      this.io.adapter(createAdapter(pub, sub));
     }
 
     // Authentication middleware

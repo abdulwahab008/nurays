@@ -1,4 +1,5 @@
 import { Request, Response } from 'express';
+import { reportError } from '../config/sentry';
 import paymentService from '../services/payment.service';
 import { AppError } from '../middleware/errorHandler';
 import { verifySafepayReturn, verifySafepayWebhook } from '../gateways/safepay.gateway';
@@ -81,8 +82,20 @@ export const safepayReturn = async (req: Request, res: Response) => {
       landingUrlFor({ outcome: 'unknown', purpose: attempt?.purpose as 'order' | 'wallet_topup' | undefined, orderId: attempt?.orderId }, false)
     );
   }
-  const result = await settleAttempt(tracker, 'return', reference);
-  return res.redirect(303, landingUrlFor(result, result.outcome !== 'unknown'));
+  try {
+    const result = await settleAttempt(tracker, 'return', reference);
+    return res.redirect(303, landingUrlFor(result, result.outcome !== 'unknown'));
+  } catch (err) {
+    // The customer is mid-redirect from Safepay: a page that says "we could not confirm your
+    // payment yet" beats a JSON error on the API domain. The webhook or the sweep settles it.
+    logger.error({ err, tracker }, 'Safepay return could not be settled');
+    reportError(err as Error, { path: req.path, method: req.method, tracker });
+    const attempt = await attemptByTracker(tracker).catch(() => null);
+    return res.redirect(
+      303,
+      landingUrlFor({ outcome: 'unknown', purpose: attempt?.purpose as 'order' | 'wallet_topup' | undefined, orderId: attempt?.orderId }, true)
+    );
+  }
 };
 
 /**

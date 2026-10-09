@@ -37,12 +37,20 @@ export function defineJob<T>(name: string, handler: (payload: T) => Promise<void
   handlers.set(name, handler as Handler);
 }
 
+let queueConnection: ReturnType<typeof newRedisConnection> | null = null;
+
 function getQueue(): Queue | null {
   if (!redisUrl()) return null;
   if (!queue) {
-    queue = new Queue(QUEUE_NAME, { connection: newRedisConnection('queue', { maxRetriesPerRequest: null }) });
+    queueConnection = newRedisConnection('queue', { maxRetriesPerRequest: null });
+    queue = new Queue(QUEUE_NAME, { connection: queueConnection });
   }
   return queue;
+}
+
+/** Is the queue's Redis connection usable right now? (ioredis reports 'ready' once connected.) */
+function queueReady(): boolean {
+  return queueConnection?.status === 'ready';
 }
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -66,24 +74,25 @@ async function runLocally(name: string, payload: unknown, attempts: number, dela
 export async function enqueue<T>(name: string, payload: T, opts: EnqueueOptions = {}): Promise<void> {
   if (!handlers.has(name)) throw new Error(`Unknown background job "${name}"`);
   const q = getQueue();
-  if (q) {
+  // While Redis is unreachable the job runs here at once rather than holding the request
+  // for the enqueue timeout on every call.
+  if (q && queueReady()) {
+    const added = q.add(name, payload, {
+      attempts: opts.attempts ?? 5,
+      backoff: { type: 'exponential', delay: 15_000 },
+      delay: opts.delayMs,
+      jobId: opts.jobId,
+      removeOnComplete: { count: 1000 },
+      removeOnFail: { count: 5000 },
+    });
     try {
-      // While Redis is unreachable add() would wait for it indefinitely, holding up the
-      // request: give it a few seconds, then run the job here instead.
-      await withTimeout(
-        q.add(name, payload, {
-          attempts: opts.attempts ?? 5,
-          backoff: { type: 'exponential', delay: 15_000 },
-          delay: opts.delayMs,
-          jobId: opts.jobId,
-          removeOnComplete: { count: 1000 },
-          removeOnFail: { count: 5000 },
-        }),
-        ENQUEUE_TIMEOUT_MS
-      );
+      // Redis can still drop mid-call: give add() a few seconds, then run the job here.
+      await withTimeout(added, ENQUEUE_TIMEOUT_MS);
       return;
     } catch (err) {
       console.error(`Could not queue job ${name} (${(err as Error)?.message ?? err}); running it in this process.`);
+      // If the add lands later all the same, withdraw it: the job is being run here.
+      added.then((job) => job.remove().catch(() => undefined)).catch(() => undefined);
     }
   }
   const run = runLocally(name, payload, opts.attempts ?? 3, opts.delayMs ?? 0).finally(() => localRuns.delete(run));
