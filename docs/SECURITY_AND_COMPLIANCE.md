@@ -70,8 +70,8 @@ is the production setting; development relaxes some.
 
 | Limiter | Limit | Applied to |
 |---|---|---|
-| API flood | 1200 / minute / IP | everything under `/api` except health |
-| Login | 10 / 15 min / IP | login, Google, reset-password, phone verify |
+| API flood | 1200 / minute / account (signed in) or / IP (anonymous) | everything under `/api` except health |
+| Login | 10 failed attempts / 15 min / IP + account | login, Google, reset-password, phone verify (a successful sign-in is not counted, so a shared mobile-network address never runs out) |
 | OTP | 5 / 15 min / IP | OTP request, forgot-password, phone request |
 | Register | 10 / hour / IP | registration |
 | Promo validation | 20 / minute / IP | promo codes |

@@ -206,6 +206,12 @@ mandatory in production):
   in the process that queued it and is lost if that process dies.
 - Timed sweeps (below) take a Postgres advisory lock per job, so only one instance runs a given sweep at a time.
 - Files: with `STORAGE_DRIVER=local` every instance needs the same volume. Use `s3` once you run more than one.
+- Database connections: Prisma opens a pool per instance, sized by default from the host's CPU count
+  (`2 × cores + 1`), not from how many instances run. Set it explicitly on `DATABASE_URL`
+  (`?connection_limit=10&pool_timeout=10`) and keep `instances × connection_limit + 10` below PostgreSQL's
+  `max_connections` (100 by default). Beyond about five instances put PgBouncer (transaction mode) in front
+  and add `&pgbouncer=true`. The load test in `docs/PRODUCTION_READINESS_AUDIT.md` showed that a larger pool
+  does not make the API faster on 4 cores: the limit there is CPU, so scale instances, not the pool.
 
 ## Background jobs
 
