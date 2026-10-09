@@ -1,5 +1,7 @@
 import { Prisma } from '@prisma/client';
 import { Request, Response } from 'express';
+import { qstr } from '../utils/query';
+import { pageArgs } from '../utils/pagination';
 import sellerService from '../services/seller.service';
 import { AppError } from '../middleware/errorHandler';
 import prisma from '../config/database';
@@ -119,7 +121,7 @@ export const getSellerAnalytics = async (req: Request, res: Response) => {
     throw new AppError('Seller account not found', 404, 'SELLER_NOT_FOUND');
   }
 
-  const period = (req.query.period as string) || '30d';
+  const period = qstr(req.query.period) || '30d';
   const analytics = await sellerService.getSellerAnalytics(seller.id, period);
 
   res.status(200).json({
@@ -240,7 +242,7 @@ export const getPublicSellers = async (req: Request, res: Response) => {
 
   const sellers = await prisma.seller.findMany({
     where: whereClause,
-    take: limit ? Math.min(Number(limit), 50) : 30,
+    take: pageArgs(1, limit, 30, 50).limit,
     orderBy,
     include: {
       user: {

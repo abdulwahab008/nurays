@@ -60,10 +60,14 @@ function pktParts(now: Date): { dayIndex: number; minutesSinceMidnight: number; 
   return { dayIndex, minutesSinceMidnight, pktDate };
 }
 
-function parseHHMM(hhmm: string): number {
+function parseHHMM(hhmm: unknown): number {
+  if (typeof hhmm !== 'string') return NaN;
   const [h, m] = hhmm.split(':').map(Number);
   return h * 60 + (m || 0);
 }
+
+const isSession = (s: unknown): s is { open: string; close: string } =>
+  !!s && typeof s === 'object' && typeof (s as { open?: unknown }).open === 'string' && typeof (s as { close?: unknown }).close === 'string';
 
 /** Build a real Date for a given PKT minutes-since-midnight offset from `now`, `daysAhead` days later. */
 function pktMinutesToDate(now: Date, daysAhead: number, minutesSinceMidnight: number): Date {
@@ -88,9 +92,10 @@ function findNextSessionStart(
   for (let daysAhead = 0; daysAhead < 8; daysAhead++) {
     const dayIndex = (startDayIndex + daysAhead) % 7;
     const day = weekly[DAY_NAMES[dayIndex]];
-    if (!day || day.closed || !day.sessions?.length) continue;
-    for (const session of [...day.sessions].sort((a, b) => parseHHMM(a.open) - parseHHMM(b.open))) {
+    if (!day || day.closed || !Array.isArray(day.sessions) || !day.sessions.length) continue;
+    for (const session of day.sessions.filter(isSession).sort((a, b) => parseHHMM(a.open) - parseHHMM(b.open))) {
       const openMin = parseHHMM(session.open);
+      if (Number.isNaN(openMin)) continue;
       if (daysAhead > 0 || openMin >= startMinutes) {
         return { daysAhead, minutes: openMin };
       }
@@ -117,7 +122,7 @@ function computeFromSchedule(seller: SellerAvailabilityInput, now: Date): Availa
   const { dayIndex, minutesSinceMidnight } = pktParts(now);
   const hours = (seller.operatingHours as OperatingHours) || {};
 
-  if (seller.scheduleMode === 'fixed_daily' && hours.fixedDaily) {
+  if (seller.scheduleMode === 'fixed_daily' && isSession(hours.fixedDaily) && !Number.isNaN(parseHHMM(hours.fixedDaily.open)) && !Number.isNaN(parseHHMM(hours.fixedDaily.close))) {
     const openMin = parseHHMM(hours.fixedDaily.open);
     const closeMin = parseHHMM(hours.fixedDaily.close);
     const overnight = closeMin <= openMin; // e.g. open 18:00, close 02:00 (next day)
@@ -138,10 +143,10 @@ function computeFromSchedule(seller: SellerAvailabilityInput, now: Date): Availa
     return { ...base, opensAt, nextOpenAt: opensAt };
   }
 
-  if (seller.scheduleMode === 'per_day' && hours.weekly) {
+  if (seller.scheduleMode === 'per_day' && hours.weekly && typeof hours.weekly === 'object') {
     const today = hours.weekly[DAY_NAMES[dayIndex]];
-    if (today && !today.closed && today.sessions?.length) {
-      const activeSession = today.sessions.find((s) => {
+    if (today && !today.closed && Array.isArray(today.sessions) && today.sessions.length) {
+      const activeSession = today.sessions.filter(isSession).find((s) => {
         const o = parseHHMM(s.open);
         const c = parseHHMM(s.close);
         return minutesSinceMidnight >= o && minutesSinceMidnight < c;

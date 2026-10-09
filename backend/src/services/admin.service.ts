@@ -1,5 +1,7 @@
 import { Prisma } from '@prisma/client';
 import prisma from '../config/database';
+import { computeSellerBalance } from './seller-balance.service';
+import { pageArgs } from '../utils/pagination';
 import { AppError } from '../middleware/errorHandler';
 import { presentFile } from '../storage';
 import { notify, notifySeller } from './notify.service';
@@ -213,9 +215,7 @@ export class AdminService {
     page?: number;
     limit?: number;
   }) {
-    const page = filters.page || 1;
-    const limit = Math.min(filters.limit || 20, 100);
-    const skip = (page - 1) * limit;
+    const { page, limit, skip } = pageArgs(filters.page, filters.limit);
 
     const where: Prisma.SellerWhereInput = {};
 
@@ -453,9 +453,7 @@ export class AdminService {
     page?: number;
     limit?: number;
   }) {
-    const page = filters.page || 1;
-    const limit = Math.min(filters.limit || 20, 100);
-    const skip = (page - 1) * limit;
+    const { page, limit, skip } = pageArgs(filters.page, filters.limit);
 
     const where: Prisma.ProductWhereInput = {};
     if (filters.status) {
@@ -499,9 +497,7 @@ export class AdminService {
    * List seller payout requests (admin only)
    */
   async getPayouts(filters: { status?: string; page?: number; limit?: number }) {
-    const page = filters.page || 1;
-    const limit = Math.min(filters.limit || 20, 100);
-    const skip = (page - 1) * limit;
+    const { page, limit, skip } = pageArgs(filters.page, filters.limit);
 
     const where: Prisma.SellerPayoutWhereInput = {};
     if (filters.status) {
@@ -556,18 +552,31 @@ export class AdminService {
     }
 
     // Conditional on still being pending: a concurrent fail (or second complete) must not also
-    // succeed — money marked sent and failed at once lets the seller request it again.
-    const claimed = await prisma.sellerPayout.updateMany({
-      where: { id: payoutId, status: 'pending' },
-      data: {
-        status: 'completed',
-        transactionId: transactionId || null,
-        processedAt: new Date(),
-      },
+    // succeed — money marked sent and failed at once lets the seller request it again. The
+    // balance is re-checked under the seller's lock first: a refund that landed after the request
+    // can mean the money is no longer the seller's to receive.
+    await prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT id FROM sellers WHERE id = ${payout.sellerId} FOR NO KEY UPDATE`;
+      const balance = await computeSellerBalance(tx, payout.sellerId);
+      if (balance.available < 0) {
+        throw new AppError(
+          `The kitchen's balance no longer covers this payout (short by Rs ${Math.abs(balance.available)}, usually a refund since the request). Fail the payout instead.`,
+          409,
+          'PAYOUT_EXCEEDS_BALANCE'
+        );
+      }
+      const claimed = await tx.sellerPayout.updateMany({
+        where: { id: payoutId, status: 'pending' },
+        data: {
+          status: 'completed',
+          transactionId: transactionId || null,
+          processedAt: new Date(),
+        },
+      });
+      if (claimed.count === 0) {
+        throw new AppError('Payout is no longer pending', 409, 'PAYOUT_NOT_PENDING');
+      }
     });
-    if (claimed.count === 0) {
-      throw new AppError('Payout is no longer pending', 409, 'PAYOUT_NOT_PENDING');
-    }
     await notifySellerOfPayout(payout.sellerId, {
       title: 'Payout sent',
       message: `We sent your payout of Rs ${Number(payout.netAmount ?? payout.amount).toLocaleString()}${transactionId ? ` (transaction ${transactionId})` : ''}.`,

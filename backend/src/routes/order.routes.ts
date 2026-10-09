@@ -15,6 +15,9 @@ import {
   createOrderSchema,
   cancelOrderSchema,
   getOrdersQuerySchema,
+  submitManualPaymentSchema,
+  confirmManualPaymentSchema,
+  sendOrderMessageSchema,
 } from '../validators/order.validator';
 import { authenticate } from '../middleware/auth.middleware';
 import { orderLimiter, messageLimiter, submissionLimiter } from '../middleware/rateLimiter';
@@ -38,12 +41,12 @@ router.post('/:id/cancel', validate(cancelOrderSchema), cancelOrder);
 
 // Manual online payment details & submission
 router.get('/:id/payment-details', getSellerPaymentDetails);
-router.post('/:id/submit-payment', submissionLimiter, submitManualPayment);
-router.post('/:id/confirm-payment', confirmManualPayment);
+router.post('/:id/submit-payment', submissionLimiter, validate(submitManualPaymentSchema), submitManualPayment);
+router.post('/:id/confirm-payment', validate(confirmManualPaymentSchema), confirmManualPayment);
 
 // In-app order messages (buyer <-> seller/rider)
 router.get('/:id/messages', getOrderMessages);
-router.post('/:id/messages', messageLimiter, sendOrderMessage);
+router.post('/:id/messages', messageLimiter, validate(sendOrderMessageSchema), sendOrderMessage);
 
 export default router;
 

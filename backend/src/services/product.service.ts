@@ -1,5 +1,6 @@
 import { Prisma } from '@prisma/client';
 import prisma from '../config/database';
+import { pageArgs } from '../utils/pagination';
 import { getPlatformDeliveryPricing } from './delivery-pricing.service';
 import { searchRankedProductIds } from './ranking.service';
 import { AppError } from '../middleware/errorHandler';
@@ -1005,9 +1006,7 @@ export class ProductService {
     isActive?: boolean;
     approvalStatus?: string;
   }) {
-    const page = filters.page || 1;
-    const limit = Math.min(filters.limit || 20, 100);
-    const skip = (page - 1) * limit;
+    const { page, limit, skip } = pageArgs(filters.page, filters.limit);
 
     const seller = await prisma.seller.findUnique({
       where: { userId: sellerId },

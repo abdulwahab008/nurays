@@ -1,4 +1,5 @@
 import prisma from '../config/database';
+import { pageArgs } from '../utils/pagination';
 import { notify } from './notify.service';
 import { AppError } from '../middleware/errorHandler';
 import { parseBreakdown } from '../utils/deliveryEarnings';
@@ -337,9 +338,10 @@ export async function dismissRefund(refundId: string, adminId: string, reason: s
         where: { orderId: order.id, status: { not: 'failed' } },
         _count: { _all: true },
       });
-      // No other refund stands: the customer never actually paid.
+      // No other refund stands. An order whose money was confirmed goes back to paid (it is
+      // still the kitchen's earning); only a transfer that never arrived is marked failed.
       if (active._count._all === 0) {
-        await tx.order.update({ where: { id: order.id }, data: { paymentStatus: 'failed' } });
+        await tx.order.update({ where: { id: order.id }, data: { paymentStatus: order.paidAt || order.paymentConfirmedAt ? 'paid' : 'failed' } });
       }
     }
     await tx.orderStatusHistory.create({
@@ -356,8 +358,7 @@ export async function dismissRefund(refundId: string, adminId: string, reason: s
 
 /** The admin's queue of refunds still waiting for the money to be sent. */
 export async function listRefunds(filters: { status?: string; page?: number; limit?: number }) {
-  const page = filters.page || 1;
-  const limit = Math.min(filters.limit || 20, 100);
+  const { page, limit } = pageArgs(filters.page, filters.limit);
   const where = filters.status ? { status: filters.status } : {};
   const [rows, total] = await Promise.all([
     prisma.refund.findMany({

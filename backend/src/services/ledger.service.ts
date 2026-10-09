@@ -1,4 +1,5 @@
 import prisma from '../config/database';
+import { pageArgs } from '../utils/pagination';
 import { parseBreakdown, platformDeliveryFee } from '../utils/deliveryEarnings';
 import { collectorOf } from '../utils/paymentCustody';
 
@@ -156,9 +157,7 @@ export class LedgerService {
     page?: number;
     limit?: number;
   }) {
-    const page = filters.page || 1;
-    const limit = Math.min(filters.limit || 50, 100);
-    const skip = (page - 1) * limit;
+    const { page, limit, skip } = pageArgs(filters.page, filters.limit, 50, 100);
 
     const where: any = {};
     if (filters.orderId) where.orderId = filters.orderId;

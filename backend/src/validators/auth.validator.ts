@@ -22,7 +22,7 @@ export const registerSchema = z.object({
 });
 
 export const loginSchema = z.object({
-  phoneOrEmail: z.string().min(1, 'Phone or email is required'),
+  phoneOrEmail: z.string().min(1, 'Phone or email is required').max(200),
   otpCodeOrPassword: z.string().min(1, 'OTP code or password is required'),
   loginMethod: z.enum(['otp', 'email']).default('email'),
 }).refine((data) => {
@@ -86,3 +86,5 @@ export const resetPasswordSchema = z.object({
   token: z.string().min(20).max(200),
   password: z.string().min(8, 'Password must be at least 8 characters').max(200),
 });
+
+export const googleLoginSchema = z.object({ accessToken: z.string().min(10).max(4096) });

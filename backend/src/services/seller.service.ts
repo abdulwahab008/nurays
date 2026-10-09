@@ -341,7 +341,12 @@ export class SellerService {
     if (data.businessNameUrdu !== undefined) updateData.businessNameUrdu = data.businessNameUrdu;
     if (data.description !== undefined) updateData.description = data.description;
     if (data.kitchenVideoUrl !== undefined) updateData.kitchenVideoUrl = data.kitchenVideoUrl || null;
-    if (data.coverImageUrl !== undefined) updateData.coverImageUrl = data.coverImageUrl || null;
+    // A cover photo shown on public pages must be the kitchen's own upload, as at registration
+    // (a hot-linked image could change after approval or track visitors).
+    if (data.coverImageUrl !== undefined) {
+      updateData.coverImageUrl =
+        data.coverImageUrl && data.coverImageUrl !== seller.coverImageUrl ? assertOwnPublicImage(data.coverImageUrl, userId, 'covers', 'cover photo') : data.coverImageUrl || null;
+    }
     if (data.jazzcashNumber !== undefined) updateData.jazzcashNumber = data.jazzcashNumber || null;
     if (data.jazzcashAccountTitle !== undefined) updateData.jazzcashAccountTitle = data.jazzcashAccountTitle || null;
     if (data.easypaisaNumber !== undefined) updateData.easypaisaNumber = data.easypaisaNumber || null;

@@ -28,3 +28,12 @@ export const riderApplicationSchema = z.object({
   cnicBackUrl: z.string().max(400).optional(),
   licenseUrl: z.string().max(400).optional(),
 });
+
+export const dutyStatusSchema = z.object({ isAvailable: z.boolean().optional() });
+
+export const riderLocationSchema = z.object({
+  latitude: z.coerce.number().min(-90).max(90),
+  longitude: z.coerce.number().min(-180).max(180),
+});
+
+export const claimDeliverySchema = z.object({ askFee: z.number().positive().max(100000).optional() });

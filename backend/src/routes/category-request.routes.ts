@@ -11,6 +11,8 @@ import {
 import { authenticate, authorize, requireSeller } from '../middleware/auth.middleware';
 import { auditWrites } from '../middleware/audit';
 import { requirePermission } from '../middleware/staff';
+import { validate } from '../middleware/validation.middleware';
+import { createCategoryRequestSchema, rejectCategoryRequestSchema } from '../validators/category-request.validator';
 
 const router = Router();
 
@@ -19,6 +21,7 @@ router.post(
   '/',
   authenticate,
   requireSeller,
+  validate(createCategoryRequestSchema),
   createCategoryRequest
 );
 
@@ -72,6 +75,7 @@ router.post(
   authorize('admin'),
   requirePermission('ops.write'),
   auditWrites('admin'),
+  validate(rejectCategoryRequestSchema),
   rejectRequest
 );
 

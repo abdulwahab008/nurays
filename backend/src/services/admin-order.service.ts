@@ -3,6 +3,7 @@ import { codCollectorOf } from '../utils/paymentCustody';
 import { presentFile } from '../storage';
 import { cancelOpenDelivery, notifyDeliveryCancelled, CancelledDelivery } from './delivery-lifecycle.service';
 import prisma from '../config/database';
+import { pageArgs } from '../utils/pagination';
 import { AppError } from '../middleware/errorHandler';
 import realtimeOrderService from './realtime-order.service';
 import socketManager from '../config/socket';
@@ -55,9 +56,7 @@ export class AdminOrderService {
     dateTo?: string;
     orderNumber?: string;
   }) {
-    const page = filters.page || 1;
-    const limit = Math.min(filters.limit || 20, 100);
-    const skip = (page - 1) * limit;
+    const { page, limit, skip } = pageArgs(filters.page, filters.limit);
 
     const where: any = {};
 

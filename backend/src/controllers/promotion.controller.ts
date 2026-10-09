@@ -1,4 +1,5 @@
 import { Request, Response } from 'express';
+import { qstr } from '../utils/query';
 import prisma from '../config/database';
 import promotionService from '../services/promotion.service';
 import { AppError } from '../middleware/errorHandler';
@@ -32,8 +33,9 @@ export const getAvailablePromotions = async (req: Request, res: Response) => {
 
 /** Get promotions per product for catalog (public, for customer product listing) */
 export const getCatalogPromotions = async (req: Request, res: Response) => {
-  const productIds = (req.query.productIds as string || '')
+  const productIds = (qstr(req.query.productIds) || '')
     .split(',')
+    .slice(0, 100)
     .map((id) => id.trim())
     .filter(Boolean);
   const data = await promotionService.getPromotionsForCatalog(productIds);

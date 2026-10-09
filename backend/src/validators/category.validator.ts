@@ -9,7 +9,7 @@ export const createCategorySchema = z.object({
   productType: z.enum(['frozen', 'fresh', 'ready_to_eat', 'ready_to_cook']).optional().nullable(),
   sortOrder: z.number().int().optional(),
   isActive: z.boolean().optional(),
-}).passthrough(); // Allow additional fields
+}); // unknown keys are dropped: the update is spread into Prisma, so nothing but these fields may reach it
 
 export const updateCategorySchema = createCategorySchema.partial();
 

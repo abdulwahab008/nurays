@@ -1,4 +1,5 @@
 import { Request, Response } from 'express';
+import { qstr } from '../utils/query';
 import { communityService } from '../services/community.service';
 
 export async function getCommunities(_req: Request, res: Response): Promise<void> {
@@ -13,8 +14,10 @@ export async function getCommunity(req: Request, res: Response): Promise<void> {
 }
 
 export async function detectCommunity(req: Request, res: Response): Promise<void> {
-  const lat = Number(req.body.latitude || req.query.lat);
-  const lng = Number(req.body.longitude || req.query.lng);
+  // validateQuery has already turned lat/lng into numbers on a GET; a POST carries them in the body.
+  const num = (v: unknown) => (typeof v === 'number' ? v : Number(qstr(v)));
+  const lat = req.body?.latitude != null ? Number(req.body.latitude) : num(req.query.lat);
+  const lng = req.body?.longitude != null ? Number(req.body.longitude) : num(req.query.lng);
 
   if (isNaN(lat) || isNaN(lng)) {
     res.status(400).json({

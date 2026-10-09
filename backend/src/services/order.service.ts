@@ -1,5 +1,6 @@
 import { randomInt } from 'crypto';
 import prisma from '../config/database';
+import { pageArgs } from '../utils/pagination';
 import { getPlatformDeliveryPricing } from './delivery-pricing.service';
 import { AppError } from '../middleware/errorHandler';
 import realtimeOrderService from './realtime-order.service';
@@ -308,6 +309,15 @@ export class OrderService {
         );
       }
 
+      // Where the item is fulfilled from is decided by the product, not the request: a hub id on
+      // an item the kitchen ships itself would otherwise re-price the delivery as Nuray's and
+      // charge the kitchen for it.
+      const fulfillmentType =
+        product.stockType === 'hub' || (product.stockType === 'both' && item.stockType === 'hub') ? 'hub' : 'direct';
+      if (item.hubId && fulfillmentType !== 'hub') {
+        throw new AppError(`${product.name} is not stocked at a hub`, 400, 'HUB_NOT_APPLICABLE');
+      }
+
       // List/catalog price — the seller-wide "deal" discount below is applied on top of this.
       const listPrice = variant ? Number(variant.price) : Number(product.price);
 
@@ -336,8 +346,8 @@ export class OrderService {
         commissionAmount: 0,
         sellerPayout: 0,
         promoDiscount: 0,
-        fulfillmentType: item.stockType || product.stockType,
-        hubId: item.hubId || null,
+        fulfillmentType,
+        hubId: fulfillmentType === 'hub' ? item.hubId || null : null,
       });
     }
 
@@ -509,19 +519,25 @@ export class OrderService {
         );
       }
 
-      if (promotion && promotion.isActive) {
+      // The code must be real and usable. A code that is unknown, switched off, expired, used up or
+      // below its minimum is refused with the same answers as /promotions/validate, instead of the
+      // order going through at full price as if no code had been typed.
+      if (!promotion) throw new AppError('Invalid promotion code', 400, 'INVALID_PROMO_CODE');
+      if (!promotion.isActive) throw new AppError('Promotion code is not active', 400, 'PROMO_INACTIVE');
+      {
         const now = new Date();
-        const withinLimits =
-          (!promotion.usageLimitTotal || promotion.usedCount < promotion.usageLimitTotal) &&
-          (await prisma.promotionUsage.count({
-            where: { promotionId: promotion.id, userId: customerId },
-          })) < promotion.usageLimitPerUser;
+        if (now < promotion.validFrom || now > promotion.validUntil) {
+          throw new AppError('Promotion code has expired', 400, 'PROMO_EXPIRED');
+        }
+        if (promotion.usageLimitTotal && promotion.usedCount >= promotion.usageLimitTotal) {
+          throw new AppError('Promotion code usage limit reached', 400, 'PROMO_LIMIT_REACHED');
+        }
+        const usedByUser = await prisma.promotionUsage.count({ where: { promotionId: promotion.id, userId: customerId } });
+        if (usedByUser >= promotion.usageLimitPerUser) {
+          throw new AppError('You have already used this promotion code', 400, 'PROMO_ALREADY_USED');
+        }
 
-        if (
-          now >= promotion.validFrom &&
-          now <= promotion.validUntil &&
-          withinLimits
-        ) {
+        {
           // A seller's code (or a product-limited code) only discounts the
           // matching items — never the rest of a multi-seller cart.
           const eligibleSubtotal = eligibleSubtotalForPromotion(
@@ -535,7 +551,10 @@ export class OrderService {
               'PROMO_NOT_APPLICABLE'
             );
           }
-          if (eligibleSubtotal >= Number(promotion.minOrderAmount)) {
+          if (eligibleSubtotal < Number(promotion.minOrderAmount)) {
+            throw new AppError(`Minimum order amount is ${promotion.minOrderAmount}`, 400, 'MIN_ORDER_NOT_MET');
+          }
+          {
             if (promotion.discountType === 'percentage') {
               discountAmount = eligibleSubtotal * (Number(promotion.discountValue) / 100);
               if (promotion.maxDiscountAmount) {
@@ -763,34 +782,36 @@ export class OrderService {
         allUsagesToRecord.push({ promotionId, discountApplied: discountAmount });
       }
       for (const usage of allUsagesToRecord) {
-        if (usage.promotionId === promotionId) {
-          // Re-check the limits atomically: they were read before this
-          // transaction, so parallel orders could each pass and overshoot.
-          const promo = await tx.promotion.findUniqueOrThrow({ where: { id: usage.promotionId } });
+        // One checkout at a time per promotion: the limits are re-read under a row lock, so two
+        // simultaneous orders cannot both pass a count that neither has yet incremented.
+        await tx.$queryRaw`SELECT id FROM promotions WHERE id = ${usage.promotionId} FOR NO KEY UPDATE`;
+        const promo = await tx.promotion.findUniqueOrThrow({ where: { id: usage.promotionId } });
+        const isCode = usage.promotionId === promotionId;
+        if (isCode) {
           const usedByUser = await tx.promotionUsage.count({
             where: { promotionId: usage.promotionId, userId: customerId },
           });
           if (usedByUser >= promo.usageLimitPerUser) {
             throw new AppError('You have already used this promotion code', 400, 'PROMO_ALREADY_USED');
           }
-          if (promo.usageLimitTotal != null) {
-            const reserved = await tx.promotion.updateMany({
-              where: { id: usage.promotionId, usedCount: { lt: promo.usageLimitTotal } },
-              data: { usedCount: { increment: 1 } },
-            });
-            if (reserved.count === 0) {
-              throw new AppError('Promotion code usage limit reached', 400, 'PROMO_LIMIT_REACHED');
-            }
-            await tx.promotionUsage.create({
-              data: {
-                promotionId: usage.promotionId,
-                userId: customerId,
-                orderId: newOrder.id,
-                discountApplied: usage.discountApplied,
-              },
-            });
-            continue;
+        }
+        if (promo.usageLimitTotal != null) {
+          const reserved = await tx.promotion.updateMany({
+            where: { id: usage.promotionId, usedCount: { lt: promo.usageLimitTotal } },
+            data: { usedCount: { increment: 1 } },
+          });
+          if (reserved.count === 0) {
+            throw new AppError(
+              isCode ? 'Promotion code usage limit reached' : 'A deal on this order has just run out; please try again',
+              400,
+              'PROMO_LIMIT_REACHED'
+            );
           }
+        } else {
+          await tx.promotion.update({
+            where: { id: usage.promotionId },
+            data: { usedCount: { increment: 1 } },
+          });
         }
         await tx.promotionUsage.create({
           data: {
@@ -799,11 +820,6 @@ export class OrderService {
             orderId: newOrder.id,
             discountApplied: usage.discountApplied,
           },
-        });
-
-        await tx.promotion.update({
-          where: { id: usage.promotionId },
-          data: { usedCount: { increment: 1 } },
         });
       }
 
@@ -939,9 +955,7 @@ export class OrderService {
       status?: string;
     }
   ) {
-    const page = filters.page || 1;
-    const limit = Math.min(filters.limit || 20, 100);
-    const skip = (page - 1) * limit;
+    const { page, limit, skip } = pageArgs(filters.page, filters.limit);
 
     const where: any = {
       customerId: userId,

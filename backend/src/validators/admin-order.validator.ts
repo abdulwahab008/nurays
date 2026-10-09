@@ -1,8 +1,8 @@
 import { z } from 'zod';
 
 export const getAdminOrdersQuerySchema = z.object({
-  page: z.string().optional().transform((val) => (val ? parseInt(val, 10) : 1)),
-  limit: z.string().optional().transform((val) => (val ? parseInt(val, 10) : 20)),
+  page: z.coerce.number().int().min(1).optional(),
+  limit: z.coerce.number().int().min(1).max(100).optional(),
   orderStatus: z.enum([
     'pending',
     'confirmed',

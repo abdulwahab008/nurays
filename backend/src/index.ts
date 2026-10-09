@@ -89,8 +89,9 @@ app.use(cors({
 app.use(requestId);
 app.use(httpLogger);
 
-app.use(express.json({ limit: '10mb' }));
-app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+// Files go through multipart uploads; a JSON body is at most a form with a few image URLs.
+app.use(express.json({ limit: '1mb' }));
+app.use(express.urlencoded({ extended: true, limit: '1mb' }));
 
 // Uploaded files: public media, signed private files, legacy /uploads (see storage/serve.ts).
 app.use(fileRoutes());

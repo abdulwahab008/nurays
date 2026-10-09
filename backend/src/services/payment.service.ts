@@ -87,7 +87,15 @@ export class PaymentService {
     }
 
     if (paymentMethod === 'cod') {
-      await prisma.order.update({ where: { id: orderId }, data: { paymentMethod: 'cod', paymentStatus: 'pending' } });
+      // Only an order nobody has paid for yet: a transfer the customer reported (awaiting the
+      // kitchen's confirmation, or disputed) must not be quietly turned into cash on delivery.
+      const claimed = await prisma.order.updateMany({
+        where: { id: orderId, customerId: userId, paymentStatus: { in: ['pending', 'failed'] } },
+        data: { paymentMethod: 'cod', paymentStatus: 'pending' },
+      });
+      if (claimed.count === 0) {
+        throw new AppError('A reported transfer is awaiting confirmation; contact the kitchen or support to change the payment method', 409, 'PAYMENT_STATE_CONFLICT');
+      }
       return { paymentId: `COD-${orderId}`, status: 'pending', message: 'Payment will be collected on delivery', redirectUrl: null, expiresAt: null };
     }
 

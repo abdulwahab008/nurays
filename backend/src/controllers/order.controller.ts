@@ -1,4 +1,5 @@
 import { Request, Response } from 'express';
+import { qstr } from '../utils/query';
 import orderService from '../services/order.service';
 import { AppError } from '../middleware/errorHandler';
 import { isStoredFile, isPrivateRef, storedFileOwner } from '../storage';
@@ -143,7 +144,7 @@ export const getOrderMessages = async (req: Request, res: Response) => {
   }
 
   const { id } = req.params;
-  const role = req.query.role as string | undefined;
+  const role = qstr(req.query.role);
   const result = await orderService.getOrderMessages(id, req.user.userId, role);
 
   res.status(200).json({

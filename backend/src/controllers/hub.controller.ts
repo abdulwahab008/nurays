@@ -1,8 +1,9 @@
 import { Request, Response } from 'express';
+import { qstr } from '../utils/query';
 import hubService from '../services/hub.service';
 
 export const getHubCenters = async (req: Request, res: Response) => {
-  const city = req.query.city as string | undefined;
+  const city = qstr(req.query.city);
 
   const hubs = await hubService.getHubCenters({ city });
 
@@ -14,8 +15,8 @@ export const getHubCenters = async (req: Request, res: Response) => {
 
 export const getHubInventory = async (req: Request, res: Response) => {
   const { id } = req.params;
-  const categoryId = req.query.categoryId as string | undefined;
-  const search = req.query.search as string | undefined;
+  const categoryId = qstr(req.query.categoryId);
+  const search = qstr(req.query.search)?.slice(0, 100);
 
   const result = await hubService.getHubInventory(id, { categoryId, search });
 
@@ -64,8 +65,8 @@ export const recordBatchIntake = async (req: Request, res: Response) => {
 
 export const getHubBatches = async (req: Request, res: Response) => {
   const { id } = req.params;
-  const status = req.query.status as string | undefined;
-  const search = req.query.search as string | undefined;
+  const status = qstr(req.query.status);
+  const search = qstr(req.query.search)?.slice(0, 100);
 
   const result = await hubService.getHubBatches(id, { status, search });
 
