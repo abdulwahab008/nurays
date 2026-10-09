@@ -679,3 +679,11 @@ P0 findings still carrying work (the exploitable part of each code finding is fi
 **Google Play and App Store: not yet.** There is no native application to submit. With the plan in Deliverable 8 a Capacitor build for both stores is realistic in three to five weeks of focused work, after which the same web code serves browsers, the PWA and the two store apps. If a store presence is needed sooner, a Trusted Web Activity on Google Play can ship within days as a stop-gap for customers, not for riders.
 
 Items that need your approval before they are done: the index migration (PERF-4, PERF-10), the refresh-token table (SEC-2), dropping unused tables (MONEY-8, BE-9), the Prisma 7 upgrade for the remaining dev-time advisories, the pin requirement at the API (DELIV-4), the staff lockout design (SEC-3), and the provider accounts.
+
+## Addendum: independent judge pass
+
+The audit workflow re-reads every lens finding with three independent judges (one tries to reproduce it on the current tree, one assesses its impact, one tries to refute it). Because the fixes were merged before the judges ran, a "not reproducible" verdict from the reproduce judge means the cited code has already changed; the impact judge's verdict says whether the original finding mattered.
+
+State when this report was last regenerated: judge results so far: 24 agents, 37 findings judged impact judge: 34 confirmed the impact, 3 did not reproduce judge: 7 reproduced on the current tree (still open), 22 reported the cited code as already changed by the fixes
+
+Reading of the verdicts so far: the impact judge agreed with the lens on every finding except three low-severity ones (the dead web refresh helper, the `CORS_ORIGIN` startup check and the unread reservation rows), which it rated as housekeeping rather than risk; the reproduce judge found the cited code already changed for every fixed finding it reached, and still reproduced exactly the items this report lists as open or partly fixed (refresh-token rotation, the staff lockout design, per-address OTP limits, password strength checks, account enumeration, the idempotency-key fingerprint). No judge contradicted a status in Deliverable 3. The complete verdict list is kept in the session's workflow journal and can be regenerated with `scratchpad/report/build-report.py`.
