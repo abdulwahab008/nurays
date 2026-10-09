@@ -1,6 +1,7 @@
 'use client';
 
 import { MAP_TILE_URL, MAP_ATTRIBUTION, MAP_MAX_ZOOM } from '@/lib/map-config';
+import 'leaflet/dist/leaflet.css';
 
 import { useEffect, useRef } from 'react';
 import { useT } from '@/lib/i18n';
@@ -43,13 +44,6 @@ export default function RiderLiveMap({ rider, destination, height = '260px' }: P
     let cancelled = false;
     (async () => {
       const L = (await import('leaflet')).default;
-      if (!document.getElementById('leaflet-css')) {
-        const link = document.createElement('link');
-        link.id = 'leaflet-css';
-        link.rel = 'stylesheet';
-        link.href = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css';
-        document.head.appendChild(link);
-      }
       if (cancelled || !containerRef.current || mapRef.current) return;
 
       const start = riderRef.current;

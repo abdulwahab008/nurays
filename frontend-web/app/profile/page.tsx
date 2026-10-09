@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { apiClient } from '@/lib/api-client';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { userProfileService, UserProfile } from '@/lib/services/user-profile.service';
@@ -93,7 +94,7 @@ export default function ProfilePage() {
   const sidebarItems = CUSTOMER_SIDEBAR_ITEMS;
 
   useEffect(() => {
-    const token = typeof window !== 'undefined' ? (sessionStorage.getItem('access_token') || localStorage.getItem('access_token')) : null;
+    const token = apiClient.getAccessToken();
     if (!token && !isAuthenticated) {
       router.push('/login');
       return;

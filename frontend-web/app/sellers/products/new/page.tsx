@@ -209,9 +209,7 @@ export default function AddProductPage() {
     try {
       // Use the new grouped endpoint
       const response = await apiClient.get('/categories/grouped');
-      console.log('Grouped categories response:', response.data);
       if (response.data.success && response.data.data) {
-        console.log('Setting grouped categories:', response.data.data);
         setGroupedCategories(response.data.data);
       }
     } catch (error) {
@@ -230,7 +228,6 @@ export default function AddProductPage() {
   const getCategoriesForSelectedType = (): Category[] => {
     if (!formData.productType) return [];
     const cats = groupedCategories[formData.productType] || [];
-    console.log('Categories for type', formData.productType, ':', cats);
     return cats;
   };
 
@@ -390,11 +387,9 @@ export default function AddProductPage() {
             headers: { 'Content-Type': 'multipart/form-data' },
           });
           
-          console.log('Upload response:', uploadResponse.data);
           
           if (uploadResponse.data.success) {
             imageUrls = uploadResponse.data.data.images.map((img: { url: string }) => img.url);
-            console.log('Image URLs:', imageUrls);
           }
         } catch (uploadError: any) {
           console.error('Image upload failed:', uploadError);
@@ -423,11 +418,9 @@ export default function AddProductPage() {
         ...menuPayload(menu),
       };
 
-      console.log('Sending product data:', productData);
 
       const response = await apiClient.post('/products', productData);
       
-      console.log('Product creation response:', response.data);
       
       if (response.data.success) {
         const productId = response.data.data.id;
@@ -453,7 +446,6 @@ export default function AddProductPage() {
               })),
             };
             
-            console.log('Creating variants:', variantData);
             
             await apiClient.post('/product-variants/bulk', variantData);
             

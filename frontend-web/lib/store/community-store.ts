@@ -13,7 +13,8 @@ interface CommunityState {
   openSelectorModal: () => void;
   closeSelectorModal: () => void;
   setSelectedCommunity: (community: Community) => void;
-  loadCommunities: () => Promise<void>;
+  /** Fetches the list once per session; `force` refetches (the retry button, an admin edit). */
+  loadCommunities: (force?: boolean) => Promise<void>;
   detectCommunityFromGPS: () => Promise<Community | null>;
   resolveCommunityFromText: (text: string) => SmartMatchResult | null;
 }
@@ -40,7 +41,8 @@ export const useCommunityStore = create<CommunityState>()(
         return resolveLocationSmart({ text }, list);
       },
 
-      loadCommunities: async () => {
+      loadCommunities: async (force = false) => {
+        if (!force && get().communities.length > 0) return;
         set({ isLoading: true, error: null });
         try {
           const list = await communityService.getCommunities();

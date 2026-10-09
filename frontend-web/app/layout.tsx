@@ -5,9 +5,7 @@ import { Plus_Jakarta_Sans, Geist_Mono } from "next/font/google";
 import { GoogleOAuthProvider } from "@react-oauth/google";
 import { ToastProvider } from "@/components/ui/toast";
 import { AuthProvider } from "@/components/AuthProvider";
-import { SellerNewOrderNotification } from "@/components/SellerNewOrderNotification";
-import { RiderNewJobNotification } from "@/components/RiderNewJobNotification";
-import { CustomerOrderNotification } from "@/components/CustomerOrderNotification";
+import { RoleNotifications } from "@/components/RoleNotifications";
 import { LocaleProvider } from "@/lib/i18n";
 import { DEFAULT_LOCALE, dirFor, isLocale, LOCALE_COOKIE } from "@/lib/i18n/config";
 import "./globals.css";
@@ -56,9 +54,7 @@ export default async function RootLayout({
         <ToastProvider>
           <AuthProvider>
             <ImageFallback />
-            <SellerNewOrderNotification />
-            <RiderNewJobNotification />
-            <CustomerOrderNotification />
+            <RoleNotifications />
             {googleClientId ? (
               <GoogleOAuthProvider clientId={googleClientId}>
                 {children}

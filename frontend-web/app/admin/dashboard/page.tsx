@@ -92,7 +92,6 @@ export default function AdminDashboardPage() {
           setPendingCategoryRequests(count);
         }
       } catch (error) {
-        console.log('Category requests endpoint not available');
       }
 
       // Load platform stats
@@ -102,7 +101,6 @@ export default function AdminDashboardPage() {
           setStats(statsResponse.data.data);
         }
       } catch (error) {
-        console.log('Stats endpoint not available yet');
       }
     } catch (error: any) {
       const errorMessage = error.response?.data?.error?.message || error.response?.data?.message || 'Failed to load dashboard';

@@ -1,6 +1,7 @@
 'use client';
 
 import { Suspense, useEffect, useRef, useState } from 'react';
+import { getStackedDiscountedPrice } from '@/lib/pricing';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { productService, Product } from '@/lib/services/product.service';
@@ -60,17 +61,6 @@ function getPromotionLabel(p: CatalogPromotion): string {
   if (p.type === 'percentage' && p.discountValue > 0) return `${p.discountValue}% off`;
   if (p.type === 'fixed' && p.discountValue > 0) return `${formatPrice(p.discountValue)} off`;
   return p.name || 'Deal';
-}
-
-function getStackedDiscountedPrice(originalPrice: number, promos: CatalogPromotion[]): number {
-  if (!promos?.length) return originalPrice;
-  const sorted = [...promos].sort((a, b) => (a.type === 'percentage' && b.type === 'fixed' ? -1 : a.type === 'fixed' && b.type === 'percentage' ? 1 : 0));
-  const result = sorted.reduce((price, p) => {
-    if (p.type === 'percentage' && p.discountValue > 0) return price * (1 - p.discountValue / 100);
-    if (p.type === 'fixed' && p.discountValue > 0) return Math.max(0, price - p.discountValue);
-    return price;
-  }, originalPrice);
-  return Math.round(result);
 }
 
 interface Category {
@@ -710,7 +700,7 @@ function ProductsContent() {
                 : t('pickCommunity')}
             </p>
             {communitiesError ? (
-              <Button onClick={() => loadCommunities()} className="flame-btn rounded-xl">
+              <Button onClick={() => loadCommunities(true)} className="flame-btn rounded-xl">
                 {t('retry')}
               </Button>
             ) : (
