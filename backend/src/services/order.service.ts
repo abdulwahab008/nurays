@@ -1108,17 +1108,29 @@ export class OrderService {
     // A rider delivering the order needs the food, the door, the amount to collect and how it is
     // paid; not the customer's bank details, receipt, the kitchen's fee breakdown or internal keys.
     const riderOnly = isOrderRider && !isAdmin && order.customerId !== userId && !isSeller;
-    const forViewer = riderOnly ? stripForRider(order, RIDER_JOB_RUNNING.includes(order.delivery?.status ?? '')) : order;
+    const jobRunning = RIDER_JOB_RUNNING.includes(order.delivery?.status ?? '');
+    const forViewer = riderOnly ? stripForRider(order, jobRunning) : order;
+    const presentedDelivery = order.delivery
+      ? presentDelivery(order.delivery, {
+          canSeePay: isAdmin || isOrderRider,
+          canSeeLocation: isAdmin || isOrderRider || order.customerId === userId,
+          riderFirstName: riderFullName?.trim().split(/\s+/)[0] || null,
+        })
+      : null;
+    // The delivery row carries the door too: a rider whose job is over keeps the area only.
+    const deliveryForViewer =
+      presentedDelivery && riderOnly && !jobRunning
+        ? {
+            ...presentedDelivery,
+            deliveryAddress: [forViewer.deliveryAddress?.area, forViewer.deliveryAddress?.city].filter(Boolean).join(', ') || null,
+            deliveryLatitude: null,
+            deliveryLongitude: null,
+          }
+        : presentedDelivery;
 
     return {
       ...forViewer,
-      delivery: order.delivery
-        ? presentDelivery(order.delivery, {
-            canSeePay: isAdmin || isOrderRider,
-            canSeeLocation: isAdmin || isOrderRider || order.customerId === userId,
-            riderFirstName: riderFullName?.trim().split(/\s+/)[0] || null,
-          })
-        : null,
+      delivery: deliveryForViewer,
       ...(handover ? { handoverCode: handover.handoverCode } : {}),
       // The receipt is private: the viewer (already checked above) gets a short-lived link.
       paymentProofUrl: riderOnly ? null : await presentFile(order.paymentProofUrl),

@@ -3,10 +3,13 @@ import type { MetadataRoute } from 'next';
 /** Lets riders and customers "Add to Home Screen" and open Nuray like an app (no browser bar). */
 export default function manifest(): MetadataRoute.Manifest {
   return {
+    id: '/',
     name: 'Nuray',
     short_name: 'Nuray',
     description: 'Home-cooked food from kitchens in your community',
     start_url: '/',
+    scope: '/',
+    categories: ['food', 'shopping'],
     display: 'standalone',
     orientation: 'portrait',
     background_color: '#FAFAFA',

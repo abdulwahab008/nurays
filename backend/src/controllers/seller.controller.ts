@@ -250,8 +250,6 @@ export const getPublicSellers = async (req: Request, res: Response) => {
       user: {
         select: {
           id: true,
-          email: true,
-          phone: true,
           profile: {
             select: {
               fullName: true,
@@ -371,8 +369,6 @@ export const getPublicSellerById = async (req: Request, res: Response) => {
       user: {
         select: {
           id: true,
-          email: true,
-          phone: true,
           profile: {
             select: {
               fullName: true,

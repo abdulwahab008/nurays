@@ -162,6 +162,26 @@ DATABASE_URL=... npm run db:baseline   # once, for a database created before the
   if the database differs from the baseline schema. It uses `ts-node` (a dev dependency), so run it from a checkout
   with dev dependencies, not from the production image.
 
+## Rollback and failed migrations
+
+Migrations are forward-only SQL (Prisma writes no down scripts), so the safety net is a backup and the rule that
+every migration is expand-only (add tables, columns and indexes; never drop or add a NOT NULL without a default
+in the same release as the code that stops using the old shape).
+
+1. **Before every release that carries a migration**, take a database snapshot (`pg_dump -Fc`, or the managed
+   provider's point-in-time snapshot) and note the image tag currently running.
+2. **Apply migrations as a release step** (`DATABASE_URL=... npm run db:migrate` from a checkout of the release
+   commit), not only through `MIGRATE_ON_START`: a failing migration at container start crash-loops the service
+   under `restart: unless-stopped` and the runtime image has no tooling to repair it.
+3. **If `migrate deploy` fails**: read the `_prisma_migrations` table to see which migration is marked as failed,
+   fix the cause by hand (or restore the snapshot if the migration partly applied), then mark it with
+   `npx prisma migrate resolve --rolled-back <migration_name>` (or `--applied` if it did complete) from a checkout,
+   and run `migrate deploy` again.
+4. **Rolling the code back** is a redeploy of the previous image tag (`ghcr.io/.../backend:sha-<short>`); because
+   migrations are expand-only the previous code keeps working against the newer schema. Rolling the schema itself
+   back means restoring the snapshot, which loses writes made since: only do it within the release window.
+5. Rehearse 3 and 4 on staging once per quarter; the go-live checklist below includes the first rehearsal.
+
 ## Docker
 
 | File | What it does |

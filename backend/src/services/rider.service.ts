@@ -51,7 +51,7 @@ const DELIVERY_INCLUDE = {
       deliveryInstructions: true,
       deliveryAddressSnapshot: true,
       customer: { select: { phone: true, profile: { select: { fullName: true } } } },
-      deliveryAddress: { select: { houseNumber: true, landmark: true, addressLine2: true } },
+      deliveryAddress: { select: { area: true, city: true, houseNumber: true, landmark: true, addressLine2: true } },
     },
   },
 } as const;
@@ -100,6 +100,13 @@ function formatDelivery(delivery: DeliveryWithOrder & {
   const snap = (o?.deliveryAddressSnapshot ?? null) as { houseNumber?: string | null; addressLine2?: string | null; landmark?: string | null } | null;
   const reveal = Boolean(delivery.riderId) && ACTIVE_STATUSES.includes(delivery.status);
   const customerPhone = reveal ? realPhoneOrNull(o?.customer?.phone) : null;
+  // Before a claim (and after the job) the neighbourhood is enough to judge a job: distance and
+  // pay are computed above from the exact point, which itself stays with the running job.
+  const areaSnap = (o?.deliveryAddressSnapshot ?? null) as { area?: string | null; city?: string | null } | null;
+  const areaOnly = [areaSnap?.area ?? o?.deliveryAddress?.area, areaSnap?.city ?? o?.deliveryAddress?.city].filter(Boolean).join(', ') || null;
+  const shownAddress = reveal ? delivery.deliveryAddress : areaOnly;
+  const shownLat = reveal ? deliveryLat : null;
+  const shownLng = reveal ? deliveryLng : null;
 
   return {
     id: delivery.id,
@@ -109,11 +116,11 @@ function formatDelivery(delivery: DeliveryWithOrder & {
     paymentMethod: delivery.order?.paymentMethod || 'cod',
     orderStatus: delivery.order?.orderStatus,
     pickupAddress: delivery.pickupAddress,
-    deliveryAddress: delivery.deliveryAddress,
+    deliveryAddress: shownAddress,
     pickupLatitude: pickupLat,
     pickupLongitude: pickupLng,
-    deliveryLatitude: deliveryLat,
-    deliveryLongitude: deliveryLng,
+    deliveryLatitude: shownLat,
+    deliveryLongitude: shownLng,
     status: delivery.status,
     pickupTime: delivery.pickupTime,
     deliveryTime: delivery.deliveryTime,
@@ -150,7 +157,7 @@ function formatDelivery(delivery: DeliveryWithOrder & {
       : null,
     // Pass the job on to Maps by its saved coordinates when there are some (more exact than text).
     pickupMapsUrl: mapsUrl(pickupLat, pickupLng, delivery.pickupAddress),
-    dropoffMapsUrl: mapsUrl(deliveryLat, deliveryLng, delivery.deliveryAddress),
+    dropoffMapsUrl: reveal ? mapsUrl(deliveryLat, deliveryLng, delivery.deliveryAddress) : null,
   };
 }
 

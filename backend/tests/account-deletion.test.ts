@@ -25,9 +25,9 @@ function reset(user: Record<string, unknown>, opts: { openOrders?: number; walle
     emailVerification: { deleteMany: jest.fn() },
     cart: { findUnique: jest.fn(async () => ({ id: 'cart-1' })), delete: jest.fn() },
     userProfile: { updateMany: jest.fn() },
-    riderDocument: { deleteMany: jest.fn() },
+    riderDocument: { deleteMany: jest.fn(), findMany: jest.fn(async () => []) },
     rider: { update: jest.fn() },
-    sellerDocument: { deleteMany: jest.fn() },
+    sellerDocument: { deleteMany: jest.fn(), findMany: jest.fn(async () => []) },
     product: { updateMany: jest.fn() },
     seller: { update: jest.fn() },
     user: { update: jest.fn(async (args: any) => args) },
@@ -95,10 +95,10 @@ describe('deleteOwnAccount', () => {
     expect(tx.cart.delete).toHaveBeenCalledWith({ where: { id: 'cart-1' } });
     expect(tx.userProfile.updateMany).toHaveBeenCalledWith({ where: { userId: USER }, data: { fullName: 'Deleted user', avatarUrl: null, city: null, area: null } });
     expect(tx.riderDocument.deleteMany).toHaveBeenCalledWith({ where: { riderId: 'rider-1' } });
-    expect(tx.rider.update).toHaveBeenCalledWith({ where: { id: 'rider-1' }, data: { status: 'closed', isAvailable: false } });
+    expect(tx.rider.update).toHaveBeenCalledWith({ where: { id: 'rider-1' }, data: expect.objectContaining({ status: 'closed', isAvailable: false, licenseNumber: null, vehicleNumber: null }) });
     expect(tx.sellerDocument.deleteMany).toHaveBeenCalledWith({ where: { sellerId: 'seller-1' } });
     expect(tx.product.updateMany).toHaveBeenCalledWith({ where: { sellerId: 'seller-1' }, data: { isActive: false } });
-    expect(tx.seller.update).toHaveBeenCalledWith({ where: { id: 'seller-1' }, data: { status: 'closed' } });
+    expect(tx.seller.update).toHaveBeenCalledWith({ where: { id: 'seller-1' }, data: expect.objectContaining({ status: 'closed', bankAccountNumber: null, jazzcashNumber: null, easypaisaNumber: null, latitude: null, longitude: null }) });
     expect(recordAudit).toHaveBeenCalledWith(expect.objectContaining({ userId: USER, action: 'auth:ACCOUNT_DELETED' }));
   });
 });

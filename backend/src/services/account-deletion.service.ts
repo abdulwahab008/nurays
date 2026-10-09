@@ -1,4 +1,6 @@
 import bcrypt from 'bcrypt';
+import { logger } from '../utils/logger';
+import { isPrivateRef, keyOfPrivateRef, storage } from '../storage';
 import prisma from '../config/database';
 import socketManager from '../config/socket';
 import { AppError } from '../middleware/errorHandler';
@@ -62,6 +64,7 @@ export async function deleteOwnAccount(userId: string, password?: string) {
 
   const now = new Date();
   const sellerId = user.seller?.id;
+  const documentRefs: string[] = [];
   await prisma.$transaction(async (tx) => {
     await tx.userAddress.deleteMany({ where: { userId } });
     await tx.favoriteSeller.deleteMany({ where: { userId } });
@@ -72,13 +75,27 @@ export async function deleteOwnAccount(userId: string, password?: string) {
     if (cart) await tx.cart.delete({ where: { id: cart.id } }); // items go with it (cascade)
     await tx.userProfile.updateMany({ where: { userId }, data: { fullName: 'Deleted user', avatarUrl: null, city: null, area: null } });
     if (rider) {
+      documentRefs.push(...(await tx.riderDocument.findMany({ where: { riderId: rider.id }, select: { documentUrl: true } })).map((d) => d.documentUrl));
       await tx.riderDocument.deleteMany({ where: { riderId: rider.id } });
-      await tx.rider.update({ where: { id: rider.id }, data: { status: 'closed', isAvailable: false } });
+      await tx.rider.update({
+        where: { id: rider.id },
+        data: { status: 'closed', isAvailable: false, licenseNumber: null, vehicleNumber: null },
+      });
     }
     if (sellerId) {
+      documentRefs.push(...(await tx.sellerDocument.findMany({ where: { sellerId }, select: { documentUrl: true } })).map((d) => d.documentUrl));
       await tx.sellerDocument.deleteMany({ where: { sellerId } });
       await tx.product.updateMany({ where: { sellerId }, data: { isActive: false } });
-      await tx.seller.update({ where: { id: sellerId }, data: { status: 'closed' } });
+      // The business name stays on past orders; the payout accounts and the home kitchen's pin do not.
+      await tx.seller.update({
+        where: { id: sellerId },
+        data: {
+          status: 'closed',
+          bankAccountName: null, bankAccountNumber: null, bankName: null,
+          jazzcashNumber: null, jazzcashAccountTitle: null, easypaisaNumber: null, easypaisaAccountTitle: null,
+          latitude: null, longitude: null,
+        },
+      });
     }
     await tx.user.update({
       where: { id: userId },
@@ -94,6 +111,13 @@ export async function deleteOwnAccount(userId: string, password?: string) {
     });
   });
   socketManager.disconnectUser(userId);
+  // Identity documents are removed from storage as well as from the database (best effort, logged).
+  for (const ref of documentRefs) {
+    if (!isPrivateRef(ref)) continue;
+    storage()
+      .delete(keyOfPrivateRef(ref), 'private')
+      .catch((err: unknown) => logger.warn({ err, userId }, 'document file not removed on account closure'));
+  }
   void recordAudit({ userId, action: 'auth:ACCOUNT_DELETED', entityType: 'user', entityId: userId, responseStatus: 200 });
   return { id: userId, status: 'deleted' };
 }

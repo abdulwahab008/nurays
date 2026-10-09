@@ -64,6 +64,24 @@ const SELLER_ORDERING_SELECT = {
   },
 } as const;
 
+/**
+ * The kitchen as shoppers may see it on a product card: identity, rating, community and how it
+ * sells. Never its exact coordinates (a home kitchen is someone's house), delivery-pricing
+ * configuration or zone lists: fee, distance and ETA are computed server-side into `delivery`.
+ */
+const PUBLIC_SELLER_CARD_KEYS = [
+  'id', 'businessName', 'businessNameUrdu', 'businessType', 'coverImageUrl', 'ratingAverage', 'totalReviews', 'isVerified',
+  'mealCategories', 'status', 'deliveryModes', 'deliveryProvider', 'freeDeliveryThreshold', 'minOrderAmountForDelivery',
+  'communityId', 'allowCrossCommunity', 'primaryCommunityName', 'community', 'scheduleMode', 'operatingHours',
+  'availabilityOverride', 'availabilityOverrideUntil', 'availabilityNote', 'orderCutoffTime', 'maxDailyOrders',
+  'preOrderOnly', 'minPrepTimeMinutes', 'createdAt',
+] as const;
+function publicSellerCard<T extends Record<string, unknown>>(seller: T): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  for (const key of PUBLIC_SELLER_CARD_KEYS) if (key in seller) out[key] = seller[key];
+  return out;
+}
+
 function attachAvailability<T extends Record<string, unknown>>(seller: T) {
   const availability = computeSellerAvailability(seller as any);
   return {
@@ -592,7 +610,7 @@ export class ProductService {
         isSameCommunity,
         isCrossCommunity,
         seller: {
-          ...attachAvailability(product.seller),
+          ...attachAvailability(publicSellerCard(product.seller)),
           community: sellerCommunity,
           isAcceptingOrders: sellerInfo.isAcceptingOrders,
           acceptingOrdersReason: sellerInfo.acceptingReason,

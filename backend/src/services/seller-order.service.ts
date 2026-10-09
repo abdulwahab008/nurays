@@ -283,8 +283,11 @@ export class SellerOrderService {
       0
     );
 
+    // The kitchen needs the door to hand food over itself; never the address row's owner id, pin or postcode.
+    const { userId: _addrUser, latitude: _lat, longitude: _lng, postalCode: _pc, ...addressForSeller } = order.deliveryAddress ?? ({} as Record<string, unknown>);
     return {
       ...order,
+      deliveryAddress: order.deliveryAddress ? addressForSeller : null,
       paymentProofUrl: await presentFile(order.paymentProofUrl),
       sellerHandsOver:
         order.deliveryType === 'self_pickup' || deliveryProviderOf(order, seller.deliveryProvider) === 'self',
