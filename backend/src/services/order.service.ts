@@ -41,6 +41,21 @@ const ON_THE_WAY_STATUSES = ['picked_up', 'in_transit', 'arrived_at_customer'];
  * the platform. The rider's position is shown only while the food is on its way (never
  * afterwards), and only to the customer, the rider and admins.
  */
+/** The order as the rider carrying it may see it: payment-submission details and internal keys removed. */
+function stripForRider<T extends Record<string, unknown>>(order: T): T {
+  const {
+    paymentReferenceNumber: _r, paymentSenderName: _n, paymentSenderAccount: _a, paymentNotes: _p, paymentDisputeReason: _d,
+    paymentTransactionId: _t, paymentConfirmedBy: _c, paymentSubmittedAt: _s, paymentConfirmedAt: _ca, idempotencyKey: _k,
+    deliveryFeeBreakdown: _f, sellerDeliveryCharge: _sc, ...rest
+  } = order as Record<string, unknown>;
+  const address = rest.deliveryAddress as Record<string, unknown> | null | undefined;
+  if (address && typeof address === 'object') {
+    const { userId: _u, ...addr } = address;
+    rest.deliveryAddress = addr;
+  }
+  return rest as T;
+}
+
 function presentDelivery<
   D extends {
     status: string;
@@ -590,6 +605,8 @@ export class OrderService {
           paymentStatus: 'pending',
           deliveryType: data.deliveryType,
           deliveryAddressId: data.deliveryAddressId,
+          // Everything the rider needs to find the door, frozen at order time: editing or deleting the
+          // saved address later must not move an order that is already on its way.
           deliveryAddressSnapshot: deliveryAddress
             ? ({
                 addressLine1: deliveryAddress.addressLine1,
@@ -597,6 +614,10 @@ export class OrderService {
                 area: deliveryAddress.area,
                 city: deliveryAddress.city,
                 postalCode: deliveryAddress.postalCode,
+                houseNumber: deliveryAddress.houseNumber ?? null,
+                landmark: deliveryAddress.landmark ?? null,
+                latitude: deliveryAddress.latitude != null ? Number(deliveryAddress.latitude) : null,
+                longitude: deliveryAddress.longitude != null ? Number(deliveryAddress.longitude) : null,
               } as any)
             : undefined,
           hubId: data.hubId,
@@ -1087,6 +1108,7 @@ export class OrderService {
         : null;
 
     const isOrderRider = !!viewerRider && order.delivery?.riderId === viewerRider.id;
+    const isSeller = !!seller && order.items.some((i: { sellerId: string }) => i.sellerId === seller.id);
     // The customer is told their rider's first name.
     const riderUserId = order.delivery?.riderId
       ? (await prisma.rider.findUnique({ where: { id: order.delivery.riderId }, select: { userId: true } }))?.userId
@@ -1095,8 +1117,13 @@ export class OrderService {
       ? (await prisma.userProfile.findUnique({ where: { userId: riderUserId }, select: { fullName: true } }))?.fullName
       : null;
 
+    // A rider delivering the order needs the food, the door, the amount to collect and how it is
+    // paid; not the customer's bank details, receipt, the kitchen's fee breakdown or internal keys.
+    const riderOnly = isOrderRider && !isAdmin && order.customerId !== userId && !isSeller;
+    const forViewer = riderOnly ? stripForRider(order) : order;
+
     return {
-      ...order,
+      ...forViewer,
       delivery: order.delivery
         ? presentDelivery(order.delivery, {
             canSeePay: isAdmin || isOrderRider,
@@ -1106,7 +1133,7 @@ export class OrderService {
         : null,
       ...(handover ? { handoverCode: handover.handoverCode } : {}),
       // The receipt is private: the viewer (already checked above) gets a short-lived link.
-      paymentProofUrl: await presentFile(order.paymentProofUrl),
+      paymentProofUrl: riderOnly ? null : await presentFile(order.paymentProofUrl),
       subtotal: Number(order.subtotal),
       deliveryFee: Number(order.deliveryFee),
       discountAmount: Number(order.discountAmount),

@@ -1,5 +1,6 @@
 import { maskEmail } from '../utils/mask';
 import prisma from '../config/database';
+import socketManager from '../config/socket';
 import { generateToken, generateRefreshToken, tokenTtlSeconds, isTokenRevoked, JWTPayload } from '../utils/jwt';
 import { formatPhoneNumber, isValidPhoneNumber } from '../utils/otp';
 import { AppError } from '../middleware/errorHandler';
@@ -50,8 +51,8 @@ export class AuthService {
     }
 
     // Validate password
-    if (password.length < 6) {
-      throw new AppError('Password must be at least 6 characters', 400, 'WEAK_PASSWORD');
+    if (password.length < 8) {
+      throw new AppError('Password must be at least 8 characters', 400, 'WEAK_PASSWORD');
     }
 
     // Check if user already exists by email
@@ -615,7 +616,9 @@ export class AuthService {
       where: { email: normalizedEmail },
       include: { profile: true },
     });
-    if (!user || user.status !== 'active') return;
+    // Only an address whose owner has already proven it gets a link: an unverified address is
+    // whatever was last typed into the profile, which must not be enough to take the account over.
+    if (!user || user.status !== 'active' || !user.emailVerified) return;
 
     // The background job creates the single-use link (only its hash is stored) and emails
     // it, so this answers just as fast for an unknown address as for a real one.
@@ -631,8 +634,8 @@ export class AuthService {
    * voided (anyone who was logged in — including an attacker — must sign in again).
    */
   async resetPassword(token: string, newPassword: string): Promise<void> {
-    if (!newPassword || newPassword.length < 6) {
-      throw new AppError('Password must be at least 6 characters', 400, 'WEAK_PASSWORD');
+    if (!newPassword || newPassword.length < 8) {
+      throw new AppError('Password must be at least 8 characters', 400, 'WEAK_PASSWORD');
     }
     const tokenHash = createHash('sha256').update(token).digest('hex');
     const passwordHash = await bcrypt.hash(newPassword, 10);
@@ -659,6 +662,7 @@ export class AuthService {
       });
     });
     // Every session ends with a password reset: leave a trail of who and when.
+    if (resetUserId) socketManager.disconnectUser(resetUserId);
     if (resetUserId) void recordAudit({ userId: resetUserId, action: 'auth:PASSWORD_RESET', entityType: 'user', entityId: resetUserId, responseStatus: 200 });
   }
 

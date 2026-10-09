@@ -140,7 +140,8 @@ All routes need authentication (`user-profile.routes.ts`).
 | Method and path | Body / notes | Returns |
 |---|---|---|
 | `GET /users/me` | none | the user's profile |
-| `PATCH /users/me` | optional `fullName` (min 2), `email`, `city`, `area`, `languagePreference`: `en` \| `ur` | updated profile |
+| `PATCH /users/me` | optional `fullName` (min 2), `email`, `city`, `area`, `languagePreference`: `en` \| `ur`; `currentPassword` is required when `email` changes on an account that has a password (400 `PASSWORD_REQUIRED`, 401 `INVALID_PASSWORD`) | updated profile; a changed email is unverified until confirmed |
+| `DELETE /users/me` | `confirm: "DELETE"`, `password` (required when the account has one) | closes the account (see Security: account closure); 409 `OPEN_ORDERS` \| `WALLET_BALANCE` \| `ACTIVE_DELIVERIES` \| `RIDER_BALANCE` \| `PENDING_PAYOUT`, 403 `STAFF_ACCOUNT` |
 | `POST /users/me/avatar` | `avatarUrl` (a URL; upload the image first with `POST /upload/avatar`) | updated avatar |
 | `GET /users/me/addresses` | none | the user's addresses (bare array) |
 | `POST /users/me/addresses` | `addressLine1` (min 5), `area` (min 2), `city` (min 2); optional `label`, `addressLine2`, `postalCode`, `landmark`, `latitude` (-90..90), `longitude` (-180..180), `communityId`, `isDefault` | 201 the address |

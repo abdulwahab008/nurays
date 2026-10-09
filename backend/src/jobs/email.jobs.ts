@@ -28,9 +28,9 @@ defineJob<{ userId: string }>('email.verification', async ({ userId }) => {
 defineJob<{ userId: string }>('email.password-reset', async ({ userId }) => {
   const user = await prisma.user.findUnique({
     where: { id: userId },
-    select: { email: true, status: true, profile: { select: { fullName: true } } },
+    select: { email: true, status: true, emailVerified: true, profile: { select: { fullName: true } } },
   });
-  if (!user?.email || user.status !== 'active') return;
+  if (!user?.email || user.status !== 'active' || !user.emailVerified) return;
 
   // Only the most recent link works.
   const token = generateVerificationToken();

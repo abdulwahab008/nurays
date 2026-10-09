@@ -41,6 +41,8 @@ export const userProfileService = {
   updateProfile: async (data: {
     fullName?: string;
     email?: string;
+    /** Asked for by the server when the email changes on an account that has a password. */
+    currentPassword?: string;
     city?: string;
     area?: string;
     languagePreference?: string;
@@ -96,6 +98,12 @@ export const userProfileService = {
 
   deleteAddress: async (addressId: string) => {
     const response = await apiClient.delete<ApiResponse<void>>(`/users/me/addresses/${addressId}`);
+    return response.data;
+  },
+
+  /** Close the account for good. The server asks for the password when the account has one (PASSWORD_REQUIRED). */
+  deleteAccount: async (password?: string) => {
+    const response = await apiClient.delete<ApiResponse<{ id: string; status: string }>>('/users/me', { data: { confirm: 'DELETE', password } });
     return response.data;
   },
 

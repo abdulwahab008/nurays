@@ -1,5 +1,6 @@
 import bcrypt from 'bcrypt';
 import prisma from '../config/database';
+import socketManager from '../config/socket';
 import { AppError } from '../middleware/errorHandler';
 import { placeholderPhone } from './auth.service';
 import { realPhoneOrNull } from '../utils/otp';
@@ -85,6 +86,7 @@ export async function changeStaffRole(actorId: string, staffId: string, role: st
   await loadTarget(actorId, staffId);
   // Their sessions end so the new role applies at once.
   const user = await prisma.user.update({ where: { id: staffId }, data: { staffRole: role, tokensValidAfter: new Date() }, select: SELECT });
+  socketManager.disconnectUser(staffId);
   return present(user);
 }
 
@@ -96,6 +98,7 @@ export async function setStaffStatus(actorId: string, staffId: string, status: s
     data: { status, ...(status === 'suspended' ? { tokensValidAfter: new Date() } : {}) },
     select: SELECT,
   });
+  if (status === 'suspended') socketManager.disconnectUser(staffId);
   return present(user);
 }
 
@@ -103,6 +106,7 @@ export async function resetStaffPassword(actorId: string, staffId: string, passw
   assertPassword(password);
   await loadTarget(actorId, staffId);
   await prisma.user.update({ where: { id: staffId }, data: { passwordHash: await bcrypt.hash(password, 10), tokensValidAfter: new Date() } });
+  socketManager.disconnectUser(staffId);
   return { id: staffId };
 }
 
@@ -110,5 +114,6 @@ export async function resetStaffPassword(actorId: string, staffId: string, passw
 export async function removeStaff(actorId: string, staffId: string) {
   await loadTarget(actorId, staffId);
   await prisma.user.update({ where: { id: staffId }, data: { userType: 'customer', staffRole: null, tokensValidAfter: new Date() } });
+  socketManager.disconnectUser(staffId);
   return { id: staffId, userType: 'customer' };
 }

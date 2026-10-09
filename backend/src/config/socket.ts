@@ -169,6 +169,15 @@ class SocketManager {
   }
 
   /**
+   * Close every live connection a user has (all instances, via the Redis adapter). Called wherever
+   * their sessions are ended: logout, suspension, role change, password reset, account closure. A
+   * token is only checked at the handshake, so without this an ended session keeps receiving events.
+   */
+  disconnectUser(userId: string) {
+    this.io?.in(`user:${userId}`).disconnectSockets(true);
+  }
+
+  /**
    * One event to everyone in any of these rooms. A connection in several of them (a customer
    * who is in the order's room and their own user room) receives it once, not once per room.
    */

@@ -1,6 +1,7 @@
 import { realPhoneOrNull } from '../utils/otp';
 import { Prisma } from '@prisma/client';
 import prisma from '../config/database';
+import socketManager from '../config/socket';
 import { AppError } from '../middleware/errorHandler';
 import { formatPhoneNumber } from '../utils/otp';
 
@@ -105,6 +106,7 @@ export async function setUserStatus(adminId: string, userId: string, status: str
     prisma.seller.updateMany({ where: { userId }, data: { status } }),
     prisma.rider.updateMany({ where: { userId }, data: { status } }),
   ]);
+  if (status === 'suspended') socketManager.disconnectUser(userId);
   return { id: userId, status };
 }
 
@@ -138,6 +140,13 @@ export async function setRiderStatus(riderId: string, status: string) {
     });
     const shape = (d: { id: string; orderId: string }) => ({ deliveryId: d.id, orderId: d.orderId });
     return { id: riderId, status, releasedJobs: toRelease.map(shape), jobsWithFood: withFood.map(shape) };
+  }).then(async (result) => {
+    // No longer a party to the jobs they lost: out of those orders' live rooms.
+    if (result.releasedJobs.length) {
+      const owner = await prisma.rider.findUnique({ where: { id: riderId }, select: { userId: true } });
+      if (owner) for (const job of result.releasedJobs) socketManager.removeUserFromOrder(owner.userId, job.orderId);
+    }
+    return result;
   });
 }
 

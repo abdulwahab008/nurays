@@ -1,5 +1,6 @@
 import { Prisma } from '@prisma/client';
 import prisma from '../config/database';
+import socketManager from '../config/socket';
 import { AppError } from '../middleware/errorHandler';
 import realtimeOrderService from './realtime-order.service';
 import ledgerService from './ledger.service';
@@ -47,6 +48,7 @@ const DELIVERY_INCLUDE = {
       paymentMethod: true,
       orderStatus: true,
       deliveryInstructions: true,
+      deliveryAddressSnapshot: true,
       customer: { select: { phone: true, profile: { select: { fullName: true } } } },
       deliveryAddress: { select: { houseNumber: true, landmark: true, addressLine2: true } },
     },
@@ -65,8 +67,9 @@ const LOCATION_MIN_INTERVAL_MS = 3_000;
 
 function mapsUrl(lat: number | null, lng: number | null, text: string | null | undefined): string {
   const destination = lat != null && lng != null ? `${lat},${lng}` : encodeURIComponent(text ?? '');
-  // two-wheeler: bike routes (shortcuts, narrow lanes) rather than car-only roads.
-  return `https://www.google.com/maps/dir/?api=1&destination=${destination}&travelmode=two-wheeler`;
+  // Google Maps URLs API (https://developers.google.com/maps/documentation/urls/get-started): only its documented
+  // parameters. No travelmode: the Maps app keeps the mode the rider last used (two-wheeler on a motorbike).
+  return `https://www.google.com/maps/dir/?api=1&destination=${destination}`;
 }
 
 function formatDelivery(delivery: DeliveryWithOrder & {
@@ -92,6 +95,8 @@ function formatDelivery(delivery: DeliveryWithOrder & {
 
   // Who to call and where exactly: only for the rider who holds a job that is still running.
   const o = delivery.order;
+  // The address as it was when the order was placed (older orders have no snapshot: the live one then).
+  const snap = (o?.deliveryAddressSnapshot ?? null) as { houseNumber?: string | null; addressLine2?: string | null; landmark?: string | null } | null;
   const reveal = Boolean(delivery.riderId) && ACTIVE_STATUSES.includes(delivery.status);
   const customerPhone = reveal ? realPhoneOrNull(o?.customer?.phone) : null;
 
@@ -136,9 +141,9 @@ function formatDelivery(delivery: DeliveryWithOrder & {
     customer: reveal ? { name: o?.customer?.profile?.fullName ?? null, phone: customerPhone } : null,
     dropoffDetails: reveal
       ? {
-          houseNumber: o?.deliveryAddress?.houseNumber ?? null,
-          addressLine2: o?.deliveryAddress?.addressLine2 ?? null,
-          landmark: o?.deliveryAddress?.landmark ?? null,
+          houseNumber: snap?.houseNumber ?? o?.deliveryAddress?.houseNumber ?? null,
+          addressLine2: snap?.addressLine2 ?? o?.deliveryAddress?.addressLine2 ?? null,
+          landmark: snap?.landmark ?? o?.deliveryAddress?.landmark ?? null,
           instructions: o?.deliveryInstructions ?? null,
         }
       : null,
@@ -195,8 +200,9 @@ export class RiderService {
     // Unknown locations stay unknown (null): a guessed point would misprice the job.
     const pickupLat = num(pickupSeller?.latitude);
     const pickupLng = num(pickupSeller?.longitude);
-    const deliveryLat = num(order.deliveryAddress?.latitude);
-    const deliveryLng = num(order.deliveryAddress?.longitude);
+    const snapCoords = order.deliveryAddressSnapshot as { latitude?: number | null; longitude?: number | null } | null;
+    const deliveryLat = num(snapCoords?.latitude) ?? num(order.deliveryAddress?.latitude);
+    const deliveryLng = num(snapCoords?.longitude) ?? num(order.deliveryAddress?.longitude);
 
     try {
       const created = await prisma.delivery.create({
@@ -596,6 +602,8 @@ export class RiderService {
     if (released.count === 0) {
       throw new AppError('You can only hand a job back before you pick up the food', 409, 'CANNOT_RELEASE');
     }
+    // No longer a party to this order: out of its live room (status and the next rider's position).
+    socketManager.removeUserFromOrder(userId, delivery.orderId);
     realtimeOrderService.emitDeliveryPosted(deliveryId, delivery.orderId);
     // Offer it to another rider (never the one who handed it back).
     dispatchSoon(deliveryId);

@@ -292,6 +292,7 @@ export default function LoginPage() {
             <BrandLockup markSize={40} wordSize={28} />
           </Link>
           <div className="flex items-center gap-3">
+            {SHOW_DEMO_LOGIN && (
             <Link
               href="/dev-login"
               className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-orange-50 hover:bg-orange-100 border border-orange-200 text-orange-800 text-xs font-bold transition-all shadow-2xs"
@@ -299,6 +300,7 @@ export default function LoginPage() {
               <Layers className="w-3.5 h-3.5" />
               <span>Multi-Tab Isolator</span>
             </Link>
+            )}
             <Link
               href="/register"
               className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-bold transition-all"

@@ -39,10 +39,10 @@ Required means the server will not start in production without it (see "Startup 
 | `DATABASE_URL` | yes | PostgreSQL connection string. |
 | `REDIS_URL` | yes (production) | |
 | `JWT_SECRET` | yes | 32+ characters, not a placeholder in production. `openssl rand -hex 32`. |
-| `JWT_EXPIRES_IN`, `JWT_REFRESH_EXPIRES_IN` | no | Defaults in `.env.example`: `24h`, `30d`. |
+| `JWT_EXPIRES_IN`, `JWT_REFRESH_EXPIRES_IN` | no | Defaults: `1h` (the app renews it with the refresh token) and `30d`. |
 | `GOOGLE_CLIENT_ID` | no | Google sign-in; see [GOOGLE_OAUTH_SETUP.md](GOOGLE_OAUTH_SETUP.md). |
 | `FRONTEND_URL` | yes (production) | Must be `https://`. Used in email links. |
-| `CORS_ORIGIN` | no, but set it | The one browser origin allowed for HTTP and Socket.IO. Defaults to `http://localhost:3000`, so production must set it. |
+| `CORS_ORIGIN` | yes | The one browser origin allowed for HTTP and Socket.IO, an https:// origin (normally the same as `FRONTEND_URL`). Production refuses to start without it. |
 | `BASE_URL` | when Safepay is on | The API's public `https://` URL. |
 
 ### Email (one of two)

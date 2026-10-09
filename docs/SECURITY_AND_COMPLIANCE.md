@@ -170,7 +170,8 @@ Admin accounts are never created through registration. The first one (the super 
 `scripts/create-admin.js`; every other staff member is added by the super admin at `/admin/staff`. They sign in with
 **email and password only**: SMS-code login and Google sign-in are refused (`ADMIN_PASSWORD_ONLY`). After **5 wrong
 passwords** the account is locked for 15 minutes (`ACCOUNT_LOCKED`, counted from the audit log). **Logging out ends
-every session** the admin has (`tokensValidAfter`). Second approvals and two-factor codes do not exist yet (see
+every session** the account has, on every device (`tokensValidAfter`; the same is true for every account type, see
+Sessions below). Second approvals and two-factor codes do not exist yet (see
 Limitations).
 
 ### Staff roles
@@ -189,6 +190,28 @@ added later is closed to support staff by default. A refusal is 403 `INSUFFICIEN
 audit log. Changing a role, suspending or removing staff ends their sessions at once (millisecond-exact `iatMs` check).
 The super admin account cannot be changed through the app. The admin menu and pages only show what a role may use,
 but that is convenience, not the security boundary.
+
+## Sessions, email changes and account closure
+
+- Access tokens live **1 hour** by default (`JWT_EXPIRES_IN`), refresh tokens 30 days. The web client renews the
+  access token transparently and only signs the person out when the server refuses the refresh token (a dropped
+  connection or a server error keeps the session). The realtime connection presents the current token on every
+  reconnect.
+- **Logout ends every session** of the account (`tokensValidAfter`) and closes its live Socket.IO connections; so
+  do suspension, a staff role change, a password reset and account closure (`socketManager.disconnectUser`).
+- **Changing the email address** on an account that has a password requires the current password
+  (`PATCH /users/me` with `currentPassword`, else 400 `PASSWORD_REQUIRED`), and the new address is unverified until
+  its owner confirms it. **Password-reset links are only ever sent to a verified address**, so a copied token cannot
+  be turned into a permanent takeover by re-pointing the account.
+- New passwords must be **at least 8 characters** (staff: 12). Existing sign-ins are unaffected.
+- **Account closure** is self-service (`DELETE /users/me`, the Delete account button on the profile, and the public
+  page `/delete-account` the app stores link to): personal details, addresses, cart, favourites, push subscriptions
+  and ID documents are removed or replaced, the account is marked `deleted` and signed out everywhere; orders,
+  payments, the ledger and the audit trail are kept without identifying details. It is refused while an order is in
+  progress, the wallet holds money, a rider has cash or pay unsettled, or a kitchen has open orders or a pending
+  payout; staff accounts are removed by the super admin.
+- A rider carrying an order sees the order without the customer's bank-transfer details, receipt, the kitchen's fee
+  breakdown or internal keys; raw product variants (cost prices) are only readable by the kitchen that owns them.
 
 ## Secrets and configuration
 
@@ -227,12 +250,11 @@ anything else: orders, ledger entries, chat, uploaded documents and receipts are
 ## Known limitations
 
 - **Refresh tokens are not rotated or revocable one by one.** `/auth/refresh` mints a new pair but the old refresh
-  token stays valid until it expires, and `POST /auth/logout` is a no-op on the server. The only way to kill a
-  session is `tokensValidAfter` (password reset, suspension, role change); there is no "log out everywhere"
-  action for users.
+  token stays valid until it expires or the account's sessions are ended as a whole (`tokensValidAfter`: logout,
+  password reset, suspension, role change, account closure). There is no per-device session list.
 - **OTP codes and email-verification tokens are stored in plain text** in the database (reset tokens are hashed).
   They are short-lived and purged, but a database read exposes live ones.
-- **Weak password policy.** Minimum 6 characters, no complexity or breached-password check. There is no
+- **Weak password policy.** Minimum 8 characters (staff 12), no complexity or breached-password check. There is no
   change-password endpoint for signed-in users; changing it goes through the reset email.
 - **Email verification does not gate login or ordering.** A user can sign in unverified; it only affects whether
   email notifications are delivered.

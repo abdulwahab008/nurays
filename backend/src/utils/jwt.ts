@@ -8,7 +8,8 @@ if (process.env.JWT_SECRET.length < 32) {
 }
 
 const JWT_SECRET = process.env.JWT_SECRET;
-const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '24h';
+// Short-lived: the client renews it with the refresh token, so a copied access token is useful for an hour, not a day.
+const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '1h';
 const JWT_REFRESH_EXPIRES_IN = process.env.JWT_REFRESH_EXPIRES_IN || '30d';
 
 export interface JWTPayload {
