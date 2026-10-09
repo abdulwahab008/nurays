@@ -9,7 +9,7 @@ How Nuray is put together: what runs, how a request travels through it, what is 
    |  HTTPS  /api/v1/*  (axios, Bearer JWT)          |  WebSocket (Socket.IO, JWT in handshake)
    |  /media /files /uploads  (Next rewrites to backend, local storage driver only)
    v                                                  v
- +---------------------------- Backend (Node 20, Express 5, TypeScript) -----------------------------+
+ +---------------------------- Backend (Node 22, Express 5, TypeScript) -----------------------------+
  |  middleware -> routes -> controllers -> services -> Prisma                                          |
  |  Socket.IO server (config/socket.ts)      scheduled sweeps (jobs/scheduler.ts)                      |
  |  BullMQ worker (jobs/queue.ts)            storage driver (storage/)                                 |

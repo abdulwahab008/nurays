@@ -5,14 +5,14 @@
 # minimal server + the files it traces, not the whole node_modules.
 
 # -------- deps --------
-FROM node:20-bookworm-slim AS deps
+FROM node:22-bookworm-slim AS deps
 WORKDIR /app
 COPY package.json package-lock.json* ./
 RUN npm ci
 
 
 # -------- builder --------
-FROM node:20-bookworm-slim AS builder
+FROM node:22-bookworm-slim AS builder
 WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
@@ -32,7 +32,12 @@ ARG NEXT_PUBLIC_LEGAL_REVIEWED
 # Optional browser error tracking.
 ARG NEXT_PUBLIC_SENTRY_DSN
 ARG NEXT_PUBLIC_SENTRY_ENVIRONMENT
+# Map tiles: a provider of your own for production (the public OpenStreetMap servers are for development).
+ARG NEXT_PUBLIC_MAP_TILE_URL
+ARG NEXT_PUBLIC_MAP_ATTRIBUTION
 ENV NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL} \
+    NEXT_PUBLIC_MAP_TILE_URL=${NEXT_PUBLIC_MAP_TILE_URL} \
+    NEXT_PUBLIC_MAP_ATTRIBUTION=${NEXT_PUBLIC_MAP_ATTRIBUTION} \
     NEXT_PUBLIC_GOOGLE_CLIENT_ID=${NEXT_PUBLIC_GOOGLE_CLIENT_ID} \
     NEXT_PUBLIC_SAFEPAY_SANDBOX=${NEXT_PUBLIC_SAFEPAY_SANDBOX} \
     NEXT_PUBLIC_WS_URL=${NEXT_PUBLIC_WS_URL} \
@@ -48,7 +53,7 @@ RUN npm run build
 
 
 # -------- runner --------
-FROM node:20-bookworm-slim AS runner
+FROM node:22-bookworm-slim AS runner
 WORKDIR /app
 
 ENV NODE_ENV=production \

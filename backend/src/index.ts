@@ -66,11 +66,17 @@ const httpServer = createServer(app);
 const PORT = process.env.PORT || 3000;
 const API_VERSION = process.env.API_VERSION || 'v1';
 
-// Trust exactly one hop (the reverse proxy/load balancer in front of this
-// service in any real deployment) so req.ip and express-rate-limit's
-// X-Forwarded-For handling are accurate instead of throwing
-// ERR_ERL_UNEXPECTED_X_FORWARDED_FOR.
-app.set('trust proxy', 1);
+// Trust the proxy hops in front of this service (one reverse proxy or load balancer by
+// default) so req.ip and express-rate-limit's X-Forwarded-For handling are accurate instead
+// of throwing ERR_ERL_UNEXPECTED_X_FORWARDED_FOR. TRUST_PROXY: a hop count ("2" behind a CDN
+// and a load balancer, "0" when exposed directly) or an address list ("loopback, 10.0.0.0/8").
+const trustProxy = (process.env.TRUST_PROXY ?? '1').trim();
+app.set('trust proxy', /^\d+$/.test(trustProxy) ? Number(trustProxy) : trustProxy);
+
+// Idle keep-alive connections must outlive the load balancer's idle timeout (60 s on most),
+// or the balancer reuses a socket the server has just closed and answers 502/504.
+httpServer.keepAliveTimeout = Number(process.env.KEEP_ALIVE_TIMEOUT_MS) || 65_000;
+httpServer.headersTimeout = httpServer.keepAliveTimeout + 1_000;
 
 // Initialize Socket.io
 socketManager.initialize(httpServer);

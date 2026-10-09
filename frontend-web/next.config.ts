@@ -48,6 +48,8 @@ const SECURITY_HEADERS = [
 ];
 
 const nextConfig: NextConfig = {
+  // The framework's name is nobody's business.
+  poweredByHeader: false,
   // Emit a self-contained server bundle for the Docker runtime image.
   // Without this, `next start` needs the full node_modules at runtime.
   output: "standalone",

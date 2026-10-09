@@ -150,31 +150,6 @@ export class OrderService {
    * Calculate delivery fee.
    * Free when: self_pickup/hub_pickup, or subtotal >= 2000, or delivery address is in all sellers' freeDeliveryAreas.
    */
-  private calculateDeliveryFee(
-    deliveryType: string,
-    subtotal: number,
-    city?: string
-  ): number {
-    if (deliveryType === 'self_pickup' || deliveryType === 'hub_pickup') {
-      return 0;
-    }
-
-    // Base delivery fee
-    let fee = 100;
-
-    // Free delivery for orders above 2000 PKR
-    if (subtotal >= 2000) {
-      return 0;
-    }
-
-    // City-based pricing (can be enhanced)
-    if (city === 'Karachi' || city === 'Lahore' || city === 'Islamabad') {
-      fee = 150;
-    }
-
-    return fee;
-  }
-
   /**
    * Create order from items
    */
@@ -507,11 +482,8 @@ export class OrderService {
       }
       deliveryFee = total;
     } else {
-      deliveryFee = this.calculateDeliveryFee(
-        data.deliveryType,
-        subtotal,
-        deliveryAddress?.city || undefined
-      );
+      // Every branch above prices the order; reaching here means there is nothing to price.
+      throw new AppError('Order has no items', 400, 'NO_ITEMS');
     }
 
     // Apply promotion code if provided
@@ -756,28 +728,16 @@ export class OrderService {
         .filter(({ item }) => item.fulfillmentType === 'hub' && item.hubId)
         .sort((a, b) => (a.item.hubId! + a.item.productId).localeCompare(b.item.hubId! + b.item.productId));
       for (const { item, idx } of hubOrdered) {
-        {
-          await allocateHubStock(tx, {
-            orderId: newOrder.id,
-            orderItemId: createdItems[idx].id,
-            orderNumber: newOrder.orderNumber,
-            hubId: item.hubId!,
-            productId: item.productId,
-            productName: item.productName,
-            quantity: item.quantity,
-            performedBy: customerId,
-          });
-
-          await tx.inventoryReservation.create({
-            data: {
-              productId: item.productId,
-              quantity: item.quantity,
-              reservationType: 'order',
-              reservationId: newOrder.id,
-              expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000), // 24 hours
-            },
-          });
-        }
+        await allocateHubStock(tx, {
+          orderId: newOrder.id,
+          orderItemId: createdItems[idx].id,
+          orderNumber: newOrder.orderNumber,
+          hubId: item.hubId!,
+          productId: item.productId,
+          productName: item.productName,
+          quantity: item.quantity,
+          performedBy: customerId,
+        });
       }
 
       // Create order status history
@@ -1265,13 +1225,6 @@ export class OrderService {
         createdBy: userId,
       });
 
-      // Remove inventory reservations
-      await tx.inventoryReservation.deleteMany({
-        where: {
-          reservationType: 'order',
-          reservationId: orderId,
-        },
-      });
 
       // Add status history
       await tx.orderStatusHistory.create({

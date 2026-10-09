@@ -516,13 +516,6 @@ export class AdminOrderService {
         }
       }
 
-      // Remove inventory reservations
-      await tx.inventoryReservation.deleteMany({
-        where: {
-          reservationType: 'order',
-          reservationId: orderId,
-        },
-      });
 
       // A cancelled order shouldn't keep consuming the promo's quota.
       await releasePromotionUsage(tx, orderId);

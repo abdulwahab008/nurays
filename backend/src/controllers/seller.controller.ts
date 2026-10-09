@@ -1,4 +1,5 @@
 import { Prisma } from '@prisma/client';
+import { searchTerm } from '../utils/search';
 import { Request, Response } from 'express';
 import { qstr } from '../utils/query';
 import { pageArgs } from '../utils/pagination';
@@ -225,10 +226,11 @@ export const getPublicSellers = async (req: Request, res: Response) => {
     whereClause.businessType = businessType;
   }
 
-  if (search && typeof search === 'string') {
+  const term = searchTerm(search);
+  if (term) {
     whereClause.OR = [
-      { businessName: { contains: search, mode: 'insensitive' } },
-      { description: { contains: search, mode: 'insensitive' } },
+      { businessName: { contains: term, mode: 'insensitive' } },
+      { description: { contains: term, mode: 'insensitive' } },
     ];
   }
 

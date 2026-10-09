@@ -1,4 +1,5 @@
 import prisma from '../config/database';
+import { AppError } from '../middleware/errorHandler';
 import { notifySeller } from './notify.service';
 import { notifyApprovers } from './approvals.service';
 
@@ -24,7 +25,7 @@ class CategoryRequestService {
     });
 
     if (existingRequest) {
-      throw new Error('You already have a pending request for this category');
+      throw new AppError('You already have a pending request for this category', 409, 'PENDING_REQUEST_EXISTS');
     }
 
     // Check if category already exists
@@ -36,7 +37,7 @@ class CategoryRequestService {
     });
 
     if (existingCategory) {
-      throw new Error('A category with this name already exists');
+      throw new AppError('A category with this name already exists', 409, 'CATEGORY_EXISTS');
     }
 
     // Validate parent category if provided
@@ -47,12 +48,12 @@ class CategoryRequestService {
       });
 
       if (!parentCategory) {
-        throw new Error('Parent category not found');
+        throw new AppError('Parent category not found', 404, 'PARENT_CATEGORY_NOT_FOUND');
       }
 
       // Ensure parent category matches the product type
       if (parentCategory.productType && parentCategory.productType !== data.productType) {
-        throw new Error('Parent category product type does not match');
+        throw new AppError('Parent category product type does not match', 400, 'PARENT_TYPE_MISMATCH');
       }
     }
 
@@ -176,11 +177,11 @@ class CategoryRequestService {
     });
 
     if (!request) {
-      throw new Error('Category request not found');
+      throw new AppError('Category request not found', 404, 'REQUEST_NOT_FOUND');
     }
 
     if (request.status !== 'pending') {
-      throw new Error('This request has already been processed');
+      throw new AppError('This request has already been processed', 409, 'REQUEST_ALREADY_PROCESSED');
     }
 
     // Generate slug
@@ -201,7 +202,7 @@ class CategoryRequestService {
         where: { id: requestId, status: 'pending' },
         data: { status: 'approved', reviewedBy: adminId, reviewedAt: new Date() },
       });
-      if (claimed.count === 0) throw new Error('This request has already been processed');
+      if (claimed.count === 0) throw new AppError('This request has already been processed', 409, 'REQUEST_ALREADY_PROCESSED');
       const created = await tx.category.create({
         data: {
           name: request.name,
@@ -234,11 +235,11 @@ class CategoryRequestService {
     });
 
     if (!request) {
-      throw new Error('Category request not found');
+      throw new AppError('Category request not found', 404, 'REQUEST_NOT_FOUND');
     }
 
     if (request.status !== 'pending') {
-      throw new Error('This request has already been processed');
+      throw new AppError('This request has already been processed', 409, 'REQUEST_ALREADY_PROCESSED');
     }
 
     const updated = await prisma.categoryRequest.update({

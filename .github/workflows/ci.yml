@@ -6,6 +6,10 @@ on:
   pull_request:
     branches: [main]
 
+# The workflow token can read the repository and nothing more.
+permissions:
+  contents: read
+
 # Cancel an in-flight run when a new commit lands on the same branch / PR.
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
@@ -23,7 +27,7 @@ jobs:
 
       - uses: actions/setup-node@v7
         with:
-          node-version: "20"
+          node-version: "22"
           cache: npm
           cache-dependency-path: backend/package-lock.json
 
@@ -53,7 +57,7 @@ jobs:
 
       - uses: actions/setup-node@v7
         with:
-          node-version: "20"
+          node-version: "22"
           cache: npm
           cache-dependency-path: frontend-web/package-lock.json
 
@@ -114,7 +118,7 @@ jobs:
 
       - uses: actions/setup-node@v7
         with:
-          node-version: "20"
+          node-version: "22"
           cache: npm
           cache-dependency-path: |
             backend/package-lock.json
@@ -257,7 +261,7 @@ jobs:
 
       - uses: actions/setup-node@v7
         with:
-          node-version: "20"
+          node-version: "22"
 
       - name: Backend dependency audit
         working-directory: backend

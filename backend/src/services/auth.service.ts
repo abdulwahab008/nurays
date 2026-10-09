@@ -670,39 +670,42 @@ export class AuthService {
    * Refresh access token
    */
   async refreshToken(refreshToken: string) {
+    const { verifyRefreshToken, generateToken } = await import('../utils/jwt');
+    // Only a bad token is "invalid"; a revoked session, a closed account or a database
+    // outage each answer as what they are (the client keeps its session on a 5xx).
+    let payload: JWTPayload;
     try {
-      const { verifyRefreshToken, generateToken } = await import('../utils/jwt');
-      const payload = verifyRefreshToken(refreshToken);
-
-      // Verify user still exists and is active
-      const user = await prisma.user.findUnique({
-        where: { id: payload.userId },
-      });
-
-      if (!user || user.status !== 'active') {
-        throw new AppError('User not found or inactive', 401, 'USER_INACTIVE');
-      }
-      if (isTokenRevoked(payload, user.tokensValidAfter)) {
-        throw new AppError('Session expired, please log in again', 401, 'SESSION_REVOKED');
-      }
-
-      // Generate new tokens
-      const tokenPayload: JWTPayload = {
-        userId: user.id,
-        userType: user.userType,
-        phone: user.phone,
-      };
-
-      const newAccessToken = generateToken(tokenPayload);
-      const newRefreshToken = generateRefreshToken(tokenPayload);
-
-      return {
-        accessToken: newAccessToken,
-        refreshToken: newRefreshToken,
-      };
-    } catch (error) {
+      payload = verifyRefreshToken(refreshToken);
+    } catch {
       throw new AppError('Invalid refresh token', 401, 'INVALID_REFRESH_TOKEN');
     }
+
+    // Verify user still exists and is active
+    const user = await prisma.user.findUnique({
+      where: { id: payload.userId },
+    });
+
+    if (!user || user.status !== 'active') {
+      throw new AppError('User not found or inactive', 401, 'USER_INACTIVE');
+    }
+    if (isTokenRevoked(payload, user.tokensValidAfter)) {
+      throw new AppError('Session expired, please log in again', 401, 'SESSION_REVOKED');
+    }
+
+    // Generate new tokens
+    const tokenPayload: JWTPayload = {
+      userId: user.id,
+      userType: user.userType,
+      phone: user.phone,
+    };
+
+    const newAccessToken = generateToken(tokenPayload);
+    const newRefreshToken = generateRefreshToken(tokenPayload);
+
+    return {
+      accessToken: newAccessToken,
+      refreshToken: newRefreshToken,
+    };
   }
 
   /**

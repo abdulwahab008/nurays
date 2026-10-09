@@ -607,13 +607,6 @@ export class SellerOrderService {
             totalOrders: { decrement: 1 },
           },
         });
-        await tx.inventoryReservation.deleteMany({
-          where: {
-            productId: orderItem.productId,
-            reservationType: 'order',
-            reservationId: orderItem.orderId,
-          },
-        });
       }
 
       const remaining = await tx.orderItem.findMany({
@@ -859,13 +852,6 @@ export class SellerOrderService {
             data: {
               ...(item.variantId ? {} : { stockQuantity: { increment: item.quantity } }),
               totalOrders: { decrement: 1 },
-            },
-          });
-          await tx.inventoryReservation.deleteMany({
-            where: {
-              productId: item.productId,
-              reservationType: 'order',
-              reservationId: order.id,
             },
           });
         }
