@@ -3,8 +3,9 @@
  * account ids: the live events, the tracking snapshot and the chat name people by role, name and
  * `isMe`. A kitchen's tracking snapshot lists its own dishes only.
  *
- * Also here: an online-payment order is refused while no gateway is configured, but a retried
- * checkout still gets the order it already placed.
+ * Also here: a rider's view of the order shows the door it was placed to, and an online-payment
+ * order is refused while no gateway is configured, but a retried checkout still gets the order it
+ * already placed.
  */
 
 jest.mock('../src/config/database', () => ({
@@ -13,6 +14,8 @@ jest.mock('../src/config/database', () => ({
     order: { findUnique: jest.fn(), findFirst: jest.fn() },
     user: { findUnique: jest.fn() },
     seller: { findUnique: jest.fn() },
+    rider: { findUnique: jest.fn() },
+    userProfile: { findUnique: jest.fn() },
     orderMessage: { updateMany: jest.fn(), findMany: jest.fn(), create: jest.fn() },
   },
 }));
@@ -256,5 +259,73 @@ describe('placing an order that is paid online', () => {
     db.order.findUnique.mockResolvedValue({ id: 'o-existing' });
     await expect(orderService.createOrder('c1', data('safepay'), { idempotencyKey: 'same-key' })).resolves.toEqual({ id: 'o-existing' });
     expect(db.order.findUnique).toHaveBeenCalledWith(expect.objectContaining({ where: { customerId_idempotencyKey: { customerId: 'c1', idempotencyKey: 'same-key' } } }));
+  });
+});
+
+describe('the rider carrying an order', () => {
+  const placedTo = { addressLine1: 'Street 5', addressLine2: null, area: 'Askari 11', city: 'Lahore', postalCode: '54000', houseNumber: null, landmark: null, latitude: 31.4, longitude: 74.4 };
+  const editedSince = { id: 'a1', userId: IDS.customer, label: 'Home', addressLine1: 'Plot 1, Lane 2', addressLine2: 'Lane 2', houseNumber: '99', landmark: 'Moved away', area: 'Gulshan', city: 'Karachi', postalCode: '75000', latitude: '24.9', longitude: '67.1' };
+  const orderRow = (status: string) => ({
+    id: 'o1',
+    customerId: IDS.customer,
+    orderStatus: 'in_transit',
+    paymentStatus: 'pending',
+    paymentMethod: 'cod',
+    subtotal: '500',
+    deliveryFee: '100',
+    discountAmount: '0',
+    taxAmount: '0',
+    totalAmount: '600',
+    paymentProofUrl: null,
+    deliveryInstructions: 'ring twice',
+    deliveryAddressSnapshot: placedTo,
+    deliveryAddress: editedSince,
+    items: [{ id: 'i1', sellerId: 's1' }],
+    hub: null,
+    statusHistory: [],
+    delivery: { id: 'd1', status, riderId: 'rider-1', rider: { id: 'rider-1' }, riderFee: '100', riderBonus: null, riderLatitude: null, riderLongitude: null, riderLocationAt: null, deliveryLatitude: '31.4', deliveryLongitude: '74.4', releasedRiderIds: ['rider-9'] },
+  });
+
+  beforeEach(() => {
+    db.user.findUnique.mockReset().mockResolvedValue({ userType: 'rider', email: 'rider@example.com' });
+    db.seller.findUnique.mockReset().mockResolvedValue(null);
+    db.rider.findUnique.mockReset().mockResolvedValue({ id: 'rider-1' });
+    db.userProfile.findUnique.mockReset().mockResolvedValue(null);
+  });
+
+  it('sees, while the job runs, the door the order was placed to and not the saved address as edited since', async () => {
+    db.order.findFirst.mockReset().mockResolvedValue(orderRow('in_transit'));
+    const view: any = await orderService.getOrderDetails('o1', IDS.rider);
+    expect(view.deliveryAddress).toMatchObject({ addressLine1: 'Street 5', addressLine2: null, houseNumber: null, landmark: null, area: 'Askari 11', city: 'Lahore', postalCode: '54000', latitude: 31.4, longitude: 74.4 });
+    expect(JSON.stringify(view.deliveryAddress)).not.toMatch(/Plot 1|Moved away|Gulshan|Karachi/);
+    // the owner's account id is not part of it
+    expect(walk(view.deliveryAddress).keys.has('userId')).toBe(false);
+  });
+
+  it('is not told which riders handed the job back; the customer is not either, an admin is', async () => {
+    db.order.findFirst.mockReset().mockResolvedValue(orderRow('in_transit'));
+    const asRider: any = await orderService.getOrderDetails('o1', IDS.rider);
+    expect(asRider.delivery).toBeTruthy();
+    expect(walk(asRider).keys.has('releasedRiderIds')).toBe(false);
+
+    db.user.findUnique.mockResolvedValue({ userType: 'customer', email: 'c@example.com' });
+    db.rider.findUnique.mockResolvedValue(null);
+    db.order.findUnique.mockResolvedValue({ handoverCode: '4821' });
+    const asCustomer: any = await orderService.getOrderDetails('o1', IDS.customer);
+    expect(asCustomer.delivery).toBeTruthy();
+    expect(walk(asCustomer).keys.has('releasedRiderIds')).toBe(false);
+
+    db.user.findUnique.mockResolvedValue({ userType: 'admin', email: 'a@example.com' });
+    const asAdmin: any = await orderService.getOrderDetails('o1', 'admin-1');
+    expect(asAdmin.delivery.releasedRiderIds).toEqual(['rider-9']);
+  });
+
+  it('keeps the area and city only once the job is over, of the order as placed', async () => {
+    db.order.findFirst.mockReset().mockResolvedValue(orderRow('delivered'));
+    const view: any = await orderService.getOrderDetails('o1', IDS.rider);
+    expect(view.deliveryAddress).toEqual({ area: 'Askari 11', city: 'Lahore' });
+    expect(view.deliveryAddressSnapshot).toEqual({ area: 'Askari 11', city: 'Lahore' });
+    expect(view.deliveryInstructions).toBeNull();
+    expect(view.delivery).toMatchObject({ deliveryAddress: 'Askari 11, Lahore', deliveryLatitude: null, deliveryLongitude: null });
   });
 });

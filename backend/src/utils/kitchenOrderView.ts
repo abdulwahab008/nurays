@@ -1,6 +1,7 @@
 import { Prisma } from '@prisma/client';
 import { deliveryProviderOf } from './paymentCustody';
 import { selfDeliveryFeeFor, sellerPaidDeliveryFor } from './deliveryEarnings';
+import { doorField } from './addressSnapshot';
 
 /**
  * What a kitchen may see of one of its orders.
@@ -108,14 +109,11 @@ const text = (v: unknown): string | null => (typeof v === 'string' && v.trim() !
  * snapshot has, even an empty one, is final, so a later edit of the saved address cannot move it.
  */
 function kitchenAddress(order: KitchenOrderRow) {
-  const live = order.deliveryAddress as Record<string, unknown> | null;
-  const snap = order.deliveryAddressSnapshot && typeof order.deliveryAddressSnapshot === 'object' && !Array.isArray(order.deliveryAddressSnapshot)
-    ? (order.deliveryAddressSnapshot as Record<string, unknown>)
-    : null;
-  if (!live && !snap) return null;
-  const pick = (key: string) => (snap && key in snap ? text(snap[key]) : text(live?.[key]));
+  const live = order.deliveryAddress;
+  if (!live && !order.deliveryAddressSnapshot) return null;
+  const pick = (key: 'addressLine1' | 'addressLine2' | 'houseNumber' | 'landmark' | 'area' | 'city') => text(doorField(order.deliveryAddressSnapshot, live, key));
   return {
-    label: (live?.label as string | null | undefined) ?? null,
+    label: live?.label ?? null,
     addressLine1: pick('addressLine1'),
     addressLine2: pick('addressLine2'),
     houseNumber: pick('houseNumber'),

@@ -18,6 +18,7 @@ import { createStockAlert } from './stock-alert.service';
 import promotionService from './promotion.service';
 import { isAcceptingOrders, validateOrderTiming } from './availability.service';
 import { ONLINE_GATEWAY_METHODS, SELLER_DIRECT_METHODS } from '../utils/paymentCustody';
+import { addressAsOrdered } from '../utils/addressSnapshot';
 import { onlinePaymentsAvailable } from './online-payment.service';
 import ledgerService from './ledger.service';
 import { newHandoverCode } from './handover.service';
@@ -63,12 +64,13 @@ function stripForRider<T extends Record<string, unknown>>(order: T, jobRunning: 
   if (!jobRunning) {
     const areaOnly = (src: Record<string, unknown> | null | undefined) =>
       src && typeof src === 'object' ? { area: src.area ?? null, city: src.city ?? null } : null;
-    rest.deliveryAddress = areaOnly(address);
+    rest.deliveryAddress = areaOnly(addressAsOrdered(snapshot, address));
     rest.deliveryAddressSnapshot = areaOnly(snapshot);
     rest.deliveryInstructions = null;
-  } else if (address && typeof address === 'object') {
-    const { userId: _u, ...addr } = address;
-    rest.deliveryAddress = addr;
+  } else if ((address && typeof address === 'object') || snapshot) {
+    // The door the order was placed to, not the saved address as edited since.
+    const { userId: _u, ...saved } = (address && typeof address === 'object' ? address : {}) as Record<string, unknown>;
+    rest.deliveryAddress = addressAsOrdered(snapshot, saved);
   }
   return rest as T;
 }
@@ -84,14 +86,17 @@ function presentDelivery<
     deliveryLatitude: unknown;
     deliveryLongitude: unknown;
     rider: Record<string, unknown> | null;
+    releasedRiderIds?: unknown;
   },
->(delivery: D, viewer: { canSeePay: boolean; canSeeLocation: boolean; riderFirstName: string | null }) {
-  const { riderFee, riderBonus, riderLatitude, riderLongitude, riderLocationAt, ...rest } = delivery;
+>(delivery: D, viewer: { canSeePay: boolean; canSeeLocation: boolean; canSeeInternal: boolean; riderFirstName: string | null }) {
+  // The riders who handed the job back are dispatch's business (it skips them); only staff see who they were.
+  const { riderFee, riderBonus, riderLatitude, riderLongitude, riderLocationAt, releasedRiderIds, ...rest } = delivery;
   const live = viewer.canSeeLocation && ON_THE_WAY_STATUSES.includes(delivery.status) && riderLatitude != null && riderLongitude != null;
   const doorKnown = delivery.deliveryLatitude != null && delivery.deliveryLongitude != null;
   return {
     ...rest,
     rider: delivery.rider ? { ...delivery.rider, name: viewer.riderFirstName } : null,
+    ...(viewer.canSeeInternal ? { releasedRiderIds } : {}),
     ...(viewer.canSeePay ? { riderFee: riderFee != null ? Number(riderFee) : null, riderBonus: riderBonus != null ? Number(riderBonus) : null } : {}),
     riderLocation: live
       ? {
@@ -1128,6 +1133,7 @@ export class OrderService {
       ? presentDelivery(order.delivery, {
           canSeePay: isAdmin || isOrderRider,
           canSeeLocation: isAdmin || isOrderRider || order.customerId === userId,
+          canSeeInternal: isAdmin,
           riderFirstName: riderFullName?.trim().split(/\s+/)[0] || null,
         })
       : null;

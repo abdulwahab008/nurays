@@ -2,7 +2,7 @@ import { realPhoneOrNull } from '../utils/otp';
 import { codCollectorOf } from '../utils/paymentCustody';
 import { presentFile } from '../storage';
 import { cancelOpenDelivery, notifyDeliveryCancelled, reopenDeliveryData, CancelledDelivery } from './delivery-lifecycle.service';
-import { dispatchSoon } from './dispatch.service';
+import { postDeliverySoon } from './dispatch.service';
 import prisma from '../config/database';
 import { pageArgs } from '../utils/pagination';
 import { AppError } from '../middleware/errorHandler';
@@ -609,10 +609,7 @@ export class AdminOrderService {
     if (previousRider?.rider?.userId) socketManager.removeUserFromOrder(previousRider.rider.userId, orderId);
     await realtimeOrderService.emitOrderStatusUpdate(orderId, 'ready', adminId);
     // Offer it to a rider now rather than on the next sweep (never the one it failed with).
-    if (reopened?.id) {
-      realtimeOrderService.emitDeliveryPosted(reopened.id, orderId);
-      dispatchSoon(reopened.id);
-    }
+    if (reopened?.id) postDeliverySoon(reopened.id, orderId);
     return { orderId, status: 'ready' };
   }
 

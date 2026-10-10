@@ -63,8 +63,12 @@ export interface DispatchResult {
   reason?: string;
 }
 
-/** Try to give one open job to the best rider. Safe to call repeatedly and concurrently. */
-export async function dispatchDelivery(deliveryId: string): Promise<DispatchResult> {
+/**
+ * Try to give one open job to the best rider. Safe to call repeatedly and concurrently.
+ * `announced` says whether the riders were already told the job is in the pool (the default); when it is
+ * not, taking it needs no "gone from the pool" message to them.
+ */
+export async function dispatchDelivery(deliveryId: string, opts: { announced?: boolean } = {}): Promise<DispatchResult> {
   if (!autoAssignEnabled()) return { assigned: false, reason: 'disabled' };
   const job = await loadJob(deliveryId);
   if (!job || job.riderId || job.status !== 'pending') return { assigned: false, reason: 'not_open' };
@@ -135,12 +139,12 @@ export async function dispatchDelivery(deliveryId: string): Promise<DispatchResu
   if (!done) return { assigned: false, reason: 'lost_race' };
 
   logger.info({ deliveryId, orderId: job.orderId, riderId: rider.id, reason: choice.reason, candidates: riders.length, bonus: done.bonus }, 'Delivery auto-assigned');
-  await announceAssignment(job, rider.userId, corridor.standardFee + done.bonus);
+  await announceAssignment(job, rider.userId, corridor.standardFee + done.bonus, opts.announced !== false);
   return { assigned: true, riderId: rider.id, reason: choice.reason };
 }
 
-export async function announceAssignment(job: JobRow, riderUserId: string, riderPay: number) {
-  void realtimeOrderService.emitDeliveryClaimed(job.id, job.orderId);
+export async function announceAssignment(job: JobRow, riderUserId: string, riderPay: number, announced = true) {
+  void realtimeOrderService.emitDeliveryClaimed(job.id, job.orderId, { toRiders: announced });
   const cod = job.order.paymentMethod === 'cod' && job.order.paymentStatus !== 'paid';
   const activeNow = await prisma.delivery.count({ where: { rider: { userId: riderUserId }, status: { in: ACTIVE } } });
   socketManager.emitToUser(riderUserId, 'delivery:assigned', { deliveryId: job.id, orderId: job.orderId });
@@ -211,4 +215,30 @@ export async function dispatchWaiting(limit = 50): Promise<number> {
 export function dispatchSoon(deliveryId?: string) {
   const run = deliveryId ? dispatchDelivery(deliveryId) : dispatchWaiting();
   void run.catch((err) => logger.error({ err }, 'Dispatch failed'));
+}
+
+/**
+ * A job has just joined the open pool (a new one, one handed back, one reopened by an admin). It is
+ * offered to the best rider first: when a rider takes it, no other rider ever hears of it, so a busy
+ * hour does not make every connected rider reload their lists twice per order. Only a job nobody
+ * could take is announced to every rider, who can then claim it by hand. The dispatcher is a
+ * parameter so the choice can be tested without a database.
+ */
+export async function postDelivery(
+  deliveryId: string,
+  orderId: string,
+  dispatch: (id: string, opts: { announced: boolean }) => Promise<DispatchResult> = dispatchDelivery
+): Promise<void> {
+  let taken = false;
+  try {
+    taken = (await dispatch(deliveryId, { announced: false })).assigned;
+  } catch (err) {
+    logger.error({ err, deliveryId }, 'Dispatch failed');
+  }
+  if (!taken) realtimeOrderService.emitDeliveryPosted(deliveryId, orderId);
+}
+
+/** Fire and forget: posting a job must never fail what triggered it. */
+export function postDeliverySoon(deliveryId: string, orderId: string) {
+  void postDelivery(deliveryId, orderId).catch((err) => logger.error({ err, deliveryId }, 'Posting a delivery failed'));
 }

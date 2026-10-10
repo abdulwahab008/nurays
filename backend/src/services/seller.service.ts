@@ -583,8 +583,10 @@ export class SellerService {
     startOfToday.setHours(0, 0, 0, 0);
 
     // Order statistics in one aggregate over the kitchen's lines (not the whole history in memory).
+    // Orders are counted once each, however many of the kitchen's dishes they hold.
     // "Active" means still in progress toward delivery — a cancelled or refunded/refund_pending
-    // order isn't going anywhere, so it's excluded from both active and pending.
+    // order isn't going anywhere, and neither is one whose lines for this kitchen were all
+    // cancelled, so they are excluded from both active and pending.
     // Earnings require BOTH the order having actually arrived (delivered/completed) AND the
     // payment having actually been collected — a delivered order whose online payment never
     // completed (or was refunded after delivery) hasn't earned the seller anything yet.
@@ -594,12 +596,12 @@ export class SellerService {
       Array<{ active_orders: number; pending_orders: number; gross_sales: number; platform_fees: number; today_orders: number; today_sales: number }>
     >`
       SELECT
-        COUNT(*) FILTER (WHERE o.order_status NOT IN ('delivered', 'completed', 'cancelled', 'refunded', 'refund_pending'))::int AS active_orders,
-        COUNT(*) FILTER (WHERE o.order_status IN ('pending', 'preparing'))::int AS pending_orders,
+        COUNT(DISTINCT o.id) FILTER (WHERE oi.status <> 'cancelled' AND o.order_status NOT IN ('delivered', 'completed', 'cancelled', 'refunded', 'refund_pending'))::int AS active_orders,
+        COUNT(DISTINCT o.id) FILTER (WHERE oi.status <> 'cancelled' AND o.order_status IN ('pending', 'preparing'))::int AS pending_orders,
         COALESCE(SUM(oi.total_price) FILTER (WHERE oi.status <> 'cancelled' AND o.order_status IN ('delivered', 'completed') AND o.payment_status = 'paid'), 0)::float8 AS gross_sales,
         COALESCE(SUM(oi.commission_amount) FILTER (WHERE oi.status <> 'cancelled' AND o.order_status IN ('delivered', 'completed') AND o.payment_status = 'paid'), 0)::float8 AS platform_fees,
         COUNT(DISTINCT o.id) FILTER (WHERE o.created_at >= ${startOfToday})::int AS today_orders,
-        COALESCE(SUM(oi.total_price) FILTER (WHERE o.created_at >= ${startOfToday}), 0)::float8 AS today_sales
+        COALESCE(SUM(oi.total_price) FILTER (WHERE o.created_at >= ${startOfToday} AND oi.status <> 'cancelled' AND o.order_status NOT IN ('cancelled', 'refunded')), 0)::float8 AS today_sales
       FROM order_items oi
       JOIN orders o ON o.id = oi.order_id
       WHERE oi.seller_id = ${sellerId}

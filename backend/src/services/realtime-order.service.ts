@@ -169,10 +169,13 @@ export class RealtimeOrderService {
     socketManager.emitToRole('rider', 'delivery:new', { deliveryId, orderId });
   }
 
-  /** A rider took a job: it leaves every other rider's list, and the order's parties reload. */
-  async emitDeliveryClaimed(deliveryId: string, orderId: string) {
+  /**
+   * A rider took a job: the order's parties reload, and it leaves every other rider's list, unless
+   * `toRiders` is false because no rider ever heard of it (a job taken automatically the moment it was created).
+   */
+  async emitDeliveryClaimed(deliveryId: string, orderId: string, opts: { toRiders?: boolean } = {}) {
     try {
-      socketManager.emitToRole('rider', 'delivery:removed', { deliveryId, orderId, reason: 'claimed' });
+      if (opts.toRiders !== false) socketManager.emitToRole('rider', 'delivery:removed', { deliveryId, orderId, reason: 'claimed' });
       const audience = await orderAudience(orderId);
       if (audience) socketManager.emitToRooms(audience.rooms, 'delivery:assigned', { deliveryId, orderId });
     } catch (err) {
