@@ -20,6 +20,7 @@ export interface SidebarItem {
   icon: string;
   badge?: number;
   subItems?: SubItem[];
+  needs?: string;
 }
 
 interface DashboardSidebarProps {
@@ -237,7 +238,7 @@ const DefaultIcon: React.FC<{ className?: string }> = ({ className }) => (
   </svg>
 );
 
-function DashboardSidebarContent({ items, userType }: DashboardSidebarProps) {
+function DashboardSidebarContent({ items: allItems, userType }: DashboardSidebarProps) {
   const pathname = usePathname();
   const tNav = useT(navMessages);
   const label = (name: string) => tNav(name as keyof typeof navMessages.en);
@@ -245,6 +246,8 @@ function DashboardSidebarContent({ items, userType }: DashboardSidebarProps) {
   const queryString = searchParams?.toString() || '';
   const currentHref = queryString ? `${pathname}?${queryString}` : pathname;
   const { user } = useAuthStore();
+  // Staff only see the pages their role may open (the server enforces it too).
+  const items = userType === 'admin' ? allItems.filter((i) => !i.needs || (user?.permissions ?? []).includes(i.needs)) : allItems;
 
   const [expandedItems, setExpandedItems] = useState<Record<string, boolean>>({});
 
@@ -423,7 +426,7 @@ function DashboardSidebarContent({ items, userType }: DashboardSidebarProps) {
                           <span className="flex-1 truncate">{label(sub.name)}</span>
                           {sub.badge !== undefined && sub.badge > 0 && (
                             <span
-                              className="text-[10px] font-bold px-1.5 py-0.5 rounded-full"
+                              className="text-[11px] font-bold px-1.5 py-0.5 rounded-full"
                               style={{ background: accentColor, color: '#FFFFFF' }}
                             >
                               {sub.badge}
@@ -479,7 +482,7 @@ function SidebarSkeleton({ items }: { items: SidebarItem[] }) {
           </div>
         </div>
         <div className="px-3 mb-2">
-          <span className="text-[10px] font-bold tracking-wider uppercase text-slate-400">Menu</span>
+          <span className="text-[11px] font-bold tracking-wider uppercase text-slate-400">Menu</span>
         </div>
         <nav className="space-y-1">
           {items.map((item) => (

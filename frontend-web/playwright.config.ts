@@ -9,6 +9,8 @@ export default defineConfig({
   reporter: process.env.CI ? [['list'], ['html', { open: 'never', outputFolder: 'playwright-report' }]] : 'list',
   use: {
     baseURL: process.env.PLAYWRIGHT_BASE_URL ?? 'http://localhost:3000',
+    // A pre-installed Chromium (sandboxes without network access to download browsers).
+    ...(process.env.PLAYWRIGHT_CHROMIUM_PATH ? { launchOptions: { executablePath: process.env.PLAYWRIGHT_CHROMIUM_PATH } } : {}),
     trace: 'on-first-retry',
     screenshot: 'only-on-failure',
   },

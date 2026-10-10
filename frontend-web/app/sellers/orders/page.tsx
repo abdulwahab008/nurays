@@ -442,7 +442,7 @@ export default function SellerOrdersPage() {
                           <div>
                             <div className="flex items-center gap-2 flex-wrap">
                               <span className="font-black text-amber-950">{t('list.proofTitle')}</span>
-                              <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-amber-200 text-amber-900">
+                              <span className="px-2 py-0.5 rounded-full text-[11px] font-extrabold bg-amber-200 text-amber-900">
                                 {t('list.actionRequired')}
                               </span>
                             </div>

@@ -66,7 +66,7 @@ export default function AdminLoginPage() {
         setUser(user as any);
 
         showToast('Login successful!', 'success');
-        router.push('/admin/dashboard');
+        router.push((user as any)?.permissions?.includes('read.finance') ? '/admin/dashboard' : '/admin/approvals');
       } else {
         throw new Error('Invalid response from server');
       }

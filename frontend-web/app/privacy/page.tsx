@@ -59,7 +59,7 @@ export default function PrivacyPage() {
       <h2>Your choices</h2>
       <ul>
         <li>You can view and correct your profile and addresses in the app, and delete saved addresses at any time.</li>
-        <li>You can ask us for a copy of your information, or to delete your account, by contacting {LEGAL.email} or the <Link href="/support" className="underline">support page</Link>. Some records must be kept for legal reasons even after an account is closed.</li>
+        <li>You can delete your account yourself from <Link href="/profile" className="underline">your profile</Link> (Danger zone, Delete account); the steps are also described at <Link href="/delete-account" className="underline">/delete-account</Link>. You can ask us for a copy of your information by contacting {LEGAL.email} or the <Link href="/support" className="underline">support page</Link>. Some records must be kept for legal reasons even after an account is closed.</li>
         <li>You can turn off push notifications in your browser or device settings.</li>
       </ul>
 

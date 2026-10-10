@@ -26,6 +26,7 @@ async function main() {
     update: {
       passwordHash,
       userType: 'admin',
+      staffRole: 'admin',
       status: 'active',
       emailVerified: true,
     },
@@ -33,6 +34,7 @@ async function main() {
       email: 'admin@frozennuray.com',
       phone: '+923000000001',
       userType: 'admin',
+      staffRole: 'admin',
       status: 'active',
       emailVerified: true,
       passwordHash,

@@ -304,7 +304,7 @@ export function SellerNewOrderNotification() {
               <span className="text-white font-black text-xs tracking-wider uppercase block">
                 {t('alert.incoming')}
               </span>
-              <span className="text-[10px] text-emerald-100 font-medium">
+              <span className="text-[11px] text-emerald-100 font-medium">
                 {t('alert.rings')}
               </span>
             </div>

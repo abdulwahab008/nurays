@@ -1,7 +1,9 @@
 import { Prisma } from '@prisma/client';
 import { randomInt } from 'crypto';
 import prisma from '../config/database';
+import { pageArgs } from '../utils/pagination';
 import { AppError } from '../middleware/errorHandler';
+import { notify } from './notify.service';
 
 export class SupportService {
   /**
@@ -76,9 +78,7 @@ export class SupportService {
       limit?: number;
     }
   ) {
-    const page = filters.page || 1;
-    const limit = Math.min(filters.limit || 20, 100);
-    const skip = (page - 1) * limit;
+    const { page, limit, skip } = pageArgs(filters.page, filters.limit);
 
     const where: Prisma.SupportTicketWhereInput = {
       userId,
@@ -133,13 +133,13 @@ export class SupportService {
     };
   }
 
-  private async formatTicketWithMessages(ticketId: string) {
+  private async formatTicketWithMessages(ticketId: string, includeInternal = false) {
     const ticket = await prisma.supportTicket.findUnique({
       where: { id: ticketId },
       include: {
         order: { select: { id: true, orderNumber: true } },
         messages: {
-          where: { isInternal: false },
+          ...(includeInternal ? {} : { where: { isInternal: false } }),
           orderBy: { createdAt: 'asc' },
         },
       },
@@ -171,6 +171,7 @@ export class SupportService {
         return {
           id: m.id,
           message: m.message,
+          ...(includeInternal ? { isInternal: m.isInternal } : {}),
           authorType: author?.userType ?? 'customer',
           authorName: author?.profile?.fullName || (author?.userType === 'admin' ? 'Support Team' : 'You'),
           createdAt: m.createdAt,
@@ -214,19 +215,31 @@ export class SupportService {
   /**
    * List all tickets (admin)
    */
-  async adminGetTickets(filters: { status?: string; page?: number; limit?: number }) {
-    const page = filters.page || 1;
-    const limit = Math.min(filters.limit || 20, 100);
-    const skip = (page - 1) * limit;
+  async adminGetTickets(filters: { status?: string; priority?: string; assignedTo?: string; search?: string; page?: number; limit?: number }) {
+    const { page, limit, skip } = pageArgs(filters.page, filters.limit);
 
     const where: Prisma.SupportTicketWhereInput = {};
     if (filters.status) where.status = filters.status;
+    if (filters.priority) where.priority = filters.priority;
+    if (filters.assignedTo === 'unassigned') where.assignedTo = null;
+    else if (filters.assignedTo) where.assignedTo = filters.assignedTo;
+    const search = filters.search?.trim().slice(0, 100);
+    if (search) {
+      where.OR = [
+        { subject: { contains: search, mode: 'insensitive' } },
+        { ticketNumber: { contains: search, mode: 'insensitive' } },
+        { order: { orderNumber: { contains: search, mode: 'insensitive' } } },
+        { user: { email: { contains: search, mode: 'insensitive' } } },
+        { user: { phone: { contains: search } } },
+      ];
+    }
 
     const [tickets, total] = await Promise.all([
       prisma.supportTicket.findMany({
         where,
         include: {
           user: { select: { email: true, phone: true, profile: { select: { fullName: true } } } },
+          order: { select: { orderNumber: true } },
         },
         orderBy: { createdAt: 'desc' },
         skip,
@@ -244,7 +257,10 @@ export class SupportService {
         priority: t.priority,
         status: t.status,
         customerName: t.user.profile?.fullName || t.user.email || t.user.phone,
+        orderNumber: t.order?.orderNumber ?? null,
+        assignedTo: t.assignedTo,
         createdAt: t.createdAt,
+        updatedAt: t.updatedAt,
       })),
       pagination: { page, limit, total, totalPages: Math.ceil(total / limit) },
     };
@@ -254,7 +270,7 @@ export class SupportService {
    * Get a single ticket + its message thread (admin — no ownership check)
    */
   async adminGetTicketDetail(ticketId: string) {
-    const ticket = await this.formatTicketWithMessages(ticketId);
+    const ticket = await this.formatTicketWithMessages(ticketId, true);
     if (!ticket) {
       throw new AppError('Ticket not found', 404, 'TICKET_NOT_FOUND');
     }
@@ -264,15 +280,26 @@ export class SupportService {
   /**
    * Admin replies to a ticket, optionally updating its status
    */
-  async adminReply(ticketId: string, adminId: string, message: string, status?: string) {
+  /**
+   * An admin answers a complaint. A normal reply goes to the customer, who is notified. An internal
+   * note (`internal: true`) is only for admins. A status change is recorded in the history as an
+   * internal line, and the ticket is assigned to the admin who handles it.
+   */
+  async adminReply(ticketId: string, adminId: string, message: string, status?: string, internal = false) {
     const ticket = await prisma.supportTicket.findUnique({ where: { id: ticketId } });
     if (!ticket) {
       throw new AppError('Ticket not found', 404, 'TICKET_NOT_FOUND');
     }
 
     await prisma.supportMessage.create({
-      data: { ticketId, userId: adminId, message },
+      data: { ticketId, userId: adminId, message, isInternal: internal },
     });
+    const statusChanged = !!status && status !== ticket.status;
+    if (statusChanged) {
+      await prisma.supportMessage.create({
+        data: { ticketId, userId: adminId, message: `Status changed from ${ticket.status} to ${status}`, isInternal: true },
+      });
+    }
 
     await prisma.supportTicket.update({
       where: { id: ticketId },
@@ -283,7 +310,21 @@ export class SupportService {
       },
     });
 
-    return this.formatTicketWithMessages(ticketId);
+    if (!internal) {
+      void notify({
+        userId: ticket.userId,
+        category: 'orders',
+        type: 'support',
+        title: status === 'resolved' ? `Ticket ${ticket.ticketNumber} resolved` : `New reply on ticket ${ticket.ticketNumber}`,
+        message: message.length > 140 ? `${message.slice(0, 140)}…` : message,
+        actionUrl: `/support`,
+        data: { ticketId },
+        channels: ['push'],
+        dedupeKey: `support-reply:${ticketId}:${Date.now()}`,
+      });
+    }
+
+    return this.formatTicketWithMessages(ticketId, true);
   }
 }
 

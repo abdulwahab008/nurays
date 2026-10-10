@@ -25,6 +25,8 @@ tax    = total - goods - deliveryFee                      // takes the rounding,
 Code: `backend/src/services/order.service.ts` (`createOrder`), `promotion.service.ts`.
 
 - Catalog deals are applied to item prices first. A promo code is applied after that, and the same promotion cannot be applied twice.
+- A code that is unknown, switched off, expired, used up (in total or by this customer) or below its minimum order is **refused at checkout** (`INVALID_PROMO_CODE`, `PROMO_INACTIVE`, `PROMO_EXPIRED`, `PROMO_LIMIT_REACHED`, `PROMO_ALREADY_USED`, `MIN_ORDER_NOT_MET`), the same answers as `/promotions/validate`; the order is never placed at full price with a code the customer typed.
+- Usage limits are re-checked inside the order transaction under a row lock on the promotion, so two checkouts racing each other cannot both use a one-per-person code or overshoot a total limit (codes and catalog deals alike).
 - A percentage code: `eligible subtotal x value / 100`, capped by the code's maximum discount. A fixed code: its value. Never more than the eligible subtotal. The code must be active, inside its dates, over its minimum order and under its usage limits (total and per customer).
 - A kitchen's own code only discounts that kitchen's items, and the kitchen funds it: commission and payout are worked out on the price after the discount.
 - A platform code (admin, Promo codes screen) is funded by Nuray: the kitchen's payout and commission are unchanged.
@@ -47,7 +49,9 @@ item.sellerPayout     = item.totalPrice - item.commissionAmount
 
 ## 3. Delivery fees
 
-Code: `backend/src/utils/deliveryFee.ts` (`getDeliveryFeeForSeller`, `platformDeliveryFee`), `backend/src/services/delivery-pricing.service.ts`. Called from `order.service.ts` once per kitchen in the order; the fees are added up and snapshotted per kitchen in `Order.deliveryFeeBreakdown` (`sellerId`, `fee`, `provider`).
+Code: `backend/src/utils/deliveryFee.ts` (`getDeliveryFeeForSeller`, `platformDeliveryFee`), `backend/src/services/delivery-pricing.service.ts`. Called from `order.service.ts` once per kitchen in the order; the fees are snapshotted per kitchen in `Order.deliveryFeeBreakdown` (`sellerId`, `fee`, `provider`, `paidBy`).
+
+**Who pays.** When a Nuray rider delivers, the **kitchen** pays Nuray the fee: the customer's delivery fee is Rs 0 (checkout shows free delivery), and the fee is stored on the order as `sellerDeliveryCharge` and taken out of the kitchen's earnings (sections 3d and 5). When the kitchen delivers itself, the customer pays the kitchen's own fee as before.
 
 Pickup orders (`self_pickup`, `hub_pickup`) have no delivery fee. Home delivery needs an address; the address carries the buyer's community.
 
@@ -121,10 +125,10 @@ Code: `utils/deliveryEarnings.ts`, `utils/paymentCustody.ts`, `ledger.service.ts
 
 | Delivered by | Fee goes to |
 |---|---|
-| Nuray rider | Nuray (ledger entry `delivery_fee`, revenue). The rider is paid separately by the rider rules in section 4, out of Nuray's pocket; the two numbers are not tied together. |
+| Nuray rider | Nuray (ledger entry `delivery_fee`, revenue), **paid by the kitchen**: a `seller_delivery_charge` ledger entry takes it off what Nuray owes the kitchen, and the seller balance subtracts it from that order's earnings (`sellerPaidDeliveryFor`). The customer pays no delivery fee. The rider is paid separately by the rider rules in section 4, out of Nuray's pocket; the two numbers are not tied together. |
 | The kitchen | The kitchen, no commission. If the kitchen collected the money itself (COD at its door, or a transfer into its account) it already holds it. If Nuray collected the money (wallet, Safepay), the fee is posted as a payable to the kitchen (`seller_delivery_fee`). |
 
-If a kitchen's items on an order are all cancelled, its delivery fee is refunded with the items (section 6).
+If a kitchen's items on an order are all cancelled, a delivery fee the customer paid (self-delivery) is refunded with the items (section 6); a kitchen-paid fee is simply not charged. Orders from before this rule have no `paidBy` and keep the old behaviour (the customer paid the fee).
 
 ## 4. Rider pay, route bonus and cash limit
 
@@ -146,6 +150,21 @@ maxCeiling   = min( standardFee + 120, round(standardFee x 1.4) )
 ### Route bonus
 
 A rider with exactly one active job who claims a second one whose pickup is within 1.5 km and drop-off within 2.5 km of the first job's gets a Rs 100 bonus (`ROUTE_BONUS`, `routeMatch`). It needs the locations of both jobs. It is stored in `Delivery.riderBonus` and paid together with the fee.
+
+### Automatic assignment (dispatch)
+
+Code: `utils/dispatch.ts` (rules), `services/dispatch.service.ts` (applies them). Nuray's riders are its own, each serving one community (admin: Riders, rider page, "Community served", `Rider.communityId`; usually 1 to 2 riders per community).
+
+When a kitchen accepts an order, the job is assigned at once, with no accept step, to the first match of:
+
+1. a rider already carrying exactly one job whose drop-off is in the same area (within 2.5 km, or the same community when coordinates are missing) and whose pickup is within 4 km (or the same community): one trip serves both. The route bonus (below) still needs the stricter 1.5 km / 2.5 km match;
+2. a rider who serves the community the food is picked up in;
+3. a rider who serves the drop-off community;
+4. any rider with room.
+
+Within a step, fewer active jobs first, then fewer deliveries today. Never chosen: a rider who is off duty, has two jobs, would pass their cash limit, or handed this job back. A rider who already has one job still gets new ones (up to two). Fee, bonus and `assignmentMode = 'auto'` are set on assignment; the rider gets a push and an in-app notification, and a pop-up with a chime on their screen (`delivery:offered`, `RiderNewJobNotification`). A job left in the open pool pops up a lighter alert only for riders who are on duty and have a free slot.
+
+If nobody can take it, the job stays in the open pool (any rider may still claim it) and is tried again every minute, when a rider finishes a job, goes on duty, hands a job back, or an admin changes a rider's community. `AUTO_ASSIGN_ENABLED=false` turns assignment off (riders claim from the pool only).
 
 ### Limits
 
@@ -192,11 +211,12 @@ Code: `utils/paymentCustody.ts` (`collectorOf`), stored in `Order.paymentCollect
 | Cash, hub pickup | Nuray |
 
 - Nuray holds it: Nuray owes the kitchen its payout.
-- The kitchen holds it: the kitchen owes Nuray everything that is not its own (commission, Nuray's delivery fee, tax, refunds Nuray paid out). Seller balance = payouts available to withdraw, computed in `seller-balance.service.ts`; it can be negative.
+- The kitchen holds it: the kitchen owes Nuray everything that is not its own (commission, Nuray's delivery fee, tax, refunds Nuray paid out). (A Nuray delivery fee is the kitchen's cost on every order, whoever holds the money.) Seller balance = payouts available to withdraw, computed in `seller-balance.service.ts`; it can be negative.
 - Ledger entries (`ledger.service.ts`) are posted once, when an order is delivered and paid (or when a late transfer is confirmed): customer payment (net of refunds), seller earning, platform commission, Nuray delivery fee, and any self-delivery fee payable.
 
 ### Seller payouts
 
+- **Cash orders a Nuray rider delivered are paid out when the rider has handed the cash in.** Cash handed in (`cash_deposit` entries, from an admin settlement) is counted against the rider's cash orders oldest first (`ordersWithCashHandedIn`); an order is covered once the deposits reach it. Until then the kitchen's share shows as `awaitingRiderCash` (earnings page: "released once the rider hands in the cash") and is not in the available balance. Online-paid orders are not held. Old cash orders with no rider cash entry count as covered.
 - A kitchen requests a payout up to its available balance (`seller.service.ts`). The minimum is the admin setting `minPayoutAmount` (Settings, default Rs 1,000), unless that kitchen has its own row in `seller_payout_schedules`, which then wins (nothing in the app creates such rows).
 - No further commission is taken at payout. Payout amounts are already net of commission.
 - An admin marks a pending payout completed (optional transaction id) or failed (reason required; the amount returns to the kitchen's balance). Only pending payouts can be changed.
@@ -210,7 +230,7 @@ Code: `backend/src/services/refund.service.ts`, `admin-order.service.ts`.
   - Paid with the wallet: credited to the customer's wallet immediately, status `completed`.
   - Anything else (Safepay, transfer, cash that was collected): a `pending` refund the admin has to send by hand, then mark sent (with a reference), or dismiss.
 - Cancelling a paid order refunds it fully through the same code. A transfer the customer reported but nobody confirmed (`payment_submitted`) also queues a refund, labelled "UNCONFIRMED TRANSFER - verify receipt first", so an admin can check the account and dismiss it if nothing arrived.
-- Dismissing a pending refund sets it to `failed` (it stops counting). If nothing else stands on the order, the order's payment becomes `failed`.
+- Dismissing a pending refund sets it to `failed` (it stops counting). If nothing else stands on the order, the order's payment goes back to `paid` when its money had been confirmed (the kitchen keeps its earning), and to `failed` only for a transfer that never arrived.
 - Order payment states: when a refund covers the whole total, the order goes to `refunded` (wallet) or `refund_pending` (manual); when the last pending refund is completed, `refund_pending` becomes `refunded`.
 - Manual refund from the order page is only for orders that are no longer in flight (delivered, completed, failed, etc.). An order that is pending through in transit must be cancelled instead.
 - Items cancelled by a kitchen on a paid order: refund = `sum( (item.totalPrice - item.promoDiscount) x 1.05 )` for those items, plus the kitchen's delivery fee once none of its items remain. Older orders without per-item discount shares use a proportional split of `total - deliveryFee`. If the whole order ends up cancelled, everything unrefunded is refunded.
@@ -299,6 +319,18 @@ score = 100 if the job is along the route of the rider's active job
 
 A cash job the rider cannot take because of the cash limit scores `-1000 + 0.01 x minutes waiting`, so it sits at the bottom.
 
+## 8b. Menus: fixed, weekly, daily
+
+Code: `utils/menu.ts`; fields `Product.menuType`, `availableDays`, `menuDate`. "Today" is Pakistan time (Asia/Karachi).
+
+| Type | The dish is on the menu |
+|---|---|
+| `fixed` (default) | always |
+| `weekly` | on the days of the week the kitchen picked (`availableDays`, 0 = Sunday to 6 = Saturday; at least one) |
+| `daily` | only on the date the kitchen put it on the menu (`menuDate`); a kitchen switches it on each day from its product list ("Put on today's menu") and it falls off at midnight |
+
+Dishes not on today's menu are left out of listings, kitchen pages and recommendations; the product page says when it is available and disables ordering; adding to the cart, checking the cart and placing an order are refused with `NOT_ON_MENU_TODAY` (an order with a delivery slot is checked against the slot's day). The kitchen's own product list shows every dish.
+
 ## 9. Notifications
 
 Code: `backend/src/services/notify.service.ts`, `backend/src/jobs/notify.jobs.ts`, `push.service.ts`, `sms.service.ts`.
@@ -323,5 +355,6 @@ Code: `backend/src/services/notify.service.ts`, `backend/src/jobs/notify.jobs.ts
 
 - Commission changes in Settings do not apply to existing kitchens (section 2).
 - Rider pay never uses the city base rate (section 4).
+- The delivery job is assigned when the kitchen accepts (food may still be preparing); a rider cannot pick up until the kitchen marks it ready, and holds one of their two slots meanwhile.
 - Nuray's delivery fee and the rider's pay are independent numbers: a short trip priced by the community fixed fee can pay the rider more than the customer paid.
 - Delivery-price cache is per process (section 3b).

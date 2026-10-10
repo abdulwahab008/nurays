@@ -1,4 +1,5 @@
 import { Request, Response } from 'express';
+import { qstr } from '../utils/query';
 import cartService from '../services/cart.service';
 import { AppError } from '../middleware/errorHandler';
 
@@ -97,7 +98,7 @@ export const getDeliveryFeeEstimate = async (req: Request, res: Response) => {
     throw new AppError('Authentication required', 401, 'AUTH_REQUIRED');
   }
 
-  const addressId = req.query.addressId as string;
+  const addressId = qstr(req.query.addressId);
   if (!addressId) {
     throw new AppError('addressId is required', 400, 'VALIDATION_ERROR');
   }

@@ -440,12 +440,12 @@ export default function SellerDeliveryPage() {
                           <span className="text-xs font-bold text-slate-900">{c.name}</span>
                           <span className="text-[11px] text-slate-400">{c.city}</span>
                           {c.isHome && (
-                            <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700">
+                            <span className="text-[11px] font-bold px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700">
                               Your community
                             </span>
                           )}
                           {!c.isHome && c.isNeighbor && (
-                            <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-blue-50 text-blue-700">
+                            <span className="text-[11px] font-bold px-1.5 py-0.5 rounded bg-blue-50 text-blue-700">
                               Nearby
                             </span>
                           )}

@@ -233,7 +233,16 @@ export const deleteProductVariant = async (userId: string, variantId: string) =>
   return { message: 'Variant deleted successfully' };
 };
 
-export const getProductVariants = async (productId: string) => {
+/** Raw variant rows carry the kitchen's cost price: only the kitchen itself (or staff) may read them. */
+async function assertProductOwner(productId: string, viewer: { userId: string; userType?: string }) {
+  if (viewer.userType === 'admin') return;
+  const product = await prisma.product.findUnique({ where: { id: productId }, select: { seller: { select: { userId: true } } } });
+  if (!product) throw new AppError('Product not found', 404, 'PRODUCT_NOT_FOUND');
+  if (product.seller.userId !== viewer.userId) throw new AppError('Unauthorized to view these variants', 403, 'FORBIDDEN');
+}
+
+export const getProductVariants = async (productId: string, viewer: { userId: string; userType?: string }) => {
+  await assertProductOwner(productId, viewer);
   const variants = await prisma.productVariant.findMany({
     where: { productId },
     orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }],
@@ -242,7 +251,7 @@ export const getProductVariants = async (productId: string) => {
   return variants;
 };
 
-export const getVariantById = async (variantId: string) => {
+export const getVariantById = async (variantId: string, viewer: { userId: string; userType?: string }) => {
   const variant = await prisma.productVariant.findUnique({
     where: { id: variantId },
     include: {
@@ -258,6 +267,7 @@ export const getVariantById = async (variantId: string) => {
   if (!variant) {
     throw new AppError('Variant not found', 404, 'VARIANT_NOT_FOUND');
   }
+  await assertProductOwner(variant.productId, viewer);
 
   return variant;
 };

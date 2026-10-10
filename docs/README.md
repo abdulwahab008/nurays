@@ -7,6 +7,8 @@ Start with the [main README](../README.md): what Nuray does, how to run it, conf
 | [ARCHITECTURE.md](ARCHITECTURE.md) | Developers | Components, request lifecycle, data model, jobs, real-time, scaling |
 | [SYSTEM_FLOWS_AND_PROCESSES.md](SYSTEM_FLOWS_AND_PROCESSES.md) | Everyone | How each flow works step by step: sign-up, listing, ordering, payment, delivery, refunds, payouts |
 | [BUSINESS_RULES.md](BUSINESS_RULES.md) | Owners, operators | Every rule with its number: totals and GST, commission, delivery prices, rider pay and cash, timeouts, ranking |
+| [PRODUCTION_READINESS_AUDIT.md](PRODUCTION_READINESS_AUDIT.md) | Owners, developers, operators | Launch audit: findings with status, security and performance reports, rider navigation fix, store launch plan, pre-launch checklist and recommendation |
+| [OPERATIONS_AND_LOGGING.md](OPERATIONS_AND_LOGGING.md) | DevOps, security | What is logged, what to keep and for how long, alerts, backups and infrastructure checklist |
 | [ADMIN_GUIDE.md](ADMIN_GUIDE.md) | Admins | Every admin screen: what it's for and what each action does |
 | [HUB_OPERATIONS_MANUAL.md](HUB_OPERATIONS_MANUAL.md) | Hub managers | Running a hub from the hub console |
 | [API_DOCUMENTATION.md](API_DOCUMENTATION.md) | Developers | Every API route: who can call it, what it takes and returns |

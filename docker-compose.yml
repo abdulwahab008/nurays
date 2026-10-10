@@ -10,6 +10,13 @@
 #   docker compose down --volumes --remove-orphans
 #   docker compose build --no-cache
 
+# Container logs are rotated on the host (3 × 10 MB per service) instead of growing without bound.
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
 services:
   backend:
     build:
@@ -17,6 +24,7 @@ services:
       dockerfile: Dockerfile
     container_name: nuray-backend
     restart: unless-stopped
+    logging: *logging
     # Room for the graceful shutdown (drain, finish requests and jobs) before Docker kills it.
     stop_grace_period: 30s
     ports:
@@ -61,8 +69,11 @@ services:
         NEXT_PUBLIC_SUPPORT_EMAIL: ${NEXT_PUBLIC_SUPPORT_EMAIL:-}
         NEXT_PUBLIC_LEGAL_REVIEWED: ${NEXT_PUBLIC_LEGAL_REVIEWED:-false}
         NEXT_PUBLIC_SENTRY_DSN: ${NEXT_PUBLIC_SENTRY_DSN:-}
+        NEXT_PUBLIC_MAP_TILE_URL: ${NEXT_PUBLIC_MAP_TILE_URL:-}
+        NEXT_PUBLIC_MAP_ATTRIBUTION: ${NEXT_PUBLIC_MAP_ATTRIBUTION:-}
     container_name: nuray-frontend
     restart: unless-stopped
+    logging: *logging
     ports:
       - "3000:3000"
     depends_on:

@@ -15,6 +15,7 @@ import {
   getPendingRiders,
   approveRejectRider,
   getAuditLogs,
+  exportAuditLogs,
 } from '../controllers/admin.controller';
 import {
   getRidersMoney,
@@ -23,6 +24,7 @@ import {
   createRiderPayout,
   createRiderAdjustment,
   updateRiderCashLimit,
+  updateRiderCommunity,
 } from '../controllers/admin-rider.controller';
 import {
   getUsers,
@@ -47,7 +49,8 @@ import {
   deletePlatformPromotion,
 } from '../controllers/admin-tools.controller';
 import { createPromotionSchema, updatePromotionSchema } from '../validators/promotion.validator';
-import { auditWrites } from '../middleware/audit';
+import { auditDenied, auditWrites } from '../middleware/audit';
+import { enforceStaffPermissions } from '../middleware/staff';
 import { adminGetTickets, adminGetTicketDetail, adminReplyToTicket } from '../controllers/support.controller';
 import { authenticate, authorize } from '../middleware/auth.middleware';
 import { validate } from '../middleware/validation.middleware';
@@ -63,6 +66,10 @@ import {
   riderSettlementSchema,
   riderAdjustmentSchema,
   riderCashLimitSchema,
+  riderCommunitySchema,
+  createStaffSchema,
+  staffRoleSchema,
+  staffPasswordSchema,
   accountStatusSchema,
   hubManagerSchema,
   createCommunitySchema,
@@ -73,15 +80,27 @@ import {
   assignHubManagerSchema,
 } from '../validators/admin.validator';
 import { adminReplySchema } from '../validators/support.validator';
+import { getStaff, postStaff, patchStaffRole, postStaffStatus, postStaffPassword, deleteStaff, getApprovalQueues } from '../controllers/admin-staff.controller';
 
 const router = Router();
 
 // All routes require admin authentication
+router.use(auditDenied('admin'));
 router.use(authenticate);
 router.use(authorize('admin'));
+router.use(enforceStaffPermissions);
 router.use(auditWrites('admin'));
 
+router.get('/approvals', getApprovalQueues);
+router.get('/staff', getStaff);
+router.post('/staff', validate(createStaffSchema), postStaff);
+router.patch('/staff/:id', validate(staffRoleSchema), patchStaffRole);
+router.post('/staff/:id/status', validate(accountStatusSchema), postStaffStatus);
+router.post('/staff/:id/password', validate(staffPasswordSchema), postStaffPassword);
+router.delete('/staff/:id', deleteStaff);
+
 router.get('/audit-logs', getAuditLogs);
+router.get('/audit-logs/export', exportAuditLogs);
 
 // Get pending sellers
 router.get('/pending-sellers', getPendingSellers);
@@ -112,6 +131,7 @@ router.post('/riders/:id/settlements', validate(riderSettlementSchema), createRi
 router.post('/riders/:id/payouts', validate(riderCashMovementSchema), createRiderPayout);
 router.post('/riders/:id/adjustments', validate(riderAdjustmentSchema), createRiderAdjustment);
 router.patch('/riders/:id/cash-limit', validate(riderCashLimitSchema), updateRiderCashLimit);
+router.patch('/riders/:id/community', validate(riderCommunitySchema), updateRiderCommunity);
 
 router.post('/riders/:id/status', validate(accountStatusSchema), updateRiderStatus);
 

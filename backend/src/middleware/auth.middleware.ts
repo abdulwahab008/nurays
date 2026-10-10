@@ -10,6 +10,8 @@ declare global {
     interface Request {
       user?: JWTPayload & {
         id: string;
+        /** Staff role of an admin account: super_admin, admin or support (null for everyone else). */
+        staffRole?: string | null;
       };
     }
   }
@@ -39,7 +41,7 @@ export const authenticate = async (
     // Verify user still exists and is active
     const user = await prisma.user.findUnique({
       where: { id: payload.userId },
-      select: { id: true, status: true, userType: true, tokensValidAfter: true },
+      select: { id: true, status: true, userType: true, staffRole: true, tokensValidAfter: true },
     });
 
     if (!user) {
@@ -61,6 +63,7 @@ export const authenticate = async (
     req.user = {
       ...payload,
       userType: user.userType,
+      staffRole: user.staffRole,
       id: payload.userId,
     };
     setLogUser(payload.userId);
@@ -92,13 +95,14 @@ export const optionalAuthenticate = async (
 
       const user = await prisma.user.findUnique({
         where: { id: payload.userId },
-        select: { id: true, status: true, userType: true, tokensValidAfter: true },
+        select: { id: true, status: true, userType: true, staffRole: true, tokensValidAfter: true },
       });
 
       if (user && user.status === 'active' && !isTokenRevoked(payload, user.tokensValidAfter)) {
         req.user = {
           ...payload,
           userType: user.userType,
+          staffRole: user.staffRole,
           id: payload.userId,
         };
         setLogUser(payload.userId);

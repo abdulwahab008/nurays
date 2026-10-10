@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
+import { getStackedDiscountedPrice } from '@/lib/pricing';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { productService } from '@/lib/services/product.service';
@@ -38,19 +39,10 @@ function getPromotionLabel(p: CatalogPromotion, t: BrowseT): string {
   return p.name || t('deal');
 }
 
-function getStackedDiscountedPrice(originalPrice: number, promos: CatalogPromotion[]): number {
-  if (!promos?.length) return originalPrice;
-  const sorted = [...promos].sort((a, b) => (a.type === 'percentage' && b.type === 'fixed' ? -1 : a.type === 'fixed' && b.type === 'percentage' ? 1 : 0));
-  const result = sorted.reduce((price, p) => {
-    if (p.type === 'percentage' && p.discountValue > 0) return price * (1 - p.discountValue / 100);
-    if (p.type === 'fixed' && p.discountValue > 0) return Math.max(0, price - p.discountValue);
-    return price;
-  }, originalPrice);
-  return Math.round(result);
-}
-
 interface ProductDetail {
   id: string;
+  availableToday?: boolean;
+  menuLabel?: string | null;
   name: string;
   nameUrdu?: string;
   description: string;
@@ -673,13 +665,13 @@ export default function ProductDetailPage() {
                 👩‍🍳
               </div>
               <div>
-                <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-0.5">
+                <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-0.5">
                   {t('homeKitchen')}
                 </p>
                 <p className="font-bold text-gray-900 flex items-center gap-2">
                   <span>{product.seller?.businessName ?? t('seller')}</span>
                   {product.seller?.isVerified && (
-                    <span className="text-[10px] font-bold text-emerald-800 bg-emerald-100 px-1.5 py-0.5 rounded">
+                    <span className="text-[11px] font-bold text-emerald-800 bg-emerald-100 px-1.5 py-0.5 rounded">
                       {t('verifiedChef')}
                     </span>
                   )}
@@ -701,7 +693,7 @@ export default function ProductDetailPage() {
                 />
               </button>
               <div className="text-end">
-                <p className="text-[10px] text-gray-400 font-bold uppercase">{t('rating')}</p>
+                <p className="text-[11px] text-gray-400 font-bold uppercase">{t('rating')}</p>
                 <p className="font-black text-sm text-gray-900">{product.seller?.rating ? `★ ${product.seller.rating.toFixed(1)}` : t('new')}</p>
               </div>
             </div>
@@ -943,19 +935,24 @@ export default function ProductDetailPage() {
 
           {/* Action Buttons: Add to Bag & Buy Now */}
           <div className="pt-2 space-y-2">
+            {product.menuLabel && (
+              <p className={`text-sm font-semibold rounded-xl px-3 py-2 ${product.availableToday === false ? 'bg-amber-50 text-amber-800 border border-amber-200' : 'bg-emerald-50 text-emerald-800 border border-emerald-200'}`} data-testid="menu-note">
+                {product.availableToday === false ? t('notOnMenuToday', { days: product.menuLabel }) : t('onMenuNote', { days: product.menuLabel })}
+              </p>
+            )}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <Button
                 onClick={handleAddToCart}
                 variant="dark"
                 className="w-full h-12 text-sm font-bold bg-[#0C1016] text-white hover:bg-black rounded-xl"
-                disabled={maxQty < quantity || addToCartLoading}
+                disabled={maxQty < quantity || addToCartLoading || product.availableToday === false}
               >
                 {addToCartLoading ? t('adding') : t('addToBag', { amount: formatPrice(unitPrice * quantity) })}
               </Button>
               <Button
                 onClick={handleBuyNow}
                 className="w-full h-12 text-sm font-bold bg-gradient-to-r from-[#FF5500] to-[#FF2A00] hover:brightness-110 text-white shadow-sm rounded-xl"
-                disabled={maxQty < quantity || addToCartLoading}
+                disabled={maxQty < quantity || addToCartLoading || product.availableToday === false}
               >
                 {t('buyNow')}
               </Button>

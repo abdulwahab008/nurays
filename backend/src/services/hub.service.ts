@@ -1,4 +1,5 @@
 import prisma from '../config/database';
+import { searchTerm } from '../utils/search';
 import { AppError } from '../middleware/errorHandler';
 import { sellableBatchWhere } from '../utils/hubStock';
 
@@ -83,12 +84,13 @@ export class HubService {
       };
     }
 
-    if (filters.search) {
+    const inventoryTerm = searchTerm(filters.search);
+    if (inventoryTerm) {
       where.product = {
         ...where.product,
         OR: [
-          { name: { contains: filters.search, mode: 'insensitive' } },
-          { nameUrdu: { contains: filters.search, mode: 'insensitive' } },
+          { name: { contains: inventoryTerm, mode: 'insensitive' } },
+          { nameUrdu: { contains: inventoryTerm, mode: 'insensitive' } },
         ],
       };
     }
@@ -355,11 +357,12 @@ export class HubService {
       }
     }
 
-    if (filters.search) {
+    const batchTerm = searchTerm(filters.search);
+    if (batchTerm) {
       where.OR = [
-        { batchNumber: { contains: filters.search, mode: 'insensitive' } },
-        { barcode: { contains: filters.search, mode: 'insensitive' } },
-        { product: { name: { contains: filters.search, mode: 'insensitive' } } },
+        { batchNumber: { contains: batchTerm, mode: 'insensitive' } },
+        { barcode: { contains: batchTerm, mode: 'insensitive' } },
+        { product: { name: { contains: batchTerm, mode: 'insensitive' } } },
       ];
     }
 

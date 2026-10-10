@@ -40,7 +40,16 @@ interface OrderDetail {
     totalPrice: number;
     seller?: { businessName: string };
   }>;
-  statusHistory?: Array<{ status: string; notes?: string; createdAt: string }>;
+  statusHistory?: Array<{ status: string; notes?: string; createdAt: string; changedByName?: string | null }>;
+  investigation?: {
+    rider: { name: string | null; phone: string | null; email: string | null; vehicle: string } | null;
+    paymentAttempts: Array<{ id: string; gateway: string; tracker: string; amount: number; status: string; settledVia: string | null; createdAt: string }>;
+    walletTransactions: Array<{ id: string; transactionType: string; amount: number; status: string; description: string | null; createdAt: string }>;
+    ledgerEntries: Array<{ id: string; transactionType: string; accountType: string; entryType: string; amount: number; description: string | null; createdAt: string }>;
+    riderLedgerEntries: Array<{ id: string; type: string; amount: number; note: string | null; createdAt: string }>;
+    supportTickets: Array<{ id: string; ticketNumber: string; subject: string; status: string; priority: string; createdAt: string }>;
+    adminActions: Array<{ id: string; action: string; status: number | null; details: unknown; createdAt: string; admin: string | null }>;
+  };
   refunds?: Array<{
     id: string;
     amount: number;
@@ -606,6 +615,45 @@ export default function AdminOrderDetailPage() {
                   </div>
                 )}
 
+                {order.investigation && (
+                  <div data-testid="order-investigation" className="space-y-4">
+                    <h2 className="text-sm font-medium text-gray-500 uppercase">Investigation</h2>
+                    {order.investigation.rider && (
+                      <p className="text-sm text-gray-700" data-testid="inv-rider">
+                        Rider: <strong>{order.investigation.rider.name || 'Unnamed'}</strong>
+                        {order.investigation.rider.phone && <> · <span data-ltr>{order.investigation.rider.phone}</span></>}
+                        {order.investigation.rider.vehicle && <> · {order.investigation.rider.vehicle}</>}
+                      </p>
+                    )}
+                    {order.investigation.supportTickets.length > 0 && (
+                      <div data-testid="inv-tickets">
+                        <p className="text-xs font-medium text-gray-500 mb-1">Complaints on this order</p>
+                        <ul className="text-sm text-gray-700 space-y-1">
+                          {order.investigation.supportTickets.map((t) => (
+                            <li key={t.id}>{t.ticketNumber} · {t.subject} · <span className="font-medium">{t.status.replace('_', ' ')}</span> · {t.priority}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                    {[
+                      ['Payment attempts', order.investigation.paymentAttempts.map((a) => `${a.gateway} ${a.status} Rs ${a.amount}${a.settledVia ? ` via ${a.settledVia}` : ''} · ${formatDate(a.createdAt)}`)],
+                      ['Wallet movements', order.investigation.walletTransactions.map((w) => `${w.transactionType} Rs ${w.amount} (${w.status}) · ${formatDate(w.createdAt)}`)],
+                      ['Ledger entries', order.investigation.ledgerEntries.map((l) => `${l.transactionType} ${l.entryType} Rs ${l.amount} · ${formatDate(l.createdAt)}`)],
+                      ['Rider ledger', order.investigation.riderLedgerEntries.map((l) => `${l.type} Rs ${l.amount}${l.note ? ` · ${l.note}` : ''} · ${formatDate(l.createdAt)}`)],
+                      ['Admin actions on this order', order.investigation.adminActions.map((a) => `${a.action.replace(/^admin:/, '')} by ${a.admin || 'unknown'} (${a.status ?? '?'}) · ${formatDate(a.createdAt)}`)],
+                    ].map(([title, rows]) => (
+                      (rows as string[]).length > 0 && (
+                        <details key={title as string} className="text-sm" open={title === 'Admin actions on this order'}>
+                          <summary className="cursor-pointer text-xs font-medium text-gray-500">{title as string} ({(rows as string[]).length})</summary>
+                          <ul className="mt-1 space-y-0.5 text-gray-600 font-mono text-xs">
+                            {(rows as string[]).map((r, i) => <li key={i}>{r}</li>)}
+                          </ul>
+                        </details>
+                      )
+                    ))}
+                  </div>
+                )}
+
                 {order.statusHistory && order.statusHistory.length > 0 && (
                   <div>
                     <h2 className="text-sm font-medium text-gray-500 uppercase mb-2">Status History</h2>
@@ -614,6 +662,7 @@ export default function AdminOrderDetailPage() {
                         <li key={i}>
                           <span className="font-medium text-gray-700">{h.status}</span>
                           {h.notes && ` — ${h.notes}`}
+                          {h.changedByName && <span className="text-gray-500"> · by {h.changedByName}</span>}
                           <span className="text-gray-400 ms-2">{formatDate(h.createdAt)}</span>
                         </li>
                       ))}

@@ -95,7 +95,7 @@ export default function SellerRegisterPage() {
   }, []);
 
   useEffect(() => {
-    const token = typeof window !== 'undefined' ? (sessionStorage.getItem('access_token') || localStorage.getItem('access_token')) : null;
+    const token = apiClient.getAccessToken();
     if (!token && !isAuthenticated) {
       router.push('/login');
       return;

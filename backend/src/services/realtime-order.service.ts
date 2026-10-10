@@ -383,13 +383,14 @@ export class RealtimeOrderService {
       updatedAt: new Date().toISOString(),
     };
 
-    // The order's room and the customer (who may only have their orders list open), once each.
+    // The customer (wherever they are in the app) and admins: the order's room also holds the
+    // kitchens, who see the status but not where the rider is (see getOrderDetails).
     const order = await prisma.order.findUnique({
       where: { id: orderId },
       select: { customerId: true },
     });
     socketManager.emitToRooms(
-      [`order:${orderId}`, ...(order?.customerId ? [`user:${order.customerId}`] : [])],
+      [...(order?.customerId ? [`user:${order.customerId}`] : []), 'role:admin'],
       'order:delivery:tracking',
       trackingData
     );

@@ -2,7 +2,19 @@
 
 For the people who run Nuray day to day. Every screen below lives under `/admin` (code: `frontend-web/app/admin/*`). All admin API routes require an admin account and every change (anything that is not a read) is written to the audit log. The numbers behind the rules mentioned here are in `BUSINESS_RULES.md`.
 
-Sign in at `/admin/login`. The menu on the left is the list of screens below, in the same order.
+Sign in at `/admin/login`. The menu on the left is the list of screens below, in the same order, limited to what your role may use.
+
+## Roles
+
+There is one **super admin** (full access). The super admin adds the other staff at `/admin/staff`: an **admin** (runs operations and money) or a **customer support** person (resolves complaints and looks things up; no money, no approvals, no settings, no audit log). Support staff start at Approvals and see only complaints and failed deliveries there. Details and the exact permissions: `SECURITY_AND_COMPLIANCE.md`, "Staff roles".
+
+### Staff: `/admin/staff` (super admin only)
+
+Add a person (name, email, role, first password of at least 12 characters that you give them yourself), change their role, suspend or reactivate, reset their password, or remove their staff access (the account becomes an ordinary customer account). Any of these signs them out immediately. The super admin row and your own row cannot be changed here.
+
+### Approvals: `/admin/approvals`
+
+One page for everything waiting on a decision, with how long the oldest has waited: kitchen applications, rider applications, new or changed dishes, category requests, payout requests, refunds, transfers to check, failed deliveries and complaints. A role sees only the queues it can act on. Admins and the super admin also get an in-app notification when a kitchen applies, a rider applies, a dish is added or changed, or a category is requested.
 
 ## Dashboard
 
@@ -58,7 +70,7 @@ New kitchens get the commission rate from Settings at the time they register (se
 
 ## Dishes (moderation)
 
-`/admin/products`. Every new dish starts as `pending` and is not visible to customers until approved. Filter: all, pending, approved, rejected.
+`/admin/products`. Every new dish starts as `pending` and is not visible to customers until approved. Filter: all, pending, approved, rejected. When a kitchen later changes what a dish *is* (name, description, category, type, ingredients, allergens, heating instructions, dietary tags or photos), it goes back to `pending` and off the store until staff approve again; price, stock and menu days are the kitchen's to change freely.
 
 - **Approve**: the dish becomes active and the kitchen is notified.
 - **Reject** (reason optional, defaults to "Product rejected"): the dish is switched off and the kitchen gets the reason by push.
@@ -153,7 +165,7 @@ Create a code: code (upper-case, no spaces), name for your records, % off or Rs 
 
 ## Support
 
-`/admin/support`. Customer support tickets; filter open, in progress, resolved, closed, all. Open a ticket to read the conversation, then reply and choose the status to set with the reply. Replying assigns the ticket to you; setting "resolved" records the time.
+`/admin/support`. Customer support tickets; filter open, in progress, resolved, closed, all. Search by subject, ticket number, order number or customer, and filter by priority. Open a ticket to read the conversation (it links to the order). Reply and choose the status to set with the reply: the customer is notified of every reply. Tick **Internal note** to write a note only admins see (shown in amber); status changes are kept in the history as internal lines. Replying assigns the ticket to you; setting "resolved" records the time. The order page shows the complaints raised on that order.
 
 ## Analytics
 
@@ -161,7 +173,9 @@ Create a code: code (upper-case, no spaces), name for your records, % off or Rs 
 
 ## Audit log
 
-`/admin/audit-log`. Every change made in the admin console, including attempts that were refused: who, what action on which record, the fields they sent (passwords, codes and tokens are redacted) and the outcome. Reading screens is not logged. Filter by area (orders, refunds, riders, kitchens, people, payouts, hubs, communities, promo codes, settings) or by a record id (for example an order id).
+`/admin/audit-log`. Every change made in the admin console, including attempts that were refused: who, what action on which record, the fields they sent (passwords, codes and tokens are redacted) and the outcome. Reading screens is not logged. Filter by area (orders, refunds, riders, kitchens, people, payouts, hubs, communities, promo codes, settings, support, categories, refused access, sign-ins), by a record id (for example an order id), by date range and by result (done or refused). **Export CSV** downloads what the filters show (at most 5,000 rows); the export is itself logged. Refused attempts at the admin area and admin sign-ins, wrong passwords, lockouts and logouts are recorded too. Rows cannot be edited or deleted.
+
+An order's page has an **Investigation** section: the rider and their phone, complaints on the order, payment attempts, wallet movements, ledger and rider-ledger entries, and every admin action taken on it. The status history names who made each change.
 
 ## Settings
 

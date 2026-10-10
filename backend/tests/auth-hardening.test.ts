@@ -6,17 +6,31 @@ const secret = process.env.JWT_SECRET as string;
 const base = { userId: 'u1', userType: 'customer', phone: '+923001234567' };
 const legacy = (expiresIn: string) => jwt.sign(base, secret, { expiresIn } as jwt.SignOptions); // no `typ`, like pre-fix tokens
 
-describe('legacy (typ-less) tokens', () => {
-  it('a legacy long-lived refresh token keeps working as a refresh token (no forced re-login on deploy)', () => {
-    expect(verifyRefreshToken(legacy('30d')).userId).toBe('u1');
-  });
-
-  it('a legacy short-lived ACCESS token can NOT mint refresh tokens', () => {
+describe('tokens without a typ claim', () => {
+  it('are not refresh tokens, however long they live', () => {
+    expect(() => verifyRefreshToken(legacy('30d'))).toThrow('Invalid or expired token');
     expect(() => verifyRefreshToken(legacy('24h'))).toThrow('Invalid or expired token');
   });
 
-  it('legacy tokens are still accepted as access tokens until they expire', () => {
-    expect(verifyToken(legacy('24h')).userId).toBe('u1');
+  it('are not access tokens either', () => {
+    expect(() => verifyToken(legacy('24h'))).toThrow('Invalid or expired token');
+  });
+
+  it('a refresh token cannot be used as an access token, nor an access token to refresh', () => {
+    const access = jwt.sign({ ...base, typ: 'access' }, secret, { expiresIn: '1h' } as jwt.SignOptions);
+    const refresh = jwt.sign({ ...base, typ: 'refresh' }, secret, { expiresIn: '30d' } as jwt.SignOptions);
+    expect(verifyToken(access).userId).toBe('u1');
+    expect(verifyRefreshToken(refresh).userId).toBe('u1');
+    expect(() => verifyToken(refresh)).toThrow('Invalid or expired token');
+    expect(() => verifyRefreshToken(access)).toThrow('Invalid or expired token');
+  });
+});
+
+describe('isTokenRevoked to the millisecond', () => {
+  it('a token issued a moment before the revocation is void, one issued a moment after is not (same second)', () => {
+    const at = new Date(1_700_000_000_500);
+    expect(isTokenRevoked({ iat: 1_700_000_000, iatMs: 1_700_000_000_100 }, at)).toBe(true);
+    expect(isTokenRevoked({ iat: 1_700_000_000, iatMs: 1_700_000_000_900 }, at)).toBe(false);
   });
 });
 

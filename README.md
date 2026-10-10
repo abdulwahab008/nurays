@@ -9,9 +9,9 @@ Gulshan-e-Iqbal, and every seller decides, community by community, whether they 
 - **Buyers** browse kitchens and dishes for their community, fill a cart (one kitchen per order: adding a dish from another kitchen asks to start a new cart), pay by
   cash on delivery, online (card, JazzCash or EasyPaisa through Safepay), the Nuray wallet, or a bank/mobile transfer
   to the kitchen, and follow the order live, including the rider's position on a map while it is on the way.
-- **Sellers** run a kitchen: products and variants, stock, orders, earnings, promotions, payouts, and their
+- **Sellers** run a kitchen: products and variants (each dish on a **fixed**, **weekly** or **daily** menu), stock, orders, earnings, promotions, payouts, and their
   **delivery terms per community** (see below). New orders arrive live, with push, email and SMS alerts.
-- **Riders** apply with their documents, claim delivery jobs, share their location while delivering, confirm delivery
+- **Riders** apply with their documents, are assigned jobs automatically (each rider serves a community; orders going the same way are batched; jobs nobody can take stay in an open pool to claim), share their location while delivering, confirm delivery
   with the customer's PIN, and see their earnings and the cash they hold.
 - **Hub centers** hold cold-chain stock (batches with expiry dates, temperature logs) for products fulfilled from a hub;
   each hub's assigned manager runs it from `/hub`.
@@ -30,7 +30,7 @@ Gulshan-e-Iqbal, and every seller decides, community by community, whether they 
   that matches no community cannot order from a seller with community rules until the buyer picks one.
 - The seller picks **who delivers**: the Nuray rider fleet or **self-delivery** (the seller keeps the fee they
   charged; no rider job is created). Items fulfilled from a hub are always delivered by the platform.
-- **Nuray's delivery prices** (when a Nuray rider delivers; the fee is platform revenue): within a community, the fixed
+- **Nuray's delivery prices** (when a Nuray rider delivers; the fee is platform revenue, **paid by the kitchen** out of its earnings, so delivery is free for the customer): within a community, the fixed
   fee an admin sets for that community (admin → Communities); between two communities an admin has priced as a pair
   (admin → Communities → "Prices between two communities"), that price in both directions; to any other community, that community's base fee for
   other communities plus a per-km rate beyond the included km, rounded up to Rs 10, up to a maximum distance (admin →
@@ -69,7 +69,7 @@ Gulshan-e-Iqbal, and every seller decides, community by community, whether they 
 
 | Layer | What |
 |---|---|
-| Backend | Node.js 20, Express 5, TypeScript, Prisma 6, PostgreSQL, Redis (ioredis, BullMQ jobs, Socket.IO adapter, rate limits), Socket.IO, Zod, pino logs, Sentry |
+| Backend | Node.js 22, Express 5, TypeScript, Prisma 6, PostgreSQL, Redis (ioredis, BullMQ jobs, Socket.IO adapter, rate limits), Socket.IO, Zod, pino logs, Sentry |
 | Files | local disk or any S3-compatible store (S3, R2, B2, MinIO); images resized to WebP with sharp; private files behind signed links |
 | Notifications | in-app + live socket, web push (VAPID), email (SMTP/Gmail), SMS (Twilio) |
 | Frontend | Next.js 16 (App Router), React 19, Tailwind CSS 4, Zustand, React Hook Form, Leaflet, Socket.IO client; English and Urdu (RTL) |
@@ -105,7 +105,7 @@ docker-compose.yml                       backend + frontend containers
 
 ### Prerequisites
 
-- Node.js 20+
+- Node.js 22+
 - PostgreSQL 15+ (with the bundled `pg_trgm` extension, as on every major managed service)
 - Redis 7+: required in production, optional in development
 
@@ -148,7 +148,7 @@ After `npm run seed:e2e`:
 | Customer | register at `/register` | works immediately |
 | Rider | register at `/register`, then fill in the rider application (vehicle, CNIC, licence photos) | needs admin approval at `/admin/riders` → Applications |
 | Hub manager | an admin assigns an existing account at `/admin/hubs/manage` | `/hub` |
-| Admin | none by default; create one with `node scripts/create-admin.js <email> <password> <name>` (from `backend/`) | http://localhost:3000/admin/login |
+| Super admin (the only one) | none by default; create it with `node scripts/create-admin.js <email> <password> <name>` (from `backend/`), then add admins and support staff at `/admin/staff` | http://localhost:3000/admin/login |
 
 See [`docs/ACCOUNT_CREDENTIALS.md`](docs/ACCOUNT_CREDENTIALS.md) for how each role is created and approved.
 

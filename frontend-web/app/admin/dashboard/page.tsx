@@ -64,6 +64,12 @@ export default function AdminDashboardPage() {
       return;
     }
 
+    // The dashboard shows platform figures; staff without that access start at their approvals.
+    if (user?.permissions && !user.permissions.includes('read.finance')) {
+      router.replace('/admin/approvals');
+      return;
+    }
+
     loadDashboardData();
   }, [isAuthenticated, user, router]);
 
@@ -86,7 +92,6 @@ export default function AdminDashboardPage() {
           setPendingCategoryRequests(count);
         }
       } catch (error) {
-        console.log('Category requests endpoint not available');
       }
 
       // Load platform stats
@@ -96,7 +101,6 @@ export default function AdminDashboardPage() {
           setStats(statsResponse.data.data);
         }
       } catch (error) {
-        console.log('Stats endpoint not available yet');
       }
     } catch (error: any) {
       const errorMessage = error.response?.data?.error?.message || error.response?.data?.message || 'Failed to load dashboard';

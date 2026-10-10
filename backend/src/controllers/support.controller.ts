@@ -1,4 +1,5 @@
 import { Request, Response } from 'express';
+import { qstr } from '../utils/query';
 import supportService from '../services/support.service';
 import { AppError } from '../middleware/errorHandler';
 
@@ -21,7 +22,7 @@ export const getUserTickets = async (req: Request, res: Response) => {
     throw new AppError('Authentication required', 401, 'AUTH_REQUIRED');
   }
 
-  const status = req.query.status as string | undefined;
+  const status = qstr(req.query.status);
   const page = req.query.page ? Number(req.query.page) : 1;
   const limit = req.query.limit ? Number(req.query.limit) : 20;
 
@@ -60,11 +61,12 @@ export const addCustomerMessage = async (req: Request, res: Response) => {
 };
 
 export const adminGetTickets = async (req: Request, res: Response) => {
-  const status = req.query.status as string | undefined;
+  const status = qstr(req.query.status);
   const page = req.query.page ? Number(req.query.page) : 1;
   const limit = req.query.limit ? Number(req.query.limit) : 20;
 
-  const result = await supportService.adminGetTickets({ status, page, limit });
+  const str = (v: unknown) => (typeof v === 'string' && v ? v : undefined);
+  const result = await supportService.adminGetTickets({ status, priority: str(req.query.priority), assignedTo: str(req.query.assignedTo), search: str(req.query.search), page, limit });
 
   res.status(200).json({
     success: true,
@@ -86,7 +88,7 @@ export const adminReplyToTicket = async (req: Request, res: Response) => {
     throw new AppError('Authentication required', 401, 'AUTH_REQUIRED');
   }
 
-  const ticket = await supportService.adminReply(req.params.id, req.user.userId, req.body.message, req.body.status);
+  const ticket = await supportService.adminReply(req.params.id, req.user.userId, req.body.message, req.body.status, req.body.internal === true);
 
   res.status(201).json({
     success: true,

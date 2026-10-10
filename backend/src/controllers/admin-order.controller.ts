@@ -98,9 +98,9 @@ export const processRefund = async (req: Request, res: Response) => {
   }
 
   const { id } = req.params;
-  const { refundAmount } = req.body;
+  const { refundAmount, reason } = req.body;
 
-  const result = await adminOrderService.processRefund(id, req.user.userId, refundAmount);
+  const result = await adminOrderService.processRefund(id, req.user.userId, refundAmount, reason);
 
   res.status(200).json({
     success: true,

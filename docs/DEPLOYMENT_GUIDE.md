@@ -8,7 +8,7 @@ Every backend setting is documented in [`backend/.env.example`](../backend/.env.
 
 | Piece | Notes |
 |---|---|
-| Backend (Node 20, Express) | Stateless; run one or more instances behind a load balancer. Port 3001 in the Docker image. Serves the REST API under `/api/v1` and Socket.IO on the same port. |
+| Backend (Node 22, Express) | Stateless; run one or more instances behind a load balancer. Port 3001 in the Docker image. Serves the REST API under `/api/v1` and Socket.IO on the same port. |
 | Frontend (Next.js 16) | `output: "standalone"` server on port 3000. It also proxies `/uploads`, `/media` and `/files` to the backend (`frontend-web/next.config.ts`), using `NEXT_PUBLIC_API_URL` at build time. |
 | PostgreSQL 15+ | Must allow `CREATE EXTENSION pg_trgm` (the baseline migration creates it; search typo tolerance uses it). |
 | Redis 7+ | Required in production (see "Several instances"). |
@@ -19,8 +19,10 @@ Every backend setting is documented in [`backend/.env.example`](../backend/.env.
 | VAPID keys | Optional. Without them there is no web push. |
 | Sentry (or GlitchTip) | Optional error tracking, backend and browser. |
 
-Put TLS in front of both services. The backend sets `trust proxy` to 1, so there must be exactly one proxy hop
-between the internet and the app (`backend/src/index.ts`); rate limits key on the client IP it reports.
+Put TLS in front of both services and send `Strict-Transport-Security: max-age=31536000; includeSubDomains` from
+the TLS terminator once every hostname is served over https (the apps do not set it themselves, so a plain-http
+staging host is never locked out). The backend trusts `TRUST_PROXY` hops (default 1), so the number of proxies
+between the internet and the app must match (`backend/src/index.ts`); rate limits key on the client IP it reports.
 
 Browser-facing hostnames: the website (`FRONTEND_URL`, also `CORS_ORIGIN`) and the API (`BASE_URL`). The backend
 allows exactly one CORS origin, so serve the site from a single origin.
@@ -39,10 +41,10 @@ Required means the server will not start in production without it (see "Startup 
 | `DATABASE_URL` | yes | PostgreSQL connection string. |
 | `REDIS_URL` | yes (production) | |
 | `JWT_SECRET` | yes | 32+ characters, not a placeholder in production. `openssl rand -hex 32`. |
-| `JWT_EXPIRES_IN`, `JWT_REFRESH_EXPIRES_IN` | no | Defaults in `.env.example`: `24h`, `30d`. |
+| `JWT_EXPIRES_IN`, `JWT_REFRESH_EXPIRES_IN` | no | Defaults: `1h` (the app renews it with the refresh token) and `30d`. |
 | `GOOGLE_CLIENT_ID` | no | Google sign-in; see [GOOGLE_OAUTH_SETUP.md](GOOGLE_OAUTH_SETUP.md). |
 | `FRONTEND_URL` | yes (production) | Must be `https://`. Used in email links. |
-| `CORS_ORIGIN` | no, but set it | The one browser origin allowed for HTTP and Socket.IO. Defaults to `http://localhost:3000`, so production must set it. |
+| `CORS_ORIGIN` | yes | The one browser origin allowed for HTTP and Socket.IO, an https:// origin (normally the same as `FRONTEND_URL`). Production refuses to start without it. |
 | `BASE_URL` | when Safepay is on | The API's public `https://` URL. |
 
 ### Email (one of two)
@@ -111,6 +113,8 @@ All `NEXT_PUBLIC_*` values are inlined into the JavaScript at build time. Changi
 | `NEXT_PUBLIC_LEGAL_COMPANY_NAME`, `NEXT_PUBLIC_LEGAL_ADDRESS`, `NEXT_PUBLIC_SUPPORT_EMAIL` | set before launch | Shown on the Terms, Privacy and Refund pages; bracketed placeholders appear until set. |
 | `NEXT_PUBLIC_LEGAL_REVIEWED` | no | Set `true` once a lawyer has reviewed the text to remove the "draft" notice. |
 | `NEXT_PUBLIC_ENABLE_DEMO_LOGIN` | no | Never `true` on a real site; it shows one-click demo accounts. |
+| `NEXT_PUBLIC_MAP_TILE_URL`, `NEXT_PUBLIC_MAP_ATTRIBUTION` | production | Build time. Map tiles default to the public OpenStreetMap server, whose policy allows only light use: set a tile provider you have an account with (its `{z}/{x}/{y}` URL and required attribution). |
+| `NOMINATIM_BASE_URL` | production | Server-side. Geocoder for address search and map-pin lookups; defaults to public Nominatim (one request a second, answers cached 10 minutes). Use your own or a paid one at real traffic. |
 | `NOMINATIM_USER_AGENT` | recommended | Server-side only (runtime, not build time). Contact string for OpenStreetMap's geocoder. |
 
 The Dockerfile and compose file also pass `NEXT_PUBLIC_SAFEPAY_SANDBOX`; nothing in the frontend code reads it.
@@ -158,6 +162,26 @@ DATABASE_URL=... npm run db:baseline   # once, for a database created before the
   if the database differs from the baseline schema. It uses `ts-node` (a dev dependency), so run it from a checkout
   with dev dependencies, not from the production image.
 
+## Rollback and failed migrations
+
+Migrations are forward-only SQL (Prisma writes no down scripts), so the safety net is a backup and the rule that
+every migration is expand-only (add tables, columns and indexes; never drop or add a NOT NULL without a default
+in the same release as the code that stops using the old shape).
+
+1. **Before every release that carries a migration**, take a database snapshot (`pg_dump -Fc`, or the managed
+   provider's point-in-time snapshot) and note the image tag currently running.
+2. **Apply migrations as a release step** (`DATABASE_URL=... npm run db:migrate` from a checkout of the release
+   commit), not only through `MIGRATE_ON_START`: a failing migration at container start crash-loops the service
+   under `restart: unless-stopped` and the runtime image has no tooling to repair it.
+3. **If `migrate deploy` fails**: read the `_prisma_migrations` table to see which migration is marked as failed,
+   fix the cause by hand (or restore the snapshot if the migration partly applied), then mark it with
+   `npx prisma migrate resolve --rolled-back <migration_name>` (or `--applied` if it did complete) from a checkout,
+   and run `migrate deploy` again.
+4. **Rolling the code back** is a redeploy of the previous image tag (`ghcr.io/.../backend:sha-<short>`); because
+   migrations are expand-only the previous code keeps working against the newer schema. Rolling the schema itself
+   back means restoring the snapshot, which loses writes made since: only do it within the release window.
+5. Rehearse 3 and 4 on staging once per quarter; the go-live checklist below includes the first rehearsal.
+
 ## Docker
 
 | File | What it does |
@@ -167,7 +191,14 @@ DATABASE_URL=... npm run db:baseline   # once, for a database created before the
 | `docker-compose.yml` | Builds both images for local use. Expects PostgreSQL and Redis on the host (`host.docker.internal`), mounts a named `uploads` volume, `stop_grace_period: 30s`, and starts the frontend after the backend is healthy. It is not a full production stack: it has no database, Redis, TLS or proxy. |
 | `.github/workflows/docker-publish.yml` | On pushes to `main` and `v*` tags (or manually), builds both images and pushes them to GitHub Container Registry as `ghcr.io/<owner>/nuray-backend` and `nuray-frontend`. Tags: `main` and `sha-<short>` on `main`; the version, `major.minor` and `latest` on `v*` tags. Frontend build args come from repository variables (`vars.NEXT_PUBLIC_API_URL`, and so on). Without them it bakes in `http://localhost:3001/api/v1`, so set the variables before using these images in production. |
 
-`.github/workflows/ci.yml` (typecheck, build, Docker build, Playwright) runs on pull requests and on `main`.
+Both runtime images take Debian's pending security updates at build time and contain `node` only: npm, npx, corepack
+and yarn are removed after the build, which takes their bundled libraries out of the image scan. Run one-off Prisma
+commands from a checkout of the release, or inside the backend container as `node_modules/.bin/prisma ...`
+(`MIGRATE_ON_START` uses the same path).
+
+`.github/workflows/ci.yml` (typecheck, build, Docker build with a Trivy scan of both images, Playwright) runs on pull
+requests and on `main`. The scan fails on fixable high and critical vulnerabilities; accepted exceptions live in
+`.trivyignore` at the repository root, each with a reason and an expiry date.
 
 ## Health and readiness
 
@@ -204,6 +235,17 @@ mandatory in production):
   in the process that queued it and is lost if that process dies.
 - Timed sweeps (below) take a Postgres advisory lock per job, so only one instance runs a given sweep at a time.
 - Files: with `STORAGE_DRIVER=local` every instance needs the same volume. Use `s3` once you run more than one.
+- Behind a load balancer or CDN: `TRUST_PROXY` is the number of proxy hops in front of the API (default `1`; `2`
+  behind a CDN plus a load balancer; `0` when exposed directly; or an address list such as `loopback, 10.0.0.0/8`).
+  Getting it wrong either rate-limits everyone as one address or lets a client spoof its address. Idle keep-alive
+  connections are held for `KEEP_ALIVE_TIMEOUT_MS` (default 65 000 ms): keep it above the balancer's idle timeout
+  (60 s on AWS ALB and most nginx setups) or the balancer will hit sockets the API has just closed and answer 502.
+- Database connections: Prisma opens a pool per instance, sized by default from the host's CPU count
+  (`2 × cores + 1`), not from how many instances run. Set it explicitly on `DATABASE_URL`
+  (`?connection_limit=10&pool_timeout=10`) and keep `instances × connection_limit + 10` below PostgreSQL's
+  `max_connections` (100 by default). Beyond about five instances put PgBouncer (transaction mode) in front
+  and add `&pgbouncer=true`. The load test in `docs/PRODUCTION_READINESS_AUDIT.md` showed that a larger pool
+  does not make the API faster on 4 cores: the limit there is CPU, so scale instances, not the pool.
 
 ## Background jobs
 

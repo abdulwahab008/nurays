@@ -52,3 +52,22 @@ describe('delivery fee ownership', () => {
     });
   });
 });
+
+describe('kitchen-paid delivery', () => {
+  const breakdown = [
+    { sellerId: 's1', fee: 120, provider: 'platform', paidBy: 'seller' },
+    { sellerId: 's2', fee: 80, provider: 'self', paidBy: 'customer' },
+  ];
+  it('a Nuray delivery fee is what the kitchen pays; a self-delivery fee is not', () => {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const { sellerPaidDeliveryFor } = require('../src/utils/deliveryEarnings');
+    expect(sellerPaidDeliveryFor(breakdown, 's1')).toBe(120);
+    expect(sellerPaidDeliveryFor(breakdown, 's2')).toBe(0);
+    expect(sellerPaidDeliveryFor(null, 's1')).toBe(0);
+  });
+  it('older orders (no paidBy) are treated as paid by the customer', () => {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const { sellerPaidDeliveryFor } = require('../src/utils/deliveryEarnings');
+    expect(sellerPaidDeliveryFor([{ sellerId: 's1', fee: 100, provider: 'platform' }], 's1')).toBe(0);
+  });
+});

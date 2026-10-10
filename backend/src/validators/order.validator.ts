@@ -16,7 +16,7 @@ export const createOrderSchema = z.object({
   deliverySlotDate: z.string().optional(),
   deliverySlotTime: z.string().optional(),
   paymentMethod: z.enum(['jazzcash', 'easypaisa', 'bank', 'cod', 'wallet', 'card', 'safepay']),
-  promotionCode: z.string().optional(),
+  promotionCode: z.string().trim().max(50).optional(),
   deliveryInstructions: z.string().max(500).optional(),
 });
 
@@ -25,8 +25,8 @@ export const cancelOrderSchema = z.object({
 });
 
 export const getOrdersQuerySchema = z.object({
-  page: z.string().optional().transform((val) => (val ? parseInt(val, 10) : 1)),
-  limit: z.string().optional().transform((val) => (val ? parseInt(val, 10) : 20)),
+  page: z.coerce.number().int().min(1).optional(),
+  limit: z.coerce.number().int().min(1).max(100).optional(),
   status: z.enum([
     'pending',
     'confirmed',
@@ -41,3 +41,24 @@ export const getOrdersQuerySchema = z.object({
   ]).optional(),
 });
 
+
+export const submitManualPaymentSchema = z.object({
+  referenceNumber: z.string().trim().min(1).max(100),
+  senderName: z.string().trim().max(120).optional(),
+  senderAccount: z.string().trim().max(100).optional(),
+  proofUrl: z.string().max(400).optional(),
+  notes: z.string().max(500).optional(),
+});
+
+export const confirmManualPaymentSchema = z.object({
+  confirmed: z.boolean(),
+  disputeReason: z.string().max(500).optional(),
+});
+
+export const sendOrderMessageSchema = z.object({
+  message: z.string().max(2000).optional(),
+  role: z.enum(['customer', 'seller', 'rider', 'admin']).optional(),
+  messageType: z.enum(['text', 'voice', 'image']).optional(),
+  mediaUrl: z.string().max(400).optional(),
+  duration: z.number().min(0).max(600).optional(),
+});

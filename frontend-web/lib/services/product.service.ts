@@ -2,6 +2,10 @@ import { apiClient, ApiResponse } from '../api-client';
 
 export interface Product {
   id: string;
+  /** false when a weekly or daily dish is not on the menu today. */
+  availableToday?: boolean;
+  /** e.g. "Mon, Wed, Fri" or "Today's menu"; null for a fixed menu. */
+  menuLabel?: string | null;
   name: string;
   nameUrdu?: string;
   slug: string;

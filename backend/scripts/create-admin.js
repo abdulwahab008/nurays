@@ -1,7 +1,11 @@
 /**
- * Script to create an admin user
- * Usage: node scripts/create-admin.js <email> <password> <fullName>
- * Example: node scripts/create-admin.js admin@frozennuray.com password123 "Admin User"
+ * Script to create the SUPER ADMIN (the one account that can add every other staff member).
+ * Usage: node scripts/create-admin.js <email> <password> <fullName> [--role=admin|support]
+ * Example: node scripts/create-admin.js owner@nuray.pk 'a-long-password' "Owner"
+ *
+ * There is exactly one super admin. If none exists yet, this creates it. If one exists, add
+ * staff from the app (/admin/staff, signed in as the super admin); --role=admin|support here
+ * is only a recovery route for when nobody can sign in.
  */
 
 const { PrismaClient } = require('@prisma/client');
@@ -18,10 +22,23 @@ async function createAdmin() {
     process.exit(1);
   }
 
-  const [email, password, fullName] = args;
+  const [email, password, fullName] = args.filter((a) => !a.startsWith('--'));
+  const roleArg = (args.find((a) => a.startsWith('--role=')) || '').slice(7);
+  if (roleArg && !['admin', 'support'].includes(roleArg)) {
+    console.error('--role must be admin or support');
+    process.exit(1);
+  }
   const normalizedEmail = email.toLowerCase().trim();
 
   try {
+    const superExists = (await prisma.user.count({ where: { staffRole: 'super_admin' } })) > 0;
+    if (superExists && !roleArg) {
+      console.error('A super admin already exists. Add staff from /admin/staff (signed in as the super admin),');
+      console.error('or pass --role=admin or --role=support to create one from here.');
+      process.exit(1);
+    }
+    const staffRole = superExists ? roleArg : 'super_admin';
+
     // Check if admin already exists
     const existingUser = await prisma.user.findFirst({
       where: { email: normalizedEmail },
@@ -34,7 +51,7 @@ async function createAdmin() {
       if (existingUser.userType !== 'admin') {
         await prisma.user.update({
           where: { id: existingUser.id },
-          data: { userType: 'admin' },
+          data: { userType: 'admin', staffRole },
         });
         console.log(`✅ Updated user to admin: ${normalizedEmail}`);
       } else {
@@ -69,6 +86,7 @@ async function createAdmin() {
         passwordHash: hashedPassword,
         phone: formattedPhone,
         userType: 'admin',
+        staffRole,
         emailVerified: true,
         phoneVerified: false,
         status: 'active',
@@ -83,7 +101,7 @@ async function createAdmin() {
       },
     });
 
-    console.log('✅ Admin user created successfully!');
+    console.log(`✅ ${staffRole === 'super_admin' ? 'Super admin' : 'Staff member (' + staffRole + ')'} created successfully!`);
     console.log('📧 Email:', admin.email);
     console.log('👤 Name:', admin.profile?.fullName);
     console.log('🔑 Password:', password);

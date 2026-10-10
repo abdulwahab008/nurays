@@ -459,7 +459,7 @@ export default function KitchensDirectoryPage() {
 
                   {/* Discount Ribbon — only when a dish really is discounted */}
                   {kitchen.hasDiscount && (
-                    <span className="absolute top-3 start-3 px-2.5 py-1 rounded-md text-white text-[10px] font-bold bg-[#FF5500] shadow-xs uppercase tracking-wider">
+                    <span className="absolute top-3 start-3 px-2.5 py-1 rounded-md text-white text-[11px] font-bold bg-[#FF5500] shadow-xs uppercase tracking-wider">
                       {tk('discounted')}
                     </span>
                   )}
@@ -489,7 +489,7 @@ export default function KitchensDirectoryPage() {
                   )}
 
                   {/* Verified Kitchen Badge */}
-                  <span className="absolute bottom-3 start-3 px-2 py-0.5 rounded-md bg-emerald-600/90 backdrop-blur-xs text-white text-[10px] font-bold flex items-center gap-1">
+                  <span className="absolute bottom-3 start-3 px-2 py-0.5 rounded-md bg-emerald-600/90 backdrop-blur-xs text-white text-[11px] font-bold flex items-center gap-1">
                     <ShieldCheck className="w-3 h-3" />
                     <span>{verifiedBadge(kitchen.businessType, tb, tk)}</span>
                   </span>
@@ -566,7 +566,7 @@ export default function KitchensDirectoryPage() {
                       {kitchen.cuisine.map((c) => (
                         <span
                           key={c}
-                          className="px-2 py-0.5 rounded-md bg-slate-50 text-[10px] font-semibold text-slate-600 border border-slate-100"
+                          className="px-2 py-0.5 rounded-md bg-slate-50 text-[11px] font-semibold text-slate-600 border border-slate-100"
                         >
                           {c}
                         </span>
@@ -662,7 +662,7 @@ export default function KitchensDirectoryPage() {
               <ShoppingBag className="w-3.5 h-3.5" />
               <span>{tk('tray')}</span>
               {cartItems.length > 0 && (
-                <span className="w-4 h-4 rounded-full bg-[#FF5500] text-white flex items-center justify-center text-[10px] font-bold">
+                <span className="w-4 h-4 rounded-full bg-[#FF5500] text-white flex items-center justify-center text-[11px] font-bold">
                   {cartItems.length}
                 </span>
               )}
@@ -703,11 +703,11 @@ export default function KitchensDirectoryPage() {
             {/* Quick Metrics Pills — real counts, "—" while loading */}
             <div className="flex items-center gap-3 flex-wrap">
               <div className="px-3.5 py-2 rounded-xl bg-slate-50 border border-slate-200 text-start">
-                <div className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">{tk('dashTitle')}</div>
+                <div className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">{tk('dashTitle')}</div>
                 <div className="text-sm font-bold text-slate-900">{isReady ? kitchenCountLabel : '—'}</div>
               </div>
               <div className="px-3.5 py-2 rounded-xl bg-slate-50 border border-slate-200 text-start">
-                <div className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">{tk('averageRating')}</div>
+                <div className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">{tk('averageRating')}</div>
                 <div className="text-sm font-bold text-amber-700 flex items-center gap-1">
                   {!isReady ? (
                     <span>—</span>

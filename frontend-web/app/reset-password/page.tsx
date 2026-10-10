@@ -21,7 +21,7 @@ function ResetForm() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (password.length < 6) {
+    if (password.length < 8) {
       showToast(t('passwordMin6'), 'warning');
       return;
     }

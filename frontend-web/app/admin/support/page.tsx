@@ -17,6 +17,9 @@ interface TicketSummary {
   priority: string;
   status: string;
   customerName: string;
+  orderNumber?: string | null;
+  order?: { id: string; orderNumber: string } | null;
+  assignedTo?: string | null;
   createdAt: string;
 }
 
@@ -25,6 +28,7 @@ interface TicketMessage {
   message: string;
   authorType: string;
   authorName: string;
+  isInternal?: boolean;
   createdAt: string;
 }
 
@@ -56,6 +60,10 @@ export default function AdminSupportPage() {
   const [reply, setReply] = useState('');
   const [nextStatus, setNextStatus] = useState('in_progress');
   const [sending, setSending] = useState(false);
+  const [internal, setInternal] = useState(false);
+  const [priority, setPriority] = useState('');
+  const [search, setSearch] = useState('');
+  const [searchApplied, setSearchApplied] = useState('');
 
   useEffect(() => {
     if (!isAuthenticated) {
@@ -68,12 +76,12 @@ export default function AdminSupportPage() {
       return;
     }
     loadTickets();
-  }, [isAuthenticated, user, router, filter]);
+  }, [isAuthenticated, user, router, filter, priority, searchApplied]);
 
   const loadTickets = async () => {
     try {
       setLoading(true);
-      const res = await apiClient.get(`/admin/support/tickets${filter !== 'all' ? `?status=${filter}` : ''}`);
+      const res = await apiClient.get('/admin/support/tickets', { params: { status: filter !== 'all' ? filter : undefined, priority: priority || undefined, search: searchApplied || undefined } });
       if (res.data.success) setTickets(res.data.data.tickets || []);
     } catch (error: any) {
       showToast(error.response?.data?.error?.message || 'Failed to load tickets', 'error');
@@ -101,10 +109,12 @@ export default function AdminSupportPage() {
       const res = await apiClient.post(`/admin/support/tickets/${selected.id}/reply`, {
         message: reply.trim(),
         status: nextStatus,
+        internal,
       });
       if (res.data.success) {
         setSelected(res.data.data);
         setReply('');
+        setInternal(false);
         loadTickets();
       }
     } catch (error: any) {
@@ -143,7 +153,10 @@ export default function AdminSupportPage() {
               </span>
             </div>
             <p className="text-xs text-gray-400 mb-4">
-              {selected.ticketNumber} · {selected.customerName} · {selected.category}
+              {selected.ticketNumber} · {selected.customerName} · {selected.category} · {selected.priority}
+              {selected.order && (
+                <> · <a href={`/admin/orders/${selected.order.id}`} className="text-green-700 underline" data-testid="ticket-order-link">Order #{selected.order.orderNumber}</a></>
+              )}
             </p>
             <p className="text-gray-700 bg-gray-50 rounded-xl p-4 mb-4">{selected.description}</p>
 
@@ -151,9 +164,9 @@ export default function AdminSupportPage() {
               {selected.messages.map((m) => (
                 <div
                   key={m.id}
-                  className={`rounded-xl p-3 max-w-lg ${m.authorType === 'admin' ? 'bg-green-50 ms-auto' : 'bg-gray-50'}`}
+                  className={`rounded-xl p-3 max-w-lg ${m.isInternal ? 'bg-amber-50 border border-dashed border-amber-300 ms-auto' : m.authorType === 'admin' ? 'bg-green-50 ms-auto' : 'bg-gray-50'}`}
                 >
-                  <p className="text-xs font-medium text-gray-500 mb-1">{m.authorName}</p>
+                  <p className="text-xs font-medium text-gray-500 mb-1">{m.authorName}{m.isInternal ? ' · internal note (customer cannot see)' : ''}</p>
                   <p className="text-sm text-gray-800">{m.message}</p>
                   <p className="text-xs text-gray-400 mt-1">{formatDateTime(m.createdAt)}</p>
                 </div>
@@ -179,14 +192,34 @@ export default function AdminSupportPage() {
                   <option value="resolved">Resolved</option>
                   <option value="closed">Closed</option>
                 </select>
+                <label className="flex items-center gap-1.5 text-sm text-gray-600">
+                  <input type="checkbox" checked={internal} onChange={(e) => setInternal(e.target.checked)} data-testid="ticket-internal" /> Internal note
+                </label>
                 <Button onClick={sendReply} disabled={sending || !reply.trim()}>
-                  {sending ? 'Sending...' : 'Send Reply'}
+                  {sending ? 'Sending...' : internal ? 'Save note' : 'Send Reply'}
                 </Button>
               </div>
             </div>
           </div>
         ) : (
           <>
+            <form
+              className="flex flex-wrap gap-2 mb-3"
+              onSubmit={(e) => {
+                e.preventDefault();
+                setSearchApplied(search.trim());
+              }}
+            >
+              <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search subject, ticket, order, customer" className="px-3 py-2 border border-gray-200 rounded-lg text-sm w-72" data-testid="ticket-search" />
+              <select value={priority} onChange={(e) => setPriority(e.target.value)} className="px-3 py-2 border border-gray-200 rounded-lg text-sm" data-testid="ticket-priority">
+                <option value="">Any priority</option>
+                <option value="urgent">Urgent</option>
+                <option value="high">High</option>
+                <option value="medium">Medium</option>
+                <option value="low">Low</option>
+              </select>
+              <Button type="submit" variant="outline" size="sm">Search</Button>
+            </form>
             <div className="flex gap-2 mb-6 flex-wrap">
               {FILTERS.map((f) => (
                 <button
@@ -222,7 +255,7 @@ export default function AdminSupportPage() {
                     <div>
                       <p className="font-medium text-gray-900">{t.subject}</p>
                       <p className="text-xs text-gray-400">
-                        {t.ticketNumber} · {t.customerName} · {formatDateTime(t.createdAt)}
+                        {t.ticketNumber} · {t.customerName} · {t.priority}{t.orderNumber ? ` · Order #${t.orderNumber}` : ''} · {formatDateTime(t.createdAt)}
                       </p>
                     </div>
                     <span className={`px-2 py-1 rounded text-xs font-medium ${statusColor(t.status)}`}>

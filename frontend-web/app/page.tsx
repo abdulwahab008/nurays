@@ -573,7 +573,7 @@ export default function Home() {
         {/* Product Type Tag (as set by the kitchen) */}
         {dish.typeLabel && (
           <span
-            className={`absolute top-2 start-2 px-1.5 py-0.5 rounded-md text-white text-[9px] font-bold flex items-center gap-0.5 ${
+            className={`absolute top-2 start-2 px-1.5 py-0.5 rounded-md text-white text-[11px] font-bold flex items-center gap-0.5 ${
               dish.isFrozen ? 'bg-cyan-600' : 'bg-[#FF5500]'
             }`}
           >
@@ -596,8 +596,8 @@ export default function Home() {
       {/* Dish Info */}
       <div className="p-3 flex-1 flex flex-col justify-between">
         <div>
-          {note && <p className="text-[10px] font-bold text-[#FF5500] truncate mb-0.5">{note}</p>}
-            <p className="text-[10px] font-semibold text-slate-500 truncate flex items-center gap-1">
+          {note && <p className="text-[11px] font-bold text-[#FF5500] truncate mb-0.5">{note}</p>}
+            <p className="text-[11px] font-semibold text-slate-500 truncate flex items-center gap-1">
             <ChefHat className="w-3 h-3 text-slate-400" />
             <span>{dish.kitchenName}</span>
           </p>
@@ -612,13 +612,13 @@ export default function Home() {
               {formatPrice(dish.price)}
             </span>
             {dish.originalPrice != null && (
-              <span className="text-[10px] text-slate-400 line-through">
+              <span className="text-[11px] text-slate-400 line-through">
                 {formatPrice(dish.originalPrice)}
               </span>
             )}
           </div>
           {dish.rating && (
-            <span className="text-[10px] font-bold bg-amber-50 text-amber-800 px-1.5 py-0.5 rounded flex items-center gap-0.5 border border-amber-200/60">
+            <span className="text-[11px] font-bold bg-amber-50 text-amber-800 px-1.5 py-0.5 rounded flex items-center gap-0.5 border border-amber-200/60">
               <Star className="w-2.5 h-2.5 fill-amber-500 text-amber-500" />
               <span>{dish.rating}</span>
             </span>
@@ -836,7 +836,7 @@ export default function Home() {
         <div className="max-w-[1440px] mx-auto flex items-center justify-between">
           <div className="flex items-center gap-2">
             <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-            <span className="text-emerald-400 font-bold uppercase text-[10px] tracking-wider">{t('platformLive')}</span>
+            <span className="text-emerald-400 font-bold uppercase text-[11px] tracking-wider">{t('platformLive')}</span>
             {stats && stats.kitchens > 0 && (
               <span className="text-slate-300 hidden sm:inline text-xs">
                 {t('liveLine', {
@@ -1106,11 +1106,11 @@ export default function Home() {
           {/* Banner 1: Authentic Home Food */}
           <div className="relative rounded-2xl p-5 sm:p-6 overflow-hidden bg-gradient-to-br from-[#EA580C] via-[#C2410C] to-[#9A3412] text-white shadow-md flex flex-col justify-between min-h-[155px] group">
             <div className="relative z-10">
-              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-black/25 text-[10px] font-bold uppercase tracking-wider mb-2">
+              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-black/25 text-[11px] font-bold uppercase tracking-wider mb-2">
                 <Flame className="w-3 h-3 text-orange-200" />
                 <span>{t('b1Tag')}</span>
               </span>
-              <h2 className="text-xl sm:text-2xl font-bold tracking-tight leading-tight">
+              <h2 className="text-xl sm:text-2xl font-bold tracking-tight leading-tight text-white">
                 {t('b1Title')}
               </h2>
               <p className="text-xs text-orange-100 mt-1 max-w-[260px] font-normal leading-relaxed">
@@ -1131,11 +1131,11 @@ export default function Home() {
           {/* Banner 2: Open a home kitchen */}
           <div className="relative rounded-2xl p-5 sm:p-6 overflow-hidden bg-gradient-to-br from-[#B45309] via-[#92400E] to-[#78350F] text-white shadow-md flex flex-col justify-between min-h-[155px] group">
             <div className="relative z-10">
-              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-black/30 text-[10px] font-bold uppercase tracking-wider mb-2">
+              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-black/30 text-[11px] font-bold uppercase tracking-wider mb-2">
                 <ChefHat className="w-3 h-3 text-amber-200" />
                 <span>{t('b2Tag')}</span>
               </span>
-              <h2 className="text-xl sm:text-2xl font-bold tracking-tight leading-tight">
+              <h2 className="text-xl sm:text-2xl font-bold tracking-tight leading-tight text-white">
                 {t('b2Title')}
               </h2>
               <p className="text-xs text-amber-100 mt-1 max-w-[260px] font-normal leading-relaxed">
@@ -1156,11 +1156,11 @@ export default function Home() {
           {/* Banner 3: Frozen pantry */}
           <div className="relative rounded-2xl p-5 sm:p-6 overflow-hidden bg-gradient-to-br from-[#0284C7] via-[#0369A1] to-[#075985] text-white shadow-md flex flex-col justify-between min-h-[155px] group">
             <div className="relative z-10">
-              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-black/30 text-[10px] font-bold uppercase tracking-wider mb-2">
+              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-black/30 text-[11px] font-bold uppercase tracking-wider mb-2">
                 <Snowflake className="w-3 h-3 text-cyan-200" />
                 <span>{t('b3Tag')}</span>
               </span>
-              <h2 className="text-xl sm:text-2xl font-bold tracking-tight leading-tight">
+              <h2 className="text-xl sm:text-2xl font-bold tracking-tight leading-tight text-white">
                 {t('b3Title')}
               </h2>
               <p className="text-xs text-cyan-100 mt-1 max-w-[260px] font-normal leading-relaxed">
@@ -1274,7 +1274,7 @@ export default function Home() {
                           {k.name}
                         </span>
                         {caption && (
-                          <span className="block text-[10px] text-slate-500 font-medium">
+                          <span className="block text-[11px] text-slate-500 font-medium">
                             {caption}
                           </span>
                         )}
@@ -1375,7 +1375,7 @@ export default function Home() {
 
                     {/* Deal Tag — only when one of its dishes is really discounted */}
                     {kitchen.deal && (
-                      <span className="absolute top-3 start-3 px-2.5 py-1 rounded-md text-white text-[10px] font-bold bg-[#FF5500] shadow-xs uppercase tracking-wider">
+                      <span className="absolute top-3 start-3 px-2.5 py-1 rounded-md text-white text-[11px] font-bold bg-[#FF5500] shadow-xs uppercase tracking-wider">
                         {kitchen.deal}
                       </span>
                     )}
@@ -1403,7 +1403,7 @@ export default function Home() {
                     )}
 
                     {/* Kitchen Type Badge (every listed kitchen is verified) */}
-                    <span className="absolute bottom-3 start-3 px-2 py-0.5 rounded-md bg-emerald-600/90 backdrop-blur-xs text-white text-[10px] font-bold flex items-center gap-1">
+                    <span className="absolute bottom-3 start-3 px-2 py-0.5 rounded-md bg-emerald-600/90 backdrop-blur-xs text-white text-[11px] font-bold flex items-center gap-1">
                       <ShieldCheck className="w-3 h-3" />
                       <span>{kitchen.badge}</span>
                     </span>
@@ -1498,7 +1498,7 @@ export default function Home() {
                     {kitchen.cuisine.length > 0 && (
                       <div className="mt-3 pt-2.5 border-t border-slate-100 flex flex-wrap gap-1">
                         {kitchen.cuisine.map((c) => (
-                          <span key={c} className="px-2 py-0.5 rounded-md bg-slate-50 text-[10px] font-semibold text-slate-600 border border-slate-100">
+                          <span key={c} className="px-2 py-0.5 rounded-md bg-slate-50 text-[11px] font-semibold text-slate-600 border border-slate-100">
                             {c}
                           </span>
                         ))}

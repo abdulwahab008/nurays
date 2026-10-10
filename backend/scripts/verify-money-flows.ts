@@ -35,7 +35,7 @@ const uniq = () => `${Date.now()}${++n}`;
 
 async function mkUser(type = 'customer') {
   const u = uniq();
-  return prisma.user.create({ data: { phone: `+92300${u.slice(-8)}`, email: `u${u}@t.test`, userType: type } as any });
+  return prisma.user.create({ data: { phone: `+92300${u.slice(-8)}`, email: `u${u}@t.test`, userType: type, ...(type === 'admin' ? { staffRole: 'admin' } : {}) } as any });
 }
 async function mkSeller(opts: any = {}) {
   const user = await mkUser('seller');
@@ -51,6 +51,8 @@ const order = async (cust: string, items: any[], extra: any = {}) => ({
 const realtimeOrderServiceForVerify = () => require('../src/services/realtime-order.service').default;
 
 async function main() {
+  // The older checks claim jobs by hand; automatic assignment has its own checks below.
+  process.env.AUTO_ASSIGN_ENABLED = 'false';
   const cust = await mkUser();
   const seller = await mkSeller();
   const sellerB = await mkSeller();
@@ -139,6 +141,11 @@ async function main() {
   const rr = await Promise.all(custs.map((c) => order(c.id, [{ productId: p.id, quantity: 1 }], { promotionCode: 'ONLY1' }).then((r: any) => Number(r.order.discountAmount), (e: any) => e.code)));
   const used = (await prisma.promotion.findUnique({ where: { id: limited.id } }))!.usedCount;
   ok('usage-limited promo cannot be overshot by parallel orders', used <= 1 && rr.filter((x) => x === 10).length <= 1, `${rr} used=${used}`);
+  const perUser = await prisma.promotion.create({ data: { code: 'PERUSER1', name: 'one per person', discountType: 'fixed', discountValue: 10, validFrom: new Date(Date.now() - 1e6), validUntil: new Date(Date.now() + 1e9), usageLimitPerUser: 1 } as any });
+  const onePerson = await mkUser();
+  const fiveProds = await Promise.all([1, 2, 3, 4, 5].map(() => mkProduct(seller.id, 20, 100)));
+  const pr5 = await Promise.all(fiveProds.map((fp) => order(onePerson.id, [{ productId: fp.id, quantity: 1 }], { promotionCode: 'PERUSER1' }).then((r: any) => Number(r.order.discountAmount), (e: any) => e.code)));
+  ok('a one-per-person code cannot be used twice by racing checkouts', pr5.filter((x) => x === 10).length === 1 && (await prisma.promotionUsage.count({ where: { promotionId: perUser.id, userId: onePerson.id } })) === 1, `${pr5}`);
 
   // ---- 11. manual payment guards ----
   const sellerRow = await prisma.seller.findUnique({ where: { id: seller.id } });
@@ -148,9 +155,15 @@ async function main() {
   ok('submit requires a reference', (await code(orderService.submitManualPayment(m.id, cust.id, { referenceNumber: '  ' } as any))) === 'REFERENCE_REQUIRED');
   ok('submit rejects data: proof', (await code(orderService.submitManualPayment(m.id, cust.id, { referenceNumber: 'TID1', proofUrl: 'data:image/png;base64,AAAA' }))) === 'INVALID_PROOF_URL');
   ok('submit ok', (await code(orderService.submitManualPayment(m.id, cust.id, { referenceNumber: 'TID1', proofUrl: '/uploads/products/x.png' }))) === 'OK');
+  ok('a reported transfer cannot be switched to cash on delivery', (await code(paymentService.processPayment(m.id, cust.id, 'cod'))) === 'PAYMENT_STATE_CONFLICT' && (await prisma.order.findUnique({ where: { id: m.id } }))!.paymentStatus === 'payment_submitted');
   ok('other seller cannot confirm', (await code(orderService.confirmManualPayment(m.id, (await prisma.seller.findUnique({ where: { id: sellerB.id } }))!.userId, true))) !== 'OK');
   ok('payee seller confirms', (await code(orderService.confirmManualPayment(m.id, sellerRow!.userId, true))) === 'OK');
   ok('confirm twice is refused', (await code(orderService.confirmManualPayment(m.id, sellerRow!.userId, true))) === 'NO_PAYMENT_SUBMITTED');
+  await prisma.order.update({ where: { id: m.id }, data: { orderStatus: 'delivered' } });
+  await adminOrderService.processRefund(m.id, admin.id);
+  const mRefund = await prisma.refund.findFirst({ where: { orderId: m.id, status: 'pending' } });
+  await dismissRefund(mRefund!.id, admin.id, 'customer withdrew the complaint');
+  ok('dismissing a refund on an order that was really paid leaves it paid (the kitchen keeps its earning)', (await prisma.order.findUnique({ where: { id: m.id } }))!.paymentStatus === 'paid');
 
   // ---- 12. payment details: real accounts only ----
   const bare: any = await orderService.getSellerPaymentDetails(m.id, cust.id);
@@ -179,6 +192,11 @@ async function main() {
   const earned = Number((await prisma.orderItem.findFirst({ where: { orderId: po.id } }))!.sellerPayout);
   const reqs = await Promise.all([1, 2, 3].map(() => (require('../src/services/seller.service').default).requestPayout(sp.id, { amount: earned, payoutMethod: 'bank_transfer', accountNumber: '1' }).then(() => 'OK', (e: any) => e.code)));
   ok('concurrent payout requests cannot exceed earnings', reqs.filter((r) => r === 'OK').length === 1, `${reqs} earned=${earned}`);
+  const payoutReq = await prisma.sellerPayout.findFirst({ where: { sellerId: sp.id, status: 'pending' } });
+  await adminOrderService.processRefund(po.id, admin.id);
+  const { default: adminSvcForPayout } = require('../src/services/admin.service');
+  ok('a payout is not completed once a refund has taken the money back', (await code(adminSvcForPayout.completePayout(payoutReq!.id, 'T-late'))) === 'PAYOUT_EXCEEDS_BALANCE');
+  ok('it can be failed instead', (await code(adminSvcForPayout.failPayout(payoutReq!.id, 'refunded'))) === 'OK');
 
   // ---- 16. refunds on cancelled PAID orders ----
   const rc = await mkUser();
@@ -259,7 +277,7 @@ async function main() {
   const bdP: any[] = (pdo.deliveryFeeBreakdown as any) || [];
   ok('orders record who delivers and who each delivery fee belongs to',
     Number(sdo.deliveryFee) === 100 && bd[0]?.provider === 'self' && sdo.deliveryProvider === 'self' &&
-      Number(pdo.deliveryFee) === 150 && bdP[0]?.provider === 'platform' && pdo.deliveryProvider === 'platform',
+      Number(pdo.deliveryFee) === 0 && Number(pdo.sellerDeliveryCharge) === 150 && bdP[0]?.provider === 'platform' && bdP[0]?.paidBy === 'seller' && pdo.deliveryProvider === 'platform',
     `${JSON.stringify(bd)} ${sdo.deliveryProvider} / ${JSON.stringify(bdP)} ${pdo.deliveryProvider}`);
 
   for (const o of [sdo, pdo]) await prisma.order.update({ where: { id: o.id }, data: { orderStatus: 'delivered', paymentStatus: 'paid', paidAt: new Date() } });
@@ -270,7 +288,8 @@ async function main() {
   const payReq = (sid: string, amount: number) => sellerService.requestPayout(sid, { amount, payoutMethod: 'bank_transfer', accountNumber: '1' }).then(() => 'OK', (e: any) => e.code);
   ok('self-delivering seller cannot withdraw more than goods + their delivery fee', (await payReq(selfS.id, selfGoods + 100 + 0.5)) === 'INSUFFICIENT_BALANCE');
   ok('self-delivering seller can withdraw goods + their delivery fee', (await payReq(selfS.id, selfGoods + 100)) === 'OK', `goods=${selfGoods}`);
-  ok('platform-fleet seller gets no delivery fee', (await payReq(platS.id, platGoods + 1)) === 'INSUFFICIENT_BALANCE' && (await payReq(platS.id, platGoods)) === 'OK');
+  // The kitchen pays Nuray's Rs 150 delivery fee out of its earnings; the customer paid no delivery fee.
+  ok('platform-fleet seller pays Nuray the delivery fee out of its earnings', (await payReq(platS.id, platGoods - 150 + 1)) === 'INSUFFICIENT_BALANCE' && (await payReq(platS.id, platGoods - 150)) === 'OK');
 
   const dash: any = await sellerService.getSellerDashboard(selfS.id);
   ok('dashboard earnings include the self-delivery fee', Math.abs(dash.overview.totalEarnings - (selfGoods + 100)) < 0.01, `total=${dash.overview.totalEarnings} expected=${selfGoods + 100}`);
@@ -363,6 +382,8 @@ async function main() {
   const pl50: any = (await order(custC.id, [{ productId: csProd.id, quantity: 1 }], { paymentMethod: 'cod', promotionCode: 'PLHALF' + promoTag })).order;
   const pl50Item = await prisma.orderItem.findFirst({ where: { orderId: pl50.id } });
   ok('a platform-funded code leaves the seller\'s share untouched', Number(pl50Item!.sellerPayout) === 900, `payout=${pl50Item!.sellerPayout}`);
+  ok('an unknown code is refused instead of silently charging full price', (await code(order(custC.id, [{ productId: csProd.id, quantity: 1 }], { promotionCode: 'NOSUCHCODE9' }))) === 'INVALID_PROMO_CODE');
+  ok('a switched-off code is refused too', (await code(order(custC.id, [{ productId: csProd.id, quantity: 1 }], { promotionCode: 'CSHALF' + promoTag }))) === 'PROMO_INACTIVE');
 
   // only the party that hands the order over can mark it delivered
   const platformDelivered = await homeOrder([{ productId: sp2.id, quantity: 1 }], 'cod');
@@ -741,6 +762,8 @@ async function main() {
   // FEFO allocation: earliest SELLABLE batch first; the <24h batch (earliest expiry) is skipped
   const hc = await mkUser();
   const hubOrder = (qty: number, uid = hc.id) => orderService.createOrder(uid, { items: [{ productId: hubProd.id, quantity: qty, stockType: 'hub', hubId: hub.id }], deliveryType: 'self_pickup', paymentMethod: 'cod' } as any) as Promise<any>;
+  const directP = await mkProduct(seller.id, 5, 100);
+  ok('a hub id on an item the kitchen ships itself is refused (it would re-price the delivery as Nuray\'s)', (await code(orderService.createOrder(hc.id, { items: [{ productId: directP.id, quantity: 1, hubId: hub.id }], deliveryType: 'self_pickup', paymentMethod: 'cod' } as any))) === 'HUB_NOT_APPLICABLE');
   const ho1 = await hubOrder(7);
   const [qa, qb, qc] = [await batchOf('A'), await batchOf('B'), await batchOf('C')];
   ok('FEFO takes the earliest sellable batch first and never the nearly-expired one', qa!.quantity === 0 && qa!.status === 'reserved' && qb!.quantity === 3 && qc!.quantity === 50, `A=${qa!.quantity} B=${qb!.quantity} C=${qc!.quantity}`);
@@ -980,7 +1003,7 @@ async function main() {
   ok('the new password works after a reset', (await authService.login(rEmail, 'brand-new-pass', 'email').then(() => 'OK', (e: any) => e.code)) === 'OK');
   ok('the old password no longer works', (await authService.login(rEmail, 'secret123', 'email').then(() => 'OK', (e: any) => e.code)) === 'INVALID_CREDENTIALS');
   ok('a reset link is single-use', (await authService.resetPassword(token, 'another-pass-1').then(() => 'OK', (e: any) => e.code)) === 'INVALID_RESET_TOKEN');
-  ok('every session issued before the reset is voided (old refresh token)', (await authService.refreshToken(oldRefresh).then(() => 'OK', (e: any) => e.code)) === 'INVALID_REFRESH_TOKEN');
+  ok('every session issued before the reset is voided (old refresh token)', (await authService.refreshToken(oldRefresh).then(() => 'OK', (e: any) => e.code)) === 'SESSION_REVOKED');
   const expTok = 'exp' + 'y'.repeat(40) + uniq();
   await prisma.passwordReset.create({ data: { userId: rReg.user.id, tokenHash: hash(expTok), expiresAt: new Date(Date.now() - 1000) } });
   ok('an expired reset link is refused', (await authService.resetPassword(expTok, 'another-pass-2').then(() => 'OK', (e: any) => e.code)) === 'INVALID_RESET_TOKEN');
@@ -993,7 +1016,7 @@ async function main() {
   await sleep(1100);
   await authService.requestOTP(sqPhone, 'registration');
   await reg(`own${uniq()}@t.test`, sqPhone, await lastOtp(sqPhone, 'registration'));
-  ok('the squatter\'s sessions are voided when the real owner claims the number', (await authService.refreshToken(sq.tokens.refresh_token).then(() => 'OK', (e: any) => e.code)) === 'INVALID_REFRESH_TOKEN');
+  ok('the squatter\'s sessions are voided when the real owner claims the number', (await authService.refreshToken(sq.tokens.refresh_token).then(() => 'OK', (e: any) => e.code)) === 'SESSION_REVOKED');
 
   // eviction + create are one transaction: a failing create leaves the squatter untouched
   const keepPhone = pn();
@@ -1013,7 +1036,8 @@ async function main() {
   // email change = unverified until the new address is confirmed
   await prisma.user.update({ where: { id: rReg.user.id }, data: { emailVerified: true } });
   const newMail = `Changed${uniq()}@T.test`;
-  await userProfileService.updateProfile(rReg.user.id, { email: newMail });
+  ok('changing the email needs the password (a token alone cannot re-point the account)', (await code(userProfileService.updateProfile(rReg.user.id, { email: newMail }))) === 'PASSWORD_REQUIRED');
+  await userProfileService.updateProfile(rReg.user.id, { email: newMail, currentPassword: 'brand-new-pass' });
   const afterMail = await prisma.user.findUnique({ where: { id: rReg.user.id }, include: { emailVerification: true } });
   ok('changing the email lowercases it, un-verifies it and issues a verification token', afterMail!.email === newMail.toLowerCase() && afterMail!.emailVerified === false && afterMail!.emailVerification?.email === newMail.toLowerCase());
 
@@ -1453,24 +1477,134 @@ async function main() {
     const addrB = await prisma.userAddress.create({ data: { userId: buyer.id, addressLine1: 'House 2', area: 'B', city: 'Lahore', communityId: commB.id, latitude: 31.556, longitude: 74.35 } as any });
     const place = (addressId: string) => orderService.createOrder(buyer.id, { items: [{ productId: pFee.id, quantity: 1 }], deliveryType: 'home_delivery', deliveryAddressId: addressId, paymentMethod: 'cod' } as any) as any;
     const same = await place(addrA.id);
-    ok('same community: the fixed fee the admin set for the community', Number(same.deliveryFee) === 100, String(same.deliveryFee));
-    ok('the total is whole rupees (1455 + 100 + GST 72.75 -> 1628)', Number(same.totalAmount) === 1628 && Number(same.taxAmount) === 73, `${same.totalAmount} / tax ${same.taxAmount}`);
+    ok('same community: the fixed fee the admin set for the community', Number(same.sellerDeliveryCharge) === 100 && Number(same.deliveryFee) === 0, String(same.sellerDeliveryCharge));
+    ok('the customer pays no delivery fee: total is whole rupees (1455 + GST 72.75 -> 1528)', Number(same.totalAmount) === 1528 && Number(same.taxAmount) === 73, `${same.totalAmount} / tax ${same.taxAmount}`);
     const cross = await place(addrB.id);
     // ~6.2 km: 150 + (6.2 - 3) * 20 = 214 -> 220
-    ok("another community: the kitchen community's base + per km beyond 3 km, to the next Rs 10", Number(cross.deliveryFee) === 220, String(cross.deliveryFee));
+    ok("another community: the kitchen community's base + per km beyond 3 km, to the next Rs 10", Number(cross.sellerDeliveryCharge) === 220, String(cross.sellerDeliveryCharge));
     await adminSvc.updateSettings({ deliveryPerKm: 30 }, buyer.id);
     const cross2 = await place(addrB.id);
-    ok("an admin's new per-km rate applies at once", Number(cross2.deliveryFee) === 250, String(cross2.deliveryFee)); // 150 + 3.2*30 = 246 -> 250
+    ok("an admin's new per-km rate applies at once", Number(cross2.sellerDeliveryCharge) === 250, String(cross2.sellerDeliveryCharge)); // 150 + 3.2*30 = 246 -> 250
     await adminSvc.updateSettings({ deliveryPerKm: 20 }, buyer.id);
     const places = require('../src/services/admin-places.service');
     const pairs = await places.setPairFee(commB.id, commA.id, 175, buyer.id);
     const pairOrder = await place(addrB.id);
-    ok('a price an admin set for the pair of communities replaces the distance fee', Number(pairOrder.deliveryFee) === 175, String(pairOrder.deliveryFee));
+    ok('a price an admin set for the pair of communities replaces the distance fee', Number(pairOrder.sellerDeliveryCharge) === 175, String(pairOrder.sellerDeliveryCharge));
     ok('a pair is stored once, whichever way round it was entered', (await prisma.communityPairFee.count({ where: { OR: [{ communityAId: commA.id }, { communityBId: commA.id }] } })) === 1);
     ok('the same community is not a pair', (await code(places.setPairFee(commA.id, commA.id, 50, buyer.id))) === 'SAME_COMMUNITY');
     await places.deletePairFee(pairs.find((x: any) => [x.communityA.id, x.communityB.id].includes(commA.id)).id);
-    ok('removing it brings back the distance fee', Number((await place(addrB.id)).deliveryFee) === 220);
+    ok('removing it brings back the distance fee', Number((await place(addrB.id)).sellerDeliveryCharge) === 220);
     ok('every order total is whole rupees', [same, cross, cross2].every((o: any) => Number.isInteger(Number(o.totalAmount))));
+  }
+
+  // ---- Automatic assignment, kitchen-paid delivery, COD payout hold, menus ----
+  {
+    const { dispatchDelivery } = require('../src/services/dispatch.service');
+    const { default: rSvc } = require('../src/services/rider.service');
+    const { computeSellerBalance } = require('../src/services/seller-balance.service');
+    const { recordSettlement } = require('../src/services/rider-ledger.service');
+    const { karachiDay } = require('../src/utils/menu');
+    const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+    await prisma.rider.updateMany({ data: { isAvailable: false } }); // only the riders made below take part
+    process.env.AUTO_ASSIGN_ENABLED = 'true';
+
+    const cA = await prisma.community.create({ data: { name: 'Disp A ' + uniq(), slug: 'disp-a-' + uniq(), city: 'Lahore', centerLatitude: 31.5, centerLongitude: 74.35 } });
+    const cB = await prisma.community.create({ data: { name: 'Disp B ' + uniq(), slug: 'disp-b-' + uniq(), city: 'Lahore', centerLatitude: 31.6, centerLongitude: 74.5 } });
+    require('../src/services/delivery-pricing.service').invalidateDeliveryPricing();
+    const mkRider = async (communityId: string) => {
+      const u = await mkUser('rider');
+      const r = await prisma.rider.create({ data: { userId: u.id, city: 'Lahore', verificationStatus: 'approved', status: 'active', isAvailable: true, communityId } as any });
+      return { user: u, rider: r };
+    };
+    const rdA = await mkRider(cA.id);
+    const rdB = await mkRider(cB.id);
+    const kA = await mkSeller({ deliveryProvider: 'platform', communityId: cA.id });
+    const kA2 = await mkSeller({ deliveryProvider: 'platform', communityId: cA.id });
+    const kB = await mkSeller({ deliveryProvider: 'platform', communityId: cB.id });
+    const buyer = await mkUser();
+    const addr = await prisma.userAddress.create({ data: { userId: buyer.id, addressLine1: 'House 9', area: 'A', city: 'Lahore', communityId: cA.id, landmark: 'Green gate', houseNumber: '9' } as any });
+    const pA = await mkProduct(kA.id, 50, 500), pA2 = await mkProduct(kA2.id, 50, 500), pB = await mkProduct(kB.id, 50, 500);
+    const placeCod = (productId: string) => orderService.createOrder(buyer.id, { items: [{ productId, quantity: 1 }], deliveryType: 'home_delivery', deliveryAddressId: addr.id, paymentMethod: 'cod', deliveryInstructions: 'Ring twice' } as any) as Promise<any>;
+    const jobFor = async (o: any) => {
+      await rSvc.ensureDeliveryForOrder(o.id, 0);
+      const d = await prisma.delivery.findUnique({ where: { orderId: o.id } });
+      await dispatchDelivery(d!.id);
+      await sleep(300);
+      return (await prisma.delivery.findUnique({ where: { id: d!.id } }))!;
+    };
+
+    const o1 = await placeCod(pA.id);
+    ok('the kitchen pays Nuray the delivery fee: the customer is charged none', Number(o1.deliveryFee) === 0 && Number(o1.sellerDeliveryCharge) === 100 && (o1.deliveryFeeBreakdown as any)?.[0]?.paidBy === 'seller', `${o1.deliveryFee} / ${o1.sellerDeliveryCharge}`);
+    const j1 = await jobFor(o1);
+    ok("a new job goes straight to the rider who serves the kitchen's community", j1.riderId === rdA.rider.id && j1.status === 'assigned' && j1.assignmentMode === 'auto' && Number(j1.riderFee) >= 120, `${j1.riderId} ${j1.status} ${j1.assignmentMode}`);
+    ok('the rider is told about it', (await prisma.notification.count({ where: { userId: rdA.user.id, title: 'New delivery assigned to you' } })) === 1);
+    const mine: any[] = await rSvc.getMyDeliveries(rdA.user.id);
+    const mj = mine.find((d) => d.id === j1.id);
+    ok("the assigned rider sees the customer's phone, house, landmark and note", !!mj?.customer?.phone && mj?.dropoffDetails?.houseNumber === '9' && mj?.dropoffDetails?.landmark === 'Green gate' && mj?.dropoffDetails?.instructions === 'Ring twice', JSON.stringify(mj?.customer));
+
+    const o2 = await placeCod(pA2.id);
+    const j2 = await jobFor(o2);
+    ok('a second order to the same delivery area goes to the rider already carrying one (one trip)', j2.riderId === rdA.rider.id, `${j2.riderId}`);
+    const o3 = await placeCod(pB.id);
+    const j3 = await jobFor(o3);
+    ok('a rider with two jobs is full, so a kitchen in another community gets its own rider', j3.riderId === rdB.rider.id, `${j3.riderId}`);
+
+    await prisma.rider.updateMany({ where: { id: { in: [rdA.rider.id, rdB.rider.id] } }, data: { isAvailable: false } });
+    const o4 = await placeCod(pA.id);
+    const j4 = await jobFor(o4);
+    ok('with nobody on duty the job stays in the open pool', j4.riderId === null && j4.status === 'pending');
+    const pool: any[] = await rSvc.getAvailableDeliveries(rdB.user.id);
+    const pj = pool.find((d) => d.id === j4.id);
+    ok("the open pool never shows the customer's phone or exact spot", !!pj && pj.customer === null && pj.dropoffDetails === null);
+    await prisma.rider.update({ where: { id: rdB.rider.id }, data: { isAvailable: true } });
+    await dispatchDelivery(j4.id);
+    ok('when a rider goes on duty the waiting job is assigned', (await prisma.delivery.findUnique({ where: { id: j4.id } }))!.riderId === rdB.rider.id);
+
+    // A rider who hands a job back is not offered it again.
+    await prisma.rider.update({ where: { id: rdA.rider.id }, data: { isAvailable: true } });
+    await rSvc.releaseDelivery(rdB.user.id, j4.id);
+    await sleep(500);
+    const j4b = (await prisma.delivery.findUnique({ where: { id: j4.id } }))!;
+    ok('a job a rider handed back is not given to that rider again (the other rider is full)', j4b.releasedRiderIds.includes(rdB.rider.id) && j4b.riderId === null);
+
+    // COD money: the rider owes the cash; the kitchen is paid out once it is handed in.
+    const code1 = (await prisma.order.findUnique({ where: { id: o1.id }, select: { handoverCode: true } }))!.handoverCode!;
+    await prisma.order.update({ where: { id: o1.id }, data: { orderStatus: 'ready' } });
+    for (const st of ['picked_up', 'in_transit']) await rSvc.updateDeliveryStatus(rdA.user.id, j1.id, st);
+    await rSvc.updateDeliveryStatus(rdA.user.id, j1.id, 'delivered', undefined, code1);
+    const total1 = Number((await prisma.order.findUnique({ where: { id: o1.id } }))!.totalAmount);
+    const entry = await prisma.sellerPayoutSchedule.findFirst({ where: { sellerId: kA.id } });
+    void entry;
+    const goods = Number((await prisma.orderItem.findFirst({ where: { orderId: o1.id } }))!.sellerPayout);
+    const b1 = await computeSellerBalance(prisma, kA.id);
+    ok('the rider now holds the cash (the order total, no delivery fee on it)', (await prisma.riderLedgerEntry.findFirst({ where: { riderId: rdA.rider.id, orderId: o1.id, type: 'cod_collected' } }))?.amount.toString() === String(-total1), String(total1));
+    ok("the kitchen's share waits for the rider's cash: nothing withdrawable yet", b1.awaitingRiderCash === goods - 100 && b1.available === 0, JSON.stringify(b1));
+    const adminU = await mkUser('admin');
+    await recordSettlement(rdA.rider.id, adminU.id, { cashHandedIn: total1 });
+    const b2 = await computeSellerBalance(prisma, kA.id);
+    ok('once the rider hands the cash in, the kitchen can withdraw its share minus the delivery fee', b2.awaitingRiderCash === 0 && b2.available === goods - 100, JSON.stringify(b2));
+    ok('the ledger records the delivery fee paid by the kitchen', (await prisma.ledgerEntry.count({ where: { orderId: o1.id, transactionType: 'seller_delivery_charge' } })) === 1 && (await prisma.ledgerEntry.count({ where: { orderId: o1.id, transactionType: 'delivery_fee' } })) === 1);
+
+    // Menus: fixed, weekly (days), daily (today).
+    const w = karachiDay().weekday;
+    const kM = await mkSeller({ deliveryProvider: 'platform' });
+    const pFixed = await mkProduct(kM.id, 20, 100), pWeekOff = await mkProduct(kM.id, 20, 100), pWeekOn = await mkProduct(kM.id, 20, 100), pDailyOff = await mkProduct(kM.id, 20, 100), pDailyOn = await mkProduct(kM.id, 20, 100);
+    await prisma.product.update({ where: { id: pWeekOff.id }, data: { menuType: 'weekly', availableDays: [(w + 1) % 7] } });
+    await prisma.product.update({ where: { id: pWeekOn.id }, data: { menuType: 'weekly', availableDays: [w] } });
+    await prisma.product.update({ where: { id: pDailyOff.id }, data: { menuType: 'daily', menuDate: null } });
+    await prisma.product.update({ where: { id: pDailyOn.id }, data: { menuType: 'daily', menuDate: karachiDay().date } });
+    const listed: any = await productService.getProducts({ sellerId: kM.id, page: 1, limit: 50 } as any);
+    const listedIds = new Set((listed.products ?? []).map((x: any) => x.id));
+    ok("customers see only dishes on today's menu (fixed, today's weekday, today's daily menu)", listedIds.has(pFixed.id) && listedIds.has(pWeekOn.id) && listedIds.has(pDailyOn.id) && !listedIds.has(pWeekOff.id) && !listedIds.has(pDailyOff.id), [...listedIds].length + ' listed');
+    const mb = await mkUser();
+    ok('a weekly dish cannot be added to the cart on another day', (await code(cartService.addToCart(mb.id, { productId: pWeekOff.id, quantity: 1 } as any))) === 'NOT_ON_MENU_TODAY');
+    ok("a daily dish that is not on today's menu cannot be added either", (await code(cartService.addToCart(mb.id, { productId: pDailyOff.id, quantity: 1 } as any))) === 'NOT_ON_MENU_TODAY');
+    ok('a dish on today\'s menu can be added', (await code(cartService.addToCart(mb.id, { productId: pWeekOn.id, quantity: 1 } as any))) === 'OK');
+    const mAddr = await prisma.userAddress.create({ data: { userId: mb.id, addressLine1: 'House 3', area: 'A', city: 'Lahore' } as any });
+    ok('an order for a dish that is not on the menu is refused', (await code(orderService.createOrder(mb.id, { items: [{ productId: pWeekOff.id, quantity: 1 }], deliveryType: 'home_delivery', deliveryAddressId: mAddr.id, paymentMethod: 'cod' } as any))) === 'NOT_ON_MENU_TODAY');
+    ok('a kitchen can put a daily dish on today\'s menu', (await code(productService.updateProduct(pDailyOff.id, kM.userId, { menuDate: 'today' }))) === 'OK' && (await prisma.product.findUnique({ where: { id: pDailyOff.id } }))!.menuDate?.getTime() === karachiDay().date.getTime());
+    ok('a weekly dish needs at least one day', (await code(productService.updateProduct(pWeekOn.id, kM.userId, { menuType: 'weekly', availableDays: [] }))) === 'MENU_DAYS_REQUIRED');
+    process.env.AUTO_ASSIGN_ENABLED = 'false';
   }
 
   // OTP SMS cap per number

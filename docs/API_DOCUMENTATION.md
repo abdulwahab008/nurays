@@ -10,7 +10,7 @@ Field lists come from the zod schemas in `backend/src/validators/*.ts`. Where a 
 
 `/api/v1` (the version comes from `API_VERSION`, default `v1`; the port from `PORT`, `3001` in `backend/.env.example`). Every path below is relative to it. The frontend takes it from `NEXT_PUBLIC_API_URL`. `GET /` (outside `/api/v1`) returns `{ success, message: "Nuray API", version, timestamp }`.
 
-Request bodies are JSON (limit 10 MB), except uploads (multipart) and the Safepay return (form post). CORS allows the `CORS_ORIGIN` origin with the headers `Content-Type`, `Authorization`, `Idempotency-Key`, `X-Request-Id`, and exposes `X-Request-Id`.
+Request bodies are JSON (limit 1 MB), except uploads (multipart) and the Safepay return (form post). CORS allows the `CORS_ORIGIN` origin with the headers `Content-Type`, `Authorization`, `Idempotency-Key`, `X-Request-Id`, and exposes `X-Request-Id`.
 
 ### Authentication
 
@@ -140,7 +140,8 @@ All routes need authentication (`user-profile.routes.ts`).
 | Method and path | Body / notes | Returns |
 |---|---|---|
 | `GET /users/me` | none | the user's profile |
-| `PATCH /users/me` | optional `fullName` (min 2), `email`, `city`, `area`, `languagePreference`: `en` \| `ur` | updated profile |
+| `PATCH /users/me` | optional `fullName` (min 2), `email`, `city`, `area`, `languagePreference`: `en` \| `ur`; `currentPassword` is required when `email` changes on an account that has a password (400 `PASSWORD_REQUIRED`, 401 `INVALID_PASSWORD`) | updated profile; a changed email is unverified until confirmed |
+| `DELETE /users/me` | `confirm: "DELETE"`, `password` (required when the account has one) | closes the account (see Security: account closure); 409 `OPEN_ORDERS` \| `WALLET_BALANCE` \| `ACTIVE_DELIVERIES` \| `RIDER_BALANCE` \| `PENDING_PAYOUT`, 403 `STAFF_ACCOUNT` |
 | `POST /users/me/avatar` | `avatarUrl` (a URL; upload the image first with `POST /upload/avatar`) | updated avatar |
 | `GET /users/me/addresses` | none | the user's addresses (bare array) |
 | `POST /users/me/addresses` | `addressLine1` (min 5), `area` (min 2), `city` (min 2); optional `label`, `addressLine2`, `postalCode`, `landmark`, `latitude` (-90..90), `longitude` (-180..180), `communityId`, `isDefault` | 201 the address |
@@ -193,8 +194,8 @@ Note the singular. `seller-order.routes.ts`. All routes need role `seller` or `a
 | `GET /products/recommended` | optional auth | query `limit` (default 12, max 24), `customerLat`, `customerLng`, `communityId` | `{ products }`, each with `recommendationReason` (`trending` for visitors and new customers; personalised for signed-in users, `utils/ranking.ts`) |
 | `GET /products/order-again` | authenticated | same query | `{ products }`: the customer's own past dishes, often and recent first |
 | `GET /products/seller/my-products` | role seller (not suspended) | query `page`, `limit`, `isActive`, `approvalStatus` (`pending` \| `approved` \| `rejected`), `productType` | `{ products, pagination }` |
-| `POST /products` | role seller (not suspended) | `name` (2-255), `price` (>0), `unit`, `stockQuantity` (>=0), `stockType` (`direct` \| `hub` \| `both`); optional `nameUrdu`, `description`, `descriptionUrdu`, `categoryId` (uuid), `originalPrice`, `costPrice`, `productType` (default `frozen`), `shelfLifeHours`, `preparationTime`, `unitUrdu`, `weightGrams`, `ingredients`, `allergens`, `dietaryInfo[]`, `storageDays`, `heatingInstructions`, `heatingInstructionsUrdu`, `minOrderQuantity`, `maxOrderQuantity`, `images[]` (URLs or paths from `/upload/product-images`), `tags[]` | 201 the product (goes through admin moderation) |
-| `PATCH /products/:id` | role seller (not suspended) | any subset of the create fields | the product |
+| `POST /products` | role seller (not suspended) | `name` (2-255), `price` (>0), `unit`, `stockQuantity` (>=0), `stockType` (`direct` \| `hub` \| `both`); optional `nameUrdu`, `description`, `descriptionUrdu`, `categoryId` (uuid), `originalPrice`, `costPrice`, `productType` (default `frozen`), `shelfLifeHours`, `preparationTime`, `unitUrdu`, `weightGrams`, `ingredients`, `allergens`, `dietaryInfo[]`, `storageDays`, `heatingInstructions`, `heatingInstructionsUrdu`, `minOrderQuantity`, `maxOrderQuantity`, `images[]` (URLs or paths from `/upload/product-images`), `tags[]`, menu: `menuType` (`fixed` default \| `weekly` \| `daily`), `availableDays[]` (0 = Sunday ... 6; at least one for weekly, else 400 `MENU_DAYS_REQUIRED`), `menuDate` (`"today"`, a `YYYY-MM-DD` date, or null) | 201 the product (goes through admin moderation) |
+| `PATCH /products/:id` | role seller (not suspended) | any subset of the create fields. `{ "menuDate": "today" }` puts a daily dish on today's menu, `{ "menuDate": null }` takes it off | the product |
 | `DELETE /products/:id` | role seller (not suspended) | none | message |
 | `GET /products/:id/reviews` | public | query `page`, `limit` (1-50, default 10), `rating` (1-5) | `{ reviews, summary: { averageRating, totalReviews, ratingBreakdown }, pagination }` |
 | `GET /products/:identifier` | optional auth | `:identifier` is the product id or slug; query `customerLat`, `customerLng`, `communityId` | the product with seller, images, variants and delivery info for the location |
@@ -280,7 +281,7 @@ All routes need authentication (`order.routes.ts`, `order.validator.ts`). Access
 
 | Method and path | Body / query | Returns |
 |---|---|---|
-| `POST /orders` | order limit, `Idempotency-Key`. Body: `items[]` (min 1; each `productId` uuid, `quantity` int >0, optional `variantId`, `stockType`, `hubId`), `deliveryType`: `home_delivery` \| `hub_pickup` \| `self_pickup`, `paymentMethod`: `jazzcash` \| `easypaisa` \| `bank` \| `cod` \| `wallet` \| `card` \| `safepay`; optional `deliveryAddressId` (uuid), `hubId`, `deliverySlotDate`, `deliverySlotTime`, `promotionCode`, `deliveryInstructions` (max 500) | 201 `{ order: { id, orderNumber, totalAmount, paymentMethod, paymentStatus, orderStatus, items }, payment: { gateway, status: "pending" } }`. For an online payment, follow with `POST /payments/process`. Totals are whole rupees |
+| `POST /orders` | order limit, `Idempotency-Key`. Body: `items[]` (min 1; each `productId` uuid, `quantity` int >0, optional `variantId`, `stockType`, `hubId`), `deliveryType`: `home_delivery` \| `hub_pickup` \| `self_pickup`, `paymentMethod`: `jazzcash` \| `easypaisa` \| `bank` \| `cod` \| `wallet` \| `card` \| `safepay`; optional `deliveryAddressId` (uuid), `hubId`, `deliverySlotDate`, `deliverySlotTime`, `promotionCode` (refused with `INVALID_PROMO_CODE` \| `PROMO_INACTIVE` \| `PROMO_EXPIRED` \| `PROMO_LIMIT_REACHED` \| `PROMO_ALREADY_USED` \| `MIN_ORDER_NOT_MET` \| `PROMO_NOT_APPLICABLE` when it cannot be used), `deliveryInstructions` (max 500). An item `hubId` is only allowed on hub stock (`HUB_NOT_APPLICABLE` otherwise) | 201 `{ order: { id, orderNumber, totalAmount, paymentMethod, paymentStatus, orderStatus, items }, payment: { gateway, status: "pending" } }`. For an online payment, follow with `POST /payments/process`. Totals are whole rupees |
 | `GET /orders/me` | query `page`, `limit`, `status` (`pending` ... `cancelled`, `refunded`) | `{ orders, pagination, statusCounts }` where `statusCounts` is the count per order status across the whole history |
 | `GET /orders/:id` | none | full order (items, delivery, payment, status history) |
 | `POST /orders/:id/cancel` | `reason` (5-500) | cancels. Customers can only cancel while the order is `pending` (400 `ORDER_NOT_CANCELLABLE` otherwise); stock is restored and a refund created if it was paid |
@@ -350,6 +351,7 @@ An order paid online only becomes visible to the kitchen's payment flow once the
 | `GET /riders/deliveries/available` | query `lat`, `lng` (optional; closest pickups first) | open delivery jobs the rider may claim (riders over their cash limit are only offered prepaid jobs) |
 | `GET /riders/deliveries/mine` | none | the rider's jobs (cancelled jobs disappear after a day) |
 | `POST /riders/deliveries/:id/claim` | optional `askFee` (rupees; must lie in the allowed corridor for the job, else 400 `BID_OUT_OF_BOUNDS`) | the claimed delivery. A rider holds at most two active jobs; 409 `RIDER_OFF_DUTY` when off duty |
+| `PATCH /admin/riders/:id/community` (admin) | `communityId` (uuid or null) | `{ communityId }`. Sets the community the rider serves, for automatic assignment |
 | `POST /riders/deliveries/:id/release` | none | `{ released: true }`. Hands a job back to the pool before pickup (`assigned` or `arrived_at_pickup`), else 409 `CANNOT_RELEASE` |
 | `PATCH /riders/deliveries/:id/status` | `status`: `arrived_at_pickup` \| `picked_up` \| `in_transit` \| `arrived_at_customer` \| `delivered` \| `delivery_failed`; `reason` (1-500, required for `delivery_failed`); `otp` (4 digits, the customer's handover PIN, for `delivered`). `picked_up` and `in_transit` return 409 `FOOD_NOT_READY` until the kitchen has marked the order ready | the delivery |
 | `POST /riders/deliveries/:id/location` | location limit. Body (not schema-validated): `latitude`, `longitude` (numbers; 400 `INVALID_COORDINATES`) | `{ delivery, currentLocation, distanceToPickupMeters, distanceToDeliveryMeters, isInsidePickupGeofence, isInsideDeliveryGeofence, autoTriggeredStatus }`. 403 if not the rider's job, 409 `DELIVERY_NOT_ACTIVE` once it has finished. Details in the realtime doc |
@@ -460,7 +462,7 @@ Outside the API rate limit (load balancers poll these).
 
 ## Admin: `/admin`
 
-Every route under `/admin` needs role `admin` (`admin.routes.ts`, `admin-order.routes.ts`). Both routers are mounted at `/admin`, and every non-GET request is written to the audit log (`middleware/audit.ts`): who, action, record, the body (with passwords, tokens and handover codes redacted) and the response status. Reads are not logged.
+Every route under `/admin` needs role `admin` (`admin.routes.ts`, `admin-order.routes.ts`). Both routers are mounted at `/admin`, and every non-GET request is written to the audit log (`middleware/audit.ts`): who, action, record, the body (with passwords, tokens and handover codes redacted) and the response status. Requests refused with 401/403 are logged as `admin:DENIED`. Reads are not logged. Admin-only routes elsewhere (categories, category requests, hub operations, an admin acting through `/seller/orders/*`) are logged too.
 
 ### Orders, refunds and analytics
 
@@ -548,7 +550,7 @@ Same body schemas as seller promotions (see Promotions), but the discount is pai
 | Method and path | Body / query | Returns |
 |---|---|---|
 | `GET /admin/payouts` | query `status`, `page`, `limit` | payout requests with pagination |
-| `POST /admin/payouts/:id/complete` | optional `transactionId` | marks paid |
+| `POST /admin/payouts/:id/complete` | optional `transactionId` | marks paid; 409 `PAYOUT_EXCEEDS_BALANCE` when a refund since the request means the kitchen's balance no longer covers it (fail it instead) |
 | `POST /admin/payouts/:id/fail` | `reason` (required) | marks failed |
 
 ### Settings
@@ -562,15 +564,30 @@ Same body schemas as seller promotions (see Promotions), but the discount is pai
 
 | Method and path | Body / query | Returns |
 |---|---|---|
-| `GET /admin/support/tickets` | query `status`, `page`, `limit` | tickets with pagination |
-| `GET /admin/support/tickets/:id` | none | one ticket with messages |
-| `POST /admin/support/tickets/:id/reply` | `message` (min 1), optional `status` (`open` \| `in_progress` \| `resolved` \| `closed`) | 201 the ticket |
+| `GET /admin/support/tickets` | query `status`, `priority`, `assignedTo` (admin id or `unassigned`), `search` (subject, ticket number, order number, customer), `page`, `limit` | tickets with pagination (each with `orderNumber`, `assignedTo`) |
+| `GET /admin/support/tickets/:id` | none | one ticket with messages, including internal notes and status-change lines (`isInternal`) |
+| `POST /admin/support/tickets/:id/reply` | `message` (min 1), optional `status` (`open` \| `in_progress` \| `resolved` \| `closed`), optional `internal` (true: an admin-only note, the customer is not told and never sees it) | 201 the ticket. A normal reply notifies the customer |
+
+### Staff and approvals
+
+| Method and path | Body | Returns |
+|---|---|---|
+| `GET /admin/approvals` | | `{ items: [{ key, label, href, count, oldestWaitingSince }], total }`, only the queues the caller's role can act on |
+| `GET /admin/staff` | | all staff with `role`, `permissions`, `status`, `lastLoginAt` (super admin only) |
+| `POST /admin/staff` | `email`, `fullName`, `role` (`admin` \| `support`), `password` (min 12) | 201 the new member |
+| `PATCH /admin/staff/:id` | `role` | the member; their sessions end |
+| `POST /admin/staff/:id/status` | `status` (`active` \| `suspended`) | the member; suspending ends their sessions |
+| `POST /admin/staff/:id/password` | `password` (min 12) | sets a new password and ends their sessions |
+| `DELETE /admin/staff/:id` | | removes staff access (account becomes a customer) |
+
+The super admin and your own account cannot be changed. Login and `GET /auth/me` return `staffRole` and `permissions` for staff. A role that may not do something gets 403 `INSUFFICIENT_STAFF_ROLE` with `details.permission`.
 
 ### Audit log
 
 | Method and path | Query | Returns |
 |---|---|---|
-| `GET /admin/audit-logs` | `page`, `limit` (default 50, max 100), `entityType`, `entityId`, `userId`, `action` (contains, case-insensitive) | `{ logs: [{ id, action, entityType, entityId, responseStatus, requestData, ipAddress, createdAt, admin: { id, name, email } }], pagination }`, newest first |
+| `GET /admin/audit-logs/export` | the same filters | a CSV file (at most 5,000 rows); the export is logged |
+| `GET /admin/audit-logs` | `page`, `limit` (default 50, max 100), `entityType`, `entityId`, `userId`, `action` (contains, case-insensitive), `dateFrom`, `dateTo`, `result` (`ok` \| `refused`) | `{ logs: [{ id, action, entityType, entityId, responseStatus, requestData, ipAddress, createdAt, admin: { id, name, email } }], pagination }`, newest first |
 
 ## Limitations
 

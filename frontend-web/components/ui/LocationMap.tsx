@@ -1,5 +1,11 @@
 'use client';
 
+import { MAP_TILE_URL, MAP_ATTRIBUTION, MAP_MAX_ZOOM } from '@/lib/map-config';
+import 'leaflet/dist/leaflet.css';
+import markerIcon from 'leaflet/dist/images/marker-icon.png';
+import markerIcon2x from 'leaflet/dist/images/marker-icon-2x.png';
+import markerShadow from 'leaflet/dist/images/marker-shadow.png';
+
 import { useEffect, useRef, useState, useCallback } from 'react';
 import dynamic from 'next/dynamic';
 import { Search, Navigation, MapPin, Loader2, Check } from 'lucide-react';
@@ -59,22 +65,15 @@ function LocationMapInner({
     const initMap = async () => {
       try {
         const L = (await import('leaflet')).default;
-        // Dynamically ensure CSS is present
-        if (!document.getElementById('leaflet-css')) {
-          const link = document.createElement('link');
-          link.id = 'leaflet-css';
-          link.rel = 'stylesheet';
-          link.href = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css';
-          document.head.appendChild(link);
-        }
 
         if (!isMounted || !mapRef.current) return;
 
+        // Marker images come from our own build, not a CDN (works offline, no third party).
         delete (L.Icon.Default.prototype as any)._getIconUrl;
         L.Icon.Default.mergeOptions({
-          iconRetinaUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png',
-          iconUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png',
-          shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
+          iconRetinaUrl: markerIcon2x.src,
+          iconUrl: markerIcon.src,
+          shadowUrl: markerShadow.src,
         });
 
         if (!mapInstanceRef.current && mapRef.current) {
@@ -89,10 +88,7 @@ function LocationMapInner({
           L.control.zoom({ position: 'topright' }).addTo(map);
 
           // Tile Layer: OpenStreetMap with clean styling
-          L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-            attribution: '&copy; OpenStreetMap',
-            maxZoom: 19,
-          }).addTo(map);
+L.tileLayer(MAP_TILE_URL, { attribution: MAP_ATTRIBUTION, maxZoom: MAP_MAX_ZOOM }).addTo(map);
 
           // Minimalist custom pin
           const pinIcon = L.divIcon({
@@ -325,7 +321,7 @@ function LocationMapInner({
             type="button"
             onClick={() => handleSearch()}
             disabled={isSearching || !searchQuery.trim()}
-            className="absolute end-1 top-1 px-2.5 py-1 bg-slate-900 hover:bg-slate-800 disabled:opacity-40 text-white text-[10px] font-bold rounded-lg transition-colors cursor-pointer"
+            className="absolute end-1 top-1 px-2.5 py-1 bg-slate-900 hover:bg-slate-800 disabled:opacity-40 text-white text-[11px] font-bold rounded-lg transition-colors cursor-pointer"
           >
             {isSearching ? <Loader2 className="w-3 h-3 animate-spin" /> : tc('search')}
           </button>
@@ -355,7 +351,7 @@ function LocationMapInner({
             ) : (
               <Navigation className="w-3.5 h-3.5" />
             )}
-            <span className="text-[10px] font-semibold hidden sm:inline">{t('myLocation')}</span>
+            <span className="text-[11px] font-semibold hidden sm:inline">{t('myLocation')}</span>
           </button>
         </div>
       </div>
@@ -380,7 +376,7 @@ function LocationMapInner({
           <span>{t('mapHint')}</span>
         </span>
         {currentCoords && (
-          <span className="font-mono font-medium text-slate-700 bg-slate-100 px-2 py-0.5 rounded text-[10px]" data-ltr>
+          <span className="font-mono font-medium text-slate-700 bg-slate-100 px-2 py-0.5 rounded text-[11px]" data-ltr>
             {currentCoords.lat.toFixed(4)}, {currentCoords.lng.toFixed(4)}
           </span>
         )}

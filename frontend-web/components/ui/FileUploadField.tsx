@@ -1,6 +1,6 @@
 'use client';
 
-import { useRef, useState } from 'react';
+import { useRef, useState, useEffect } from 'react';
 import { apiClient, apiErrorMessage } from '@/lib/api-client';
 import { useT } from '@/lib/i18n';
 import { commonMessages } from '@/lib/i18n/messages/common';
@@ -37,6 +37,13 @@ export default function FileUploadField({ kind, label, hint, value, onChange, re
   const tc = useT(commonMessages);
   const inputRef = useRef<HTMLInputElement>(null);
   const [preview, setPreview] = useState<string | null>(null);
+  // A preview is a blob: URL the browser keeps in memory until it is released.
+  useEffect(
+    () => () => {
+      if (preview?.startsWith('blob:')) URL.revokeObjectURL(preview);
+    },
+    [preview]
+  );
   const [fileName, setFileName] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);

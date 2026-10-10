@@ -1,4 +1,6 @@
+import { maskEmail } from '../utils/mask';
 import prisma from '../config/database';
+import socketManager from '../config/socket';
 import { generateToken, generateRefreshToken, tokenTtlSeconds, isTokenRevoked, JWTPayload } from '../utils/jwt';
 import { formatPhoneNumber, isValidPhoneNumber } from '../utils/otp';
 import { AppError } from '../middleware/errorHandler';
@@ -7,15 +9,21 @@ import { randomBytes, createHash } from 'crypto';
 import otpService from './otp.service';
 import { queueVerificationEmail, queuePasswordResetEmail } from '../jobs/email.jobs';
 import adminService from './admin.service';
+import { recordAudit } from '../middleware/audit';
+import { permissionsFor } from '../utils/permissions';
 import { generateVerificationToken } from '../utils/email-verification';
 
 /** A unique stand-in number for an account with no (or an evicted) real phone. Never a real number: +999 isn't assigned. */
-const placeholderPhone = (seed: string): string =>
+export const placeholderPhone = (seed: string): string =>
   `+999${Buffer.from(seed.toLowerCase()).toString('base64').replace(/[^A-Za-z0-9]/g, '').slice(0, 8)}${Date.now().toString().slice(-8)}${randomBytes(3).toString('hex')}`;
 
 
 /** A valid bcrypt hash of a random string, for equalising login timing when the account doesn't exist. */
 const DUMMY_PASSWORD_HASH = bcrypt.hashSync(randomBytes(16).toString('hex'), 10);
+
+/** An admin account is locked for a while after this many wrong passwords. */
+const ADMIN_MAX_FAILED_LOGINS = 5;
+const ADMIN_LOCK_MINUTES = 15;
 
 export class AuthService {
   /**
@@ -43,8 +51,8 @@ export class AuthService {
     }
 
     // Validate password
-    if (password.length < 6) {
-      throw new AppError('Password must be at least 6 characters', 400, 'WEAK_PASSWORD');
+    if (password.length < 8) {
+      throw new AppError('Password must be at least 8 characters', 400, 'WEAK_PASSWORD');
     }
 
     // Check if user already exists by email
@@ -352,9 +360,24 @@ export class AuthService {
         throw new AppError('Password not set. Please use phone login or reset password', 400, 'PASSWORD_NOT_SET');
       }
 
+      // Admin accounts: locked after repeated wrong passwords (counted from the audit log).
+      const isAdmin = user.userType === 'admin';
+      if (isAdmin) {
+        const since = new Date(Date.now() - ADMIN_LOCK_MINUTES * 60 * 1000);
+        const lastOk = await prisma.auditLog.findFirst({ where: { action: 'auth:LOGIN', userId: user.id, createdAt: { gte: since } }, orderBy: { createdAt: 'desc' }, select: { createdAt: true } });
+        const failures = await prisma.auditLog.count({
+          where: { action: 'auth:LOGIN_FAILED', entityId: user.id, createdAt: { gte: lastOk?.createdAt ?? since } },
+        });
+        if (failures >= ADMIN_MAX_FAILED_LOGINS) {
+          void recordAudit({ action: 'auth:LOGIN_LOCKED', entityType: 'user', entityId: user.id, responseStatus: 429 });
+          throw new AppError(`Too many wrong passwords. This account is locked for ${ADMIN_LOCK_MINUTES} minutes.`, 429, 'ACCOUNT_LOCKED');
+        }
+      }
+
       // Verify password
       const isPasswordValid = await bcrypt.compare(otpCodeOrPassword, user.passwordHash);
       if (!isPasswordValid) {
+        if (isAdmin) await recordAudit({ action: 'auth:LOGIN_FAILED', entityType: 'user', entityId: user.id, responseStatus: 401 });
         throw new AppError('Invalid email or password', 401, 'INVALID_CREDENTIALS');
       }
 
@@ -383,6 +406,7 @@ export class AuthService {
         where: { id: user.id },
         data: { lastLoginAt: new Date() },
       });
+      if (isAdmin) await recordAudit({ userId: user.id, action: 'auth:LOGIN', entityType: 'user', entityId: user.id, responseStatus: 200 });
 
       return {
         user: {
@@ -390,6 +414,8 @@ export class AuthService {
           phone: user.phone,
           email: user.email,
           userType: user.userType,
+          staffRole: user.staffRole,
+          permissions: permissionsFor(user.staffRole),
           status: user.status,
           profile: user.profile,
           emailVerified: user.emailVerified,
@@ -429,6 +455,12 @@ export class AuthService {
         throw new AppError(`Account is ${user.status}`, 403, 'ACCOUNT_SUSPENDED');
       }
 
+      // An SMS code (open to SIM swaps) is not enough for an admin account: password only.
+      if (user.userType === 'admin') {
+        void recordAudit({ action: 'auth:LOGIN_REFUSED_OTP', entityType: 'user', entityId: user.id, responseStatus: 403 });
+        throw new AppError('Admin accounts sign in with email and password.', 403, 'ADMIN_PASSWORD_ONLY');
+      }
+
       // OTP proves the caller controls this number — but not that the ACCOUNT's owner does. If
       // the number was never verified for this account, whoever created it may not own it
       // (they could have typed a victim's number), so logging the OTP holder in would hand them
@@ -463,6 +495,8 @@ export class AuthService {
           phone: user.phone,
           email: user.email,
           userType: user.userType,
+          staffRole: user.staffRole,
+          permissions: permissionsFor(user.staffRole),
           status: user.status,
           profile: user.profile,
           emailVerified: user.emailVerified,
@@ -582,14 +616,16 @@ export class AuthService {
       where: { email: normalizedEmail },
       include: { profile: true },
     });
-    if (!user || user.status !== 'active') return;
+    // Only an address whose owner has already proven it gets a link: an unverified address is
+    // whatever was last typed into the profile, which must not be enough to take the account over.
+    if (!user || user.status !== 'active' || !user.emailVerified) return;
 
     // The background job creates the single-use link (only its hash is stored) and emails
     // it, so this answers just as fast for an unknown address as for a real one.
     try {
       await queuePasswordResetEmail(user.id);
     } catch (err) {
-      console.error(`[forgotPassword] Could not queue the reset email for ${normalizedEmail}`, err);
+      console.error(`[forgotPassword] Could not queue the reset email for ${maskEmail(normalizedEmail)}`, err);
     }
   }
 
@@ -598,12 +634,13 @@ export class AuthService {
    * voided (anyone who was logged in — including an attacker — must sign in again).
    */
   async resetPassword(token: string, newPassword: string): Promise<void> {
-    if (!newPassword || newPassword.length < 6) {
-      throw new AppError('Password must be at least 6 characters', 400, 'WEAK_PASSWORD');
+    if (!newPassword || newPassword.length < 8) {
+      throw new AppError('Password must be at least 8 characters', 400, 'WEAK_PASSWORD');
     }
     const tokenHash = createHash('sha256').update(token).digest('hex');
     const passwordHash = await bcrypt.hash(newPassword, 10);
 
+    let resetUserId: string | null = null;
     await prisma.$transaction(async (tx) => {
       const used = await tx.passwordReset.updateMany({
         where: { tokenHash, usedAt: null, expiresAt: { gt: new Date() } },
@@ -613,6 +650,7 @@ export class AuthService {
         throw new AppError('This reset link is invalid or has expired', 400, 'INVALID_RESET_TOKEN');
       }
       const reset = await tx.passwordReset.findUniqueOrThrow({ where: { tokenHash } });
+      resetUserId = reset.userId;
       await tx.user.update({
         where: { id: reset.userId },
         data: {
@@ -623,45 +661,51 @@ export class AuthService {
         },
       });
     });
+    // Every session ends with a password reset: leave a trail of who and when.
+    if (resetUserId) socketManager.disconnectUser(resetUserId);
+    if (resetUserId) void recordAudit({ userId: resetUserId, action: 'auth:PASSWORD_RESET', entityType: 'user', entityId: resetUserId, responseStatus: 200 });
   }
 
   /**
    * Refresh access token
    */
   async refreshToken(refreshToken: string) {
+    const { verifyRefreshToken, generateToken } = await import('../utils/jwt');
+    // Only a bad token is "invalid"; a revoked session, a closed account or a database
+    // outage each answer as what they are (the client keeps its session on a 5xx).
+    let payload: JWTPayload;
     try {
-      const { verifyRefreshToken, generateToken } = await import('../utils/jwt');
-      const payload = verifyRefreshToken(refreshToken);
-
-      // Verify user still exists and is active
-      const user = await prisma.user.findUnique({
-        where: { id: payload.userId },
-      });
-
-      if (!user || user.status !== 'active') {
-        throw new AppError('User not found or inactive', 401, 'USER_INACTIVE');
-      }
-      if (isTokenRevoked(payload, user.tokensValidAfter)) {
-        throw new AppError('Session expired, please log in again', 401, 'SESSION_REVOKED');
-      }
-
-      // Generate new tokens
-      const tokenPayload: JWTPayload = {
-        userId: user.id,
-        userType: user.userType,
-        phone: user.phone,
-      };
-
-      const newAccessToken = generateToken(tokenPayload);
-      const newRefreshToken = generateRefreshToken(tokenPayload);
-
-      return {
-        accessToken: newAccessToken,
-        refreshToken: newRefreshToken,
-      };
-    } catch (error) {
+      payload = verifyRefreshToken(refreshToken);
+    } catch {
       throw new AppError('Invalid refresh token', 401, 'INVALID_REFRESH_TOKEN');
     }
+
+    // Verify user still exists and is active
+    const user = await prisma.user.findUnique({
+      where: { id: payload.userId },
+    });
+
+    if (!user || user.status !== 'active') {
+      throw new AppError('User not found or inactive', 401, 'USER_INACTIVE');
+    }
+    if (isTokenRevoked(payload, user.tokensValidAfter)) {
+      throw new AppError('Session expired, please log in again', 401, 'SESSION_REVOKED');
+    }
+
+    // Generate new tokens
+    const tokenPayload: JWTPayload = {
+      userId: user.id,
+      userType: user.userType,
+      phone: user.phone,
+    };
+
+    const newAccessToken = generateToken(tokenPayload);
+    const newRefreshToken = generateRefreshToken(tokenPayload);
+
+    return {
+      accessToken: newAccessToken,
+      refreshToken: newRefreshToken,
+    };
   }
 
   /**
@@ -688,6 +732,8 @@ export class AuthService {
       phone: user.phone,
       email: user.email,
       userType: user.userType,
+      staffRole: user.staffRole,
+      permissions: permissionsFor(user.staffRole),
       status: user.status,
       emailVerified: user.emailVerified,
       phoneVerified: user.phoneVerified,

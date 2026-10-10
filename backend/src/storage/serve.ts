@@ -38,7 +38,13 @@ export function fileRoutes(): Router {
     );
 
     router.get(/^\/files\/(.+)$/, (req: Request, res: Response) => {
-      const key = decodeURIComponent((req.params as any)[0] ?? '');
+      let key: string;
+      try {
+        key = decodeURIComponent((req.params as any)[0] ?? '');
+      } catch {
+        res.status(400).json({ success: false, error: { message: 'This link is invalid', code: 'FILE_LINK_INVALID' } });
+        return;
+      }
       const exp = Number(req.query.exp);
       const sig = typeof req.query.sig === 'string' ? req.query.sig : '';
       if (!key.startsWith('x/') || key.includes('..') || !s.verify(key, exp, sig)) {

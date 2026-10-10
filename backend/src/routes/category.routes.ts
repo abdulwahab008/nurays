@@ -13,6 +13,8 @@ import {
   updateCategorySchema,
 } from '../validators/category.validator';
 import { authenticate, authorize } from '../middleware/auth.middleware';
+import { auditWrites } from '../middleware/audit';
+import { requirePermission } from '../middleware/staff';
 
 const router = Router();
 
@@ -26,6 +28,8 @@ router.post(
   '/',
   authenticate,
   authorize('admin'),
+  requirePermission('ops.write'),
+  auditWrites('admin'),
   validate(createCategorySchema),
   createCategory
 );
@@ -34,6 +38,8 @@ router.patch(
   '/:id',
   authenticate,
   authorize('admin'),
+  requirePermission('ops.write'),
+  auditWrites('admin'),
   validate(updateCategorySchema),
   updateCategory
 );
@@ -42,6 +48,8 @@ router.delete(
   '/:id',
   authenticate,
   authorize('admin'),
+  requirePermission('ops.write'),
+  auditWrites('admin'),
   deleteCategory
 );
 

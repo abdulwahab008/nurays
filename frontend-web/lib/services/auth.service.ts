@@ -154,13 +154,7 @@ export const authService = {
     return response.data;
   },
 
-  // Token management
-  refreshToken: async (refreshToken: string) => {
-    const response = await apiClient.post<ApiResponse<AuthTokens>>('/auth/refresh-token', {
-      refresh_token: refreshToken,
-    });
-    return response.data;
-  },
+  // Token refresh lives in lib/api-client.ts (transparent on 401).
 
   logout: async () => {
     await apiClient.post('/auth/logout');

@@ -1,9 +1,13 @@
 import { Prisma } from '@prisma/client';
+import { searchTerm } from '../utils/search';
 import { Request, Response } from 'express';
+import { qstr } from '../utils/query';
+import { pageArgs } from '../utils/pagination';
 import sellerService from '../services/seller.service';
 import { AppError } from '../middleware/errorHandler';
 import prisma from '../config/database';
 import { computeSellerAvailability } from '../services/availability.service';
+import { onMenuWhere } from '../utils/menu';
 
 export const getCurrentSeller = async (req: Request, res: Response) => {
   if (!req.user) {
@@ -118,7 +122,7 @@ export const getSellerAnalytics = async (req: Request, res: Response) => {
     throw new AppError('Seller account not found', 404, 'SELLER_NOT_FOUND');
   }
 
-  const period = (req.query.period as string) || '30d';
+  const period = qstr(req.query.period) || '30d';
   const analytics = await sellerService.getSellerAnalytics(seller.id, period);
 
   res.status(200).json({
@@ -222,10 +226,11 @@ export const getPublicSellers = async (req: Request, res: Response) => {
     whereClause.businessType = businessType;
   }
 
-  if (search && typeof search === 'string') {
+  const term = searchTerm(search);
+  if (term) {
     whereClause.OR = [
-      { businessName: { contains: search, mode: 'insensitive' } },
-      { description: { contains: search, mode: 'insensitive' } },
+      { businessName: { contains: term, mode: 'insensitive' } },
+      { description: { contains: term, mode: 'insensitive' } },
     ];
   }
 
@@ -239,14 +244,12 @@ export const getPublicSellers = async (req: Request, res: Response) => {
 
   const sellers = await prisma.seller.findMany({
     where: whereClause,
-    take: limit ? Math.min(Number(limit), 50) : 30,
+    take: pageArgs(1, limit, 30, 50).limit,
     orderBy,
     include: {
       user: {
         select: {
           id: true,
-          email: true,
-          phone: true,
           profile: {
             select: {
               fullName: true,
@@ -267,7 +270,7 @@ export const getPublicSellers = async (req: Request, res: Response) => {
         },
       },
       products: {
-        where: { isActive: true, approvalStatus: 'approved' },
+        where: { isActive: true, approvalStatus: 'approved', ...onMenuWhere() },
         take: 4,
         select: {
           id: true,
@@ -286,7 +289,7 @@ export const getPublicSellers = async (req: Request, res: Response) => {
       },
       _count: {
         select: {
-          products: { where: { isActive: true, approvalStatus: 'approved' } },
+          products: { where: { isActive: true, approvalStatus: 'approved', ...onMenuWhere() } },
           reviews: true,
         },
       },
@@ -366,8 +369,6 @@ export const getPublicSellerById = async (req: Request, res: Response) => {
       user: {
         select: {
           id: true,
-          email: true,
-          phone: true,
           profile: {
             select: {
               fullName: true,
@@ -390,7 +391,7 @@ export const getPublicSellerById = async (req: Request, res: Response) => {
         },
       },
       products: {
-        where: { isActive: true, approvalStatus: 'approved' },
+        where: { isActive: true, approvalStatus: 'approved', ...onMenuWhere() },
         orderBy: { createdAt: 'desc' },
         include: {
           category: {

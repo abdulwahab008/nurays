@@ -65,6 +65,7 @@ interface EarningsData {
   pendingPayout: number;
   availableBalance: number;
   codCommissionOwed: number;
+  awaitingRiderCash: number;
   payouts: Array<{
     id: string;
     amount: number;
@@ -126,6 +127,7 @@ export default function SellerEarningsPage() {
           pendingPayout: ov.pendingPayout ?? 0,
           availableBalance: ov.availableForPayout ?? 0,
           codCommissionOwed: ov.codCommissionOwed ?? 0,
+          awaitingRiderCash: ov.awaitingRiderCash ?? 0,
           payouts: payoutsRes.data.success ? payoutsRes.data.data : [],
         });
       }
@@ -205,6 +207,11 @@ export default function SellerEarningsPage() {
                   <span className="text-xs font-semibold text-blue-600 block">{t('available')}</span>
                   <span className="text-2xl font-black text-gray-900 mt-1 block">{formatPrice(earnings.availableBalance)}</span>
                   <span className="text-[11px] text-gray-500 mt-1 block">{t('availableHint')}</span>
+                  {earnings.awaitingRiderCash > 0 && (
+                    <span className="text-[11px] text-amber-700 font-semibold mt-1 block">
+                      {t('awaitingRiderCash', { amount: formatPrice(earnings.awaitingRiderCash) })}
+                    </span>
+                  )}
                 </div>
                 <div className="w-12 h-12 bg-blue-50 text-blue-600 rounded-xl flex items-center justify-center">
                   {Icons.wallet}

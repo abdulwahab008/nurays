@@ -470,7 +470,7 @@ export default function CartPage() {
             {/* Tray Icon */}
             <div className="relative inline-flex items-center justify-center w-24 h-24 rounded-3xl bg-gradient-to-tr from-amber-100 to-orange-100 border border-orange-200/80 shadow-inner mb-5">
               <ShoppingBag className="w-12 h-12 text-[#FF5500]" />
-              <span className="absolute -bottom-1.5 -end-1.5 px-2 py-0.5 rounded-full bg-slate-900 text-white text-[10px] font-black uppercase tracking-wider shadow-xs">
+              <span className="absolute -bottom-1.5 -end-1.5 px-2 py-0.5 rounded-full bg-slate-900 text-white text-[11px] font-black uppercase tracking-wider shadow-xs">
                 {t('zeroItems')}
               </span>
             </div>
@@ -567,12 +567,12 @@ export default function CartPage() {
                     {activeSeller.businessName}
                   </h3>
                   {(activeSeller as any).community?.name && (
-                    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-white text-slate-700 border border-slate-200 shadow-2xs">
+                    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-white text-slate-700 border border-slate-200 shadow-2xs">
                       <MapPin className="w-3 h-3 text-[#FF5500]" />
                       <span>{(activeSeller as any).community.name}</span>
                     </span>
                   )}
-                  <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800">
+                  <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-emerald-100 text-emerald-800">
                     <ShieldCheck className="w-3 h-3" />
                     <span>{t('singleKitchenOrder')}</span>
                   </span>
@@ -687,7 +687,7 @@ export default function CartPage() {
                           </div>
                         )}
                         <span
-                          className={`absolute bottom-1.5 start-1.5 px-2 py-0.5 rounded-md text-[9px] font-bold text-white shadow-xs flex items-center gap-1 ${
+                          className={`absolute bottom-1.5 start-1.5 px-2 py-0.5 rounded-md text-[11px] font-bold text-white shadow-xs flex items-center gap-1 ${
                             item.stockType === 'hub' ? 'bg-cyan-600' : 'bg-[#FF5500]'
                           }`}
                         >
@@ -731,7 +731,7 @@ export default function CartPage() {
                         </div>
 
                         {promotionLabel && (
-                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-emerald-100 text-emerald-800 text-[10px] font-bold mt-1.5">
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-emerald-100 text-emerald-800 text-[11px] font-bold mt-1.5">
                             <Tag className="w-2.5 h-2.5" />
                             <span>{promotionLabel}</span>
                           </span>
@@ -812,7 +812,7 @@ export default function CartPage() {
                     <Snowflake className="w-3.5 h-3.5 text-cyan-600" />
                     <span>{t('insulatedPack')}</span>
                   </span>
-                  <span className="text-emerald-700 font-bold uppercase text-[10px]">{tc('free')}</span>
+                  <span className="text-emerald-700 font-bold uppercase text-[11px]">{tc('free')}</span>
                 </div>
 
                 <div className="flex justify-between text-slate-600 font-medium">
@@ -884,7 +884,7 @@ export default function CartPage() {
                   <span className="text-sm font-bold text-slate-900">{t('totalPayable')}</span>
                   <span className="text-2xl font-black text-slate-950">{formatPrice(displayTotal)}</span>
                 </div>
-                <span className="text-[10px] text-slate-400 block mt-0.5">
+                <span className="text-[11px] text-slate-400 block mt-0.5">
                   {t('includesAll')}
                 </span>
               </div>

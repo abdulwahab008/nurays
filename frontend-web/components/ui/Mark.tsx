@@ -67,7 +67,7 @@ export function Wordmark({ size = 26, className }: { size?: number; className?: 
         NURAY
       </span>
       <span
-        className="rounded-md px-1.5 py-0.5 text-[9px] font-black uppercase tracking-wider text-white"
+        className="rounded-md px-1.5 py-0.5 text-[11px] font-black uppercase tracking-wider text-white"
         style={{
           background: 'linear-gradient(135deg, #FF5500 0%, #FF2A00 100%)',
           boxShadow: '0 2px 8px -1px rgba(255, 85, 0, 0.4)',

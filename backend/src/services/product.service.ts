@@ -1,10 +1,15 @@
 import { Prisma } from '@prisma/client';
+import { logger } from '../utils/logger';
 import prisma from '../config/database';
+import { pageArgs } from '../utils/pagination';
 import { getPlatformDeliveryPricing } from './delivery-pricing.service';
 import { searchRankedProductIds } from './ranking.service';
 import { AppError } from '../middleware/errorHandler';
 import { computeSellerAvailability, isAcceptingOrders } from './availability.service';
 import { getDeliveryFeeForSeller, haversineKm } from '../utils/deliveryFee';
+import { isOnMenu, menuNote, normalizeMenuInput, onMenuWhere } from '../utils/menu';
+import { notifyApprovers } from './approvals.service';
+import { notifySeller } from './notify.service';
 import { SELLER_COMMUNITY_DELIVERY_SELECT } from '../utils/sellerDeliverySelect';
 import { isUploadedBy } from '../utils/uploadPaths';
 import { isStoredFile } from '../storage';
@@ -58,6 +63,24 @@ const SELLER_ORDERING_SELECT = {
     },
   },
 } as const;
+
+/**
+ * The kitchen as shoppers may see it on a product card: identity, rating, community and how it
+ * sells. Never its exact coordinates (a home kitchen is someone's house), delivery-pricing
+ * configuration or zone lists: fee, distance and ETA are computed server-side into `delivery`.
+ */
+const PUBLIC_SELLER_CARD_KEYS = [
+  'id', 'businessName', 'businessNameUrdu', 'businessType', 'coverImageUrl', 'ratingAverage', 'totalReviews', 'isVerified',
+  'mealCategories', 'status', 'deliveryModes', 'deliveryProvider', 'freeDeliveryThreshold', 'minOrderAmountForDelivery',
+  'communityId', 'allowCrossCommunity', 'primaryCommunityName', 'community', 'scheduleMode', 'operatingHours',
+  'availabilityOverride', 'availabilityOverrideUntil', 'availabilityNote', 'orderCutoffTime', 'maxDailyOrders',
+  'preOrderOnly', 'minPrepTimeMinutes', 'createdAt',
+] as const;
+function publicSellerCard<T extends Record<string, unknown>>(seller: T): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  for (const key of PUBLIC_SELLER_CARD_KEYS) if (key in seller) out[key] = seller[key];
+  return out;
+}
 
 function attachAvailability<T extends Record<string, unknown>>(seller: T) {
   const availability = computeSellerAvailability(seller as any);
@@ -241,6 +264,23 @@ function expandSearchTerms(search: string): string[] {
   return Array.from(terms);
 }
 
+/** Edits to these change what customers are told about the dish, so an approved dish goes back to review. */
+const REVIEWED_FIELDS = ['name', 'nameUrdu', 'description', 'descriptionUrdu', 'categoryId', 'productType', 'ingredients', 'allergens', 'heatingInstructions', 'heatingInstructionsUrdu'] as const;
+const fileName = (url: string) => decodeURIComponent(url.split('?')[0].split('/').pop() ?? url);
+
+export function contentChanged(existing: Record<string, any>, data: Record<string, any>, existingImageUrls: string[]): boolean {
+  for (const f of REVIEWED_FIELDS) {
+    if (data[f] !== undefined && String(data[f] ?? '') !== String(existing[f] ?? '')) return true;
+  }
+  if (data.dietaryInfo !== undefined && JSON.stringify([...(data.dietaryInfo ?? [])].sort()) !== JSON.stringify([...(existing.dietaryInfo ?? [])].sort())) return true;
+  if (data.images !== undefined) {
+    const next = (data.images as string[]).map(fileName).sort();
+    const prev = existingImageUrls.map(fileName).sort();
+    if (JSON.stringify(next) !== JSON.stringify(prev)) return true;
+  }
+  return false;
+}
+
 export class ProductService {
   /**
    * Get all products with filters and pagination
@@ -323,6 +363,8 @@ export class ProductService {
     where.approvalStatus = 'approved';
     // ...nor a product from a suspended/inactive seller.
     where.seller = { status: 'active' };
+    // ...and only dishes that are on the menu today (fixed, today's weekday, or today's daily menu).
+    where.AND = [...(Array.isArray(where.AND) ? where.AND : where.AND ? [where.AND] : []), onMenuWhere()];
 
     if (filters.mealCategory) {
       where.seller.mealCategories = { has: filters.mealCategory };
@@ -568,7 +610,7 @@ export class ProductService {
         isSameCommunity,
         isCrossCommunity,
         seller: {
-          ...attachAvailability(product.seller),
+          ...attachAvailability(publicSellerCard(product.seller)),
           community: sellerCommunity,
           isAcceptingOrders: sellerInfo.isAcceptingOrders,
           acceptingOrdersReason: sellerInfo.acceptingReason,
@@ -665,11 +707,13 @@ export class ProductService {
       throw new AppError('Product not found', 404, 'PRODUCT_NOT_FOUND');
     }
 
-    // Increment view count
-    await prisma.product.update({
-      where: { id: product.id },
-      data: { viewsCount: { increment: 1 } },
-    });
+    // Count the view without holding the response or rewriting the row (updated_at stays
+    // what the kitchen last changed); a kitchen looking at its own dish is not a view.
+    if (!isOwner) {
+      void prisma
+        .$executeRaw`UPDATE products SET views_count = views_count + 1 WHERE id = ${product.id}`
+        .catch((err: unknown) => logger.warn({ err, productId: product.id }, 'view count not recorded'));
+    }
 
     // Format images with full URLs
     const baseUrl = process.env.BASE_URL || 'http://localhost:3001';
@@ -680,6 +724,8 @@ export class ProductService {
     // expose only an explicit public subset, and the product's cost price only
     // to its owner.
     const { seller: fullSeller, costPrice: rawCostPrice, ...productFields } = product;
+    const availableToday = isOnMenu(product);
+    const menuLabel = menuNote(product);
     const publicSeller = {
       id: fullSeller.id,
       businessName: fullSeller.businessName,
@@ -712,6 +758,9 @@ export class ProductService {
 
     return {
       ...productFields,
+      // Whether the dish can be ordered today, and when it is on the menu (for the page to say so).
+      availableToday,
+      menuLabel,
       price: Number(product.price),
       originalPrice: product.originalPrice ? Number(product.originalPrice) : null,
       ...(isOwner ? { costPrice: rawCostPrice ? Number(rawCostPrice) : null } : {}),
@@ -773,6 +822,9 @@ export class ProductService {
     preparationTime?: number;  // Minutes for made-to-order items
     images?: string[];
     tags?: string[];
+    menuType?: string;
+    availableDays?: number[];
+    menuDate?: string | null;
   }) {
     // Verify seller exists
     const seller = await prisma.seller.findUnique({
@@ -817,6 +869,7 @@ export class ProductService {
         productType: data.productType || 'frozen',  // Default to frozen for backward compatibility
         shelfLifeHours: data.shelfLifeHours,  // For fresh items
         preparationTime: data.preparationTime,  // For made-to-order items
+        ...normalizeMenuInput({ menuType: data.menuType, availableDays: data.availableDays, menuDate: data.menuDate }),
         approvalStatus: 'pending', // Awaits admin moderation
         isActive: false, // Not visible to customers until approved
         images: data.images
@@ -846,7 +899,9 @@ export class ProductService {
     for (let attempt = 1; ; attempt++) {
       const slug = await this.uniqueSlug(data.name, seller.id);
       try {
-        return await createRow(slug);
+        const created = await createRow(slug);
+        notifyApprovers({ title: 'New dish to approve', message: `"${created.name}" was added and is waiting for approval.`, actionUrl: '/admin/products', dedupeKey: `product-new:${created.id}` });
+        return created;
       } catch (err: any) {
         const target = String(err?.meta?.target ?? '');
         if (err?.code !== 'P2002' || !/slug/i.test(target) || attempt >= 5) throw err;
@@ -871,6 +926,13 @@ export class ProductService {
     if (!product) {
       throw new AppError('Product not found or access denied', 404, 'PRODUCT_NOT_FOUND');
     }
+
+    // An approved (or rejected) dish whose content changed goes back to review; the kitchen's price, stock
+    // and menu changes do not need one.
+    const existingImages = data.images !== undefined ? await prisma.productImage.findMany({ where: { productId }, select: { imageUrl: true } }) : [];
+    const needsReview =
+      (product.approvalStatus === 'approved' || product.approvalStatus === 'rejected') &&
+      contentChanged(product, data, existingImages.map((i) => i.imageUrl));
 
     // If name changed, update slug
     let slug = product.slug;
@@ -902,11 +964,17 @@ export class ProductService {
       delete data.images;
     }
 
+    // Menu type, days and date are checked together and saved as columns.
+    const { menuType, availableDays, menuDate, ...rest } = data;
+    const menu = menuType !== undefined || availableDays !== undefined || menuDate !== undefined ? normalizeMenuInput({ menuType, availableDays, menuDate }, product) : {};
+
     // Update product - no re-approval needed
     const updatedProduct = await prisma.product.update({
       where: { id: productId },
       data: {
-        ...data,
+        ...rest,
+        ...menu,
+        ...(needsReview ? { approvalStatus: 'pending', rejectionReason: null } : {}),
         slug,
         // Keep current approval status and active state
         // Unless explicitly changed via isActive field
@@ -918,6 +986,10 @@ export class ProductService {
       },
     });
 
+    if (needsReview) {
+      notifyApprovers({ title: 'A dish was changed and needs review', message: `"${updatedProduct.name}" was edited by its kitchen.`, actionUrl: '/admin/products', dedupeKey: `product-review:${productId}:${Date.now()}` });
+      void notifySeller(product.sellerId, { title: 'Your changes are under review', message: `"${updatedProduct.name}" is hidden from customers until staff approve the changes.`, actionUrl: '/sellers/products' });
+    }
     return updatedProduct;
   }
 
@@ -955,9 +1027,7 @@ export class ProductService {
     isActive?: boolean;
     approvalStatus?: string;
   }) {
-    const page = filters.page || 1;
-    const limit = Math.min(filters.limit || 20, 100);
-    const skip = (page - 1) * limit;
+    const { page, limit, skip } = pageArgs(filters.page, filters.limit);
 
     const seller = await prisma.seller.findUnique({
       where: { userId: sellerId },

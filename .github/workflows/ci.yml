@@ -6,6 +6,10 @@ on:
   pull_request:
     branches: [main]
 
+# The workflow token can read the repository and nothing more.
+permissions:
+  contents: read
+
 # Cancel an in-flight run when a new commit lands on the same branch / PR.
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
@@ -23,7 +27,7 @@ jobs:
 
       - uses: actions/setup-node@v7
         with:
-          node-version: "20"
+          node-version: "22"
           cache: npm
           cache-dependency-path: backend/package-lock.json
 
@@ -53,7 +57,7 @@ jobs:
 
       - uses: actions/setup-node@v7
         with:
-          node-version: "20"
+          node-version: "22"
           cache: npm
           cache-dependency-path: frontend-web/package-lock.json
 
@@ -114,7 +118,7 @@ jobs:
 
       - uses: actions/setup-node@v7
         with:
-          node-version: "20"
+          node-version: "22"
           cache: npm
           cache-dependency-path: |
             backend/package-lock.json
@@ -148,6 +152,8 @@ jobs:
         env:
           PORT: "3001"
           NODE_ENV: development
+          # The E2E specs claim jobs from the open pool by hand; automatic assignment has its own checks.
+          AUTO_ASSIGN_ENABLED: "false"
         run: |
           npm run build
           node dist/index.js &
@@ -182,7 +188,7 @@ jobs:
           # purchase.spec reads the email-verification token straight from the
           # DB via psql (no mailbox in CI). Point it at the CI database.
           E2E_DB_URL: postgresql://nuray:nuray@localhost:5432/nuray_test
-        run: npx playwright test tests/e2e/smoke.spec.ts --project=chromium
+        run: npx playwright test tests/e2e/smoke.spec.ts tests/e2e/rider-navigation.spec.ts --project=chromium
 
       - name: Upload Playwright report
         if: ${{ !cancelled() }}
@@ -208,18 +214,68 @@ jobs:
         with:
           context: ./backend
           push: false
+          load: true
           tags: nuray-backend:ci
           cache-from: type=gha,scope=backend
           cache-to: type=gha,scope=backend,mode=max
+
+      - name: Scan backend image (OS and library vulnerabilities)
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: nuray-backend:ci
+          trivyignores: .trivyignore
+          format: table
+          exit-code: "1"
+          ignore-unfixed: true
+          severity: CRITICAL,HIGH
 
       - name: Build frontend image
         uses: docker/build-push-action@v7
         with:
           context: ./frontend-web
           push: false
+          load: true
           tags: nuray-frontend:ci
           cache-from: type=gha,scope=frontend
           cache-to: type=gha,scope=frontend,mode=max
           build-args: |
             NEXT_PUBLIC_API_URL=http://localhost:3001/api/v1
             NEXT_PUBLIC_SAFEPAY_SANDBOX=true
+
+      - name: Scan frontend image (OS and library vulnerabilities)
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: nuray-frontend:ci
+          trivyignores: .trivyignore
+          format: table
+          exit-code: "1"
+          ignore-unfixed: true
+          severity: CRITICAL,HIGH
+
+  security:
+    # Known-vulnerable dependencies (production only) and committed secrets.
+    name: Dependency audit + secret scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+
+      - name: Backend dependency audit
+        working-directory: backend
+        # The three remaining "high" advisories are in the Prisma CLI (build and migration time only,
+        # not loaded by the running API) and need the Prisma 7 upgrade; critical ones fail the build.
+        run: npm audit --omit=dev --audit-level=critical
+
+      - name: Frontend dependency audit
+        working-directory: frontend-web
+        run: npm audit --omit=dev --audit-level=high
+
+      - name: Secret scan (gitleaks)
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

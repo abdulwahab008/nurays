@@ -12,6 +12,7 @@ import express from 'express';
 import { createServer } from 'http';
 import cors from 'cors';
 import helmet from 'helmet';
+import compression from 'compression';
 import socketManager from './config/socket';
 import { fileRoutes } from './storage/serve';
 import { checkAndCreateStockAlerts } from './services/stock-alert.service';
@@ -26,6 +27,7 @@ import { markShuttingDown, isShuttingDown } from './utils/lifecycle';
 import { apiLimiter } from './middleware/rateLimiter';
 import { requestId, httpLogger } from './middleware/requestContext';
 import { isProduction } from './config/env';
+import { logOpsSnapshot } from './services/ops-snapshot.service';
 import { sweepStaleOrders, purgeExpiredSecrets } from './services/order-maintenance.service';
 import { expireAbandonedAttempts } from './services/online-payment.service';
 import { errorHandler } from './middleware/errorHandler';
@@ -57,17 +59,24 @@ import supportRoutes from './routes/support.routes';
 import uploadRoutes from './routes/upload.routes';
 import communityRoutes from './routes/community.routes';
 import favoriteRoutes from './routes/favorite.routes';
+import { dispatchWaiting } from './services/dispatch.service';
 
 const app = express();
 const httpServer = createServer(app);
 const PORT = process.env.PORT || 3000;
 const API_VERSION = process.env.API_VERSION || 'v1';
 
-// Trust exactly one hop (the reverse proxy/load balancer in front of this
-// service in any real deployment) so req.ip and express-rate-limit's
-// X-Forwarded-For handling are accurate instead of throwing
-// ERR_ERL_UNEXPECTED_X_FORWARDED_FOR.
-app.set('trust proxy', 1);
+// Trust the proxy hops in front of this service (one reverse proxy or load balancer by
+// default) so req.ip and express-rate-limit's X-Forwarded-For handling are accurate instead
+// of throwing ERR_ERL_UNEXPECTED_X_FORWARDED_FOR. TRUST_PROXY: a hop count ("2" behind a CDN
+// and a load balancer, "0" when exposed directly) or an address list ("loopback, 10.0.0.0/8").
+const trustProxy = (process.env.TRUST_PROXY ?? '1').trim();
+app.set('trust proxy', /^\d+$/.test(trustProxy) ? Number(trustProxy) : trustProxy);
+
+// Idle keep-alive connections must outlive the load balancer's idle timeout (60 s on most),
+// or the balancer reuses a socket the server has just closed and answers 502/504.
+httpServer.keepAliveTimeout = Number(process.env.KEEP_ALIVE_TIMEOUT_MS) || 65_000;
+httpServer.headersTimeout = httpServer.keepAliveTimeout + 1_000;
 
 // Initialize Socket.io
 socketManager.initialize(httpServer);
@@ -76,6 +85,8 @@ socketManager.initialize(httpServer);
 app.use(helmet({
   crossOriginResourcePolicy: { policy: 'cross-origin' }, // Allow images to be loaded from other origins
 }));
+// JSON lists compress about 10x; phones on mobile data feel it.
+app.use(compression());
 app.use(cors({
   origin: process.env.CORS_ORIGIN || 'http://localhost:3000',
   credentials: true,
@@ -87,8 +98,9 @@ app.use(cors({
 app.use(requestId);
 app.use(httpLogger);
 
-app.use(express.json({ limit: '10mb' }));
-app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+// Files go through multipart uploads; a JSON body is at most a form with a few image URLs.
+app.use(express.json({ limit: '1mb' }));
+app.use(express.urlencoded({ extended: true, limit: '1mb' }));
 
 // Uploaded files: public media, signed private files, legacy /uploads (see storage/serve.ts).
 app.use(fileRoutes());
@@ -153,6 +165,7 @@ httpServer.listen(PORT, () => {
   // Hub batches past their expiry stop showing as available.
   scheduleJob('hub-expiry', 60 * 60 * 1000, () => hubService.expireStaleBatches());
   // Orders nobody is moving forward release their stock and the customer's money.
+  scheduleJob('dispatch-waiting', 60 * 1000, () => dispatchWaiting());
   scheduleJob('stale-orders', 2 * 60 * 1000, () => sweepStaleOrders());
   // Old one-time codes and used / expired reset tokens.
   scheduleJob('purge-expired-secrets', 6 * 60 * 60 * 1000, () => purgeExpiredSecrets());
@@ -160,6 +173,7 @@ httpServer.listen(PORT, () => {
   scheduleJob('expire-payment-attempts', 15 * 60 * 1000, () => expireAbandonedAttempts());
   // Trending and rating scores the listings sort by (recent orders fade over days, so this
   // keeps them current even when nobody orders).
+  scheduleJob('ops-snapshot', 5 * 60 * 1000, () => logOpsSnapshot());
   scheduleJob('ranking-scores', 15 * 60 * 1000, () => recomputeRankings());
 
   // Background jobs (emails, notifications). With Redis every instance takes queued jobs.

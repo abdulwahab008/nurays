@@ -8,6 +8,7 @@ import {
   recordAdjustment,
   setCashLimit,
 } from '../services/rider-ledger.service';
+import { setRiderCommunity } from '../services/dispatch.service';
 
 /** Riders' cash and earnings, for settling up with them. */
 
@@ -49,4 +50,9 @@ export const createRiderAdjustment = async (req: Request, res: Response) => {
 export const updateRiderCashLimit = async (req: Request, res: Response) => {
   const data = await setCashLimit(req.params.id, req.body.cashLimit);
   res.status(200).json({ success: true, data, message: 'Cash limit updated' });
+};
+
+export const updateRiderCommunity = async (req: Request, res: Response) => {
+  const data = await setRiderCommunity(req.params.id, req.body.communityId);
+  res.status(200).json({ success: true, data, message: 'Community updated' });
 };

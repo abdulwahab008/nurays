@@ -1,5 +1,6 @@
 import { randomInt } from 'crypto';
 import prisma from '../config/database';
+import { pageArgs } from '../utils/pagination';
 import { getPlatformDeliveryPricing } from './delivery-pricing.service';
 import { AppError } from '../middleware/errorHandler';
 import realtimeOrderService from './realtime-order.service';
@@ -12,6 +13,7 @@ import { allocateHubStock, releaseHubAllocations } from './hub-allocation.servic
 import { DeliveryFeeShare } from '../utils/deliveryEarnings';
 import { isStoredFile, isPrivateRef, storedFileOwner, presentFile } from '../storage';
 import { getDeliveryFeeForSeller, haversineKm } from '../utils/deliveryFee';
+import { assertOnMenu } from '../utils/menu';
 import { createStockAlert } from './stock-alert.service';
 import promotionService from './promotion.service';
 import { isAcceptingOrders, validateOrderTiming } from './availability.service';
@@ -40,6 +42,35 @@ const ON_THE_WAY_STATUSES = ['picked_up', 'in_transit', 'arrived_at_customer'];
  * the platform. The rider's position is shown only while the food is on its way (never
  * afterwards), and only to the customer, the rider and admins.
  */
+const RIDER_JOB_RUNNING = ['assigned', 'arrived_at_pickup', 'picked_up', 'in_transit', 'arrived_at_customer'];
+
+/**
+ * The order as the rider carrying it may see it: payment-submission details and internal keys
+ * removed. The customer's door (address, pin, instructions) is theirs only while the job is
+ * running; once it is delivered, failed or cancelled the rider keeps the area and city only,
+ * the same as the rider endpoints.
+ */
+function stripForRider<T extends Record<string, unknown>>(order: T, jobRunning: boolean): T {
+  const {
+    paymentReferenceNumber: _r, paymentSenderName: _n, paymentSenderAccount: _a, paymentNotes: _p, paymentDisputeReason: _d,
+    paymentTransactionId: _t, paymentConfirmedBy: _c, paymentSubmittedAt: _s, paymentConfirmedAt: _ca, idempotencyKey: _k,
+    deliveryFeeBreakdown: _f, sellerDeliveryCharge: _sc, ...rest
+  } = order as Record<string, unknown>;
+  const address = rest.deliveryAddress as Record<string, unknown> | null | undefined;
+  const snapshot = rest.deliveryAddressSnapshot as Record<string, unknown> | null | undefined;
+  if (!jobRunning) {
+    const areaOnly = (src: Record<string, unknown> | null | undefined) =>
+      src && typeof src === 'object' ? { area: src.area ?? null, city: src.city ?? null } : null;
+    rest.deliveryAddress = areaOnly(address);
+    rest.deliveryAddressSnapshot = areaOnly(snapshot);
+    rest.deliveryInstructions = null;
+  } else if (address && typeof address === 'object') {
+    const { userId: _u, ...addr } = address;
+    rest.deliveryAddress = addr;
+  }
+  return rest as T;
+}
+
 function presentDelivery<
   D extends {
     status: string;
@@ -119,31 +150,6 @@ export class OrderService {
    * Calculate delivery fee.
    * Free when: self_pickup/hub_pickup, or subtotal >= 2000, or delivery address is in all sellers' freeDeliveryAreas.
    */
-  private calculateDeliveryFee(
-    deliveryType: string,
-    subtotal: number,
-    city?: string
-  ): number {
-    if (deliveryType === 'self_pickup' || deliveryType === 'hub_pickup') {
-      return 0;
-    }
-
-    // Base delivery fee
-    let fee = 100;
-
-    // Free delivery for orders above 2000 PKR
-    if (subtotal >= 2000) {
-      return 0;
-    }
-
-    // City-based pricing (can be enhanced)
-    if (city === 'Karachi' || city === 'Lahore' || city === 'Islamabad') {
-      fee = 150;
-    }
-
-    return fee;
-  }
-
   /**
    * Create order from items
    */
@@ -255,6 +261,8 @@ export class OrderService {
       if (!product.isActive || product.approvalStatus !== 'approved') {
         throw new AppError(`Product ${product.name} is not available`, 400, 'PRODUCT_UNAVAILABLE');
       }
+      // A weekly or daily dish must be on the menu on the day it is ordered for (the delivery slot's day, else today).
+      assertOnMenu(product, data.deliverySlotDate ? new Date(data.deliverySlotDate) : new Date());
 
       sellersInOrder.set(product.seller.id, product.seller);
 
@@ -290,6 +298,15 @@ export class OrderService {
         );
       }
 
+      // Where the item is fulfilled from is decided by the product, not the request: a hub id on
+      // an item the kitchen ships itself would otherwise re-price the delivery as Nuray's and
+      // charge the kitchen for it.
+      const fulfillmentType =
+        product.stockType === 'hub' || (product.stockType === 'both' && item.stockType === 'hub') ? 'hub' : 'direct';
+      if (item.hubId && fulfillmentType !== 'hub') {
+        throw new AppError(`${product.name} is not stocked at a hub`, 400, 'HUB_NOT_APPLICABLE');
+      }
+
       // List/catalog price — the seller-wide "deal" discount below is applied on top of this.
       const listPrice = variant ? Number(variant.price) : Number(product.price);
 
@@ -318,8 +335,8 @@ export class OrderService {
         commissionAmount: 0,
         sellerPayout: 0,
         promoDiscount: 0,
-        fulfillmentType: item.stockType || product.stockType,
-        hubId: item.hubId || null,
+        fulfillmentType,
+        hubId: fulfillmentType === 'hub' ? item.hubId || null : null,
       });
     }
 
@@ -380,6 +397,8 @@ export class OrderService {
 
     // Calculate delivery fee: per-seller (free in their areas, fixed or distance-based outside), then sum
     let deliveryFee: number;
+    // What the kitchen pays Nuray for a Nuray rider's delivery (the customer pays no delivery fee for it).
+    let sellerDeliveryCharge = 0;
     const deliveryFeeBreakdown: DeliveryFeeShare[] = [];
     if (data.deliveryType === 'home_delivery' && !deliveryAddress) {
       // The delivery address carries the buyer's community, which decides whether
@@ -448,22 +467,23 @@ export class OrderService {
         if (!result.deliverable) {
           throw new AppError(`${seller.businessName}: ${result.reason}`, 400, 'ADDRESS_NOT_DELIVERABLE');
         }
-        total += result.fee;
+        // A fee priced by Nuray (result.pricing) is for a Nuray rider: the kitchen pays it.
+        const paidByKitchen = result.pricing != null;
+        if (paidByKitchen) sellerDeliveryCharge += result.fee;
+        else total += result.fee;
         if (result.fee > 0) {
           deliveryFeeBreakdown.push({
             sellerId: seller.id,
             fee: result.fee,
-            provider: seller.deliveryProvider === 'self' ? 'self' : 'platform',
+            provider: paidByKitchen ? 'platform' : 'self',
+            paidBy: paidByKitchen ? 'seller' : 'customer',
           });
         }
       }
       deliveryFee = total;
     } else {
-      deliveryFee = this.calculateDeliveryFee(
-        data.deliveryType,
-        subtotal,
-        deliveryAddress?.city || undefined
-      );
+      // Every branch above prices the order; reaching here means there is nothing to price.
+      throw new AppError('Order has no items', 400, 'NO_ITEMS');
     }
 
     // Apply promotion code if provided
@@ -485,19 +505,25 @@ export class OrderService {
         );
       }
 
-      if (promotion && promotion.isActive) {
+      // The code must be real and usable. A code that is unknown, switched off, expired, used up or
+      // below its minimum is refused with the same answers as /promotions/validate, instead of the
+      // order going through at full price as if no code had been typed.
+      if (!promotion) throw new AppError('Invalid promotion code', 400, 'INVALID_PROMO_CODE');
+      if (!promotion.isActive) throw new AppError('Promotion code is not active', 400, 'PROMO_INACTIVE');
+      {
         const now = new Date();
-        const withinLimits =
-          (!promotion.usageLimitTotal || promotion.usedCount < promotion.usageLimitTotal) &&
-          (await prisma.promotionUsage.count({
-            where: { promotionId: promotion.id, userId: customerId },
-          })) < promotion.usageLimitPerUser;
+        if (now < promotion.validFrom || now > promotion.validUntil) {
+          throw new AppError('Promotion code has expired', 400, 'PROMO_EXPIRED');
+        }
+        if (promotion.usageLimitTotal && promotion.usedCount >= promotion.usageLimitTotal) {
+          throw new AppError('Promotion code usage limit reached', 400, 'PROMO_LIMIT_REACHED');
+        }
+        const usedByUser = await prisma.promotionUsage.count({ where: { promotionId: promotion.id, userId: customerId } });
+        if (usedByUser >= promotion.usageLimitPerUser) {
+          throw new AppError('You have already used this promotion code', 400, 'PROMO_ALREADY_USED');
+        }
 
-        if (
-          now >= promotion.validFrom &&
-          now <= promotion.validUntil &&
-          withinLimits
-        ) {
+        {
           // A seller's code (or a product-limited code) only discounts the
           // matching items — never the rest of a multi-seller cart.
           const eligibleSubtotal = eligibleSubtotalForPromotion(
@@ -511,7 +537,10 @@ export class OrderService {
               'PROMO_NOT_APPLICABLE'
             );
           }
-          if (eligibleSubtotal >= Number(promotion.minOrderAmount)) {
+          if (eligibleSubtotal < Number(promotion.minOrderAmount)) {
+            throw new AppError(`Minimum order amount is ${promotion.minOrderAmount}`, 400, 'MIN_ORDER_NOT_MET');
+          }
+          {
             if (promotion.discountType === 'percentage') {
               discountAmount = eligibleSubtotal * (Number(promotion.discountValue) / 100);
               if (promotion.maxDiscountAmount) {
@@ -571,6 +600,7 @@ export class OrderService {
           handoverCode: newHandoverCode(),
           subtotal,
           deliveryFee,
+          sellerDeliveryCharge,
           deliveryFeeBreakdown: deliveryFeeBreakdown as any,
           deliveryProvider,
           discountAmount,
@@ -580,6 +610,8 @@ export class OrderService {
           paymentStatus: 'pending',
           deliveryType: data.deliveryType,
           deliveryAddressId: data.deliveryAddressId,
+          // Everything the rider needs to find the door, frozen at order time: editing or deleting the
+          // saved address later must not move an order that is already on its way.
           deliveryAddressSnapshot: deliveryAddress
             ? ({
                 addressLine1: deliveryAddress.addressLine1,
@@ -587,6 +619,10 @@ export class OrderService {
                 area: deliveryAddress.area,
                 city: deliveryAddress.city,
                 postalCode: deliveryAddress.postalCode,
+                houseNumber: deliveryAddress.houseNumber ?? null,
+                landmark: deliveryAddress.landmark ?? null,
+                latitude: deliveryAddress.latitude != null ? Number(deliveryAddress.latitude) : null,
+                longitude: deliveryAddress.longitude != null ? Number(deliveryAddress.longitude) : null,
               } as any)
             : undefined,
           hubId: data.hubId,
@@ -692,28 +728,16 @@ export class OrderService {
         .filter(({ item }) => item.fulfillmentType === 'hub' && item.hubId)
         .sort((a, b) => (a.item.hubId! + a.item.productId).localeCompare(b.item.hubId! + b.item.productId));
       for (const { item, idx } of hubOrdered) {
-        {
-          await allocateHubStock(tx, {
-            orderId: newOrder.id,
-            orderItemId: createdItems[idx].id,
-            orderNumber: newOrder.orderNumber,
-            hubId: item.hubId!,
-            productId: item.productId,
-            productName: item.productName,
-            quantity: item.quantity,
-            performedBy: customerId,
-          });
-
-          await tx.inventoryReservation.create({
-            data: {
-              productId: item.productId,
-              quantity: item.quantity,
-              reservationType: 'order',
-              reservationId: newOrder.id,
-              expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000), // 24 hours
-            },
-          });
-        }
+        await allocateHubStock(tx, {
+          orderId: newOrder.id,
+          orderItemId: createdItems[idx].id,
+          orderNumber: newOrder.orderNumber,
+          hubId: item.hubId!,
+          productId: item.productId,
+          productName: item.productName,
+          quantity: item.quantity,
+          performedBy: customerId,
+        });
       }
 
       // Create order status history
@@ -732,34 +756,36 @@ export class OrderService {
         allUsagesToRecord.push({ promotionId, discountApplied: discountAmount });
       }
       for (const usage of allUsagesToRecord) {
-        if (usage.promotionId === promotionId) {
-          // Re-check the limits atomically: they were read before this
-          // transaction, so parallel orders could each pass and overshoot.
-          const promo = await tx.promotion.findUniqueOrThrow({ where: { id: usage.promotionId } });
+        // One checkout at a time per promotion: the limits are re-read under a row lock, so two
+        // simultaneous orders cannot both pass a count that neither has yet incremented.
+        await tx.$queryRaw`SELECT id FROM promotions WHERE id = ${usage.promotionId} FOR NO KEY UPDATE`;
+        const promo = await tx.promotion.findUniqueOrThrow({ where: { id: usage.promotionId } });
+        const isCode = usage.promotionId === promotionId;
+        if (isCode) {
           const usedByUser = await tx.promotionUsage.count({
             where: { promotionId: usage.promotionId, userId: customerId },
           });
           if (usedByUser >= promo.usageLimitPerUser) {
             throw new AppError('You have already used this promotion code', 400, 'PROMO_ALREADY_USED');
           }
-          if (promo.usageLimitTotal != null) {
-            const reserved = await tx.promotion.updateMany({
-              where: { id: usage.promotionId, usedCount: { lt: promo.usageLimitTotal } },
-              data: { usedCount: { increment: 1 } },
-            });
-            if (reserved.count === 0) {
-              throw new AppError('Promotion code usage limit reached', 400, 'PROMO_LIMIT_REACHED');
-            }
-            await tx.promotionUsage.create({
-              data: {
-                promotionId: usage.promotionId,
-                userId: customerId,
-                orderId: newOrder.id,
-                discountApplied: usage.discountApplied,
-              },
-            });
-            continue;
+        }
+        if (promo.usageLimitTotal != null) {
+          const reserved = await tx.promotion.updateMany({
+            where: { id: usage.promotionId, usedCount: { lt: promo.usageLimitTotal } },
+            data: { usedCount: { increment: 1 } },
+          });
+          if (reserved.count === 0) {
+            throw new AppError(
+              isCode ? 'Promotion code usage limit reached' : 'A deal on this order has just run out; please try again',
+              400,
+              'PROMO_LIMIT_REACHED'
+            );
           }
+        } else {
+          await tx.promotion.update({
+            where: { id: usage.promotionId },
+            data: { usedCount: { increment: 1 } },
+          });
         }
         await tx.promotionUsage.create({
           data: {
@@ -768,11 +794,6 @@ export class OrderService {
             orderId: newOrder.id,
             discountApplied: usage.discountApplied,
           },
-        });
-
-        await tx.promotion.update({
-          where: { id: usage.promotionId },
-          data: { usedCount: { increment: 1 } },
         });
       }
 
@@ -908,9 +929,7 @@ export class OrderService {
       status?: string;
     }
   ) {
-    const page = filters.page || 1;
-    const limit = Math.min(filters.limit || 20, 100);
-    const skip = (page - 1) * limit;
+    const { page, limit, skip } = pageArgs(filters.page, filters.limit);
 
     const where: any = {
       customerId: userId,
@@ -1077,6 +1096,7 @@ export class OrderService {
         : null;
 
     const isOrderRider = !!viewerRider && order.delivery?.riderId === viewerRider.id;
+    const isSeller = !!seller && order.items.some((i: { sellerId: string }) => i.sellerId === seller.id);
     // The customer is told their rider's first name.
     const riderUserId = order.delivery?.riderId
       ? (await prisma.rider.findUnique({ where: { id: order.delivery.riderId }, select: { userId: true } }))?.userId
@@ -1085,18 +1105,35 @@ export class OrderService {
       ? (await prisma.userProfile.findUnique({ where: { userId: riderUserId }, select: { fullName: true } }))?.fullName
       : null;
 
+    // A rider delivering the order needs the food, the door, the amount to collect and how it is
+    // paid; not the customer's bank details, receipt, the kitchen's fee breakdown or internal keys.
+    const riderOnly = isOrderRider && !isAdmin && order.customerId !== userId && !isSeller;
+    const jobRunning = RIDER_JOB_RUNNING.includes(order.delivery?.status ?? '');
+    const forViewer = riderOnly ? stripForRider(order, jobRunning) : order;
+    const presentedDelivery = order.delivery
+      ? presentDelivery(order.delivery, {
+          canSeePay: isAdmin || isOrderRider,
+          canSeeLocation: isAdmin || isOrderRider || order.customerId === userId,
+          riderFirstName: riderFullName?.trim().split(/\s+/)[0] || null,
+        })
+      : null;
+    // The delivery row carries the door too: a rider whose job is over keeps the area only.
+    const deliveryForViewer =
+      presentedDelivery && riderOnly && !jobRunning
+        ? {
+            ...presentedDelivery,
+            deliveryAddress: [forViewer.deliveryAddress?.area, forViewer.deliveryAddress?.city].filter(Boolean).join(', ') || null,
+            deliveryLatitude: null,
+            deliveryLongitude: null,
+          }
+        : presentedDelivery;
+
     return {
-      ...order,
-      delivery: order.delivery
-        ? presentDelivery(order.delivery, {
-            canSeePay: isAdmin || isOrderRider,
-            canSeeLocation: isAdmin || isOrderRider || order.customerId === userId,
-            riderFirstName: riderFullName?.trim().split(/\s+/)[0] || null,
-          })
-        : null,
+      ...forViewer,
+      delivery: deliveryForViewer,
       ...(handover ? { handoverCode: handover.handoverCode } : {}),
       // The receipt is private: the viewer (already checked above) gets a short-lived link.
-      paymentProofUrl: await presentFile(order.paymentProofUrl),
+      paymentProofUrl: riderOnly ? null : await presentFile(order.paymentProofUrl),
       subtotal: Number(order.subtotal),
       deliveryFee: Number(order.deliveryFee),
       discountAmount: Number(order.discountAmount),
@@ -1200,13 +1237,6 @@ export class OrderService {
         createdBy: userId,
       });
 
-      // Remove inventory reservations
-      await tx.inventoryReservation.deleteMany({
-        where: {
-          reservationType: 'order',
-          reservationId: orderId,
-        },
-      });
 
       // Add status history
       await tx.orderStatusHistory.create({

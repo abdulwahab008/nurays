@@ -9,7 +9,7 @@ How Nuray is put together: what runs, how a request travels through it, what is 
    |  HTTPS  /api/v1/*  (axios, Bearer JWT)          |  WebSocket (Socket.IO, JWT in handshake)
    |  /media /files /uploads  (Next rewrites to backend, local storage driver only)
    v                                                  v
- +---------------------------- Backend (Node 20, Express 5, TypeScript) -----------------------------+
+ +---------------------------- Backend (Node 22, Express 5, TypeScript) -----------------------------+
  |  middleware -> routes -> controllers -> services -> Prisma                                          |
  |  Socket.IO server (config/socket.ts)      scheduled sweeps (jobs/scheduler.ts)                      |
  |  BullMQ worker (jobs/queue.ts)            storage driver (storage/)                                 |
@@ -116,7 +116,7 @@ Order of middleware in `index.ts`:
 1. `helmet`, `cors` (single origin from `CORS_ORIGIN`, credentials on, `Idempotency-Key` and `X-Request-Id` allowed).
 2. `requestId`: uses a sane incoming `X-Request-Id` or makes one; returns it in the response header; runs the rest of the request inside an async log context carrying it.
 3. `httpLogger` (pino-http): one line per request with method, path, status, duration. Health checks are not logged.
-4. `express.json` / `urlencoded` (10 MB limit).
+4. `express.json` / `urlencoded` (1 MB limit; files go through multipart uploads).
 5. File routes (`/media`, `/files`, `/uploads`).
 6. `/api/v1/health` (outside the flood limit), then `apiLimiter` for everything else under `/api`.
 7. The router for the path. Per route, in this order:

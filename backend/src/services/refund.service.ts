@@ -1,4 +1,5 @@
 import prisma from '../config/database';
+import { pageArgs } from '../utils/pagination';
 import { notify } from './notify.service';
 import { AppError } from '../middleware/errorHandler';
 import { parseBreakdown } from '../utils/deliveryEarnings';
@@ -174,7 +175,13 @@ async function shrinkUnpaidOrder(tx: Tx, order: any) {
   const breakdown = parseBreakdown(order.deliveryFeeBreakdown);
   const liveBreakdown = breakdown.filter((r) => liveSellers.has(r.sellerId));
   // Legacy orders have no per-seller split, so their delivery fee stays as it was.
-  const deliveryFee = breakdown.length ? money(liveBreakdown.reduce((sum, r) => sum + r.fee, 0)) : Number(order.deliveryFee);
+  // The customer's delivery fee is only the shares they pay; a kitchen-paid fee is not on their bill.
+  const deliveryFee = breakdown.length
+    ? money(liveBreakdown.filter((r) => r.paidBy !== 'seller').reduce((sum, r) => sum + r.fee, 0))
+    : Number(order.deliveryFee);
+  const sellerDeliveryCharge = breakdown.length
+    ? money(liveBreakdown.filter((r) => r.paidBy === 'seller').reduce((sum, r) => sum + r.fee, 0))
+    : Number(order.sellerDeliveryCharge ?? 0);
 
   const { taxAmount, totalAmount } = priceOrder(subtotal - discount, deliveryFee);
   await tx.order.update({
@@ -183,6 +190,7 @@ async function shrinkUnpaidOrder(tx: Tx, order: any) {
       subtotal,
       discountAmount: discount,
       deliveryFee,
+      sellerDeliveryCharge,
       deliveryFeeBreakdown: breakdown.length ? (liveBreakdown as any) : undefined,
       taxAmount,
       totalAmount,
@@ -229,7 +237,7 @@ export async function refundForCancelledItems(
     const live = allItems.filter((i: any) => i.sellerId === sellerId && i.status !== 'cancelled').length;
     if (live === 0) {
       deliveryBack += parseBreakdown(order.deliveryFeeBreakdown)
-        .filter((r) => r.sellerId === sellerId)
+        .filter((r) => r.sellerId === sellerId && r.paidBy !== 'seller')
         .reduce((sum, r) => sum + r.fee, 0);
     }
   }
@@ -330,9 +338,10 @@ export async function dismissRefund(refundId: string, adminId: string, reason: s
         where: { orderId: order.id, status: { not: 'failed' } },
         _count: { _all: true },
       });
-      // No other refund stands: the customer never actually paid.
+      // No other refund stands. An order whose money was confirmed goes back to paid (it is
+      // still the kitchen's earning); only a transfer that never arrived is marked failed.
       if (active._count._all === 0) {
-        await tx.order.update({ where: { id: order.id }, data: { paymentStatus: 'failed' } });
+        await tx.order.update({ where: { id: order.id }, data: { paymentStatus: order.paidAt || order.paymentConfirmedAt ? 'paid' : 'failed' } });
       }
     }
     await tx.orderStatusHistory.create({
@@ -349,8 +358,7 @@ export async function dismissRefund(refundId: string, adminId: string, reason: s
 
 /** The admin's queue of refunds still waiting for the money to be sent. */
 export async function listRefunds(filters: { status?: string; page?: number; limit?: number }) {
-  const page = filters.page || 1;
-  const limit = Math.min(filters.limit || 20, 100);
+  const { page, limit } = pageArgs(filters.page, filters.limit);
   const where = filters.status ? { status: filters.status } : {};
   const [rows, total] = await Promise.all([
     prisma.refund.findMany({

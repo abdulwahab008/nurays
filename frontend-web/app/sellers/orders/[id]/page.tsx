@@ -47,7 +47,7 @@ interface SellerOrderDetail {
     product?: { images?: Array<{ imageUrl: string }> } | null;
   }>;
   statusHistory: Array<{ status: string; notes?: string | null; createdAt: string }>;
-  sellerTotals?: { subtotal: number; commission: number; payout: number; deliveryFeeKept: number };
+  sellerTotals?: { subtotal: number; commission: number; payout: number; deliveryFeeKept: number; deliveryFeePaid?: number };
 }
 
 export default function SellerOrderDetailPage() {
@@ -240,7 +240,10 @@ export default function SellerOrderDetailPage() {
                     {order.sellerTotals.deliveryFeeKept > 0 && (
                       <p className="flex justify-between text-gray-600"><span>{t('detail.deliveryFeeKept')}</span><span>{formatPrice(order.sellerTotals.deliveryFeeKept)}</span></p>
                     )}
-                    <p className="flex justify-between font-semibold"><span>{t('detail.yourEarnings')}</span><span>{formatPrice(order.sellerTotals.payout + (order.sellerTotals.deliveryFeeKept || 0))}</span></p>
+                    {(order.sellerTotals.deliveryFeePaid ?? 0) > 0 && (
+                      <p className="flex justify-between text-gray-600"><span>{t('detail.deliveryFeePaid')}</span><span data-ltr>-{formatPrice(order.sellerTotals.deliveryFeePaid ?? 0)}</span></p>
+                    )}
+                    <p className="flex justify-between font-semibold"><span>{t('detail.yourEarnings')}</span><span>{formatPrice(order.sellerTotals.payout + (order.sellerTotals.deliveryFeeKept || 0) - (order.sellerTotals.deliveryFeePaid || 0))}</span></p>
                   </div>
                 )}
               </div>

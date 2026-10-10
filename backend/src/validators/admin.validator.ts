@@ -2,12 +2,12 @@ import { z } from 'zod';
 
 export const approveRejectSellerSchema = z.object({
   approved: z.boolean(),
-  notes: z.string().optional(),
+  notes: z.string().max(1000).optional(),
 });
 
 export const moderateProductSchema = z.object({
   approved: z.boolean(),
-  reason: z.string().optional(),
+  reason: z.string().max(1000).optional(),
 });
 
 export const updateSellerStatusSchema = z.object({
@@ -16,15 +16,15 @@ export const updateSellerStatusSchema = z.object({
 
 export const approveRejectRiderSchema = z.object({
   approved: z.boolean(),
-  reason: z.string().optional(),
+  reason: z.string().max(1000).optional(),
 });
 
 export const completePayoutSchema = z.object({
-  transactionId: z.string().optional(),
+  transactionId: z.string().max(100).optional(),
 });
 
 export const failPayoutSchema = z.object({
-  reason: z.string().min(1, 'A reason is required'),
+  reason: z.string().min(1, 'A reason is required').max(1000),
 });
 
 export const updateSettingsSchema = z.object({
@@ -67,6 +67,8 @@ export const riderAdjustmentSchema = z.object({
 export const riderCashLimitSchema = z.object({
   cashLimit: z.number().finite().min(0).max(1_000_000).nullable(),
 });
+
+export const riderCommunitySchema = z.object({ communityId: z.string().uuid().nullable() });
 
 // People
 export const accountStatusSchema = z.object({ status: z.enum(['active', 'suspended']) });
@@ -114,3 +116,13 @@ const hubFields = {
 export const createHubSchema = z.object(hubFields).partial().required({ name: true, code: true, city: true, area: true, address: true, latitude: true, longitude: true, capacityCubicFeet: true });
 export const updateHubSchema = z.object(hubFields).partial();
 export const assignHubManagerSchema = z.object({ managerId: z.string().uuid().nullable() });
+
+// Staff (super admin only)
+export const createStaffSchema = z.object({
+  email: z.string().trim().email().max(200),
+  fullName: z.string().trim().min(2).max(120),
+  role: z.enum(['admin', 'support']),
+  password: z.string().min(12, 'Use at least 12 characters').max(200),
+});
+export const staffRoleSchema = z.object({ role: z.enum(['admin', 'support']) });
+export const staffPasswordSchema = z.object({ password: z.string().min(12, 'Use at least 12 characters').max(200) });

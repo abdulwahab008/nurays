@@ -9,6 +9,7 @@ import {
   TREND,
   trendScores,
 } from '../utils/ranking';
+import { onMenuWhere } from '../utils/menu';
 
 /**
  * Ranking: trending kitchens and dishes, trustworthy ratings, search relevance and
@@ -78,8 +79,12 @@ export async function refreshRatingScores(only?: { productId?: string | null; se
   const m = RATING_PRIOR.mean;
   const w = RATING_PRIOR.weight;
   if (!only) {
-    await prisma.$executeRaw`UPDATE products SET rating_score = (${w}::float8 * ${m}::float8 + rating_average * total_reviews) / (${w}::float8 + total_reviews)`;
-    await prisma.$executeRaw`UPDATE sellers SET rating_score = (${w}::float8 * ${m}::float8 + rating_average * total_reviews) / (${w}::float8 + total_reviews)`;
+    // Only rows whose score changes: Postgres writes a new tuple for every row an UPDATE touches,
+    // and every 15 minutes almost nothing has changed.
+    await prisma.$executeRaw`UPDATE products SET rating_score = (${w}::float8 * ${m}::float8 + rating_average * total_reviews) / (${w}::float8 + total_reviews)
+      WHERE rating_score IS DISTINCT FROM (${w}::float8 * ${m}::float8 + rating_average * total_reviews) / (${w}::float8 + total_reviews)`;
+    await prisma.$executeRaw`UPDATE sellers SET rating_score = (${w}::float8 * ${m}::float8 + rating_average * total_reviews) / (${w}::float8 + total_reviews)
+      WHERE rating_score IS DISTINCT FROM (${w}::float8 * ${m}::float8 + rating_average * total_reviews) / (${w}::float8 + total_reviews)`;
     return;
   }
   if (only.productId) {
@@ -142,7 +147,7 @@ export async function searchRankedProductIds(terms: string[], max = 500): Promis
 async function visibleDishes(ids: string[]) {
   if (ids.length === 0) return [];
   return prisma.product.findMany({
-    where: { id: { in: ids }, isActive: true, approvalStatus: 'approved', seller: { status: 'active' } },
+    where: { id: { in: ids }, isActive: true, approvalStatus: 'approved', seller: { status: 'active' }, ...onMenuWhere() },
     select: { id: true, sellerId: true, categoryId: true, trendScore: true },
   });
 }

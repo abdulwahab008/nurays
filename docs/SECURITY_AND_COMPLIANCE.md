@@ -41,7 +41,7 @@ Code: `backend/src/services/auth.service.ts`, `utils/jwt.ts`, `middleware/auth.m
 
 ## Roles and authorization
 
-Roles: `customer`, `seller`, `rider`, `admin`, `hub_manager`.
+Roles: `customer`, `seller`, `rider`, `admin`, `hub_manager`. Admin accounts carry a staff role (`super_admin`, `admin`, `support`), see Admin accounts.
 
 - **Middleware** (`middleware/auth.middleware.ts`): `authenticate`, `authorize(...roles)` (403
   `INSUFFICIENT_PERMISSIONS`), `requireSeller` (approved and active seller), `blockSuspendedSeller`. Whole routers
@@ -70,8 +70,8 @@ is the production setting; development relaxes some.
 
 | Limiter | Limit | Applied to |
 |---|---|---|
-| API flood | 1200 / minute / IP | everything under `/api` except health |
-| Login | 10 / 15 min / IP | login, Google, reset-password, phone verify |
+| API flood | 1200 / minute / account (signed in) or / IP (anonymous) | everything under `/api` except health |
+| Login | 10 failed attempts / 15 min / IP + account | login, Google, reset-password, phone verify (a successful sign-in is not counted, so a shared mobile-network address never runs out) |
 | OTP | 5 / 15 min / IP | OTP request, forgot-password, phone request |
 | Register | 10 / hour / IP | registration |
 | Promo validation | 20 / minute / IP | promo codes |
@@ -141,12 +141,77 @@ code locks (423) and an admin has to complete the handover.
 
 ## Audit log
 
-`middleware/audit.ts`, applied to `admin.routes.ts` and `admin-order.routes.ts`. Every non-GET request there is
-written to `audit_logs` after the response: user, action (`admin:METHOD /path`), entity id, IP, user agent, the
-request body (secret-looking fields such as passwords, tokens and codes redacted; strings truncated; nested depth
-and key counts capped) and the response status, including failed attempts. Reads are not logged. Admin actions
-exposed elsewhere (for example hub-manager assignment, `PUT /hubs/:id/manager`) are not part of this log. Admins can
-read it in the admin area.
+`middleware/audit.ts`. Every non-GET request on the admin routers, and on the other routes an admin can use
+(categories, category requests, hub operations and hub manager assignment, deleting product images, and an admin
+acting as a kitchen on `/seller/orders/*`), is written to `audit_logs` after the response: user, action
+(`admin:METHOD /path`, or `hub:`, `admin-as-seller:`), entity id, IP, user agent, the request body (secret-looking
+fields such as passwords, tokens and codes redacted; strings truncated; nested depth and key counts capped) and the
+response status, including failed attempts.
+
+Also recorded:
+
+- **Refused access** to the admin area (no token, bad token, or not an admin): `admin:DENIED METHOD /path`, with the
+  user if there was one.
+- **Admin sign-in events**: `auth:LOGIN`, `auth:LOGIN_FAILED`, `auth:LOGIN_LOCKED`, `auth:LOGIN_REFUSED_OTP`,
+  `auth:LOGOUT`.
+- **Exports of the audit log itself** (`admin:EXPORT audit-logs`).
+
+**Append-only.** A database trigger (migration `audit_log_append_only`) refuses every UPDATE and DELETE on
+`audit_logs`, including from the application's own database user. The one allowed change is detaching an account's
+rows (`user_id` set to NULL) when that account is deleted. Rows are written after the response, outside the
+mutation's transaction, so a crash in between can lose a row. Reads are not logged.
+
+Admins read and filter it (area, record id, date range, result) and export a CSV (at most 5,000 rows) from the admin
+area.
+
+## Admin accounts
+
+Admin accounts are never created through registration. The first one (the super admin) is made with
+`scripts/create-admin.js`; every other staff member is added by the super admin at `/admin/staff`. They sign in with
+**email and password only**: SMS-code login and Google sign-in are refused (`ADMIN_PASSWORD_ONLY`). After **5 wrong
+passwords** the account is locked for 15 minutes (`ACCOUNT_LOCKED`, counted from the audit log). **Logging out ends
+every session** the account has, on every device (`tokensValidAfter`; the same is true for every account type, see
+Sessions below). Second approvals and two-factor codes do not exist yet (see
+Limitations).
+
+### Staff roles
+
+Staff are users with `user_type = 'admin'` and a `staff_role` (database CHECK keeps the two in step):
+
+| Role | How many | What it can do |
+|---|---|---|
+| `super_admin` | exactly one (partial unique index `users_one_super_admin`) | everything, and only this role adds, changes, suspends or removes staff, edits settings or corrects a rider balance by hand |
+| `admin` | any | day to day operations: approvals, orders, people, refunds, payouts, settling with riders, places, promo codes, complaints, reads the audit log |
+| `support` | any | the customer support person: looks things up and handles complaints (reply, internal notes, resolve). Cannot move money, approve anyone, change orders, or see applicants' ID documents, settings, analytics or the audit log |
+
+Enforcement is on the server, table driven (`utils/permissions.ts`, `middleware/staff.ts`): every `/admin` request is
+matched to a permission; a write no rule names needs `ops.write`, a read no rule names needs `read.core`, so a route
+added later is closed to support staff by default. A refusal is 403 `INSUFFICIENT_STAFF_ROLE` and is written to the
+audit log. Changing a role, suspending or removing staff ends their sessions at once (millisecond-exact `iatMs` check).
+The super admin account cannot be changed through the app. The admin menu and pages only show what a role may use,
+but that is convenience, not the security boundary.
+
+## Sessions, email changes and account closure
+
+- Access tokens live **1 hour** by default (`JWT_EXPIRES_IN`), refresh tokens 30 days. The web client renews the
+  access token transparently and only signs the person out when the server refuses the refresh token (a dropped
+  connection or a server error keeps the session). The realtime connection presents the current token on every
+  reconnect.
+- **Logout ends every session** of the account (`tokensValidAfter`) and closes its live Socket.IO connections; so
+  do suspension, a staff role change, a password reset and account closure (`socketManager.disconnectUser`).
+- **Changing the email address** on an account that has a password requires the current password
+  (`PATCH /users/me` with `currentPassword`, else 400 `PASSWORD_REQUIRED`), and the new address is unverified until
+  its owner confirms it. **Password-reset links are only ever sent to a verified address**, so a copied token cannot
+  be turned into a permanent takeover by re-pointing the account.
+- New passwords must be **at least 8 characters** (staff: 12). Existing sign-ins are unaffected.
+- **Account closure** is self-service (`DELETE /users/me`, the Delete account button on the profile, and the public
+  page `/delete-account` the app stores link to): personal details, addresses, cart, favourites, push subscriptions
+  and ID documents are removed or replaced, the account is marked `deleted` and signed out everywhere; orders,
+  payments, the ledger and the audit trail are kept without identifying details. It is refused while an order is in
+  progress, the wallet holds money, a rider has cash or pay unsettled, or a kitchen has open orders or a pending
+  payout; staff accounts are removed by the super admin.
+- A rider carrying an order sees the order without the customer's bank-transfer details, receipt, the kitchen's fee
+  breakdown or internal keys; raw product variants (cost prices) are only readable by the kitchen that owns them.
 
 ## Secrets and configuration
 
@@ -175,6 +240,8 @@ return a generic message plus a request id. The frontend sends the JWT in the `A
 
 ## Data retention
 
+What to keep, for how long, and what to alert on is in [OPERATIONS_AND_LOGGING.md](OPERATIONS_AND_LOGGING.md).
+
 The `purge-expired-secrets` job (every 6 hours, `order-maintenance.service.ts`) deletes OTP records older than 24
 hours and password-reset tokens that expired more than 24 hours ago or were used more than 24 hours ago. The
 stale-order sweep cancels unaccepted and unpaid orders (see the deployment guide). There is no automatic deletion of
@@ -183,12 +250,11 @@ anything else: orders, ledger entries, chat, uploaded documents and receipts are
 ## Known limitations
 
 - **Refresh tokens are not rotated or revocable one by one.** `/auth/refresh` mints a new pair but the old refresh
-  token stays valid until it expires, and `POST /auth/logout` is a no-op on the server. The only way to kill a
-  session is `tokensValidAfter` (password reset, suspension, role change); there is no "log out everywhere"
-  action for users.
+  token stays valid until it expires or the account's sessions are ended as a whole (`tokensValidAfter`: logout,
+  password reset, suspension, role change, account closure). There is no per-device session list.
 - **OTP codes and email-verification tokens are stored in plain text** in the database (reset tokens are hashed).
   They are short-lived and purged, but a database read exposes live ones.
-- **Weak password policy.** Minimum 6 characters, no complexity or breached-password check. There is no
+- **Weak password policy.** Minimum 8 characters (staff 12), no complexity or breached-password check. There is no
   change-password endpoint for signed-in users; changing it goes through the reset email.
 - **Email verification does not gate login or ordering.** A user can sign in unverified; it only affects whether
   email notifications are delivered.
@@ -197,5 +263,5 @@ anything else: orders, ledger entries, chat, uploaded documents and receipts are
 - **Legacy public files.** Receipts and chat media uploaded before the storage layer sit under `/uploads` and are
   public by URL; new ones are private. `backend/scripts/migrate-private-uploads.ts` exists for moving them.
 - **`create-admin.js` prints the password it was given** and, for an existing email, resets that account's password.
-- **The audit log covers the two admin routers only**, not other privileged actions.
+- **All admins are equal.** There are no separate roles (finance, support), no limits or second approval on refunds, payouts and rider corrections, and no two-factor sign-in. Reading screens (customer details, payment proofs, rider money) is not logged.
 - **The frontend stores tokens in browser storage** like most SPAs, so an XSS bug would expose them.

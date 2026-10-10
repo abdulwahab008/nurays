@@ -11,6 +11,7 @@ import { formatPrice, displayRating } from '@/lib/utils';
 import { apiClient } from '@/lib/api-client';
 import { useLiveRefresh } from '@/lib/hooks/use-live-refresh';
 import { useRiderLocation, LocationSharing } from '@/lib/hooks/use-rider-location';
+import { alternativeMapsLink, canNavigateTo, googleMapsDirectionsUrl, mobilePlatform, NavDestination } from '@/lib/navigation-links';
 import Link from 'next/link';
 import RiderApplicationForm from '@/components/riders/RiderApplicationForm';
 import { useT } from '@/lib/i18n';
@@ -196,9 +197,13 @@ export default function RiderDashboardPage() {
 
   // Claim delivery from pool (with optional inDrive askFee)
   const handleClaim = async (deliveryId: string, askFee?: number) => {
+    // Accepting a job starts the trip to the kitchen: open Google Maps (window opened inside the tap, see handleAdvanceStatus).
+    const job = available.find((a) => a.id === deliveryId);
+    const nav = job ? window.open('', '_blank') : null;
     try {
       setBusyId(deliveryId);
       await riderService.claimDelivery(deliveryId, askFee);
+      if (nav && job) nav.location.href = navUrlFor({ ...job, status: 'assigned' } as Delivery);
       showToast(
         askFee
           ? t('claimedCustom', { fee: askFee })
@@ -208,6 +213,7 @@ export default function RiderDashboardPage() {
       setActiveTab('active');
       loadAll(true);
     } catch (error: any) {
+      nav?.close();
       showToast(error.response?.data?.error?.message || t('claimFailed'), 'error');
     } finally {
       setBusyId(null);
@@ -229,8 +235,62 @@ export default function RiderDashboardPage() {
     }
   };
 
+  // The leg the rider is on: to the kitchen until the food is picked up, then to the customer.
+  const headingToCustomer = (d: Delivery) => ['picked_up', 'in_transit', 'arrived_at_customer'].includes(d.status);
+  // Where this leg goes: the saved map pin when there is one, otherwise the address text.
+  const navDestinationFor = (d: Delivery): NavDestination =>
+    headingToCustomer(d)
+      ? { latitude: d.deliveryLatitude ?? null, longitude: d.deliveryLongitude ?? null, text: d.deliveryAddress }
+      : { latitude: d.pickupLatitude ?? null, longitude: d.pickupLongitude ?? null, text: d.pickupAddress };
+  const navUrlFor = (d: Delivery) =>
+    (headingToCustomer(d) ? d.dropoffMapsUrl : d.pickupMapsUrl) ?? googleMapsDirectionsUrl(navDestinationFor(d));
+  // Navigation is offered while the rider is travelling: to the kitchen, or with the food to the customer.
+  const NAVIGABLE_STATUSES = ['assigned', 'picked_up', 'in_transit'];
+  const canStartNavigation = (d: Delivery) => NAVIGABLE_STATUSES.includes(d.status) && canNavigateTo(navDestinationFor(d));
+  const [navBusyId, setNavBusyId] = useState<string | null>(null);
+  const platform = mobilePlatform();
+
+  /**
+   * Start navigation. The window is opened inside the tap (browsers block pop-ups opened after a
+   * network call), then the job is re-read from the server: a job that was cancelled, reassigned or
+   * finished since the screen last refreshed must not send the rider anywhere. Opening the maps app
+   * changes nothing about the job: arriving and handing over are still the rider's own taps.
+   */
+  const handleStartNavigation = async (delivery: Delivery, event: React.MouseEvent<HTMLAnchorElement>) => {
+    event.preventDefault();
+    if (navBusyId) return; // a second tap while the first is still checking
+    setNavBusyId(delivery.id);
+    const nav = window.open('', '_blank');
+    try {
+      const fresh = (await riderService.getMyDeliveries()).data?.find((d: Delivery) => d.id === delivery.id);
+      if (!fresh || !NAVIGABLE_STATUSES.includes(fresh.status)) {
+        nav?.close();
+        showToast(t('navNotAvailable'), 'error');
+        loadAll(true);
+        return;
+      }
+      if (!canNavigateTo(navDestinationFor(fresh))) {
+        nav?.close();
+        showToast(t('navNoDestination'), 'error');
+        return;
+      }
+      const url = navUrlFor(fresh);
+      if (nav) nav.location.href = url;
+      else window.location.assign(url); // pop-up blocked: leave for the maps app, the rider comes back with the back button
+    } catch {
+      // Offline or the server did not answer: the link's own href still opens the last known destination.
+      nav?.close();
+      window.location.assign(navUrlFor(delivery));
+    } finally {
+      setNavBusyId(null);
+    }
+  };
+
   // Advance delivery along the real fulfillment lifecycle
   const handleAdvanceStatus = async (delivery: Delivery) => {
+    // Leaving the kitchen with the food: open directions to the customer. The window is opened now,
+    // inside the tap, because browsers block pop-ups opened after a network call.
+    const nav = delivery.status === 'picked_up' ? window.open('', '_blank') : null;
     try {
       setBusyId(delivery.id);
       if (delivery.status === 'assigned') {
@@ -242,6 +302,7 @@ export default function RiderDashboardPage() {
       } else if (delivery.status === 'picked_up') {
         await riderService.updateDeliveryStatus(delivery.id, 'in_transit');
         showToast(t('toastDeparted'), 'info');
+        if (nav) nav.location.href = navUrlFor(delivery);
       } else if (delivery.status === 'in_transit') {
         await riderService.updateDeliveryStatus(delivery.id, 'arrived_at_customer');
         showToast(t('toastArrivedDoor'), 'info');
@@ -257,6 +318,7 @@ export default function RiderDashboardPage() {
       }
       loadAll(true);
     } catch (error: any) {
+      nav?.close();
       showToast(error.response?.data?.error?.message || t('statusUpdateFailed'), 'error');
     } finally {
       setBusyId(null);
@@ -444,7 +506,7 @@ export default function RiderDashboardPage() {
               <div className="bg-white rounded-2xl p-1.5 shadow-sm border border-slate-200 flex items-center gap-1">
                 <button
                   onClick={() => setActiveTab('active')}
-                  className={`flex-1 py-2.5 px-4 rounded-xl text-xs font-black tracking-wide transition-all flex items-center justify-center gap-2 ${
+                  className={`flex-1 py-2.5 px-2 sm:px-4 min-w-0 rounded-xl text-xs font-black tracking-wide transition-all flex items-center justify-center gap-2 ${
                     activeTab === 'active'
                       ? 'bg-slate-900 text-white shadow-sm'
                       : 'text-slate-600 hover:bg-slate-100'
@@ -452,7 +514,7 @@ export default function RiderDashboardPage() {
                 >
                   <span>{t('tabActive')}</span>
                   {activeDeliveries.length > 0 && (
-                    <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-emerald-500 text-white animate-pulse">
+                    <span className="px-2 py-0.5 rounded-full text-[11px] font-black bg-emerald-500 text-white animate-pulse">
                       {activeDeliveries.length}
                     </span>
                   )}
@@ -460,14 +522,14 @@ export default function RiderDashboardPage() {
 
                 <button
                   onClick={() => setActiveTab('available')}
-                  className={`flex-1 py-2.5 px-4 rounded-xl text-xs font-black tracking-wide transition-all flex items-center justify-center gap-2 ${
+                  className={`flex-1 py-2.5 px-2 sm:px-4 min-w-0 rounded-xl text-xs font-black tracking-wide transition-all flex items-center justify-center gap-2 ${
                     activeTab === 'available'
                       ? 'bg-slate-900 text-white shadow-sm'
                       : 'text-slate-600 hover:bg-slate-100'
                   }`}
                 >
                   <span>{t('tabAvailable')}</span>
-                  <span className={`px-2 py-0.5 rounded-full text-[10px] font-black ${
+                  <span className={`px-2 py-0.5 rounded-full text-[11px] font-black ${
                     activeTab === 'available' ? 'bg-amber-400 text-slate-900' : 'bg-slate-200 text-slate-700'
                   }`}>
                     {available.length}
@@ -476,7 +538,7 @@ export default function RiderDashboardPage() {
 
                 <button
                   onClick={() => setActiveTab('history')}
-                  className={`flex-1 py-2.5 px-4 rounded-xl text-xs font-black tracking-wide transition-all flex items-center justify-center gap-2 ${
+                  className={`flex-1 py-2.5 px-2 sm:px-4 min-w-0 rounded-xl text-xs font-black tracking-wide transition-all flex items-center justify-center gap-2 ${
                     activeTab === 'history'
                       ? 'bg-slate-900 text-white shadow-sm'
                       : 'text-slate-600 hover:bg-slate-100'
@@ -531,12 +593,17 @@ export default function RiderDashboardPage() {
                                   <span className="font-black text-base tracking-wide text-white">
                                     {t('orderNo', { number: delivery.orderNumber || delivery.orderId.slice(0, 8) })}
                                   </span>
-                                  <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 uppercase">
+                                  <span className="px-2 py-0.5 rounded text-[11px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 uppercase">
                                     {(() => {
                                       const k = riderKeyFor('dstatus', delivery.status);
                                       return k ? t(k) : delivery.status.replace(/_/g, ' ');
                                     })()}
                                   </span>
+                                  {delivery.assignmentMode === 'auto' && (
+                                    <span className="px-2 py-0.5 rounded text-[11px] font-bold bg-blue-500/20 text-blue-200 border border-blue-400/40">
+                                      {t('autoAssigned')}
+                                    </span>
+                                  )}
                                 </div>
                               </div>
 
@@ -584,7 +651,7 @@ export default function RiderDashboardPage() {
                                           {isDone ? '✓' : step.icon}
                                         </div>
                                         <span
-                                          className={`text-[10px] mt-1 ${
+                                          className={`text-[11px] mt-1 ${
                                             isCurrent
                                               ? 'text-slate-900 font-bold'
                                               : isDone
@@ -601,21 +668,49 @@ export default function RiderDashboardPage() {
                               </div>
                             </div>
 
+                            {/* START NAVIGATION: opens the maps app for the current leg (checked against the server first) */}
+                            {NAVIGABLE_STATUSES.includes(delivery.status) && (
+                              <div className="px-5 pt-4">
+                                <a
+                                  href={navUrlFor(delivery)}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  data-testid="start-navigation"
+                                  aria-disabled={!canStartNavigation(delivery) || navBusyId === delivery.id}
+                                  onClick={(e) => (canStartNavigation(delivery) ? handleStartNavigation(delivery, e) : e.preventDefault())}
+                                  className={`flex items-center justify-center gap-2 w-full py-3 rounded-xl text-white text-sm font-black shadow-md ${
+                                    canStartNavigation(delivery) && navBusyId !== delivery.id ? 'bg-emerald-600 hover:bg-emerald-700' : 'bg-slate-400 cursor-not-allowed'
+                                  }`}
+                                >
+                                  {navBusyId === delivery.id ? t('processing') : headingToCustomer(delivery) ? t('startNavCustomer') : t('startNavKitchen')}
+                                </a>
+                                <p className="text-[11px] text-slate-500 text-center mt-1">{t('navHint')}</p>
+                                {(() => {
+                                  const alt = alternativeMapsLink(navDestinationFor(delivery), platform);
+                                  return alt ? (
+                                    <a href={alt.url} target="_blank" rel="noopener noreferrer" data-testid="alt-navigation" className="block text-center text-[11px] font-semibold text-emerald-700 underline mt-1">
+                                      {alt.kind === 'apple' ? t('openInAppleMaps') : t('openInOtherMaps')}
+                                    </a>
+                                  ) : null;
+                                })()}
+                              </div>
+                            )}
+
                             {/* ROUTE NODES (PICKUP & DROPOFF) */}
                             <div className="p-5 grid grid-cols-1 md:grid-cols-2 gap-4">
                               <div className="p-3.5 rounded-xl bg-blue-50/60 border border-blue-100 flex items-start justify-between gap-2.5">
                                 <div className="flex items-start gap-2.5">
                                   <span className="text-xl">🏪</span>
                                   <div>
-                                    <span className="text-[10px] uppercase font-bold text-blue-900 block">{t('pickupKitchen')}</span>
+                                    <span className="text-[11px] uppercase font-bold text-blue-900 block">{t('pickupKitchen')}</span>
                                     <p className="text-xs font-bold text-slate-800 mt-0.5">{delivery.pickupAddress}</p>
-                                    <span className="inline-block text-[10px] text-blue-700 mt-1 font-medium bg-blue-100/70 px-2 py-0.5 rounded">
+                                    <span className="inline-block text-[11px] text-blue-700 mt-1 font-medium bg-blue-100/70 px-2 py-0.5 rounded">
                                       {t('prepVerify')}
                                     </span>
                                   </div>
                                 </div>
                                 <a
-                                  href={`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(delivery.pickupAddress)}`}
+                                  href={delivery.pickupMapsUrl ?? `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(delivery.pickupAddress)}`}
                                   target="_blank"
                                   rel="noopener noreferrer"
                                   className="px-2.5 py-1 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-[11px] font-bold shadow-xs whitespace-nowrap transition-all flex items-center gap-1"
@@ -628,15 +723,36 @@ export default function RiderDashboardPage() {
                                 <div className="flex items-start gap-2.5">
                                   <span className="text-xl">📍</span>
                                   <div>
-                                    <span className="text-[10px] uppercase font-bold text-emerald-900 block">{t('dropoffCustomer')}</span>
+                                    <span className="text-[11px] uppercase font-bold text-emerald-900 block">{t('dropoffCustomer')}</span>
                                     <p className="text-xs font-bold text-slate-800 mt-0.5">{delivery.deliveryAddress}</p>
-                                    <span className="inline-block text-[10px] text-emerald-700 mt-1 font-medium bg-emerald-100/70 px-2 py-0.5 rounded">
+                                    {delivery.dropoffDetails && (
+                                      <p className="text-[11px] text-slate-600 mt-1 space-y-0.5">
+                                        {delivery.dropoffDetails.houseNumber && <span className="block">{t('houseNo')}: {delivery.dropoffDetails.houseNumber}</span>}
+                                        {delivery.dropoffDetails.addressLine2 && <span className="block">{delivery.dropoffDetails.addressLine2}</span>}
+                                        {delivery.dropoffDetails.landmark && <span className="block">{t('landmark')}: {delivery.dropoffDetails.landmark}</span>}
+                                        {delivery.dropoffDetails.instructions && <span className="block font-semibold text-amber-700">{t('customerNote')}: {delivery.dropoffDetails.instructions}</span>}
+                                      </p>
+                                    )}
+                                    {delivery.customer && (
+                                      <p className="text-[11px] text-slate-700 mt-1.5 flex flex-wrap items-center gap-2">
+                                        <span className="font-bold">{delivery.customer.name || t('customer')}</span>
+                                        {delivery.customer.phone && (
+                                          <a href={`tel:${delivery.customer.phone}`} data-ltr className="px-2 py-0.5 rounded-md bg-emerald-600 text-white font-bold">
+                                            📞 {delivery.customer.phone}
+                                          </a>
+                                        )}
+                                      </p>
+                                    )}
+                                    <span className="inline-block text-[11px] text-emerald-700 mt-1 font-medium bg-emerald-100/70 px-2 py-0.5 rounded">
                                       {t('doorstepPin')}
                                     </span>
                                   </div>
                                 </div>
+                                {delivery.deliveryLatitude == null && (
+                                  <p className="text-[11px] font-semibold text-amber-700" data-testid="no-map-pin">{t('noMapPin')}</p>
+                                )}
                                 <a
-                                  href={`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(delivery.deliveryAddress)}`}
+                                  href={delivery.dropoffMapsUrl ?? `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(delivery.deliveryAddress)}`}
                                   target="_blank"
                                   rel="noopener noreferrer"
                                   className="px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-[11px] font-bold shadow-xs whitespace-nowrap transition-all flex items-center gap-1"
@@ -780,16 +896,16 @@ export default function RiderDashboardPage() {
                               </span>
                               <div className="flex items-center gap-1.5 flex-wrap">
                                 {d.isRouteMatch && (
-                                  <span className="px-2 py-0.5 rounded text-[10px] font-black bg-emerald-600 text-white shadow-xs animate-pulse">
+                                  <span className="px-2 py-0.5 rounded text-[11px] font-black bg-emerald-600 text-white shadow-xs animate-pulse">
                                     {t('routeMatch', { bonus: d.batchBonus })}
                                   </span>
                                 )}
                                 {['ready', 'dispatched', 'in_transit'].includes(d.orderStatus ?? '') ? (
-                                  <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-100 text-emerald-800">
+                                  <span className="px-2 py-0.5 rounded text-[11px] font-bold bg-emerald-100 text-emerald-800">
                                     {tc('status.ready')}
                                   </span>
                                 ) : (
-                                  <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-800">
+                                  <span className="px-2 py-0.5 rounded text-[11px] font-bold bg-amber-100 text-amber-800">
                                     {t('stillPreparing')}
                                   </span>
                                 )}
@@ -801,7 +917,7 @@ export default function RiderDashboardPage() {
                                 <span className="font-bold text-slate-800">{t('pickupLabel')}</span>
                                 <span className="truncate">{d.pickupAddress}</span>
                                 {d.pickupDistanceKm != null && (
-                                  <span className="shrink-0 px-1.5 rounded bg-sky-50 text-sky-800 font-bold text-[10px]">
+                                  <span className="shrink-0 px-1.5 rounded bg-sky-50 text-sky-800 font-bold text-[11px]">
                                     {t('kmAway', { km: d.pickupDistanceKm })}
                                   </span>
                                 )}
@@ -826,13 +942,13 @@ export default function RiderDashboardPage() {
                                 <span className="font-black text-emerald-700">
                                   Rs {d.standardFee}
                                   {d.isRouteMatch && (
-                                    <span className="text-[10px] text-emerald-600 font-bold ms-1">
+                                    <span className="text-[11px] text-emerald-600 font-bold ms-1">
                                       {t('bonusSuffix', { bonus: d.batchBonus })}
                                     </span>
                                   )}
                                 </span>
                               </div>
-                              <div className="flex items-center justify-between text-[10px] text-slate-500">
+                              <div className="flex items-center justify-between text-[11px] text-slate-500">
                                 <span>{t('corridor')}</span>
                                 <span className="font-medium text-slate-700">
                                   {t('corridorRange', { min: d.minAskFee, max: d.maxAskFee })}
@@ -984,12 +1100,12 @@ export default function RiderDashboardPage() {
 
                 <div className="grid grid-cols-2 gap-2 text-xs">
                   <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-100">
-                    <span className="text-slate-400 block text-[10px] font-bold uppercase">{t('runsDelivered')}</span>
+                    <span className="text-slate-400 block text-[11px] font-bold uppercase">{t('runsDelivered')}</span>
                     <span className="text-base font-black text-slate-800">{completedDeliveries.length}</span>
                   </div>
 
                   <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-100">
-                    <span className="text-slate-400 block text-[10px] font-bold uppercase">{t('activeNow')}</span>
+                    <span className="text-slate-400 block text-[11px] font-bold uppercase">{t('activeNow')}</span>
                     <span className="text-base font-black text-slate-800">{activeDeliveries.length}</span>
                   </div>
                 </div>

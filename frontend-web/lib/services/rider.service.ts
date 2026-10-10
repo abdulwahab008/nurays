@@ -48,6 +48,13 @@ export interface Delivery {
   riderBonus?: number | null;
   // A cash order that would take the rider past their cash limit.
   exceedsCashLimit?: boolean;
+  /** Only once the job is the rider's: who to call and the exact spot. */
+  customer?: { name: string | null; phone: string | null } | null;
+  dropoffDetails?: { houseNumber: string | null; addressLine2: string | null; landmark: string | null; instructions: string | null } | null;
+  pickupMapsUrl?: string;
+  dropoffMapsUrl?: string;
+  /** "auto" when the system picked the rider, "claimed" when they took it from the pool. */
+  assignmentMode?: 'auto' | 'claimed' | null;
 }
 
 export interface RiderProfile {

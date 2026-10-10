@@ -60,10 +60,10 @@ export default function CartConflictModal({
         {/* Transition Comparison Box */}
         <div className="mx-6 p-4 rounded-2xl bg-slate-50 border border-slate-200/80 space-y-3">
           <div className="flex items-center justify-between text-xs">
-            <span className="font-bold text-slate-400 uppercase tracking-wider text-[10px]">
+            <span className="font-bold text-slate-400 uppercase tracking-wider text-[11px]">
               {t('currentCart')}
             </span>
-            <span className="px-2 py-0.5 rounded bg-slate-200 text-slate-700 font-black text-[10px]">
+            <span className="px-2 py-0.5 rounded bg-slate-200 text-slate-700 font-black text-[11px]">
               {t('willBeCleared')}
             </span>
           </div>
@@ -79,15 +79,15 @@ export default function CartConflictModal({
           </div>
 
           <div className="flex items-center justify-between text-xs">
-            <span className="font-bold text-[#FF5500] uppercase tracking-wider text-[10px]">
+            <span className="font-bold text-[#FF5500] uppercase tracking-wider text-[11px]">
               {t('newKitchen')}
             </span>
-            <span className="px-2 py-0.5 rounded bg-orange-100 text-[#FF5500] font-black text-[10px]">
+            <span className="px-2 py-0.5 rounded bg-orange-100 text-[#FF5500] font-black text-[11px]">
               {t('newOrder')}
             </span>
           </div>
           <div className="flex items-center gap-2.5">
-            <div className="w-5 h-5 rounded-md bg-[#FF5500] text-white flex items-center justify-center text-[10px] font-black flex-shrink-0">
+            <div className="w-5 h-5 rounded-md bg-[#FF5500] text-white flex items-center justify-center text-[11px] font-black flex-shrink-0">
               👩‍🍳
             </div>
             <span className="font-black text-slate-950 text-sm truncate">

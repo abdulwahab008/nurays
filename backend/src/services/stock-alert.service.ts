@@ -1,4 +1,5 @@
 import prisma from '../config/database';
+import { AppError } from '../middleware/errorHandler';
 import { queueEmail } from '../jobs/email.jobs';
 
 interface CreateStockAlertData {
@@ -124,7 +125,7 @@ export const markAlertAsRead = async (alertId: string, sellerId: string) => {
   });
 
   if (!alert || alert.sellerId !== sellerId) {
-    throw new Error('Alert not found');
+    throw new AppError('Alert not found', 404, 'ALERT_NOT_FOUND');
   }
 
   return prisma.stockAlert.update({
@@ -142,7 +143,7 @@ export const dismissAlert = async (alertId: string, sellerId: string) => {
   });
 
   if (!alert || alert.sellerId !== sellerId) {
-    throw new Error('Alert not found');
+    throw new AppError('Alert not found', 404, 'ALERT_NOT_FOUND');
   }
 
   return prisma.stockAlert.update({

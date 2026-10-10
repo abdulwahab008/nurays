@@ -46,15 +46,9 @@ export const createCategoryRequest = async (req: Request, res: Response) => {
       data: request,
       message: 'Category request submitted successfully. Admin will review it shortly.',
     });
-  } catch (error: any) {
-    console.error('Create category request error:', error);
-    return res.status(400).json({
-      success: false,
-      error: {
-        code: 'REQUEST_FAILED',
-        message: error.message || 'Failed to submit category request',
-      },
-    });
+  } catch (error) {
+    // Service errors carry their own status; anything else is a bug for the central handler.
+    throw error;
   }
 };
 
@@ -79,15 +73,9 @@ export const getMyRequests = async (req: Request, res: Response) => {
       success: true,
       data: requests,
     });
-  } catch (error: any) {
-    console.error('Get my requests error:', error);
-    return res.status(500).json({
-      success: false,
-      error: {
-        code: 'FETCH_FAILED',
-        message: 'Failed to fetch category requests',
-      },
-    });
+  } catch (error) {
+    // Service errors carry their own status; anything else is a bug for the central handler.
+    throw error;
   }
 };
 
@@ -102,15 +90,9 @@ export const getAllRequests = async (req: Request, res: Response) => {
       success: true,
       data: requests,
     });
-  } catch (error: any) {
-    console.error('Get all requests error:', error);
-    res.status(500).json({
-      success: false,
-      error: {
-        code: 'FETCH_FAILED',
-        message: 'Failed to fetch category requests',
-      },
-    });
+  } catch (error) {
+    // Service errors carry their own status; anything else is a bug for the central handler.
+    throw error;
   }
 };
 
@@ -135,15 +117,9 @@ export const getRequestById = async (req: Request, res: Response) => {
       success: true,
       data: request,
     });
-  } catch (error: any) {
-    console.error('Get request by ID error:', error);
-    return res.status(500).json({
-      success: false,
-      error: {
-        code: 'FETCH_FAILED',
-        message: 'Failed to fetch category request',
-      },
-    });
+  } catch (error) {
+    // Service errors carry their own status; anything else is a bug for the central handler.
+    throw error;
   }
 };
 
@@ -161,15 +137,9 @@ export const approveRequest = async (req: Request, res: Response) => {
       data: category,
       message: 'Category request approved and category created successfully',
     });
-  } catch (error: any) {
-    console.error('Approve request error:', error);
-    res.status(400).json({
-      success: false,
-      error: {
-        code: 'APPROVAL_FAILED',
-        message: error.message || 'Failed to approve category request',
-      },
-    });
+  } catch (error) {
+    // Service errors carry their own status; anything else is a bug for the central handler.
+    throw error;
   }
 };
 
@@ -197,15 +167,9 @@ export const rejectRequest = async (req: Request, res: Response) => {
       data: updated,
       message: 'Category request rejected',
     });
-  } catch (error: any) {
-    console.error('Reject request error:', error);
-    return res.status(400).json({
-      success: false,
-      error: {
-        code: 'REJECTION_FAILED',
-        message: error.message || 'Failed to reject category request',
-      },
-    });
+  } catch (error) {
+    // Service errors carry their own status; anything else is a bug for the central handler.
+    throw error;
   }
 };
 
@@ -218,14 +182,8 @@ export const getPendingCount = async (_req: Request, res: Response) => {
       success: true,
       data: { count },
     });
-  } catch (error: any) {
-    console.error('Get pending count error:', error);
-    return res.status(500).json({
-      success: false,
-      error: {
-        code: 'FETCH_FAILED',
-        message: 'Failed to fetch pending count',
-      },
-    });
+  } catch (error) {
+    // Service errors carry their own status; anything else is a bug for the central handler.
+    throw error;
   }
 };

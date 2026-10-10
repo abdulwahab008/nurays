@@ -3,6 +3,7 @@ import { verifyHandoverCode } from './handover.service';
 import { presentFile } from '../storage';
 import { cancelOpenDelivery, notifyDeliveryCancelled, CancelledDelivery } from './delivery-lifecycle.service';
 import prisma from '../config/database';
+import { pageArgs } from '../utils/pagination';
 import { AppError } from '../middleware/errorHandler';
 import realtimeOrderService from './realtime-order.service';
 import riderService from './rider.service';
@@ -10,7 +11,7 @@ import { releasePromotionUsage } from './promotion.service';
 import { refundForCancelledItems } from './refund.service';
 import ledgerService from './ledger.service';
 import { releaseHubAllocations } from './hub-allocation.service';
-import { selfDeliveryFeeFor } from '../utils/deliveryEarnings';
+import { selfDeliveryFeeFor, sellerPaidDeliveryFor } from '../utils/deliveryEarnings';
 
 export class SellerOrderService {
   /**
@@ -36,9 +37,7 @@ export class SellerOrderService {
       throw new AppError('Seller not found', 404, 'SELLER_NOT_FOUND');
     }
 
-    const page = filters.page || 1;
-    const limit = Math.min(filters.limit || 20, 100);
-    const skip = (page - 1) * limit;
+    const { page, limit, skip } = pageArgs(filters.page, filters.limit);
 
     // Build where clause for order items
     const where: any = {
@@ -284,8 +283,11 @@ export class SellerOrderService {
       0
     );
 
+    // The kitchen needs the door to hand food over itself; never the address row's owner id, pin or postcode.
+    const { userId: _addrUser, latitude: _lat, longitude: _lng, postalCode: _pc, ...addressForSeller } = order.deliveryAddress ?? ({} as Record<string, unknown>);
     return {
       ...order,
+      deliveryAddress: order.deliveryAddress ? addressForSeller : null,
       paymentProofUrl: await presentFile(order.paymentProofUrl),
       sellerHandsOver:
         order.deliveryType === 'self_pickup' || deliveryProviderOf(order, seller.deliveryProvider) === 'self',
@@ -300,6 +302,8 @@ export class SellerOrderService {
         payout: sellerPayout,
         // Delivery fee this seller keeps because they deliver the order themselves.
         deliveryFeeKept: selfDeliveryFeeFor(order.deliveryFeeBreakdown, order.items[0]?.sellerId ?? ''),
+        // Nuray's delivery fee for a Nuray rider, paid by the kitchen out of its earnings.
+        deliveryFeePaid: sellerPaidDeliveryFor(order.deliveryFeeBreakdown, order.items[0]?.sellerId ?? ''),
       },
     };
   }
@@ -606,13 +610,6 @@ export class SellerOrderService {
             totalOrders: { decrement: 1 },
           },
         });
-        await tx.inventoryReservation.deleteMany({
-          where: {
-            productId: orderItem.productId,
-            reservationType: 'order',
-            reservationId: orderItem.orderId,
-          },
-        });
       }
 
       const remaining = await tx.orderItem.findMany({
@@ -858,13 +855,6 @@ export class SellerOrderService {
             data: {
               ...(item.variantId ? {} : { stockQuantity: { increment: item.quantity } }),
               totalOrders: { decrement: 1 },
-            },
-          });
-          await tx.inventoryReservation.deleteMany({
-            where: {
-              productId: item.productId,
-              reservationType: 'order',
-              reservationId: order.id,
             },
           });
         }

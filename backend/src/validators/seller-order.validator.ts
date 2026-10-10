@@ -1,8 +1,8 @@
 import { z } from 'zod';
 
 export const getSellerOrdersQuerySchema = z.object({
-  page: z.string().optional().transform((val) => (val ? parseInt(val, 10) : 1)),
-  limit: z.string().optional().transform((val) => (val ? parseInt(val, 10) : 20)),
+  page: z.coerce.number().int().min(1).optional(),
+  limit: z.coerce.number().int().min(1).max(100).optional(),
   status: z.enum(['pending', 'preparing', 'ready', 'dispatched', 'cancelled']).optional(),
   orderStatus: z.enum([
     'pending',
@@ -40,3 +40,5 @@ export const deliverOrderSchema = z.object({
 export const deliveryFailedSchema = z.object({
   reason: z.string().trim().min(3, 'Say why the delivery failed').max(500),
 });
+
+export const rejectOrderSchema = z.object({ reason: z.string().trim().max(500).optional() });

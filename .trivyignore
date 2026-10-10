@@ -1,0 +1,7 @@
+# Vulnerabilities the CI image scan accepts on purpose. Each entry says why, and expires so
+# it is looked at again; an expired entry fails the scan until it is renewed or fixed.
+
+# deepmerge-ts 7.x inside the Prisma CLI (@prisma/config). The CLI is in the backend image only
+# to run `prisma migrate deploy`; it merges the project's own Prisma config, never request
+# data. The fix needs Prisma 7, an upgrade awaiting approval (docs/PRODUCTION_READINESS_AUDIT.md).
+CVE-2026-40345 exp:2027-01-31

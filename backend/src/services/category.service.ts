@@ -193,7 +193,10 @@ export class CategoryService {
   /**
    * Update category (admin only)
    */
-  async updateCategory(categoryId: string, data: any) {
+  async updateCategory(
+    categoryId: string,
+    data: { name?: string; nameUrdu?: string; description?: string; iconUrl?: string | null; parentId?: string | null; productType?: string | null; sortOrder?: number; isActive?: boolean }
+  ) {
     const category = await prisma.category.findUnique({
       where: { id: categoryId },
     });
@@ -217,10 +220,18 @@ export class CategoryService {
       }
     }
 
+    // Only these columns, never a relation write or an id from the request body.
     const updatedCategory = await prisma.category.update({
       where: { id: categoryId },
       data: {
-        ...data,
+        ...(data.name !== undefined ? { name: data.name } : {}),
+        ...(data.nameUrdu !== undefined ? { nameUrdu: data.nameUrdu } : {}),
+        ...(data.description !== undefined ? { description: data.description } : {}),
+        ...(data.iconUrl !== undefined ? { iconUrl: data.iconUrl || null } : {}),
+        ...(data.parentId !== undefined ? { parentId: data.parentId || null } : {}),
+        ...(data.productType !== undefined ? { productType: data.productType } : {}),
+        ...(data.sortOrder !== undefined ? { sortOrder: data.sortOrder } : {}),
+        ...(data.isActive !== undefined ? { isActive: data.isActive } : {}),
         slug,
       },
     });

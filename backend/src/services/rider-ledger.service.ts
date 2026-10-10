@@ -56,6 +56,31 @@ export async function riderMoney(client: Client, riderId: string): Promise<Rider
   };
 }
 
+/** The same figures for many riders in one query (dispatch looks at every rider on duty). */
+export async function riderMoneyMany(client: Client, riderIds: string[]): Promise<Map<string, RiderMoney>> {
+  const out = new Map<string, RiderMoney>();
+  if (riderIds.length === 0) return out;
+  const rows = await (client as typeof prisma).riderLedgerEntry.groupBy({
+    by: ['riderId', 'type'],
+    where: { riderId: { in: riderIds } },
+    _sum: { amount: true },
+  });
+  for (const riderId of riderIds) {
+    const mine = rows.filter((r) => r.riderId === riderId);
+    const sum = (type: string) => Number(mine.find((r) => r.type === type)?._sum.amount ?? 0);
+    const balance = money(mine.reduce((total, r) => total + Number(r._sum.amount ?? 0), 0));
+    const cashHeld = money(-(sum('cod_collected') + sum('cash_deposit')));
+    out.set(riderId, {
+      balance,
+      cashHeld,
+      unpaid: money(balance + cashHeld),
+      earned: money(sum('delivery_fee') + sum('bonus')),
+      paidOut: money(-sum('payout')),
+    });
+  }
+  return out;
+}
+
 /**
  * A completed delivery's entries: the rider's fee and bonus, and the cash they took if it was
  * a cash order. Inside the caller's transaction; each is written at most once per delivery.
@@ -303,6 +328,7 @@ export async function riderMoneyForAdmin(riderId: string, page = 1) {
       totalDeliveries: rider.totalDeliveries,
       ratingAverage: Number(rider.ratingAverage),
       cashLimitIsDefault: rider.cashLimit == null,
+      communityId: rider.communityId,
     },
     ...summary,
     ...history,

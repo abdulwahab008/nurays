@@ -87,7 +87,7 @@ export function ClosedKitchenModal({
           </div>
 
           <div className="min-w-0 pe-6">
-            <div className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-red-100 text-red-800 text-[10px] font-bold uppercase tracking-wider mb-1">
+            <div className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-red-100 text-red-800 text-[11px] font-bold uppercase tracking-wider mb-1">
               <span className="w-1.5 h-1.5 rounded-full bg-red-500" />
               <span>{t('closedInstant')}</span>
             </div>

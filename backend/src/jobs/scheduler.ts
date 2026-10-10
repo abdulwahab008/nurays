@@ -1,4 +1,5 @@
 import prisma from '../config/database';
+import { logger } from '../utils/logger';
 
 /**
  * In-process scheduled jobs that are safe with several app instances: each run takes
@@ -32,7 +33,7 @@ export function scheduleJob(name: string, everyMs: number, fn: () => Promise<unk
   const tick = () =>
     runExclusive(name, async () => {
       await fn();
-    }).catch((err) => console.error(`Job ${name} failed:`, err));
+    }).catch((err) => logger.error({ err, job: name }, `Job ${name} failed`));
   if (opts.runAtStart !== false) setTimeout(tick, 5_000).unref?.();
   const timer = setInterval(tick, everyMs);
   timer.unref?.();

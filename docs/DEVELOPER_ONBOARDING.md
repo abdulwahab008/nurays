@@ -5,7 +5,7 @@ For what Nuray does, read the root [README](../README.md) first.
 
 ## Prerequisites
 
-- Node.js 20+
+- Node.js 22+
 - PostgreSQL 15+ with the `pg_trgm` extension (bundled with PostgreSQL; managed services have it)
 - Redis 7+: optional in development, required in production. Without `REDIS_URL`, rate limits, live updates and
   background jobs stay inside the one backend process.

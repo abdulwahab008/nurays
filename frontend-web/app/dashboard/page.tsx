@@ -130,7 +130,7 @@ function DealBadge({ dish }: { dish: DashboardDish }) {
   const percentOff = Math.round((1 - dish.price / dish.originalPrice) * 100);
   if (percentOff <= 0) return null;
   return (
-    <span className="absolute top-2.5 start-2.5 px-2 py-0.5 rounded-lg text-white text-[10px] font-bold bg-[#FF5500] shadow-xs uppercase tracking-wider flex items-center gap-1">
+    <span className="absolute top-2.5 start-2.5 px-2 py-0.5 rounded-lg text-white text-[11px] font-bold bg-[#FF5500] shadow-xs uppercase tracking-wider flex items-center gap-1">
       <Tag className="w-3 h-3" />
       <span>{t('percentOff', { percent: percentOff })}</span>
     </span>
@@ -481,7 +481,7 @@ export default function CustomerDashboardPage() {
                 <div>
                   <div className="flex items-center gap-2">
                     <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-                    <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-600">{t('activeDelivery')}</span>
+                    <span className="text-[11px] font-bold uppercase tracking-wider text-emerald-600">{t('activeDelivery')}</span>
                   </div>
                   <p className="text-sm font-bold text-slate-900 mt-0.5">{t('orderNumber', { number: activeOrder.orderNumber })}</p>
                   <p className="text-xs text-slate-500 font-medium">
@@ -610,7 +610,7 @@ export default function CustomerDashboardPage() {
             <section>
               <div className="flex items-center justify-between mb-3">
                 <div>
-                  <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-slate-100 text-slate-700 text-[10px] font-bold uppercase tracking-wider mb-1">
+                  <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-slate-100 text-slate-700 text-[11px] font-bold uppercase tracking-wider mb-1">
                     <ChefHat className="w-3.5 h-3.5 text-[#FF5500]" />
                     <span>{t('verifiedDomesticCooks')}</span>
                   </div>
@@ -662,7 +662,7 @@ export default function CustomerDashboardPage() {
                           className="w-full h-full group-hover:scale-105 transition-transform duration-300"
                         />
                         <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent" />
-                        <span className="absolute bottom-2.5 start-2.5 px-2 py-0.5 rounded-md bg-emerald-600/90 text-white text-[10px] font-bold flex items-center gap-1">
+                        <span className="absolute bottom-2.5 start-2.5 px-2 py-0.5 rounded-md bg-emerald-600/90 text-white text-[11px] font-bold flex items-center gap-1">
                           <ShieldCheck className="w-3 h-3" />
                           <span>{t('verified')}</span>
                         </span>
@@ -725,7 +725,7 @@ export default function CustomerDashboardPage() {
             <section>
               <div className="flex items-center justify-between mb-3">
                 <div>
-                  <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-orange-100 text-[#FF5500] text-[10px] font-bold uppercase tracking-wider mb-1">
+                  <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-orange-100 text-[#FF5500] text-[11px] font-bold uppercase tracking-wider mb-1">
                     <Flame className="w-3.5 h-3.5 text-[#FF5500]" />
                     <span>{t('popularDishes')}</span>
                   </div>
@@ -826,12 +826,12 @@ export default function CustomerDashboardPage() {
                 <div className="flex items-center justify-between mb-3">
                   <div>
                     <div className="flex items-center gap-2 mb-1">
-                      <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-gradient-to-r from-amber-500 to-[#FF5500] text-white text-[10px] font-black uppercase tracking-wider shadow-xs">
+                      <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-gradient-to-r from-amber-500 to-[#FF5500] text-white text-[11px] font-black uppercase tracking-wider shadow-xs">
                         <Trophy className="w-3 h-3" />
                         <span>{t('top10Badge')}</span>
                       </div>
                       {isRandomOrder && (
-                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-violet-100 text-violet-700 text-[10px] font-bold">
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-violet-100 text-violet-700 text-[11px] font-bold">
                           <Dices className="w-3 h-3" />
                           <span>{t('shuffled')}</span>
                         </span>
@@ -911,7 +911,7 @@ export default function CustomerDashboardPage() {
                           <DealBadge dish={dish} />
 
                           {(dish.isFrozen || dish.prepTimeMinutes) && (
-                            <span className="absolute bottom-2.5 start-2.5 px-2 py-0.5 rounded-md bg-black/70 backdrop-blur-xs text-white text-[10px] font-bold flex items-center gap-1">
+                            <span className="absolute bottom-2.5 start-2.5 px-2 py-0.5 rounded-md bg-black/70 backdrop-blur-xs text-white text-[11px] font-bold flex items-center gap-1">
                               {dish.isFrozen ? (
                                 <>
                                   <Snowflake className="w-3 h-3 text-cyan-400" />
@@ -979,7 +979,7 @@ export default function CustomerDashboardPage() {
               <section>
                 <div className="flex items-center justify-between mb-3">
                   <div>
-                    <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-slate-100 text-slate-700 text-[10px] font-bold uppercase tracking-wider mb-1">
+                    <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-slate-100 text-slate-700 text-[11px] font-bold uppercase tracking-wider mb-1">
                       <ChefHat className="w-3.5 h-3.5 text-[#FF5500]" />
                       <span>{t('verifiedHomeCooks')}</span>
                     </div>
@@ -1038,7 +1038,7 @@ export default function CustomerDashboardPage() {
                             className="w-full h-full group-hover:scale-105 transition-transform duration-300"
                           />
                           <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent" />
-                          <span className="absolute bottom-2.5 start-2.5 px-2 py-0.5 rounded-md bg-emerald-600/90 text-white text-[10px] font-bold flex items-center gap-1">
+                          <span className="absolute bottom-2.5 start-2.5 px-2 py-0.5 rounded-md bg-emerald-600/90 text-white text-[11px] font-bold flex items-center gap-1">
                             <ShieldCheck className="w-3 h-3" />
                             <span>{t('verifiedDomesticCook')}</span>
                           </span>
@@ -1103,7 +1103,7 @@ export default function CustomerDashboardPage() {
               <section>
                 <div className="flex items-center justify-between mb-3">
                   <div>
-                    <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-amber-100 text-amber-800 text-[10px] font-bold uppercase tracking-wider mb-1">
+                    <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-amber-100 text-amber-800 text-[11px] font-bold uppercase tracking-wider mb-1">
                       <Sparkles className="w-3.5 h-3.5 text-[#FF5500]" />
                       <span>{t('generationalRecipes')}</span>
                     </div>
@@ -1196,7 +1196,7 @@ export default function CustomerDashboardPage() {
               <section>
                 <div className="flex items-center justify-between mb-3">
                   <div>
-                    <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-red-100 text-red-700 text-[10px] font-bold uppercase tracking-wider mb-1">
+                    <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-red-100 text-red-700 text-[11px] font-bold uppercase tracking-wider mb-1">
                       <Flame className="w-3.5 h-3.5 text-red-600" />
                       <span>{t('slowBraised')}</span>
                     </div>
@@ -1289,7 +1289,7 @@ export default function CustomerDashboardPage() {
               <section>
                 <div className="flex items-center justify-between mb-3">
                   <div>
-                    <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-cyan-100 text-cyan-800 text-[10px] font-bold uppercase tracking-wider mb-1">
+                    <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-cyan-100 text-cyan-800 text-[11px] font-bold uppercase tracking-wider mb-1">
                       <Snowflake className="w-3.5 h-3.5 text-cyan-600" />
                       <span>{t('freezerReady')}</span>
                     </div>
@@ -1338,7 +1338,7 @@ export default function CustomerDashboardPage() {
                           />
                           <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-transparent to-transparent" />
                           {dish.isFrozen ? (
-                            <span className="absolute top-2.5 start-2.5 px-2 py-0.5 rounded-lg text-white text-[10px] font-bold bg-cyan-600 shadow-xs uppercase tracking-wider flex items-center gap-1">
+                            <span className="absolute top-2.5 start-2.5 px-2 py-0.5 rounded-lg text-white text-[11px] font-bold bg-cyan-600 shadow-xs uppercase tracking-wider flex items-center gap-1">
                               <Snowflake className="w-3 h-3" />
                               <span>{t('frozen')}</span>
                             </span>

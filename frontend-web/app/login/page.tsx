@@ -292,6 +292,7 @@ export default function LoginPage() {
             <BrandLockup markSize={40} wordSize={28} />
           </Link>
           <div className="flex items-center gap-3">
+            {SHOW_DEMO_LOGIN && (
             <Link
               href="/dev-login"
               className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-orange-50 hover:bg-orange-100 border border-orange-200 text-orange-800 text-xs font-bold transition-all shadow-2xs"
@@ -299,6 +300,7 @@ export default function LoginPage() {
               <Layers className="w-3.5 h-3.5" />
               <span>Multi-Tab Isolator</span>
             </Link>
+            )}
             <Link
               href="/register"
               className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-bold transition-all"
@@ -315,7 +317,7 @@ export default function LoginPage() {
           <div className="lg:col-span-7 bg-slate-50/80 rounded-2xl p-5 sm:p-6 border border-slate-200/70">
             <div className="flex items-center justify-between mb-4">
               <div>
-                <span className="text-[10px] font-bold tracking-wider text-[#FF5500] bg-orange-100/80 px-2.5 py-0.5 rounded-full uppercase">
+                <span className="text-[11px] font-bold tracking-wider text-[#FF5500] bg-orange-100/80 px-2.5 py-0.5 rounded-full uppercase">
                   Instant Access
                 </span>
                 <h2 className="text-lg font-bold text-slate-900 mt-2 flex items-center gap-2">
@@ -349,7 +351,7 @@ export default function LoginPage() {
                           {acc.id === 'rider' && <Bike className="w-4 h-4 text-blue-600" />}
                           {acc.id === 'admin' && <ShieldCheck className="w-4 h-4 text-purple-600" />}
                         </div>
-                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${acc.badgeClass}`}>
+                        <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full border ${acc.badgeClass}`}>
                           {acc.badge}
                         </span>
                       </div>
