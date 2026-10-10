@@ -77,7 +77,7 @@ export function SlideOverCartDrawer({ isOpen, onClose }: SlideOverCartDrawerProp
       <div className="fixed inset-y-0 end-0 max-w-full flex ps-10">
         <div
           ref={drawerRef}
-          className="w-screen max-w-md bg-white shadow-2xl flex flex-col transform transition-transform ease-out duration-300 animate-in slide-in-from-right"
+          className="w-screen max-w-md pt-(--safe-top) pb-(--safe-bottom) pe-(--safe-end) bg-white shadow-2xl flex flex-col transform transition-transform ease-out duration-300 animate-in slide-in-from-right"
         >
           {/* Header */}
           <div className="p-4 border-b border-slate-200 flex items-center justify-between bg-slate-50/70">

@@ -1270,7 +1270,7 @@ function ProductsContent() {
   return (
     <div className="min-h-screen bg-[#F8FAFC] text-[#0F172A] pb-24">
       {/* Dedicated Public Catalog Header */}
-      <header className="sticky top-0 z-40 bg-white/95 backdrop-blur-md border-b border-slate-200/80 shadow-2xs">
+      <header className="sticky top-0 z-40 pt-(--safe-top) bg-white/95 backdrop-blur-md border-b border-slate-200/80 shadow-2xs">
         <div className="max-w-[1440px] mx-auto px-3 sm:px-8 h-16 flex items-center justify-between gap-2 sm:gap-4">
           <div className="flex items-center gap-6 min-w-0">
             <Link href="/" className="hover:opacity-95 transition-opacity shrink-0">

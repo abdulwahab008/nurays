@@ -121,6 +121,32 @@
 }
 
 /* ============================================================
+   SAFE AREAS
+   The page reaches under a notch, the status bar and the home indicator (viewport-fit=cover; an edge-to-edge app
+   always does). These are 0 on a screen that has none, so nothing changes there. Fixed and sticky bars use them so
+   that no button sits where the screen cannot be seen or touched; --safe-start/--safe-end follow the direction.
+   ============================================================ */
+:root {
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-right: env(safe-area-inset-right, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-left: env(safe-area-inset-left, 0px);
+  --safe-start: var(--safe-left);
+  --safe-end: var(--safe-right);
+  /* Where a page starts under the fixed top bar: the bar's 4rem and the status bar above it */
+  --header-offset: calc(4rem + var(--safe-top));
+}
+html[dir="rtl"] {
+  --safe-start: var(--safe-right);
+  --safe-end: var(--safe-left);
+}
+/* Turned sideways, the notch is at a side: the page keeps clear of it (fixed bars do the same for themselves). */
+body {
+  padding-left: var(--safe-left);
+  padding-right: var(--safe-right);
+}
+
+/* ============================================================
    BASE RESETS & DEFAULTS
    ============================================================ */
 html, body {
@@ -460,6 +486,8 @@ h1, h2, h3, h4, h5, h6 {
 /* Dashboard menu: a slide-in drawer below lg (from the start side, so the right in Urdu). */
 @media (max-width: 1023.98px) {
   .nuray-drawer {
+    padding-inline-start: var(--safe-start);
+    padding-bottom: var(--safe-bottom);
     transform: translateX(-100%);
     transition: transform 200ms ease;
   }

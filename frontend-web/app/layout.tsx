@@ -10,7 +10,8 @@ import { DEFAULT_LOCALE, dirFor, isLocale, LOCALE_COOKIE } from "@/lib/i18n/conf
 import "./fonts/fonts.css";
 import "./globals.css";
 
-// Phones: scale to the screen, tint the browser bar, and reach under the notch (pages keep their own padding).
+// Phones: scale to the screen, tint the browser bar, and reach under the notch. Fixed and sticky bars keep clear of the notch, the
+// status bar and the home indicator with the --safe-* variables in globals.css.
 export const viewport: Viewport = {
   width: 'device-width',
   initialScale: 1,

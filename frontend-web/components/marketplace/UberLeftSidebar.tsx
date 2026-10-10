@@ -72,7 +72,7 @@ export function UberLeftSidebar({
 
       {/* Drawer */}
       <div className="fixed inset-y-0 start-0 max-w-full flex pe-10">
-        <aside className="w-80 max-w-full bg-white shadow-2xl flex flex-col transform transition-transform ease-out duration-300 animate-in slide-in-from-left">
+        <aside className="w-80 max-w-full pt-(--safe-top) pb-(--safe-bottom) ps-(--safe-start) bg-white shadow-2xl flex flex-col transform transition-transform ease-out duration-300 animate-in slide-in-from-left">
           {/* Header */}
           <div className="p-4 border-b border-slate-200 flex items-center justify-between bg-slate-50/70">
             <Link

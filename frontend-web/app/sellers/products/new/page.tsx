@@ -1547,7 +1547,7 @@ export default function AddProductPage() {
           </div>
 
           {/* Submit Buttons - Sticky Footer */}
-          <div className="sticky bottom-0 bg-white border-t-2 border-gray-100 -mx-6 px-6 py-5 mt-8 rounded-t-3xl shadow-2xl">
+          <div className="sticky bottom-0 bg-white border-t-2 border-gray-100 -mx-6 px-6 pt-5 pb-[calc(1.25rem+var(--safe-bottom))] mt-8 rounded-t-3xl shadow-2xl">
             <div className="max-w-4xl mx-auto flex flex-col sm:flex-row gap-3">
               <Button
                 type="submit"

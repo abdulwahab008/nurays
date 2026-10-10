@@ -287,7 +287,7 @@ export function SellerNewOrderNotification() {
   if (!isSeller || !isSellerPage || !activeOrder) return null;
 
   return (
-    <div className="fixed top-4 end-4 z-[9999] flex flex-col gap-3 pointer-events-none">
+    <div className="fixed top-[calc(1rem+var(--safe-top))] end-[calc(1rem+var(--safe-end))] z-[9999] flex flex-col gap-3 pointer-events-none">
       <div
         id={`seller-alert-order-${activeOrder.orderId}`}
         className="pointer-events-auto w-[380px] bg-white rounded-3xl shadow-2xl border-2 border-emerald-400 overflow-hidden ring-4 ring-emerald-500/10"

@@ -637,7 +637,7 @@ export default function KitchensDirectoryPage() {
   return (
     <div className="min-h-screen bg-[#FAFAFA] text-slate-900 pb-24">
       {/* Header Bar */}
-      <header className="sticky top-0 z-40 bg-white/95 backdrop-blur-md border-b border-slate-200/80 shadow-xs">
+      <header className="sticky top-0 z-40 pt-(--safe-top) bg-white/95 backdrop-blur-md border-b border-slate-200/80 shadow-xs">
         <div className="max-w-[1400px] mx-auto px-4 sm:px-6 h-16 flex items-center justify-between gap-4">
           <div className="flex items-center gap-4">
             <Link href="/" className="hover:opacity-90 transition-opacity">

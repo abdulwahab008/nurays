@@ -112,7 +112,7 @@ export function UserLayout({ children, showSidebar = true, showNavbar = true }: 
       <div className="min-h-screen" style={{ background: 'var(--cream-50)' }}>
         {showNavbar && (
           <nav
-            className="sticky top-0 z-50 backdrop-blur-md"
+            className="sticky top-0 z-50 pt-(--safe-top) backdrop-blur-md"
             style={{
               background: 'rgba(251,248,241,0.94)',
               borderBottom: '1px solid var(--ink-100)',
@@ -185,7 +185,7 @@ export function UserLayout({ children, showSidebar = true, showNavbar = true }: 
           drawerOpen={drawerOpen}
         />
       )}
-      <div className="pt-16">
+      <div className="pt-(--header-offset)">
         {showSidebar && (
           <>
             {/* Sidebar: fixed on lg+, a slide-out drawer on phones and tablets (same as DashboardLayout) */}
@@ -196,7 +196,7 @@ export function UserLayout({ children, showSidebar = true, showNavbar = true }: 
               aria-hidden={!drawerOpen}
             />
             <div
-              className="nuray-drawer fixed top-16 bottom-0 start-0 z-50 w-64"
+              className="nuray-drawer fixed top-(--header-offset) bottom-0 start-0 z-50 w-64"
               data-open={drawerOpen ? 'true' : 'false'}
               onClick={() => setDrawerPath(null)}
             >

@@ -765,7 +765,7 @@ export default function CartPage() {
           </div>
 
           {/* ── RIGHT: ORDER SUMMARY ── */}
-          <div className="lg:col-span-1 sticky top-20">
+          <div className="lg:col-span-1 sticky top-[calc(5rem+var(--safe-top))]">
             <div className="bg-white rounded-3xl border border-slate-200/90 shadow-sm p-5 sm:p-6 space-y-4">
               <h3 className="text-base font-extrabold text-slate-950 pb-3 border-b border-slate-100 flex items-center justify-between">
                 <span>{t('orderSummary')}</span>

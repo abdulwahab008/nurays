@@ -443,7 +443,7 @@ export default function KitchenStorefrontPage() {
   };
 
   const renderPublicHeader = () => (
-    <header className="sticky top-0 z-40 bg-white/95 backdrop-blur-md border-b border-slate-200/80 shadow-2xs">
+    <header className="sticky top-0 z-40 pt-(--safe-top) bg-white/95 backdrop-blur-md border-b border-slate-200/80 shadow-2xs">
       <div className="max-w-[1360px] mx-auto px-4 sm:px-8 h-16 flex items-center justify-between gap-4">
         <div className="flex items-center gap-4">
           <Link href="/" className="hover:opacity-90 transition-opacity">
@@ -806,7 +806,7 @@ export default function KitchenStorefrontPage() {
 
       {/* Menu Categories Bar */}
       {kitchen.dishes.length > 0 && (
-        <div className="sticky top-16 z-30 bg-[#F8FAFC]/95 backdrop-blur-md border-b border-slate-200/80 py-3 mt-4">
+        <div className="sticky top-(--header-offset) z-30 bg-[#F8FAFC]/95 backdrop-blur-md border-b border-slate-200/80 py-3 mt-4">
           <div className="max-w-[1360px] mx-auto px-4 sm:px-8 flex items-center gap-2.5 overflow-x-auto no-scrollbar">
             <button
               onClick={() => setActiveCategory('all')}
@@ -1124,7 +1124,7 @@ export default function KitchenStorefrontPage() {
 
       {/* Floating Kitchen Cart Pill (Foodpanda/DoorDash style) */}
       {cartCount > 0 && (
-        <div className="fixed bottom-6 inset-x-0 z-50 flex justify-center px-4">
+        <div className="fixed bottom-[calc(1.5rem+var(--safe-bottom))] inset-x-0 z-50 flex justify-center px-4">
           <div className="bg-[#0C1016] text-white p-3 rounded-2xl shadow-xl border border-white/10 flex items-center justify-between gap-5 max-w-lg w-full">
             <div className="flex items-center gap-3">
               <div className="w-9 h-9 rounded-xl bg-[#FF5500] flex items-center justify-center text-white font-bold text-xs">

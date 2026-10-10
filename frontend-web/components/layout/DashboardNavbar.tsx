@@ -273,7 +273,7 @@ export function DashboardNavbar({ title, subtitle, userType = 'customer', onMenu
 
   return (
     <nav
-      className="fixed top-0 start-0 end-0 z-50 h-16 bg-white/95 backdrop-blur-md border-b border-slate-200/80 shadow-xs"
+      className="fixed top-0 start-0 end-0 z-50 h-(--header-offset) pt-(--safe-top) pl-(--safe-left) pr-(--safe-right) bg-white/95 backdrop-blur-md border-b border-slate-200/80 shadow-xs"
     >
       <div className="flex items-center justify-between h-full px-3 sm:px-6 gap-2">
         {/* Logo Section */}

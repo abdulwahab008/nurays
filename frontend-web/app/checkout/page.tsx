@@ -1048,7 +1048,7 @@ export default function CheckoutPage() {
 
           {/* Right Column: Sticky Order Summary & Portions (5 of 12) */}
           <div className="lg:col-span-5">
-            <div className="bg-white rounded-3xl p-5 sm:p-6 border border-slate-200/90 shadow-xs sticky top-20 space-y-5">
+            <div className="bg-white rounded-3xl p-5 sm:p-6 border border-slate-200/90 shadow-xs sticky top-[calc(5rem+var(--safe-top))] space-y-5">
               <div className="flex items-center justify-between pb-3 border-b border-slate-100">
                 <h3 className="text-sm font-bold text-slate-900 tracking-tight">{t('orderSummary')}</h3>
                 <div className="flex items-center gap-3">

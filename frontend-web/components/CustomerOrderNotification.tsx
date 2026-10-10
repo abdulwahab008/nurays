@@ -159,7 +159,7 @@ export function CustomerOrderNotification() {
   if (!isCustomer || notifications.length === 0) return null;
 
   return (
-    <div className="fixed top-4 end-4 z-[9998] flex flex-col gap-3 pointer-events-none">
+    <div className="fixed top-[calc(1rem+var(--safe-top))] end-[calc(1rem+var(--safe-end))] z-[9998] flex flex-col gap-3 pointer-events-none">
       {notifications.map((n) => {
         const known = STATUS_CONFIG[n.status];
         const cfg = known

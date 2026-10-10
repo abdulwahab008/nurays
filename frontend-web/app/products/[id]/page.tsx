@@ -494,7 +494,7 @@ export default function ProductDetailPage() {
     <>
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 lg:gap-12">
       {/* Product Images - left column */}
-      <div className="lg:sticky lg:top-24 self-start">
+      <div className="lg:sticky lg:top-[calc(6rem+var(--safe-top))] self-start">
         <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
           <div className="aspect-square max-h-[480px] bg-gray-50 flex items-center justify-center overflow-hidden">
             {product.images[selectedImage]?.url ? (
@@ -808,7 +808,7 @@ export default function ProductDetailPage() {
         </div>
 
         {/* Purchase card - sticky on large screens */}
-        <div className="lg:sticky lg:top-24 bg-white rounded-2xl shadow-sm border border-gray-100 p-6 space-y-6">
+        <div className="lg:sticky lg:top-[calc(6rem+var(--safe-top))] bg-white rounded-2xl shadow-sm border border-gray-100 p-6 space-y-6">
           {product.variants.length > 0 && (
             <div>
               <p className="text-sm font-medium text-gray-700 mb-3">{t('options')}</p>
@@ -996,7 +996,7 @@ export default function ProductDetailPage() {
   return (
     <div className="min-h-screen" style={{ background: 'var(--cream-50)' }}>
       <nav
-        className="sticky top-0 z-50 backdrop-blur-md"
+        className="sticky top-0 z-50 pt-(--safe-top) backdrop-blur-md"
         style={{ background: 'rgba(251,248,241,0.94)', borderBottom: '1px solid var(--ink-100)' }}
       >
         <div className="max-w-[1440px] mx-auto px-6 md:px-12">

@@ -132,6 +132,12 @@ Frontend:
 - Layout classes must be direction-neutral so Urdu mirrors: `ms-`/`me-`/`ps-`/`pe-`/`start-`/`end-`,
   `text-start`/`text-end`; avoid `ml-`/`mr-`/`pl-`/`pr-`/`left-`/`right-`/`text-left` in translated screens. Keep
   numbers, phone numbers and emails in `dir="ltr"` spans.
+- Fixed and sticky bars keep clear of a notch, the status bar and the home indicator with the variables in
+  `globals.css`: `pt-(--safe-top)` on a bar at the top, `top-(--header-offset)` for what sticks under the 4rem top bar,
+  `pb-(--safe-bottom)` or `bottom-[calc(1.5rem+var(--safe-bottom))]` at the bottom, `--safe-start`/`--safe-end` for a
+  corner pop-up or a drawer (they swap in Urdu), `--safe-left`/`--safe-right` for a bar that spans the screen (a notch
+  does not mirror). Every value is 0 on a screen without insets. To see a new bar with a notch, give Chromium
+  `Emulation.setSafeAreaInsetsOverride` over the DevTools protocol.
 - State: Zustand stores in `lib/store/` (auth, cart, community); live updates through `lib/hooks/use-socket.ts` and
   `use-live-refresh.ts`.
 

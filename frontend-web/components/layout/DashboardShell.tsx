@@ -172,7 +172,7 @@ export function DashboardShell({
         onMenuToggle={() => setOpen((v) => !v)}
         drawerOpen={open}
       />
-      <div className="pt-16">
+      <div className="pt-(--header-offset)">
         <div
           onClick={() => setOpen(false)}
           aria-hidden={!open}
@@ -184,7 +184,7 @@ export function DashboardShell({
           }}
         />
         <div
-          className="nuray-drawer fixed top-16 bottom-0 start-0 z-50 w-64"
+          className="nuray-drawer fixed top-(--header-offset) bottom-0 start-0 z-50 w-64"
           data-open={open ? 'true' : 'false'}
           onClick={() => setOpen(false)}
         >
@@ -194,7 +194,7 @@ export function DashboardShell({
         <StackedTables />
 
         <main
-          className="lg:ms-64 px-4 sm:px-6 lg:px-10 py-6 lg:py-10 min-h-[calc(100vh-4rem)] bg-[#FAFAFA]"
+          className="lg:ms-64 px-4 sm:px-6 lg:px-10 py-6 lg:py-10 min-h-[calc(100vh-var(--header-offset))] bg-[#FAFAFA]"
         >
           {title && (
             <div className="mb-6 sm:mb-8">

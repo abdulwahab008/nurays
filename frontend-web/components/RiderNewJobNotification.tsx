@@ -117,7 +117,7 @@ export function RiderNewJobNotification() {
   if (!isRider || popups.length === 0) return null;
 
   return (
-    <div className="fixed top-4 end-4 z-[100] w-[min(92vw,380px)] space-y-3" data-testid="rider-job-popups">
+    <div className="fixed top-[calc(1rem+var(--safe-top))] end-[calc(1rem+var(--safe-end))] z-[100] w-[min(92vw,380px)] space-y-3" data-testid="rider-job-popups">
       {popups.map((p) => (
         <div key={p.key} role="alert" className="rounded-2xl bg-slate-900 text-white shadow-2xl border border-emerald-400/40 p-4" data-testid={p.kind === 'assigned' ? 'rider-assigned-popup' : 'rider-pool-popup'}>
           <div className="flex items-start justify-between gap-3">
