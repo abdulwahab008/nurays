@@ -40,6 +40,10 @@ jobs:
       - name: Typecheck
         run: npx tsc --noEmit
 
+      - name: Lint
+        # Fails on any error, and on more warnings than the cap in package.json: lower the cap when you fix some.
+        run: npm run lint
+
       - name: Unit tests
         run: npm test
 
@@ -188,7 +192,7 @@ jobs:
           # purchase.spec reads the email-verification token straight from the
           # DB via psql (no mailbox in CI). Point it at the CI database.
           E2E_DB_URL: postgresql://nuray:nuray@localhost:5432/nuray_test
-        run: npx playwright test tests/e2e/smoke.spec.ts tests/e2e/rider-navigation.spec.ts --project=chromium
+        run: npx playwright test tests/e2e/smoke.spec.ts tests/e2e/rider-navigation.spec.ts tests/e2e/csp.spec.ts tests/e2e/geocode-proxy.spec.ts --project=chromium
 
       - name: Upload Playwright report
         if: ${{ !cancelled() }}
@@ -197,6 +201,64 @@ jobs:
           name: playwright-report
           path: frontend-web/playwright-report/
           retention-days: 7
+
+      # The API checks talk to the backend started above (automatic rider assignment is off, so they claim
+      # delivery jobs by hand) and use its database, where they make their own users, kitchens and orders.
+      # After Playwright, so the data they leave behind cannot affect the browser specs.
+      - name: API checks
+        if: ${{ !cancelled() }}
+        working-directory: backend
+        env:
+          API_URL: http://localhost:3001/api/v1
+        run: npm run api-checks
+
+  money-flows:
+    name: Money flows (real database)
+    runs-on: ubuntu-latest
+    needs: [backend]
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_USER: nuray
+          POSTGRES_PASSWORD: nuray
+          POSTGRES_DB: nuray_money
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U nuray"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    defaults:
+      run:
+        working-directory: backend
+    env:
+      DATABASE_URL: postgresql://nuray:nuray@localhost:5432/nuray_money
+      JWT_SECRET: ci-money-flows-secret-key-at-least-32-characters
+      # Test mode: no SMS provider, no Redis, the payment gateway stubbed by the script itself.
+      NODE_ENV: test
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+
+      - name: Install
+        run: npm ci
+
+      - name: Prisma generate + migrate
+        run: |
+          npx prisma generate
+          npx prisma migrate deploy
+
+      # Orders, promotions, refunds, payouts, ledgers, hubs, sessions and sign-in rules, called through the
+      # services against the real schema. Exits 1 when a check fails and 2 when the script itself crashes.
+      - name: Verify money flows
+        run: npx ts-node scripts/verify-money-flows.ts
 
   docker-build:
     # Sanity: confirm the Dockerfiles actually build on CI infra. No push here.

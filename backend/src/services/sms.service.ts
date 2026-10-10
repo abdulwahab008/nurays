@@ -17,7 +17,8 @@ function getTwilioClient() {
   const token = process.env.TWILIO_AUTH_TOKEN;
   if (!sid || !token) return null;
   try {
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    // Loaded on first use so a deployment without Twilio never needs the package.
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
     const twilio = require('twilio');
     twilioClient = twilio(sid, token, { timeout: 15000 });
     return twilioClient;

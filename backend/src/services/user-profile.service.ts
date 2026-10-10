@@ -117,12 +117,12 @@ export class UserProfileService {
     }
 
     // Get or create profile
-    let profile = await prisma.userProfile.findUnique({
+    const profile = await prisma.userProfile.findUnique({
       where: { userId },
     });
 
     if (!profile) {
-      profile = await prisma.userProfile.create({
+      await prisma.userProfile.create({
         data: {
           userId,
           fullName: data.fullName || 'User',
@@ -132,7 +132,7 @@ export class UserProfileService {
         },
       });
     } else {
-      profile = await prisma.userProfile.update({
+      await prisma.userProfile.update({
         where: { userId },
         data: {
           fullName: data.fullName ?? profile.fullName,

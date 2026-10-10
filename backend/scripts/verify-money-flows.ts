@@ -1083,7 +1083,10 @@ async function main() {
   for (let i = 0; i < 5; i++) wrongCodes.push(await wrongPw());
   ok('a wrong password is INVALID_PASSWORD (a 400, so the web app does not take it for an expired session)', wrongCodes.every((c) => c === 'INVALID_PASSWORD'), wrongCodes.join());
   ok('after five wrong passwords even the right one is refused for a while', (await code(userProfileService.updateProfile(guardUser.user.id, { email: gMail(1), currentPassword: PW1 }))) === 'RATE_LIMITED');
-  ok('and the wrong guesses left a trail', (await prisma.auditLog.count({ where: { action: 'auth:REAUTH_FAILED', entityId: guardUser.user.id } })) === 5);
+  // The audit rows are written in the background: give the last one a moment to land.
+  const trail = () => prisma.auditLog.count({ where: { action: 'auth:REAUTH_FAILED', entityId: guardUser.user.id } });
+  for (let waited = 0; waited < 3000 && (await trail()) < 5; waited += 100) await new Promise((resolve) => setTimeout(resolve, 100));
+  ok('and the wrong guesses left a trail', (await trail()) === 5);
   ok('closing the account is guarded by the same count', (await code(require('../src/services/account-deletion.service').deleteOwnAccount(guardUser.user.id, PW1))) === 'RATE_LIMITED');
 
   // an account can only change its e-mail so often, and one inbox only gets so many verification e-mails

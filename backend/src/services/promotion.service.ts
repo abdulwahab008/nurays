@@ -269,7 +269,7 @@ export class PromotionService {
     }
 
     // Calculate discount
-    let discountAmount = 0;
+    let discountAmount: number;
     if (promotion.discountType === 'percentage') {
       discountAmount = (cartTotal * Number(promotion.discountValue)) / 100;
       if (promotion.maxDiscountAmount) {
@@ -526,7 +526,7 @@ export class PromotionService {
 
     const now = new Date();
     return list.map((p) => {
-      let status: 'active' | 'scheduled' | 'expired' | 'draft' = 'draft';
+      let status: 'active' | 'scheduled' | 'expired' | 'draft';
       if (!p.isActive) status = 'draft';
       else if (now < p.validFrom) status = 'scheduled';
       else if (now > p.validUntil) status = 'expired';
@@ -568,7 +568,7 @@ export class PromotionService {
       throw new AppError('You can only view your own promotions', 403, 'FORBIDDEN');
     }
     const now = new Date();
-    let status: 'active' | 'scheduled' | 'expired' | 'draft' = 'draft';
+    let status: 'active' | 'scheduled' | 'expired' | 'draft';
     if (!promotion.isActive) status = 'draft';
     else if (now < promotion.validFrom) status = 'scheduled';
     else if (now > promotion.validUntil) status = 'expired';
