@@ -50,6 +50,7 @@ Suites and what each protects:
 | `delivery-provider.test.ts` | `ensureDeliveryForOrder`: platform vs self delivery decides whether a rider job exists |
 | `deliveryEarnings.test.ts` | who owns the delivery fee, self-delivery fee sums |
 | `promotion-catalog-discount.test.ts` | stacked discounts and catalogue discounts on an order |
+| `web-parity.test.ts` | what checkout shows is what the server charges: the web app's order total and GST (`frontend-web/lib/order-totals.ts`) against `priceOrder`, over about 24,000 totals to the paisa, and its price after a kitchen's stacked deals against `applyStackedDiscount`, over 20,000 prices; it reads the web files directly, so it fails when one side is changed without the other |
 | `order-pricing.test.ts` | the arithmetic of placing an order (`utils/orderPricing.ts`): each line's price, commission and payout, a promotion code's discount (percentage, cap, fixed, never above what it covers) and each line's share of it (platform- or kitchen-funded), and who pays each kitchen's delivery fee |
 | `rider-ledger.test.ts` | rider money, settlements, payouts, delivery ledger entries, cash limit on claim, location updates |
 | `rider-approval-gate.test.ts` | an unapproved rider cannot see or claim jobs |

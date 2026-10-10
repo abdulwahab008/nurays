@@ -11,7 +11,7 @@ export const roundMoney = (n: number): number => {
  * An order's GST and total. GST is charged on the goods after discounts; the total is then
  * rounded to whole rupees (cash has no paisa, and the customer, rider and kitchen must all see
  * the same amount), and the GST line takes that rounding, always under Rs 0.50.
- * frontend-web/lib/utils.ts orderTotals() mirrors this for checkout.
+ * frontend-web/lib/order-totals.ts orderTotals() mirrors this for checkout (backend/tests/web-parity.test.ts fails when they differ).
  */
 export function priceOrder(goodsAfterDiscount: number, deliveryFee: number): { taxAmount: number; totalAmount: number } {
   const goods = Math.max(0, goodsAfterDiscount);
@@ -35,4 +35,31 @@ export function allocateDiscount(items: Array<{ total: number }>, discount: numb
     allocated += part;
     return part;
   });
+}
+
+/**
+ * Stack multiple catalog discounts onto a base price, percentage discounts
+ * first then fixed amounts — must stay byte-for-byte identical to the
+ * frontend's getStackedDiscountedPrice (checkout/cart/product pages) so the
+ * price a customer sees always matches what they're actually charged.
+ * backend/tests/web-parity.test.ts fails when the two differ.
+ */
+export function applyStackedDiscount(
+  basePrice: number,
+  promos: Array<{ discountType: string; discountValue: number }>
+): number {
+  if (!promos?.length) return basePrice;
+  const sorted = [...promos].sort((a, b) =>
+    a.discountType === 'percentage' && b.discountType === 'fixed'
+      ? -1
+      : a.discountType === 'fixed' && b.discountType === 'percentage'
+        ? 1
+        : 0
+  );
+  const result = sorted.reduce((price, p) => {
+    if (p.discountType === 'percentage' && p.discountValue > 0) return price * (1 - p.discountValue / 100);
+    if (p.discountType === 'fixed' && p.discountValue > 0) return Math.max(0, price - p.discountValue);
+    return price;
+  }, basePrice);
+  return Math.round(result);
 }

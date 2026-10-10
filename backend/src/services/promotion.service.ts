@@ -1,32 +1,7 @@
 import prisma from '../config/database';
 import { AppError } from '../middleware/errorHandler';
 import { codeDiscount } from '../utils/orderPricing';
-
-/**
- * Stack multiple catalog discounts onto a base price, percentage discounts
- * first then fixed amounts — must stay byte-for-byte identical to the
- * frontend's getStackedDiscountedPrice (checkout/cart/product pages) so the
- * price a customer sees always matches what they're actually charged.
- */
-export function applyStackedDiscount(
-  basePrice: number,
-  promos: Array<{ discountType: string; discountValue: number }>
-): number {
-  if (!promos?.length) return basePrice;
-  const sorted = [...promos].sort((a, b) =>
-    a.discountType === 'percentage' && b.discountType === 'fixed'
-      ? -1
-      : a.discountType === 'fixed' && b.discountType === 'percentage'
-        ? 1
-        : 0
-  );
-  const result = sorted.reduce((price, p) => {
-    if (p.discountType === 'percentage' && p.discountValue > 0) return price * (1 - p.discountValue / 100);
-    if (p.discountType === 'fixed' && p.discountValue > 0) return Math.max(0, price - p.discountValue);
-    return price;
-  }, basePrice);
-  return Math.round(result);
-}
+import { applyStackedDiscount } from '../utils/pricing';
 
 type CatalogEligiblePromotion = {
   id: string;

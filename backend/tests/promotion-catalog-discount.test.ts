@@ -6,7 +6,7 @@ jest.mock('../src/config/database', () => ({
   },
 }));
 
-import { applyStackedDiscount } from '../src/services/promotion.service';
+import { applyStackedDiscount } from '../src/utils/pricing';
 import promotionService from '../src/services/promotion.service';
 import prisma from '../src/config/database';
 
