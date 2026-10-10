@@ -17,7 +17,7 @@ import { cashLimitOf, listRiderEntries, postDeliveryEntries, riderEarningsSummar
 import { assertOwnDocument } from '../utils/documents';
 import { presentFile } from '../storage';
 import { notifyApprovers } from './approvals.service';
-import { canMoveDelivery, ORDER_STATUS_FOR_DELIVERY_STATUS, refuseDeliveryMove } from '../utils/deliveryStatus';
+import { ACTIVE_DELIVERY_STATUSES, BEFORE_PICKUP_STATUSES, ON_THE_WAY_STATUSES, canMoveDelivery, ORDER_STATUS_FOR_DELIVERY_STATUS, refuseDeliveryMove } from '../utils/deliveryStatus';
 import { doorField } from '../utils/addressSnapshot';
 import { logger } from '../utils/logger';
 
@@ -50,14 +50,12 @@ type DeliveryWithOrder = Omit<FullDelivery, 'deliveryOtp' | 'order'> & {
 };
 
 // Jobs a rider is working on. They share their location while on one of these.
-const ACTIVE_STATUSES = ['assigned', 'arrived_at_pickup', 'picked_up', 'in_transit', 'arrived_at_customer'];
 // Jobs that are over: they leave the rider's running list and only show in the history.
 const FINISHED_STATUSES = ['delivered', 'delivery_failed', 'cancelled'];
 // How many finished jobs the rider's job list carries unless asked for more, and the most it will carry.
 export const DEFAULT_JOB_HISTORY = 30;
 export const MAX_JOB_HISTORY = 200;
 // Once the food has left the kitchen, the customer can see where it is.
-const ON_THE_WAY_STATUSES = ['picked_up', 'in_transit', 'arrived_at_customer'];
 const GEOFENCE_KM = 0.15; // 150 m
 // A phone reporting every second is stored (and passed on to the customer) at most this often.
 const LOCATION_MIN_INTERVAL_MS = 3_000;
@@ -97,7 +95,7 @@ function formatDelivery(delivery: DeliveryWithOrder & {
     const value = doorField(o?.deliveryAddressSnapshot, o?.deliveryAddress, key);
     return typeof value === 'string' && value.trim() !== '' ? value : null;
   };
-  const reveal = Boolean(delivery.riderId) && ACTIVE_STATUSES.includes(delivery.status);
+  const reveal = Boolean(delivery.riderId) && ACTIVE_DELIVERY_STATUSES.includes(delivery.status);
   const customerPhone = reveal ? realPhoneOrNull(o?.customer?.phone) : null;
   // Before a claim (and after the job) the neighbourhood is enough to judge a job: distance and
   // pay are computed above from the exact point, which itself stays with the running job.
@@ -261,7 +259,7 @@ export class RiderService {
     const activeDeliveries = await prisma.delivery.findMany({
       where: {
         riderId: rider.id,
-        status: { in: ACTIVE_STATUSES },
+        status: { in: ACTIVE_DELIVERY_STATUSES },
       },
       include: PAYMENT_INCLUDE,
     });
@@ -382,7 +380,7 @@ export class RiderService {
       await tx.$queryRaw`SELECT id FROM riders WHERE id = ${rider.id} FOR UPDATE`;
 
       // At most two jobs at once.
-      const active = await tx.delivery.findMany({ where: { riderId: rider.id, status: { in: ACTIVE_STATUSES } }, include: PAYMENT_INCLUDE });
+      const active = await tx.delivery.findMany({ where: { riderId: rider.id, status: { in: ACTIVE_DELIVERY_STATUSES } }, include: PAYMENT_INCLUDE });
       if (active.length >= 2) {
         throw new AppError(
           'Rider capacity limit reached (maximum 2 active orders). Deliver an ongoing run before claiming new orders.',
@@ -591,7 +589,7 @@ export class RiderService {
     if (!delivery) throw new AppError('Delivery not found', 404, 'DELIVERY_NOT_FOUND');
     if (delivery.riderId !== rider.id) throw new AppError('This delivery is not assigned to you', 403, 'ACCESS_DENIED');
     const released = await prisma.delivery.updateMany({
-      where: { id: deliveryId, riderId: rider.id, status: { in: ['assigned', 'arrived_at_pickup'] } },
+      where: { id: deliveryId, riderId: rider.id, status: { in: BEFORE_PICKUP_STATUSES } },
       data: reopenDeliveryData(rider.id),
     });
     if (released.count === 0) {
@@ -735,7 +733,7 @@ export class RiderService {
     if (delivery.riderId !== rider.id) {
       throw new AppError('This delivery is not assigned to you', 403, 'ACCESS_DENIED');
     }
-    if (!ACTIVE_STATUSES.includes(delivery.status)) {
+    if (!ACTIVE_DELIVERY_STATUSES.includes(delivery.status)) {
       throw new AppError('This job is finished, so its location is no longer shared', 409, 'DELIVERY_NOT_ACTIVE');
     }
 

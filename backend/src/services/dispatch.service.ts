@@ -8,6 +8,7 @@ import { cashLimitOf, riderMoney, riderMoneyMany } from './rider-ledger.service'
 import { calculateDeliveryFeeCorridor } from '../utils/deliveryFee';
 import { assignmentMessage, cashToCollect, dropoffAreaOf, endsOf, routeMatch } from '../utils/riderJobs';
 import { cashAtDoor, isCashAtDoor } from '../utils/paymentCustody';
+import { ACTIVE_DELIVERY_STATUSES } from '../utils/deliveryStatus';
 import { chooseRider, DispatchCandidate, JobEnds, MAX_ACTIVE_JOBS } from '../utils/dispatch';
 import { ON_DUTY_RIDER } from '../utils/riderDuty';
 
@@ -18,7 +19,6 @@ import { ON_DUTY_RIDER } from '../utils/riderDuty';
  */
 export const autoAssignEnabled = () => process.env.AUTO_ASSIGN_ENABLED !== 'false';
 
-const ACTIVE = ['assigned', 'arrived_at_pickup', 'picked_up', 'in_transit', 'arrived_at_customer'];
 const LIVE_ORDER_NOT = ['cancelled', 'refunded', 'delivered', 'completed'];
 
 const JOB_INCLUDE = {
@@ -86,7 +86,7 @@ export async function dispatchDelivery(deliveryId: string, opts: { announced?: b
   const startOfDay = new Date();
   startOfDay.setHours(0, 0, 0, 0);
   const [activeJobs, doneToday, moneyByRider] = await Promise.all([
-    prisma.delivery.findMany({ where: { riderId: { in: riderIds }, status: { in: ACTIVE } }, include: JOB_INCLUDE }),
+    prisma.delivery.findMany({ where: { riderId: { in: riderIds }, status: { in: ACTIVE_DELIVERY_STATUSES } }, include: JOB_INCLUDE }),
     prisma.delivery.groupBy({ by: ['riderId'], where: { riderId: { in: riderIds }, status: 'delivered', deliveryTime: { gte: startOfDay } }, _count: { _all: true } }),
     riderMoneyMany(prisma, riderIds),
   ]);
@@ -125,7 +125,7 @@ export async function dispatchDelivery(deliveryId: string, opts: { announced?: b
     await tx.$queryRaw`SELECT id FROM riders WHERE id = ${rider.id} FOR UPDATE`;
     const fresh = await tx.rider.findUnique({ where: { id: rider.id }, select: { isAvailable: true, status: true, cashLimit: true } });
     if (!fresh || !fresh.isAvailable || fresh.status !== 'active') return false;
-    const active = await tx.delivery.findMany({ where: { riderId: rider.id, status: { in: ACTIVE } }, include: { order: { select: { paymentMethod: true, paymentStatus: true, totalAmount: true } } } });
+    const active = await tx.delivery.findMany({ where: { riderId: rider.id, status: { in: ACTIVE_DELIVERY_STATUSES } }, include: { order: { select: { paymentMethod: true, paymentStatus: true, totalAmount: true } } } });
     if (active.length >= MAX_ACTIVE_JOBS) return false;
     if (cod) {
       const { cashHeld } = await riderMoney(tx, rider.id);
@@ -148,7 +148,7 @@ export async function dispatchDelivery(deliveryId: string, opts: { announced?: b
 export async function announceAssignment(job: JobRow, riderUserId: string, riderPay: number, announced = true) {
   void realtimeOrderService.emitDeliveryClaimed(job.id, job.orderId, { toRiders: announced });
   const cash = cashAtDoor(job.order);
-  const activeNow = await prisma.delivery.count({ where: { rider: { userId: riderUserId }, status: { in: ACTIVE } } });
+  const activeNow = await prisma.delivery.count({ where: { rider: { userId: riderUserId }, status: { in: ACTIVE_DELIVERY_STATUSES } } });
   socketManager.emitToUser(riderUserId, 'delivery:assigned', { deliveryId: job.id, orderId: job.orderId });
   // The rider's screen pops this up, even while they are already carrying another job.
   socketManager.emitToUser(riderUserId, 'delivery:offered', {

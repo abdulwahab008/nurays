@@ -33,6 +33,17 @@ export const ORDER_STATUS_FOR_DELIVERY_STATUS: Readonly<Record<string, string>> 
 
 export const canMoveDelivery = (from: string, to: string): boolean => DELIVERY_TRANSITIONS[from]?.includes(to) ?? false;
 
+/**
+ * A job a rider holds and has not finished: the statuses a rider can move a job from, so a status added to the table
+ * above is active without being added anywhere else. A delivered or failed job is not (a failed one can still be
+ * cancelled or resolved by an admin).
+ */
+export const ACTIVE_DELIVERY_STATUSES: string[] = Object.keys(DELIVERY_TRANSITIONS);
+/** Claimed but the food is not in the rider's hands yet: the rider can hand the job back. */
+export const BEFORE_PICKUP_STATUSES: string[] = ['assigned', 'arrived_at_pickup'];
+/** The food is with the rider, on the way to the customer: the rider's position is shared with the customer. */
+export const ON_THE_WAY_STATUSES: string[] = ['picked_up', 'in_transit', 'arrived_at_customer'];
+
 /** Order statuses from which the food has left, or may leave, the kitchen. */
 const KITCHEN_READY_STATUSES = ['ready', 'dispatched', 'in_transit'];
 

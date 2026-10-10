@@ -1,4 +1,5 @@
 import { logger } from '../utils/logger';
+import { ACTIVE_DELIVERY_STATUSES } from '../utils/deliveryStatus';
 import { isPrivateRef, keyOfPrivateRef, storage } from '../storage';
 import prisma from '../config/database';
 import socketManager from '../config/socket';
@@ -23,7 +24,6 @@ import { assertCurrentPassword } from './reauth.service';
  */
 
 const ORDER_OPEN_NOT = ['delivered', 'completed', 'cancelled', 'refunded'];
-const DELIVERY_ACTIVE = ['assigned', 'arrived_at_pickup', 'picked_up', 'in_transit', 'arrived_at_customer'];
 
 export async function deleteOwnAccount(userId: string, password?: string, ctx: { ip?: string | null } = {}) {
   const user = await prisma.user.findUnique({ where: { id: userId }, include: { seller: { select: { id: true } } } });
@@ -46,7 +46,7 @@ export async function deleteOwnAccount(userId: string, password?: string, ctx: {
   }
   const rider = await prisma.rider.findUnique({ where: { userId }, select: { id: true } });
   if (rider) {
-    const active = await prisma.delivery.count({ where: { riderId: rider.id, status: { in: DELIVERY_ACTIVE } } });
+    const active = await prisma.delivery.count({ where: { riderId: rider.id, status: { in: ACTIVE_DELIVERY_STATUSES } } });
     if (active > 0) throw new AppError('Finish or hand back your active deliveries first', 409, 'ACTIVE_DELIVERIES');
     const money = await riderMoney(prisma, rider.id);
     if (Math.round(money.cashHeld) !== 0 || Math.round(money.unpaid) !== 0) {

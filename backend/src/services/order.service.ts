@@ -1,6 +1,7 @@
 import { randomInt } from 'crypto';
 import prisma from '../config/database';
 import { pageArgs } from '../utils/pagination';
+import { ACTIVE_DELIVERY_STATUSES, ON_THE_WAY_STATUSES } from '../utils/deliveryStatus';
 import { getPlatformDeliveryPricing } from './delivery-pricing.service';
 import { AppError } from '../middleware/errorHandler';
 import realtimeOrderService from './realtime-order.service';
@@ -39,14 +40,12 @@ async function payeeSellerUserId(orderId: string): Promise<string | null> {
 }
 
 // Once the food has left the kitchen, the customer can see where the rider is.
-const ON_THE_WAY_STATUSES = ['picked_up', 'in_transit', 'arrived_at_customer'];
 
 /**
  * What a party to an order sees of its delivery. The rider's pay is between the rider and
  * the platform. The rider's position is shown only while the food is on its way (never
  * afterwards), and only to the customer, the rider and admins.
  */
-const RIDER_JOB_RUNNING = ['assigned', 'arrived_at_pickup', 'picked_up', 'in_transit', 'arrived_at_customer'];
 
 /**
  * The order as the rider carrying it may see it: payment-submission details and internal keys
@@ -1128,7 +1127,7 @@ export class OrderService {
     // A rider delivering the order needs the food, the door, the amount to collect and how it is
     // paid; not the customer's bank details, receipt, the kitchen's fee breakdown or internal keys.
     const riderOnly = isOrderRider && !isAdmin && order.customerId !== userId && !isSeller;
-    const jobRunning = RIDER_JOB_RUNNING.includes(order.delivery?.status ?? '');
+    const jobRunning = ACTIVE_DELIVERY_STATUSES.includes(order.delivery?.status ?? '');
     const forViewer = riderOnly ? stripForRider(order, jobRunning) : order;
     const presentedDelivery = order.delivery
       ? presentDelivery(order.delivery, {

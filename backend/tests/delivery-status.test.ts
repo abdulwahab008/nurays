@@ -3,7 +3,16 @@
  * produces, and the conditions on the order that stop a move. Written before anyone changes the
  * rider or dispatch code, so a change to the machine shows up here first.
  */
-import { canMoveDelivery, DELIVERY_TRANSITIONS, ORDER_STATUS_FOR_DELIVERY_STATUS, refuseDeliveryMove, DeliveryMoveOrder } from '../src/utils/deliveryStatus';
+import {
+  ACTIVE_DELIVERY_STATUSES,
+  BEFORE_PICKUP_STATUSES,
+  canMoveDelivery,
+  DELIVERY_TRANSITIONS,
+  ON_THE_WAY_STATUSES,
+  ORDER_STATUS_FOR_DELIVERY_STATUS,
+  refuseDeliveryMove,
+  DeliveryMoveOrder,
+} from '../src/utils/deliveryStatus';
 
 const ALL = ['pending', 'assigned', 'arrived_at_pickup', 'picked_up', 'in_transit', 'arrived_at_customer', 'delivered', 'delivery_failed', 'cancelled'];
 
@@ -146,5 +155,29 @@ describe('what must be true of the order', () => {
 
   it('reports the order being final before the food not being ready', () => {
     expect(refuseDeliveryMove('assigned', 'picked_up', order({ orderStatus: 'cancelled' }))?.code).toBe('ORDER_ALREADY_TERMINAL');
+  });
+});
+
+// The lists every service reads ("is this job running?") used to be written out in six files; they live beside the machine.
+describe('the shared status lists', () => {
+  it('a job is active exactly while a rider can still move it, from claimed to arrived at the customer', () => {
+    expect(ACTIVE_DELIVERY_STATUSES).toEqual(['assigned', 'arrived_at_pickup', 'picked_up', 'in_transit', 'arrived_at_customer']);
+    expect(ACTIVE_DELIVERY_STATUSES).toEqual(Object.keys(DELIVERY_TRANSITIONS));
+  });
+
+  it('a job that is unclaimed, delivered, failed or cancelled is not active (a failed job can still be cancelled or resolved)', () => {
+    for (const status of ['pending', 'delivered', 'delivery_failed', 'cancelled']) expect(ACTIVE_DELIVERY_STATUSES).not.toContain(status);
+  });
+
+  it('before pickup and on the way split the active statuses between them', () => {
+    expect(BEFORE_PICKUP_STATUSES).toEqual(['assigned', 'arrived_at_pickup']);
+    expect(ON_THE_WAY_STATUSES).toEqual(['picked_up', 'in_transit', 'arrived_at_customer']);
+    expect([...BEFORE_PICKUP_STATUSES, ...ON_THE_WAY_STATUSES].sort()).toEqual([...ACTIVE_DELIVERY_STATUSES].sort());
+  });
+
+  it('every move leads to another active status or to a finished one', () => {
+    for (const targets of Object.values(DELIVERY_TRANSITIONS)) {
+      for (const to of targets) expect([...ACTIVE_DELIVERY_STATUSES, 'delivered', 'delivery_failed']).toContain(to);
+    }
   });
 });
