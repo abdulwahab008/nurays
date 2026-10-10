@@ -8,7 +8,7 @@ Nuray has five layers of checks. Each one catches a different kind of mistake, s
 | Backend unit tests (Jest) | `backend/tests/*.test.ts` | nothing (no database, no network) | yes, `npm test` |
 | Real-database money-flow script | `backend/scripts/verify-money-flows.ts` | a throwaway PostgreSQL | yes, the `money-flows` job |
 | API checks over HTTP | `backend/scripts/api-checks/` | the running API and its (throwaway) database | yes, the last step of the `e2e` job |
-| Playwright end-to-end | `frontend-web/tests/e2e/` | backend + database + frontend running | `smoke`, `rider-navigation`, `rider-location-resume`, `csp`, `geocode-proxy` and `public-pages` specs |
+| Playwright end-to-end | `frontend-web/tests/e2e/` | backend + database + frontend running | `smoke`, `rider-navigation`, `rider-location-resume`, `csp`, `geocode-proxy`, `public-pages` and `mobile` specs |
 | Load test | `backend/scripts/load/` | a staging stack and a `*_load` database | no, run by hand before launch: [LOAD_TESTING.md](LOAD_TESTING.md); its arithmetic is in Jest (`load-engine.test.ts`) and its scripts are typechecked in CI |
 | Lint, typecheck, build, schema drift, Docker | `.github/workflows/ci.yml` | GitHub Actions | yes |
 
@@ -202,7 +202,7 @@ ignored, the request carrying the pin), and the token store (`token-store.test.t
 
 ## 3. Frontend end-to-end (Playwright)
 
-Config: `frontend-web/playwright.config.ts`. One project (`chromium`), specs in `tests/e2e/`, base URL
+Config: `frontend-web/playwright.config.ts`. Two projects: `chromium` (a desktop browser, every spec but `mobile.spec.ts`) and `mobile` (Chromium with a Pixel 7's screen, touch and user agent, only `mobile.spec.ts`). Specs in `tests/e2e/`, base URL
 `PLAYWRIGHT_BASE_URL` or `http://localhost:3000`, retries and one worker in CI, screenshots on failure, trace on first
 retry. The config starts the frontend itself (`npm run dev -- -p 3000` locally, reusing a running server; `npm run
 start -- -p 3000` in CI after a build). The backend, PostgreSQL and (optionally) Redis must already be running on
@@ -225,6 +225,7 @@ URL, used to read the email-verification token because there is no mailbox; the 
 
 | Spec | What it checks | Data it needs |
 |---|---|---|
+| `mobile.spec.ts` (the `mobile` project) | on a 412 px phone: ten public pages do not scroll sideways, a dish opens from the list and its page fits, the menu opens to the pages a visitor needs and fits the screen, the viewport allows the whole screen (`viewport-fit=cover`) and zooming, the manifest has an id, a scope, a start page and icons that load | `seed:e2e` |
 | `smoke.spec.ts` | landing page and links, `/products` lists items, product page, `/login` (OTP + Email tabs, Google), `/register` role choices, `/checkout` redirects to login, no console errors, API health | `seed:e2e` |
 | `purchase.spec.ts` | API register, verify, login, address, cart, COD order; UI login and order list; add to cart | `seed:e2e` (fixed product id), `E2E_DB_URL` |
 | `ideal-flow.spec.ts` | login redirects for customer, seller, rider and admin; one full order through kitchen, rider, PIN handover and ledger | runs `backend/scripts/seed-ideal-flow-users.ts` itself |
@@ -249,7 +250,7 @@ Limitations to know about:
 |---|---|
 | `backend` | `npm ci`, `prisma generate`, `tsc --noEmit`, `npm run typecheck:scripts` (the API checks and the load tooling), `npm run lint` (no errors, at most the warning count set in `package.json`), `npm test`, `npm run build` |
 | `frontend` | `npm ci`, `tsc --noEmit`, `npm run lint` (no errors, at most the warning count set in `package.json`), `npm test` (the web unit tests), `npm run build` (with placeholder `NEXT_PUBLIC_*`) |
-| `e2e` (after both above) | PostgreSQL 15 and Redis 7 services, `prisma migrate deploy`, schema drift check (`npm run db:check`), `seed:e2e`, build and start the backend on 3001 (automatic rider assignment off), build the frontend, install Chromium, run the `smoke`, `rider-navigation`, `rider-location-resume`, `csp`, `geocode-proxy` and `public-pages` specs (the last with sample app-link settings in the environment), upload the Playwright report, then `npm run api-checks` against the backend |
+| `e2e` (after both above) | PostgreSQL 15 and Redis 7 services, `prisma migrate deploy`, schema drift check (`npm run db:check`), `seed:e2e`, build and start the backend on 3001 (automatic rider assignment off), build the frontend, install Chromium, run the `smoke`, `rider-navigation`, `rider-location-resume`, `csp`, `geocode-proxy`, `public-pages` (with sample app-link settings in the environment) and `mobile` specs, upload the Playwright report, then `npm run api-checks` against the backend |
 | `money-flows` (after `backend`) | its own PostgreSQL 15, `prisma migrate deploy`, `scripts/verify-money-flows.ts` in test mode |
 | `load-tooling` (after `backend`) | PostgreSQL 15 (`nuray_load`) and Redis 7 services, `prisma migrate deploy`, `npm run load:seed` at 2 % of the launch size, build and start the API (automatic rider assignment off), `load:tokens`, then each load scenario for a few seconds with `--smoke` (fails on a 5xx or an unanswered request, not on speed); see [LOAD_TESTING.md](LOAD_TESTING.md) |
 | `docker-build` (after backend and frontend) | builds both images without pushing |
