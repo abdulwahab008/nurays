@@ -37,10 +37,21 @@ const DELIVERY_INCLUDE = {
   },
 } as const;
 
-type DeliveryWithOrder = Omit<Prisma.DeliveryGetPayload<{ include: typeof DELIVERY_INCLUDE }>, 'deliveryOtp'>;
+// An open job is listed without its customer: who they are and how to reach them only go to the rider who holds the job.
+const POOL_INCLUDE = { order: { select: { ...DELIVERY_INCLUDE.order.select, customer: false } } } as const;
+
+type FullDelivery = Prisma.DeliveryGetPayload<{ include: typeof DELIVERY_INCLUDE }>;
+type DeliveryWithOrder = Omit<FullDelivery, 'deliveryOtp' | 'order'> & {
+  order: Omit<FullDelivery['order'], 'customer'> & { customer?: FullDelivery['order']['customer'] };
+};
 
 // Jobs a rider is working on. They share their location while on one of these.
 const ACTIVE_STATUSES = ['assigned', 'arrived_at_pickup', 'picked_up', 'in_transit', 'arrived_at_customer'];
+// Jobs that are over: they leave the rider's running list and only show in the history.
+const FINISHED_STATUSES = ['delivered', 'delivery_failed', 'cancelled'];
+// How many finished jobs the rider's job list carries unless asked for more, and the most it will carry.
+export const DEFAULT_JOB_HISTORY = 30;
+export const MAX_JOB_HISTORY = 200;
 // Once the food has left the kitchen, the customer can see where it is.
 const ON_THE_WAY_STATUSES = ['picked_up', 'in_transit', 'arrived_at_customer'];
 const GEOFENCE_KM = 0.15; // 150 m
@@ -254,7 +265,7 @@ export class RiderService {
     const deliveries = await prisma.delivery.findMany({
       // Only jobs for orders still going somewhere.
       where: { riderId: null, status: 'pending', order: { orderStatus: { notIn: ['cancelled', 'refunded', 'delivered', 'completed'] } } },
-      include: DELIVERY_INCLUDE,
+      include: POOL_INCLUDE,
       orderBy: { createdAt: 'asc' },
       // The oldest open jobs; a pool deeper than this is an operations problem, not a list.
       take: 100,
@@ -302,20 +313,35 @@ export class RiderService {
     return ranked.sort((a, b) => b.score - a.score).map((r) => r.job);
   }
 
-  async getMyDeliveries(userId: string) {
+  /**
+   * The rider's jobs, newest first: every job still going, and the `history` most recent finished ones (30 unless
+   * asked, 0 for none, at most 200). The dashboard reloads this every 30 seconds for every rider on duty, so it
+   * carries what the screen shows and not a rider's whole career; earnings has the full ledger.
+   */
+  async getMyDeliveries(userId: string, history: number = DEFAULT_JOB_HISTORY) {
     const rider = await this.requireRider(userId);
-    const deliveries = await prisma.delivery.findMany({
-      // Jobs cancelled more than a day ago are noise; a fresh cancellation stays visible.
-      where: {
-        riderId: rider.id,
-        NOT: { status: 'cancelled', updatedAt: { lt: new Date(Date.now() - 24 * 3600 * 1000) } },
-      },
-      include: DELIVERY_INCLUDE,
-      orderBy: { createdAt: 'desc' },
-      // Every running job plus recent history; earnings has the full ledger.
-      take: 200,
-    });
-    return deliveries.map(formatDelivery);
+    const finishedCount = Math.min(MAX_JOB_HISTORY, Math.max(0, Math.floor(history)));
+    const [running, finished] = await Promise.all([
+      prisma.delivery.findMany({
+        where: { riderId: rider.id, status: { notIn: FINISHED_STATUSES } },
+        include: DELIVERY_INCLUDE,
+        orderBy: { createdAt: 'desc' },
+      }),
+      finishedCount === 0
+        ? []
+        : prisma.delivery.findMany({
+            // Jobs cancelled more than a day ago are noise; a fresh cancellation stays visible.
+            where: {
+              riderId: rider.id,
+              status: { in: FINISHED_STATUSES },
+              NOT: { status: 'cancelled', updatedAt: { lt: new Date(Date.now() - 24 * 3600 * 1000) } },
+            },
+            include: DELIVERY_INCLUDE,
+            orderBy: { createdAt: 'desc' },
+            take: finishedCount,
+          }),
+    ]);
+    return [...running, ...finished].sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime()).map(formatDelivery);
   }
 
   async claimDelivery(userId: string, deliveryId: string, askFee?: number) {

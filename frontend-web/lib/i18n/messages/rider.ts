@@ -158,6 +158,7 @@ export const riderMessages = defineMessages({
     deliveredOrders: 'Delivered orders',
     successfulCount: '{count} Successful Deliveries',
     noCompleted: 'No deliveries completed yet.',
+    showOlder: 'Show older deliveries',
     pinVerified: '✓ PIN Verified',
     youEarned: 'You earned {amount}',
 
@@ -412,6 +413,7 @@ export const riderMessages = defineMessages({
     deliveredOrders: 'پہنچائے گئے آرڈرز',
     successfulCount: '{count} کامیاب ڈیلیوریز',
     noCompleted: 'ابھی تک کوئی ڈیلیوری مکمل نہیں ہوئی۔',
+    showOlder: 'پرانی ڈیلیوریز دکھائیں',
     pinVerified: '✓ پن کی تصدیق ہو گئی',
     youEarned: 'آپ کی کمائی {amount}',
 

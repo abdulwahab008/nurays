@@ -63,6 +63,9 @@ export default function RiderDashboardPage() {
   const [mine, setMine] = useState<Delivery[]>([]);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [togglingDuty, setTogglingDuty] = useState(false);
+  // The job list carries the latest finished jobs only; "show older" asks for the most the server will send.
+  const [olderShown, setOlderShown] = useState(false);
+  const historyRef = useRef<number | undefined>(undefined);
 
   // Doorstep PIN Handshake Modal state
   const [pinModalDelivery, setPinModalDelivery] = useState<Delivery | null>(null);
@@ -92,7 +95,7 @@ export default function RiderDashboardPage() {
 
       const [availableRes, mineRes, profileRes] = await Promise.all([
         riderService.getAvailableDeliveries(),
-        riderService.getMyDeliveries(),
+        riderService.getMyDeliveries({ history: historyRef.current }),
         riderService.getRiderProfile().catch(() => null),
       ]);
 
@@ -186,6 +189,14 @@ export default function RiderDashboardPage() {
     (d) => !FINISHED_STATUSES.includes(d.status)
   );
   const completedDeliveries = mine.filter((d) => d.status === 'delivered');
+  // Every delivery the rider has made, from their profile: the list below only holds the latest ones.
+  const deliveredTotal = profile?.totalDeliveries ?? completedDeliveries.length;
+
+  const showOlderDeliveries = () => {
+    historyRef.current = 200;
+    setOlderShown(true);
+    void loadAll(true);
+  };
 
   // The phone's position goes to each job in progress (and nowhere when there is none).
   const locationSharing = useRiderLocation(
@@ -1027,7 +1038,7 @@ export default function RiderDashboardPage() {
                   <div className="p-4 bg-slate-50 border-b border-slate-200 flex items-center justify-between">
                     <h3 className="font-black text-sm text-slate-900">{t('deliveredOrders')}</h3>
                     <span className="text-xs font-bold text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-full border border-emerald-200">
-                      {t('successfulCount', { count: completedDeliveries.length })}
+                      {t('successfulCount', { count: deliveredTotal })}
                     </span>
                   </div>
 
@@ -1058,6 +1069,17 @@ export default function RiderDashboardPage() {
                           </div>
                         </div>
                       ))}
+                      {!olderShown && deliveredTotal > completedDeliveries.length && (
+                        <div className="px-5 py-3 text-center">
+                          <button
+                            type="button"
+                            onClick={showOlderDeliveries}
+                            className="text-xs font-bold text-[#FF5500] hover:underline"
+                          >
+                            {t('showOlder')}
+                          </button>
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>

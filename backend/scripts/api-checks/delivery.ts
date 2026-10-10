@@ -2,8 +2,8 @@
  * Delivery fixes as the outside sees them: map pins must be inside Pakistan, a rider sees the
  * customer's door only while the job runs, a job handed back or retried goes back to the pool
  * clean, the admin order list can be cut down to one kitchen, the kitchen dashboard adds up, a
- * rider's live position reaches the customer and not the kitchen, and rider jobs carry a Google
- * Maps directions link built from the pin.
+ * rider's live position reaches the customer and not the kitchen, rider jobs carry a Google
+ * Maps directions link built from the pin, and the rider's job list trims its history.
  */
 import { randomUUID } from 'crypto';
 import { io, Socket } from 'socket.io-client';
@@ -281,4 +281,14 @@ export default async function delivery() {
   ok('rider jobs carry a Google Maps directions URL built from the pin', DIRECTIONS.test(link?.dropoffMapsUrl ?? '') && link.dropoffMapsUrl.endsWith('=24.8015,67.0655'), link?.dropoffMapsUrl);
   ok("and the pickup one is built from the kitchen's pin", DIRECTIONS.test(link?.pickupMapsUrl ?? '') && link.pickupMapsUrl.endsWith(`=${KARACHI.latitude},${KARACHI.longitude}`), link?.pickupMapsUrl);
   ok('and neither has an undocumented travelmode parameter', !!link && !/travelmode/.test(`${link.dropoffMapsUrl}${link.pickupMapsUrl}`));
+
+  // 9. the rider's job list carries every running job, and finished ones only as far as asked
+  const jobsOf = async (rider: Actor, query = '') => ((await rider.as('GET', `/riders/deliveries/mine${query}`)).body.data ?? []) as Array<{ id: string; status: string }>;
+  ok("a rider's job list holds the job they delivered", (await jobsOf(liveRider)).some((j) => j.id === liveJob && j.status === 'delivered'));
+  ok('?history=0 leaves finished jobs out', !(await jobsOf(liveRider, '?history=0')).some((j) => j.id === liveJob));
+  ok('but a running job is in the list whatever the history', (await jobsOf(mapRider, '?history=0')).some((j) => j.id === mapJob && j.status === 'assigned'));
+  for (const odd of ['abc', '-1', '1.5', '', '1e3', '99999999999999999999', '%00', '1&history=2']) {
+    const r = await liveRider.as('GET', `/riders/deliveries/mine?history=${odd}`);
+    ok(`?history=${odd} is not a server error`, r.status === 200 && Array.isArray(r.body.data), said(r));
+  }
 }

@@ -90,7 +90,7 @@ export function RiderNewJobNotification() {
           timers.delete(d.deliveryId);
           // Only worth a pop-up for a rider who has a free slot (the server tells only riders who are on duty).
           try {
-            const mine = await riderService.getMyDeliveries();
+            const mine = await riderService.getMyDeliveries({ history: 0 }); // only the running jobs are counted
             const active = (mine.data ?? []).filter((x) => !['delivered', 'delivery_failed', 'cancelled'].includes(x.status)).length;
             if (active >= 2) return;
           } catch {
