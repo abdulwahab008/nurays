@@ -45,7 +45,7 @@ Layers, from the outside in:
 |---|---|
 | Accounts and auth | `auth.service`, `otp.service`, `google-auth.service`, `user-profile.service`, `admin-people.service` |
 | Kitchens | `seller.service`, `availability.service` (open/closed from schedule, in Pakistan time), `category-request.service`, `promotion.service`, `stock-alert.service`, `profit-loss.service` |
-| Catalog | `product.service`, `product-variant.service`, `category.service`, `ranking.service` (search, trending, recommendations), `favorite.service`, `review.service`, `media.service` |
+| Catalog | `product.service`, `product-variant.service`, `category.service`, `ranking.service` (search, trending, recommendations), `favorite.service`, `review.service`, `review-moderation.service` (reports and hiding), `media.service` |
 | Communities | `community.service`, `admin-places.service`, `delivery-pricing.service` |
 | Cart and orders | `cart.service`, `order.service`, `seller-order.service`, `admin-order.service`, `order-maintenance.service`, `handover.service` |
 | Payments and money | `payment.service`, `online-payment.service` (Safepay), `wallet.service`, `refund.service`, `ledger.service`, `seller-balance.service`, `rider-ledger.service` |

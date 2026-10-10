@@ -688,7 +688,7 @@ export class ProductService {
         },
         _count: {
           select: {
-            reviews: true,
+            reviews: { where: { isApproved: true } },
             orderItems: true,
           },
         },
@@ -1055,7 +1055,7 @@ export class ProductService {
           images: true,
           _count: {
             select: {
-              reviews: true,
+              reviews: { where: { isApproved: true } },
               orderItems: true,
             },
           },

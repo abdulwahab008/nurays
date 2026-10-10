@@ -658,32 +658,6 @@ export class SellerService {
       take: 5,
     });
 
-    // Get pending reviews
-    const pendingReviews = await prisma.review.findMany({
-      where: {
-        sellerId,
-        isApproved: false,
-      },
-      include: {
-        product: {
-          select: {
-            name: true,
-          },
-        },
-        customer: {
-          include: {
-            profile: {
-              select: {
-                fullName: true,
-              },
-            },
-          },
-        },
-      },
-      orderBy: { createdAt: 'desc' },
-      take: 5,
-    });
-
     const todayOrders = Number(stats?.today_orders ?? 0);
     const todaySales = Number(stats?.today_sales ?? 0);
 
@@ -750,14 +724,6 @@ export class SellerService {
         name: product.name,
         stockQuantity: product.stockQuantity,
         image: product.images[0]?.imageUrl || null,
-      })),
-      pendingReviews: pendingReviews.map((review) => ({
-        id: review.id,
-        productName: review.product?.name,
-        customerName: review.customer.profile?.fullName || 'Anonymous',
-        rating: review.productRating,
-        comment: review.comment,
-        createdAt: review.createdAt,
       })),
     };
   }

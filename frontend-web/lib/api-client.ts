@@ -237,3 +237,9 @@ export function apiErrorMessage(err: unknown, fallback: string): string {
   if (axios.isAxiosError<ApiError>(err)) return err.response?.data?.error?.message || fallback;
   return fallback;
 }
+
+/** The server's error code for a failed request (e.g. `OWN_REVIEW`), for showing a message in the person's language. */
+export function apiErrorCode(err: unknown): string | undefined {
+  if (axios.isAxiosError<ApiError>(err)) return err.response?.data?.error?.code;
+  return undefined;
+}

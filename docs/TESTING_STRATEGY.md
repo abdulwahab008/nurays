@@ -63,6 +63,7 @@ Suites and what each protects:
 | `kitchen-order-view.test.ts`, `public-seller-privacy.test.ts` | what a kitchen sees of an order, and what the public kitchen endpoints return |
 | `order-party-privacy.test.ts` | live events, the tracking snapshot and the chat name people by role, never by account id; the rider's view of the door; the online-payment guard |
 | `address-snapshot.test.ts` | the one rule for the address an order was placed to |
+| `review-moderation.test.ts` | reporting a review (not your own, not a hidden one, the first reason kept, audited), the staff queue and its three tabs, hide / keep / restore and the ratings worked out again after each |
 | `password-policy.test.ts`, `reauth.test.ts`, `attempt-budget.test.ts`, `mail-budget.test.ts` | new-password rules; "confirm with your password" counting only wrong passwords; shared counters in Redis or memory |
 | `auth-limits.test.ts`, `rate-limit-keys.test.ts` | per-phone and per-e-mail request limits over real HTTP; how limiter keys are built |
 | `account-deletion.test.ts` | closing an account: what blocks it and what is scrubbed |
@@ -145,6 +146,7 @@ JSON that leaves the API (what a rider or a kitchen is shown, what a wrong input
 | `small-fixes` | literal `%` and `_` in search, malformed links, token types, spreadsheet formulas in the audit export |
 | `privacy` | public listings and the open pool carry no pin, door link, e-mail or phone |
 | `kitchen-view` | what a kitchen may see of an order, the tracking snapshot, chat and live events |
+| `moderation` | reporting a review (signed in, not your own, a reason from the list), the staff queue and the approvals count, hide / keep / restore, and that a hidden review is gone from the dish page, the kitchen's page, the review counts and every rating |
 | `sign-in` | password rules, one answer for a wrong password and an unknown account, reset links, the re-authentication budget, staff passwords, Google sign-in requests, changing the password while signed in (older sessions void, fresh tokens, no password for a Google account), the one-time code purposes |
 
 Every suite makes its own users, kitchens, dishes and orders with unique values, so it runs on any database that has had

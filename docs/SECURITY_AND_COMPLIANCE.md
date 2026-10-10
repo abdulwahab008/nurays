@@ -218,7 +218,7 @@ Staff are users with `user_type = 'admin'` and a `staff_role` (database CHECK ke
 |---|---|---|
 | `super_admin` | exactly one (partial unique index `users_one_super_admin`) | everything, and only this role adds, changes, suspends or removes staff, edits settings or corrects a rider balance by hand |
 | `admin` | any | day to day operations: approvals, orders, people, refunds, payouts, settling with riders, places, promo codes, complaints, reads the audit log |
-| `support` | any | the customer support person: looks things up and handles complaints (reply, internal notes, resolve). Cannot move money, approve anyone, change orders, or see applicants' ID documents, settings, analytics or the audit log |
+| `support` | any | the customer support person: looks things up, handles complaints (reply, internal notes, resolve) and decides on reported reviews (hide, keep, show again). Cannot move money, approve anyone, change orders, or see applicants' ID documents, settings, analytics or the audit log |
 
 Enforcement is on the server, table driven (`utils/permissions.ts`, `middleware/staff.ts`): every `/admin` request is
 matched to a permission; a write no rule names needs `ops.write`, a read no rule names needs `read.core`, so a route
@@ -226,6 +226,20 @@ added later is closed to support staff by default. A refusal is 403 `INSUFFICIEN
 audit log. Changing a role, suspending or removing staff ends their sessions at once (millisecond-exact `iatMs` check).
 The super admin account cannot be changed through the app. The admin menu and pages only show what a role may use,
 but that is convenience, not the security boundary.
+
+## Reviews: reports and hiding
+
+Reviews are public and written by customers, which the app stores treat as user-generated content: people must be able
+to report one and staff must be able to take it down. Anyone signed in except the review's author can report a review
+(`POST /reviews/:id/report`: `abusive`, `spam`, `false`, `privacy` or `other`, and a note of up to 300 characters; the
+submission limit applies). A report hides nothing, so nobody can take a review down just by reporting it: it flags the
+review (`reviews.is_flagged`, the first reason kept in `reviews.flag_reason`) and puts it in the staff queue
+(`/admin/reviews`, a queue on the Approvals page). A person with `support.handle` (support staff, admins, the super
+admin) then hides the review (`is_approved = false`: it leaves every public page, the kitchen's dashboard and the
+dish's, the kitchen's and the rider's rating, which are worked out again), keeps it (the report is closed) or shows a
+hidden one again. A hidden review cannot be reported. Each report is audited as `review:REPORT` with who made it and
+why, each decision as `admin:POST /reviews/:id/hide|keep|restore`. No table or column was added. Not done: the
+author is not told when a review is hidden, there is no appeal, and the order chat has no report or block action.
 
 ## Sessions, email changes and account closure
 
@@ -313,8 +327,7 @@ anything else: orders, ledger entries, chat, uploaded documents and receipts are
 - **OTP codes and email-verification tokens are stored in plain text** in the database (reset tokens are hashed).
   They are short-lived and purged, but a database read exposes live ones.
 - **No breached-password lookup.** Passwords are checked against a bundled list of common ones, not against a live
-  breach database (that would send part of a hash to an outside service). There is no change-password endpoint for
-  signed-in users; changing it goes through the reset email.
+  breach database (that would send part of a hash to an outside service).
 - **Email verification does not gate login or ordering.** A user can sign in unverified; it only affects whether
   email notifications are delivered.
 - **Customer, kitchen and rider logins have no per-account lockout.** Password guessing is limited per address and
@@ -323,5 +336,5 @@ anything else: orders, ledger entries, chat, uploaded documents and receipts are
 - **Legacy public files.** Receipts and chat media uploaded before the storage layer sit under `/uploads` and are
   public by URL; new ones are private. `backend/scripts/migrate-private-uploads.ts` exists for moving them.
 - **`create-admin.js` resets the password** of an account that already has the email (and signs it out everywhere); it no longer prints the password.
-- **All admins are equal.** There are no separate roles (finance, support), no limits or second approval on refunds, payouts and rider corrections, and no two-factor sign-in. Reading screens (customer details, payment proofs, rider money) is not logged.
+- **Staff roles are coarse.** There are three (super admin, admin, support; see Staff roles) and no separate finance role, no limits or second approval on refunds, payouts and rider corrections, and no two-factor sign-in. Reading screens (customer details, payment proofs, rider money) is not logged.
 - **The frontend stores tokens in browser storage** like most SPAs, so an XSS bug would expose them.

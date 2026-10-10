@@ -293,9 +293,11 @@ Derived: `cashHeld = collected - deposited` (what the rider carries), `unpaid = 
 ## 13. Reviews (`services/review.service.ts`)
 
 1. Allowed once the order is `delivered` (or `completed`), only by its customer, once per order item.
-2. A review carries a product rating, a kitchen rating, an optional delivery rating, a comment and photos; it is marked verified purchase and approved immediately (no moderation).
+2. A review carries a product rating, a kitchen rating, an optional delivery rating, a comment and photos; it is marked verified purchase and shown immediately (nothing is held back for approval).
 3. After saving, the dish's and kitchen's rating averages are recalculated, and the rider's rating too when a delivery rating was given and a Nuray rider delivered. Pickup orders have no delivery rating.
 4. Reviews feed the Bayesian rating used for ranking at the next `ranking-scores` run (or the rating refresh on submit).
+5. **Reporting** (`services/review-moderation.service.ts`). Anyone signed in except the review's author can report a review (`POST /reviews/:id/report`: abusive, spam, false, privacy or other, and an optional note of up to 300 characters). The first report flags the review with its reason and puts it in the staff queue (`/admin/reviews`, and a queue on the Approvals page); the review stays shown until a person decides. Every report is written to the audit log with who made it.
+6. **Deciding** (support staff, admins, the super admin). *Hide* takes the review off every public page and out of the dish's, the kitchen's and the Nuray rider's rating, which are worked out again without it; *Keep* closes the report and the review stays; *Show again* undoes a hide. A hidden review cannot be reported (it is not there for anyone), and the kitchen no longer sees it. No new table or column is involved: hiding is `is_approved = false`, the report is `is_flagged` with `flag_reason`. The author is not told, and there is no appeal yet.
 
 ## 14. Notifications at each step
 

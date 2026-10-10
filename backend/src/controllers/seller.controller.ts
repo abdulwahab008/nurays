@@ -289,7 +289,7 @@ export const getPublicSellers = async (req: Request, res: Response) => {
       _count: {
         select: {
           products: { where: { isActive: true, approvalStatus: 'approved', ...onMenuWhere() } },
-          reviews: true,
+          reviews: { where: { isApproved: true } },
         },
       },
     },
@@ -408,6 +408,7 @@ export const getPublicSellerById = async (req: Request, res: Response) => {
         },
       },
       reviews: {
+        where: { isApproved: true },
         take: 10,
         orderBy: { createdAt: 'desc' },
         include: {

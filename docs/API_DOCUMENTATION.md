@@ -371,6 +371,9 @@ An order paid online only becomes visible to the kitchen's payment flow once the
 |---|---|---|---|
 | `GET /reviews/products/:id/reviews` | public | same query as `GET /products/:id/reviews` | same |
 | `POST /reviews` | authenticated, submission limit | `orderId` (uuid), `orderItemId` (uuid), `productRating` (1-5), `sellerRating` (1-5); optional `deliveryRating` (1-5), `comment`, `photos[]` (URLs) | 201 the review. The order must be the caller's and delivered (400 `ORDER_NOT_DELIVERED`); one review per item (duplicate gives 409 `DUPLICATE_RECORD`) |
+| `POST /reviews/:id/report` | authenticated, submission limit | `reason`: `abusive` \| `spam` \| `false` \| `privacy` \| `other`; optional `note` (trimmed, 300 characters at most) | 200 `{ success, message }`. A report hides nothing: it flags the review and puts it in the staff queue (the first reason is kept; later reports only add to the audit log, `review:REPORT`). 400 `OWN_REVIEW` for the review's author; 404 `REVIEW_NOT_FOUND` for a review that is not there, a hidden one included |
+
+A review that staff have hidden is left out of the reviews lists, of the kitchen's public page (`GET /sellers/:id`), of the review counts in the dish and kitchen payloads, and of the dish's, the kitchen's and the Nuray rider's rating. Staff decide on reports under Admin, "Reviews".
 
 ## Promotions: `/promotions`
 
@@ -575,6 +578,19 @@ Same body schemas as seller promotions (see Promotions), but the discount is pai
 | `GET /admin/support/tickets/:id` | none | one ticket with messages, including internal notes and status-change lines (`isInternal`) |
 | `POST /admin/support/tickets/:id/reply` | `message` (min 1), optional `status` (`open` \| `in_progress` \| `resolved` \| `closed`), optional `internal` (true: an admin-only note, the customer is not told and never sees it) | 201 the ticket. A normal reply notifies the customer |
 
+### Reviews
+
+`admin-reviews.controller.ts`, `review-moderation.service.ts`. Reading needs `read.core`; the three decisions need `support.handle` (support staff, admins and the super admin).
+
+| Method and path | Body / query | Returns |
+|---|---|---|
+| `GET /admin/reviews` | query `status`: `reported` (default: flagged and still shown, the longest-waiting first) \| `hidden` \| `all`; `page`, `limit` (1-50, default 20) | `{ reviews: [{ id, createdAt, reportedSince, productId, productName, sellerId, businessName, customerId, customerName, productRating, sellerRating, deliveryRating, comment, photos, sellerResponse, isVisible, isReported, reason, reportCount }], pagination }`; `reportCount` is the number of reports in the audit log |
+| `POST /admin/reviews/:id/hide` | | `{ success, message }`. The review leaves every public page and the ratings are worked out again without it. Hiding a hidden review changes nothing |
+| `POST /admin/reviews/:id/keep` | | `{ success, message }`. Closes the report; the review stays shown |
+| `POST /admin/reviews/:id/restore` | | `{ success, message }`. Shows a hidden review again and works the ratings out again |
+
+404 `REVIEW_NOT_FOUND` for an id that is not there. Each decision is in the audit log (`admin:POST /reviews/:id/hide`, `/keep`, `/restore`).
+
 ### Staff and approvals
 
 | Method and path | Body | Returns |
@@ -587,7 +603,7 @@ Same body schemas as seller promotions (see Promotions), but the discount is pai
 | `POST /admin/staff/:id/password` | `password` (min 12) | sets a new password and ends their sessions |
 | `DELETE /admin/staff/:id` | | removes staff access (account becomes a customer) |
 
-The super admin and your own account cannot be changed. Login and `GET /auth/me` return `staffRole` and `permissions` for staff. A role that may not do something gets 403 `INSUFFICIENT_STAFF_ROLE` with `details.permission`.
+The queue keys are the kinds of work listed in the admin guide; `reviews` ("Reported reviews", for roles with `support.handle`) counts reviews that were reported and are still shown, and points to `/admin/reviews`. The super admin and your own account cannot be changed. Login and `GET /auth/me` return `staffRole` and `permissions` for staff. A role that may not do something gets 403 `INSUFFICIENT_STAFF_ROLE` with `details.permission`.
 
 ### Audit log
 

@@ -22,6 +22,7 @@ const SUITES: Array<[name: string, load: () => Promise<{ default: () => Promise<
   ['privacy', () => import('./privacy')],
   ['kitchen-view', () => import('./kitchen-view')],
   ['sign-in', () => import('./sign-in')],
+  ['moderation', () => import('./moderation')],
 ];
 
 /** The hosts that count as this machine. */

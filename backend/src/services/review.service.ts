@@ -207,6 +207,19 @@ export class ReviewService {
   }
 
   /**
+   * Work out again everything one review feeds into (the dish's, the kitchen's and the Nuray rider's ratings): after
+   * staff hide a review, or show one again, it counts or stops counting.
+   */
+  async refreshRatingsFor(review: { productId: string | null; sellerId: string; orderId: string; deliveryRating: number | null }) {
+    if (review.productId) await this.updateProductRating(review.productId);
+    await this.updateSellerRating(review.sellerId);
+    if (review.deliveryRating != null) {
+      const delivery = await prisma.delivery.findUnique({ where: { orderId: review.orderId }, select: { riderId: true, status: true } });
+      if (delivery?.riderId && delivery.status === 'delivered') await this.updateRiderRating(delivery.riderId);
+    }
+  }
+
+  /**
    * Update product rating
    */
   private async updateProductRating(productId: string) {

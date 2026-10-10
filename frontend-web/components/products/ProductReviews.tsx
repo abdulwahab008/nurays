@@ -5,6 +5,7 @@ import { apiClient } from '@/lib/api-client';
 import { formatDate } from '@/lib/utils';
 import { useT } from '@/lib/i18n';
 import { browseMessages } from '@/lib/i18n/messages/browse';
+import ReportReview from './ReportReview';
 
 interface Review {
   id: string;
@@ -102,7 +103,10 @@ export default function ProductReviews({ productId }: { productId: string }) {
                 {review.sellerResponse}
               </div>
             )}
-            <p className="text-xs text-gray-400 mt-1">{formatDate(review.createdAt)}</p>
+            <div className="flex flex-wrap items-center gap-x-3 mt-1">
+              <p className="text-xs text-gray-400">{formatDate(review.createdAt)}</p>
+              <ReportReview reviewId={review.id} />
+            </div>
           </div>
         ))}
       </div>
