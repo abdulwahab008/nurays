@@ -143,7 +143,7 @@ JSON that leaves the API (what a rider or a kitchen is shown, what a wrong input
 | Suite | What it checks |
 |---|---|
 | `account-closure` | closing your own account: who may, what blocks it, what a closed account can no longer do, the wrong-password budget |
-| `snapshot` | the door an order goes to is the one written down when it was placed, for the rider's job and the rider's order page |
+| `snapshot` | the door an order goes to is the one written down when it was placed, for the rider's job, the rider's order page and the customer's own order (edited or deleted saved address included) |
 | `security` | token lifetime, what a rider and the customer see of an order, variants private to the kitchen, logout, e-mail change, reset links |
 | `validation` | bad paging, repeated keys, missing or wrong-typed bodies, oversized bodies, numbers the database cannot hold, unreal dates |
 | `delivery` | map pins inside Pakistan, the door shown only while a job runs, hand-back and retry, the admin order filter, the kitchen dashboard, live position, Maps links |

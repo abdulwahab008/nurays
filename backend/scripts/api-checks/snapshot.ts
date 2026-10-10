@@ -57,6 +57,26 @@ export default async function snapshot() {
   const page = (await rider2.as('GET', `/orders/${orderId}`)).body.data?.deliveryAddress;
   ok('the rider\'s order page shows the same door: street, landmark and pin as at checkout', page?.addressLine1 === 'House 9, Street 5' && page?.landmark === 'Opposite the park' && Math.abs(Number(page?.latitude) - 24.8607) < 1e-6, page);
 
+  // The customer's own order page reads the same copy: not moved by a later edit, and not lost when the saved address is deleted.
+  const mine = (await customer.as('GET', `/orders/${orderId}`)).body.data?.deliveryAddress;
+  ok(
+    "the customer's own order shows the street, the landmark and the pin as ordered, not as the saved address was edited",
+    mine?.addressLine1 === 'House 9, Street 5' && mine?.area !== 'Gulshan Block 7' && mine?.landmark === 'Opposite the park' && Math.abs(Number(mine?.latitude) - 24.8607) < 1e-6,
+    mine
+  );
+  const removed = await customer.as('DELETE', `/users/me/addresses/${addressId}`);
+  const afterDelete = (await customer.as('GET', `/orders/${orderId}`)).body.data;
+  ok('the saved address can be deleted', removed.status === 200, removed.code);
+  ok(
+    'and the order still says where it went: street, area, house number, landmark and pin',
+    afterDelete?.deliveryAddress?.addressLine1 === 'House 9, Street 5' &&
+      afterDelete?.deliveryAddress?.area === frozen?.area &&
+      afterDelete?.deliveryAddress?.houseNumber === 'H-55' &&
+      afterDelete?.deliveryAddress?.landmark === 'Opposite the park' &&
+      Math.abs(Number(afterDelete?.deliveryAddress?.latitude) - 24.8607) < 1e-6,
+    afterDelete?.deliveryAddress
+  );
+
   // 3. a customer can enter a house number: it is trimmed, listed, editable, limited, and reaches the rider's door details
   const typed = await makeUser('customer');
   const base = { addressLine1: 'Street 5', area: 'DHA Phase 6', city: 'Karachi', latitude: 24.8015, longitude: 67.0655 };

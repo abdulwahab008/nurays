@@ -301,6 +301,10 @@ export class OrderQueries {
 
     return {
       ...forViewer,
+      // The door as the order was placed (utils/addressSnapshot.ts), whatever has happened to the saved address since: edited, it
+      // must not say the order is going somewhere else, and deleted, the order must still say where it went. A rider's copy was
+      // settled above.
+      ...(riderOnly ? {} : { deliveryAddress: addressAsOrdered(order.deliveryAddressSnapshot, order.deliveryAddress) }),
       delivery: deliveryForViewer,
       ...(handover ? { handoverCode: handover.handoverCode } : {}),
       // The receipt is private: the viewer (already checked above) gets a short-lived link.
