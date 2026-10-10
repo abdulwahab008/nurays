@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback, ReactNode } from 'react';
+import { useState, useEffect, useCallback, useRef, ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { DashboardLayout, SELLER_SIDEBAR_ITEMS } from '@/components/layout/DashboardShell';
@@ -138,8 +138,49 @@ interface SellerProduct {
   approvalStatus?: string;
 }
 
-function CreatePromotionModal({
-  isOpen,
+interface PromotionFormValues {
+  name: string;
+  type: string;
+  discountValue: string;
+  startDate: string;
+  endDate: string;
+  code: string;
+  minOrderValue: string;
+  maxUsage: string;
+}
+
+/** The form's starting values: the promotion being edited, or a week-long 15% deal starting now. */
+function promotionFormFor(initialData?: Promotion | null): PromotionFormValues {
+  if (initialData) {
+    return {
+      name: initialData.name,
+      type: initialData.type === 'fixed' ? 'fixed' : 'percentage',
+      discountValue: String(initialData.discountValue),
+      startDate: initialData.startDate.slice(0, 16),
+      endDate: initialData.endDate.slice(0, 16),
+      code: initialData.code || '',
+      minOrderValue: initialData.minOrderAmount != null ? String(initialData.minOrderAmount) : '',
+      maxUsage: initialData.usageLimitTotal != null ? String(initialData.usageLimitTotal) : '',
+    };
+  }
+  return {
+    name: '',
+    type: 'percentage',
+    discountValue: '15',
+    startDate: new Date().toISOString().slice(0, 16),
+    endDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().slice(0, 16),
+    code: '',
+    minOrderValue: '',
+    maxUsage: '',
+  };
+}
+
+/** Mounted only while open, so every opening starts from the promotion being edited (or a new deal) and loads the products once. */
+function CreatePromotionModal(props: CreatePromotionModalProps) {
+  return props.isOpen ? <PromotionForm key={props.promotionId ?? 'new'} {...props} /> : null;
+}
+
+function PromotionForm({
   onClose,
   onSubmit,
   onUpdate,
@@ -148,25 +189,22 @@ function CreatePromotionModal({
   promotionId,
 }: CreatePromotionModalProps) {
   const isEditMode = Boolean(promotionId && initialData);
-  const [formData, setFormData] = useState({
-    name: '',
-    type: 'percentage',
-    discountValue: '',
-    startDate: '',
-    endDate: '',
-    code: '',
-    minOrderValue: '',
-    maxUsage: '',
-  });
-  const [selectedProductIds, setSelectedProductIds] = useState<string[]>([]);
+  const [formData, setFormData] = useState(() => promotionFormFor(initialData));
+  const [selectedProductIds, setSelectedProductIds] = useState<string[]>(
+    () => initialData?.products ?? initialData?.applicableProductIds ?? []
+  );
   const [products, setProducts] = useState<SellerProduct[]>([]);
-  const [productsLoading, setProductsLoading] = useState(false);
+  const [productsLoading, setProductsLoading] = useState(true);
   const [productsLoadError, setProductsLoadError] = useState<string | null>(null);
   const [productSearch, setProductSearch] = useState('');
 
-  const loadProductsForPromotion = useCallback(() => {
-    setProductsLoadError(null);
-    setProductsLoading(true);
+  // The latest error callback, without making the product request depend on it (it is a new function on every render of the page).
+  const onErrorRef = useRef(onError);
+  useEffect(() => {
+    onErrorRef.current = onError;
+  });
+
+  const fetchProducts = useCallback(() => {
     apiClient
       .get<{ success: boolean; data: { products?: SellerProduct[]; pagination?: { total: number } } }>(
         '/products/seller/my-products',
@@ -202,45 +240,20 @@ function CreatePromotionModal({
             ? 'Connection refused — the backend is not running.'
             : err.response?.data?.error?.message ?? err.response?.data?.message ?? err.message ?? 'Failed to load products'
         );
-        if (!isNetwork) onError?.(err.response?.data?.error?.message ?? err.message ?? 'Failed to load products');
+        if (!isNetwork) onErrorRef.current?.(err.response?.data?.error?.message ?? err.message ?? 'Failed to load products');
       })
       .finally(() => setProductsLoading(false));
-  }, [onError]);
+  }, []);
 
-  // Prefill form when editing
   useEffect(() => {
-    if (isOpen && initialData) {
-      const start = initialData.startDate.slice(0, 16);
-      const end = initialData.endDate.slice(0, 16);
-      setFormData({
-        name: initialData.name,
-        type: initialData.type === 'fixed' ? 'fixed' : 'percentage',
-        discountValue: String(initialData.discountValue),
-        startDate: start,
-        endDate: end,
-        code: initialData.code || '',
-        minOrderValue: initialData.minOrderAmount != null ? String(initialData.minOrderAmount) : '',
-        maxUsage: initialData.usageLimitTotal != null ? String(initialData.usageLimitTotal) : '',
-      });
-      setSelectedProductIds(initialData.products ?? initialData.applicableProductIds ?? []);
-      loadProductsForPromotion();
-    } else if (isOpen) {
-      const now = new Date();
-      const end = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
-      setFormData({
-        name: '',
-        type: 'percentage',
-        discountValue: '15',
-        startDate: now.toISOString().slice(0, 16),
-        endDate: end.toISOString().slice(0, 16),
-        code: '',
-        minOrderValue: '',
-        maxUsage: '',
-      });
-      setSelectedProductIds([]);
-      loadProductsForPromotion();
-    }
-  }, [isOpen, initialData, loadProductsForPromotion]);
+    fetchProducts();
+  }, [fetchProducts]);
+
+  const loadProductsForPromotion = () => {
+    setProductsLoadError(null);
+    setProductsLoading(true);
+    fetchProducts();
+  };
 
   const toggleProduct = (productId: string) => {
     setSelectedProductIds((prev) =>
@@ -266,8 +279,6 @@ function CreatePromotionModal({
       onSubmit(data);
     }
   };
-
-  if (!isOpen) return null;
 
   return (
     <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in duration-200">

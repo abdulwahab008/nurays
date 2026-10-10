@@ -36,8 +36,11 @@ export function useLiveRefresh(refresh: () => void, options: LiveRefreshOptions)
 
   const refreshRef = useRef(refresh);
   const matchRef = useRef(match);
-  refreshRef.current = refresh;
-  matchRef.current = match;
+  // The latest callbacks, kept for the listeners below (updated once the render has committed, not during it).
+  useEffect(() => {
+    refreshRef.current = refresh;
+    matchRef.current = match;
+  });
 
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const triggerRef = useRef(() => {

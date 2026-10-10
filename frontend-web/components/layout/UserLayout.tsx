@@ -10,6 +10,7 @@ import { adminSidebarFor } from './DashboardShell';
 import { DashboardNavbar } from './DashboardNavbar';
 import { useAuthStore } from '@/lib/store/auth-store';
 import { useEffect, useState } from 'react';
+import { useHydrated } from '@/lib/hooks/use-hydrated';
 import { BrandLockup } from '@/components/ui/Mark';
 import { useT } from '@/lib/i18n';
 import { shellMessages } from '@/lib/i18n/messages/shell';
@@ -32,22 +33,18 @@ export function UserLayout({ children, showSidebar = true, showNavbar = true }: 
   const pathname = usePathname();
   const router = useRouter();
   const t = useT(shellMessages);
-  const [mounted, setMounted] = useState(false);
-  const [drawerOpen, setDrawerOpen] = useState(false);
+  const mounted = useHydrated();
+  // The phone menu belongs to the page it was opened on, so navigating closes it without an effect.
+  const [drawerPath, setDrawerPath] = useState<string | null>(null);
+  const drawerOpen = drawerPath !== null && drawerPath === pathname;
 
-  // Close the phone menu after navigating, and stop the page scrolling behind it while it is open.
-  useEffect(() => setDrawerOpen(false), [pathname]);
+  // Stop the page scrolling behind the menu while it is open.
   useEffect(() => {
     document.body.style.overflow = drawerOpen ? 'hidden' : '';
     return () => {
       document.body.style.overflow = '';
     };
   }, [drawerOpen]);
-
-  // Wait for hydration to complete
-  useEffect(() => {
-    setMounted(true);
-  }, []);
 
   // Determine user type and sidebar items
   const userType = user?.userType || user?.user_type || 'customer';
@@ -184,7 +181,7 @@ export function UserLayout({ children, showSidebar = true, showNavbar = true }: 
         <DashboardNavbar
           title="Nuray"
           userType={userType as 'customer' | 'seller' | 'admin' | 'rider'}
-          onMenuToggle={() => setDrawerOpen((v) => !v)}
+          onMenuToggle={() => setDrawerPath(drawerOpen ? null : pathname)}
           drawerOpen={drawerOpen}
         />
       )}
@@ -195,13 +192,13 @@ export function UserLayout({ children, showSidebar = true, showNavbar = true }: 
             <div
               className="fixed inset-0 z-40 lg:hidden transition-opacity duration-200"
               style={{ background: 'rgba(15,23,42,0.6)', opacity: drawerOpen ? 1 : 0, pointerEvents: drawerOpen ? 'auto' : 'none' }}
-              onClick={() => setDrawerOpen(false)}
+              onClick={() => setDrawerPath(null)}
               aria-hidden={!drawerOpen}
             />
             <div
               className="nuray-drawer fixed top-16 bottom-0 start-0 z-50 w-64"
               data-open={drawerOpen ? 'true' : 'false'}
-              onClick={() => setDrawerOpen(false)}
+              onClick={() => setDrawerPath(null)}
             >
               <DashboardSidebar items={getSidebarItems()} userType={userType as 'customer' | 'seller' | 'admin' | 'rider'} />
             </div>

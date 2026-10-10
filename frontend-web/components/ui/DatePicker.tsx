@@ -48,12 +48,12 @@ export function DatePicker({
     };
   }, [isOpen]);
 
-  // Sync view date when value changes
-  useEffect(() => {
-    if (value) {
-      setViewDate(new Date(value + 'T00:00:00'));
-    }
-  }, [value]);
+  // Follow the value when it changes from outside (adjusted during the render, so there is no extra pass).
+  const [shownValue, setShownValue] = useState(value);
+  if (value !== shownValue) {
+    setShownValue(value);
+    if (value) setViewDate(new Date(value + 'T00:00:00'));
+  }
 
   const year = viewDate.getFullYear();
   const month = viewDate.getMonth();

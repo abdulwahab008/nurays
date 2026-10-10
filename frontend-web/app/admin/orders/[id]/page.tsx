@@ -433,7 +433,7 @@ export default function AdminOrderDetailPage() {
                   <div className="rounded-lg border border-amber-200 bg-amber-50 p-4">
                     <h2 className="text-sm font-semibold text-amber-900 mb-1">Delivery failed</h2>
                     <p className="text-sm text-amber-800 mb-3">
-                      The rider or seller couldn't complete this delivery. Send it back out for another attempt, or cancel and refund below.
+                      The rider or seller couldn&apos;t complete this delivery. Send it back out for another attempt, or cancel and refund below.
                     </p>
                     <button
                       onClick={handleRetryDelivery}

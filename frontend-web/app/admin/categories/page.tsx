@@ -67,42 +67,36 @@ interface CategoryModalProps {
   parentCategories: Category[];
 }
 
-function CategoryModal({ isOpen, onClose, onSubmit, category, parentCategories }: CategoryModalProps) {
-  const [formData, setFormData] = useState({
-    name: '',
-    nameUrdu: '',
-    description: '',
-    iconUrl: '',
-    parentId: '',
-    sortOrder: 0,
-    isActive: true,
-  });
+const BLANK_CATEGORY_FORM = {
+  name: '',
+  nameUrdu: '',
+  description: '',
+  iconUrl: '',
+  parentId: '',
+  sortOrder: 0,
+  isActive: true,
+};
 
-  useEffect(() => {
-    if (category) {
-      setFormData({
-        name: category.name || '',
-        nameUrdu: category.nameUrdu || '',
-        description: category.description || '',
-        iconUrl: category.iconUrl || '',
-        parentId: category.parentId || '',
-        sortOrder: category.sortOrder || 0,
-        isActive: category.isActive ?? true,
-      });
-    } else {
-      setFormData({
-        name: '',
-        nameUrdu: '',
-        description: '',
-        iconUrl: '',
-        parentId: '',
-        sortOrder: 0,
-        isActive: true,
-      });
-    }
-  }, [category, isOpen]);
+function categoryFormFor(category?: Category | null) {
+  if (!category) return BLANK_CATEGORY_FORM;
+  return {
+    name: category.name || '',
+    nameUrdu: category.nameUrdu || '',
+    description: category.description || '',
+    iconUrl: category.iconUrl || '',
+    parentId: category.parentId || '',
+    sortOrder: category.sortOrder || 0,
+    isActive: category.isActive ?? true,
+  };
+}
 
-  if (!isOpen) return null;
+/** Mounted only while open, so every opening starts from the category being edited (or a blank form). */
+function CategoryModal(props: CategoryModalProps) {
+  return props.isOpen ? <CategoryForm key={props.category?.id ?? 'new'} {...props} /> : null;
+}
+
+function CategoryForm({ onClose, onSubmit, category, parentCategories }: CategoryModalProps) {
+  const [formData, setFormData] = useState(() => categoryFormFor(category));
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -670,7 +664,7 @@ export default function AdminCategoriesPage() {
             </div>
             <h2 className="text-2xl font-bold text-gray-900 mb-2">No categories yet</h2>
             <p className="text-gray-500 mb-8 max-w-md mx-auto">
-              Create categories to organize your products and help customers find what they're looking for.
+              Create categories to organize your products and help customers find what they&apos;re looking for.
             </p>
             <Button 
               onClick={openCreateModal}
@@ -696,10 +690,10 @@ export default function AdminCategoriesPage() {
         <div className="mt-8 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-2xl p-6 border border-blue-100">
           <h3 className="font-semibold text-gray-900 mb-3">📖 How Categories Work</h3>
           <ul className="text-sm text-gray-600 space-y-2">
-            <li>• <strong>Parent Categories</strong> are top-level groupings (e.g., "Frozen Parathas")</li>
-            <li>• <strong>Subcategories</strong> are nested under parent categories (e.g., "Stuffed Parathas" under "Frozen Parathas")</li>
+            <li>• <strong>Parent Categories</strong> are top-level groupings (e.g., &quot;Frozen Parathas&quot;)</li>
+            <li>• <strong>Subcategories</strong> are nested under parent categories (e.g., &quot;Stuffed Parathas&quot; under &quot;Frozen Parathas&quot;)</li>
             <li>• <strong>Sort Order</strong> determines display sequence (lower numbers appear first)</li>
-            <li>• <strong>Inactive categories</strong> won't show to customers but products remain linked</li>
+            <li>• <strong>Inactive categories</strong> won&apos;t show to customers but products remain linked</li>
             <li>• <strong>Slugs</strong> are auto-generated from names for SEO-friendly URLs</li>
           </ul>
         </div>

@@ -76,6 +76,10 @@ jobs:
       - name: Typecheck
         run: npx tsc --noEmit
 
+      - name: Lint
+        # Fails on any error, and on more warnings than the cap in package.json: lower the cap when you fix some.
+        run: npm run lint
+
       - name: Build
         # NEXT_PUBLIC_* are inlined at build time; provide non-secret defaults
         # so the build doesn't try to bake real URLs into the artefact.

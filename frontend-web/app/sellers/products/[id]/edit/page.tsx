@@ -1315,7 +1315,7 @@ export default function EditProductPage() {
                   <div className="bg-blue-50 rounded-lg p-3 border border-blue-100">
                     <p className="text-xs font-medium text-blue-800 mb-1">💡 Pro Tips:</p>
                     <ul className="text-xs text-blue-700 space-y-0.5">
-                      <li>• Changes are saved when you click "Update Product"</li>
+                      <li>• Changes are saved when you click &quot;Update Product&quot;</li>
                       <li>• Deleted variants will be permanently removed</li>
                       <li>• Set low stock alerts to avoid running out</li>
                     </ul>
