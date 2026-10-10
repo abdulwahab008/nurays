@@ -195,7 +195,9 @@ extension (`../../lib/cities.ts`; the web `tsconfig.json` allows that). The suit
 (`cities.test.ts`: the list and its centres, Rawalpindi against Islamabad, the big cities from anywhere in them, the
 countryside, Urdu and English names, the order of the map's fields, and that nothing ever defaults to Karachi) and the
 discount maths and label (`pricing.test.ts`: percentage and fixed deals, stacking in either order, never below zero,
-whole rupees, a deal with no size). Screens are covered by Playwright (next section), not here.
+whole rupees, a deal with no size), and the reading of the map service's answer (`geocode.test.ts`: which field is the
+area, the street and the city, the pin's own city when the service is down or answers garbage, text trimmed, non-text
+ignored, the request carrying the pin). Screens are covered by Playwright (next section), not here.
 
 ## 3. Frontend end-to-end (Playwright)
 

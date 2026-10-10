@@ -139,7 +139,9 @@ Frontend:
   does not mirror). Every value is 0 on a screen without insets. To see a new bar with a notch, give Chromium
   `Emulation.setSafeAreaInsetsOverride` over the DevTools protocol.
 - A form never invents a city: `lib/cities.ts` has the list, the Urdu names and the matching (a map's answer to a city,
-  or `''` when nothing says), and the city fields start empty.
+  or `''` when nothing says), and the city fields start empty. To ask the map service what is at a pin, use
+  `reverseGeocode` in `lib/geocode.ts` (it never throws; it returns the area, street, house number, postcode and city,
+  and the pin's own city when the service is down) instead of calling `/api/geocode/reverse` yourself.
 - State: Zustand stores in `lib/store/` (auth, cart, community); live updates through `lib/hooks/use-socket.ts` and
   `use-live-refresh.ts`.
 

@@ -12,7 +12,8 @@ import { DashboardLayout, CUSTOMER_SIDEBAR_ITEMS } from '@/components/layout/Das
 import { useT } from '@/lib/i18n';
 import { commonMessages } from '@/lib/i18n/messages/common';
 import { accountMessages } from '@/lib/i18n/messages/account';
-import { CITIES, cityFromCoords, cityFromGeocoder } from '@/lib/cities';
+import { CITIES } from '@/lib/cities';
+import { reverseGeocode, GeocodedPlace } from '@/lib/geocode';
 
 function MapLoading() {
   const t = useT(accountMessages);
@@ -87,6 +88,25 @@ const getAreasForCity = (city: string): string[] => {
 };
 
 // Cities for dropdown
+
+/** The address form with what the map said about a pin filled in; whatever it did not say stays as the person had it. */
+function withPlace<T extends { city: string; area: string; addressLine1: string; houseNumber: string; postalCode: string; latitude: string; longitude: string }>(
+  form: T,
+  place: GeocodedPlace,
+  lat: number,
+  lng: number
+): T {
+  return {
+    ...form,
+    latitude: lat.toString(),
+    longitude: lng.toString(),
+    city: place.city || form.city,
+    area: place.area || form.area,
+    addressLine1: place.street || form.addressLine1,
+    houseNumber: place.houseNumber || form.houseNumber,
+    postalCode: place.postalCode || form.postalCode,
+  };
+}
 
 export default function AddressesPage() {
   const router = useRouter();
@@ -164,59 +184,15 @@ export default function AddressesPage() {
         // Update map coordinates to user's ACTUAL location
         setMapCoords({ lat: latitude, lng: longitude });
         
-        // Use our API proxy for reverse geocoding (avoids CORS with Nominatim)
-        try {
-          const response = await fetch(
-            `/api/geocode/reverse?lat=${encodeURIComponent(latitude)}&lon=${encodeURIComponent(longitude)}`
-          );
-          if (!response.ok) throw new Error('Geocode failed');
-          const data = await response.json();
-          
-          if (data && data.address) {
-            const addr = data.address;
-            
-            // The city the map's words name, else the one the pin is in; empty when neither says (the person types it)
-            const matchedCity = cityFromGeocoder(addr, latitude, longitude);
-            
-            // Auto-fill form fields from reverse geocoding
-            setFormData(prev => ({
-              ...prev,
-              latitude: latitude.toString(),
-              longitude: longitude.toString(),
-              city: matchedCity || prev.city,
-              // Try to get area/suburb (handle Urdu suburb names)
-              area: addr.suburb || addr.neighbourhood || addr.quarter || addr.residential || prev.area,
-              // Try to get street address
-              addressLine1: addr.road ? addr.road : prev.addressLine1,
-              houseNumber: addr.house_number || prev.houseNumber,
-              postalCode: addr.postcode || prev.postalCode,
-            }));
-            
-            showToast(matchedCity ? t('locationDetectedCity', { city: matchedCity }) : t('locationDetectedFill'), 'success');
-          } else {
-            // No address data, use coordinate-based city detection
-            const coordCity = cityFromCoords(latitude, longitude);
-            setFormData(prev => ({
-              ...prev,
-              latitude: latitude.toString(),
-              longitude: longitude.toString(),
-              city: coordCity || prev.city,
-            }));
-            showToast(coordCity ? t('locationDetectedCityFill', { city: coordCity }) : t('locationDetectedFill'), 'success');
-          }
-        } catch (error) {
-          console.error('Reverse geocoding error:', error);
-          // Use coordinate-based detection as fallback
-          const coordCity = cityFromCoords(latitude, longitude);
-          setFormData(prev => ({
-            ...prev,
-            latitude: latitude.toString(),
-            longitude: longitude.toString(),
-            city: coordCity || prev.city,
-          }));
-          showToast(coordCity ? t('locationDetectedCityFill', { city: coordCity }) : t('locationDetectedFill'), 'success');
+        // What the map says is at the pin; with no answer, the city the pin itself is in (or nothing)
+        const place = await reverseGeocode(latitude, longitude);
+        setFormData((prev) => withPlace(prev, place, latitude, longitude));
+        if (place.fromService) {
+          showToast(place.city ? t('locationDetectedCity', { city: place.city }) : t('locationDetectedFill'), 'success');
+        } else {
+          showToast(place.city ? t('locationDetectedCityFill', { city: place.city }) : t('locationDetectedFill'), 'success');
         }
-        
+
         setDetectingLocation(false);
         setShowMap(true); // Auto-open map centered on user's location
       },
@@ -514,48 +490,9 @@ export default function AddressesPage() {
                     }));
                     setMapCoords({ lat: coords.lat, lng: coords.lng });
                     
-                    // Reverse geocode the clicked location via our API proxy
-                    try {
-                      const response = await fetch(
-                        `/api/geocode/reverse?lat=${encodeURIComponent(coords.lat)}&lon=${encodeURIComponent(coords.lng)}`
-                      );
-                      if (!response.ok) throw new Error('Geocode failed');
-                      const data = await response.json();
-                      
-                      if (data && data.address) {
-                        const addr = data.address;
-                        
-                        const matchedCity = cityFromGeocoder(addr, coords.lat, coords.lng);
-                        
-                        setFormData(prev => ({
-                          ...prev,
-                          latitude: coords.lat.toString(),
-                          longitude: coords.lng.toString(),
-                          city: matchedCity || prev.city,
-                          area: addr.suburb || addr.neighbourhood || addr.quarter || addr.residential || prev.area,
-                          addressLine1: addr.road ? addr.road : prev.addressLine1,
-                          houseNumber: addr.house_number || prev.houseNumber,
-                          postalCode: addr.postcode || prev.postalCode,
-                        }));
-                        
-                        if (matchedCity) showToast(t('citySelected', { city: matchedCity }), 'success');
-                      } else {
-                        // No address data, use coordinate-based detection
-                        const coordCity = cityFromCoords(coords.lat, coords.lng);
-                        if (coordCity) {
-                          setFormData(prev => ({ ...prev, city: coordCity }));
-                          showToast(t('citySelected', { city: coordCity }), 'success');
-                        }
-                      }
-                    } catch (error) {
-                      console.error('Reverse geocoding error:', error);
-                      // Fallback to coordinate-based detection
-                      const coordCity = cityFromCoords(coords.lat, coords.lng);
-                      if (coordCity) {
-                        setFormData(prev => ({ ...prev, city: coordCity }));
-                        showToast(t('citySelected', { city: coordCity }), 'success');
-                      }
-                    }
+                    const place = await reverseGeocode(coords.lat, coords.lng);
+                    setFormData((prev) => withPlace(prev, place, coords.lat, coords.lng));
+                    if (place.city) showToast(t('citySelected', { city: place.city }), 'success');
                   }}
                   height="300px"
                   draggable={true}

@@ -42,7 +42,8 @@ interface FormData {
 }
 
 import LocationMap from '@/components/ui/LocationMap';
-import { CITIES, cityFromGeocoder } from '@/lib/cities';
+import { CITIES } from '@/lib/cities';
+import { reverseGeocode } from '@/lib/geocode';
 
 export function SellerOnboardingModal({ isOpen, onClose, onComplete }: SellerOnboardingModalProps) {
   const { showToast } = useToast();
@@ -83,38 +84,17 @@ export function SellerOnboardingModal({ isOpen, onClose, onComplete }: SellerOnb
       longitude: coords.lng,
       address: coords.address || prev.address,
     }));
-    await reverseGeocode(coords.lat, coords.lng);
-  };
-
-  const reverseGeocode = async (lat: number, lng: number) => {
-    try {
-      const response = await fetch(
-        `/api/geocode/reverse?lat=${encodeURIComponent(lat)}&lon=${encodeURIComponent(lng)}`
-      );
-      if (!response.ok) return;
-      const data = await response.json();
-      
-      if (data.address) {
-        // The city the map's words name, else the one the pin is in. The list below only offers listed cities, so an
-        // unlisted one leaves the choice as it was.
-        const named = cityFromGeocoder(data.address, lat, lng);
-        const city = (CITIES as readonly string[]).includes(named) ? named : '';
-
-        const area = data.address.suburb || data.address.neighbourhood || data.address.road || '';
-        const fullAddress = data.display_name || '';
-
-        setFormData(prev => ({
-          ...prev,
-          city: city || prev.city,
-          area: area || prev.area,
-          address: fullAddress || prev.address,
-          latitude: lat,
-          longitude: lng,
-        }));
-      }
-    } catch (error) {
-      console.error('Reverse geocode error:', error);
-    }
+    const place = await reverseGeocode(coords.lat, coords.lng);
+    // The list below only offers listed cities, so an unlisted one leaves the choice as it was.
+    const city = (CITIES as readonly string[]).includes(place.city) ? place.city : '';
+    setFormData(prev => ({
+      ...prev,
+      city: city || prev.city,
+      area: place.area || place.street || prev.area,
+      address: place.displayName || prev.address,
+      latitude: coords.lat,
+      longitude: coords.lng,
+    }));
   };
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
