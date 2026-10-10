@@ -1,0 +1,300 @@
+# Plan for the remaining production-readiness work
+
+Written 2026-10-10 from `docs/PRODUCTION_READINESS_AUDIT.md`. Every finding the report marks Open or Partly fixed (38 open, 22 partly fixed), every remaining risk, the load-test plan, the store plan and the launch checklist were re-checked against the current code (`main` plus the index migrations in [abdulwahab008/nurays#38](https://github.com/abdulwahab008/nurays/pull/38)). Six reviewers checked one area each and a second reviewer per area tried to prove them wrong (69 corrections, all folded in below). A final pass read the whole report for anything missed.
+
+## Where things stand
+
+- **The report is mostly right, with some drift.** PERF-10 is now fixed (the index migrations). SEC-R5 (rider job pool shows exact pins) was already fixed by PRIV-2. FE-14's cause is wrong: the `?search` double fetch only happens in development, and the real duplicate is a different one. 17 statements in the report are out of date (listed under "Report corrections" below).
+- **New problems found while re-checking** (not in the report):
+  - **Kitchens still receive the customer's map pin, postcode and user id** through the order snapshot, and `GET /orders/:id` doesn't shape the kitchen's view at all (NEW-priv-1, P1).
+  - A stolen 1-hour access token can **guess the account password** up to 1,200 times a minute on "change email" and "close account" (NEW-auth-1, P1). That weakens the SEC-1 fix.
+  - Forgot-password and resend-verification are limited per IP address only, so anyone can **flood a victim's inbox** from a few addresses and damage the sender's reputation with the email provider (part of SEC-4).
+  - **Staff passwords**: the docs say 12 characters, but `scripts/create-admin.js` has no minimum, and `scripts/reset-admin-password.js` accepts 6 characters, defaults to `Admin123!` and only works for `admin@frozennuray.com`. Any staff member can also reset to 8 characters through forgot-password.
+  - **Public reviews are auto-approved and can't be reported or hidden.** The App Store (guideline 1.2) and Google Play's user-generated-content policy both require a report action.
+  - The **cart page invents a Rs 80 delivery fee and a Rs 800 free-delivery bar** when it has no estimate.
+  - Rider notifications keep the customer's street address after the job ends (NEW-priv-2).
+- **CI on `main` is red.** The run on the PR #26 merge commit failed in the end-to-end job because the web build could not download the Plus Jakarta Sans font from Google Fonts (`next/font/google` fetches fonts during `next build`). It was a network hiccup: the frontend job in the same run built fine, and PR #38 passed. But any CI or Docker build can fail the same way, so the fonts should be bundled in the repo.
+- **The evidence behind most "Fixed" rows can't be re-run.** The `flow/56`–`flow/64` API checks the report cites, and the load-test and EXPLAIN scripts, live only in the audit session, not in the repo or CI.
+- **16 Dependabot PRs are open.** Some must not be merged as they are: Node 25 base images (#27, #29; not an LTS release), `@prisma/client` 7 without the matching CLI (#19) and TypeScript 7 (#20, #24).
+
+## Effort at a glance
+
+| Phase | What | Who | Engineer-days (rough) |
+|---|---|---|---|
+| 0 | Housekeeping that unblocks the rest | Claude, plus you merging | 3–4 |
+| 1 | Launch blockers for the web soft launch | You and ops, plus about 6 days of code | 6 code + ops time |
+| 2 | P1 code that needs no decision | Claude | about 12 |
+| 3 | Work waiting on your decisions | You decide, then Claude | about 21 once decided |
+| 4 | Google Play and App Store apps | You (accounts) and Claude | about 22, plus store review time |
+| 5 | After launch: code health and performance | Claude | about 23 |
+
+Estimates are for one experienced engineer and include tests. The calendar time of Phase 1 depends on outside parties: the lawyer, hosting, map provider and devices.
+
+## This week, in order
+
+1. **Merge PR #38** (indexes). That also runs CI on `main` again.
+2. **Bundle the web fonts** so builds stop depending on Google Fonts (Phase 0.1).
+3. **Start the long-lead items now (you):** legal entity details and the lawyer review, the production hostnames (put the API on a subdomain of the site's domain, e.g. `api.nuray.pk`), map and geocoder provider accounts, and the Apple and Play organisation accounts (they need a D-U-N-S number).
+4. **Privacy fixes, one PR (about 1 day):** NEW-priv-1, PRIV-6, NEW-priv-2, INTEG-3.
+5. **Auth hardening (about 3 days):** NEW-auth-1, SEC-4, staff password rules, SEC-5.
+6. **Bring the API checks into the repo and CI** (Phase 0.3), before any refactor.
+7. **Rider fan-out (PERF-5)**, then write the load-test scripts.
+8. **Answer decisions 1–7 in Phase 3.** They unlock the remaining P1 work.
+
+---
+
+## Phase 0: Housekeeping (no decisions needed)
+
+- [ ] **0.1 Web build without a font download** (P0, XS–S). Switch `frontend-web/app/layout.tsx` from `next/font/google` to `next/font/local`, with the Plus Jakarta Sans and Geist Mono files in the repo. Check: `next build` with no internet access.
+- [ ] **0.2 Merge PR #38 and get `main` green.** After merging, release the five index migrations as a release step (`npm run db:migrate` from a checkout), not through `MIGRATE_ON_START`. A failed concurrent build would otherwise crash-loop the API. The recovery steps are at the top of each migration file.
+- [ ] **0.3 Re-runnable evidence** (P1, M). Port the API checks the report cites (`flow/56`–`64`: deletion, snapshot, security, validation, delivery, views, small fixes, privacy) to `backend/scripts/api-checks/*.ts`, reading `API_URL`/`DATABASE_URL` from the environment and using the e2e seed accounts. Add `npm run api-checks`. Run it, together with `verify-money-flows` (333 checks), in the CI end-to-end job, which already has Postgres. Move the browser-only checks into Playwright specs where they still add coverage. Then update every `flow/…` citation in the report.
+- [ ] **0.4 Dependabot triage** (XS). Close #27 and #29 (Node 25) and #19 (Prisma client alone). Hold #20 and #24 (TypeScript 7) and #35 (lucide-react 1.x) for a planned upgrade. Merge the safe patch bumps after CI. Add rules to `.github/dependabot.yml`: ignore non-LTS Node majors, and group `prisma` with `@prisma/client`. PR #1 is from before the rebuild and can probably be closed.
+- [ ] **0.5 Correct the report** (S): see "Report corrections" at the end.
+
+## Phase 1: Launch blockers for the web soft launch (P0)
+
+Most of this is outside the code. Items marked **(you)** need the owner or ops; items marked **(Claude)** are code that can be written now.
+
+- [ ] **Legal (you, longest lead time).** Company legal name, registered address and a monitored support mailbox, then one lawyer review of terms, privacy, refund policy and the delete-account page (MOBILE-5). The privacy policy also needs new sections drafted now: the rider's live location shared during a delivery, device push identifiers, and camera use for documents (NEW-legal-1). The audit-log retention period (SEC-R7) belongs in the same review.
+  - **(Claude, XS)** Release guard: the build fails when `NEXT_PUBLIC_LEGAL_REVIEWED=true` but the company values are empty, and the publish workflow warns on `main` and fails on a release tag. Only the frontend image is affected.
+- [ ] **Production configuration (you).** Fill in the real `.env` and start the API once against it (it refuses placeholders). Also set the **GitHub repository variables** the image-publish workflow reads (`NEXT_PUBLIC_API_URL`, `NEXT_PUBLIC_WS_URL`, Google client id, Sentry DSN, map and legal variables). Without them, every push to `main` publishes a frontend image with `http://localhost:3001` baked in.
+- [ ] **Hosting (you).** TLS and HSTS at the load balancer. `TRUST_PROXY` set to the real number of proxy hops. Readiness probe on `/api/v1/health/ready`. Load-balancer idle timeout below 65 s. API on a subdomain of the site (needed for the cookie in Phase 3 decision 2).
+- [ ] **Map tiles and geocoder (you, plus Claude S).** Accounts with a tile provider and a geocoder (the public OpenStreetMap servers are for development only). Restrict the tile key by referrer, because it ships in the browser bundle.
+  - **(Claude)** The geocoder proxy currently hard-codes one request per second and sends no API key, so a paid account would still run at public-server speed. Make the key, the rate and the queue cap configurable.
+- [ ] **Backups and rehearsals (you).** Scheduled database and file backups. One restore rehearsal. One rollback rehearsal: a failed `migrate deploy`, then `prisma migrate resolve`, then redeploy of the previous image tag.
+- [ ] **Staging environment (you).** Production images, managed Postgres and Redis, two API instances behind a real load balancer. Needed for the load test and for the store reviewers' test accounts.
+- [ ] **Launch data (you).** Create the super admin with `scripts/create-admin.js` from a checkout (the runtime image has no scripts). Set up communities and delivery prices, and approve the first kitchens and riders. If an existing database is migrated, check that the oldest admin, who becomes super admin, is the right person.
+- [ ] **Device checks (you, plus Claude S).** On one Android phone and one iPhone, each with and without Google Maps installed: Start navigation opens Maps at the pin; position sharing resumes within about 5 s after coming back from Maps; the screen stays on; the PIN handover completes. Record the iOS version: the wake lock doesn't work in home-screen web apps before iOS 18.4.
+  - **(Claude)** An automated Playwright test of the resume path on a mobile viewport (DELIV-7).
+- [ ] **Load test (Claude writes it, L; you provide staging).**
+  - `backend/scripts/seed-load.ts` (10k products, 2k kitchens, 50k orders; refuses to run on a database whose name doesn't end in `_load`).
+  - A token-minting script, because tokens expire after 1 hour and the whole run takes longer.
+  - k6 scenarios: browse, checkout, rider loop, login storm.
+  - A Node Socket.IO harness for 2,000 sockets that copies what the rider dashboard does after each event.
+  - The audit's EXPLAIN queries committed to the repo.
+  - On the managed Postgres: `log_min_duration_statement=200ms` and `pg_stat_statements`.
+  - Do PERF-5 first, or the rider scenario measures a problem that is already known.
+- [ ] **Launch-day smoke checks (you).** From `docs/DEPLOYMENT_GUIDE.md`: a registration email and an OTP arrive; an S3 upload and a private receipt link work; one real small Safepay payment completes an order; `db:check` passes.
+
+## Phase 2: P1 code that needs no decision (Claude can start now)
+
+**Privacy (one PR, about 1 day)**
+- [ ] **NEW-priv-1** Kitchen order views built from an explicit list of fields: no pin, postcode, customer id or internal keys. `GET /orders/:id` gets the same kitchen view. Tests check that nothing beyond the allowed fields comes back.
+- [ ] **PRIV-6** Stop returning the seller's user id from public kitchen endpoints (XS).
+- [ ] **NEW-priv-2** Rider notifications name the area and city, not the street (XS).
+- [ ] **INTEG-3** Refuse online-payment orders when Safepay isn't configured, with a test-mode switch so the money-flow checks still run (XS).
+
+**Sign-in security (about 3 days)**
+- [ ] **NEW-auth-1** Limit password re-checks on change-email and close-account, counting only wrong passwords. Answer a wrong password with 400 instead of 401, so the web client doesn't refresh and retry.
+- [ ] **SEC-4** Per-phone and per-email limits on OTP, forgot-password, resend-verification and email change. A forgot-password link is not re-issued within 60 s. A generous per-IP backstop on login. Redis keys hold hashes, never raw numbers or addresses.
+- [ ] **Staff passwords** At least 12 characters for staff everywhere: reset, `create-admin.js` and `reset-admin-password.js`. The reset script takes the email as an argument, has no default password and writes an audit entry.
+- [ ] **SEC-5** Refuse common passwords using a bundled list, and fix the leftover "6 characters" hint on the register page. The fixtures must not contain "nuray", which the personal-word check would refuse.
+- [ ] **SEC-7** Give the report-only CSP somewhere to send reports: a same-origin `/csp-report` collector that strips query strings, because reset links carry tokens. Add a Playwright CSP check and a build flag to enforce. Then 7 days of reports on staging or the soft launch, then enforce. The `'unsafe-inline'` question is decision 9.
+
+**Capacity**
+- [ ] **PERF-5** Try auto-assignment first and post a job to the open pool only if nobody takes it. That removes most pool events with no client change. Then send pool events only to riders who are on duty and active (a socket room joined and left on duty toggle, approval and suspension), and refresh only the list that changed.
+- [ ] **INTEG-2** Geocoding limits: keep the global queue cap, and add only a generous per-IP flood guard (many Pakistani mobile users share one IP). The proper per-account limit comes when the geocode routes move behind the API sign-in.
+
+**Quality gates**
+- [ ] **FE-6** Get the web lint errors to zero, including the 13 React hook errors (some are real bugs). Gate CI on errors, with a warning cap that only goes down.
+- [ ] **BE-1** Add an ESLint config to the backend and a CI lint step (half a day).
+- [ ] **DELIV-11** Unit tests for the delivery status machine, before anyone touches the rider or dispatch code.
+
+**Store preparation that works on the web today**
+- [ ] **MOBILE-6** A public help page with an FAQ and the support email, no sign-in needed.
+- [ ] **MOBILE-1** `POST /auth/google` also accepts Google id tokens, which a native app needs. The web keeps its current button.
+- [ ] **MOBILE-4** One `openExternal()` helper for maps, documents and legal links. Each rider map button keeps going to its own end of the trip.
+- [ ] **MOBILE-7** Serve `assetlinks.json` and `apple-app-site-association` from environment values; the values come once the store accounts exist.
+
+## Phase 3: Your decisions
+
+Each line gives the options, the recommendation, and what it unlocks. Effort is what remains after the decision.
+
+| # | Decision | Recommendation | Unlocks |
+|---|---|---|---|
+| 1 | **Per-device sessions** (SEC-R1, SEC-2): approve a `auth_sessions` + `refresh_tokens` migration | Approve. "Log out" ends this device only and a new "Sign out everywhere" ends all. Staff stay signed in 12 h, everyone else 30 days (renewed while active). Everyone signs in once at deploy, which costs nothing before launch. | Stolen refresh tokens detected and killed, a list of signed-in devices. L (4 days). Logout must work with an expired access token, and account closure must delete sessions. |
+| 2 | **Refresh token in an httpOnly cookie** (SEC-R2) | Host the API on a subdomain of the site (`api.<domain>`) and use a `Secure; HttpOnly; SameSite=Strict` cookie with an Origin check. Don't wait for CSP enforcement. Decide first how native background location will authenticate, because native code can't read the cookie. | Scripts on the page can no longer read the refresh token. M, after decision 1. |
+| 3 | **Staff lockout** (SEC-3) | Lock only the (account, IP address) pair. Alert the owner after 20 failures from all addresses in an hour; a slow-down, never a refusal of the right password. A reset or super-admin unlock clears it. Two-factor codes for staff later. | No one can lock the super admin out with one request. M. |
+| 4 | **What kitchens see about customers** (PRIV-4) | Phone and full door only while the kitchen hands the order over itself (pickup or self-delivery) and the order is live. Self-delivery also gets the pin and a Maps link. Otherwise first name, area and city, and contact through the order chat. | M. Builds on NEW-priv-1. |
+| 5 | **Pin decides the community** (DELIV-3) | A valid pin wins. Outside every radius, accept an area-name match only within 1.5 km of that community (a setting). Name matches limited to the address's own city: today a Karachi address named "DHA Phase 5" is filed under Lahore. Dispatch reads the community fixed at order time. | Correct pricing and dispatch for edge and cross-city addresses. S–M. |
+| 6 | **Require a pin for home delivery at the API** (DELIV-4) | First run the read-only count of pinless addresses and recent pinless orders on a production copy. If no recent pinless orders exist, enforce now with no grace period; otherwise use a 30-day grace period. | S. Fixtures in `verify-money-flows` need pins. |
+| 7 | **IP geolocation fallback** (FE-11, OPS-13, INTEG-7) | Delete it. When GPS fails, only pan the map and ask the buyer to drag the pin; never set a guessed pin. | No visitor IPs sent over plain HTTP. S. |
+| 8 | **Revealing which accounts exist** (SEC-11) | Same answer on login paths: "if this number is registered, a code is on its way". The registration-purpose OTP request must also stop answering "user exists". Sign-up errors can stay explicit. | S. |
+| 9 | **CSP strength** (SEC-7) | Enforce the current policy after the 7-day soak. Per-request nonces would make every page server-rendered and are only worth it once decision 2 is done. | P1 closed. |
+| 10 | **Audit log free text** (SEC-R7) | Redact phone numbers, emails, CNIC and IBAN, and cap reasons at 200 characters. Order numbers and payment references stay readable. Retention set with the lawyer (suggested: 24 months for staff actions, 180 days for failed-login rows); needs a trigger change. | M. |
+| 11 | **Schema clean-ups** (MONEY-7, MONEY-8, BE-9): one approval session | Approve: an idempotency fingerprint column (a reused key with a different order body is refused), drop `inventory_reservations`, drop four unused models after confirming production has no rows in them. | S each, separate migrations. |
+| 12 | **Default community** (FE-20) | No silent default: keep the chooser open and say "No Nuray community near you yet". | S. |
+| 13 | **Search engines and share previews** (FE-10) | Page titles and descriptions plus a sitemap now; server-rendered detail pages next; leave the listing page as is. | S–L. |
+| 14 | **Legacy scripts** (BE-14) | Delete the 7 frozen-food leftovers. Decide whether the two cooked-food category seeds become one documented seed. | XS. |
+| 15 | **Seller "meal categories"** | The API means meal times, the web saves cuisines. Pick one. | XS–S. |
+| 16 | **Brand logo** (FE-21) | Pick one of the three options in `public/brand/`. | Store icons and graphics. |
+| 17 | **Background jobs** (D2-W4) | Add on/off switches now so one instance can run the jobs. A separate worker process only if the load test shows a need. Stagger the jobs' start times. | XS–S. |
+| 18 | **Old orders without an address snapshot** (Deliverable 6) | Accept the live-address fallback until those orders close, then remove the fallback code. | XS later. |
+| 19 | **Prisma advisories** (Deliverable 10) | Prisma 7 does not fix them. Use an npm override for `deepmerge-ts`, bump `handlebars`, and plan jest 30 for the dev-only findings. | S. |
+| 20 | **Seller balance speed** (PERF-1) | Do only step 1 (rider cash from deliveries, indexed) now. Rewriting the balance in SQL would copy the money rules into a second place. | M. |
+
+## Phase 4: Google Play and App Store
+
+**Start now (you):**
+- Play and Apple organisation accounts under the legal entity.
+- A Firebase project.
+- One app id for both stores (e.g. `pk.nuray.app`). It can never change once published.
+- Store decisions:
+  - **MOBILE-2** (recommended: hide Google sign-in in the iOS app for v1, which avoids the Sign in with Apple requirement).
+  - **MOBILE-9** (recommended: keep location running during a job with an Android foreground service and iOS while-in-use background updates, not "allow all the time").
+  - **MOBILE-10** (recommended: the app loads the live website, so one deploy updates everything).
+  - Whether to ship the Play-only Trusted Web Activity first (D8-TWA). It's worth it only if a Play listing is needed weeks early. Use the same app id and signing key so the real app replaces it.
+
+**Web work that needs no native project (Claude):**
+- A small platform helper, a token store behind the API client (MOBILE-11) and `openExternal` (Phase 2).
+- Safe-area padding for fixed bars (MOBILE-8). This is mandatory, because Android API 36 no longer allows opting out of edge-to-edge, and it already affects iPhone home-screen users.
+- A mobile Playwright project (MOBILE-12).
+- Removing a browser's push subscription on logout (NEW-push-1).
+- **Report and hide for reviews**, with an admin queue (store requirement).
+- An accessibility pass with an automated axe check.
+
+**Needs approval:** MOBILE-3 native push, a new `native_push_tokens` table. On iOS use a Firebase messaging plugin; the standard one returns APNs tokens that FCM rejects.
+
+**The native shell (D8-CHECKLIST, more than a week):**
+- Capacitor for Android (target **API 36**, the current Play requirement) and iOS.
+- Push, location plugin, camera permissions with English and Urdu texts, deep links (orders, Safepay return, email links), native Sentry.
+- Store listings in English and Urdu, data-safety and privacy-label forms (drafted in `docs/STORE_DATA_DECLARATIONS.md` with NEW-legal-1), content rating (chat and reviews declared).
+- Reviewer accounts on staging.
+- Play's 14-day closed test applies only to personal accounts.
+
+## Phase 5: After launch (P2), in batches
+
+- **Backend consistency (about 3 days):** shared delivery status lists (BE-5; keep "failed" deliveries cancellable), one `roundMoney` (BE-6), unused exports (BE-8), console calls to the logger (BE-10), one cash-at-door rule (BE-15), typed `req.seller` (BE-12), seller lookup and formatting out of controllers (BE-13), the three safe seller enums.
+- **Split `order.service.ts`** (BE-11, 1,856 lines), and move pricing, promotions and delivery-fee maths into pure, unit-tested modules.
+- **Cart truthfulness:** remove the invented fee and Rs 800 bar (NEW-cart-fee), drop the placeholder fee field (BE-7), and return the free-delivery threshold the fee engine actually applied.
+- **Account extras:** change password while signed in (NEW-auth-3), a notice to the old address on email change (NEW-auth-4), remove the unused OTP purpose (NEW-auth-2).
+- **Web app:**
+  - One discount label helper (FE-4) and a thin admin layout (FE-5).
+  - Typed API shapes (FE-7, ratcheting the lint cap).
+  - One seller product form (FE-8; updates use PATCH, and variant saves differ between create and edit).
+  - One geocode and city module (FE-9; fixes the Karachi default and Rawalpindi mislabel).
+  - Store selectors for cart and community (FE-12), the signed-in duplicate products fetch (FE-14), one button component (FE-18).
+  - Unit tests for web helpers (NEW-web-2), the hub console product photo (NEW-fe-hub-1).
+  - A smaller shared bundle for anonymous pages.
+- **Performance and operations:** a lighter product card (PERF-6, CAP-4), cleanup of partial S3 image writes (INTEG-6), Actions pinned to commit SHAs (OPS-10), and the dev-only npm advisories.
+
+## Report corrections
+
+To make in `docs/PRODUCTION_READINESS_AUDIT.md` (Phase 0.5):
+
+- **Header and Deliverable 7:**
+  - The branch was merged through PR #26, and the index migrations add a schema change.
+  - The stack counts changed: 70 pages, 52 services, 20 validators, 16 migrations.
+  - CI evidence: PR #26 and PR #38 green; the `main` run red on the font download.
+- **SEC-R5** is fixed (PRIV-2, AUTHZ-4). **PERF-10** is fixed, with `deliveries(status)` declined for the stated reason. **FE-14**'s cause is wrong.
+- **Deliverable 4:**
+  - Email change does **not** end sessions (NEW-auth-4).
+  - Forgot-password has no per-address cap.
+  - `.env.example` lacks `AUTO_ASSIGN_ENABLED`, `SAFEPAY_API_URL`, `SAFEPAY_CHECKOUT_URL`, `SENTRY_TRACES_SAMPLE_RATE`, `SLOW_REQUEST_MS` (and `NEXT_PUBLIC_SENTRY_RELEASE` on the web).
+  - The Prisma advisories are in the runtime image (accepted in `.trivyignore`), and the dev-only ones are unrelated to Prisma.
+- **Deliverable 9:**
+  - Replace "One CI run green on this branch" with "`main` green, PR #38 merged".
+  - FE-6 belongs in P1, as the addendum says.
+- **Deliverable 10:** the approvals list is missing MONEY-7, MOBILE-3, SEC-R7's trigger change and the decisions in Phase 3.
+- **Fixed rows with leftovers:**
+  - FE-17: `auth-store.ts` still reads the token storage directly in three places.
+  - BE-2: two scripts still import an undeclared `axios`.
+  - OPS-10: the Trivy action is now pinned to a SHA.
+  - OPS-8: the go-live checklist doesn't include the rollback rehearsal it promises.
+- **DEPLOYMENT_GUIDE.md:** add the dispatch and ops-snapshot jobs to the background-jobs table, replace "exactly one proxy hop" with `TRUST_PROXY`, and add the rollback rehearsal to the go-live checklist.
+- **Web lint counts:** now 271 errors and 188 warnings; 237 `any`.
+
+## Appendix: every item and its current state
+
+Status now: what the code shows today. Needs: code = can be done now; decision = your choice first; approval = a migration you approve; outside = accounts, devices, legal or infrastructure; native app = the Capacitor project.
+
+| ID | In the report | Status now | Needs | Priority | Effort | Phase | Work |
+|---|---|---|---|---|---|---|---|
+| SEC-2 | Partly fixed | Partly open | approval | P1 | XS | 3 (#1) | Finish session revocation: logout/rotation residual (umbrella for SEC-R1/SEC-R2) |
+| SEC-R1 | — | Open | approval | P1 | L | 3 (#1) | Per-device sessions: refresh-token rotation with reuse detection |
+| SEC-R2 | — | Open | decision | P1 | M | 3 (#2) | Move the refresh token to an httpOnly cookie with CSRF protection |
+| SEC-3 | Open | Open | decision | P1 | M | 3 (#3) | Staff lockout that cannot be used to lock out the super admin |
+| SEC-4 | Partly fixed | Partly open | code | P1 | M | 2 | OTP, forgot-password and verification-email limits per target; login backstops |
+| SEC-5 | Partly fixed | Partly open | code | P2 | S | 2 | Common/breached password check (plus the leftover 6-character UI hint) |
+| SEC-7 | Partly fixed | Partly open | code | P1 | S | 2 | Give the report-only CSP a report destination, then enforce it |
+| SEC-11 | Open | Open | decision | P2 | S | 3 (#8) | Stop revealing which emails and phone numbers have accounts on the login and OTP paths |
+| NEW-auth-1 | — | Open | code | P1 | S | 2 | Throttle re-authentication password checks; stop answering a wrong password with 401 |
+| NEW-auth-2 | — | Open | code | P2 | XS | 5 | Remove the unused 'reset_password' OTP purpose |
+| NEW-auth-3 | — | Open | code | P2 | S | 5 | Change-password endpoint for signed-in users |
+| NEW-auth-4 | — | Report wrong | code | P2 | S | 5 | Email change: report claims sessions end, code does not; no notice to the old address |
+| PRIV-4 | Partly fixed | Partly open | decision | P1 | M | 3 (#4) | Kitchen order views: show the customer's phone and door only while the kitchen itself hands the order over |
+| NEW-priv-1 | — | Open | code | P1 | S | 2 | Kitchen still receives the customer's pin, postcode and user id through the order snapshot and GET /orders/:id |
+| PRIV-6 | Partly fixed | Partly open | code | P2 | XS | 2 | Stop returning the seller's userId from public kitchen endpoints |
+| MONEY-7 | Open | Open | approval | P2 | S | 3 (#11) | Reject a reused Idempotency-Key that comes with a different order body (also closes SEC-R6) |
+| MONEY-8 | Fixed | Partly open | approval | P2 | XS | 3 (#11) | Drop the unused inventory_reservations table |
+| BE-9 | Open | Open | approval | P2 | S | 3 (#11) | Drop the four unused models: UserActivityLog, SearchQuery, SellerBadge, SellerPayoutSchedule |
+| DELIV-3 | Partly fixed | Partly open | decision | P1 | S | 3 (#5) | Let a map pin decide the community: stop area-name and home-community fallbacks from overriding a pin that falls outside every community |
+| DELIV-4 | Open | Open | decision | P1 | S | 3 (#6) | Require a map pin for home delivery at the API (grace rule and how to measure) |
+| INTEG-3 | Open | Open | code | P2 | XS | 2 | Refuse online-payment orders when Safepay is not configured |
+| SEC-R5 | — | Report wrong | code | P2 | XS | 0.5 (report) | Open job pool pin precision: already fixed by PRIV-2/AUTHZ-4; the Deliverable 4 row is stale |
+| SEC-R7 | — | Open | decision | P2 | M | 3 (#10) | Audit log: redact free text in requestData and add a retention purge that works with the append-only trigger |
+| NEW-priv-2 | — | Open | code | P2 | XS | 2 | Rider notifications keep the customer's street address after the job ends |
+| PERF-1 | Partly fixed | Partly open | code | P2 | M | 3 (#20) | Bound the seller balance computation (dashboard, payout request, payout completion) |
+| PERF-6 | Partly fixed | Partly open | code | P2 | S | 5 | Trim the product card to the fields the web app reads |
+| CAP-4 | Partly fixed | Partly open | code | P2 | XS | 5 | Product card size (same work as PERF-6) |
+| PERF-5 | Partly fixed | Partly open | code | P1 | M | 2 | Stop every rider reloading three lists on every open-pool change |
+| PERF-10 | Partly fixed | Done | code | P2 | XS | 0.5 (report) | Leading-status indexes: confirm deliveries(status) is not needed and close the item |
+| FE-14 | Partly fixed | Report wrong | code | P2 | S | 5 | Products page duplicate fetch: the ?search cause is not reproducible in code; fix the real duplicate for signed-in users |
+| INTEG-2 | Partly fixed | Partly open | code | P1 | S | 2 | Per-address bucket on the Next geocode routes |
+| INTEG-6 | Partly fixed | Partly open | code | P2 | S | 5 | Clean up partial multi-size image writes |
+| FE-11 | Open | Open | decision | P1 | S | 3 (#7) | Remove the plain-HTTP ip-api.com geolocation fallback |
+| OPS-13 | Open | Open | decision | P1 | XS | 3 (#7) | IP geolocation with no configuration or off switch (closed by FE-11) |
+| INTEG-7 | Open | Open | decision | P1 | XS | 3 (#7) | Uncached, unauthenticated IP proxy to ip-api.com (closed by FE-11) |
+| OPS-10 | Partly fixed | Partly open | code | P2 | M | 5 | Pin GitHub Actions to commit SHAs and add a lint gate |
+| D10-PRISMA7 | — | Report wrong | decision | P2 | S | 3 (#19) | Prisma CLI advisories: Prisma 7 does not fix them; remaining npm audit findings |
+| D2-W4 | — | Open | decision | P2 | M | 3 (#17) | In-process scheduler and queue worker: add run flags now, a worker process later |
+| D5-LOADTEST | — | Open | outside | P0 | L | 1 | Write and run the Deliverable 5 load test (seed, scenarios, socket harness) |
+| NEW-ops-1 | — | Open | code | P2 | M | 0 | Commit the API flow scripts the report cites as evidence |
+| NEW-fe-hub-1 | — | Open | code | P2 | XS | 5 | Hub console intake picker never shows the product photo |
+| BE-1 | Open | Open | code | P2 | S | 2 | Backend ESLint config and a CI lint gate |
+| BE-5 | Open | Open | code | P2 | S | 5 | One shared module for delivery status lists and the rider transition table |
+| BE-6 | Open | Open | code | P2 | XS | 5 | Use one roundMoney helper instead of six private money() copies |
+| BE-7 | Partly fixed | Partly open | code | P2 | XS | 5 | Remove the cart summary's placeholder deliveryFee/discount/total |
+| BE-8 | Open | Open | code | P2 | XS | 5 | Delete the six unused exports (plus one new one) |
+| BE-10 | Open | Open | code | P2 | S | 5 | Replace console.* with the structured logger |
+| BE-11 | Open | Open | code | P2 | M | 5 | Split order.service.ts into placement, views, manual payments and chat |
+| BE-12 | Open | Open | code | P2 | M | 5 | Type req.seller, drop the req casts, cut down `any` |
+| BE-13 | Open | Open | code | P2 | M | 5 | Move query/formatting out of controllers; one seller lookup |
+| BE-14 | Open | Open | decision | P2 | XS | 3 (#14) | Remove (or quarantine) the unreferenced legacy scripts |
+| BE-15 | Open | Open | code | P2 | XS | 5 | Unify maskPhone, numeric coercion and the cash-at-door rule |
+| DELIV-11 | Partly fixed | Partly open | code | P1 | S | 2 | Mocked unit test for the delivery state machine |
+| NEW-seller-enums | — | Open | code | P2 | XS | 5 | Enforce the seller profile enums the validator already declares |
+| NEW-cart-fee | — | Open | code | P2 | S | 5 | Cart page invents a delivery fee and a Rs 800 free-delivery bar |
+| NEW-flow-scripts | — | Open | code | P2 | M | 0 | Bring the flow/56-64 API checks the report cites into the repo |
+| FE-4 | Partly fixed | Partly open | code | P2 | XS | 5 | One promotion label helper and remove the last private copy of the discount maths |
+| FE-5 | Partly fixed | Partly open | code | P2 | S | 5 | Make UserLayout a thin admin shell; drop the dead sidebar lists and 17 emoji icon keys |
+| FE-6 | Open | Open | code | P1 | M | 2 | Make web ESLint green, fix the hook-rule errors, gate CI on lint |
+| SEC-R9 | — | Open | code | P1 | XS | 2 | Web ESLint red (remaining-risk entry): closed by FE-6 |
+| FE-7 | Open | Open | code | P2 | L | 5 | Type the API shapes the pages read and remove `any` (ratchet the lint gate) |
+| FE-8 | Open | Open | code | P2 | L | 5 | One seller product form; split the largest single-component pages |
+| FE-9 | Open | Open | code | P2 | M | 5 | One geocode/city module for reverse geocoding and city matching |
+| FE-10 | Open | Open | decision | P2 | L | 3 (#13) | Server rendering and per-page metadata for the public marketplace pages |
+| FE-12 | Open | Open | code | P2 | S | 5 | Zustand selectors where they actually reduce re-renders (cart and community) |
+| FE-18 | Open | Open | code | P2 | XS | 5 | One button component: retire NurayButton |
+| FE-20 | Open | Open | decision | P2 | S | 3 (#12) | No silent default community on GPS denial or when no community is near |
+| NEW-web-1 | — | Open | code | P2 | XS | 5 | Address form defaults the city to Karachi and the city tables misclassify Rawalpindi |
+| NEW-web-2 | — | Open | code | P2 | XS | 5 | Unit test runner for web lib helpers |
+| MOBILE-1 | Open | Open | code | P1 | S | 2 | Accept Google id tokens on POST /auth/google now; native Google sign-in comes with the shell |
+| MOBILE-2 | Open | Open | decision | P1 | S | 4 | iOS login under App Store guideline 4.8: hide Google on iOS, or add Sign in with Apple |
+| MOBILE-3 | Open | Open | approval | P1 | L | 4 | Native push through FCM (Android, and iOS via APNs) next to web push |
+| MOBILE-4 | Open | Open | code | P1 | M | 2 | One openExternal() helper for maps, documents and legal links (web now, native branch later) |
+| MOBILE-5 | Open | Open | outside | P0 | XS | 1 | Set the legal identity build args after lawyer sign-off, plus a release guard |
+| MOBILE-6 | Open | Open | code | P1 | S | 2 | Public help page with FAQ and support e-mail, no sign-in |
+| MOBILE-7 | Open | Open | code | P1 | S | 2 | Serve assetlinks.json and apple-app-site-association from env (values once the accounts exist) |
+| MOBILE-8 | Open | Open | code | P2 | M | 4 | Safe-area insets on the fixed and sticky bars |
+| MOBILE-9 | Open | Open | decision | P1 | M | 4 | Decide how rider location works while the app is not in front |
+| MOBILE-10 | Open | Open | decision | P2 | S | 4 | Capacitor in remote-URL mode: confirm the decision, navigation allow-list and offline page |
+| MOBILE-11 | Open | Open | code | P2 | S | 4 | Token storage behind one store in api-client (native secure storage later) |
+| MOBILE-12 | Partly fixed | Partly open | code | P2 | S | 4 | Mobile Playwright project and store assets (icons, feature graphic, screenshots) |
+| DELIV-7 | Partly fixed | Partly open | outside | P0 | S | 1 | Device check of the position resume and wake lock, plus an automated resume test |
+| D8-CHECKLIST | — | Open | native app | P1 | XL | 4 | Capacitor shell for Android and iOS, and the Deliverable 8 pre-submission checklist |
+| D8-TWA | — | Open | outside | P2 | M | 4 | Play-only Trusted Web Activity stop-gap (Bubblewrap) |
+| NEW-push-1 | — | Open | code | P2 | S | 4 | A browser's push subscription stays with the first account that enabled it, even after sign-out |
+| NEW-legal-1 | — | Open | outside | P1 | S | 1 | Privacy policy and store data declarations for the apps (rider live location, device identifiers) |
+
+Effort: XS under 2 hours, S half a day, M 1–2 days, L 3–5 days, XL over a week. The launch tasks found by the coverage pass (configuration, hosting, map provider, backups, staging, launch data, smoke checks, fonts, Dependabot) are in Phases 0 and 1 above without IDs.
