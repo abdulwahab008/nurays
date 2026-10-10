@@ -225,8 +225,11 @@ exception also triggers this shutdown (exit code 1); unhandled promise rejection
 Run as many backend instances as you need; they share state through PostgreSQL and Redis (`REDIS_URL` is why it is
 mandatory in production):
 
-- Rate limits: counters live in Redis (`middleware/rateLimiter.ts`). If Redis is unreachable requests are let
-  through rather than refused.
+- Rate limits: counters live in Redis (`middleware/rateLimiter.ts`, and `utils/attemptBudget.ts` for "wrong
+  password" and e-mail counts). If Redis is unreachable requests are let through rather than refused, and the
+  counts fall back to each instance's memory. Keys for a phone number or an e-mail address hold a hash, never the
+  number or address. The per-address limits are deliberately loose (a Pakistani mobile network puts many customers
+  behind one address); the tight ones are per phone number and per e-mail address (see SECURITY_AND_COMPLIANCE.md).
 - Live updates: Socket.IO uses the Redis adapter so an event emitted on one instance reaches clients on any other
   (`config/socket.ts`). Clients may use WebSocket or long polling; if you rely on polling, enable sticky sessions on
   the load balancer.
@@ -295,7 +298,8 @@ Details and the payment flows are in [PAYMENT_GATEWAY_INTEGRATION.md](PAYMENT_GA
 ## First admin
 
 There is no default admin. `backend/scripts/create-admin.js` creates one (or promotes and resets the password of an
-existing account with that email), already email-verified:
+existing account with that email, signing it out everywhere), already email-verified. The password needs at least 12
+characters, must not be a common one and must not contain the name or email:
 
 ```bash
 cd backend
@@ -303,8 +307,9 @@ DATABASE_URL=... node scripts/create-admin.js admin@yourdomain.pk '<strong passw
 ```
 
 It needs `node_modules` and the generated Prisma client, so run it from a checkout, not from the runtime image
-(which has no `scripts/`). It prints the password it was given to the terminal; clear your shell history and use a
-strong password. Sign in at `/admin/login`. Other admins, hub managers and communities are managed from the admin
+(which has no `scripts/`). It does not print the password, but your shell keeps the command: clear the history or
+pass the password from a file or variable. If nobody can sign in later, `node scripts/reset-admin-password.js <email>
+'<new password>'` resets one staff account the same way (and writes it to the audit log). Sign in at `/admin/login`. Other admins, hub managers and communities are managed from the admin
 screens.
 
 ## Go-live checklist

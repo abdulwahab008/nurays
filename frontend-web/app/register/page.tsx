@@ -12,6 +12,7 @@ import { apiClient } from '@/lib/api-client';
 import { BrandLockup } from '@/components/ui/Mark';
 import { useT } from '@/lib/i18n';
 import { authMessages } from '@/lib/i18n/messages/auth';
+import { weakPasswordMessage } from '@/lib/password-errors';
 
 function RegisterForm() {
   const router = useRouter();
@@ -185,7 +186,10 @@ function RegisterForm() {
       const errorCode = err.response?.data?.error?.code;
       
       // Provide more specific error messages
-      if (errorCode === 'EMAIL_EXISTS' || errorMessage.includes('already registered')) {
+      const weak = weakPasswordMessage(err, t);
+      if (weak) {
+        setError(weak);
+      } else if (errorCode === 'EMAIL_EXISTS' || errorMessage.includes('already registered')) {
         setError(t('errEmailExists'));
       } else if (errorCode === 'PHONE_EXISTS' || errorMessage.includes('Phone number already')) {
         setError(t('errPhoneExists'));
@@ -337,14 +341,14 @@ function RegisterForm() {
                 className="h-1 flex-1 rounded-full transition-colors"
                 style={{
                   background:
-                    formData.password.length >= 6
+                    formData.password.length >= 8
                       ? 'var(--forest-500)'
                       : formData.password.length > 0
                       ? 'var(--gold-400)'
                       : 'var(--ink-200)',
                 }}
               />
-              <span className={helperClass} style={helperStyle}>{formData.password.length}/6</span>
+              <span className={helperClass} style={helperStyle}>{formData.password.length}/8</span>
             </div>
           </div>
 

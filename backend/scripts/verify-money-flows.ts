@@ -873,8 +873,10 @@ async function main() {
 
   // ---- 22. phone verification ----
   const pn = () => '+92300' + String(Math.floor(1000000 + Math.random() * 8999999));
-  const reg = (email: string, phone?: string, phone_otp?: string) =>
-    authService.register(email, 'secret123', 'customer', 'Test User', phone, undefined, undefined, undefined, phone_otp) as Promise<any>;
+  const PW1 = 'Lantern-Quartz-71'; // passwords the sign-up accepts: long enough, not common, not the person's own details
+  const PW2 = 'Harbour-Bridge-24';
+  const reg = (email: string, phone?: string, phone_otp?: string, password = PW1) =>
+    authService.register(email, password, 'customer', 'Test User', phone, undefined, undefined, undefined, phone_otp) as Promise<any>;
   const lastOtp = async (phone: string, purpose: string) => (await prisma.otpVerification.findFirst({ where: { phone, purpose, isVerified: false }, orderBy: { createdAt: 'desc' } }))!.otpCode;
 
   const phoneA = pn();
@@ -1032,16 +1034,67 @@ async function main() {
   const token = 'tok' + 'x'.repeat(40) + uniq();
   const hash = (t: string) => createHash('sha256').update(t).digest('hex');
   await prisma.passwordReset.create({ data: { userId: rReg.user.id, tokenHash: hash(token), expiresAt: new Date(Date.now() + 3600e3) } });
-  await authService.resetPassword(token, 'brand-new-pass');
-  ok('the new password works after a reset', (await authService.login(rEmail, 'brand-new-pass', 'email').then(() => 'OK', (e: any) => e.code)) === 'OK');
-  ok('the old password no longer works', (await authService.login(rEmail, 'secret123', 'email').then(() => 'OK', (e: any) => e.code)) === 'INVALID_CREDENTIALS');
-  ok('a reset link is single-use', (await authService.resetPassword(token, 'another-pass-1').then(() => 'OK', (e: any) => e.code)) === 'INVALID_RESET_TOKEN');
+  await authService.resetPassword(token, PW2);
+  ok('the new password works after a reset', (await authService.login(rEmail, PW2, 'email').then(() => 'OK', (e: any) => e.code)) === 'OK');
+  ok('the old password no longer works', (await authService.login(rEmail, PW1, 'email').then(() => 'OK', (e: any) => e.code)) === 'INVALID_CREDENTIALS');
+  ok('a reset link is single-use', (await authService.resetPassword(token, 'Another-Phrase-Entirely-1').then(() => 'OK', (e: any) => e.code)) === 'INVALID_RESET_TOKEN');
   ok('every session issued before the reset is voided (old refresh token)', (await authService.refreshToken(oldRefresh).then(() => 'OK', (e: any) => e.code)) === 'SESSION_REVOKED');
   const expTok = 'exp' + 'y'.repeat(40) + uniq();
   await prisma.passwordReset.create({ data: { userId: rReg.user.id, tokenHash: hash(expTok), expiresAt: new Date(Date.now() - 1000) } });
-  ok('an expired reset link is refused', (await authService.resetPassword(expTok, 'another-pass-2').then(() => 'OK', (e: any) => e.code)) === 'INVALID_RESET_TOKEN');
+  ok('an expired reset link is refused', (await authService.resetPassword(expTok, 'Another-Phrase-Entirely-2').then(() => 'OK', (e: any) => e.code)) === 'INVALID_RESET_TOKEN');
   await authService.forgotPassword('nobody-' + uniq() + '@t.test'); // must not throw / reveal anything
   ok('forgot-password answers the same for an unknown email', true);
+
+  // ---- 24b. the password policy and the limits on sensitive actions ----
+  const pwEmail = `pw${uniq()}@t.test`;
+  ok('registering with a common password is refused', (await code(reg(pwEmail, undefined, undefined, 'password123'))) === 'WEAK_PASSWORD');
+  ok('so is one made from the person\'s own e-mail name', (await code(reg(pwEmail, undefined, undefined, `my-${pwEmail.split('@')[0]}-9`))) === 'WEAK_PASSWORD');
+  ok('and one that is too short, with nothing created', (await code(reg(pwEmail, undefined, undefined, 'Sh0rt-1'))) === 'WEAK_PASSWORD' && (await prisma.user.count({ where: { email: pwEmail } })) === 0);
+  const weakTok = 'wk' + 'z'.repeat(40) + uniq();
+  const weakUser: any = await reg(`wk${uniq()}@t.test`);
+  await prisma.passwordReset.create({ data: { userId: weakUser.user.id, tokenHash: hash(weakTok), expiresAt: new Date(Date.now() + 3600e3) } });
+  ok('a weak new password is refused at a reset', (await authService.resetPassword(weakTok, 'password123').then(() => 'OK', (e: any) => e.code)) === 'WEAK_PASSWORD');
+  ok('and does not use up the link', (await authService.resetPassword(weakTok, 'Quiet-River-Stone-58').then(() => 'OK', (e: any) => e.code)) === 'OK');
+  const staffUser = await mkUser('admin');
+  const staffTok = 'st' + 'q'.repeat(40) + uniq();
+  await prisma.passwordReset.create({ data: { userId: staffUser.id, tokenHash: hash(staffTok), expiresAt: new Date(Date.now() + 3600e3) } });
+  ok('a staff member must choose twelve characters when resetting', (await authService.resetPassword(staffTok, 'Violet-Mg-9').then(() => 'OK', (e: any) => e.code)) === 'WEAK_PASSWORD');
+  ok('and twelve is enough', (await authService.resetPassword(staffTok, 'Violet-Mg-91').then(() => 'OK', (e: any) => e.code)) === 'OK');
+
+  // asking again within a minute does not cancel the link just sent
+  const fpUser = await mkUser();
+  await prisma.user.update({ where: { id: fpUser.id }, data: { emailVerified: true } });
+  await authService.forgotPassword(fpUser.email!);
+  await sleep(600);
+  const firstLinks = await prisma.passwordReset.findMany({ where: { userId: fpUser.id, usedAt: null } });
+  await authService.forgotPassword(fpUser.email!);
+  await sleep(600);
+  const secondLinks = await prisma.passwordReset.findMany({ where: { userId: fpUser.id, usedAt: null } });
+  ok('a reset link is made for a verified address', firstLinks.length === 1);
+  ok('asking again within a minute keeps that link instead of cancelling it', secondLinks.length === 1 && secondLinks[0].id === firstLinks[0].id);
+
+  // "confirm with your password": wrong answers are 400, five stop even the right one
+  const guardUser: any = await reg(`gd${uniq()}@t.test`);
+  const gMail = (n: number) => `guard${n}${uniq()}@t.test`;
+  const wrongPw = () => code(userProfileService.updateProfile(guardUser.user.id, { email: gMail(0), currentPassword: 'not-the-password' }));
+  let wrongCodes: string[] = [];
+  for (let i = 0; i < 5; i++) wrongCodes.push(await wrongPw());
+  ok('a wrong password is INVALID_PASSWORD (a 400, so the web app does not take it for an expired session)', wrongCodes.every((c) => c === 'INVALID_PASSWORD'), wrongCodes.join());
+  ok('after five wrong passwords even the right one is refused for a while', (await code(userProfileService.updateProfile(guardUser.user.id, { email: gMail(1), currentPassword: PW1 }))) === 'RATE_LIMITED');
+  ok('and the wrong guesses left a trail', (await prisma.auditLog.count({ where: { action: 'auth:REAUTH_FAILED', entityId: guardUser.user.id } })) === 5);
+  ok('closing the account is guarded by the same count', (await code(require('../src/services/account-deletion.service').deleteOwnAccount(guardUser.user.id, PW1))) === 'RATE_LIMITED');
+
+  // an account can only change its e-mail so often, and one inbox only gets so many verification e-mails
+  const chUser: any = await reg(`ch${uniq()}@t.test`);
+  const chCodes: string[] = [];
+  for (let i = 0; i < 4; i++) chCodes.push(await code(userProfileService.updateProfile(chUser.user.id, { email: `change${i}${uniq()}@t.test`, currentPassword: PW1 })));
+  ok('an account may change its e-mail three times an hour, the fourth is refused', chCodes.join() === 'OK,OK,OK,RATE_LIMITED', chCodes.join());
+  const bombTarget = `inbox${uniq()}@gmail.com`;
+  const bombUsers: any[] = [await reg(`b1${uniq()}@t.test`), await reg(`b2${uniq()}@t.test`), await reg(`b3${uniq()}@t.test`), await reg(`b4${uniq()}@t.test`)];
+  const bombCodes: string[] = [];
+  const variants = [bombTarget, bombTarget.replace('@', '+a@'), bombTarget.replace('@', '+b@'), bombTarget.replace('inbox', 'in.box')];
+  for (let i = 0; i < 4; i++) bombCodes.push(await code(userProfileService.updateProfile(bombUsers[i].user.id, { email: variants[i], currentPassword: PW1 })));
+  ok('one inbox gets three verification e-mails an hour, however the address is dressed up (tags, dots)', bombCodes.join() === 'OK,OK,OK,RATE_LIMITED', bombCodes.join());
 
   // a number evicted from a squatter voids the squatter's sessions
   const sqPhone = pn();
@@ -1070,7 +1123,7 @@ async function main() {
   await prisma.user.update({ where: { id: rReg.user.id }, data: { emailVerified: true } });
   const newMail = `Changed${uniq()}@T.test`;
   ok('changing the email needs the password (a token alone cannot re-point the account)', (await code(userProfileService.updateProfile(rReg.user.id, { email: newMail }))) === 'PASSWORD_REQUIRED');
-  await userProfileService.updateProfile(rReg.user.id, { email: newMail, currentPassword: 'brand-new-pass' });
+  await userProfileService.updateProfile(rReg.user.id, { email: newMail, currentPassword: PW2 });
   const afterMail = await prisma.user.findUnique({ where: { id: rReg.user.id }, include: { emailVerification: true } });
   ok('changing the email lowercases it, un-verifies it and issues a verification token', afterMail!.email === newMail.toLowerCase() && afterMail!.emailVerified === false && afterMail!.emailVerification?.email === newMail.toLowerCase());
 

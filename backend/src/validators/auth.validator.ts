@@ -23,7 +23,8 @@ export const registerSchema = z.object({
 
 export const loginSchema = z.object({
   phoneOrEmail: z.string().min(1, 'Phone or email is required').max(200),
-  otpCodeOrPassword: z.string().min(1, 'OTP code or password is required'),
+  // Long enough for any password the sign-up accepts (200), not an invitation to hash a megabyte.
+  otpCodeOrPassword: z.string().min(1, 'OTP code or password is required').max(200),
   loginMethod: z.enum(['otp', 'email']).default('email'),
 }).refine((data) => {
   // If email login, validate email format

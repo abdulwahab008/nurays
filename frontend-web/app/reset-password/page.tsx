@@ -9,6 +9,7 @@ import { apiClient } from '@/lib/api-client';
 import { BrandLockup } from '@/components/ui/Mark';
 import { useT } from '@/lib/i18n';
 import { authMessages } from '@/lib/i18n/messages/auth';
+import { weakPasswordMessage } from '@/lib/password-errors';
 
 function ResetForm() {
   const router = useRouter();
@@ -35,7 +36,7 @@ function ResetForm() {
       showToast(t('passwordUpdated'), 'success');
       router.push('/login');
     } catch (err: any) {
-      showToast(err?.response?.data?.error?.message || t('resetLinkInvalid'), 'error');
+      showToast(weakPasswordMessage(err, t) || err?.response?.data?.error?.message || t('resetLinkInvalid'), 'error');
     } finally {
       setLoading(false);
     }

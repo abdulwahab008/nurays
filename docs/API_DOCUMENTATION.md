@@ -89,8 +89,14 @@ Business-rule errors use specific codes defined next to the check in the service
 | Limiter | Limit | Key | Applied to |
 |---|---|---|---|
 | api | 1200 / minute | IP | everything under `/api` except `/health` |
-| login | 10 / 15 min | IP | `POST /auth/login`, `/auth/google`, `/auth/reset-password`, `/auth/phone/verify` |
-| otp | 5 / 15 min | IP | `POST /auth/otp/request`, `/auth/forgot-password`, `/auth/phone/request` |
+| login | 10 failures / 15 min | IP + account | `POST /auth/login`, `/auth/google`, `/auth/reset-password`, `/auth/phone/verify` |
+| login-ip | 100 failures / 15 min | IP | `POST /auth/login`, `/auth/google` |
+| otp-ip | 30 / 15 min | IP | `POST /auth/otp/request` |
+| otp-phone | 3 / 15 min | phone number | `POST /auth/otp/request`, `/auth/phone/request` |
+| phone-request | 5 / hour | user | `POST /auth/phone/request` |
+| forgot-ip | 20 / 15 min | IP | `POST /auth/forgot-password` |
+| forgot-email | 3 / hour | e-mail address | `POST /auth/forgot-password` |
+| resend-verification | 3 / hour | user | `POST /auth/resend-verification` |
 | register | 10 / hour | IP | `POST /auth/register` |
 | promo | 20 / minute | IP | `POST /promotions/validate` |
 | order | 20 / 10 min | user | `POST /orders` |

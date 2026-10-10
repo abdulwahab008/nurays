@@ -58,7 +58,22 @@ describe('deleteOwnAccount', () => {
   it('needs the password when the account has one, and checks it', async () => {
     reset({});
     await expect(deleteOwnAccount(USER)).rejects.toMatchObject({ code: 'PASSWORD_REQUIRED' });
-    await expect(deleteOwnAccount(USER, 'wrong')).rejects.toMatchObject({ code: 'INVALID_PASSWORD', statusCode: 401 });
+    // 400, not 401: the web app treats a 401 as an expired session and would refresh its tokens and retry.
+    await expect(deleteOwnAccount(USER, 'wrong')).rejects.toMatchObject({ code: 'INVALID_PASSWORD', statusCode: 400 });
+  });
+
+  it('stops after five wrong passwords, even for the right one, and a right one clears the count', async () => {
+    reset({ id: 'user-guessed' });
+    for (let i = 0; i < 4; i++) await expect(deleteOwnAccount('user-guessed', 'nope')).rejects.toMatchObject({ code: 'INVALID_PASSWORD' });
+    // a right password in between clears the count (it then fails for another reason: an order is open)
+    reset({ id: 'user-guessed' }, { openOrders: 1 });
+    await expect(deleteOwnAccount('user-guessed', 'Correct-Horse-1')).rejects.toMatchObject({ code: 'OPEN_ORDERS' });
+    reset({ id: 'user-guessed' });
+    for (let i = 0; i < 5; i++) await expect(deleteOwnAccount('user-guessed', 'nope')).rejects.toMatchObject({ code: 'INVALID_PASSWORD' });
+    await expect(deleteOwnAccount('user-guessed', 'Correct-Horse-1')).rejects.toMatchObject({ code: 'RATE_LIMITED', statusCode: 429 });
+    // another account is not affected
+    reset({ id: 'user-other' });
+    await expect(deleteOwnAccount('user-other', 'nope')).rejects.toMatchObject({ code: 'INVALID_PASSWORD' });
   });
 
   it('does not need a password for an OTP-only account', async () => {

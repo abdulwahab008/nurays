@@ -45,7 +45,7 @@ async function createVerifiedCustomer(): Promise<TestUserSession> {
   const ctx = await api();
   const suffix = `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
   const email = `audit-buyer-${suffix}@example.com`;
-  const password = 'Password123!';
+  const password = 'Lantern-Quartz-71!';
 
   // 1. Register
   await postJson(ctx, '/auth/register', {
@@ -196,8 +196,8 @@ test.describe.serial('Buyer / Customer Specification Complete 27-Section Audit',
 
     // Fill form without checking T&C
     await page.locator('#email').fill(`tc-test-${Date.now()}@example.com`);
-    await page.locator('#password').fill('Password123!');
-    await page.locator('#confirmPassword').fill('Password123!');
+    await page.locator('#password').fill('Lantern-Quartz-71!');
+    await page.locator('#confirmPassword').fill('Lantern-Quartz-71!');
     await page.locator('#full_name').fill('Terms Validator');
     await page.locator('#community').selectOption('Askari 11');
     await page.locator('#house_apt').fill('Apt 101, Block A');

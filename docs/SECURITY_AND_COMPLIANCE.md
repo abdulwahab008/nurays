@@ -71,8 +71,13 @@ is the production setting; development relaxes some.
 | Limiter | Limit | Applied to |
 |---|---|---|
 | API flood | 1200 / minute / account (signed in) or / IP (anonymous) | everything under `/api` except health |
-| Login | 10 failed attempts / 15 min / IP + account | login, Google, reset-password, phone verify (a successful sign-in is not counted, so a shared mobile-network address never runs out) |
-| OTP | 5 / 15 min / IP | OTP request, forgot-password, phone request |
+| Login | 10 failed attempts / 15 min / IP + account, and 100 failed attempts / 15 min / IP across accounts | login, Google, reset-password, phone verify (a successful sign-in is not counted, so a shared mobile-network address never runs out) |
+| OTP code | 30 / 15 min / IP, and 3 / 15 min / phone number | OTP request (the database also caps each number: 60 s apart, 5 an hour). The number's key is the number as normalised, hashed |
+| Phone verification | 5 / hour / account, and 3 / 15 min / phone number | phone request (signed in) |
+| Reset link | 20 / 15 min / IP, and 3 / hour / e-mail address | forgot-password (answers the same whether or not the address has an account). A link made in the last minute is not replaced by a new request |
+| Verification e-mail | 3 / hour / account (resend); 3 / hour / inbox (also for e-mail changes: `+tags` and Gmail dots count as the same inbox) | resend-verification, changing the e-mail |
+| E-mail change | 3 / hour / account | `PATCH /users/me` with a new `email` |
+| Password re-check | 5 wrong passwords / 15 min / account | changing the e-mail (accounts with a password) and closing the account. Only wrong answers are counted; five stop even the right password until the window ends. A wrong password is a 400 `INVALID_PASSWORD` (a 401 would look like an expired session to the web app) and is written to the audit log (`auth:REAUTH_FAILED`) |
 | Register | 10 / hour / IP | registration |
 | Promo validation | 20 / minute / IP | promo codes |
 | Uploads | 60 / 10 min / user | all uploads |
@@ -203,7 +208,13 @@ but that is convenience, not the security boundary.
   (`PATCH /users/me` with `currentPassword`, else 400 `PASSWORD_REQUIRED`), and the new address is unverified until
   its owner confirms it. **Password-reset links are only ever sent to a verified address**, so a copied token cannot
   be turned into a permanent takeover by re-pointing the account.
-- New passwords must be **at least 8 characters** (staff: 12). Existing sign-ins are unaffected.
+- New passwords must be **at least 8 characters** (staff: 12), not one of the ~9,000 most common passwords (SecLists
+  top 10,000 plus a few local ones; "Password123!" counts as the common word with a tail), and not contain the
+  person's own e-mail name, phone number, name or "Nuray" (`utils/password-rules.ts`, refused with 400
+  `WEAK_PASSWORD` and the reason in `details.reason`). This applies when a password is chosen: sign-up, reset and a
+  staff member's first password (`create-admin.js` and `reset-admin-password.js` too). Sign-in does not check it,
+  so existing accounts keep working. Staff passwords are held to twelve characters on every path, including the
+  public reset link.
 - **Account closure** is self-service (`DELETE /users/me`, the Delete account button on the profile, and the public
   page `/delete-account` the app stores link to): personal details, addresses, cart, favourites, push subscriptions
   and ID documents are removed or replaced, the account is marked `deleted` and signed out everywhere; orders,
@@ -254,14 +265,16 @@ anything else: orders, ledger entries, chat, uploaded documents and receipts are
   password reset, suspension, role change, account closure). There is no per-device session list.
 - **OTP codes and email-verification tokens are stored in plain text** in the database (reset tokens are hashed).
   They are short-lived and purged, but a database read exposes live ones.
-- **Weak password policy.** Minimum 8 characters (staff 12), no complexity or breached-password check. There is no
-  change-password endpoint for signed-in users; changing it goes through the reset email.
+- **No breached-password lookup.** Passwords are checked against a bundled list of common ones, not against a live
+  breach database (that would send part of a hash to an outside service). There is no change-password endpoint for
+  signed-in users; changing it goes through the reset email.
 - **Email verification does not gate login or ordering.** A user can sign in unverified; it only affects whether
   email notifications are delivered.
-- **Login lockout is per IP only.** There is no per-account lockout for password guessing (the limit is 10 attempts
-  per 15 minutes per IP).
+- **Customer, kitchen and rider logins have no per-account lockout.** Password guessing is limited per address and
+  account together (10 failures / 15 min) and per address (100 / 15 min), not per account across addresses, because a
+  hard per-account limit would let anyone lock a stranger out. Staff accounts do lock (see Admin accounts).
 - **Legacy public files.** Receipts and chat media uploaded before the storage layer sit under `/uploads` and are
   public by URL; new ones are private. `backend/scripts/migrate-private-uploads.ts` exists for moving them.
-- **`create-admin.js` prints the password it was given** and, for an existing email, resets that account's password.
+- **`create-admin.js` resets the password** of an account that already has the email (and signs it out everywhere); it no longer prints the password.
 - **All admins are equal.** There are no separate roles (finance, support), no limits or second approval on refunds, payouts and rider corrections, and no two-factor sign-in. Reading screens (customer details, payment proofs, rider money) is not logged.
 - **The frontend stores tokens in browser storage** like most SPAs, so an XSS bug would expose them.

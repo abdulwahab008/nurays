@@ -55,10 +55,12 @@ cd backend
 node scripts/create-admin.js admin@example.com 'a-strong-password' "Admin Name"
 ```
 
-If the email already exists, the script promotes that account to admin and sets the new password. Related helpers:
-`node scripts/list-admin-users.js` lists admins; `node scripts/reset-admin-password.js "<new password>"` resets the
-password of `admin@frozennuray.com` only (a legacy default address; with no argument it sets a temporary
-`Admin123!`, so always pass a password). Sign in at `/admin/login`. Admin screens are English only.
+A staff password has at least 12 characters and must not be a common one or contain the person's name or email; the
+script never prints it. If the email already exists, the script promotes that account to admin, sets the new password
+and signs the account out everywhere. Related helpers: `node scripts/list-admin-users.js` lists admins;
+`node scripts/reset-admin-password.js <email> '<new password>'` resets the password of one staff account (same rules,
+all its sessions end, and the reset is written to the audit log; there is no default password any more). Sign in at
+`/admin/login`. Admin screens are English only.
 
 ### Hub manager
 

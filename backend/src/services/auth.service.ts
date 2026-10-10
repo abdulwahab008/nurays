@@ -2,7 +2,7 @@ import { maskEmail } from '../utils/mask';
 import prisma from '../config/database';
 import socketManager from '../config/socket';
 import { generateToken, generateRefreshToken, tokenTtlSeconds, isTokenRevoked, JWTPayload } from '../utils/jwt';
-import { formatPhoneNumber, isValidPhoneNumber } from '../utils/otp';
+import { formatPhoneNumber, isValidPhoneNumber, realPhoneOrNull } from '../utils/otp';
 import { AppError } from '../middleware/errorHandler';
 import bcrypt from 'bcrypt';
 import { randomBytes, createHash } from 'crypto';
@@ -12,6 +12,8 @@ import adminService from './admin.service';
 import { recordAudit } from '../middleware/audit';
 import { permissionsFor } from '../utils/permissions';
 import { generateVerificationToken } from '../utils/email-verification';
+import { assertVerifyMailAllowed } from '../utils/mailBudget';
+import { assertPasswordStrength, MIN_PASSWORD_LENGTH, MIN_STAFF_PASSWORD_LENGTH } from '../utils/password-policy';
 
 /** A unique stand-in number for an account with no (or an evicted) real phone. Never a real number: +999 isn't assigned. */
 export const placeholderPhone = (seed: string): string =>
@@ -50,10 +52,9 @@ export class AuthService {
       throw new AppError('Invalid email format', 400, 'INVALID_EMAIL');
     }
 
-    // Validate password
-    if (password.length < 8) {
-      throw new AppError('Password must be at least 8 characters', 400, 'WEAK_PASSWORD');
-    }
+    // Validate password: long enough, not a common one, not made of the person's own details.
+    // Before the phone code below is used up, so a weak password does not burn an SMS.
+    assertPasswordStrength(password, { email: normalizedEmail, phone, name: fullName });
 
     // Check if user already exists by email
     // Use findFirst instead of findUnique because email is nullable and unique
@@ -307,6 +308,9 @@ export class AuthService {
     if (user.emailVerified) {
       throw new AppError('Email already verified', 400, 'ALREADY_VERIFIED');
     }
+
+    // Before the old link is cancelled: an inbox only gets so many of these an hour.
+    await assertVerifyMailAllowed(user.email);
 
     // Delete old verification token if exists
     if (user.emailVerification) {
@@ -634,10 +638,22 @@ export class AuthService {
    * voided (anyone who was logged in — including an attacker — must sign in again).
    */
   async resetPassword(token: string, newPassword: string): Promise<void> {
-    if (!newPassword || newPassword.length < 8) {
-      throw new AppError('Password must be at least 8 characters', 400, 'WEAK_PASSWORD');
-    }
     const tokenHash = createHash('sha256').update(token).digest('hex');
+    // Whose link it is decides what the new password must be (staff: longer; nobody: made of their own
+    // name or number), so the link is looked at first. It is used up below, in the step that sets the password.
+    const pending = await prisma.passwordReset.findFirst({
+      where: { tokenHash, usedAt: null, expiresAt: { gt: new Date() } },
+      select: { user: { select: { email: true, phone: true, userType: true, profile: { select: { fullName: true } } } } },
+    });
+    if (!pending) {
+      throw new AppError('This reset link is invalid or has expired', 400, 'INVALID_RESET_TOKEN');
+    }
+    assertPasswordStrength(newPassword, {
+      minLength: pending.user.userType === 'admin' ? MIN_STAFF_PASSWORD_LENGTH : MIN_PASSWORD_LENGTH,
+      email: pending.user.email,
+      phone: realPhoneOrNull(pending.user.phone),
+      name: pending.user.profile?.fullName,
+    });
     const passwordHash = await bcrypt.hash(newPassword, 10);
 
     let resetUserId: string | null = null;
