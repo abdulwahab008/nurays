@@ -80,5 +80,8 @@ jobs:
             NEXT_PUBLIC_SUPPORT_EMAIL=${{ vars.NEXT_PUBLIC_SUPPORT_EMAIL || '' }}
             NEXT_PUBLIC_LEGAL_REVIEWED=${{ vars.NEXT_PUBLIC_LEGAL_REVIEWED || 'false' }}
             NEXT_PUBLIC_SENTRY_DSN=${{ vars.NEXT_PUBLIC_SENTRY_DSN || '' }}
+            NEXT_PUBLIC_SENTRY_ENVIRONMENT=${{ vars.NEXT_PUBLIC_SENTRY_ENVIRONMENT || '' }}
+            NEXT_PUBLIC_SENTRY_RELEASE=${{ vars.NEXT_PUBLIC_SENTRY_RELEASE || github.sha }}
+            CSP_ENFORCE=${{ vars.CSP_ENFORCE || 'false' }}
             NEXT_PUBLIC_MAP_TILE_URL=${{ vars.NEXT_PUBLIC_MAP_TILE_URL || '' }}
             NEXT_PUBLIC_MAP_ATTRIBUTION=${{ vars.NEXT_PUBLIC_MAP_ATTRIBUTION || '' }}

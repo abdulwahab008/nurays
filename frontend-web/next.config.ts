@@ -21,9 +21,16 @@ function connectSources(): string {
 }
 
 /**
- * Browser security headers. The Content-Security-Policy is sent report-only first: it is logged by
- * the browser instead of blocking, so a missed origin (a new tile server, a payment page) is found
- * in the console before the policy is enforced. Turn it into Content-Security-Policy once clean.
+ * Build-time switch: with CSP_ENFORCE=true the policy below is enforced; otherwise it is report-only.
+ * It is baked into the build like every NEXT_PUBLIC_* value (Docker: the CSP_ENFORCE build arg).
+ */
+const ENFORCE_CSP = process.env.CSP_ENFORCE === 'true';
+
+/**
+ * Browser security headers. The Content-Security-Policy is sent report-only first: the browser reports
+ * a violation to /api/csp-report (one log line each, see app/api/csp-report) instead of blocking, so a
+ * missed origin (a new tile server, a payment page) is found before the policy is enforced. Enforce it
+ * (CSP_ENFORCE=true at build time) after a week of clean reports on staging or the soft launch.
  */
 const SECURITY_HEADERS = [
   { key: 'X-Content-Type-Options', value: 'nosniff' },
@@ -31,7 +38,7 @@ const SECURITY_HEADERS = [
   { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
   { key: 'Permissions-Policy', value: 'camera=(self), microphone=(), geolocation=(self), payment=()' },
   {
-    key: 'Content-Security-Policy-Report-Only',
+    key: ENFORCE_CSP ? 'Content-Security-Policy' : 'Content-Security-Policy-Report-Only',
     value: [
       "default-src 'self'",
       "script-src 'self' 'unsafe-inline' https://accounts.google.com",
@@ -43,6 +50,7 @@ const SECURITY_HEADERS = [
       "frame-ancestors 'none'",
       "base-uri 'self'",
       "form-action 'self'",
+      'report-uri /api/csp-report',
     ].join('; '),
   },
 ];

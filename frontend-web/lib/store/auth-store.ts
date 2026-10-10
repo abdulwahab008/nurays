@@ -53,7 +53,7 @@ export const useAuthStore = create<AuthState>()(
               }
             : undefined,
         };
-        const hasToken = typeof window !== 'undefined' && !!(sessionStorage.getItem('access_token') || localStorage.getItem('access_token'));
+        const hasToken = !!apiClient.getAccessToken();
         set({ user: normalizedUser, isAuthenticated: hasToken });
       },
       logout: () => {
@@ -62,10 +62,7 @@ export const useAuthStore = create<AuthState>()(
         // server-side session revocation.
         // The token is read now, before it is cleared below: the request's auth
         // header is attached asynchronously, so it would otherwise go out empty.
-        const token =
-          typeof window !== 'undefined'
-            ? sessionStorage.getItem('access_token') || localStorage.getItem('access_token')
-            : null;
+        const token = apiClient.getAccessToken();
         apiClient
           .post('/auth/logout', {}, token ? { headers: { Authorization: `Bearer ${token}` } } : undefined)
           .catch(() => {
@@ -112,7 +109,7 @@ export const useAuthStore = create<AuthState>()(
       // On rehydrate, ensure tokens are valid and set isAuthenticated
       onRehydrateStorage: () => (state) => {
         if (state && typeof window !== 'undefined') {
-          const hasToken = !!(sessionStorage.getItem('access_token') || localStorage.getItem('access_token'));
+          const hasToken = !!apiClient.getAccessToken();
           // If we have a token but no user, clear the token (invalid state)
           if (hasToken && !state.user) {
             sessionStorage.removeItem('access_token');
