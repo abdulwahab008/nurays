@@ -48,7 +48,7 @@
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1145.0",
     "@aws-sdk/s3-request-presigner": "^3.1145.0",
-    "@prisma/client": "^6.19.0",
+    "@prisma/client": "^7.10.0",
     "@sentry/node": "^11.2.0",
     "@smithy/node-http-handler": "^4.12.1",
     "@socket.io/redis-adapter": "^8.3.0",
