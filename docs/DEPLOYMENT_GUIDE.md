@@ -114,7 +114,7 @@ All `NEXT_PUBLIC_*` values are inlined into the JavaScript at build time. Changi
 | `NEXT_PUBLIC_GOOGLE_CLIENT_ID` | no | Same client ID as the backend's `GOOGLE_CLIENT_ID`. |
 | `NEXT_PUBLIC_SENTRY_DSN`, `NEXT_PUBLIC_SENTRY_ENVIRONMENT`, `NEXT_PUBLIC_SENTRY_RELEASE` | no | Browser error tracking; nothing loads when empty. Build time, like every `NEXT_PUBLIC_*`: the publish workflow passes them as build args (the release defaults to the commit). |
 | `NEXT_PUBLIC_LEGAL_COMPANY_NAME`, `NEXT_PUBLIC_LEGAL_ADDRESS`, `NEXT_PUBLIC_SUPPORT_EMAIL` | set before launch | Shown on the Terms, Privacy and Refund pages; bracketed placeholders appear until set. |
-| `NEXT_PUBLIC_LEGAL_REVIEWED` | no | Set `true` once a lawyer has reviewed the text to remove the "draft" notice. |
+| `NEXT_PUBLIC_LEGAL_REVIEWED` | no | Set `true` once a lawyer has reviewed the text to remove the "draft" notice. A build with it `true` and any of the three details above empty fails (`next.config.ts`), so reviewed pages never carry placeholders. In the publish workflow the repository variables of the same names are checked before the frontend image is built: a push to `main` only warns when they are missing or the pages are not marked reviewed, a `v*` release tag fails. |
 | `NEXT_PUBLIC_ENABLE_DEMO_LOGIN` | no | Never `true` on a real site; it shows one-click demo accounts. |
 | `CSP_ENFORCE` | no | Build time. `true` enforces the Content-Security-Policy; anything else leaves it report-only, with violations logged by `/api/csp-report`. Switch after a clean week (see "Browser security headers" in [SECURITY_AND_COMPLIANCE.md](SECURITY_AND_COMPLIANCE.md)). In the publish workflow it is the repository variable `CSP_ENFORCE`. |
 | `NEXT_PUBLIC_MAP_TILE_URL`, `NEXT_PUBLIC_MAP_ATTRIBUTION` | production | Build time. Map tiles default to the public OpenStreetMap server, whose policy allows only light use: set a tile provider you have an account with (its `{z}/{x}/{y}` URL and required attribution). |
@@ -335,7 +335,7 @@ screens.
 - [ ] Test email (registration verification) and test phone OTP both arrive.
 - [ ] Safepay: `SAFEPAY_SANDBOX=false`, live keys, webhook registered; one real small payment completes the order.
 - [ ] VAPID keys set if you want push; Sentry DSNs set if you want error tracking.
-- [ ] Legal company details set in the frontend build; `NEXT_PUBLIC_ENABLE_DEMO_LOGIN` not `true`.
+- [ ] Legal company details and `NEXT_PUBLIC_LEGAL_REVIEWED=true` set as repository variables (a release tag is refused without them) and in the frontend build; `NEXT_PUBLIC_ENABLE_DEMO_LOGIN` not `true`.
 - [ ] First admin created; communities, delivery prices (admin, Settings) and kitchens/riders approved.
 - [ ] Database and file backups running, and a restore tested.
 - [ ] Rollback rehearsed on staging: the previous image tag runs against the newer schema, and a deliberately failed migration was repaired with `migrate resolve` (see "Rollback and failed migrations").

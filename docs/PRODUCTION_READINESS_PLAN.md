@@ -7,14 +7,14 @@ Written 2026-10-10 from `docs/PRODUCTION_READINESS_AUDIT.md`. Every finding the 
 Done on `claude/epic-johnson-r4eep6`. The audit report's second addendum has the detail; nothing here needed a schema change.
 
 - **Phase 0:** the fonts are bundled (0.1), the API checks are in the repository and in CI (0.3: eleven suites, 323 checks, plus `verify-money-flows` with 360 checks in a job of its own), the Dependabot rules are in (0.4; closing the old Dependabot pull requests is yours), and the report is corrected (0.5).
-- **Phase 1, the code part:** the geocoder's key, pace and queue are settings and one address has a flood guard (INTEG-2).
+- **Phase 1, the code part:** the geocoder's key, pace and queue are settings and one address has a flood guard (INTEG-2), and a release guard keeps draft legal pages out of a release (MOBILE-5).
 - **Phase 2:** NEW-priv-1, PRIV-6, NEW-priv-2 and INTEG-3, then the findings of an independent review of them; NEW-auth-1, SEC-4, the staff password rules and SEC-5; the CSP collector, its Playwright check and the enforce switch (SEC-7); PERF-5 (a job is offered to the best rider first, and only riders on duty hear of a job nobody took); the backend lint gate (BE-1); the delivery status machine and its tests (DELIV-11).
 - **Defects the new checks found and fixed on the way:** the rider's view of an order mixed the old street text with the new pin after the customer edited the saved address; the kitchen dashboard counted dishes as orders and counted cancelled lines in today's sales; the delivery row on `GET /orders/:id` listed the riders who had handed the job back to every viewer; and a sweep with absurd values found 500s on huge page numbers, impossible dates, non-finite price filters and amounts beyond a column's range; none is a 500 now (the request is refused with a 400, or the value is capped or ignored).
 
 Still ahead, in order:
 
 1. **Merge PR #38** (yours), which runs CI on `main` again (Phase 0.2).
-2. **Phase 1:** everything outside the code, plus the release guard for the legal build arguments and the load-test scripts.
+2. **Phase 1:** everything outside the code, plus the load-test scripts.
 3. **Phase 2, what is left:** FE-6 (web lint to zero), the seven days of CSP reports and then enforcing, MOBILE-6, MOBILE-1, MOBILE-4 and MOBILE-7, and the automated resume test for DELIV-7.
 4. **Phase 3:** waits for your answers to decisions 1–20; anything with a migration waits for your approval.
 
@@ -77,7 +77,7 @@ Estimates are for one experienced engineer and include tests. The calendar time 
 Most of this is outside the code. Items marked **(you)** need the owner or ops; items marked **(Claude)** are code that can be written now.
 
 - [ ] **Legal (you, longest lead time).** Company legal name, registered address and a monitored support mailbox, then one lawyer review of terms, privacy, refund policy and the delete-account page (MOBILE-5). The privacy policy also needs new sections drafted now: the rider's live location shared during a delivery, device push identifiers, and camera use for documents (NEW-legal-1). The audit-log retention period (SEC-R7) belongs in the same review.
-  - **(Claude, XS)** Release guard: the build fails when `NEXT_PUBLIC_LEGAL_REVIEWED=true` but the company values are empty, and the publish workflow warns on `main` and fails on a release tag. Only the frontend image is affected.
+  - **(Claude, XS)** Release guard: the build fails when `NEXT_PUBLIC_LEGAL_REVIEWED=true` but the company values are empty, and the publish workflow warns on `main` and fails on a release tag. Only the frontend image is affected. **Done:** `next.config.ts` refuses a build marked reviewed without the company name, address and support e-mail, and the publish workflow checks the repository variables first (warning on `main`, failing on a `v*` tag).
 - [ ] **Production configuration (you).** Fill in the real `.env` and start the API once against it (it refuses placeholders). Also set the **GitHub repository variables** the image-publish workflow reads (`NEXT_PUBLIC_API_URL`, `NEXT_PUBLIC_WS_URL`, Google client id, Sentry DSN, map and legal variables). Without them, every push to `main` publishes a frontend image with `http://localhost:3001` baked in.
 - [ ] **Hosting (you).** TLS and HSTS at the load balancer. `TRUST_PROXY` set to the real number of proxy hops. Readiness probe on `/api/v1/health/ready`. Load-balancer idle timeout below 65 s. API on a subdomain of the site (needed for the cookie in Phase 3 decision 2).
 - [ ] **Map tiles and geocoder (you, plus Claude S).** Accounts with a tile provider and a geocoder (the public OpenStreetMap servers are for development only). Restrict the tile key by referrer, because it ships in the browser bundle.
@@ -304,7 +304,7 @@ Status now: what the code shows today. Needs: code = can be done now; decision =
 | MOBILE-2 | Open | Open | decision | P1 | S | 4 | iOS login under App Store guideline 4.8: hide Google on iOS, or add Sign in with Apple |
 | MOBILE-3 | Open | Open | approval | P1 | L | 4 | Native push through FCM (Android, and iOS via APNs) next to web push |
 | MOBILE-4 | Open | Open | code | P1 | M | 2 | One openExternal() helper for maps, documents and legal links (web now, native branch later) |
-| MOBILE-5 | Open | Open | outside | P0 | XS | 1 | Set the legal identity build args after lawyer sign-off, plus a release guard |
+| MOBILE-5 | Open | Partly done | outside | P0 | XS | 1 | Set the legal identity build args after lawyer sign-off (the release guard is in: a reviewed build without them fails, a release tag is refused) |
 | MOBILE-6 | Open | Open | code | P1 | S | 2 | Public help page with FAQ and support e-mail, no sign-in |
 | MOBILE-7 | Open | Open | code | P1 | S | 2 | Serve assetlinks.json and apple-app-site-association from env (values once the accounts exist) |
 | MOBILE-8 | Open | Open | code | P2 | M | 4 | Safe-area insets on the fixed and sticky bars |

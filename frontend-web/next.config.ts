@@ -4,6 +4,23 @@ const BACKEND_URL = process.env.NEXT_PUBLIC_API_URL
   ? process.env.NEXT_PUBLIC_API_URL.replace(/\/api\/v1\/?$/, '')
   : 'http://localhost:3001';
 
+/**
+ * A build that says the legal texts were reviewed (NEXT_PUBLIC_LEGAL_REVIEWED=true) must also carry the
+ * company's details. Otherwise the Terms, Privacy and Refund pages would go live showing "[Company legal name]"
+ * with their draft notice removed.
+ */
+function assertLegalDetails() {
+  if (process.env.NEXT_PUBLIC_LEGAL_REVIEWED !== 'true') return;
+  const missing = ['NEXT_PUBLIC_LEGAL_COMPANY_NAME', 'NEXT_PUBLIC_LEGAL_ADDRESS', 'NEXT_PUBLIC_SUPPORT_EMAIL'].filter((name) => !process.env[name]?.trim());
+  if (missing.length > 0) {
+    throw new Error(
+      `NEXT_PUBLIC_LEGAL_REVIEWED is true, but ${missing.join(', ')} ${missing.length === 1 ? 'is' : 'are'} not set: ` +
+        'the legal pages would show bracketed placeholders without their draft notice.'
+    );
+  }
+}
+assertLegalDetails();
+
 /** Origins the browser may talk to from this site (the API, its realtime server, sign-in and error reporting). */
 function connectSources(): string {
   const out = new Set<string>(["'self'", 'https://accounts.google.com', 'https://oauth2.googleapis.com', 'https://www.googleapis.com']);
