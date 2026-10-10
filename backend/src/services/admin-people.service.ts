@@ -5,6 +5,7 @@ import prisma from '../config/database';
 import socketManager from '../config/socket';
 import { AppError } from '../middleware/errorHandler';
 import { formatPhoneNumber } from '../utils/otp';
+import { pageArgs } from '../utils/pagination';
 
 /**
  * People, for admins: every account (search, suspend, reactivate), riders' standing, and the
@@ -15,8 +16,7 @@ const ACCOUNT_STATUSES = ['active', 'suspended'] as const;
 type AccountStatus = (typeof ACCOUNT_STATUSES)[number];
 
 export async function listUsers(opts: { search?: string; type?: string; status?: string; page?: number; limit?: number }) {
-  const page = Math.max(1, Math.trunc(Number(opts.page)) || 1);
-  const limit = Math.min(100, Math.max(1, Math.trunc(Number(opts.limit)) || 25));
+  const { page, limit, skip } = pageArgs(opts.page, opts.limit, 25);
   const search = (opts.search ?? '').trim().slice(0, 100);
   const where: Prisma.UserWhereInput = {
     ...(opts.type ? { userType: opts.type } : {}),
@@ -36,7 +36,7 @@ export async function listUsers(opts: { search?: string; type?: string; status?:
     prisma.user.findMany({
       where,
       orderBy: { createdAt: 'desc' },
-      skip: (page - 1) * limit,
+      skip,
       take: limit,
       select: {
         id: true,

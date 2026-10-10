@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { readableDate } from './primitives';
 import { PAKISTAN_BOUNDS, PIN_OUTSIDE } from '../utils/geo';
 
 export const registerSellerSchema = z.object({
@@ -75,24 +76,24 @@ export const updateSellerSchema = z.object({
   bankAccountName: z.string().max(120).optional().nullable(),
   bankAccountNumber: z.string().max(60).optional().nullable(),
   bankName: z.string().max(120).optional().nullable(),
-  lowStockThreshold: z.number().int().min(0).optional().nullable(),
+  lowStockThreshold: z.number().int().min(0).max(100_000).optional().nullable(),
   enableStockAlerts: z.boolean().optional(),
   freeDeliveryAreas: z.array(z.string()).optional().nullable(),
-  freeDeliveryRadiusKm: z.number().min(0).optional().nullable(),
+  freeDeliveryRadiusKm: z.number().min(0).max(1000).optional().nullable(),
   latitude: z.number().min(PAKISTAN_BOUNDS.minLat, PIN_OUTSIDE).max(PAKISTAN_BOUNDS.maxLat, PIN_OUTSIDE).optional().nullable(),
   longitude: z.number().min(PAKISTAN_BOUNDS.minLng, PIN_OUTSIDE).max(PAKISTAN_BOUNDS.maxLng, PIN_OUTSIDE).optional().nullable(),
   deliveryFeeType: z.enum(['fixed', 'distance']).or(z.literal('')).optional().nullable(),
-  deliveryFeeFixed: z.number().int().min(0).optional().nullable(),
-  deliveryFeeBase: z.number().int().min(0).optional().nullable(),
-  deliveryFeePerKm: z.number().min(0).optional().nullable(),
+  deliveryFeeFixed: z.number().int().min(0).max(100_000).optional().nullable(),
+  deliveryFeeBase: z.number().int().min(0).max(100_000).optional().nullable(),
+  deliveryFeePerKm: z.number().min(0).max(10_000).optional().nullable(),
 
-  distancePricingTiers: z.array(z.object({ maxKm: z.number().min(0), fee: z.number().min(0) })).optional().nullable(),
-  maxDeliveryDistanceKm: z.number().min(0).optional().nullable(),
-  minOrderAmountForDelivery: z.number().min(0).optional().nullable(),
-  freeDeliveryThreshold: z.number().min(0).optional().nullable(),
+  distancePricingTiers: z.array(z.object({ maxKm: z.number().min(0).max(1000), fee: z.number().min(0).max(100_000) })).max(50).optional().nullable(),
+  maxDeliveryDistanceKm: z.number().min(0).max(1000).optional().nullable(),
+  minOrderAmountForDelivery: z.number().min(0).max(10_000_000).optional().nullable(),
+  freeDeliveryThreshold: z.number().min(0).max(10_000_000).optional().nullable(),
   allowedPostalCodes: z.array(z.string().min(1)).optional().nullable(),
   deliveryZones: z
-    .array(z.object({ name: z.string().min(1), cities: z.array(z.string()), areas: z.array(z.string()), fee: z.number().min(0) }))
+    .array(z.object({ name: z.string().min(1), cities: z.array(z.string()), areas: z.array(z.string()), fee: z.number().min(0).max(100_000) }))
     .optional()
     .nullable(),
   deliveryModes: z.array(z.string()).optional().nullable(),
@@ -107,15 +108,15 @@ export const updateSellerSchema = z.object({
   operatingHours: operatingHoursSchema.optional().nullable(),
 
   availabilityOverride: z.string().optional().nullable(),
-  availabilityOverrideUntil: z.string().optional().nullable(),
+  availabilityOverrideUntil: readableDate('availabilityOverrideUntil').optional().nullable(),
   availabilityNote: z.string().max(300).optional().nullable(),
 
   orderCutoffTime: z.string().optional().nullable(),
-  maxDailyOrders: z.number().int().nonnegative().optional().nullable(),
-  minPrepTimeMinutes: z.number().int().min(0).optional().nullable(),
+  maxDailyOrders: z.number().int().nonnegative().max(100_000).optional().nullable(),
+  minPrepTimeMinutes: z.number().int().min(0).max(10_080).optional().nullable(),
   preOrderOnly: z.boolean().optional(),
-  advanceBookingMinDays: z.number().int().min(0).optional().nullable(),
-  advanceBookingMaxDays: z.number().int().min(0).optional().nullable(),
+  advanceBookingMinDays: z.number().int().min(0).max(365).optional().nullable(),
+  advanceBookingMaxDays: z.number().int().min(0).max(365).optional().nullable(),
 });
 
 export const setCommunityDeliverySchema = z.object({
@@ -125,8 +126,8 @@ export const setCommunityDeliverySchema = z.object({
         communityId: z.string().min(1),
         // Only used when the kitchen delivers itself; with Nuray riders the fee is Nuray's.
         fee: z.number().min(0).max(100000).optional().default(0),
-        freeAbove: z.number().min(0).optional().nullable(),
-        minOrderAmount: z.number().min(0).optional().nullable(),
+        freeAbove: z.number().min(0).max(10_000_000).optional().nullable(),
+        minOrderAmount: z.number().min(0).max(10_000_000).optional().nullable(),
         isEnabled: z.boolean().optional(),
       })
     )
@@ -134,7 +135,7 @@ export const setCommunityDeliverySchema = z.object({
 });
 
 export const requestPayoutSchema = z.object({
-  amount: z.number().min(100, 'Minimum payout amount is 100 PKR'),
+  amount: z.number().min(100, 'Minimum payout amount is 100 PKR').max(10_000_000),
   payoutMethod: z.enum(['bank_transfer', 'jazzcash', 'easypaisa']),
   accountNumber: z.string().min(1, 'Account number is required'),
 });

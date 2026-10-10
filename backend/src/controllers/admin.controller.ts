@@ -4,6 +4,7 @@ import adminService from '../services/admin.service';
 import prisma from '../config/database';
 import { AppError } from '../middleware/errorHandler';
 import { recordAudit } from '../middleware/audit';
+import { pageArgs } from '../utils/pagination';
 
 export const getPendingSellers = async (_req: Request, res: Response) => {
   const sellers = await adminService.getPendingSellers();
@@ -244,14 +245,13 @@ export const exportAuditLogs = async (req: Request, res: Response) => {
 
 /** The audit trail of admin changes, newest first, filterable by record, admin, action, date and result. */
 export const getAuditLogs = async (req: Request, res: Response) => {
-  const page = Math.max(1, parseInt(String(req.query.page ?? '1'), 10) || 1);
-  const limit = Math.min(100, Math.max(1, parseInt(String(req.query.limit ?? '50'), 10) || 50));
+  const { page, limit, skip } = pageArgs(req.query.page, req.query.limit, 50);
   const where = auditFilter(req.query);
   const [logs, total] = await Promise.all([
     prisma.auditLog.findMany({
       where,
       orderBy: { createdAt: 'desc' },
-      skip: (page - 1) * limit,
+      skip,
       take: limit,
       include: { user: { select: { id: true, email: true, profile: { select: { fullName: true } } } } },
     }),

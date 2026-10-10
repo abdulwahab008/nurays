@@ -12,5 +12,5 @@ export const verifyPaymentSchema = z.object({
 });
 
 export const walletTopupSchema = z.object({
-  amount: z.number().positive('Enter an amount'),
+  amount: z.number().positive('Enter an amount').max(10_000_000),
 });

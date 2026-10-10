@@ -1,6 +1,7 @@
 import { Prisma } from '@prisma/client';
 import prisma from '../config/database';
 import { AppError } from '../middleware/errorHandler';
+import { pageArgs } from '../utils/pagination';
 
 /**
  * The Nuray Wallet: money the platform holds for a customer (top-ups, refunds of wallet-paid
@@ -95,15 +96,14 @@ export async function getWallet(userId: string) {
 }
 
 export async function listWalletTransactions(userId: string, page = 1, limit = 20) {
-  const safePage = Math.max(1, Math.trunc(page) || 1);
-  const safeLimit = Math.min(100, Math.max(1, Math.trunc(limit) || 20));
+  const { page: safePage, limit: safeLimit, skip } = pageArgs(page, limit, 20);
   const wallet = await prisma.wallet.findUnique({ where: { userId }, select: { id: true } });
   if (!wallet) return { transactions: [], pagination: { page: safePage, limit: safeLimit, total: 0, totalPages: 0 } };
   const [rows, total] = await Promise.all([
     prisma.walletTransaction.findMany({
       where: { walletId: wallet.id },
       orderBy: { createdAt: 'desc' },
-      skip: (safePage - 1) * safeLimit,
+      skip,
       take: safeLimit,
       include: { order: { select: { orderNumber: true } } },
     }),

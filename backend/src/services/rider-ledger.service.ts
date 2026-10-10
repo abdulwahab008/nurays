@@ -2,6 +2,7 @@ import { Prisma } from '@prisma/client';
 import prisma from '../config/database';
 import { AppError } from '../middleware/errorHandler';
 import { notify } from './notify.service';
+import { pageArgs } from '../utils/pagination';
 
 /**
  * A rider's money with the platform (see RiderLedgerEntry in schema.prisma). Entries are
@@ -233,8 +234,7 @@ export async function setCashLimit(riderId: string, cashLimit: number | null) {
  * most cash first. `filter`: holding_cash (cash to collect), owed (the platform owes them).
  */
 export async function listRidersWithMoney(opts: { search?: string; filter?: string; page?: number; limit?: number }) {
-  const page = Math.max(1, Math.trunc(Number(opts.page)) || 1);
-  const limit = Math.min(100, Math.max(1, Math.trunc(Number(opts.limit)) || 25));
+  const { page, limit, skip } = pageArgs(opts.page, opts.limit, 25);
   const search = (opts.search ?? '').trim().slice(0, 100);
   const pattern = `%${search.replace(/[\\%_]/g, (c) => `\\${c}`)}%`;
   const searchSql = search
@@ -270,7 +270,7 @@ export async function listRidersWithMoney(opts: { search?: string; filter?: stri
              MAX(e.created_at) AS last_entry_at
       ${base}
       ORDER BY cash_held DESC, balance DESC, p.full_name ASC NULLS LAST
-      LIMIT ${limit} OFFSET ${(page - 1) * limit}`,
+      LIMIT ${limit} OFFSET ${skip}`,
     prisma.$queryRaw<Array<{ total: number }>>`SELECT COUNT(*)::int AS total FROM (SELECT r.id ${base}) matched`,
   ]);
 
@@ -336,13 +336,12 @@ export async function riderMoneyForAdmin(riderId: string, page = 1) {
 }
 
 export async function listRiderEntries(riderId: string, page = 1, limit = 30) {
-  const safePage = Math.max(1, Math.trunc(page) || 1);
-  const safeLimit = Math.min(100, Math.max(1, Math.trunc(limit) || 30));
+  const { page: safePage, limit: safeLimit, skip } = pageArgs(page, limit, 30);
   const [rows, total] = await Promise.all([
     prisma.riderLedgerEntry.findMany({
       where: { riderId },
       orderBy: { createdAt: 'desc' },
-      skip: (safePage - 1) * safeLimit,
+      skip,
       take: safeLimit,
     }),
     prisma.riderLedgerEntry.count({ where: { riderId } }),
