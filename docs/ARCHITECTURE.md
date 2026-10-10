@@ -222,7 +222,7 @@ Next.js 16 App Router, React 19, Tailwind 4. Root `app/layout.tsx` wraps everyth
 
 | Path | Contents |
 |---|---|
-| `app/` | Pages. Customer: `/`, `kitchens`, `products`, `cart`, `checkout`, `orders`, `payment/return`, `wallet`, `favorites`, `notifications`, `profile`, `support`. Auth: `login`, `register`, `forgot-password`, `reset-password`, `verify-email*`. Role areas: `sellers/*` (studio), `riders/*`, `hub`, `admin/*`. Legal pages. `app/api/geocode/*` are small server routes for address lookup. |
+| `app/` | Pages. Customer: `/`, `kitchens`, `products`, `cart`, `checkout`, `orders`, `payment/return`, `wallet`, `favorites`, `notifications`, `profile`, `support`. Auth: `login`, `register`, `forgot-password`, `reset-password`, `verify-email*`. Role areas: `sellers/*` (studio), `riders/*`, `hub`, `admin/*`. Legal pages. `app/api/geocode/*` are small server routes for address lookup (cached, paced, with a per-address guard), and `app/api/csp-report` collects Content-Security-Policy violation reports. |
 | `components/` | UI by area (`admin`, `cart`, `kitchen`, `marketplace`, `orders`, `products`, `riders`, `hubs`, `layout`, `ui`, ...). `RoleGuard` protects role areas client-side; the backend is what actually enforces access. |
 | `lib/api-client.ts` | Axios instance with bearer token and one-shot refresh on 401. |
 | `lib/services/` | Typed wrappers per backend area (`order.service.ts`, `payment.service.ts`, ...). |

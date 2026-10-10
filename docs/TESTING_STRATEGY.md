@@ -1,14 +1,15 @@
 # Testing strategy
 
-Nuray has four layers of checks. Each one catches a different kind of mistake, so pick by what your change can break
+Nuray has five layers of checks. Each one catches a different kind of mistake, so pick by what your change can break
 (see "Which layer does my change need?" at the end).
 
 | Layer | Where | Needs | Runs in CI |
 |---|---|---|---|
 | Backend unit tests (Jest) | `backend/tests/*.test.ts` | nothing (no database, no network) | yes, `npm test` |
-| Real-database money-flow script | `backend/scripts/verify-money-flows.ts` | a throwaway PostgreSQL | no, run by hand |
-| Playwright end-to-end | `frontend-web/tests/e2e/` | backend + database + frontend running | only `smoke.spec.ts` |
-| Typecheck, build, schema drift, Docker | `.github/workflows/ci.yml` | GitHub Actions | yes |
+| Real-database money-flow script | `backend/scripts/verify-money-flows.ts` | a throwaway PostgreSQL | yes, the `money-flows` job |
+| API checks over HTTP | `backend/scripts/api-checks/` | the running API and its (throwaway) database | yes, the last step of the `e2e` job |
+| Playwright end-to-end | `frontend-web/tests/e2e/` | backend + database + frontend running | `smoke`, `rider-navigation`, `csp` and `geocode-proxy` specs |
+| Lint, typecheck, build, schema drift, Docker | `.github/workflows/ci.yml` | GitHub Actions | yes |
 
 A manual click-through checklist for a whole order is in [E2E_TESTING_GUIDE.md](E2E_TESTING_GUIDE.md).
 
@@ -50,6 +51,17 @@ Suites and what each protects:
 | `notify.test.ts` | notification preferences, fan-out per channel, push delivery |
 | `gateways.test.ts`, `bank-gateway-verify.test.ts` | payment gateway status and fail-closed behaviour, bank transfer verification |
 | `storage.test.ts` | signed file links, local storage driver |
+| `permissions.test.ts`, `audit.test.ts` | staff roles and what each may do on the admin API; the admin audit trail |
+| `menu.test.ts` | fixed, weekly and daily menus (Pakistan time) |
+| `dispatch.test.ts`, `post-delivery.test.ts` | which rider gets a new job and the stored notification (area only); a job taken at once is never announced to the pool |
+| `delivery-status.test.ts` | the rider's delivery status machine: transitions, the order status each produces, the conditions on the order |
+| `kitchen-order-view.test.ts`, `public-seller-privacy.test.ts` | what a kitchen sees of an order, and what the public kitchen endpoints return |
+| `order-party-privacy.test.ts` | live events, the tracking snapshot and the chat name people by role, never by account id; the rider's view of the door; the online-payment guard |
+| `address-snapshot.test.ts` | the one rule for the address an order was placed to |
+| `password-policy.test.ts`, `reauth.test.ts`, `attempt-budget.test.ts`, `mail-budget.test.ts` | new-password rules; "confirm with your password" counting only wrong passwords; shared counters in Redis or memory |
+| `auth-limits.test.ts`, `rate-limit-keys.test.ts` | per-phone and per-e-mail request limits over real HTTP; how limiter keys are built |
+| `account-deletion.test.ts` | closing an account: what blocks it and what is scrubbed |
+| `input-limits.test.ts` | numbers the database cannot hold, unreal dates and huge page numbers are refused with a 400 |
 
 `backend/tests/fixtures/` holds a SQL fixture and a shell script (`run-migration-300000-fixture.sh`) for exercising one
 specific migration against dirty data; they are not part of `npm test`.
@@ -103,11 +115,60 @@ dropdb nuray_scratch
 
 Output is one `PASS` / `FAIL` line per check and a final `N passed, M failed`. The exit code is 1 if anything failed
 and 2 if the script itself crashed. Run it when you touch orders, payments, refunds, the ledger, rider money, hubs or
-anything that locks rows. When you fix a money bug, add the check that would have caught it here.
+anything that locks rows. When you fix a money bug, add the check that would have caught it here. CI runs it in the
+`money-flows` job against its own PostgreSQL.
 
 Other scripts in `backend/scripts/` (`verify-gap-resolutions.ts`, `run-ideal-flow.ts`, `test-order-progression.ts`,
 `test-chat-features.ts`) are older, API-driven helpers that expect a running backend and seeded users. They are not
 part of any pipeline.
+
+## 2b. API checks over HTTP
+
+`backend/scripts/api-checks/` holds checks that talk to a **running API** the way the web app does, and read its
+database where they need to. They cover what the money-flow script cannot: the routes, the middleware, and the exact
+JSON that leaves the API (what a rider or a kitchen is shown, what a wrong input is answered with).
+
+| Suite | What it checks |
+|---|---|
+| `account-closure` | closing your own account: who may, what blocks it, what a closed account can no longer do, the wrong-password budget |
+| `snapshot` | the door an order goes to is the one written down when it was placed, for the rider's job and the rider's order page |
+| `security` | token lifetime, what a rider and the customer see of an order, variants private to the kitchen, logout, e-mail change, reset links |
+| `validation` | bad paging, repeated keys, missing or wrong-typed bodies, oversized bodies, numbers the database cannot hold, unreal dates |
+| `delivery` | map pins inside Pakistan, the door shown only while a job runs, hand-back and retry, the admin order filter, the kitchen dashboard, live position, Maps links |
+| `views` | the view counter, compression, rate-limit headers |
+| `small-fixes` | literal `%` and `_` in search, malformed links, token types, spreadsheet formulas in the audit export |
+| `privacy` | public listings and the open pool carry no pin, door link, e-mail or phone |
+| `kitchen-view` | what a kitchen may see of an order, the tracking snapshot, chat and live events |
+| `sign-in` | password rules, one answer for a wrong password and an unknown account, reset links, the re-authentication budget, staff passwords |
+
+Every suite makes its own users, kitchens, dishes and orders with unique values, so it runs on any database that has had
+`prisma migrate deploy` and any number of times. It never depends on seeded accounts. Because it leaves its data
+behind, use a throwaway database.
+
+```bash
+# start the API on a throwaway database with automatic rider assignment off (the checks claim delivery jobs by hand)
+cd backend
+export DATABASE_URL=postgresql://postgres@localhost:5432/nuray_checks
+export JWT_SECRET=any-string-of-at-least-32-characters
+npx prisma migrate deploy
+AUTO_ASSIGN_ENABLED=false PORT=3001 npm run dev          # another terminal
+
+# run every suite, or only those whose name contains a word
+API_URL=http://localhost:3001/api/v1 npm run api-checks
+API_URL=http://localhost:3001/api/v1 npm run api-checks -- security delivery
+```
+
+The output is `PASS` / `FAIL` per check and a final count; the exit code is 1 when a check failed and 2 when the API
+cannot be reached or the run was refused. Every account the suites create has the same known password, so they refuse
+to run when the API or the database is not on this machine; `API_CHECKS_ALLOW_REMOTE=true` overrides that for a
+private test environment and for nothing else. The API runs in development mode, where the per-address, per-phone and
+per-e-mail request limits are relaxed, so those limits are covered by the Jest tests instead.
+
+**Writing one:** copy the style of `security.ts`. A check names what must be true, asserts the thing that was wrong
+before the fix (not only a status code), and for "X must not appear" first puts X into the data (or has a positive
+control). When a real defect turns up, leave the check failing and fix the code; the suites were written to fail on the
+unfixed code, and several did (the rider's job text used the edited saved address, the kitchen dashboard counted
+dishes as orders, a huge page number answered 500).
 
 ## 3. Frontend end-to-end (Playwright)
 
@@ -156,9 +217,10 @@ Limitations to know about:
 
 | Job | Steps |
 |---|---|
-| `backend` | `npm ci`, `prisma generate`, `tsc --noEmit`, `npm test`, `npm run build` |
+| `backend` | `npm ci`, `prisma generate`, `tsc --noEmit`, `npm run lint` (no errors, at most the warning count set in `package.json`), `npm test`, `npm run build` |
 | `frontend` | `npm ci`, `tsc --noEmit`, `npm run build` (with placeholder `NEXT_PUBLIC_*`) |
-| `e2e` (after both above) | PostgreSQL 15 and Redis 7 services, `prisma migrate deploy`, schema drift check (`npm run db:check`), `seed:e2e`, build and start the backend on 3001, build the frontend, install Chromium, run `smoke.spec.ts`, upload the Playwright report |
+| `e2e` (after both above) | PostgreSQL 15 and Redis 7 services, `prisma migrate deploy`, schema drift check (`npm run db:check`), `seed:e2e`, build and start the backend on 3001 (automatic rider assignment off), build the frontend, install Chromium, run the `smoke`, `rider-navigation`, `csp` and `geocode-proxy` specs, upload the Playwright report, then `npm run api-checks` against the backend |
+| `money-flows` (after `backend`) | its own PostgreSQL 15, `prisma migrate deploy`, `scripts/verify-money-flows.ts` in test mode |
 | `docker-build` (after backend and frontend) | builds both images without pushing |
 
 The drift check fails a PR that changes `schema.prisma` without a migration.
@@ -176,5 +238,7 @@ The drift check fails a PR that changes `schema.prisma` without a migration.
 | `schema.prisma` | create a migration (`npx prisma migrate dev`); CI's drift check enforces it; run the money-flow script if constraints changed |
 | A frontend page or component | `npx tsc --noEmit`, `npm run build`, click through it in the browser, in English and Urdu |
 | Login, registration, routing, a core public page | `smoke.spec.ts` |
-| A flow that crosses roles (checkout, kitchen accept, rider claim, handover) | the manual checklist in [E2E_TESTING_GUIDE.md](E2E_TESTING_GUIDE.md), and the relevant Playwright spec |
+| What an API answer carries or hides (a payload, a role's view, a status code for bad input) | an API check in `backend/scripts/api-checks/`, plus Jest for the pure part |
+| A flow that crosses roles (checkout, kitchen accept, rider claim, handover) | the manual checklist in [E2E_TESTING_GUIDE.md](E2E_TESTING_GUIDE.md), the API checks, and the relevant Playwright spec |
+| A header, the Content-Security-Policy or a Next route handler | `csp.spec.ts` / `geocode-proxy.spec.ts` style Playwright API tests |
 | Translations | `npx tsc --noEmit` (a missing Urdu key is a type error), then look at the page in Urdu |

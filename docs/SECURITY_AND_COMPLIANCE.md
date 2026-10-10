@@ -101,6 +101,33 @@ misattributed.
   audio and PDF are checked by magic bytes. Size limits: 8 MB images, 5 MB receipts and chat media, 10 MB
   documents.
 
+## Browser security headers and the Content-Security-Policy
+
+The web app (`frontend-web/next.config.ts`) sends `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`,
+`Referrer-Policy: strict-origin-when-cross-origin`, a `Permissions-Policy` (camera and location only for the site
+itself) and a Content-Security-Policy. HSTS is set at the TLS terminator (see the deployment guide). Fonts and map
+assets ship with the build, so the only third-party origins the policy names are Google sign-in, Safepay's
+checkout and the configured API, realtime and error-reporting hosts.
+
+The policy is **report-only** until it has been seen to be clean: a browser that meets something the policy would
+block still loads it, and posts a report to `/api/csp-report` (`app/api/csp-report/route.ts`). Each violation
+becomes one JSON log line, `"type":"csp-violation"`, with the directive, what was blocked and the page, where every
+address is cut to origin and path (a password-reset link carries its token in the query string), the script
+sample is dropped, and the body and the number of reports per minute are capped. `tests/e2e/csp.spec.ts` checks
+the header, both report formats and the redaction, and loads the public pages to prove they report nothing.
+
+To enforce it:
+
+1. Run the report-only build on staging or the soft launch, using every role's screens, for about a week.
+2. Search the frontend logs for `"type":"csp-violation"`. A legitimate origin goes into the policy in
+   `next.config.ts`; reports whose blocked address is a browser extension (`chrome-extension`, `moz-extension`) are noise.
+3. When a week is clean, rebuild the frontend with the build argument `CSP_ENFORCE=true` (in the publish workflow:
+   the repository variable `CSP_ENFORCE`). The header becomes `Content-Security-Policy`; reports keep coming, so
+   keep the same search saved.
+
+`'unsafe-inline'` stays in `script-src` and `style-src` for now (Next.js's inline bootstrap script and inline
+styles); replacing it with per-request nonces is a separate decision.
+
 ## Private files and signed URLs
 
 `backend/src/storage/`. Public images (key prefix `p/`) are served from the CDN. Private files (prefix `x/`:
@@ -211,7 +238,7 @@ but that is convenience, not the security boundary.
 - New passwords must be **at least 8 characters** (staff: 12), not one of the ~9,000 most common passwords (SecLists
   top 10,000 plus a few local ones; "Password123!" counts as the common word with a tail), and not contain the
   person's own e-mail name, phone number, name or "Nuray" (`utils/password-rules.ts`, refused with 400
-  `WEAK_PASSWORD` and the reason in `details.reason`). This applies when a password is chosen: sign-up, reset and a
+  `WEAK_PASSWORD` and the reason in `details.reason`; a password that is too short is turned away earlier by the request schema, as 400 `VALIDATION_ERROR`, on the sign-up, reset and staff-management routes, and as `WEAK_PASSWORD` with `TOO_SHORT` and `minLength` on a staff member's own reset link). This applies when a password is chosen: sign-up, reset and a
   staff member's first password (`create-admin.js` and `reset-admin-password.js` too). Sign-in does not check it,
   so existing accounts keep working. Staff passwords are held to twelve characters on every path, including the
   public reset link.

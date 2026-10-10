@@ -65,9 +65,9 @@ Order events go through `emitToRooms`, which sends one event to the union of sev
 | `order:item:status:update` | order audience | `{ orderItemId, orderId, orderNumber, status, updatedAt }` | a single item's status changes (seller item routes) |
 | `order:message` | order audience | `{ orderId, messageId, senderRole }` | a chat message is posted on the order |
 | `order:messages:read` | order audience | `{ orderId }` | someone read the order's messages |
-| `order:delivery:tracking` | `order:<id>` and the customer's `user:` room | `{ orderId, location: { latitude, longitude }, distanceKm?, estimatedArrival?, updatedAt }` | the rider reports a position (see below) |
-| `delivery:new` | `role:rider` | `{ deliveryId, orderId }` | a Nuray delivery job is created (`ensureDeliveryForOrder`, when the kitchen accepts or starts preparing, or an admin moves the order on), or jobs are released back to the pool when a rider is suspended |
-| `delivery:removed` | `role:rider` | `{ deliveryId, orderId, reason: 'claimed' }` when a rider claims it; `{ deliveryId, orderId }` when it is cancelled | the job is no longer available |
+| `order:delivery:tracking` | the customer's `user:` room and `role:admin` (not the order's room: it holds the kitchens) | `{ orderId, location: { latitude, longitude }, distanceKm?, estimatedArrival?, updatedAt }` | the rider reports a position (see below) |
+| `delivery:new` | `role:rider` | `{ deliveryId, orderId }` | a Nuray delivery job is created (`ensureDeliveryForOrder`, when the kitchen accepts or starts preparing, or an admin moves the order on), handed back by its rider, reopened by an admin retry, or released when a rider is suspended, **and no rider could take it automatically**. The job is offered to the best rider first (`postDelivery`); one that is assigned at once is never announced to the pool |
+| `delivery:removed` | `role:rider` | `{ deliveryId, orderId, reason: 'claimed' }` when a rider claims it; `{ deliveryId, orderId }` when it is cancelled | the job is no longer available. A job taken automatically the moment it was posted sends no `delivery:removed` (no rider ever heard of it); the order's parties still get `delivery:assigned` |
 | `delivery:assigned` | order audience | `{ deliveryId, orderId }` | a rider claimed the job |
 | `delivery:cancelled` | the assigned rider's `user:` room | `{ deliveryId, orderId }` | the order was cancelled while the rider held the job |
 | `notification:new` | the recipient's `user:` room | `{ id, type, title, message, actionUrl, createdAt }` | any in-app notification is created (`notify()` in `notify.service.ts`) |
@@ -89,7 +89,7 @@ Notes:
 5. When a position was stored and the job is `picked_up`, `in_transit` or `arrived_at_customer`, the server emits `order:delivery:tracking` with the position and `distanceKm` (rider to customer, one decimal, only when the customer's location is known).
 6. The customer's order page shows the rider on a map only while the order status is `dispatched` or `in_transit`. It uses the latest `order:delivery:tracking` payload, otherwise `delivery.riderLocation` from `GET /orders/:id` (which is returned only to viewers allowed to see it, and only while on the way).
 
-Sellers and admins in the order room also receive `order:delivery:tracking`; the shipped seller pages do not use it.
+Only the customer and admins receive `order:delivery:tracking`: the order's room also holds the kitchens, who see the status but never where the rider is.
 
 ## Order tracking endpoint
 

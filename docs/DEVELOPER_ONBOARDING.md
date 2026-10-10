@@ -185,6 +185,8 @@ advisory lock so only one instance runs it at a time; make the function safe to 
 | backend | `npm run dev` | server with reload |
 | backend | `npm run build` / `npm start` | compile to `dist/`, run it |
 | backend | `npm test` | Jest unit tests |
+| backend | `npm run lint` | ESLint (CI fails on errors and on more warnings than the cap in `package.json`) |
+| backend | `npm run api-checks` | checks over HTTP against a running API on a throwaway database, see [TESTING_STRATEGY.md](TESTING_STRATEGY.md) |
 | backend | `npm run db:migrate` | apply migrations |
 | backend | `npm run db:check` | database vs `schema.prisma` (exit code 2 on drift) |
 | backend | `npm run prisma:migrate` | `prisma migrate dev` (create a migration) |
@@ -196,7 +198,7 @@ advisory lock so only one instance runs it at a time; make the function safe to 
 | frontend-web | `npx tsc --noEmit` | typecheck (CI does this) |
 | frontend-web | `npm run test:e2e` | Playwright |
 
-Before pushing, run `npx tsc --noEmit` in both folders and `npm test` in `backend`. Details of each test layer are in
+Before pushing, run `npx tsc --noEmit` in both folders and `npm run lint` and `npm test` in `backend`. Details of each test layer are in
 [TESTING_STRATEGY.md](TESTING_STRATEGY.md).
 
 ## Troubleshooting

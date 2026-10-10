@@ -2,7 +2,23 @@
 
 Written 2026-10-10 from `docs/PRODUCTION_READINESS_AUDIT.md`. Every finding the report marks Open or Partly fixed (38 open, 22 partly fixed), every remaining risk, the load-test plan, the store plan and the launch checklist were re-checked against the current code (`main` plus the index migrations in [abdulwahab008/nurays#38](https://github.com/abdulwahab008/nurays/pull/38)). Six reviewers checked one area each and a second reviewer per area tried to prove them wrong (69 corrections, all folded in below). A final pass read the whole report for anything missed.
 
-## Where things stand
+## Progress on PR #38 since this plan was written
+
+Done on `claude/epic-johnson-r4eep6`. The audit report's second addendum has the detail; nothing here needed a schema change.
+
+- **Phase 0:** the fonts are bundled (0.1), the API checks are in the repository and in CI (0.3: ten suites, 302 checks, plus `verify-money-flows` with 360 checks in a job of its own), the Dependabot rules are in (0.4; closing the old Dependabot pull requests is yours), and the report is corrected (0.5).
+- **Phase 1, the code part:** the geocoder's key, pace and queue are settings and one address has a flood guard (INTEG-2).
+- **Phase 2:** NEW-priv-1, PRIV-6, NEW-priv-2 and INTEG-3, then the findings of an independent review of them; NEW-auth-1, SEC-4, the staff password rules and SEC-5; the CSP collector, its Playwright check and the enforce switch (SEC-7); the first part of PERF-5; the backend lint gate (BE-1); the delivery status machine and its tests (DELIV-11).
+- **Defects the new checks found and fixed on the way:** the rider's view of an order mixed the old street text with the new pin after the customer edited the saved address; the kitchen dashboard counted dishes as orders and counted cancelled lines in today's sales; the delivery row on `GET /orders/:id` listed the riders who had handed the job back to every viewer; and a sweep with absurd values found 500s on huge page numbers, impossible dates, non-finite price filters and amounts beyond a column's range; none is a 500 now (the request is refused with a 400, or the value is capped or ignored).
+
+Still ahead, in order:
+
+1. **Merge PR #38** (yours), which runs CI on `main` again (Phase 0.2).
+2. **Phase 1:** everything outside the code, plus the release guard for the legal build arguments and the load-test scripts.
+3. **Phase 2, what is left:** FE-6 (web lint to zero), the second part of PERF-5 (needs a client change), the seven days of CSP reports and then enforcing, MOBILE-6, MOBILE-1, MOBILE-4 and MOBILE-7, and the automated resume test for DELIV-7.
+4. **Phase 3:** waits for your answers to decisions 1–20; anything with a migration waits for your approval.
+
+## Where things stand (when the plan was written)
 
 - **The report is mostly right, with some drift.** PERF-10 is now fixed (the index migrations). SEC-R5 (rider job pool shows exact pins) was already fixed by PRIV-2. FE-14's cause is wrong: the `?search` double fetch only happens in development, and the real duplicate is a different one. 17 statements in the report are out of date (listed under "Report corrections" below).
 - **New problems found while re-checking** (not in the report):
@@ -13,6 +29,11 @@ Written 2026-10-10 from `docs/PRODUCTION_READINESS_AUDIT.md`. Every finding the 
   - **Public reviews are auto-approved and can't be reported or hidden.** The App Store (guideline 1.2) and Google Play's user-generated-content policy both require a report action.
   - The **cart page invents a Rs 80 delivery fee and a Rs 800 free-delivery bar** when it has no estimate.
   - Rider notifications keep the customer's street address after the job ends (NEW-priv-2).
+  - Found later, while writing the API checks:
+    - **A customer cannot enter a house number** (NEW-addr-1, P2). The address form has no field for it and the address validator drops it, so the `house_number` column stays empty for every new address and the order snapshot's house number never has anything to freeze. Landmark works.
+    - **Notifications a rider already holds** still show the street (NEW-priv-3, P2). The fix covers new notifications only.
+    - **`GET /admin/orders?sellerId=`** takes the kitchen owner's account id, while every other route and the rows it returns name a kitchen by its own id (NEW-admin-1, P2).
+    - **A deliberate 503 is reported like a crash** (NEW-ops-2, P2). The error handler logs every 5xx `AppError` as an error and sends it to error tracking, including `GATEWAY_UNAVAILABLE`, which is the expected answer while no gateway is configured.
 - **CI on `main` is red.** The run on the PR #26 merge commit failed in the end-to-end job because the web build could not download the Plus Jakarta Sans font from Google Fonts (`next/font/google` fetches fonts during `next build`). It was a network hiccup: the frontend job in the same run built fine, and PR #38 passed. But any CI or Docker build can fail the same way, so the fonts should be bundled in the repo.
 - **The evidence behind most "Fixed" rows can't be re-run.** The `flow/56`–`flow/64` API checks the report cites, and the load-test and EXPLAIN scripts, live only in the audit session, not in the repo or CI.
 - **16 Dependabot PRs are open.** Some must not be merged as they are: Node 25 base images (#27, #29; not an LTS release), `@prisma/client` 7 without the matching CLI (#19) and TypeScript 7 (#20, #24).
@@ -33,23 +54,23 @@ Estimates are for one experienced engineer and include tests. The calendar time 
 ## This week, in order
 
 1. **Merge PR #38** (indexes). That also runs CI on `main` again.
-2. **Bundle the web fonts** so builds stop depending on Google Fonts (Phase 0.1).
+2. **Bundle the web fonts** so builds stop depending on Google Fonts (Phase 0.1). Done.
 3. **Start the long-lead items now (you):** legal entity details and the lawyer review, the production hostnames (put the API on a subdomain of the site's domain, e.g. `api.nuray.pk`), map and geocoder provider accounts, and the Apple and Play organisation accounts (they need a D-U-N-S number).
-4. **Privacy fixes, one PR (about 1 day):** NEW-priv-1, PRIV-6, NEW-priv-2, INTEG-3.
-5. **Auth hardening (about 3 days):** NEW-auth-1, SEC-4, staff password rules, SEC-5.
-6. **Bring the API checks into the repo and CI** (Phase 0.3), before any refactor.
-7. **Rider fan-out (PERF-5)**, then write the load-test scripts.
+4. **Privacy fixes, one PR (about 1 day):** NEW-priv-1, PRIV-6, NEW-priv-2, INTEG-3. Done.
+5. **Auth hardening (about 3 days):** NEW-auth-1, SEC-4, staff password rules, SEC-5. Done.
+6. **Bring the API checks into the repo and CI** (Phase 0.3), before any refactor. Done.
+7. **Rider fan-out (PERF-5)**, then write the load-test scripts. The first part of the fan-out is done (a job a rider takes at once is never announced to the pool); the load-test scripts are next.
 8. **Answer decisions 1–7 in Phase 3.** They unlock the remaining P1 work.
 
 ---
 
 ## Phase 0: Housekeeping (no decisions needed)
 
-- [ ] **0.1 Web build without a font download** (P0, XS–S). Switch `frontend-web/app/layout.tsx` from `next/font/google` to `next/font/local`, with the Plus Jakarta Sans and Geist Mono files in the repo. Check: `next build` with no internet access.
+- [x] **0.1 Web build without a font download** (P0, XS–S). Switch `frontend-web/app/layout.tsx` from `next/font/google` to `next/font/local`, with the Plus Jakarta Sans and Geist Mono files in the repo. Check: `next build` with no internet access. **Done:** the three families are variable woff2 files in `app/fonts`; a build with the network switched off succeeds and its output has no Google address; the CSP no longer names Google's font hosts.
 - [ ] **0.2 Merge PR #38 and get `main` green.** After merging, release the five index migrations as a release step (`npm run db:migrate` from a checkout), not through `MIGRATE_ON_START`. A failed concurrent build would otherwise crash-loop the API. The recovery steps are at the top of each migration file.
-- [ ] **0.3 Re-runnable evidence** (P1, M). Port the API checks the report cites (`flow/56`–`64`: deletion, snapshot, security, validation, delivery, views, small fixes, privacy) to `backend/scripts/api-checks/*.ts`, reading `API_URL`/`DATABASE_URL` from the environment and using the e2e seed accounts. Add `npm run api-checks`. Run it, together with `verify-money-flows` (333 checks), in the CI end-to-end job, which already has Postgres. Move the browser-only checks into Playwright specs where they still add coverage. Then update every `flow/…` citation in the report.
-- [ ] **0.4 Dependabot triage** (XS). Close #27 and #29 (Node 25) and #19 (Prisma client alone). Hold #20 and #24 (TypeScript 7) and #35 (lucide-react 1.x) for a planned upgrade. Merge the safe patch bumps after CI. Add rules to `.github/dependabot.yml`: ignore non-LTS Node majors, and group `prisma` with `@prisma/client`. PR #1 is from before the rebuild and can probably be closed.
-- [ ] **0.5 Correct the report** (S): see "Report corrections" at the end.
+- [x] **0.3 Re-runnable evidence** (P1, M). Port the API checks the report cites (`flow/56`–`64`: deletion, snapshot, security, validation, delivery, views, small fixes, privacy) to `backend/scripts/api-checks/*.ts`, reading `API_URL`/`DATABASE_URL` from the environment and using the e2e seed accounts. Add `npm run api-checks`. Run it, together with `verify-money-flows` (333 checks), in the CI end-to-end job, which already has Postgres. Move the browser-only checks into Playwright specs where they still add coverage. Then update every `flow/…` citation in the report. **Done:** `backend/scripts/api-checks/` holds ten suites (`security`, `account-closure`, `snapshot`, `kitchen-view`, `validation`, `small-fixes`, `views`, `privacy`, `delivery`, `sign-in`; 302 checks) run by `npm run api-checks`, as the last step of the end-to-end job; `verify-money-flows` (now 360 checks) runs in a CI job of its own. The report cites these suites. The admin API suites and the browser scripts (41–50, 63, 65) stay session evidence.
+- [ ] **0.4 Dependabot triage** (XS). Close #27 and #29 (Node 25) and #19 (Prisma client alone). Hold #20 and #24 (TypeScript 7) and #35 (lucide-react 1.x) for a planned upgrade. Merge the safe patch bumps after CI. Add rules to `.github/dependabot.yml`: ignore non-LTS Node majors, and group `prisma` with `@prisma/client`. PR #1 is from before the rebuild and can probably be closed. **Partly done:** the rules are in `.github/dependabot.yml` (related updates are grouped, Node and TypeScript majors are not proposed); closing #27, #29 and #19 and holding #20, #24 and #35 is yours.
+- [x] **0.5 Correct the report** (S): see "Report corrections" at the end. **Done** (see "Report corrections" below).
 
 ## Phase 1: Launch blockers for the web soft launch (P0)
 
@@ -60,7 +81,7 @@ Most of this is outside the code. Items marked **(you)** need the owner or ops; 
 - [ ] **Production configuration (you).** Fill in the real `.env` and start the API once against it (it refuses placeholders). Also set the **GitHub repository variables** the image-publish workflow reads (`NEXT_PUBLIC_API_URL`, `NEXT_PUBLIC_WS_URL`, Google client id, Sentry DSN, map and legal variables). Without them, every push to `main` publishes a frontend image with `http://localhost:3001` baked in.
 - [ ] **Hosting (you).** TLS and HSTS at the load balancer. `TRUST_PROXY` set to the real number of proxy hops. Readiness probe on `/api/v1/health/ready`. Load-balancer idle timeout below 65 s. API on a subdomain of the site (needed for the cookie in Phase 3 decision 2).
 - [ ] **Map tiles and geocoder (you, plus Claude S).** Accounts with a tile provider and a geocoder (the public OpenStreetMap servers are for development only). Restrict the tile key by referrer, because it ships in the browser bundle.
-  - **(Claude)** The geocoder proxy currently hard-codes one request per second and sends no API key, so a paid account would still run at public-server speed. Make the key, the rate and the queue cap configurable.
+  - **(Claude)** The geocoder proxy currently hard-codes one request per second and sends no API key, so a paid account would still run at public-server speed. Make the key, the rate and the queue cap configurable. **Done (INTEG-2):** `NOMINATIM_API_KEY` (and the parameter it travels in), `NOMINATIM_MIN_INTERVAL_MS` and `NOMINATIM_MAX_PENDING` are settings, and `GEOCODE_PER_IP_PER_MINUTE` (default 120) is the per-address flood guard.
 - [ ] **Backups and rehearsals (you).** Scheduled database and file backups. One restore rehearsal. One rollback rehearsal: a failed `migrate deploy`, then `prisma migrate resolve`, then redeploy of the previous image tag.
 - [ ] **Staging environment (you).** Production images, managed Postgres and Redis, two API instances behind a real load balancer. Needed for the load test and for the store reviewers' test accounts.
 - [ ] **Launch data (you).** Create the super admin with `scripts/create-admin.js` from a checkout (the runtime image has no scripts). Set up communities and delivery prices, and approve the first kitchens and riders. If an existing database is migrated, check that the oldest admin, who becomes super admin, is the right person.
@@ -79,26 +100,26 @@ Most of this is outside the code. Items marked **(you)** need the owner or ops; 
 ## Phase 2: P1 code that needs no decision (Claude can start now)
 
 **Privacy (one PR, about 1 day)**
-- [ ] **NEW-priv-1** Kitchen order views built from an explicit list of fields: no pin, postcode, customer id or internal keys. `GET /orders/:id` gets the same kitchen view. Tests check that nothing beyond the allowed fields comes back.
-- [ ] **PRIV-6** Stop returning the seller's user id from public kitchen endpoints (XS).
-- [ ] **NEW-priv-2** Rider notifications name the area and city, not the street (XS).
-- [ ] **INTEG-3** Refuse online-payment orders when Safepay isn't configured, with a test-mode switch so the money-flow checks still run (XS).
+- [x] **NEW-priv-1** Kitchen order views built from an explicit list of fields: no pin, postcode, customer id or internal keys. `GET /orders/:id` gets the same kitchen view. Tests check that nothing beyond the allowed fields comes back. **Done** (`utils/kitchenOrderView.ts`, both routes). An independent review of it found more channels that named the other parties (ids in live events, tracking and chat, gateway references in order history, address fields); all fixed.
+- [x] **PRIV-6** Stop returning the seller's user id from public kitchen endpoints (XS). **Done.**
+- [x] **NEW-priv-2** Rider notifications name the area and city, not the street (XS). **Done** for new notifications; rows stored before the change still hold the street (NEW-priv-3).
+- [x] **INTEG-3** Refuse online-payment orders when Safepay isn't configured, with a test-mode switch so the money-flow checks still run (XS). **Done** (503 `GATEWAY_UNAVAILABLE`; the checkout page falls back to cash).
 
 **Sign-in security (about 3 days)**
-- [ ] **NEW-auth-1** Limit password re-checks on change-email and close-account, counting only wrong passwords. Answer a wrong password with 400 instead of 401, so the web client doesn't refresh and retry.
-- [ ] **SEC-4** Per-phone and per-email limits on OTP, forgot-password, resend-verification and email change. A forgot-password link is not re-issued within 60 s. A generous per-IP backstop on login. Redis keys hold hashes, never raw numbers or addresses.
-- [ ] **Staff passwords** At least 12 characters for staff everywhere: reset, `create-admin.js` and `reset-admin-password.js`. The reset script takes the email as an argument, has no default password and writes an audit entry.
-- [ ] **SEC-5** Refuse common passwords using a bundled list, and fix the leftover "6 characters" hint on the register page. The fixtures must not contain "nuray", which the personal-word check would refuse.
-- [ ] **SEC-7** Give the report-only CSP somewhere to send reports: a same-origin `/csp-report` collector that strips query strings, because reset links carry tokens. Add a Playwright CSP check and a build flag to enforce. Then 7 days of reports on staging or the soft launch, then enforce. The `'unsafe-inline'` question is decision 9.
+- [x] **NEW-auth-1** Limit password re-checks on change-email and close-account, counting only wrong passwords. Answer a wrong password with 400 instead of 401, so the web client doesn't refresh and retry. **Done.**
+- [x] **SEC-4** Per-phone and per-email limits on OTP, forgot-password, resend-verification and email change. A forgot-password link is not re-issued within 60 s. A generous per-IP backstop on login. Redis keys hold hashes, never raw numbers or addresses. **Done.**
+- [x] **Staff passwords** At least 12 characters for staff everywhere: reset, `create-admin.js` and `reset-admin-password.js`. The reset script takes the email as an argument, has no default password and writes an audit entry. **Done.**
+- [x] **SEC-5** Refuse common passwords using a bundled list, and fix the leftover "6 characters" hint on the register page. The fixtures must not contain "nuray", which the personal-word check would refuse. **Done** (about ten thousand common passwords, the person's own details; the register page says 8).
+- [ ] **SEC-7** Give the report-only CSP somewhere to send reports: a same-origin `/csp-report` collector that strips query strings, because reset links carry tokens. Add a Playwright CSP check and a build flag to enforce. Then 7 days of reports on staging or the soft launch, then enforce. The `'unsafe-inline'` question is decision 9. **Done so far:** the `/api/csp-report` collector, a Playwright check that the public pages produce no report, and `CSP_ENFORCE=true`. **Left:** seven days of reports on staging or the soft launch, then the switch.
 
 **Capacity**
-- [ ] **PERF-5** Try auto-assignment first and post a job to the open pool only if nobody takes it. That removes most pool events with no client change. Then send pool events only to riders who are on duty and active (a socket room joined and left on duty toggle, approval and suspension), and refresh only the list that changed.
-- [ ] **INTEG-2** Geocoding limits: keep the global queue cap, and add only a generous per-IP flood guard (many Pakistani mobile users share one IP). The proper per-account limit comes when the geocode routes move behind the API sign-in.
+- [ ] **PERF-5** Try auto-assignment first and post a job to the open pool only if nobody takes it. That removes most pool events with no client change. Then send pool events only to riders who are on duty and active (a socket room joined and left on duty toggle, approval and suspension), and refresh only the list that changed. **Done so far:** a job is offered to the best rider first and the pool hears of it only when nobody can take it. **Left:** pool events only for riders on duty and a refresh of only the list that changed (a client change).
+- [x] **INTEG-2** Geocoding limits: keep the global queue cap, and add only a generous per-IP flood guard (many Pakistani mobile users share one IP). The proper per-account limit comes when the geocode routes move behind the API sign-in. **Done** (see Phase 1).
 
 **Quality gates**
 - [ ] **FE-6** Get the web lint errors to zero, including the 13 React hook errors (some are real bugs). Gate CI on errors, with a warning cap that only goes down.
-- [ ] **BE-1** Add an ESLint config to the backend and a CI lint step (half a day).
-- [ ] **DELIV-11** Unit tests for the delivery status machine, before anyone touches the rider or dispatch code.
+- [x] **BE-1** Add an ESLint config to the backend and a CI lint step (half a day). **Done:** `npm run lint` runs in CI; 0 errors, at most 168 warnings.
+- [x] **DELIV-11** Unit tests for the delivery status machine, before anyone touches the rider or dispatch code. **Done:** `utils/deliveryStatus.ts` and 19 tests that fail when a transition or a guard changes.
 
 **Store preparation that works on the web today**
 - [ ] **MOBILE-6** A public help page with an FAQ and the support email, no sign-in needed.
@@ -129,7 +150,7 @@ Each line gives the options, the recommendation, and what it unlocks. Effort is 
 | 15 | **Seller "meal categories"** | The API means meal times, the web saves cuisines. Pick one. | XS–S. |
 | 16 | **Brand logo** (FE-21) | Pick one of the three options in `public/brand/`. | Store icons and graphics. |
 | 17 | **Background jobs** (D2-W4) | Add on/off switches now so one instance can run the jobs. A separate worker process only if the load test shows a need. Stagger the jobs' start times. | XS–S. |
-| 18 | **Old orders without an address snapshot** (Deliverable 6) | Accept the live-address fallback until those orders close, then remove the fallback code. | XS later. |
+| 18 | **Old orders without an address snapshot** (Deliverable 6) | Accept the live-address fallback until those orders close, then remove the fallback code. The same rule covers orders placed before the snapshot kept house number and landmark: a field the snapshot has is final, a field it lacks comes from the saved address. | XS later. |
 | 19 | **Prisma advisories** (Deliverable 10) | Prisma 7 does not fix them. Use an npm override for `deepmerge-ts`, bump `handlebars`, and plan jest 30 for the dev-only findings. | S. |
 | 20 | **Seller balance speed** (PERF-1) | Do only step 1 (rider cash from deliveries, indexed) now. Rewriting the balance in SQL would copy the money rules into a second place. | M. |
 
@@ -180,7 +201,7 @@ Each line gives the options, the recommendation, and what it unlocks. Effort is 
 
 ## Report corrections
 
-To make in `docs/PRODUCTION_READINESS_AUDIT.md` (Phase 0.5):
+Made in `docs/PRODUCTION_READINESS_AUDIT.md` (Phase 0.5), including the status counts, which are now 87 fixed, 17 partly fixed and 36 open:
 
 - **Header and Deliverable 7:**
   - The branch was merged through PR #26, and the index migrations add a schema change.
@@ -214,33 +235,33 @@ Status now: what the code shows today. Needs: code = can be done now; decision =
 | SEC-R1 | — | Open | approval | P1 | L | 3 (#1) | Per-device sessions: refresh-token rotation with reuse detection |
 | SEC-R2 | — | Open | decision | P1 | M | 3 (#2) | Move the refresh token to an httpOnly cookie with CSRF protection |
 | SEC-3 | Open | Open | decision | P1 | M | 3 (#3) | Staff lockout that cannot be used to lock out the super admin |
-| SEC-4 | Partly fixed | Partly open | code | P1 | M | 2 | OTP, forgot-password and verification-email limits per target; login backstops |
-| SEC-5 | Partly fixed | Partly open | code | P2 | S | 2 | Common/breached password check (plus the leftover 6-character UI hint) |
-| SEC-7 | Partly fixed | Partly open | code | P1 | S | 2 | Give the report-only CSP a report destination, then enforce it |
+| SEC-4 | Partly fixed | Done | code | P1 | M | 2 | OTP, forgot-password and verification-email limits per target; login backstops |
+| SEC-5 | Partly fixed | Done | code | P2 | S | 2 | Common/breached password check (plus the leftover 6-character UI hint) |
+| SEC-7 | Partly fixed | Partly done | code | P1 | S | 2 | Collector, Playwright check and `CSP_ENFORCE` are in; left: a week of reports, then enforce |
 | SEC-11 | Open | Open | decision | P2 | S | 3 (#8) | Stop revealing which emails and phone numbers have accounts on the login and OTP paths |
-| NEW-auth-1 | — | Open | code | P1 | S | 2 | Throttle re-authentication password checks; stop answering a wrong password with 401 |
+| NEW-auth-1 | — | Done | code | P1 | S | 2 | Throttle re-authentication password checks; stop answering a wrong password with 401 |
 | NEW-auth-2 | — | Open | code | P2 | XS | 5 | Remove the unused 'reset_password' OTP purpose |
 | NEW-auth-3 | — | Open | code | P2 | S | 5 | Change-password endpoint for signed-in users |
 | NEW-auth-4 | — | Report wrong | code | P2 | S | 5 | Email change: report claims sessions end, code does not; no notice to the old address |
 | PRIV-4 | Partly fixed | Partly open | decision | P1 | M | 3 (#4) | Kitchen order views: show the customer's phone and door only while the kitchen itself hands the order over |
-| NEW-priv-1 | — | Open | code | P1 | S | 2 | Kitchen still receives the customer's pin, postcode and user id through the order snapshot and GET /orders/:id |
-| PRIV-6 | Partly fixed | Partly open | code | P2 | XS | 2 | Stop returning the seller's userId from public kitchen endpoints |
+| NEW-priv-1 | — | Done | code | P1 | S | 2 | Kitchen still receives the customer's pin, postcode and user id through the order snapshot and GET /orders/:id |
+| PRIV-6 | Partly fixed | Done | code | P2 | XS | 2 | Stop returning the seller's userId from public kitchen endpoints |
 | MONEY-7 | Open | Open | approval | P2 | S | 3 (#11) | Reject a reused Idempotency-Key that comes with a different order body (also closes SEC-R6) |
 | MONEY-8 | Fixed | Partly open | approval | P2 | XS | 3 (#11) | Drop the unused inventory_reservations table |
 | BE-9 | Open | Open | approval | P2 | S | 3 (#11) | Drop the four unused models: UserActivityLog, SearchQuery, SellerBadge, SellerPayoutSchedule |
 | DELIV-3 | Partly fixed | Partly open | decision | P1 | S | 3 (#5) | Let a map pin decide the community: stop area-name and home-community fallbacks from overriding a pin that falls outside every community |
 | DELIV-4 | Open | Open | decision | P1 | S | 3 (#6) | Require a map pin for home delivery at the API (grace rule and how to measure) |
-| INTEG-3 | Open | Open | code | P2 | XS | 2 | Refuse online-payment orders when Safepay is not configured |
-| SEC-R5 | — | Report wrong | code | P2 | XS | 0.5 (report) | Open job pool pin precision: already fixed by PRIV-2/AUTHZ-4; the Deliverable 4 row is stale |
+| INTEG-3 | Open | Done | code | P2 | XS | 2 | Refuse online-payment orders when Safepay is not configured |
+| SEC-R5 | — | Done | code | P2 | XS | 0.5 (report) | Open job pool pin precision: already fixed by PRIV-2/AUTHZ-4; the Deliverable 4 row is stale |
 | SEC-R7 | — | Open | decision | P2 | M | 3 (#10) | Audit log: redact free text in requestData and add a retention purge that works with the append-only trigger |
-| NEW-priv-2 | — | Open | code | P2 | XS | 2 | Rider notifications keep the customer's street address after the job ends |
+| NEW-priv-2 | — | Done | code | P2 | XS | 2 | Rider notifications keep the customer's street address after the job ends |
 | PERF-1 | Partly fixed | Partly open | code | P2 | M | 3 (#20) | Bound the seller balance computation (dashboard, payout request, payout completion) |
 | PERF-6 | Partly fixed | Partly open | code | P2 | S | 5 | Trim the product card to the fields the web app reads |
 | CAP-4 | Partly fixed | Partly open | code | P2 | XS | 5 | Product card size (same work as PERF-6) |
-| PERF-5 | Partly fixed | Partly open | code | P1 | M | 2 | Stop every rider reloading three lists on every open-pool change |
+| PERF-5 | Partly fixed | Partly done | code | P1 | M | 2 | A job taken at once is no longer announced; left: pool events only for riders on duty, refresh only the list that changed |
 | PERF-10 | Partly fixed | Done | code | P2 | XS | 0.5 (report) | Leading-status indexes: confirm deliveries(status) is not needed and close the item |
-| FE-14 | Partly fixed | Report wrong | code | P2 | S | 5 | Products page duplicate fetch: the ?search cause is not reproducible in code; fix the real duplicate for signed-in users |
-| INTEG-2 | Partly fixed | Partly open | code | P1 | S | 2 | Per-address bucket on the Next geocode routes |
+| FE-14 | Partly fixed | Partly open | code | P2 | S | 5 | Products page duplicate fetch: the ?search cause only happens in development (the report now says so); fix the real duplicate for signed-in users |
+| INTEG-2 | Partly fixed | Done | code | P1 | S | 2 | Per-address bucket on the Next geocode routes |
 | INTEG-6 | Partly fixed | Partly open | code | P2 | S | 5 | Clean up partial multi-size image writes |
 | FE-11 | Open | Open | decision | P1 | S | 3 (#7) | Remove the plain-HTTP ip-api.com geolocation fallback |
 | OPS-13 | Open | Open | decision | P1 | XS | 3 (#7) | IP geolocation with no configuration or off switch (closed by FE-11) |
@@ -249,9 +270,9 @@ Status now: what the code shows today. Needs: code = can be done now; decision =
 | D10-PRISMA7 | — | Report wrong | decision | P2 | S | 3 (#19) | Prisma CLI advisories: Prisma 7 does not fix them; remaining npm audit findings |
 | D2-W4 | — | Open | decision | P2 | M | 3 (#17) | In-process scheduler and queue worker: add run flags now, a worker process later |
 | D5-LOADTEST | — | Open | outside | P0 | L | 1 | Write and run the Deliverable 5 load test (seed, scenarios, socket harness) |
-| NEW-ops-1 | — | Open | code | P2 | M | 0 | Commit the API flow scripts the report cites as evidence |
+| NEW-ops-1 | — | Done | code | P2 | M | 0 | Commit the API flow scripts the report cites as evidence |
 | NEW-fe-hub-1 | — | Open | code | P2 | XS | 5 | Hub console intake picker never shows the product photo |
-| BE-1 | Open | Open | code | P2 | S | 2 | Backend ESLint config and a CI lint gate |
+| BE-1 | Open | Done | code | P2 | S | 2 | Backend ESLint config and a CI lint gate |
 | BE-5 | Open | Open | code | P2 | S | 5 | One shared module for delivery status lists and the rider transition table |
 | BE-6 | Open | Open | code | P2 | XS | 5 | Use one roundMoney helper instead of six private money() copies |
 | BE-7 | Partly fixed | Partly open | code | P2 | XS | 5 | Remove the cart summary's placeholder deliveryFee/discount/total |
@@ -262,10 +283,10 @@ Status now: what the code shows today. Needs: code = can be done now; decision =
 | BE-13 | Open | Open | code | P2 | M | 5 | Move query/formatting out of controllers; one seller lookup |
 | BE-14 | Open | Open | decision | P2 | XS | 3 (#14) | Remove (or quarantine) the unreferenced legacy scripts |
 | BE-15 | Open | Open | code | P2 | XS | 5 | Unify maskPhone, numeric coercion and the cash-at-door rule |
-| DELIV-11 | Partly fixed | Partly open | code | P1 | S | 2 | Mocked unit test for the delivery state machine |
+| DELIV-11 | Partly fixed | Done | code | P1 | S | 2 | Mocked unit test for the delivery state machine |
 | NEW-seller-enums | — | Open | code | P2 | XS | 5 | Enforce the seller profile enums the validator already declares |
 | NEW-cart-fee | — | Open | code | P2 | S | 5 | Cart page invents a delivery fee and a Rs 800 free-delivery bar |
-| NEW-flow-scripts | — | Open | code | P2 | M | 0 | Bring the flow/56-64 API checks the report cites into the repo |
+| NEW-flow-scripts | — | Done | code | P2 | M | 0 | Bring the flow/56-64 API checks the report cites into the repo |
 | FE-4 | Partly fixed | Partly open | code | P2 | XS | 5 | One promotion label helper and remove the last private copy of the discount maths |
 | FE-5 | Partly fixed | Partly open | code | P2 | S | 5 | Make UserLayout a thin admin shell; drop the dead sidebar lists and 17 emoji icon keys |
 | FE-6 | Open | Open | code | P1 | M | 2 | Make web ESLint green, fix the hook-rule errors, gate CI on lint |
@@ -296,5 +317,9 @@ Status now: what the code shows today. Needs: code = can be done now; decision =
 | D8-TWA | — | Open | outside | P2 | M | 4 | Play-only Trusted Web Activity stop-gap (Bubblewrap) |
 | NEW-push-1 | — | Open | code | P2 | S | 4 | A browser's push subscription stays with the first account that enabled it, even after sign-out |
 | NEW-legal-1 | — | Open | outside | P1 | S | 1 | Privacy policy and store data declarations for the apps (rider live location, device identifiers) |
+| NEW-addr-1 | — | Open | decision | P2 | S | 5 | A customer cannot enter a house number: no field in the address form, the validator drops it, so `house_number` stays empty. Add the field (form and validator, then the snapshot has something to freeze) or stop showing it to riders |
+| NEW-priv-3 | — | Open | code | P2 | XS | 5 | Rider notifications stored before NEW-priv-2 still hold the street: a one-off scrub, only needed if production has such rows |
+| NEW-admin-1 | — | Open | code | P2 | XS | 5 | `GET /admin/orders?sellerId=` takes the kitchen owner's account id; accept the kitchen's own id (and keep the old one working) |
+| NEW-ops-2 | — | Open | code | P2 | XS | 5 | The error handler logs and reports every 5xx `AppError`, so the deliberate `GATEWAY_UNAVAILABLE` (no gateway configured) is reported like a crash: give expected states their own flag |
 
 Effort: XS under 2 hours, S half a day, M 1–2 days, L 3–5 days, XL over a week. The launch tasks found by the coverage pass (configuration, hosting, map provider, backups, staging, launch data, smoke checks, fonts, Dependabot) are in Phases 0 and 1 above without IDs.
