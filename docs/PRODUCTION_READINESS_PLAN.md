@@ -6,16 +6,16 @@ Written 2026-10-10 from `docs/PRODUCTION_READINESS_AUDIT.md`. Every finding the 
 
 Done on `claude/epic-johnson-r4eep6`. The audit report's second addendum has the detail; nothing here needed a schema change.
 
-- **Phase 0:** the fonts are bundled (0.1), the API checks are in the repository and in CI (0.3: ten suites, 302 checks, plus `verify-money-flows` with 360 checks in a job of its own), the Dependabot rules are in (0.4; closing the old Dependabot pull requests is yours), and the report is corrected (0.5).
+- **Phase 0:** the fonts are bundled (0.1), the API checks are in the repository and in CI (0.3: eleven suites, 323 checks, plus `verify-money-flows` with 360 checks in a job of its own), the Dependabot rules are in (0.4; closing the old Dependabot pull requests is yours), and the report is corrected (0.5).
 - **Phase 1, the code part:** the geocoder's key, pace and queue are settings and one address has a flood guard (INTEG-2).
-- **Phase 2:** NEW-priv-1, PRIV-6, NEW-priv-2 and INTEG-3, then the findings of an independent review of them; NEW-auth-1, SEC-4, the staff password rules and SEC-5; the CSP collector, its Playwright check and the enforce switch (SEC-7); the first part of PERF-5; the backend lint gate (BE-1); the delivery status machine and its tests (DELIV-11).
+- **Phase 2:** NEW-priv-1, PRIV-6, NEW-priv-2 and INTEG-3, then the findings of an independent review of them; NEW-auth-1, SEC-4, the staff password rules and SEC-5; the CSP collector, its Playwright check and the enforce switch (SEC-7); PERF-5 (a job is offered to the best rider first, and only riders on duty hear of a job nobody took); the backend lint gate (BE-1); the delivery status machine and its tests (DELIV-11).
 - **Defects the new checks found and fixed on the way:** the rider's view of an order mixed the old street text with the new pin after the customer edited the saved address; the kitchen dashboard counted dishes as orders and counted cancelled lines in today's sales; the delivery row on `GET /orders/:id` listed the riders who had handed the job back to every viewer; and a sweep with absurd values found 500s on huge page numbers, impossible dates, non-finite price filters and amounts beyond a column's range; none is a 500 now (the request is refused with a 400, or the value is capped or ignored).
 
 Still ahead, in order:
 
 1. **Merge PR #38** (yours), which runs CI on `main` again (Phase 0.2).
 2. **Phase 1:** everything outside the code, plus the release guard for the legal build arguments and the load-test scripts.
-3. **Phase 2, what is left:** FE-6 (web lint to zero), the second part of PERF-5 (needs a client change), the seven days of CSP reports and then enforcing, MOBILE-6, MOBILE-1, MOBILE-4 and MOBILE-7, and the automated resume test for DELIV-7.
+3. **Phase 2, what is left:** FE-6 (web lint to zero), the seven days of CSP reports and then enforcing, MOBILE-6, MOBILE-1, MOBILE-4 and MOBILE-7, and the automated resume test for DELIV-7.
 4. **Phase 3:** waits for your answers to decisions 1–20; anything with a migration waits for your approval.
 
 ## Where things stand (when the plan was written)
@@ -59,7 +59,7 @@ Estimates are for one experienced engineer and include tests. The calendar time 
 4. **Privacy fixes, one PR (about 1 day):** NEW-priv-1, PRIV-6, NEW-priv-2, INTEG-3. Done.
 5. **Auth hardening (about 3 days):** NEW-auth-1, SEC-4, staff password rules, SEC-5. Done.
 6. **Bring the API checks into the repo and CI** (Phase 0.3), before any refactor. Done.
-7. **Rider fan-out (PERF-5)**, then write the load-test scripts. The first part of the fan-out is done (a job a rider takes at once is never announced to the pool); the load-test scripts are next.
+7. **Rider fan-out (PERF-5)**, then write the load-test scripts. The fan-out is done; the load-test scripts are next.
 8. **Answer decisions 1–7 in Phase 3.** They unlock the remaining P1 work.
 
 ---
@@ -68,7 +68,7 @@ Estimates are for one experienced engineer and include tests. The calendar time 
 
 - [x] **0.1 Web build without a font download** (P0, XS–S). Switch `frontend-web/app/layout.tsx` from `next/font/google` to `next/font/local`, with the Plus Jakarta Sans and Geist Mono files in the repo. Check: `next build` with no internet access. **Done:** the three families are variable woff2 files in `app/fonts`; a build with the network switched off succeeds and its output has no Google address; the CSP no longer names Google's font hosts.
 - [ ] **0.2 Merge PR #38 and get `main` green.** After merging, release the five index migrations as a release step (`npm run db:migrate` from a checkout), not through `MIGRATE_ON_START`. A failed concurrent build would otherwise crash-loop the API. The recovery steps are at the top of each migration file.
-- [x] **0.3 Re-runnable evidence** (P1, M). Port the API checks the report cites (`flow/56`–`64`: deletion, snapshot, security, validation, delivery, views, small fixes, privacy) to `backend/scripts/api-checks/*.ts`, reading `API_URL`/`DATABASE_URL` from the environment and using the e2e seed accounts. Add `npm run api-checks`. Run it, together with `verify-money-flows` (333 checks), in the CI end-to-end job, which already has Postgres. Move the browser-only checks into Playwright specs where they still add coverage. Then update every `flow/…` citation in the report. **Done:** `backend/scripts/api-checks/` holds ten suites (`security`, `account-closure`, `snapshot`, `kitchen-view`, `validation`, `small-fixes`, `views`, `privacy`, `delivery`, `sign-in`; 302 checks) run by `npm run api-checks`, as the last step of the end-to-end job; `verify-money-flows` (now 360 checks) runs in a CI job of its own. The report cites these suites. The admin API suites and the browser scripts (41–50, 63, 65) stay session evidence.
+- [x] **0.3 Re-runnable evidence** (P1, M). Port the API checks the report cites (`flow/56`–`64`: deletion, snapshot, security, validation, delivery, views, small fixes, privacy) to `backend/scripts/api-checks/*.ts`, reading `API_URL`/`DATABASE_URL` from the environment and using the e2e seed accounts. Add `npm run api-checks`. Run it, together with `verify-money-flows` (333 checks), in the CI end-to-end job, which already has Postgres. Move the browser-only checks into Playwright specs where they still add coverage. Then update every `flow/…` citation in the report. **Done:** `backend/scripts/api-checks/` holds eleven suites (`security`, `account-closure`, `snapshot`, `kitchen-view`, `validation`, `small-fixes`, `views`, `privacy`, `delivery`, `pool`, `sign-in`; 323 checks) run by `npm run api-checks`, as the last step of the end-to-end job; `verify-money-flows` (now 360 checks) runs in a CI job of its own. The report cites these suites. The admin API suites and the browser scripts (41–50, 63, 65) stay session evidence.
 - [ ] **0.4 Dependabot triage** (XS). Close #27 and #29 (Node 25) and #19 (Prisma client alone). Hold #20 and #24 (TypeScript 7) and #35 (lucide-react 1.x) for a planned upgrade. Merge the safe patch bumps after CI. Add rules to `.github/dependabot.yml`: ignore non-LTS Node majors, and group `prisma` with `@prisma/client`. PR #1 is from before the rebuild and can probably be closed. **Partly done:** the rules are in `.github/dependabot.yml` (related updates are grouped, Node and TypeScript majors are not proposed); closing #27, #29 and #19 and holding #20, #24 and #35 is yours.
 - [x] **0.5 Correct the report** (S): see "Report corrections" at the end. **Done** (see "Report corrections" below).
 
@@ -113,7 +113,7 @@ Most of this is outside the code. Items marked **(you)** need the owner or ops; 
 - [ ] **SEC-7** Give the report-only CSP somewhere to send reports: a same-origin `/csp-report` collector that strips query strings, because reset links carry tokens. Add a Playwright CSP check and a build flag to enforce. Then 7 days of reports on staging or the soft launch, then enforce. The `'unsafe-inline'` question is decision 9. **Done so far:** the `/api/csp-report` collector, a Playwright check that the public pages produce no report, and `CSP_ENFORCE=true`. **Left:** seven days of reports on staging or the soft launch, then the switch.
 
 **Capacity**
-- [ ] **PERF-5** Try auto-assignment first and post a job to the open pool only if nobody takes it. That removes most pool events with no client change. Then send pool events only to riders who are on duty and active (a socket room joined and left on duty toggle, approval and suspension), and refresh only the list that changed. **Done so far:** a job is offered to the best rider first and the pool hears of it only when nobody can take it. **Left:** pool events only for riders on duty and a refresh of only the list that changed (a client change).
+- [x] **PERF-5** Try auto-assignment first and post a job to the open pool only if nobody takes it. That removes most pool events with no client change. Then send pool events only to riders who are on duty and active (a socket room joined and left on duty toggle, approval and suspension), and refresh only the list that changed. **Done:** a job is offered to the best rider first and the pool hears of it only when nobody can take it; then only riders who are approved, active and on duty are told (the `riders:on-duty` room, kept in step by `socketManager.syncRiderDuty`), and the dashboard reloads just the list of available jobs, and again when the rider goes on duty. In a browser: two requests instead of five for a new job, one instead of three when someone else takes it, none for a rider who is off duty. Checked by unit tests and the `pool` API suite.
 - [x] **INTEG-2** Geocoding limits: keep the global queue cap, and add only a generous per-IP flood guard (many Pakistani mobile users share one IP). The proper per-account limit comes when the geocode routes move behind the API sign-in. **Done** (see Phase 1).
 
 **Quality gates**
@@ -201,7 +201,7 @@ Each line gives the options, the recommendation, and what it unlocks. Effort is 
 
 ## Report corrections
 
-Made in `docs/PRODUCTION_READINESS_AUDIT.md` (Phase 0.5), including the status counts, which are now 87 fixed, 17 partly fixed and 36 open:
+Made in `docs/PRODUCTION_READINESS_AUDIT.md` (Phase 0.5), including the status counts, which are now 88 fixed, 16 partly fixed and 36 open:
 
 - **Header and Deliverable 7:**
   - The branch was merged through PR #26, and the index migrations add a schema change.
@@ -258,7 +258,7 @@ Status now: what the code shows today. Needs: code = can be done now; decision =
 | PERF-1 | Partly fixed | Partly open | code | P2 | M | 3 (#20) | Bound the seller balance computation (dashboard, payout request, payout completion) |
 | PERF-6 | Partly fixed | Partly open | code | P2 | S | 5 | Trim the product card to the fields the web app reads |
 | CAP-4 | Partly fixed | Partly open | code | P2 | XS | 5 | Product card size (same work as PERF-6) |
-| PERF-5 | Partly fixed | Partly done | code | P1 | M | 2 | A job taken at once is no longer announced; left: pool events only for riders on duty, refresh only the list that changed |
+| PERF-5 | Partly fixed | Done | code | P1 | M | 2 | A job is offered to the best rider first; pool events reach only riders on duty and the dashboard reloads only the list that changed |
 | PERF-10 | Partly fixed | Done | code | P2 | XS | 0.5 (report) | Leading-status indexes: confirm deliveries(status) is not needed and close the item |
 | FE-14 | Partly fixed | Partly open | code | P2 | S | 5 | Products page duplicate fetch: the ?search cause only happens in development (the report now says so); fix the real duplicate for signed-in users |
 | INTEG-2 | Partly fixed | Done | code | P1 | S | 2 | Per-address bucket on the Next geocode routes |
