@@ -65,6 +65,8 @@ model User {
   emailVerification EmailVerification?
 
   @@index([primaryCommunityId])
+  // Admin user lists by type, newest first; active-admin lookups.
+  @@index([userType, createdAt])
 
   @@map("users")
 }
@@ -1135,6 +1137,9 @@ model SupportTicket {
   messages        SupportMessage[]
 
   @@index([userId])
+  // The complaints queue by status, oldest or newest first; an order's complaints.
+  @@index([status, createdAt])
+  @@index([orderId])
 
   @@map("support_tickets")
 }
@@ -1293,6 +1298,9 @@ model AuditLog {
 
   @@index([userId, createdAt])
   @@index([entityType, entityId])
+  // Newest-first audit pages and date ranges; one record's history (order investigation, staff sign-in lock).
+  @@index([createdAt])
+  @@index([entityId, createdAt])
 
   @@map("audit_logs")
 }

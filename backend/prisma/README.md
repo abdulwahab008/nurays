@@ -24,6 +24,14 @@ database: it skips those and records no migration history.
 3. Commit the schema and the migration together. CI rebuilds a database from the migrations
    and fails if it doesn't match `schema.prisma` (`npm run db:check`).
 
+**Adding an index to a table that already has data.** Build it with `CREATE INDEX CONCURRENTLY`
+so the table stays readable and writable, and give each such index a migration of its own:
+Postgres refuses a concurrent build inside a transaction, and Prisma runs a migration file as
+one script, so two statements in one file fail. Keep Prisma's index name (from
+`npx prisma migrate diff --from-schema-datamodel <old schema> --to-schema-datamodel prisma/schema.prisma --script`)
+so `npm run db:check` sees no drift. The `20261010100001`–`05` migrations are examples, including
+the recovery steps for a build that fails.
+
 ## Deploying
 
 Apply pending migrations before (or as) the new code starts:
