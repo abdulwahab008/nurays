@@ -60,7 +60,7 @@ Order events go through `emitToRooms`, which sends one event to the union of sev
 
 | Event | Sent to | Payload | Emitted when |
 |---|---|---|---|
-| `order:new` | each seller's `user:` room | `{ orderId, orderNumber, totalAmount, items: [{ productName, quantity, totalPrice }], createdAt }`. `items` are only that seller's items. | an order is placed (`order.service.ts`, via `emitNewOrderNotification`), including online-payment orders that are not paid yet |
+| `order:new` | each seller's `user:` room | `{ orderId, orderNumber, totalAmount, items: [{ productName, quantity, totalPrice }], createdAt }`. `items` are only that seller's items. | an order is placed (`order-placement.service.ts`, via `emitNewOrderNotification`), including online-payment orders that are not paid yet |
 | `order:new` | `role:admin` | `{ orderId, orderNumber, totalAmount, customerId, createdAt }` | same moment |
 | `order:status:update` | order audience and `role:admin` | `{ orderId, orderNumber, status, updatedAt }` | the order's status changes or its payment is settled: kitchen accepts/rejects/prepares/readies/cancels, rider updates the delivery, customer cancels, admin changes status/cancels/retries/refunds, sweeps cancel an order, Safepay confirms a payment |
 | `order:item:status:update` | order audience | `{ orderItemId, orderId, orderNumber, status, updatedAt }` | a single item's status changes (seller item routes) |

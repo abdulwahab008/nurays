@@ -53,7 +53,7 @@ Roles: `customer`, `seller`, `rider`, `admin`, `hub_manager`. Admin accounts car
   (`authorize('rider')`), `seller-order.routes.ts` (`authorize('seller','admin')` plus `blockSuspendedSeller`).
   Riders must also be approved before they can act (`rider.service.ts` `requireRider`).
 - **Ownership is checked in services, by querying with the caller's id**, not only by role:
-  - Orders are looked up with `customerId: userId` for customer actions (`order.service.ts`, `payment.service.ts`,
+  - Orders are looked up with `customerId: userId` for customer actions (`order-queries.service.ts`, `order-cancel.service.ts`, `order-payment.service.ts`, `payment.service.ts`,
     `online-payment.service.ts`); order messages are open only to the customer, the order's sellers, its assigned
     rider, or an admin.
   - A manual transfer can only be confirmed or disputed by the seller the customer was told to pay (the order's

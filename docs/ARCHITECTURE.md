@@ -47,7 +47,7 @@ Layers, from the outside in:
 | Kitchens | `seller.service`, `availability.service` (open/closed from schedule, in Pakistan time), `category-request.service`, `promotion.service`, `stock-alert.service`, `profit-loss.service` |
 | Catalog | `product.service`, `product-variant.service`, `category.service`, `ranking.service` (search, trending, recommendations), `favorite.service`, `review.service`, `review-moderation.service` (reports and hiding), `media.service` |
 | Communities | `community.service`, `admin-places.service`, `delivery-pricing.service` |
-| Cart and orders | `cart.service`, `order.service`, `seller-order.service`, `admin-order.service`, `order-maintenance.service`, `handover.service` |
+| Cart and orders | `cart.service`, `order.service` (the door over `order-placement`, `order-queries`, `order-cancel`, `order-payment` and `order-chat`), `seller-order.service`, `admin-order.service`, `order-maintenance.service`, `handover.service` |
 | Payments and money | `payment.service`, `online-payment.service` (Safepay), `wallet.service`, `refund.service`, `ledger.service`, `seller-balance.service`, `rider-ledger.service` |
 | Delivery | `rider.service`, `delivery-lifecycle.service` |
 | Hubs | `hub.service`, `hub-allocation.service` |
@@ -240,7 +240,7 @@ Next.js 16 App Router, React 19, Tailwind 4. Root `app/layout.tsx` wraps everyth
 | I want to... | Look at |
 |---|---|
 | Add an endpoint | `routes/<area>.routes.ts` -> controller -> service; schema in `validators/`; mount in `index.ts` if it is a new router. |
-| Change how an order is priced | `utils/pricing.ts` (`priceOrder`), `order.service.ts` `createOrder`, delivery fee in `utils/deliveryFee.ts` and `delivery-pricing.service.ts`. |
+| Change how an order is priced | `utils/pricing.ts` (`priceOrder`), `order-placement.service.ts` `createOrder`, delivery fee in `utils/deliveryFee.ts` and `delivery-pricing.service.ts`. |
 | Change who holds money / who owes whom | `utils/paymentCustody.ts`, `ledger.service.ts`, `seller-balance.service.ts`, `rider-ledger.service.ts`. |
 | Change order status rules | `seller-order.service.ts`, `rider.service.ts` (`VALID_TRANSITIONS`), `admin-order.service.ts` (`ORDER_FORWARD_SEQUENCE`). |
 | Change an auto-cancel timeout or add a sweep | `order-maintenance.service.ts`; register in `index.ts` with `scheduleJob`. |

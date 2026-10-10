@@ -11,6 +11,7 @@
  */
 import prisma from '../src/config/database';
 import orderService from '../src/services/order.service';
+import orderPlacement from '../src/services/order-placement.service';
 import paymentService, { PAYABLE_STATUSES } from '../src/services/payment.service';
 import adminOrderService from '../src/services/admin-order.service';
 import { completeRefund, dismissRefund } from '../src/services/refund.service';
@@ -741,7 +742,7 @@ async function main() {
   ok('25 simultaneous orders all succeed with distinct 6-digit numbers', burst.every((b) => /^FN\d{8}\d{6}$/.test(b)) && new Set(burst).size === 25, burst.filter((b) => b.startsWith('ERR')).join(','));
 
   // force clashes: make the generator return an already-used number twice, then a fresh one
-  const svc: any = orderService;
+  const svc: any = orderPlacement; // the order number is drawn by the placement service
   const taken = burst[0];
   const original = svc.generateOrderNumber.bind(svc);
   let calls = 0;

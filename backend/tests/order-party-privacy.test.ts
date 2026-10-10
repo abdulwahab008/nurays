@@ -35,6 +35,7 @@ import { notify, notifyMany } from '../src/services/notify.service';
 import { safepayGateway } from '../src/gateways/safepay.gateway';
 import realtimeOrderService from '../src/services/realtime-order.service';
 import orderService from '../src/services/order.service';
+import orderPlacement from '../src/services/order-placement.service';
 
 const db = prisma as any;
 const emitToRooms = (socketManager as any).emitToRooms as jest.Mock;
@@ -236,7 +237,7 @@ describe('placing an order that is paid online', () => {
     db.user.findUnique.mockReset().mockResolvedValue(null);
     // no order exists yet for the checkout's Idempotency-Key
     db.order.findUnique.mockReset().mockResolvedValue(null);
-    loadPlaced = jest.spyOn(orderService as any, 'loadPlacedOrder').mockResolvedValue({ id: 'o-existing' });
+    loadPlaced = jest.spyOn(orderPlacement as any, 'loadPlacedOrder').mockResolvedValue({ id: 'o-existing' });
   });
   afterEach(() => loadPlaced.mockRestore());
 

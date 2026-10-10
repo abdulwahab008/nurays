@@ -22,7 +22,7 @@ tax    = total - goods - deliveryFee                      // takes the rounding,
 
 ### Discounts and who pays them
 
-Code: `backend/src/services/order.service.ts` (`createOrder`), `promotion.service.ts`.
+Code: `backend/src/services/order-placement.service.ts` (`createOrder`), `promotion.service.ts`.
 
 - Catalog deals are applied to item prices first. A promo code is applied after that, and the same promotion cannot be applied twice.
 - A code that is unknown, switched off, expired, used up (in total or by this customer) or below its minimum order is **refused at checkout** (`INVALID_PROMO_CODE`, `PROMO_INACTIVE`, `PROMO_EXPIRED`, `PROMO_LIMIT_REACHED`, `PROMO_ALREADY_USED`, `MIN_ORDER_NOT_MET`), the same answers as `/promotions/validate`; the order is never placed at full price with a code the customer typed.
@@ -34,7 +34,7 @@ Code: `backend/src/services/order.service.ts` (`createOrder`), `promotion.servic
 
 ## 2. Commission
 
-Code: `order.service.ts` (item commission), `admin.service.ts` (default setting), `ledger.service.ts`.
+Code: `order-placement.service.ts` (item commission), `admin.service.ts` (default setting), `ledger.service.ts`.
 
 ```
 item.commissionAmount = item.totalPrice x seller.commissionRate / 100
@@ -49,7 +49,7 @@ item.sellerPayout     = item.totalPrice - item.commissionAmount
 
 ## 3. Delivery fees
 
-Code: `backend/src/utils/deliveryFee.ts` (`getDeliveryFeeForSeller`, `platformDeliveryFee`), `backend/src/services/delivery-pricing.service.ts`. Called from `order.service.ts` once per kitchen in the order; the fees are snapshotted per kitchen in `Order.deliveryFeeBreakdown` (`sellerId`, `fee`, `provider`, `paidBy`).
+Code: `backend/src/utils/deliveryFee.ts` (`getDeliveryFeeForSeller`, `platformDeliveryFee`), `backend/src/services/delivery-pricing.service.ts`. Called from `order-placement.service.ts` once per kitchen in the order; the fees are snapshotted per kitchen in `Order.deliveryFeeBreakdown` (`sellerId`, `fee`, `provider`, `paidBy`).
 
 **Who pays.** When a Nuray rider delivers, the **kitchen** pays Nuray the fee: the customer's delivery fee is Rs 0 (checkout shows free delivery), and the fee is stored on the order as `sellerDeliveryCharge` and taken out of the kitchen's earnings (sections 3d and 5). When the kitchen delivers itself, the customer pays the kitchen's own fee as before.
 

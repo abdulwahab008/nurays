@@ -103,7 +103,7 @@ For a home delivery the address needs a community (taken from the address or res
 3. If the **kitchen delivers itself**: its own rules apply (per-community fee and free-above, free threshold, free radius, zones, fixed or distance fee), and the kitchen keeps the fee.
 4. Pickups have no fee.
 
-### Placing the order (`POST /orders`, `services/order.service.ts` `createOrder`)
+### Placing the order (`POST /orders`, `services/order-placement.service.ts` `createOrder`)
 
 Rate limited to 20 per 10 minutes per user.
 
