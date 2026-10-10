@@ -13,8 +13,26 @@ declare global {
         /** Staff role of an admin account: super_admin, admin or support (null for everyone else). */
         staffRole?: string | null;
       };
+      /** The signed-in user's approved, active kitchen: set by `requireSeller` (routes behind it only). */
+      seller?: { id: string; businessName: string; status: string; verificationStatus: string };
     }
   }
+}
+
+/** The signed-in user's id, for a route that sits behind `authenticate`: a missing user is a 401, never a crash. */
+export function currentUserId(req: Request): string {
+  if (!req.user) throw new AppError('Authentication required', 401, 'AUTH_REQUIRED');
+  return req.user.userId;
+}
+
+/**
+ * The signed-in user's kitchen id, for a route that sits behind `authenticate` and is open to a kitchen still awaiting approval
+ * (a route behind `requireSeller` reads `req.seller` instead). 404 SELLER_NOT_FOUND when the account has no kitchen.
+ */
+export async function currentSellerId(req: Request): Promise<string> {
+  const seller = await prisma.seller.findUnique({ where: { userId: currentUserId(req) }, select: { id: true } });
+  if (!seller) throw new AppError('Seller account not found', 404, 'SELLER_NOT_FOUND');
+  return seller.id;
 }
 
 /**
@@ -169,7 +187,7 @@ export const requireSeller = async (
     }
 
     // Attach seller to request
-    (req as any).seller = seller;
+    req.seller = seller;
 
     next();
   } catch (error) {

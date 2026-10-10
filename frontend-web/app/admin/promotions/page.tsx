@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { UserLayout } from '@/components/layout/UserLayout';
+import { AdminShell } from '@/components/layout/AdminShell';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/toast';
 import { apiClient, apiErrorMessage } from '@/lib/api-client';
@@ -136,7 +136,7 @@ export default function AdminPromotionsPage() {
   const label = 'block text-xs font-semibold text-gray-700 mb-1';
 
   return (
-    <UserLayout showSidebar={true} showNavbar={true}>
+    <AdminShell>
       <div className="max-w-5xl mx-auto space-y-5">
         <div className="flex flex-wrap items-end justify-between gap-3">
           <div>
@@ -261,6 +261,6 @@ export default function AdminPromotionsPage() {
           )}
         </div>
       </div>
-    </UserLayout>
+    </AdminShell>
   );
 }

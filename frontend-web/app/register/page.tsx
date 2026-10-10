@@ -12,6 +12,7 @@ import { apiClient } from '@/lib/api-client';
 import { BrandLockup } from '@/components/ui/Mark';
 import { useT } from '@/lib/i18n';
 import { authMessages } from '@/lib/i18n/messages/auth';
+import { weakPasswordMessage } from '@/lib/password-errors';
 
 function RegisterForm() {
   const router = useRouter();
@@ -25,10 +26,7 @@ function RegisterForm() {
     confirmPassword: '',
     full_name: '',
     phone: '',
-    city: 'Karachi',
-    community: 'Askari 11',
-    house_apt: '',
-    area: '',
+    city: '',
     user_type: 'customer',
     business_name: '',
     termsAccepted: false,
@@ -132,7 +130,6 @@ function RegisterForm() {
         phone: formData.phone ? formData.phone.trim() : undefined,
         phone_otp: formData.phone && phoneOtp.trim() ? phoneOtp.trim() : undefined,
         city: formData.city ? formData.city.trim() : undefined,
-        area: formData.area ? formData.area.trim() : undefined,
         business_name: formData.user_type === 'seller' ? formData.business_name.trim() : undefined,
       });
       
@@ -185,7 +182,10 @@ function RegisterForm() {
       const errorCode = err.response?.data?.error?.code;
       
       // Provide more specific error messages
-      if (errorCode === 'EMAIL_EXISTS' || errorMessage.includes('already registered')) {
+      const weak = weakPasswordMessage(err, t);
+      if (weak) {
+        setError(weak);
+      } else if (errorCode === 'EMAIL_EXISTS' || errorMessage.includes('already registered')) {
         setError(t('errEmailExists'));
       } else if (errorCode === 'PHONE_EXISTS' || errorMessage.includes('Phone number already')) {
         setError(t('errPhoneExists'));
@@ -337,14 +337,14 @@ function RegisterForm() {
                 className="h-1 flex-1 rounded-full transition-colors"
                 style={{
                   background:
-                    formData.password.length >= 6
+                    formData.password.length >= 8
                       ? 'var(--forest-500)'
                       : formData.password.length > 0
                       ? 'var(--gold-400)'
                       : 'var(--ink-200)',
                 }}
               />
-              <span className={helperClass} style={helperStyle}>{formData.password.length}/6</span>
+              <span className={helperClass} style={helperStyle}>{formData.password.length}/8</span>
             </div>
           </div>
 
@@ -481,47 +481,6 @@ function RegisterForm() {
               value={formData.city}
               onChange={(e) => setFormData({ ...formData, city: e.target.value })}
               placeholder="Karachi"
-              className={inputClass}
-              style={inputStyle}
-            />
-          </div>
-
-          <div className="mb-4">
-            <label htmlFor="community" className={labelClass}>
-              {t('community')}
-            </label>
-            <select
-              id="community"
-              value={formData.community}
-              onChange={(e) => setFormData({ ...formData, community: e.target.value })}
-              className={inputClass}
-              style={inputStyle}
-              required
-            >
-              <option value="Askari 11">Askari 11 (Sector A/B/C)</option>
-              <option value="Askari 10">Askari 10 (Main / Sector D)</option>
-              <option value="DHA Phase 6">DHA Phase 6</option>
-              <option value="DHA Phase 5">DHA Phase 5 (Commercial & Residential)</option>
-              <option value="Bahria Town">Bahria Town Karachi</option>
-              <option value="Gulshan-e-Iqbal">Gulshan-e-Iqbal</option>
-              <option value="Clifton">Clifton (Blocks 1-9)</option>
-              <option value="Other">{t('otherCommunity')}</option>
-            </select>
-            <p className={helperClass} style={helperStyle}>
-              {t('communityHelper')}
-            </p>
-          </div>
-
-          <div className="mb-4">
-            <label htmlFor="house_apt" className={labelClass}>
-              {t('houseApt')}
-            </label>
-            <input
-              type="text"
-              id="house_apt"
-              value={formData.house_apt}
-              onChange={(e) => setFormData({ ...formData, house_apt: e.target.value })}
-              placeholder={t('houseAptPlaceholder')}
               className={inputClass}
               style={inputStyle}
             />

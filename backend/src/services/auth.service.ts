@@ -2,7 +2,7 @@ import { maskEmail } from '../utils/mask';
 import prisma from '../config/database';
 import socketManager from '../config/socket';
 import { generateToken, generateRefreshToken, tokenTtlSeconds, isTokenRevoked, JWTPayload } from '../utils/jwt';
-import { formatPhoneNumber, isValidPhoneNumber } from '../utils/otp';
+import { formatPhoneNumber, isValidPhoneNumber, realPhoneOrNull } from '../utils/otp';
 import { AppError } from '../middleware/errorHandler';
 import bcrypt from 'bcrypt';
 import { randomBytes, createHash } from 'crypto';
@@ -12,6 +12,11 @@ import adminService from './admin.service';
 import { recordAudit } from '../middleware/audit';
 import { permissionsFor } from '../utils/permissions';
 import { generateVerificationToken } from '../utils/email-verification';
+import { assertVerifyMailAllowed } from '../utils/mailBudget';
+import { assertPasswordStrength, MIN_PASSWORD_LENGTH, MIN_STAFF_PASSWORD_LENGTH } from '../utils/password-policy';
+import { assertCurrentPassword } from './reauth.service';
+import { notifyPasswordChanged } from './account-notice.service';
+import { logger } from '../utils/logger';
 
 /** A unique stand-in number for an account with no (or an evicted) real phone. Never a real number: +999 isn't assigned. */
 export const placeholderPhone = (seed: string): string =>
@@ -50,10 +55,9 @@ export class AuthService {
       throw new AppError('Invalid email format', 400, 'INVALID_EMAIL');
     }
 
-    // Validate password
-    if (password.length < 8) {
-      throw new AppError('Password must be at least 8 characters', 400, 'WEAK_PASSWORD');
-    }
+    // Validate password: long enough, not a common one, not made of the person's own details.
+    // Before the phone code below is used up, so a weak password does not burn an SMS.
+    assertPasswordStrength(password, { email: normalizedEmail, phone, name: fullName });
 
     // Check if user already exists by email
     // Use findFirst instead of findUnique because email is nullable and unique
@@ -209,7 +213,7 @@ export class AuthService {
       await queueVerificationEmail(user.id);
     } catch (err) {
       emailSendFailed = true;
-      console.error(`[register] Could not queue the verification email for ${normalizedEmail}; the user can resend it.`, err);
+      logger.error({ err, email: maskEmail(normalizedEmail) }, 'Could not queue the verification e-mail at registration; the user can resend it');
     }
 
     // Generate tokens (user can use app but should verify email)
@@ -307,6 +311,9 @@ export class AuthService {
     if (user.emailVerified) {
       throw new AppError('Email already verified', 400, 'ALREADY_VERIFIED');
     }
+
+    // Before the old link is cancelled: an inbox only gets so many of these an hour.
+    await assertVerifyMailAllowed(user.email);
 
     // Delete old verification token if exists
     if (user.emailVerification) {
@@ -515,7 +522,7 @@ export class AuthService {
   /**
    * Request OTP for login/registration
    */
-  async requestOTP(phone: string, purpose: 'registration' | 'login' | 'reset_password') {
+  async requestOTP(phone: string, purpose: 'registration' | 'login') {
     const formattedPhone = formatPhoneNumber(phone);
 
     if (!isValidPhoneNumber(formattedPhone)) {
@@ -625,7 +632,7 @@ export class AuthService {
     try {
       await queuePasswordResetEmail(user.id);
     } catch (err) {
-      console.error(`[forgotPassword] Could not queue the reset email for ${maskEmail(normalizedEmail)}`, err);
+      logger.error({ err, email: maskEmail(normalizedEmail) }, 'Could not queue the password reset e-mail');
     }
   }
 
@@ -634,10 +641,22 @@ export class AuthService {
    * voided (anyone who was logged in — including an attacker — must sign in again).
    */
   async resetPassword(token: string, newPassword: string): Promise<void> {
-    if (!newPassword || newPassword.length < 8) {
-      throw new AppError('Password must be at least 8 characters', 400, 'WEAK_PASSWORD');
-    }
     const tokenHash = createHash('sha256').update(token).digest('hex');
+    // Whose link it is decides what the new password must be (staff: longer; nobody: made of their own
+    // name or number), so the link is looked at first. It is used up below, in the step that sets the password.
+    const pending = await prisma.passwordReset.findFirst({
+      where: { tokenHash, usedAt: null, expiresAt: { gt: new Date() } },
+      select: { user: { select: { email: true, phone: true, userType: true, profile: { select: { fullName: true } } } } },
+    });
+    if (!pending) {
+      throw new AppError('This reset link is invalid or has expired', 400, 'INVALID_RESET_TOKEN');
+    }
+    assertPasswordStrength(newPassword, {
+      minLength: pending.user.userType === 'admin' ? MIN_STAFF_PASSWORD_LENGTH : MIN_PASSWORD_LENGTH,
+      email: pending.user.email,
+      phone: realPhoneOrNull(pending.user.phone),
+      name: pending.user.profile?.fullName,
+    });
     const passwordHash = await bcrypt.hash(newPassword, 10);
 
     let resetUserId: string | null = null;
@@ -664,6 +683,76 @@ export class AuthService {
     // Every session ends with a password reset: leave a trail of who and when.
     if (resetUserId) socketManager.disconnectUser(resetUserId);
     if (resetUserId) void recordAudit({ userId: resetUserId, action: 'auth:PASSWORD_RESET', entityType: 'user', entityId: resetUserId, responseStatus: 200 });
+  }
+
+  /**
+   * Ends every session the account has, on every device: a token issued before now stops working. Tokens are stateless,
+   * so this cut-off (`tokensValidAfter`) is the only way a sign-out can mean anything.
+   */
+  async revokeSessions(userId: string): Promise<void> {
+    await prisma.user.update({ where: { id: userId }, data: { tokensValidAfter: new Date() } });
+  }
+
+  /**
+   * Change the password of a signed-in account.
+   *
+   * The current password is asked for again, and counted like the other "confirm with your password" screens, so a
+   * token that leaks cannot be used to guess it. An account with no password (it signs in with Google or a code) has
+   * nothing to change, and a token alone must not be able to give it one: it sets one through "forgot password",
+   * which writes to the address its owner has proven. As with a password reset every other session ends, and this one
+   * is handed a fresh pair of tokens so that the person stays signed in here. The owner is told by e-mail.
+   */
+  async changePassword(userId: string, currentPassword: string, newPassword: string, ctx: { ip?: string | null } = {}) {
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: {
+        id: true,
+        email: true,
+        emailVerified: true,
+        phone: true,
+        userType: true,
+        status: true,
+        passwordHash: true,
+        profile: { select: { fullName: true } },
+      },
+    });
+    if (!user || user.status !== 'active') {
+      throw new AppError('User not found', 404, 'USER_NOT_FOUND');
+    }
+    if (!user.passwordHash) {
+      throw new AppError('This account has no password. Use "Forgot password" to set one.', 400, 'NO_PASSWORD_SET');
+    }
+    // What is wrong with the new password is said before the old one is checked: it costs the person no attempt.
+    assertPasswordStrength(newPassword, {
+      minLength: user.userType === 'admin' ? MIN_STAFF_PASSWORD_LENGTH : MIN_PASSWORD_LENGTH,
+      email: user.email,
+      phone: realPhoneOrNull(user.phone),
+      name: user.profile?.fullName,
+    });
+    await assertCurrentPassword({ id: user.id, passwordHash: user.passwordHash }, currentPassword, ctx);
+    if (await bcrypt.compare(newPassword, user.passwordHash)) {
+      throw new AppError('Choose a password different from the current one', 400, 'PASSWORD_UNCHANGED');
+    }
+
+    // Hashed first: the cut-off is taken as late as possible, so a session another device starts meanwhile is not spared.
+    const passwordHash = await bcrypt.hash(newPassword, 10);
+    const changedAt = new Date();
+    await prisma.user.update({ where: { id: userId }, data: { passwordHash, tokensValidAfter: changedAt } });
+    socketManager.disconnectUser(userId);
+    void recordAudit({ userId, action: 'auth:PASSWORD_CHANGED', entityType: 'user', entityId: userId, ipAddress: ctx.ip ?? null, responseStatus: 200 });
+    void notifyPasswordChanged({ email: user.email, emailVerified: user.emailVerified, fullName: user.profile?.fullName }, changedAt);
+
+    // Tokens made after the cut-off: this session carries on, every older one is void.
+    const tokenPayload: JWTPayload = { userId: user.id, userType: user.userType, phone: user.phone };
+    const accessToken = generateToken(tokenPayload);
+    const refreshToken = generateRefreshToken(tokenPayload);
+    return {
+      tokens: {
+        access_token: accessToken,
+        refresh_token: refreshToken,
+        expires_in: tokenTtlSeconds(accessToken),
+      },
+    };
   }
 
   /**

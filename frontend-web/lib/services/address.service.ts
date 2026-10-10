@@ -5,6 +5,7 @@ export interface Address {
   label?: string;
   addressLine1: string;
   addressLine2?: string;
+  houseNumber?: string | null;
   area: string;
   city: string;
   postalCode?: string;

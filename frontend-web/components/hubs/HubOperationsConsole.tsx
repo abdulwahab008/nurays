@@ -96,7 +96,7 @@ interface FrozenProduct {
   id: string;
   name: string;
   price: number;
-  primaryImage?: { imageUrl: string } | null;
+  primaryImage?: string | null;
   category?: { name: string } | null;
   seller?: { id: string; businessName: string } | null;
 }
@@ -842,10 +842,10 @@ export default function HubOperationsConsole({ mode }: { mode: 'admin' | 'manage
                   {selectedProduct && (
                     <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 flex items-center gap-4">
                       <div className="w-16 h-16 rounded-lg bg-gray-200 flex-shrink-0 relative overflow-hidden border border-gray-300">
-                        {selectedProduct.primaryImage?.imageUrl ? (
+                        {selectedProduct.primaryImage ? (
                           // eslint-disable-next-line @next/next/no-img-element
                           <img
-                            src={selectedProduct.primaryImage.imageUrl}
+                            src={selectedProduct.primaryImage}
                             alt={selectedProduct.name}
                             loading="lazy"
                             className="absolute inset-0 w-full h-full object-cover"
@@ -1490,7 +1490,7 @@ export default function HubOperationsConsole({ mode }: { mode: 'admin' | 'manage
                 </label>
                 <select
                   value={newStatusChoice}
-                  onChange={(e) => setNewStatusChoice(e.target.value as any)}
+                  onChange={(e) => setNewStatusChoice(e.target.value as 'available' | 'damaged')}
                   className="w-full border border-gray-300 rounded-xl px-3 py-2 text-sm font-semibold focus:ring-2 focus:ring-cyan-500 outline-none"
                 >
                   <option value="available">🟢 Available (Release to Sellable Inventory)</option>

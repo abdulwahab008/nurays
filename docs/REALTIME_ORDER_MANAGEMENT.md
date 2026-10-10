@@ -31,6 +31,7 @@ A connection joins automatically:
 |---|---|
 | `user:<userId>` | the user's own connections (all tabs and devices) |
 | `role:<userType>` | everyone of that role: `role:customer`, `role:seller`, `role:rider`, `role:admin`, `role:hub_manager` |
+| `riders:on-duty` | a rider's connections while the rider is approved, active and on duty (`utils/riderDuty.ts`, the dispatcher's own filter). Jobs in the open pool are announced here and not to `role:rider`: an off-duty rider cannot claim a job, so telling them would only make their dashboard reload. A connection that opens joins if the rider is on duty; going on or off duty, a suspension, an approval or a rejection move every connection of that rider in or out (`socketManager.syncRiderDuty`, across instances through the Redis adapter) |
 
 and can join on request:
 
@@ -59,22 +60,22 @@ Order events go through `emitToRooms`, which sends one event to the union of sev
 
 | Event | Sent to | Payload | Emitted when |
 |---|---|---|---|
-| `order:new` | each seller's `user:` room | `{ orderId, orderNumber, totalAmount, items: [{ productName, quantity, totalPrice }], createdAt }`. `items` are only that seller's items. | an order is placed (`order.service.ts`, via `emitNewOrderNotification`), including online-payment orders that are not paid yet |
+| `order:new` | each seller's `user:` room | `{ orderId, orderNumber, totalAmount, items: [{ productName, quantity, totalPrice }], createdAt }`. `items` are only that seller's items. | an order is placed (`order-placement.service.ts`, via `emitNewOrderNotification`), including online-payment orders that are not paid yet |
 | `order:new` | `role:admin` | `{ orderId, orderNumber, totalAmount, customerId, createdAt }` | same moment |
-| `order:status:update` | order audience and `role:admin` | `{ orderId, orderNumber, status, updatedAt, changedBy }` | the order's status changes or its payment is settled: kitchen accepts/rejects/prepares/readies/cancels, rider updates the delivery, customer cancels, admin changes status/cancels/retries/refunds, sweeps cancel an order, Safepay confirms a payment |
+| `order:status:update` | order audience and `role:admin` | `{ orderId, orderNumber, status, updatedAt }` | the order's status changes or its payment is settled: kitchen accepts/rejects/prepares/readies/cancels, rider updates the delivery, customer cancels, admin changes status/cancels/retries/refunds, sweeps cancel an order, Safepay confirms a payment |
 | `order:item:status:update` | order audience | `{ orderItemId, orderId, orderNumber, status, updatedAt }` | a single item's status changes (seller item routes) |
-| `order:message` | order audience | `{ orderId, messageId, senderId, senderRole }` | a chat message is posted on the order |
-| `order:messages:read` | order audience | `{ orderId, readerId }` | someone read the order's messages |
-| `order:delivery:tracking` | `order:<id>` and the customer's `user:` room | `{ orderId, location: { latitude, longitude }, distanceKm?, estimatedArrival?, updatedAt }` | the rider reports a position (see below) |
-| `delivery:new` | `role:rider` | `{ deliveryId, orderId }` | a Nuray delivery job is created (`ensureDeliveryForOrder`, when the kitchen accepts or starts preparing, or an admin moves the order on), or jobs are released back to the pool when a rider is suspended |
-| `delivery:removed` | `role:rider` | `{ deliveryId, orderId, reason: 'claimed' }` when a rider claims it; `{ deliveryId, orderId }` when it is cancelled | the job is no longer available |
+| `order:message` | order audience | `{ orderId, messageId, senderRole }` | a chat message is posted on the order |
+| `order:messages:read` | order audience | `{ orderId }` | someone read the order's messages |
+| `order:delivery:tracking` | the customer's `user:` room and `role:admin` (not the order's room: it holds the kitchens) | `{ orderId, location: { latitude, longitude }, distanceKm?, estimatedArrival?, updatedAt }` | the rider reports a position (see below) |
+| `delivery:new` | `riders:on-duty` | `{ deliveryId, orderId }` | a Nuray delivery job is created (`ensureDeliveryForOrder`, when the kitchen accepts or starts preparing, or an admin moves the order on), handed back by its rider, reopened by an admin retry, or released when a rider is suspended, **and no rider could take it automatically**. The job is offered to the best rider first (`postDelivery`); one that is assigned at once is never announced to the pool |
+| `delivery:removed` | `riders:on-duty` | `{ deliveryId, orderId, reason: 'claimed' }` when a rider claims it; `{ deliveryId, orderId }` when it is cancelled | the job is no longer available. A job taken automatically the moment it was posted sends no `delivery:removed` (no rider ever heard of it); the order's parties still get `delivery:assigned` |
 | `delivery:assigned` | order audience | `{ deliveryId, orderId }` | a rider claimed the job |
 | `delivery:cancelled` | the assigned rider's `user:` room | `{ deliveryId, orderId }` | the order was cancelled while the rider held the job |
 | `notification:new` | the recipient's `user:` room | `{ id, type, title, message, actionUrl, createdAt }` | any in-app notification is created (`notify()` in `notify.service.ts`) |
 
 Notes:
 
-- `status` in `order:status:update` is the order status (`pending`, `confirmed`, `preparing`, `ready`, `dispatched`, `in_transit`, `delivered`, `delivery_failed`, `completed`, `cancelled`, `refunded`). `changedBy` is a user id, `system`, or `payment`.
+- `status` in `order:status:update` is the order status (`pending`, `confirmed`, `preparing`, `ready`, `dispatched`, `in_transit`, `delivered`, `delivery_failed`, `completed`, `cancelled`, `refunded`). Who made the change (a user, the system or a payment) decides who is notified but is not in the payload: this event reaches the customer, every kitchen and the rider, and none of them learns another's account id. The chat events likewise name the sender by role only.
 - `emitOrderStatusUpdate` also creates the in-app notification (and push/email/SMS where applicable) for the customer for statuses with a message, and tells kitchens about cancellations they did not make. That is where most `notification:new` events for orders come from (`backend/src/services/notify.service.ts`).
 - Alongside `order:new`, each kitchen gets a notification (`notification:new`, plus push, email and SMS). For online-payment orders (`safepay` or `card`) still unpaid, it is a "waiting for payment" notification without push/email/SMS, and the "New paid order" notification follows once Safepay confirms (`online-payment.service.ts`). The `order:new` socket event itself is not held back, so the seller pop-up can appear before payment.
 - `order:new` goes to each seller only, never to the customer; the customer gets an "Order placed" notification instead.
@@ -89,11 +90,11 @@ Notes:
 5. When a position was stored and the job is `picked_up`, `in_transit` or `arrived_at_customer`, the server emits `order:delivery:tracking` with the position and `distanceKm` (rider to customer, one decimal, only when the customer's location is known).
 6. The customer's order page shows the rider on a map only while the order status is `dispatched` or `in_transit`. It uses the latest `order:delivery:tracking` payload, otherwise `delivery.riderLocation` from `GET /orders/:id` (which is returned only to viewers allowed to see it, and only while on the way).
 
-Sellers and admins in the order room also receive `order:delivery:tracking`; the shipped seller pages do not use it.
+Only the customer and admins receive `order:delivery:tracking`: the order's room also holds the kitchens, who see the status but never where the rider is.
 
 ## Order tracking endpoint
 
-`GET /api/v1/realtime/orders/:id/track` (authenticated) returns a status snapshot: `orderId`, `orderNumber`, `orderStatus`, `paymentStatus`, `estimatedDeliveryAt`, `deliveredAt`, the last 10 `statusHistory` rows, `items` (id, name, quantity, status) and `delivery` (status, estimated arrival, distance, duration) or `null`. Allowed for the order's customer, a seller with an item in it, or an admin; others get 403 `ACCESS_DENIED`. Note that an assigned rider is not allowed here (they can still join the socket room). The shipped frontend does not call this endpoint.
+`GET /api/v1/realtime/orders/:id/track` (authenticated) returns a status snapshot: `orderId`, `orderNumber`, `orderStatus`, `paymentStatus`, `estimatedDeliveryAt`, `deliveredAt`, the last 10 `statusHistory` rows (status, notes, time; not who made the change), `items` (id, name, quantity, status; a kitchen sees its own items only, the customer and admins all of them) and `delivery` (status, estimated arrival, distance, duration) or `null`. Allowed for the order's customer, a seller with an item in it, or an admin; others get 403 `ACCESS_DENIED`. Note that an assigned rider is not allowed here (they can still join the socket room). The shipped frontend does not call this endpoint.
 
 ## Frontend
 
@@ -120,7 +121,7 @@ Sellers and admins in the order room also receive `order:delivery:tracking`; the
 | `components/SellerNewOrderNotification.tsx` | `order:new` | pop-up with a chime on `/sellers` pages; orders already waiting are also fetched on open |
 | `app/sellers/orders/page.tsx` | `order:new`, `order:status:update`, `order:item:status:update`, `delivery:assigned` | reloads the list |
 | `app/sellers/orders/[id]/page.tsx` | `order:status:update`, `order:item:status:update`, `delivery:assigned` | reloads the order |
-| `app/riders/dashboard/page.tsx` | `delivery:new`, `delivery:removed`, `delivery:cancelled`, `delivery:assigned`, `order:status:update`; also sends location | reloads available and own jobs |
+| `app/riders/dashboard/page.tsx` | `delivery:new`, `delivery:removed`, `delivery:cancelled`, `delivery:assigned`, `order:status:update`; also sends location | `delivery:new` and `delivery:removed` reload only the list of available jobs (a second `useLiveRefresh` with `eventsOnly`); the list is also reloaded when the rider goes on duty, because pool events reach only riders on duty and it may have moved on meanwhile. The other three events reload available and own jobs |
 | `app/riders/earnings/page.tsx` | `order:status:update` | reloads earnings |
 | `components/orders/OrderChatModal.tsx` | `order:message`, `order:messages:read` | reloads the conversation |
 | `components/layout/DashboardNavbar.tsx` | `notification:new` | increments the unread bell counter |

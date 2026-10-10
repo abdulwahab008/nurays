@@ -151,10 +151,7 @@ app.use(errorHandler);
 
 // Start server
 httpServer.listen(PORT, () => {
-  console.log(`🚀 Server running on port ${PORT}`);
-  console.log(`📝 Environment: ${process.env.NODE_ENV || 'development'}`);
-  console.log(`🔗 API Base URL: http://localhost:${PORT}/api/${API_VERSION}`);
-  console.log(`🔌 WebSocket server initialized`);
+  logger.info({ port: PORT, env: process.env.NODE_ENV || 'development', api: `http://localhost:${PORT}/api/${API_VERSION}` }, 'Server running (WebSocket server initialized)');
 
   // Background jobs. Each run holds a Postgres advisory lock, so with several app
   // instances only one runs a given job at a time (jobs/scheduler.ts).
@@ -193,9 +190,9 @@ const SHUTDOWN_DRAIN_MS = Number(process.env.SHUTDOWN_DRAIN_MS ?? (isProduction(
 async function shutdown(signal: string, exitCode = 0) {
   if (isShuttingDown()) return;
   markShuttingDown();
-  console.log(`${signal} received: shutting down`);
+  logger.info({ signal }, 'Shutting down');
   const forced = setTimeout(() => {
-    console.error('Shutdown took too long; exiting.');
+    logger.error('Shutdown took too long; exiting');
     process.exit(1);
   }, SHUTDOWN_GRACE_MS);
   forced.unref();
@@ -205,11 +202,11 @@ async function shutdown(signal: string, exitCode = 0) {
   // Stop accepting connections; in-flight requests finish. Live sockets never end on their
   // own, so they are closed (clients reconnect to another instance).
   const httpClosed = new Promise<void>((resolve) => httpServer.close(() => resolve()));
-  await socketManager.close().catch((err) => console.error('Closing sockets failed:', err));
+  await socketManager.close().catch((err) => logger.error({ err }, 'Closing sockets failed'));
   await httpClosed;
-  await stopWorkers().catch((err) => console.error('Stopping job workers failed:', err));
+  await stopWorkers().catch((err) => logger.error({ err }, 'Stopping job workers failed'));
   await Promise.allSettled([prisma.$disconnect(), closeRedis(), flushSentry()]);
-  console.log('Shutdown complete');
+  logger.info('Shutdown complete');
   process.exit(exitCode);
 }
 

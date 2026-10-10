@@ -40,7 +40,7 @@ Where a route is only "authenticated" but the service enforces ownership or a ro
 3. The response is `{ success, data: { accessToken, refreshToken } }` (camelCase, no `expires_in`): both tokens are replaced. The old refresh token is not invalidated server-side.
 4. Retry the original request once. If refresh fails (401 `INVALID_REFRESH_TOKEN`), sign out.
 
-The web client (`frontend-web/lib/api-client.ts`) does exactly this, shares one in-flight refresh between concurrent 401s, and never retries `/auth/refresh`, `/auth/login`, `/auth/logout` or `/auth/register`. `POST /auth/logout` does nothing server-side (stateless JWT): the client discards its tokens.
+The web client (`frontend-web/lib/api-client.ts`) does exactly this, shares one in-flight refresh between concurrent 401s, and never retries `/auth/refresh`, `/auth/login`, `/auth/logout` or `/auth/register`. `POST /auth/logout` ends every session the account has (it sets `tokensValidAfter`), so the client discards its tokens and every other device has to sign in again.
 
 ### Response envelope
 
@@ -89,8 +89,14 @@ Business-rule errors use specific codes defined next to the check in the service
 | Limiter | Limit | Key | Applied to |
 |---|---|---|---|
 | api | 1200 / minute | IP | everything under `/api` except `/health` |
-| login | 10 / 15 min | IP | `POST /auth/login`, `/auth/google`, `/auth/reset-password`, `/auth/phone/verify` |
-| otp | 5 / 15 min | IP | `POST /auth/otp/request`, `/auth/forgot-password`, `/auth/phone/request` |
+| login | 10 failures / 15 min | IP + account | `POST /auth/login`, `/auth/google`, `/auth/reset-password`, `/auth/phone/verify` |
+| login-ip | 100 failures / 15 min | IP | `POST /auth/login`, `/auth/google` |
+| otp-ip | 30 / 15 min | IP | `POST /auth/otp/request` |
+| otp-phone | 3 / 15 min | phone number | `POST /auth/otp/request`, `/auth/phone/request` |
+| phone-request | 5 / hour | user | `POST /auth/phone/request` |
+| forgot-ip | 20 / 15 min | IP | `POST /auth/forgot-password` |
+| forgot-email | 3 / hour | e-mail address | `POST /auth/forgot-password` |
+| resend-verification | 3 / hour | user | `POST /auth/resend-verification` |
 | register | 10 / hour | IP | `POST /auth/register` |
 | promo | 20 / minute | IP | `POST /promotions/validate` |
 | order | 20 / 10 min | user | `POST /orders` |
@@ -119,17 +125,18 @@ Uploaded public images are served from the storage layer's public URL. Private f
 
 | Method and path | Access | Body / notes | Returns |
 |---|---|---|---|
-| `POST /auth/otp/request` | public, otp limit | `phone` (10-15 chars), `purpose`: `registration` \| `login` \| `reset_password` | `{ message, phone }` (the normalised number); sends an SMS code |
-| `POST /auth/register` | public, register limit | `email`, `password` (min 6), `user_type`: `customer` \| `seller` \| `rider`, `full_name` (2-255); optional `phone`, `phone_otp` (6 digits, from `/otp/request` with purpose `registration`; without it the phone is saved unverified), `city`, `area`, `business_name` (required for sellers, else 400 `BUSINESS_NAME_REQUIRED`) | 201 `{ user, seller?, tokens, requiresEmailVerification: true, emailSendFailed }`; seller and rider accounts start pending approval |
+| `POST /auth/otp/request` | public, otp limit | `phone` (10-15 chars), `purpose`: `registration` \| `login` (a code for a password reset is not offered, a reset goes through the e-mailed link: 400 `VALIDATION_ERROR`) | `{ message, phone }` (the normalised number); sends an SMS code |
+| `POST /auth/register` | public, register limit | `email`, `password` (8-200 characters; a common password, or one built from the person's own name, phone or e-mail, is refused with 400 `WEAK_PASSWORD` and `details.reason`; one that is too short is refused by the request schema as 400 `VALIDATION_ERROR`), `user_type`: `customer` \| `seller` \| `rider`, `full_name` (2-255); optional `phone`, `phone_otp` (6 digits, from `/otp/request` with purpose `registration`; without it the phone is saved unverified), `city`, `area`, `business_name` (required for sellers, else 400 `BUSINESS_NAME_REQUIRED`) | 201 `{ user, seller?, tokens, requiresEmailVerification: true, emailSendFailed }`; seller and rider accounts start pending approval |
 | `POST /auth/login` | public, login limit | `loginMethod`: `email` (default) or `otp`; `phoneOrEmail`; `otpCodeOrPassword` (password min 6, or 6-digit OTP). Email login needs a valid email, OTP login a phone of 10-15 chars | `{ user, tokens, requiresEmailVerification }`. An unverified email does not block login |
-| `POST /auth/google` | public, login limit | `accessToken` (Google access token, not schema-validated; missing gives 400 `MISSING_GOOGLE_TOKEN`) | same shape as login |
+| `POST /auth/google` | public, login limit | exactly one of `accessToken` (the web button's Google access token) or `idToken` (a native app's Google ID token, a signed JWT verified against Google's keys); both or neither is 400 `VALIDATION_ERROR` | same shape as login. 401 `INVALID_GOOGLE_TOKEN`, 401 `GOOGLE_EMAIL_UNVERIFIED`, 503 `GOOGLE_NOT_CONFIGURED` / `GOOGLE_UNAVAILABLE` |
 | `POST /auth/verify-email` | public | `token` | message only |
 | `POST /auth/forgot-password` | public, otp limit | `email` | always the same message, whether or not the account exists; emails a reset link |
-| `POST /auth/reset-password` | public, login limit | `token` (20-200 chars), `password` (min 6) | message; revokes older sessions |
+| `POST /auth/reset-password` | public, login limit | `token` (20-200 chars), `password` (the same rules as sign-up; a staff member needs 12 characters, refused with 400 `WEAK_PASSWORD` and `details.minLength`) | message; revokes older sessions |
 | `POST /auth/refresh` | public | `refreshToken` | `{ accessToken, refreshToken }` (see Refresh flow) |
 | `GET /auth/me` | authenticated | none | `{ id, phone, email, userType, status, emailVerified, phoneVerified, profile, defaultAddress }` |
 | `POST /auth/resend-verification` | authenticated | none | message |
-| `POST /auth/logout` | authenticated | none | message only (no server-side effect) |
+| `POST /auth/change-password` | authenticated | `currentPassword` (asked for again: a wrong one is 400 `INVALID_PASSWORD`, never 401, and five wrong ones in 15 minutes stop even the right one with 429 `RATE_LIMITED`, the same budget as changing the e-mail or closing the account), `newPassword` (the same rules as sign-up, judged first, so a weak one costs no attempt: 400 `WEAK_PASSWORD` with `details.reason` and `details.minLength`, staff 12 characters; the same password again is 400 `PASSWORD_UNCHANGED`) | `{ tokens: { access_token, refresh_token, expires_in } }` for this session; every older session, on this device and every other, is void (401 `SESSION_REVOKED`) and the account's sockets are closed. An account with no password (it signs in with Google) is refused with 400 `NO_PASSWORD_SET`: it sets one through `forgot-password`, which writes to its verified address. The change is audited (`auth:PASSWORD_CHANGED`) and the verified address is e-mailed a notice |
+| `POST /auth/logout` | authenticated | none | message; ends every session the account has, on every device (older access and refresh tokens are refused with 401 `SESSION_REVOKED`), closes its sockets and forgets every push subscription the account has (nobody is signed in on those devices any more; the web app registers a browser's own subscription again for whoever signs in on it) |
 | `POST /auth/phone/request` | authenticated, otp limit | `phone` | `{ message, phone }`; sends a code to that number |
 | `POST /auth/phone/verify` | authenticated, login limit | `phone`, `otp` (6 digits) | `{ phone, phoneVerified }`; the number becomes the account's |
 
@@ -139,12 +146,12 @@ All routes need authentication (`user-profile.routes.ts`).
 
 | Method and path | Body / notes | Returns |
 |---|---|---|
-| `GET /users/me` | none | the user's profile |
-| `PATCH /users/me` | optional `fullName` (min 2), `email`, `city`, `area`, `languagePreference`: `en` \| `ur`; `currentPassword` is required when `email` changes on an account that has a password (400 `PASSWORD_REQUIRED`, 401 `INVALID_PASSWORD`) | updated profile; a changed email is unverified until confirmed |
+| `GET /users/me` | none | `{ id, phone, phoneVerified, email, emailVerified, hasPassword, userType, status, profile, createdAt }`: `hasPassword` says whether there is a password to change (a Google account has none); the password itself never leaves the server |
+| `PATCH /users/me` | optional `fullName` (min 2), `email`, `city`, `area`, `languagePreference`: `en` \| `ur`; `currentPassword` is required when `email` changes on an account that has a password (400 `PASSWORD_REQUIRED`, 400 `INVALID_PASSWORD` for a wrong one, never 401, which would make the web app refresh its session and retry; five wrong passwords an hour per account end in 429 `RATE_LIMITED`, and so does the fourth e-mail change an hour) | updated profile; a changed email is unverified until confirmed, and the address the account leaves is e-mailed a notice (only if its owner had verified it) that names the new address in part |
 | `DELETE /users/me` | `confirm: "DELETE"`, `password` (required when the account has one) | closes the account (see Security: account closure); 409 `OPEN_ORDERS` \| `WALLET_BALANCE` \| `ACTIVE_DELIVERIES` \| `RIDER_BALANCE` \| `PENDING_PAYOUT`, 403 `STAFF_ACCOUNT` |
 | `POST /users/me/avatar` | `avatarUrl` (a URL; upload the image first with `POST /upload/avatar`) | updated avatar |
 | `GET /users/me/addresses` | none | the user's addresses (bare array) |
-| `POST /users/me/addresses` | `addressLine1` (min 5), `area` (min 2), `city` (min 2); optional `label`, `addressLine2`, `postalCode`, `landmark`, `latitude` (-90..90), `longitude` (-180..180), `communityId`, `isDefault` | 201 the address |
+| `POST /users/me/addresses` | `addressLine1` (min 5), `area` (min 2), `city` (min 2); optional `label`, `addressLine2`, `houseNumber` (max 50, spaces trimmed: the house, flat or shop number a rider looks for on the door), `postalCode`, `landmark`, `latitude` (23.5..37.5), `longitude` (60.5..77.5) (the pin must be inside Pakistan, else 400 `VALIDATION_ERROR`), `communityId`, `isDefault` | 201 the address |
 | `PATCH /users/me/addresses/:id` | any subset of the address fields, at least one (for example `{ isDefault: true }`) | the address |
 | `DELETE /users/me/addresses/:id` | none | message |
 
@@ -156,10 +163,10 @@ All routes need authentication (`user-profile.routes.ts`).
 |---|---|---|---|
 | `GET /sellers` | public | query `communityId`, `city`, `businessType`, `search` (name or description), `sort` (`trending`, otherwise best rated), `limit` (max 50, default 30) | `{ data: [kitchen cards], count }`: only approved, verified, active sellers; each has rating, community, `availability`, delivery terms, up to 4 products. Not paginated |
 | `GET /sellers/:id` | public | `:id` is the seller id or its user id | one kitchen with its products, `availability`, delivery terms and the 10 latest reviews; 404 `SELLER_NOT_FOUND` if not approved and active |
-| `POST /sellers/register` | authenticated | `businessName` (min 3); optional `businessNameUrdu`, `businessType` (`restaurant` \| `home_kitchen` \| `bakery` \| `cafe` \| `cloud_kitchen`, default `home_kitchen`), `description`, `kitchenVideoUrl`, `coverImageUrl`, `cnicFrontUrl`, `cnicBackUrl`, `kitchenPhotoUrls[]`, `communityId`, `primaryCommunityName`, `latitude`, `longitude`, `address`, `houseOrUnitNumber`, `mealCategories[]`, `deliveryModes[]`, `bankAccountName`, `bankAccountNumber`, `bankName`, `jazzcashNumber`, `jazzcashAccountTitle`, `easypaisaNumber`, `easypaisaAccountTitle`, `agreeToTerms` | 201 application; 400 `SELLER_ALREADY_EXISTS` unless the previous application was rejected |
+| `POST /sellers/register` | authenticated | `businessName` (min 3); optional `businessNameUrdu`, `businessType` (`restaurant` \| `home_kitchen` \| `bakery` \| `cafe` \| `cloud_kitchen`, default `home_kitchen`), `description`, `kitchenVideoUrl`, `coverImageUrl`, `cnicFrontUrl`, `cnicBackUrl`, `kitchenPhotoUrls[]`, `communityId`, `primaryCommunityName`, `latitude`, `longitude`, `address`, `houseOrUnitNumber`, `mealCategories[]`, `deliveryModes[]` (`delivery` \| `pickup` \| `dine_in`), `bankAccountName`, `bankAccountNumber`, `bankName`, `jazzcashNumber`, `jazzcashAccountTitle`, `easypaisaNumber`, `easypaisaAccountTitle`, `agreeToTerms` | 201 application; 400 `SELLER_ALREADY_EXISTS` unless the previous application was rejected |
 | `GET /sellers/me` | authenticated | none | the caller's seller profile (also while pending or rejected) |
 | `GET /sellers/me/dashboard` | authenticated | none | dashboard numbers for the caller's seller account (404 `SELLER_NOT_FOUND` without one) |
-| `PATCH /sellers/me`, `PUT /sellers/me` | role seller (not suspended) | all optional, most nullable: `businessName`, `businessNameUrdu`, `description`, `kitchenVideoUrl`, `coverImageUrl`, payment fields (`jazzcash*`, `easypaisa*`, `bank*`), `lowStockThreshold`, `enableStockAlerts`, `latitude`, `longitude`, delivery settings (`deliveryProvider`: `platform` \| `self`, `allowCrossCommunity`, `deliveryFeeType`: `fixed` \| `distance`, `deliveryFeeFixed`, `deliveryFeeBase`, `deliveryFeePerKm`, `distancePricingTiers[{maxKm,fee}]`, `maxDeliveryDistanceKm`, `minOrderAmountForDelivery`, `freeDeliveryThreshold`, `freeDeliveryAreas[]`, `freeDeliveryRadiusKm`, `allowedPostalCodes[]`, `deliveryZones[]`, `deliveryModes[]`), `businessType`, `mealCategories[]`, `storeNotice` (max 500), availability (`scheduleMode`, `operatingHours` as `{ fixedDaily?, weekly? }` with `HH:MM` times, `availabilityOverride` such as `open`, `closed`, `busy`, `vacation`, `holiday`, `preorder_only`, `availabilityOverrideUntil`, `availabilityNote` max 300), `orderCutoffTime`, `maxDailyOrders`, `minPrepTimeMinutes`, `preOrderOnly`, `advanceBookingMinDays`, `advanceBookingMaxDays` | the updated profile |
+| `PATCH /sellers/me`, `PUT /sellers/me` | role seller (not suspended) | all optional, most nullable: `businessName`, `businessNameUrdu`, `description`, `kitchenVideoUrl`, `coverImageUrl`, payment fields (`jazzcash*`, `easypaisa*`, `bank*`), `lowStockThreshold`, `enableStockAlerts`, `latitude`, `longitude` (inside Pakistan, else 400 `VALIDATION_ERROR`), delivery settings (`deliveryProvider`: `platform` \| `self`, `allowCrossCommunity`, `deliveryFeeType`: `fixed` \| `distance`, `deliveryFeeFixed`, `deliveryFeeBase`, `deliveryFeePerKm`, `distancePricingTiers[{maxKm,fee}]`, `maxDeliveryDistanceKm`, `minOrderAmountForDelivery`, `freeDeliveryThreshold`, `freeDeliveryAreas[]`, `freeDeliveryRadiusKm`, `allowedPostalCodes[]`, `deliveryZones[]`, `deliveryModes[]`: any of `delivery` \| `pickup` \| `dine_in`, never null), `businessType` (the five of registration, never null), `mealCategories[]` (free text), `storeNotice` (max 500), availability (`scheduleMode`, `operatingHours` as `{ fixedDaily?, weekly? }` with `HH:MM` times, `availabilityOverride`: `open` \| `closed` \| `busy` \| `vacation` \| `holiday` \| `preorder_only`, or null to follow the schedule, `availabilityOverrideUntil`, `availabilityNote` max 300), `orderCutoffTime` (`HH:MM`, or null for none), `maxDailyOrders`, `minPrepTimeMinutes`, `preOrderOnly`, `advanceBookingMinDays`, `advanceBookingMaxDays` | the updated profile |
 | `POST /sellers/me/toggle-live` | role seller (not suspended) | none | `{ availabilityOverride, isOpen, message }`: flips the store between open and closed (sets `availabilityOverride` to `open` or `closed`, clearing any end date) |
 | `GET /sellers/me/community-delivery` | role seller (not suspended) | none | the kitchen's per-community delivery terms |
 | `PUT /sellers/me/community-delivery` | role seller (not suspended) | `terms[]` (max 200), each `{ communityId, fee (0-100000, default 0), freeAbove?, minOrderAmount?, isEnabled? }`. The fee is only used for self-delivery; with Nuray riders the delivery fee is Nuray's | saved terms |
@@ -174,7 +181,7 @@ Note the singular. `seller-order.routes.ts`. All routes need role `seller` or `a
 | Method and path | Body / query | Returns |
 |---|---|---|
 | `GET /seller/orders` | query `page`, `limit`, `status` (`pending`, `preparing`, `ready`, `dispatched`, `cancelled`; item status), `orderStatus` (any order status), `dateFrom`, `dateTo` | `{ orders, pagination }` containing the seller's items |
-| `GET /seller/orders/:id` | none | one order with the seller's items |
+| `GET /seller/orders/:id` | none | the kitchen's view of one order: its own items, the customer's name and phone, the door (address as at checkout), payment details for a manual transfer, status history and the kitchen's earnings. Never the customer's account id, map pin, postcode, idempotency key or payment-gateway transaction id |
 | `POST /seller/orders/:id/accept` | none | accepts the order (starts preparation); when Nuray delivers, a delivery job is created for riders |
 | `POST /seller/orders/:id/reject` | `reason` (not schema-validated) | rejects and notifies the customer |
 | `POST /seller/orders/:id/ready` | none | marks it ready for pickup |
@@ -267,9 +274,9 @@ All routes need authentication (`cart.routes.ts`, `cart.validator.ts`). One cart
 
 | Method and path | Body / query | Returns |
 |---|---|---|
-| `GET /cart` | none | the cart with items grouped and priced |
+| `GET /cart` | none | `{ items, summary: { subtotal, totalItems, totalSellers }, activeSeller }`: the dishes at the kitchens' prices. The summary carries no delivery fee, discount or total: those are worked out where they are known (the estimate below, and checkout) |
 | `GET /cart/validate` | none | checkout validation of the cart (stock, availability, rules) |
-| `GET /cart/delivery-estimate` | query `addressId` (required, else 400 `VALIDATION_ERROR`) | delivery fee estimate for that address |
+| `GET /cart/delivery-estimate` | query `addressId` (required, else 400 `VALIDATION_ERROR`) | what delivering the cart to that address costs the customer, worked out as an order for the same dishes would be: `{ deliveryFee, isFree, isDeliverable, reason, kitchenPaysDelivery, freeDeliveryThreshold, deliverySubtotal }`. `deliverySubtotal` is the amount the kitchen's rules were checked against: the dishes at today's prices after the kitchen's own deals, before any voucher code. `freeDeliveryThreshold` is the order amount at which a self-delivering kitchen's fee is waived (still to reach while the fee is charged, reached once it is waived) and is `null` when no rule says so or a Nuray rider delivers (the kitchen pays that fee); progress is `deliverySubtotal / freeDeliveryThreshold`. `isDeliverable: false` means the kitchen does not deliver to that address (`reason` says why) and `deliveryFee` is then 0 and must not be shown as free |
 | `POST /cart/items` | `productId` (id or slug), `quantity` (>=1); optional `variantId` (uuid), `stockType`, `hubId`, `clearAndAdd` (empty the cart first) | 201 the item |
 | `PATCH /cart/items/:id` | optional `quantity` (>=0; 0 removes the item), `stockType`, `hubId` | the item, or a message when removed |
 | `DELETE /cart/items/:id` | none | message |
@@ -281,15 +288,15 @@ All routes need authentication (`order.routes.ts`, `order.validator.ts`). Access
 
 | Method and path | Body / query | Returns |
 |---|---|---|
-| `POST /orders` | order limit, `Idempotency-Key`. Body: `items[]` (min 1; each `productId` uuid, `quantity` int >0, optional `variantId`, `stockType`, `hubId`), `deliveryType`: `home_delivery` \| `hub_pickup` \| `self_pickup`, `paymentMethod`: `jazzcash` \| `easypaisa` \| `bank` \| `cod` \| `wallet` \| `card` \| `safepay`; optional `deliveryAddressId` (uuid), `hubId`, `deliverySlotDate`, `deliverySlotTime`, `promotionCode` (refused with `INVALID_PROMO_CODE` \| `PROMO_INACTIVE` \| `PROMO_EXPIRED` \| `PROMO_LIMIT_REACHED` \| `PROMO_ALREADY_USED` \| `MIN_ORDER_NOT_MET` \| `PROMO_NOT_APPLICABLE` when it cannot be used), `deliveryInstructions` (max 500). An item `hubId` is only allowed on hub stock (`HUB_NOT_APPLICABLE` otherwise) | 201 `{ order: { id, orderNumber, totalAmount, paymentMethod, paymentStatus, orderStatus, items }, payment: { gateway, status: "pending" } }`. For an online payment, follow with `POST /payments/process`. Totals are whole rupees |
+| `POST /orders` | order limit, `Idempotency-Key`. Body: `items[]` (min 1; each `productId` uuid, `quantity` int >0, optional `variantId`, `stockType`, `hubId`), `deliveryType`: `home_delivery` \| `hub_pickup` \| `self_pickup`, `paymentMethod`: `jazzcash` \| `easypaisa` \| `bank` \| `cod` \| `wallet` \| `card` \| `safepay`; optional `deliveryAddressId` (uuid), `hubId`, `deliverySlotDate`, `deliverySlotTime`, `promotionCode` (refused with `INVALID_PROMO_CODE` \| `PROMO_INACTIVE` \| `PROMO_EXPIRED` \| `PROMO_LIMIT_REACHED` \| `PROMO_ALREADY_USED` \| `MIN_ORDER_NOT_MET` \| `PROMO_NOT_APPLICABLE` when it cannot be used), `deliveryInstructions` (max 500). An item `hubId` is only allowed on hub stock (`HUB_NOT_APPLICABLE` otherwise). `safepay` / `card` is refused with 503 `GATEWAY_UNAVAILABLE` while online payment is not configured, before anything is reserved | 201 `{ order: { id, orderNumber, totalAmount, paymentMethod, paymentStatus, orderStatus, items }, payment: { gateway, status: "pending" } }`. For an online payment, follow with `POST /payments/process`. Totals are whole rupees |
 | `GET /orders/me` | query `page`, `limit`, `status` (`pending` ... `cancelled`, `refunded`) | `{ orders, pagination, statusCounts }` where `statusCounts` is the count per order status across the whole history |
-| `GET /orders/:id` | none | full order (items, delivery, payment, status history) |
+| `GET /orders/:id` | none | full order (items, delivery, payment, status history) for the customer and admins. A rider gets the order without payment details and internal keys; a kitchen gets the same view as `GET /seller/orders/:id` |
 | `POST /orders/:id/cancel` | `reason` (5-500) | cancels. Customers can only cancel while the order is `pending` (400 `ORDER_NOT_CANCELLABLE` otherwise); stock is restored and a refund created if it was paid |
 | `GET /orders/:id/payment-details` | none | the kitchen's transfer details (bank, JazzCash, EasyPaisa) for a manual-transfer order |
 | `POST /orders/:id/submit-payment` | submission limit. Body (not schema-validated): `referenceNumber` (required), optional `senderName`, `senderAccount`, `proofUrl` (from `POST /upload/payment-proof`), `notes` | records the customer's transfer, status `payment_submitted`; 400 for paid, cancelled, COD or wallet orders |
 | `POST /orders/:id/confirm-payment` | `confirmed` (boolean), `disputeReason` (not schema-validated) | for the receiving kitchen only (403 `NOT_PAYEE` otherwise): `confirmed: true` marks the order paid, `false` marks the payment `disputed` for admins |
-| `GET /orders/:id/messages` | query `role` (`customer` \| `seller` \| `rider`) | the order's chat messages; reading marks them read and emits `order:messages:read` |
-| `POST /orders/:id/messages` | message limit. Body: `message` (text, max 2000) or `mediaUrl`; optional `messageType` (`text` \| `voice` \| `image`), `role`, `duration` (seconds, 0-3600). `mediaUrl` must be a chat upload by the sender (`POST /upload/chat-media`) | 201 the message; emits `order:message` |
+| `GET /orders/:id/messages` | query `role` (`customer` \| `seller` \| `rider`) | the order's chat messages (each with `senderRole`, `senderName` and `isMe`, never the sender's account id); reading marks them read and emits `order:messages:read` |
+| `POST /orders/:id/messages` | message limit. Body: `message` (text, max 2000) or `mediaUrl`; optional `messageType` (`text` \| `voice` \| `image`), `role`, `duration` (seconds, 0-3600). `mediaUrl` must be a chat upload by the sender (`POST /upload/chat-media`) | 201 the message (same fields as above); emits `order:message` |
 
 ## Payments, wallet and Safepay: `/payments`
 
@@ -349,12 +356,12 @@ An order paid online only becomes visible to the kitchen's payment flow once the
 | `PUT /riders/me/application` | submission limit. `city` (2-60), `vehicleType`: `motorcycle` \| `bicycle` \| `scooter` \| `car` \| `rickshaw`, `vehicleNumber` (2-20); optional `licenseNumber`, `cnicFrontUrl`, `cnicBackUrl`, `licenseUrl` (private refs from `POST /upload/documents`) | the application, back to `pending` review |
 | `PATCH /riders/duty-status` | optional `isAvailable` (boolean; omitted toggles) | `{ isAvailable }` |
 | `GET /riders/deliveries/available` | query `lat`, `lng` (optional; closest pickups first) | open delivery jobs the rider may claim (riders over their cash limit are only offered prepaid jobs) |
-| `GET /riders/deliveries/mine` | none | the rider's jobs (cancelled jobs disappear after a day) |
+| `GET /riders/deliveries/mine` | query `history` (optional whole number, 0 to 200; anything else is ignored) | every job still running, and the latest `history` finished ones, newest first: 30 unless asked, none for 0, at most 200 (cancelled jobs disappear after a day). The full record of money is under `GET /riders/me/earnings`; the rider's lifetime count is `totalDeliveries` on `GET /riders/me` |
 | `POST /riders/deliveries/:id/claim` | optional `askFee` (rupees; must lie in the allowed corridor for the job, else 400 `BID_OUT_OF_BOUNDS`) | the claimed delivery. A rider holds at most two active jobs; 409 `RIDER_OFF_DUTY` when off duty |
 | `PATCH /admin/riders/:id/community` (admin) | `communityId` (uuid or null) | `{ communityId }`. Sets the community the rider serves, for automatic assignment |
 | `POST /riders/deliveries/:id/release` | none | `{ released: true }`. Hands a job back to the pool before pickup (`assigned` or `arrived_at_pickup`), else 409 `CANNOT_RELEASE` |
-| `PATCH /riders/deliveries/:id/status` | `status`: `arrived_at_pickup` \| `picked_up` \| `in_transit` \| `arrived_at_customer` \| `delivered` \| `delivery_failed`; `reason` (1-500, required for `delivery_failed`); `otp` (4 digits, the customer's handover PIN, for `delivered`). `picked_up` and `in_transit` return 409 `FOOD_NOT_READY` until the kitchen has marked the order ready | the delivery |
-| `POST /riders/deliveries/:id/location` | location limit. Body (not schema-validated): `latitude`, `longitude` (numbers; 400 `INVALID_COORDINATES`) | `{ delivery, currentLocation, distanceToPickupMeters, distanceToDeliveryMeters, isInsidePickupGeofence, isInsideDeliveryGeofence, autoTriggeredStatus }`. 403 if not the rider's job, 409 `DELIVERY_NOT_ACTIVE` once it has finished. Details in the realtime doc |
+| `PATCH /riders/deliveries/:id/status` | `status`: `arrived_at_pickup` \| `picked_up` \| `in_transit` \| `arrived_at_customer` \| `delivered` \| `delivery_failed`; `reason` (1-500, required for `delivery_failed`); `otp` (4 digits, the customer's handover PIN, for `delivered`). `picked_up` and `in_transit` return 409 `FOOD_NOT_READY` until the kitchen has marked the order ready, and so does `delivery_failed` from `arrived_at_pickup` (hand the job back instead); `picked_up` on an order paid online or by transfer returns 409 `PAYMENT_NOT_CONFIRMED` until the payment is confirmed; any move on a cancelled or refunded order returns 409 `ORDER_ALREADY_TERMINAL` | the delivery |
+| `POST /riders/deliveries/:id/location` | location limit. `latitude` (23.5..37.5), `longitude` (60.5..77.5): numbers inside Pakistan, else 400 `VALIDATION_ERROR` | `{ delivery, currentLocation, distanceToPickupMeters, distanceToDeliveryMeters, isInsidePickupGeofence, isInsideDeliveryGeofence, autoTriggeredStatus }`. 403 if not the rider's job, 409 `DELIVERY_NOT_ACTIVE` once it has finished. Details in the realtime doc |
 
 ## Reviews: `/reviews`
 
@@ -364,6 +371,9 @@ An order paid online only becomes visible to the kitchen's payment flow once the
 |---|---|---|---|
 | `GET /reviews/products/:id/reviews` | public | same query as `GET /products/:id/reviews` | same |
 | `POST /reviews` | authenticated, submission limit | `orderId` (uuid), `orderItemId` (uuid), `productRating` (1-5), `sellerRating` (1-5); optional `deliveryRating` (1-5), `comment`, `photos[]` (URLs) | 201 the review. The order must be the caller's and delivered (400 `ORDER_NOT_DELIVERED`); one review per item (duplicate gives 409 `DUPLICATE_RECORD`) |
+| `POST /reviews/:id/report` | authenticated, submission limit | `reason`: `abusive` \| `spam` \| `false` \| `privacy` \| `other`; optional `note` (trimmed, 300 characters at most) | 200 `{ success, message }`. A report hides nothing: it flags the review and puts it in the staff queue (the first reason is kept; later reports only add to the audit log, `review:REPORT`). 400 `OWN_REVIEW` for the review's author; 404 `REVIEW_NOT_FOUND` for a review that is not there, a hidden one included |
+
+A review that staff have hidden is left out of the reviews lists, of the kitchen's public page (`GET /sellers/:id`), of the review counts in the dish and kitchen payloads, and of the dish's, the kitchen's and the Nuray rider's rating. Staff decide on reports under Admin, "Reviews".
 
 ## Promotions: `/promotions`
 
@@ -403,7 +413,7 @@ All routes need authentication (`notification.routes.ts`, `notification.validato
 | `GET /notifications/preferences` | none | which categories reach the user on which channels |
 | `PUT /notifications/preferences` | `preferences`: object with optional keys `orders`, `payments`, `deliveries`, each an object with optional booleans `push`, `email`, `sms` | the saved preferences |
 | `GET /notifications/push/public-key` | none | `{ publicKey }`: the VAPID public key for web push |
-| `POST /notifications/push/subscriptions` | `endpoint` (URL), `keys: { p256dh, auth }` (the browser's `PushSubscription`) | 201 message |
+| `POST /notifications/push/subscriptions` | `endpoint` (URL), `keys: { p256dh, auth }` (the browser's `PushSubscription`) | 201 message; a device that already belonged to another account moves to this one |
 | `DELETE /notifications/push/subscriptions` | `endpoint` | message |
 | `PATCH /notifications/:id/read` | none | message |
 | `PATCH /notifications/read-all` | none | message |
@@ -425,7 +435,7 @@ All routes need authentication. Admin support routes are under `/admin/support`.
 
 | Method and path | Access | Returns |
 |---|---|---|
-| `GET /realtime/orders/:id/track` | authenticated; the order's customer, a seller with an item in it, or an admin | status snapshot: status, payment status, history (last 10), items, delivery summary |
+| `GET /realtime/orders/:id/track` | authenticated; the order's customer, a seller with an item in it, or an admin | status snapshot: status, payment status, history (last 10: status, notes, time), items (a seller sees its own only), delivery summary |
 
 The Socket.IO server itself is documented in [REALTIME_ORDER_MANAGEMENT.md](./REALTIME_ORDER_MANAGEMENT.md).
 
@@ -470,7 +480,7 @@ Every route under `/admin` needs role `admin` (`admin.routes.ts`, `admin-order.r
 |---|---|---|
 | `GET /admin/analytics` | query `dateFrom`, `dateTo` | platform analytics |
 | `GET /admin/statistics` | none | order statistics |
-| `GET /admin/orders` | query `page`, `limit`, `orderStatus`, `paymentStatus` (`pending`, `paid`, `failed`, `refunded`, `refund_pending`, `payment_submitted`, `disputed`), `customerId`, `sellerId`, `dateFrom`, `dateTo`, `orderNumber` | `{ orders, pagination }` |
+| `GET /admin/orders` | query `page`, `limit`, `orderStatus`, `paymentStatus` (`pending`, `paid`, `failed`, `refunded`, `refund_pending`, `payment_submitted`, `disputed`), `customerId`, `sellerId` (a kitchen's own id, as in `items[].seller.id` of the rows; the id of the account that owns it also works; an unknown id lists nothing), `dateFrom`, `dateTo`, `orderNumber` | `{ orders, pagination }` |
 | `GET /admin/orders/:id` | none | full order |
 | `PATCH /admin/orders/:id/status` | `status` (`pending` ... `completed`, `cancelled`, `refunded`), optional `notes` (max 500) | the order |
 | `POST /admin/orders/:id/cancel` | `reason` (5-500) | cancels, restocks, refunds if paid, closes any delivery job |
@@ -568,6 +578,19 @@ Same body schemas as seller promotions (see Promotions), but the discount is pai
 | `GET /admin/support/tickets/:id` | none | one ticket with messages, including internal notes and status-change lines (`isInternal`) |
 | `POST /admin/support/tickets/:id/reply` | `message` (min 1), optional `status` (`open` \| `in_progress` \| `resolved` \| `closed`), optional `internal` (true: an admin-only note, the customer is not told and never sees it) | 201 the ticket. A normal reply notifies the customer |
 
+### Reviews
+
+`admin-reviews.controller.ts`, `review-moderation.service.ts`. Reading needs `read.core`; the three decisions need `support.handle` (support staff, admins and the super admin).
+
+| Method and path | Body / query | Returns |
+|---|---|---|
+| `GET /admin/reviews` | query `status`: `reported` (default: flagged and still shown, the longest-waiting first) \| `hidden` \| `all`; `page`, `limit` (1-50, default 20) | `{ reviews: [{ id, createdAt, reportedSince, productId, productName, sellerId, businessName, customerId, customerName, productRating, sellerRating, deliveryRating, comment, photos, sellerResponse, isVisible, isReported, reason, reportCount }], pagination }`; `reportCount` is the number of reports in the audit log |
+| `POST /admin/reviews/:id/hide` | | `{ success, message }`. The review leaves every public page and the ratings are worked out again without it. Hiding a hidden review changes nothing |
+| `POST /admin/reviews/:id/keep` | | `{ success, message }`. Closes the report; the review stays shown |
+| `POST /admin/reviews/:id/restore` | | `{ success, message }`. Shows a hidden review again and works the ratings out again |
+
+404 `REVIEW_NOT_FOUND` for an id that is not there. Each decision is in the audit log (`admin:POST /reviews/:id/hide`, `/keep`, `/restore`).
+
 ### Staff and approvals
 
 | Method and path | Body | Returns |
@@ -580,7 +603,7 @@ Same body schemas as seller promotions (see Promotions), but the discount is pai
 | `POST /admin/staff/:id/password` | `password` (min 12) | sets a new password and ends their sessions |
 | `DELETE /admin/staff/:id` | | removes staff access (account becomes a customer) |
 
-The super admin and your own account cannot be changed. Login and `GET /auth/me` return `staffRole` and `permissions` for staff. A role that may not do something gets 403 `INSUFFICIENT_STAFF_ROLE` with `details.permission`.
+The queue keys are the kinds of work listed in the admin guide; `reviews` ("Reported reviews", for roles with `support.handle`) counts reviews that were reported and are still shown, and points to `/admin/reviews`. The super admin and your own account cannot be changed. Login and `GET /auth/me` return `staffRole` and `permissions` for staff. A role that may not do something gets 403 `INSUFFICIENT_STAFF_ROLE` with `details.permission`.
 
 ### Audit log
 
@@ -591,7 +614,7 @@ The super admin and your own account cannot be changed. Login and `GET /auth/me`
 
 ## Limitations
 
-- `POST /auth/logout` and the refresh endpoint do not revoke tokens; sessions are only revoked by password reset or account takeover handling (`tokensValidAfter`).
+- The refresh endpoint hands out a new refresh token without invalidating the old one (no rotation with reuse detection), and sessions are not listed per device: logout, a password reset or change, a suspension, a role change, an account takeover and account closure each end every session of the account at once (`tokensValidAfter`).
 - `GET /realtime/orders/:id/track` rejects the order's assigned rider, although a rider can join the order's socket room.
 - Several routes read their body without a zod schema (seller reject reason, manual payment submission, order-payment confirmation, rider location, category requests, Google sign-in). Their checks are in the controller or service.
 - Error shapes are not completely uniform: `community.controller.ts` returns its 400s as `{ success: false, message }` without an `error` object.

@@ -1,6 +1,6 @@
 'use client';
 
-import { ReactNode, useEffect, useState } from 'react';
+import { ReactNode, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuthStore } from '@/lib/store/auth-store';
 import { useAuthInit } from '@/lib/hooks/use-auth-init';
@@ -32,26 +32,20 @@ export function RoleGuard({
   const router = useRouter();
   const { initialized } = useAuthInit();
   const { isAuthenticated, user } = useAuthStore();
-  const [decision, setDecision] = useState<'pending' | 'allow' | 'deny'>('pending');
 
+  // Worked out from the current state on every render, so protected UI can never show on a stale decision.
+  const role = user?.userType ?? user?.user_type;
+  const decision: 'pending' | 'allow' | 'deny' = !initialized
+    ? 'pending'
+    : !isAuthenticated || !role || !allowedRoles.includes(role as (typeof allowedRoles)[number])
+      ? 'deny'
+      : 'allow';
+
+  // The redirect is the only side effect: a signed-out visitor goes to sign in, a signed-in one of the wrong role elsewhere.
   useEffect(() => {
-    if (!initialized) return;
-
-    if (!isAuthenticated) {
-      setDecision('deny');
-      router.replace(redirectUnauthenticated);
-      return;
-    }
-
-    const role = user?.userType ?? user?.user_type;
-    if (!role || !allowedRoles.includes(role as (typeof allowedRoles)[number])) {
-      setDecision('deny');
-      router.replace(redirectWrongRole);
-      return;
-    }
-
-    setDecision('allow');
-  }, [initialized, isAuthenticated, user, allowedRoles, router, redirectUnauthenticated, redirectWrongRole]);
+    if (decision !== 'deny') return;
+    router.replace(isAuthenticated ? redirectWrongRole : redirectUnauthenticated);
+  }, [decision, isAuthenticated, router, redirectUnauthenticated, redirectWrongRole]);
 
   if (decision !== 'allow') {
     return (

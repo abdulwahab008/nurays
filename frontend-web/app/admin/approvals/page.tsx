@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
-import { UserLayout } from '@/components/layout/UserLayout';
+import { AdminShell } from '@/components/layout/AdminShell';
 import { useToast } from '@/components/ui/toast';
 import { apiClient, apiErrorMessage } from '@/lib/api-client';
 import { useAuthStore } from '@/lib/store/auth-store';
@@ -53,7 +53,7 @@ export default function AdminApprovalsPage() {
   useLiveRefresh(load, { events: ['order:new', 'order:status:update', 'notification:new', 'delivery:new'], intervalMs: 60_000 });
 
   return (
-    <UserLayout showSidebar showNavbar>
+    <AdminShell>
       <div className="max-w-4xl mx-auto p-4 sm:p-6">
         <div className="mb-6">
           <h1 className="text-2xl font-bold text-gray-900">Approvals</h1>
@@ -94,6 +94,6 @@ export default function AdminApprovalsPage() {
           </>
         )}
       </div>
-    </UserLayout>
+    </AdminShell>
   );
 }

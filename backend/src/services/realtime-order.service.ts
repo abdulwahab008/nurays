@@ -3,6 +3,8 @@ import socketManager from '../config/socket';
 import { AppError } from '../middleware/errorHandler';
 import { notify, notifyMany } from './notify.service';
 import type { DeliveryChannel } from '../jobs/notify.jobs';
+import { ONLINE_GATEWAY_METHODS } from '../utils/paymentCustody';
+import { logger } from '../utils/logger';
 
 // What each order status tells the customer, and which channels besides the app it is worth.
 const ORDER_STATUS_MESSAGES: Record<
@@ -66,12 +68,13 @@ export class RealtimeOrderService {
       return;
     }
 
+    // Who made the change decides the notifications below, but the id never leaves the server: this
+    // payload reaches the customer, every kitchen and the rider, and none should learn another's account id.
     const orderData = {
       orderId,
       orderNumber: audience.orderNumber,
       status,
       updatedAt: new Date().toISOString(),
-      changedBy,
     };
 
     // The order's room, customer, kitchens, rider and admins, each connection once.
@@ -142,39 +145,42 @@ export class RealtimeOrderService {
   // The emitters below are best-effort and never throw: a lost live update is caught up by
   // the client's reload on reconnect, never worth failing the action that caused it.
 
-  /** A new chat message on an order: its parties reload the conversation. */
-  async emitOrderMessage(orderId: string, messageId: string, senderId: string, senderRole: string) {
+  /** A new chat message on an order: its parties reload the conversation. Says who by role, never by account id. */
+  async emitOrderMessage(orderId: string, messageId: string, senderRole: string) {
     try {
       const audience = await orderAudience(orderId);
-      if (audience) socketManager.emitToRooms(audience.rooms, 'order:message', { orderId, messageId, senderId, senderRole });
+      if (audience) socketManager.emitToRooms(audience.rooms, 'order:message', { orderId, messageId, senderRole });
     } catch (err) {
-      console.error('order:message event failed:', err);
+      logger.error({ err, orderId }, 'order:message event failed');
     }
   }
 
   /** Someone read an order's messages: the senders' read ticks update. */
-  async emitMessagesRead(orderId: string, readerId: string) {
+  async emitMessagesRead(orderId: string) {
     try {
       const audience = await orderAudience(orderId);
-      if (audience) socketManager.emitToRooms(audience.rooms, 'order:messages:read', { orderId, readerId });
+      if (audience) socketManager.emitToRooms(audience.rooms, 'order:messages:read', { orderId });
     } catch (err) {
-      console.error('order:messages:read event failed:', err);
+      logger.error({ err, orderId }, 'order:messages:read event failed');
     }
   }
 
-  /** A delivery job joined the open pool: riders reload their list of available jobs. */
+  /** A delivery job joined the open pool: the riders who can take it (on duty) reload their list of available jobs. */
   emitDeliveryPosted(deliveryId: string, orderId: string) {
-    socketManager.emitToRole('rider', 'delivery:new', { deliveryId, orderId });
+    socketManager.emitToOnDutyRiders('delivery:new', { deliveryId, orderId });
   }
 
-  /** A rider took a job: it leaves every other rider's list, and the order's parties reload. */
-  async emitDeliveryClaimed(deliveryId: string, orderId: string) {
+  /**
+   * A rider took a job: the order's parties reload, and it leaves the list of every rider on duty, unless
+   * `toRiders` is false because no rider ever heard of it (a job taken automatically the moment it was created).
+   */
+  async emitDeliveryClaimed(deliveryId: string, orderId: string, opts: { toRiders?: boolean } = {}) {
     try {
-      socketManager.emitToRole('rider', 'delivery:removed', { deliveryId, orderId, reason: 'claimed' });
+      if (opts.toRiders !== false) socketManager.emitToOnDutyRiders('delivery:removed', { deliveryId, orderId, reason: 'claimed' });
       const audience = await orderAudience(orderId);
       if (audience) socketManager.emitToRooms(audience.rooms, 'delivery:assigned', { deliveryId, orderId });
     } catch (err) {
-      console.error('delivery:assigned event failed:', err);
+      logger.error({ err, orderId, deliveryId }, 'delivery:assigned event failed');
     }
   }
 
@@ -241,7 +247,7 @@ export class RealtimeOrderService {
 
     // An order waiting for its online payment is only worth an alert once it is paid
     // (see online-payment.service): a kitchen shouldn't start on an unpaid order.
-    const awaitingOnlinePayment = ['safepay', 'card'].includes(order.paymentMethod) && order.paymentStatus !== 'paid';
+    const awaitingOnlinePayment = ONLINE_GATEWAY_METHODS.includes(order.paymentMethod) && order.paymentStatus !== 'paid';
 
     // Emit to each seller and create a persistent notification for the Notifications page
     sellerOrders.forEach((items, sellerUserId) => {
@@ -336,6 +342,9 @@ export class RealtimeOrderService {
       throw new AppError('Access denied', 403, 'ACCESS_DENIED');
     }
 
+    // A kitchen sees its own dishes only (the same as on its order page), never another kitchen's.
+    const visibleItems = isCustomer || isAdmin ? order.items : order.items.filter((item) => item.seller.userId === userId);
+
     return {
       orderId: order.id,
       orderNumber: order.orderNumber,
@@ -343,13 +352,13 @@ export class RealtimeOrderService {
       paymentStatus: order.paymentStatus,
       estimatedDeliveryAt: order.estimatedDeliveryAt,
       deliveredAt: order.deliveredAt,
+      // Who made a change is an account id: the customer, a kitchen or a rider never learns another's.
       statusHistory: order.statusHistory.map((history) => ({
         status: history.status,
         notes: history.notes,
-        changedBy: history.changedBy,
         createdAt: history.createdAt,
       })),
-      items: order.items.map((item) => ({
+      items: visibleItems.map((item) => ({
         id: item.id,
         productName: item.productName,
         quantity: item.quantity,

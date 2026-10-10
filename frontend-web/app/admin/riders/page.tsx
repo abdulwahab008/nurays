@@ -3,7 +3,7 @@
 import { Suspense, useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { UserLayout } from '@/components/layout/UserLayout';
+import { AdminShell } from '@/components/layout/AdminShell';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/toast';
 import { apiClient, apiErrorMessage } from '@/lib/api-client';
@@ -65,7 +65,7 @@ function AdminRidersContent() {
   const tab: Tab = searchParams.get('tab') === 'applications' ? 'applications' : 'riders';
 
   return (
-    <UserLayout showSidebar={true} showNavbar={true}>
+    <AdminShell>
       <div className="max-w-6xl mx-auto">
         <div className="mb-6">
           <h1 className="text-3xl font-bold text-gray-900">Riders</h1>
@@ -92,7 +92,7 @@ function AdminRidersContent() {
 
         {tab === 'riders' ? <RidersMoney /> : <Applications />}
       </div>
-    </UserLayout>
+    </AdminShell>
   );
 }
 

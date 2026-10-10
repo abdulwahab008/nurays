@@ -1,3 +1,4 @@
+import type { Prisma } from '@prisma/client';
 import prisma from '../config/database';
 import { searchTerm } from '../utils/search';
 import { AppError } from '../middleware/errorHandler';
@@ -8,7 +9,7 @@ export class HubService {
    * Get hub centers
    */
   async getHubCenters(filters: { city?: string }) {
-    const where: any = {
+    const where: Prisma.HubCenterWhereInput = {
       status: 'active',
     };
 
@@ -45,7 +46,7 @@ export class HubService {
             longitude: Number(hub.longitude),
           }
         : null,
-      operatingHours: hub.operatingHours as any,
+      operatingHours: hub.operatingHours,
       status: hub.status,
       availableProductsCount: new Set(hub.inventory.map((i) => i.productId)).size,
     }));
@@ -71,29 +72,18 @@ export class HubService {
 
     // Public endpoint: show only what can be bought. It used to list quarantined,
     // damaged and expired batches, and products that were unapproved or inactive.
-    const where: any = {
-      hubId,
-      ...sellableBatchWhere(),
-      product: { approvalStatus: 'approved', isActive: true, seller: { status: 'active' } },
-    };
-
+    const product: Prisma.ProductWhereInput = { approvalStatus: 'approved', isActive: true, seller: { status: 'active' } };
     if (filters.categoryId) {
-      where.product = {
-        ...where.product,
-        categoryId: filters.categoryId,
-      };
+      product.categoryId = filters.categoryId;
     }
-
     const inventoryTerm = searchTerm(filters.search);
     if (inventoryTerm) {
-      where.product = {
-        ...where.product,
-        OR: [
-          { name: { contains: inventoryTerm, mode: 'insensitive' } },
-          { nameUrdu: { contains: inventoryTerm, mode: 'insensitive' } },
-        ],
-      };
+      product.OR = [
+        { name: { contains: inventoryTerm, mode: 'insensitive' } },
+        { nameUrdu: { contains: inventoryTerm, mode: 'insensitive' } },
+      ];
     }
+    const where: Prisma.HubInventoryWhereInput = { hubId, ...sellableBatchWhere(), product };
 
     const inventory = await prisma.hubInventory.findMany({
       where,
@@ -347,7 +337,7 @@ export class HubService {
     const hub = await prisma.hubCenter.findUnique({ where: { id: hubId } });
     if (!hub) throw new AppError('Hub center not found', 404, 'HUB_NOT_FOUND');
 
-    const where: any = { hubId };
+    const where: Prisma.HubInventoryWhereInput = { hubId };
 
     if (filters.status && filters.status !== 'all') {
       if (filters.status === 'quarantined') {

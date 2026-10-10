@@ -6,7 +6,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint",
+    "lint": "eslint --max-warnings 362",
+    "test": "node --test --experimental-strip-types \"tests/unit/**/*.test.ts\"",
     "test:e2e": "playwright test",
     "test:e2e:ui": "playwright test --ui"
   },

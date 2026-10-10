@@ -30,6 +30,10 @@ export function useToast() {
 export function ToastProvider({ children }: { children: ReactNode }) {
   const [toasts, setToasts] = useState<Toast[]>([]);
 
+  const removeToast = useCallback((id: string) => {
+    setToasts((prev) => prev.filter((toast) => toast.id !== id));
+  }, []);
+
   const showToast = useCallback((message: string, type: ToastType = 'info', duration: number = 5000) => {
     const id = Math.random().toString(36).substring(2, 9);
     const toast: Toast = { id, message, type, duration };
@@ -41,11 +45,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
         removeToast(id);
       }, duration);
     }
-  }, []);
-
-  const removeToast = useCallback((id: string) => {
-    setToasts((prev) => prev.filter((toast) => toast.id !== id));
-  }, []);
+  }, [removeToast]);
 
   return (
     <ToastContext.Provider value={{ toasts, showToast, removeToast }}>
@@ -57,7 +57,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
 
 function ToastContainer({ toasts, removeToast }: { toasts: Toast[]; removeToast: (id: string) => void }) {
   return (
-    <div className="fixed top-4 end-4 z-50 flex flex-col gap-2 max-w-md w-[calc(100%-2rem)]">
+    <div className="fixed top-[calc(1rem+var(--safe-top))] end-[calc(1rem+var(--safe-end))] z-50 flex flex-col gap-2 max-w-md w-[calc(100%-2rem)]">
       {toasts.map((toast) => (
         <ToastItem key={toast.id} toast={toast} onRemove={removeToast} />
       ))}

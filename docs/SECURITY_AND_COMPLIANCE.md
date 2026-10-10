@@ -15,9 +15,9 @@ Code: `backend/src/services/auth.service.ts`, `utils/jwt.ts`, `middleware/auth.m
   must exist and be `active` (suspended gives 403), and the role used is the current one, not the one in the token.
   Socket.IO connections run the same check (`config/socket.ts`).
 - **Session revocation.** `User.tokensValidAfter`: any token issued before it is refused (401 `SESSION_REVOKED`),
-  access and refresh alike. It is set on password reset, when a phone number is taken over by its proven owner,
-  when an unverified-email account is claimed through Google sign-in, when an admin suspends a user, and when a
-  user's role changes (hub manager assigned or removed, `admin-people.service.ts`).
+  access and refresh alike. It is set on logout, password reset and password change, when a phone number is taken
+  over by its proven owner, when an unverified-email account is claimed through Google sign-in, when an admin
+  suspends a user, and when a user's role changes (hub manager assigned or removed, `admin-people.service.ts`).
 - **Passwords.** bcrypt, cost 10. Login for an unknown email still runs a bcrypt comparison against a dummy hash, so
   timing does not reveal whether an account exists; the error is the same for both cases.
 - **Email verification.** A random 32-byte token, valid 24 hours, mailed as a link. Password-reset tokens are random,
@@ -35,6 +35,10 @@ Code: `backend/src/services/auth.service.ts`, `utils/jwt.ts`, `middleware/auth.m
   `verified_email`. In production an unset `GOOGLE_CLIENT_ID` makes Google sign-in answer 503; in development the
   audience check is skipped when it is unset. If the matching account's email was never verified, its password is
   dropped and its sessions are voided, so someone who pre-registered a victim's email cannot keep access.
+  A native app sends a Google *ID token* instead, which the server verifies itself (`utils/google-id-token.ts`):
+  RS256 only (never `none`, never a symmetric algorithm), the signature against Google's published keys, Google as
+  issuer, an audience in `GOOGLE_CLIENT_ID` or `GOOGLE_NATIVE_CLIENT_IDS`, not expired, e-mail verified. With no client
+  id configured an ID token is always refused, development included.
 - **Privileged roles** (`admin`, `hub_manager`) cannot be self-registered: the register schema only accepts
   `customer`, `seller` and `rider`. Admins are created with `backend/scripts/create-admin.js`; hub managers are
   assigned by an admin.
@@ -49,7 +53,7 @@ Roles: `customer`, `seller`, `rider`, `admin`, `hub_manager`. Admin accounts car
   (`authorize('rider')`), `seller-order.routes.ts` (`authorize('seller','admin')` plus `blockSuspendedSeller`).
   Riders must also be approved before they can act (`rider.service.ts` `requireRider`).
 - **Ownership is checked in services, by querying with the caller's id**, not only by role:
-  - Orders are looked up with `customerId: userId` for customer actions (`order.service.ts`, `payment.service.ts`,
+  - Orders are looked up with `customerId: userId` for customer actions (`order-queries.service.ts`, `order-cancel.service.ts`, `order-payment.service.ts`, `payment.service.ts`,
     `online-payment.service.ts`); order messages are open only to the customer, the order's sellers, its assigned
     rider, or an admin.
   - A manual transfer can only be confirmed or disputed by the seller the customer was told to pay (the order's
@@ -71,8 +75,13 @@ is the production setting; development relaxes some.
 | Limiter | Limit | Applied to |
 |---|---|---|
 | API flood | 1200 / minute / account (signed in) or / IP (anonymous) | everything under `/api` except health |
-| Login | 10 failed attempts / 15 min / IP + account | login, Google, reset-password, phone verify (a successful sign-in is not counted, so a shared mobile-network address never runs out) |
-| OTP | 5 / 15 min / IP | OTP request, forgot-password, phone request |
+| Login | 10 failed attempts / 15 min / IP + account, and 100 failed attempts / 15 min / IP across accounts | login, Google, reset-password, phone verify (a successful sign-in is not counted, so a shared mobile-network address never runs out) |
+| OTP code | 30 / 15 min / IP, and 3 / 15 min / phone number | OTP request (the database also caps each number: 60 s apart, 5 an hour). The number's key is the number as normalised, hashed |
+| Phone verification | 5 / hour / account, and 3 / 15 min / phone number | phone request (signed in) |
+| Reset link | 20 / 15 min / IP, and 3 / hour / e-mail address | forgot-password (answers the same whether or not the address has an account). A link made in the last minute is not replaced by a new request |
+| Verification e-mail | 3 / hour / account (resend); 3 / hour / inbox (also for e-mail changes: `+tags` and Gmail dots count as the same inbox) | resend-verification, changing the e-mail |
+| E-mail change | 3 / hour / account | `PATCH /users/me` with a new `email` |
+| Password re-check | 5 wrong passwords / 15 min / account | changing the e-mail (accounts with a password), changing the password and closing the account. Only wrong answers are counted; five stop even the right password until the window ends. A wrong password is a 400 `INVALID_PASSWORD` (a 401 would look like an expired session to the web app) and is written to the audit log (`auth:REAUTH_FAILED`) |
 | Register | 10 / hour / IP | registration |
 | Promo validation | 20 / minute / IP | promo codes |
 | Uploads | 60 / 10 min / user | all uploads |
@@ -95,6 +104,33 @@ misattributed.
   re-encoded with sharp, which rejects non-images and strips EXIF including GPS (input capped at 40 megapixels);
   audio and PDF are checked by magic bytes. Size limits: 8 MB images, 5 MB receipts and chat media, 10 MB
   documents.
+
+## Browser security headers and the Content-Security-Policy
+
+The web app (`frontend-web/next.config.ts`) sends `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`,
+`Referrer-Policy: strict-origin-when-cross-origin`, a `Permissions-Policy` (camera and location only for the site
+itself) and a Content-Security-Policy. HSTS is set at the TLS terminator (see the deployment guide). Fonts and map
+assets ship with the build, so the only third-party origins the policy names are Google sign-in, Safepay's
+checkout and the configured API, realtime and error-reporting hosts.
+
+The policy is **report-only** until it has been seen to be clean: a browser that meets something the policy would
+block still loads it, and posts a report to `/api/csp-report` (`app/api/csp-report/route.ts`). Each violation
+becomes one JSON log line, `"type":"csp-violation"`, with the directive, what was blocked and the page, where every
+address is cut to origin and path (a password-reset link carries its token in the query string), the script
+sample is dropped, and the body and the number of reports per minute are capped. `tests/e2e/csp.spec.ts` checks
+the header, both report formats and the redaction, and loads the public pages to prove they report nothing.
+
+To enforce it:
+
+1. Run the report-only build on staging or the soft launch, using every role's screens, for about a week.
+2. Search the frontend logs for `"type":"csp-violation"`. A legitimate origin goes into the policy in
+   `next.config.ts`; reports whose blocked address is a browser extension (`chrome-extension`, `moz-extension`) are noise.
+3. When a week is clean, rebuild the frontend with the build argument `CSP_ENFORCE=true` (in the publish workflow:
+   the repository variable `CSP_ENFORCE`). The header becomes `Content-Security-Policy`; reports keep coming, so
+   keep the same search saved.
+
+`'unsafe-inline'` stays in `script-src` and `style-src` for now (Next.js's inline bootstrap script and inline
+styles); replacing it with per-request nonces is a separate decision.
 
 ## Private files and signed URLs
 
@@ -182,7 +218,7 @@ Staff are users with `user_type = 'admin'` and a `staff_role` (database CHECK ke
 |---|---|---|
 | `super_admin` | exactly one (partial unique index `users_one_super_admin`) | everything, and only this role adds, changes, suspends or removes staff, edits settings or corrects a rider balance by hand |
 | `admin` | any | day to day operations: approvals, orders, people, refunds, payouts, settling with riders, places, promo codes, complaints, reads the audit log |
-| `support` | any | the customer support person: looks things up and handles complaints (reply, internal notes, resolve). Cannot move money, approve anyone, change orders, or see applicants' ID documents, settings, analytics or the audit log |
+| `support` | any | the customer support person: looks things up, handles complaints (reply, internal notes, resolve) and decides on reported reviews (hide, keep, show again). Cannot move money, approve anyone, change orders, or see applicants' ID documents, settings, analytics or the audit log |
 
 Enforcement is on the server, table driven (`utils/permissions.ts`, `middleware/staff.ts`): every `/admin` request is
 matched to a permission; a write no rule names needs `ops.write`, a read no rule names needs `read.core`, so a route
@@ -191,6 +227,20 @@ audit log. Changing a role, suspending or removing staff ends their sessions at 
 The super admin account cannot be changed through the app. The admin menu and pages only show what a role may use,
 but that is convenience, not the security boundary.
 
+## Reviews: reports and hiding
+
+Reviews are public and written by customers, which the app stores treat as user-generated content: people must be able
+to report one and staff must be able to take it down. Anyone signed in except the review's author can report a review
+(`POST /reviews/:id/report`: `abusive`, `spam`, `false`, `privacy` or `other`, and a note of up to 300 characters; the
+submission limit applies). A report hides nothing, so nobody can take a review down just by reporting it: it flags the
+review (`reviews.is_flagged`, the first reason kept in `reviews.flag_reason`) and puts it in the staff queue
+(`/admin/reviews`, a queue on the Approvals page). A person with `support.handle` (support staff, admins, the super
+admin) then hides the review (`is_approved = false`: it leaves every public page, the kitchen's dashboard and the
+dish's, the kitchen's and the rider's rating, which are worked out again), keeps it (the report is closed) or shows a
+hidden one again. A hidden review cannot be reported. Each report is audited as `review:REPORT` with who made it and
+why, each decision as `admin:POST /reviews/:id/hide|keep|restore`. No table or column was added. Not done: the
+author is not told when a review is hidden, there is no appeal, and the order chat has no report or block action.
+
 ## Sessions, email changes and account closure
 
 - Access tokens live **1 hour** by default (`JWT_EXPIRES_IN`), refresh tokens 30 days. The web client renews the
@@ -198,12 +248,34 @@ but that is convenience, not the security boundary.
   connection or a server error keeps the session). The realtime connection presents the current token on every
   reconnect.
 - **Logout ends every session** of the account (`tokensValidAfter`) and closes its live Socket.IO connections; so
-  do suspension, a staff role change, a password reset and account closure (`socketManager.disconnectUser`).
+  do suspension, a staff role change, a password reset, a password change and account closure
+  (`socketManager.disconnectUser`). Logout also **forgets the account's push subscriptions**, so a browser or phone
+  that someone else uses next is not told about the previous account's orders; the web app drops its own
+  subscription on sign-out and registers it again for whoever signs in on that browser (`lib/push.ts`,
+  `components/AuthProvider.tsx`). A session that simply expired keeps its subscription until the next person signs
+  in on that browser, who takes it over.
+- **Changing the password while signed in** (`POST /auth/change-password`) asks for the current password again (the
+  re-check budget above), judges the new one first so that a weak one costs no attempt, refuses the same password,
+  and ends every session of the account; the session that made the change is handed fresh tokens, so the person
+  stays signed in. An account with no password cannot be given one by a token alone (400 `NO_PASSWORD_SET`): it
+  sets one through "forgot password", which writes only to a verified address. The change is audited
+  (`auth:PASSWORD_CHANGED`) and the owner is e-mailed.
+- **The owner hears of a change they may not have made.** A password change e-mails the account's verified address,
+  and so does an e-mail change, to the address the account *leaves*, naming the new one only in part (never in full)
+  and the time (Pakistan time). Both are queued (a mail server that is down neither undoes nor delays the change)
+  and neither is sent to an address nobody has proven (it may be a stranger's). There is no link to undo a change
+  in the notice yet: it points to the help page, where the person can write to support.
 - **Changing the email address** on an account that has a password requires the current password
   (`PATCH /users/me` with `currentPassword`, else 400 `PASSWORD_REQUIRED`), and the new address is unverified until
   its owner confirms it. **Password-reset links are only ever sent to a verified address**, so a copied token cannot
   be turned into a permanent takeover by re-pointing the account.
-- New passwords must be **at least 8 characters** (staff: 12). Existing sign-ins are unaffected.
+- New passwords must be **at least 8 characters** (staff: 12), not one of the ~9,000 most common passwords (SecLists
+  top 10,000 plus a few local ones; "Password123!" counts as the common word with a tail), and not contain the
+  person's own e-mail name, phone number, name or "Nuray" (`utils/password-rules.ts`, refused with 400
+  `WEAK_PASSWORD` and the reason in `details.reason`; a password that is too short is turned away earlier by the request schema, as 400 `VALIDATION_ERROR`, on the sign-up, reset and staff-management routes, and as `WEAK_PASSWORD` with `TOO_SHORT` and `minLength` on a staff member's own reset link). This applies when a password is chosen: sign-up, reset and a
+  staff member's first password (`create-admin.js` and `reset-admin-password.js` too). Sign-in does not check it,
+  so existing accounts keep working. Staff passwords are held to twelve characters on every path, including the
+  public reset link.
 - **Account closure** is self-service (`DELETE /users/me`, the Delete account button on the profile, and the public
   page `/delete-account` the app stores link to): personal details, addresses, cart, favourites, push subscriptions
   and ID documents are removed or replaced, the account is marked `deleted` and signed out everywhere; orders,
@@ -251,17 +323,18 @@ anything else: orders, ledger entries, chat, uploaded documents and receipts are
 
 - **Refresh tokens are not rotated or revocable one by one.** `/auth/refresh` mints a new pair but the old refresh
   token stays valid until it expires or the account's sessions are ended as a whole (`tokensValidAfter`: logout,
-  password reset, suspension, role change, account closure). There is no per-device session list.
+  password reset, password change, suspension, role change, account closure). There is no per-device session list.
 - **OTP codes and email-verification tokens are stored in plain text** in the database (reset tokens are hashed).
   They are short-lived and purged, but a database read exposes live ones.
-- **Weak password policy.** Minimum 8 characters (staff 12), no complexity or breached-password check. There is no
-  change-password endpoint for signed-in users; changing it goes through the reset email.
+- **No breached-password lookup.** Passwords are checked against a bundled list of common ones, not against a live
+  breach database (that would send part of a hash to an outside service).
 - **Email verification does not gate login or ordering.** A user can sign in unverified; it only affects whether
   email notifications are delivered.
-- **Login lockout is per IP only.** There is no per-account lockout for password guessing (the limit is 10 attempts
-  per 15 minutes per IP).
+- **Customer, kitchen and rider logins have no per-account lockout.** Password guessing is limited per address and
+  account together (10 failures / 15 min) and per address (100 / 15 min), not per account across addresses, because a
+  hard per-account limit would let anyone lock a stranger out. Staff accounts do lock (see Admin accounts).
 - **Legacy public files.** Receipts and chat media uploaded before the storage layer sit under `/uploads` and are
   public by URL; new ones are private. `backend/scripts/migrate-private-uploads.ts` exists for moving them.
-- **`create-admin.js` prints the password it was given** and, for an existing email, resets that account's password.
-- **All admins are equal.** There are no separate roles (finance, support), no limits or second approval on refunds, payouts and rider corrections, and no two-factor sign-in. Reading screens (customer details, payment proofs, rider money) is not logged.
-- **The frontend stores tokens in browser storage** like most SPAs, so an XSS bug would expose them.
+- **`create-admin.js` resets the password** of an account that already has the email (and signs it out everywhere); it no longer prints the password.
+- **Staff roles are coarse.** There are three (super admin, admin, support; see Staff roles) and no separate finance role, no limits or second approval on refunds, payouts and rider corrections, and no two-factor sign-in. Reading screens (customer details, payment proofs, rider money) is not logged.
+- **The frontend stores tokens in browser storage** like most SPAs, so an XSS bug would expose them. All token reads and writes go through one store (`frontend-web/lib/token-store.ts`), which a native shell replaces (`setTokenStore()`) to keep them in the phone's keychain or keystore; that native store is not written yet.

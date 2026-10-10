@@ -2,7 +2,7 @@ import { z } from 'zod';
 
 export const requestOTPSchema = z.object({
   phone: z.string().min(10).max(15),
-  purpose: z.enum(['registration', 'login', 'reset_password']),
+  purpose: z.enum(['registration', 'login']),
 });
 
 export const registerSchema = z.object({
@@ -23,7 +23,8 @@ export const registerSchema = z.object({
 
 export const loginSchema = z.object({
   phoneOrEmail: z.string().min(1, 'Phone or email is required').max(200),
-  otpCodeOrPassword: z.string().min(1, 'OTP code or password is required'),
+  // Long enough for any password the sign-up accepts (200), not an invitation to hash a megabyte.
+  otpCodeOrPassword: z.string().min(1, 'OTP code or password is required').max(200),
   loginMethod: z.enum(['otp', 'email']).default('email'),
 }).refine((data) => {
   // If email login, validate email format
@@ -82,9 +83,21 @@ export const forgotPasswordSchema = z.object({
   email: z.string().email('Invalid email format'),
 });
 
+// The strength of the new password is judged by the service (it knows whose password it is), which says why in `details.reason`.
+export const changePasswordSchema = z.object({
+  currentPassword: z.string().min(1, 'Enter your current password').max(200),
+  newPassword: z.string().min(1, 'Enter a new password').max(200),
+});
+
 export const resetPasswordSchema = z.object({
   token: z.string().min(20).max(200),
   password: z.string().min(8, 'Password must be at least 8 characters').max(200),
 });
 
-export const googleLoginSchema = z.object({ accessToken: z.string().min(10).max(4096) });
+// Exactly one proof of who is signing in: the web button's access token, or a native app's ID token (a signed JWT).
+export const googleLoginSchema = z
+  .object({
+    accessToken: z.string().min(10).max(4096).optional(),
+    idToken: z.string().min(10).max(8192).optional(),
+  })
+  .refine((body) => (body.accessToken === undefined) !== (body.idToken === undefined), { message: 'Send either accessToken or idToken' });

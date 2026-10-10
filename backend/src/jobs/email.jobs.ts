@@ -14,6 +14,8 @@ import { defineJob, enqueue } from './queue';
  */
 
 const RESET_LINK_TTL_MS = 60 * 60 * 1000;
+/** A reset link is not replaced for this long after it was made. */
+const RESET_LINK_RESEND_AFTER_MS = 60 * 1000;
 
 defineJob<{ userId: string }>('email.verification', async ({ userId }) => {
   const user = await prisma.user.findUnique({
@@ -31,6 +33,14 @@ defineJob<{ userId: string }>('email.password-reset', async ({ userId }) => {
     select: { email: true, status: true, emailVerified: true, profile: { select: { fullName: true } } },
   });
   if (!user?.email || user.status !== 'active' || !user.emailVerified) return;
+
+  // A link sent in the last minute is still on its way to the inbox: asking again must not cancel it
+  // (anyone can ask for any address), so it stands and no second one is made.
+  const justSent = await prisma.passwordReset.findFirst({
+    where: { userId, usedAt: null, createdAt: { gt: new Date(Date.now() - RESET_LINK_RESEND_AFTER_MS) } },
+    select: { id: true },
+  });
+  if (justSent) return;
 
   // Only the most recent link works.
   const token = generateVerificationToken();

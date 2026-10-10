@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import { qstr } from '../utils/query';
 import hubService from '../services/hub.service';
+import { currentUserId } from '../middleware/auth.middleware';
 
 export const getHubCenters = async (req: Request, res: Response) => {
   const city = qstr(req.query.city);
@@ -40,7 +41,7 @@ export const recordBatchIntake = async (req: Request, res: Response) => {
     barcode,
   } = req.body;
 
-  const staffUserId = (req as any).user?.userId || (req as any).user?.id;
+  const staffUserId = currentUserId(req);
 
   const result = await hubService.recordBatchIntake({
     hubId: id,
@@ -79,7 +80,7 @@ export const getHubBatches = async (req: Request, res: Response) => {
 export const updateBatchStatus = async (req: Request, res: Response) => {
   const { id, batchId } = req.params;
   const { status, reason } = req.body;
-  const staffUserId = (req as any).user?.userId || (req as any).user?.id;
+  const staffUserId = currentUserId(req);
 
   const result = await hubService.updateBatchStatus({
     hubId: id,

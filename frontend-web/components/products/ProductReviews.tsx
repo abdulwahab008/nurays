@@ -5,6 +5,7 @@ import { apiClient } from '@/lib/api-client';
 import { formatDate } from '@/lib/utils';
 import { useT } from '@/lib/i18n';
 import { browseMessages } from '@/lib/i18n/messages/browse';
+import ReportReview from './ReportReview';
 
 interface Review {
   id: string;
@@ -38,24 +39,27 @@ function Stars({ rating }: { rating: number }) {
 
 export default function ProductReviews({ productId }: { productId: string }) {
   const t = useT(browseMessages);
-  const [data, setData] = useState<ReviewsResponse | null>(null);
-  const [loading, setLoading] = useState(true);
   const [page, setPage] = useState(1);
+  // The last answer and which page of which product it was for: loading is "the answer is for something else".
+  const [answer, setAnswer] = useState<{ key: string; data: ReviewsResponse | null }>({ key: '', data: null });
+  const key = `${productId}:${page}`;
+  const { data } = answer;
+  const loading = answer.key !== key;
 
   useEffect(() => {
     let cancelled = false;
-    setLoading(true);
     apiClient
       .get(`/products/${productId}/reviews?page=${page}`)
       .then((res) => {
-        if (!cancelled && res.data?.success) setData(res.data.data);
+        if (!cancelled) setAnswer((last) => ({ key, data: res.data?.success ? res.data.data : last.data }));
       })
-      .catch(() => {})
-      .finally(() => !cancelled && setLoading(false));
+      .catch(() => {
+        if (!cancelled) setAnswer((last) => ({ key, data: last.data }));
+      });
     return () => {
       cancelled = true;
     };
-  }, [productId, page]);
+  }, [productId, page, key]);
 
   if (loading && !data) {
     return <div className="text-sm text-gray-500 py-6">{t('loadingReviews')}</div>;
@@ -99,7 +103,10 @@ export default function ProductReviews({ productId }: { productId: string }) {
                 {review.sellerResponse}
               </div>
             )}
-            <p className="text-xs text-gray-400 mt-1">{formatDate(review.createdAt)}</p>
+            <div className="flex flex-wrap items-center gap-x-3 mt-1">
+              <p className="text-xs text-gray-400">{formatDate(review.createdAt)}</p>
+              <ReportReview reviewId={review.id} />
+            </div>
           </div>
         ))}
       </div>

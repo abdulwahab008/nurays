@@ -1,31 +1,7 @@
 import prisma from '../config/database';
 import { AppError } from '../middleware/errorHandler';
-
-/**
- * Stack multiple catalog discounts onto a base price, percentage discounts
- * first then fixed amounts — must stay byte-for-byte identical to the
- * frontend's getStackedDiscountedPrice (checkout/cart/product pages) so the
- * price a customer sees always matches what they're actually charged.
- */
-export function applyStackedDiscount(
-  basePrice: number,
-  promos: Array<{ discountType: string; discountValue: number }>
-): number {
-  if (!promos?.length) return basePrice;
-  const sorted = [...promos].sort((a, b) =>
-    a.discountType === 'percentage' && b.discountType === 'fixed'
-      ? -1
-      : a.discountType === 'fixed' && b.discountType === 'percentage'
-        ? 1
-        : 0
-  );
-  const result = sorted.reduce((price, p) => {
-    if (p.discountType === 'percentage' && p.discountValue > 0) return price * (1 - p.discountValue / 100);
-    if (p.discountType === 'fixed' && p.discountValue > 0) return Math.max(0, price - p.discountValue);
-    return price;
-  }, basePrice);
-  return Math.round(result);
-}
+import { codeDiscount } from '../utils/orderPricing';
+import { applyStackedDiscount } from '../utils/pricing';
 
 type CatalogEligiblePromotion = {
   id: string;
@@ -268,18 +244,8 @@ export class PromotionService {
       throw new AppError('You have already used this promotion code', 400, 'PROMO_ALREADY_USED');
     }
 
-    // Calculate discount
-    let discountAmount = 0;
-    if (promotion.discountType === 'percentage') {
-      discountAmount = (cartTotal * Number(promotion.discountValue)) / 100;
-      if (promotion.maxDiscountAmount) {
-        discountAmount = Math.min(discountAmount, Number(promotion.maxDiscountAmount));
-      }
-    } else {
-      discountAmount = Number(promotion.discountValue);
-    }
-    // Never let a discount exceed the cart it applies to, regardless of the promo's configured value.
-    discountAmount = Math.min(discountAmount, cartTotal);
+    // The same sum the order does (never more than the cart it applies to, whatever the promo's configured value).
+    const discountAmount = codeDiscount(promotion, cartTotal);
 
     const finalAmount = cartTotal - discountAmount;
 
@@ -526,7 +492,7 @@ export class PromotionService {
 
     const now = new Date();
     return list.map((p) => {
-      let status: 'active' | 'scheduled' | 'expired' | 'draft' = 'draft';
+      let status: 'active' | 'scheduled' | 'expired' | 'draft';
       if (!p.isActive) status = 'draft';
       else if (now < p.validFrom) status = 'scheduled';
       else if (now > p.validUntil) status = 'expired';
@@ -568,7 +534,7 @@ export class PromotionService {
       throw new AppError('You can only view your own promotions', 403, 'FORBIDDEN');
     }
     const now = new Date();
-    let status: 'active' | 'scheduled' | 'expired' | 'draft' = 'draft';
+    let status: 'active' | 'scheduled' | 'expired' | 'draft';
     if (!promotion.isActive) status = 'draft';
     else if (now < promotion.validFrom) status = 'scheduled';
     else if (now > promotion.validUntil) status = 'expired';

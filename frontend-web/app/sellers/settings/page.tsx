@@ -154,7 +154,8 @@ export default function SellerSettingsPage() {
           freeDeliveryThreshold: seller.freeDeliveryThreshold ?? 500,
           deliveryModes: Array.isArray(seller.deliveryModes) && seller.deliveryModes.length ? seller.deliveryModes : ['delivery'],
 
-          businessType: seller.businessType || 'home_kitchen',
+          // A value the list does not offer (an old record) would be refused when the form is saved: start from a valid one.
+          businessType: BUSINESS_TYPES.some((b) => b.value === seller.businessType) ? seller.businessType : 'home_kitchen',
           mealCategories: Array.isArray(seller.mealCategories) ? seller.mealCategories : [],
           storeNotice: seller.storeNotice || '',
 
@@ -340,7 +341,7 @@ export default function SellerSettingsPage() {
           ? new Date(availabilityOverrideUntil).toISOString()
           : undefined,
         availabilityNote: availabilityNote || undefined,
-        orderCutoffTime: orderCutoffTime || undefined,
+        orderCutoffTime: orderCutoffTime || null,
         maxDailyOrders: maxDailyOrders ?? undefined,
         minPrepTimeMinutes: minPrepTimeMinutes ?? undefined,
         preOrderOnly,

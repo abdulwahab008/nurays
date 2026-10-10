@@ -8,14 +8,14 @@ const optionalHubId = z
 export const addToCartSchema = z.object({
   productId: z.string().min(1, 'Product ID is required'), // UUID or slug; service resolves by id or slug
   variantId: z.string().uuid().optional(),
-  quantity: z.coerce.number().int().positive('Quantity must be at least 1'),
+  quantity: z.coerce.number().int().positive('Quantity must be at least 1').max(10_000),
   stockType: z.enum(['direct', 'hub', 'both']).optional(),
   hubId: optionalHubId,
   clearAndAdd: z.boolean().optional(),
 });
 
 export const updateCartItemSchema = z.object({
-  quantity: z.coerce.number().int().min(0).optional(),
+  quantity: z.coerce.number().int().min(0).max(10_000).optional(),
   stockType: z.enum(['direct', 'hub', 'both']).optional(),
   hubId: optionalHubId,
 });

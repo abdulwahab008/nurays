@@ -84,15 +84,15 @@ export function RiderNewJobNotification() {
         if (pending) clearTimeout(pending);
         show({ key: `a-${d.deliveryId}`, kind: 'assigned', ...d });
       }),
-      // Posted to every rider: only worth a pop-up if nobody has taken it a moment later.
+      // Posted to the riders on duty: only worth a pop-up if nobody has taken it a moment later.
       subscribe('delivery:new', (d) => {
         const timer = setTimeout(async () => {
           timers.delete(d.deliveryId);
-          // Only worth a pop-up for a rider who could take it: on duty, and with a free slot.
+          // Only worth a pop-up for a rider who has a free slot (the server tells only riders who are on duty).
           try {
-            const [mine, profile] = await Promise.all([riderService.getMyDeliveries(), riderService.getRiderProfile()]);
+            const mine = await riderService.getMyDeliveries({ history: 0 }); // only the running jobs are counted
             const active = (mine.data ?? []).filter((x) => !['delivered', 'delivery_failed', 'cancelled'].includes(x.status)).length;
-            if (active >= 2 || profile.data?.isAvailable === false) return;
+            if (active >= 2) return;
           } catch {
             return;
           }
@@ -117,7 +117,7 @@ export function RiderNewJobNotification() {
   if (!isRider || popups.length === 0) return null;
 
   return (
-    <div className="fixed top-4 end-4 z-[100] w-[min(92vw,380px)] space-y-3" data-testid="rider-job-popups">
+    <div className="fixed top-[calc(1rem+var(--safe-top))] end-[calc(1rem+var(--safe-end))] z-[100] w-[min(92vw,380px)] space-y-3" data-testid="rider-job-popups">
       {popups.map((p) => (
         <div key={p.key} role="alert" className="rounded-2xl bg-slate-900 text-white shadow-2xl border border-emerald-400/40 p-4" data-testid={p.kind === 'assigned' ? 'rider-assigned-popup' : 'rider-pool-popup'}>
           <div className="flex items-start justify-between gap-3">

@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { readableDate } from './primitives';
 
 export const getSellerOrdersQuerySchema = z.object({
   page: z.coerce.number().int().min(1).optional(),
@@ -15,8 +16,8 @@ export const getSellerOrdersQuerySchema = z.object({
     'completed',
     'cancelled',
   ]).optional(),
-  dateFrom: z.string().optional(),
-  dateTo: z.string().optional(),
+  dateFrom: readableDate('dateFrom').optional(),
+  dateTo: readableDate('dateTo').optional(),
 });
 
 export const updateOrderItemStatusSchema = z.object({

@@ -33,7 +33,7 @@ cash limit (`RIDER_CASH_LIMIT`) are in `rider-ledger.service.ts`.
 
 ### Wallet
 
-Selected at checkout: `OrderService.createOrder` debits the wallet in the same database transaction that creates the
+Selected at checkout: `createOrder` (`order-placement.service.ts`) debits the wallet in the same database transaction that creates the
 order, so an order never exists waiting for wallet money that is not there. An existing unpaid order can also be paid
 from the wallet with `POST /payments/process` (`PaymentService.processWalletPayment`). Debits are conditional
 updates (`wallet.service.ts`), so two requests cannot overdraw it. Every change writes a `wallet_transactions` row
@@ -76,7 +76,7 @@ Locked wallets cannot top up.
 
 ### Transfer to the kitchen (JazzCash, EasyPaisa, bank)
 
-Nuray never touches this money. The steps, all in `order.service.ts`:
+Nuray never touches this money. The steps are in `order-payment.service.ts`, except the reminder and the timeout (`order-maintenance.service.ts`) and the refund (`refund.service.ts`):
 
 1. `GET /orders/:id/payment-details` (`getSellerPaymentDetails`) shows the accounts the kitchen has configured
    (JazzCash, EasyPaisa, bank). Nothing is shown if the kitchen set none; there are no placeholder accounts.

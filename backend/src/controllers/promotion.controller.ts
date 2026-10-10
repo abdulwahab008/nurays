@@ -1,6 +1,6 @@
 import { Request, Response } from 'express';
 import { qstr } from '../utils/query';
-import prisma from '../config/database';
+import { currentSellerId } from '../middleware/auth.middleware';
 import promotionService from '../services/promotion.service';
 import { AppError } from '../middleware/errorHandler';
 
@@ -46,12 +46,9 @@ export const getCatalogPromotions = async (req: Request, res: Response) => {
 export const listMyPromotions = async (req: Request, res: Response) => {
   if (!req.user) throw new AppError('Authentication required', 401, 'AUTH_REQUIRED');
 
-  const seller = await prisma.seller.findUnique({
-    where: { userId: req.user.userId },
-  });
-  if (!seller) throw new AppError('Seller profile not found', 404, 'SELLER_NOT_FOUND');
+  const sellerId = await currentSellerId(req);
 
-  const promotions = await promotionService.listBySeller(seller.id);
+  const promotions = await promotionService.listBySeller(sellerId);
   res.status(200).json({ success: true, data: promotions });
 };
 
@@ -59,12 +56,9 @@ export const listMyPromotions = async (req: Request, res: Response) => {
 export const createPromotion = async (req: Request, res: Response) => {
   if (!req.user) throw new AppError('Authentication required', 401, 'AUTH_REQUIRED');
 
-  const seller = await prisma.seller.findUnique({
-    where: { userId: req.user.userId },
-  });
-  if (!seller) throw new AppError('Seller profile not found', 404, 'SELLER_NOT_FOUND');
+  const sellerId = await currentSellerId(req);
 
-  const promotion = await promotionService.createForSeller(seller.id, req.body);
+  const promotion = await promotionService.createForSeller(sellerId, req.body);
   res.status(201).json({ success: true, data: promotion });
 };
 
@@ -72,12 +66,9 @@ export const createPromotion = async (req: Request, res: Response) => {
 export const getPromotion = async (req: Request, res: Response) => {
   if (!req.user) throw new AppError('Authentication required', 401, 'AUTH_REQUIRED');
 
-  const seller = await prisma.seller.findUnique({
-    where: { userId: req.user.userId },
-  });
-  if (!seller) throw new AppError('Seller profile not found', 404, 'SELLER_NOT_FOUND');
+  const sellerId = await currentSellerId(req);
 
-  const promotion = await promotionService.getOneForSeller(seller.id, req.params.id);
+  const promotion = await promotionService.getOneForSeller(sellerId, req.params.id);
   res.status(200).json({ success: true, data: promotion });
 };
 
@@ -85,12 +76,9 @@ export const getPromotion = async (req: Request, res: Response) => {
 export const updatePromotion = async (req: Request, res: Response) => {
   if (!req.user) throw new AppError('Authentication required', 401, 'AUTH_REQUIRED');
 
-  const seller = await prisma.seller.findUnique({
-    where: { userId: req.user.userId },
-  });
-  if (!seller) throw new AppError('Seller profile not found', 404, 'SELLER_NOT_FOUND');
+  const sellerId = await currentSellerId(req);
 
-  const promotion = await promotionService.updateForSeller(seller.id, req.params.id, req.body);
+  const promotion = await promotionService.updateForSeller(sellerId, req.params.id, req.body);
   res.status(200).json({ success: true, data: promotion });
 };
 
@@ -98,12 +86,9 @@ export const updatePromotion = async (req: Request, res: Response) => {
 export const deletePromotion = async (req: Request, res: Response) => {
   if (!req.user) throw new AppError('Authentication required', 401, 'AUTH_REQUIRED');
 
-  const seller = await prisma.seller.findUnique({
-    where: { userId: req.user.userId },
-  });
-  if (!seller) throw new AppError('Seller profile not found', 404, 'SELLER_NOT_FOUND');
+  const sellerId = await currentSellerId(req);
 
-  await promotionService.deleteForSeller(seller.id, req.params.id);
+  await promotionService.deleteForSeller(sellerId, req.params.id);
   res.status(200).json({ success: true, message: 'Promotion deleted' });
 };
 

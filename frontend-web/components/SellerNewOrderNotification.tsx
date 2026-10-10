@@ -9,6 +9,7 @@ import { formatPrice } from '@/lib/utils';
 import { useToast } from '@/components/ui/toast';
 import { useT } from '@/lib/i18n';
 import { kitchenOrderMessages } from '@/lib/i18n/messages/kitchen-orders';
+import { newAudioContext } from '@/lib/audio';
 
 interface NewOrderData {
   orderId: string;
@@ -25,9 +26,8 @@ interface NewOrderData {
 function playNewOrderSound() {
   if (typeof window === 'undefined') return;
   try {
-    const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
-    if (!AudioCtx) return;
-    const ctx = new AudioCtx();
+    const ctx = newAudioContext();
+    if (!ctx) return;
     const t = ctx.currentTime;
 
     const go = () => {
@@ -287,7 +287,7 @@ export function SellerNewOrderNotification() {
   if (!isSeller || !isSellerPage || !activeOrder) return null;
 
   return (
-    <div className="fixed top-4 end-4 z-[9999] flex flex-col gap-3 pointer-events-none">
+    <div className="fixed top-[calc(1rem+var(--safe-top))] end-[calc(1rem+var(--safe-end))] z-[9999] flex flex-col gap-3 pointer-events-none">
       <div
         id={`seller-alert-order-${activeOrder.orderId}`}
         className="pointer-events-auto w-[380px] bg-white rounded-3xl shadow-2xl border-2 border-emerald-400 overflow-hidden ring-4 ring-emerald-500/10"

@@ -326,7 +326,7 @@ export class ProductService {
     const skip = (page - 1) * limit;
 
     // Build where clause
-    const where: any = {};
+    const where: Prisma.ProductWhereInput = {};
 
     if (filters.categoryId) {
       where.categoryId = filters.categoryId;
@@ -672,11 +672,6 @@ export class ProductService {
         category: true,
         seller: {
           include: {
-            user: {
-              select: {
-                phone: true,
-              },
-            },
             community: { select: { id: true, name: true, slug: true, crossCommunityEnabled: true } },
             communityDeliveries: SELLER_COMMUNITY_DELIVERY_SELECT.communityDeliveries,
           },
@@ -693,7 +688,7 @@ export class ProductService {
         },
         _count: {
           select: {
-            reviews: true,
+            reviews: { where: { isApproved: true } },
             orderItems: true,
           },
         },
@@ -1037,7 +1032,7 @@ export class ProductService {
       throw new AppError('Seller not found', 404, 'SELLER_NOT_FOUND');
     }
 
-    const where: any = {
+    const where: Prisma.ProductWhereInput = {
       sellerId: seller.id,
     };
 
@@ -1060,7 +1055,7 @@ export class ProductService {
           images: true,
           _count: {
             select: {
-              reviews: true,
+              reviews: { where: { isApproved: true } },
               orderItems: true,
             },
           },

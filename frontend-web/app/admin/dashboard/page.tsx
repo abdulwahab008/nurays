@@ -147,7 +147,7 @@ export default function AdminDashboardPage() {
           <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-200">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-gray-600 mb-1">Today's Orders</p>
+                <p className="text-sm text-gray-600 mb-1">Today&apos;s Orders</p>
                 <p className="text-3xl font-bold text-gray-900">{stats.today.orders}</p>
               </div>
               <div className="w-12 h-12 bg-gray-100 rounded-lg flex items-center justify-center">
@@ -159,7 +159,7 @@ export default function AdminDashboardPage() {
           <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-200">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-gray-600 mb-1">Today's Revenue</p>
+                <p className="text-sm text-gray-600 mb-1">Today&apos;s Revenue</p>
                 <p className="text-2xl font-bold text-gray-900">{formatPrice(stats.today.revenue)}</p>
               </div>
               <div className="w-12 h-12 bg-gray-100 rounded-lg flex items-center justify-center">

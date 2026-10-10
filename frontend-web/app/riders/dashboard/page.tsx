@@ -17,6 +17,8 @@ import RiderApplicationForm from '@/components/riders/RiderApplicationForm';
 import { useT } from '@/lib/i18n';
 import { commonMessages } from '@/lib/i18n/messages/common';
 import { riderMessages, riderKeyFor, type RiderMessageKey } from '@/lib/i18n/messages/rider';
+import { ExternalLink } from '@/components/ExternalLink';
+import { reserveExternal } from '@/lib/open-external';
 
 const ROAD_STEPS: { id: string; labelKey: RiderMessageKey; icon: string }[] = [
   { id: 'assigned', labelKey: 'step.assigned', icon: '📋' },
@@ -63,6 +65,9 @@ export default function RiderDashboardPage() {
   const [mine, setMine] = useState<Delivery[]>([]);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [togglingDuty, setTogglingDuty] = useState(false);
+  // The job list carries the latest finished jobs only; "show older" asks for the most the server will send.
+  const [olderShown, setOlderShown] = useState(false);
+  const historyRef = useRef<number | undefined>(undefined);
 
   // Doorstep PIN Handshake Modal state
   const [pinModalDelivery, setPinModalDelivery] = useState<Delivery | null>(null);
@@ -92,7 +97,7 @@ export default function RiderDashboardPage() {
 
       const [availableRes, mineRes, profileRes] = await Promise.all([
         riderService.getAvailableDeliveries(),
-        riderService.getMyDeliveries(),
+        riderService.getMyDeliveries({ history: historyRef.current }),
         riderService.getRiderProfile().catch(() => null),
       ]);
 
@@ -126,6 +131,16 @@ export default function RiderDashboardPage() {
     }
   }, [showToast, activeTab, t]);
 
+  // The open pool alone: a job was posted or taken, so nothing but the list of available jobs can have changed.
+  const loadAvailable = useCallback(async () => {
+    try {
+      const res = await riderService.getAvailableDeliveries();
+      setAvailable(res.data || []);
+    } catch {
+      // The next full reload reports what is wrong (an account that cannot take jobs, a lost connection).
+    }
+  }, []);
+
   const isRider = user?.user_type === 'rider' || user?.userType === 'rider';
 
   // The sidebar links to #active / #available / #history.
@@ -157,18 +172,33 @@ export default function RiderDashboardPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isAuthenticated, user, isRider, router, showToast]);
 
-  // New jobs, jobs taken by other riders or cancelled, and status changes on this rider's
-  // orders (e.g. the kitchen marking food ready) arrive as live events.
+  // Jobs given to this rider or cancelled, and status changes on this rider's orders (e.g. the kitchen
+  // marking food ready), arrive as live events and reload everything.
   useLiveRefresh(() => loadAll(true), {
-    events: ['delivery:new', 'delivery:removed', 'delivery:cancelled', 'delivery:assigned', 'order:status:update'],
+    events: ['delivery:cancelled', 'delivery:assigned', 'order:status:update'],
     enabled: isAuthenticated && isRider && !blockedReason,
     intervalMs: 30_000,
+  });
+
+  // Jobs posted to the pool or taken from it (sent only to riders on duty) change nothing but the pool list.
+  useLiveRefresh(loadAvailable, {
+    events: ['delivery:new', 'delivery:removed'],
+    enabled: isAuthenticated && isRider && !blockedReason,
+    eventsOnly: true,
   });
 
   const activeDeliveries = mine.filter(
     (d) => !FINISHED_STATUSES.includes(d.status)
   );
   const completedDeliveries = mine.filter((d) => d.status === 'delivered');
+  // Every delivery the rider has made, from their profile: the list below only holds the latest ones.
+  const deliveredTotal = profile?.totalDeliveries ?? completedDeliveries.length;
+
+  const showOlderDeliveries = () => {
+    historyRef.current = 200;
+    setOlderShown(true);
+    void loadAll(true);
+  };
 
   // The phone's position goes to each job in progress (and nowhere when there is none).
   const locationSharing = useRiderLocation(
@@ -188,6 +218,8 @@ export default function RiderDashboardPage() {
         res.data.isAvailable ? t('nowOnDuty') : t('nowOffDuty'),
         'success'
       );
+      // Pool events reach only riders on duty, so the list may have moved on while they were off.
+      if (res.data.isAvailable) void loadAvailable();
     } catch (error: any) {
       showToast(error.response?.data?.error?.message || t('toggleDutyFailed'), 'error');
     } finally {
@@ -199,11 +231,11 @@ export default function RiderDashboardPage() {
   const handleClaim = async (deliveryId: string, askFee?: number) => {
     // Accepting a job starts the trip to the kitchen: open Google Maps (window opened inside the tap, see handleAdvanceStatus).
     const job = available.find((a) => a.id === deliveryId);
-    const nav = job ? window.open('', '_blank') : null;
+    const nav = job ? reserveExternal() : null;
     try {
       setBusyId(deliveryId);
       await riderService.claimDelivery(deliveryId, askFee);
-      if (nav && job) nav.location.href = navUrlFor({ ...job, status: 'assigned' } as Delivery);
+      if (nav && job) nav.open(navUrlFor({ ...job, status: 'assigned' } as Delivery));
       showToast(
         askFee
           ? t('claimedCustom', { fee: askFee })
@@ -213,7 +245,7 @@ export default function RiderDashboardPage() {
       setActiveTab('active');
       loadAll(true);
     } catch (error: any) {
-      nav?.close();
+      nav?.cancel();
       showToast(error.response?.data?.error?.message || t('claimFailed'), 'error');
     } finally {
       setBusyId(null);
@@ -260,27 +292,24 @@ export default function RiderDashboardPage() {
     event.preventDefault();
     if (navBusyId) return; // a second tap while the first is still checking
     setNavBusyId(delivery.id);
-    const nav = window.open('', '_blank');
+    const nav = reserveExternal();
     try {
-      const fresh = (await riderService.getMyDeliveries()).data?.find((d: Delivery) => d.id === delivery.id);
+      const fresh = (await riderService.getMyDeliveries({ history: 0 })).data?.find((d: Delivery) => d.id === delivery.id);
       if (!fresh || !NAVIGABLE_STATUSES.includes(fresh.status)) {
-        nav?.close();
+        nav.cancel();
         showToast(t('navNotAvailable'), 'error');
         loadAll(true);
         return;
       }
       if (!canNavigateTo(navDestinationFor(fresh))) {
-        nav?.close();
+        nav.cancel();
         showToast(t('navNoDestination'), 'error');
         return;
       }
-      const url = navUrlFor(fresh);
-      if (nav) nav.location.href = url;
-      else window.location.assign(url); // pop-up blocked: leave for the maps app, the rider comes back with the back button
+      nav.open(navUrlFor(fresh)); // a blocked pop-up leaves for the maps app itself: the rider comes back with the back button
     } catch {
-      // Offline or the server did not answer: the link's own href still opens the last known destination.
-      nav?.close();
-      window.location.assign(navUrlFor(delivery));
+      // Offline or the server did not answer: the last known destination is still better than none.
+      nav.open(navUrlFor(delivery));
     } finally {
       setNavBusyId(null);
     }
@@ -290,7 +319,7 @@ export default function RiderDashboardPage() {
   const handleAdvanceStatus = async (delivery: Delivery) => {
     // Leaving the kitchen with the food: open directions to the customer. The window is opened now,
     // inside the tap, because browsers block pop-ups opened after a network call.
-    const nav = delivery.status === 'picked_up' ? window.open('', '_blank') : null;
+    const nav = delivery.status === 'picked_up' ? reserveExternal() : null;
     try {
       setBusyId(delivery.id);
       if (delivery.status === 'assigned') {
@@ -302,7 +331,7 @@ export default function RiderDashboardPage() {
       } else if (delivery.status === 'picked_up') {
         await riderService.updateDeliveryStatus(delivery.id, 'in_transit');
         showToast(t('toastDeparted'), 'info');
-        if (nav) nav.location.href = navUrlFor(delivery);
+        if (nav) nav.open(navUrlFor(delivery));
       } else if (delivery.status === 'in_transit') {
         await riderService.updateDeliveryStatus(delivery.id, 'arrived_at_customer');
         showToast(t('toastArrivedDoor'), 'info');
@@ -318,7 +347,7 @@ export default function RiderDashboardPage() {
       }
       loadAll(true);
     } catch (error: any) {
-      nav?.close();
+      nav?.cancel();
       showToast(error.response?.data?.error?.message || t('statusUpdateFailed'), 'error');
     } finally {
       setBusyId(null);
@@ -429,7 +458,7 @@ export default function RiderDashboardPage() {
             <div>
               <div className="flex items-center gap-2 flex-wrap">
                 <h2 className="font-black text-lg text-white">
-                  {profile?.name || (user as any)?.profile?.fullName || t('nameNotSet')}
+                  {profile?.name || user?.profile?.fullName || t('nameNotSet')}
                 </h2>
                 <span className="px-2 py-0.5 rounded text-[11px] font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
                   ⭐ {riderRating ? t('fleetScore', { rating: riderRating }) : t('newRider')}
@@ -671,10 +700,8 @@ export default function RiderDashboardPage() {
                             {/* START NAVIGATION: opens the maps app for the current leg (checked against the server first) */}
                             {NAVIGABLE_STATUSES.includes(delivery.status) && (
                               <div className="px-5 pt-4">
-                                <a
+                                <ExternalLink
                                   href={navUrlFor(delivery)}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
                                   data-testid="start-navigation"
                                   aria-disabled={!canStartNavigation(delivery) || navBusyId === delivery.id}
                                   onClick={(e) => (canStartNavigation(delivery) ? handleStartNavigation(delivery, e) : e.preventDefault())}
@@ -683,14 +710,14 @@ export default function RiderDashboardPage() {
                                   }`}
                                 >
                                   {navBusyId === delivery.id ? t('processing') : headingToCustomer(delivery) ? t('startNavCustomer') : t('startNavKitchen')}
-                                </a>
+                                </ExternalLink>
                                 <p className="text-[11px] text-slate-500 text-center mt-1">{t('navHint')}</p>
                                 {(() => {
                                   const alt = alternativeMapsLink(navDestinationFor(delivery), platform);
                                   return alt ? (
-                                    <a href={alt.url} target="_blank" rel="noopener noreferrer" data-testid="alt-navigation" className="block text-center text-[11px] font-semibold text-emerald-700 underline mt-1">
+                                    <ExternalLink href={alt.url} data-testid="alt-navigation" className="block text-center text-[11px] font-semibold text-emerald-700 underline mt-1">
                                       {alt.kind === 'apple' ? t('openInAppleMaps') : t('openInOtherMaps')}
-                                    </a>
+                                    </ExternalLink>
                                   ) : null;
                                 })()}
                               </div>
@@ -709,14 +736,12 @@ export default function RiderDashboardPage() {
                                     </span>
                                   </div>
                                 </div>
-                                <a
+                                <ExternalLink
                                   href={delivery.pickupMapsUrl ?? `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(delivery.pickupAddress)}`}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
                                   className="px-2.5 py-1 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-[11px] font-bold shadow-xs whitespace-nowrap transition-all flex items-center gap-1"
                                 >
                                   {t('maps')}
-                                </a>
+                                </ExternalLink>
                               </div>
 
                               <div className="p-3.5 rounded-xl bg-emerald-50/60 border border-emerald-100 flex items-start justify-between gap-2.5">
@@ -751,14 +776,12 @@ export default function RiderDashboardPage() {
                                 {delivery.deliveryLatitude == null && (
                                   <p className="text-[11px] font-semibold text-amber-700" data-testid="no-map-pin">{t('noMapPin')}</p>
                                 )}
-                                <a
+                                <ExternalLink
                                   href={delivery.dropoffMapsUrl ?? `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(delivery.deliveryAddress)}`}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
                                   className="px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-[11px] font-bold shadow-xs whitespace-nowrap transition-all flex items-center gap-1"
                                 >
                                   {t('maps')}
-                                </a>
+                                </ExternalLink>
                               </div>
                             </div>
 
@@ -1008,7 +1031,7 @@ export default function RiderDashboardPage() {
                   <div className="p-4 bg-slate-50 border-b border-slate-200 flex items-center justify-between">
                     <h3 className="font-black text-sm text-slate-900">{t('deliveredOrders')}</h3>
                     <span className="text-xs font-bold text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-full border border-emerald-200">
-                      {t('successfulCount', { count: completedDeliveries.length })}
+                      {t('successfulCount', { count: deliveredTotal })}
                     </span>
                   </div>
 
@@ -1039,6 +1062,17 @@ export default function RiderDashboardPage() {
                           </div>
                         </div>
                       ))}
+                      {!olderShown && deliveredTotal > completedDeliveries.length && (
+                        <div className="px-5 py-3 text-center">
+                          <button
+                            type="button"
+                            onClick={showOlderDeliveries}
+                            className="text-xs font-bold text-[#FF5500] hover:underline"
+                          >
+                            {t('showOlder')}
+                          </button>
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>

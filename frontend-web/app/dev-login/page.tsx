@@ -110,10 +110,6 @@ function DevLoginContent() {
     setStatusMessage(`Authenticating as ${role.name}...`);
 
     try {
-      if (typeof window !== 'undefined' && isolate) {
-        sessionStorage.setItem('tab_isolated', 'true');
-      }
-
       const res = await apiClient.post('/auth/login', {
         phoneOrEmail: role.email,
         otpCodeOrPassword: role.pass,
@@ -139,6 +135,8 @@ function DevLoginContent() {
     const auto = searchParams.get('autologin');
 
     if (roleParam && auto === '1') {
+      // This development-only hub signs in the role the link names; the state it sets is the "signing in" message.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       performLogin(roleParam, true);
     }
   }, [searchParams]);

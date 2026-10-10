@@ -43,6 +43,7 @@ Required means the server will not start in production without it (see "Startup 
 | `JWT_SECRET` | yes | 32+ characters, not a placeholder in production. `openssl rand -hex 32`. |
 | `JWT_EXPIRES_IN`, `JWT_REFRESH_EXPIRES_IN` | no | Defaults: `1h` (the app renews it with the refresh token) and `30d`. |
 | `GOOGLE_CLIENT_ID` | no | Google sign-in; see [GOOGLE_OAUTH_SETUP.md](GOOGLE_OAUTH_SETUP.md). |
+| `GOOGLE_NATIVE_CLIENT_IDS` | no | Comma-separated Android and iOS OAuth client IDs, for a native app's Google sign-in (ID tokens). Leave empty until the apps exist. |
 | `FRONTEND_URL` | yes (production) | Must be `https://`. Used in email links. |
 | `CORS_ORIGIN` | yes | The one browser origin allowed for HTTP and Socket.IO, an https:// origin (normally the same as `FRONTEND_URL`). Production refuses to start without it. |
 | `BASE_URL` | when Safepay is on | The API's public `https://` URL. |
@@ -84,6 +85,7 @@ payment receipts, seller and rider documents, chat media) are never public; the 
 | `SAFEPAY_PUBLIC_KEY`, `SAFEPAY_SECRET_KEY` | optional | Both together switch online payment on. |
 | `SAFEPAY_WEBHOOK_SECRET` | yes if the keys are set | |
 | `SAFEPAY_SANDBOX` | yes if the keys are set | Must be exactly `true` or `false`. `false` is live. |
+| `SAFEPAY_API_URL`, `SAFEPAY_CHECKOUT_URL` | no | Override the Safepay API and hosted-checkout hosts (default: the sandbox or live pair chosen by `SAFEPAY_SANDBOX`). Only for a proxy or a test double. |
 | `WALLET_TOPUP_MAX` | no | Largest single top-up, Rs. |
 
 ### Other
@@ -95,7 +97,9 @@ payment receipts, seller and rider documents, chat media) are never public; the 
 | `ORDER_ACCEPT_TIMEOUT_MINUTES` (30), `ORDER_PAYMENT_TIMEOUT_MINUTES` (60), `PAYMENT_CONFIRM_ESCALATE_HOURS` (6) | no | Used by the stale-order sweep. |
 | `BANK_API_URL`, `BANK_MERCHANT_ID`, `BANK_API_KEY`, `BANK_RETURN_URL` | no | Placeholder for a bank gateway that is not implemented. Leave empty. See [PAYMENT_GATEWAY_INTEGRATION.md](PAYMENT_GATEWAY_INTEGRATION.md). |
 | `LOG_LEVEL`, `LOG_FORMAT` | no | Default `info`. |
-| `SENTRY_DSN`, `SENTRY_ENVIRONMENT`, `SENTRY_RELEASE`, `SENTRY_TRACES_SAMPLE_RATE` | no | Sentry is off when `SENTRY_DSN` is empty. The traces rate is read in code but not listed in `.env.example`; default 0. |
+| `SLOW_REQUEST_MS` | no | A request slower than this is logged as a warning, so it can be alerted on. Default 2000. |
+| `AUTO_ASSIGN_ENABLED` | no | Automatic rider assignment (see "Background jobs"). Anything but `false` leaves it on; `false` keeps every job in the open pool for riders to claim by hand. |
+| `SENTRY_DSN`, `SENTRY_ENVIRONMENT`, `SENTRY_RELEASE`, `SENTRY_TRACES_SAMPLE_RATE` | no | Sentry is off when `SENTRY_DSN` is empty. The traces rate is the share of requests traced, 0 to 1; default 0. |
 | `SHUTDOWN_DRAIN_MS`, `SHUTDOWN_GRACE_MS` | no | See "Graceful shutdown". |
 | `MIGRATE_ON_START` | no | Docker image only; see "Migrations". |
 
@@ -108,14 +112,22 @@ All `NEXT_PUBLIC_*` values are inlined into the JavaScript at build time. Changi
 |---|---|---|
 | `NEXT_PUBLIC_API_URL` | yes | Public API URL including `/api/v1`, e.g. `https://api.example.pk/api/v1`. Also decides where the Next.js rewrites send `/media`, `/files`, `/uploads`. |
 | `NEXT_PUBLIC_WS_URL` | no | Socket.IO origin when it is not the API's origin. |
+| `NEXT_PUBLIC_SITE_URL` | production | Build time. The address the site is served from, the origin only (`https://nuray.pk`). It gives a shared dish or kitchen link its canonical address and picture, and opens the public pages to search engines (`/robots.txt`, `/sitemap.xml`). While it is empty (development, staging) every page is marked `noindex` and `robots.txt` disallows everything, so a test site never turns up in a search. |
+| `API_INTERNAL_URL` | in Docker | Server-side, runtime (no rebuild). The API's address as the web server sees it (`http://backend:3001/api/v1` in the compose file), when the browser's `NEXT_PUBLIC_API_URL` is not reachable from inside the container. The web server reads a dish or kitchen from it for its page title and link preview; when it cannot, the page is served with the site's own title. |
 | `NEXT_PUBLIC_GOOGLE_CLIENT_ID` | no | Same client ID as the backend's `GOOGLE_CLIENT_ID`. |
-| `NEXT_PUBLIC_SENTRY_DSN`, `NEXT_PUBLIC_SENTRY_ENVIRONMENT`, `NEXT_PUBLIC_SENTRY_RELEASE` | no | Browser error tracking; nothing loads when empty. (`NEXT_PUBLIC_SENTRY_RELEASE` is read by the app but is not a Dockerfile build arg.) |
+| `NEXT_PUBLIC_SENTRY_DSN`, `NEXT_PUBLIC_SENTRY_ENVIRONMENT`, `NEXT_PUBLIC_SENTRY_RELEASE` | no | Browser error tracking; nothing loads when empty. Build time, like every `NEXT_PUBLIC_*`: the publish workflow passes them as build args (the release defaults to the commit). |
 | `NEXT_PUBLIC_LEGAL_COMPANY_NAME`, `NEXT_PUBLIC_LEGAL_ADDRESS`, `NEXT_PUBLIC_SUPPORT_EMAIL` | set before launch | Shown on the Terms, Privacy and Refund pages; bracketed placeholders appear until set. |
-| `NEXT_PUBLIC_LEGAL_REVIEWED` | no | Set `true` once a lawyer has reviewed the text to remove the "draft" notice. |
+| `NEXT_PUBLIC_LEGAL_REVIEWED` | no | Set `true` once a lawyer has reviewed the text to remove the "draft" notice. A build with it `true` and any of the three details above empty fails (`next.config.ts`), so reviewed pages never carry placeholders. In the publish workflow the repository variables of the same names are checked before the frontend image is built: a push to `main` only warns when they are missing or the pages are not marked reviewed, a `v*` release tag fails. |
 | `NEXT_PUBLIC_ENABLE_DEMO_LOGIN` | no | Never `true` on a real site; it shows one-click demo accounts. |
+| `ANDROID_APP_PACKAGE`, `ANDROID_SHA256_CERT_FINGERPRINTS` | when the Android app exists | Server-side, runtime (no rebuild). The app's package name (e.g. `pk.nuray.app`) and the SHA-256 fingerprints of its signing certificates, comma separated: the upload key's and, with Play App Signing, Google's. The site serves `/.well-known/assetlinks.json` from them so the app opens without a browser bar and links open the app. Both must be set and valid, or the file is a 404 (a value that is set but invalid is logged as a warning). |
+| `IOS_APP_IDS` | when the iOS app exists | Server-side, runtime. The app's id or ids, `TEAMID.bundle.id`, comma separated. The site serves `/.well-known/apple-app-site-association` from it (every path opens the app except `/api/*` and `/admin/*`); 404 while unset. |
+| `CSP_ENFORCE` | no | Build time. `true` enforces the Content-Security-Policy; anything else leaves it report-only, with violations logged by `/api/csp-report`. Switch after a clean week (see "Browser security headers" in [SECURITY_AND_COMPLIANCE.md](SECURITY_AND_COMPLIANCE.md)). In the publish workflow it is the repository variable `CSP_ENFORCE`. |
 | `NEXT_PUBLIC_MAP_TILE_URL`, `NEXT_PUBLIC_MAP_ATTRIBUTION` | production | Build time. Map tiles default to the public OpenStreetMap server, whose policy allows only light use: set a tile provider you have an account with (its `{z}/{x}/{y}` URL and required attribution). |
 | `NOMINATIM_BASE_URL` | production | Server-side. Geocoder for address search and map-pin lookups; defaults to public Nominatim (one request a second, answers cached 10 minutes). Use your own or a paid one at real traffic. |
 | `NOMINATIM_USER_AGENT` | recommended | Server-side only (runtime, not build time). Contact string for OpenStreetMap's geocoder. |
+| `NOMINATIM_API_KEY`, `NOMINATIM_API_KEY_PARAM` | with a paid geocoder | Server-side, runtime. The account key and the query parameter it travels in (default `key`; Geoapify uses `apiKey`). It is added to every upstream request and never to a cache key or a response. |
+| `NOMINATIM_MIN_INTERVAL_MS`, `NOMINATIM_MAX_PENDING` | with a paid geocoder | Server-side, runtime. Pause between upstream calls (default 1100, the public server's one request a second; `0` for none) and how many lookups may wait their turn before the next is told to retry with 503 (default 20). Raise both only as far as the provider's plan allows. |
+| `GEOCODE_PER_IP_PER_MINUTE` | no | Server-side, runtime. Address lookups one client address may make a minute before it gets 429 (default 120). Generous on purpose: many users share one mobile-network address. It reads the first address in `X-Forwarded-For`, so it only restrains clients when your proxy sets that header itself; the queue cap above still protects the geocoder either way. |
 
 The Dockerfile and compose file also pass `NEXT_PUBLIC_SAFEPAY_SANDBOX`; nothing in the frontend code reads it.
 
@@ -225,8 +237,11 @@ exception also triggers this shutdown (exit code 1); unhandled promise rejection
 Run as many backend instances as you need; they share state through PostgreSQL and Redis (`REDIS_URL` is why it is
 mandatory in production):
 
-- Rate limits: counters live in Redis (`middleware/rateLimiter.ts`). If Redis is unreachable requests are let
-  through rather than refused.
+- Rate limits: counters live in Redis (`middleware/rateLimiter.ts`, and `utils/attemptBudget.ts` for "wrong
+  password" and e-mail counts). If Redis is unreachable requests are let through rather than refused, and the
+  counts fall back to each instance's memory. Keys for a phone number or an e-mail address hold a hash, never the
+  number or address. The per-address limits are deliberately loose (a Pakistani mobile network puts many customers
+  behind one address); the tight ones are per phone number and per e-mail address (see SECURITY_AND_COMPLIANCE.md).
 - Live updates: Socket.IO uses the Redis adapter so an event emitted on one instance reaches clients on any other
   (`config/socket.ts`). Clients may use WebSocket or long polling; if you rely on polling, enable sticky sessions on
   the load balancer.
@@ -254,12 +269,14 @@ repeats.
 
 | Job | Every | What it does |
 |---|---|---|
+| `dispatch-waiting` | 1 min | Offers every open delivery job to the best rider on duty (a rider already going that way, then the community's own riders, then anyone with room). A job nobody fits stays in the open pool, where any rider can still claim it. Off when `AUTO_ASSIGN_ENABLED=false`. |
 | `stale-orders` | 2 min | Cancels orders the kitchen did not accept, or whose online payment or transfer never completed, and returns stock; creates refunds; alerts admins to unconfirmed transfers (timeouts above). |
 | `expire-payment-attempts` | 15 min | Expires abandoned online checkout sessions (a late confirmation still settles). |
 | `ranking-scores` | 15 min | Recomputes trending and rating scores. |
 | `hub-expiry` | 1 h | Hides expired hub batches. |
 | `stock-alerts` | 6 h | Safety-net stock alert check. |
 | `purge-expired-secrets` | 6 h | Deletes old OTP codes and used or expired reset tokens. |
+| `ops-snapshot` | 5 min | Writes one structured log line (`metric: "ops_snapshot"`) with open deliveries and how long the oldest has waited, riders on duty, orders and cancellations in the last hour, failed payments, pending approvals, refunds, payouts and open tickets. Chart or alert on it in the log tool. |
 
 ## Logs and error tracking
 
@@ -295,7 +312,8 @@ Details and the payment flows are in [PAYMENT_GATEWAY_INTEGRATION.md](PAYMENT_GA
 ## First admin
 
 There is no default admin. `backend/scripts/create-admin.js` creates one (or promotes and resets the password of an
-existing account with that email), already email-verified:
+existing account with that email, signing it out everywhere), already email-verified. The password needs at least 12
+characters, must not be a common one and must not contain the name or email:
 
 ```bash
 cd backend
@@ -303,8 +321,9 @@ DATABASE_URL=... node scripts/create-admin.js admin@yourdomain.pk '<strong passw
 ```
 
 It needs `node_modules` and the generated Prisma client, so run it from a checkout, not from the runtime image
-(which has no `scripts/`). It prints the password it was given to the terminal; clear your shell history and use a
-strong password. Sign in at `/admin/login`. Other admins, hub managers and communities are managed from the admin
+(which has no `scripts/`). It does not print the password, but your shell keeps the command: clear the history or
+pass the password from a file or variable. If nobody can sign in later, `node scripts/reset-admin-password.js <email>
+'<new password>'` resets one staff account the same way (and writes it to the audit log). Sign in at `/admin/login`. Other admins, hub managers and communities are managed from the admin
 screens.
 
 ## Go-live checklist
@@ -315,13 +334,14 @@ screens.
       production `NEXT_PUBLIC_API_URL`.
 - [ ] Migrations applied (`db:migrate`) and `db:check` passes.
 - [ ] Redis reachable; `/api/v1/health` shows database and redis `healthy`.
-- [ ] Load balancer uses `/api/v1/health/ready`, exactly one proxy hop in front of the app.
+- [ ] Load balancer uses `/api/v1/health/ready`, and `TRUST_PROXY` equals the number of proxy hops in front of the app (default 1).
 - [ ] S3 bucket and CDN configured; private bucket or prefix not publicly readable; a test image upload and a
       receipt link work.
 - [ ] Test email (registration verification) and test phone OTP both arrive.
 - [ ] Safepay: `SAFEPAY_SANDBOX=false`, live keys, webhook registered; one real small payment completes the order.
 - [ ] VAPID keys set if you want push; Sentry DSNs set if you want error tracking.
-- [ ] Legal company details set in the frontend build; `NEXT_PUBLIC_ENABLE_DEMO_LOGIN` not `true`.
+- [ ] Legal company details and `NEXT_PUBLIC_LEGAL_REVIEWED=true` set as repository variables (a release tag is refused without them) and in the frontend build; `NEXT_PUBLIC_ENABLE_DEMO_LOGIN` not `true`.
 - [ ] First admin created; communities, delivery prices (admin, Settings) and kitchens/riders approved.
 - [ ] Database and file backups running, and a restore tested.
+- [ ] Rollback rehearsed on staging: the previous image tag runs against the newer schema, and a deliberately failed migration was repaired with `migrate resolve` (see "Rollback and failed migrations").
 - [ ] Shutdown tested: rolling a deploy drops no requests (`SHUTDOWN_DRAIN_MS` versus the balancer's check interval).

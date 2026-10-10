@@ -6,6 +6,8 @@ export class AppError extends Error {
   statusCode: number;
   code: string;
   details?: any;
+  /** A 5xx the system gives on purpose, in a state it knows about (see `AppError.expected`). */
+  isExpected = false;
 
   constructor(message: string, statusCode: number = 500, code: string = 'INTERNAL_ERROR', details?: any) {
     super(message);
@@ -14,13 +16,24 @@ export class AppError extends Error {
     this.details = details;
     Error.captureStackTrace(this, this.constructor);
   }
+
+  /**
+   * An answer of 5xx that is the system working as set up, not a fault (a feature that is switched off, such as
+   * online payment with no gateway configured): it is logged as a warning and not reported to error tracking.
+   */
+  static expected(message: string, statusCode: number, code: string, details?: unknown): AppError {
+    const err = new AppError(message, statusCode, code, details);
+    err.isExpected = true;
+    return err;
+  }
 }
 
 /**
  * Known library errors a client caused, translated to the right 4xx instead of a
  * blanket 500: a unique-constraint hit (now common — reviews, promo usage, SKUs),
  * a missing record, a malformed or oversized body, an upload over the size limit.
- * Anything unrecognised is returned unchanged and handled as a real 500.
+ * A database that was too busy to answer in time becomes a 503. Anything
+ * unrecognised is returned unchanged and handled as a real 500.
  */
 export const toAppError = (err: any): Error | AppError => {
   if (err instanceof AppError) return err;
@@ -35,6 +48,11 @@ export const toAppError = (err: any): Error | AppError => {
     }
     if (err.code === 'P2025') {
       return new AppError('Record not found', 404, 'NOT_FOUND');
+    }
+    // No database connection free in time, or a transaction that ran out of time: an overload. The work was rolled
+    // back, so "busy, try again" is true, and a 503 is what a client or a load balancer knows how to retry.
+    if (err.code === 'P2024' || err.code === 'P2028') {
+      return new AppError('The service is busy. Please try again in a moment.', 503, 'SERVICE_BUSY');
     }
   }
 
@@ -70,10 +88,10 @@ export const errorHandler = (
   const err = toAppError(rawErr);
   const requestId = (req as Request & { id?: string }).id;
   const isDev = process.env.NODE_ENV === 'development';
-  const expected = err instanceof AppError && err.statusCode < 500;
+  const expected = err instanceof AppError && (err.statusCode < 500 || err.isExpected);
 
   if (expected) {
-    // A client mistake (validation, not found, forbidden...): worth a line, not an alert.
+    // A client mistake (validation, not found, forbidden...) or a known state such as a switched-off feature: worth a line, not an alert.
     logger.warn({ code: (err as AppError).code, status: (err as AppError).statusCode, path: req.path, method: req.method }, err.message);
   } else {
     // A bug or an outage: the full stack goes to the logs and to error tracking, never to the client.
@@ -82,6 +100,7 @@ export const errorHandler = (
   }
 
   if (err instanceof AppError) {
+    if (err.statusCode === 503) res.setHeader('Retry-After', '2');
     res.status(err.statusCode || 500).json({
       success: false,
       error: {

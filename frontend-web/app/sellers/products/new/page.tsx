@@ -877,7 +877,7 @@ export default function AddProductPage() {
                   <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                     <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
                   </svg>
-                  Can't find your category? Request a new one
+                  Can&apos;t find your category? Request a new one
                 </button>
               </div>
             )}
@@ -1435,7 +1435,7 @@ export default function AddProductPage() {
                   <div className="bg-blue-50 rounded-lg p-3 border border-blue-100">
                     <p className="text-xs font-medium text-blue-800 mb-1">💡 Pro Tips:</p>
                     <ul className="text-xs text-blue-700 space-y-0.5">
-                      <li>• Set the most popular size as "Default"</li>
+                      <li>• Set the most popular size as &quot;Default&quot;</li>
                       <li>• Offer bulk discounts (e.g., Large pack = better Rs/piece)</li>
                       <li>• Set low stock alerts to avoid running out</li>
                       <li>• Maximum 20 variants per product</li>
@@ -1547,7 +1547,7 @@ export default function AddProductPage() {
           </div>
 
           {/* Submit Buttons - Sticky Footer */}
-          <div className="sticky bottom-0 bg-white border-t-2 border-gray-100 -mx-6 px-6 py-5 mt-8 rounded-t-3xl shadow-2xl">
+          <div className="sticky bottom-0 bg-white border-t-2 border-gray-100 -mx-6 px-6 pt-5 pb-[calc(1.25rem+var(--safe-bottom))] mt-8 rounded-t-3xl shadow-2xl">
             <div className="max-w-4xl mx-auto flex flex-col sm:flex-row gap-3">
               <Button
                 type="submit"
@@ -1590,7 +1590,7 @@ export default function AddProductPage() {
             </h3>
             <ul className="text-sm text-amber-700 space-y-1">
               <li>• Use clear, well-lit photos from multiple angles</li>
-              <li>• Include quantity in product name (e.g., "Pack of 12")</li>
+              <li>• Include quantity in product name (e.g., &quot;Pack of 12&quot;)</li>
               <li>• Add a discount - products with discounts sell 3x more!</li>
               <li>• List all ingredients for customer trust</li>
             </ul>

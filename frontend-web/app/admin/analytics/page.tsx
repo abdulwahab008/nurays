@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { UserLayout } from '@/components/layout/UserLayout';
+import { AdminShell } from '@/components/layout/AdminShell';
 import { useToast } from '@/components/ui/toast';
 import { useAuthStore } from '@/lib/store/auth-store';
 import { apiClient } from '@/lib/api-client';
@@ -83,7 +83,7 @@ export default function AdminAnalyticsPage() {
   }
 
   return (
-    <UserLayout showSidebar={true} showNavbar={true}>
+    <AdminShell>
       <div className="max-w-7xl mx-auto">
         <div className="mb-6">
           <h1 className="text-3xl font-bold text-gray-900">Platform Analytics</h1>
@@ -203,7 +203,7 @@ export default function AdminAnalyticsPage() {
           </div>
         )}
       </div>
-    </UserLayout>
+    </AdminShell>
   );
 }
 

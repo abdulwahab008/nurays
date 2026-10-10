@@ -2,6 +2,8 @@ import { Prisma } from '@prisma/client';
 import prisma from '../config/database';
 import { AppError } from '../middleware/errorHandler';
 import { notify } from './notify.service';
+import { pageArgs } from '../utils/pagination';
+import { roundMoney } from '../utils/pricing';
 
 /**
  * A rider's money with the platform (see RiderLedgerEntry in schema.prisma). Entries are
@@ -18,11 +20,6 @@ import { notify } from './notify.service';
  */
 
 type Client = Prisma.TransactionClient | typeof prisma;
-
-const money = (n: number) => {
-  const rounded = Math.round(n * 100) / 100;
-  return rounded === 0 ? 0 : rounded; // never -0
-};
 
 export const DEFAULT_CASH_LIMIT = Number(process.env.RIDER_CASH_LIMIT) || 10_000;
 
@@ -45,14 +42,14 @@ export async function riderMoney(client: Client, riderId: string): Promise<Rider
     _sum: { amount: true },
   });
   const sum = (type: string) => Number(rows.find((r) => r.type === type)?._sum.amount ?? 0);
-  const balance = money(rows.reduce((total, r) => total + Number(r._sum.amount ?? 0), 0));
-  const cashHeld = money(-(sum('cod_collected') + sum('cash_deposit')));
+  const balance = roundMoney(rows.reduce((total, r) => total + Number(r._sum.amount ?? 0), 0));
+  const cashHeld = roundMoney(-(sum('cod_collected') + sum('cash_deposit')));
   return {
     balance,
     cashHeld,
-    unpaid: money(balance + cashHeld),
-    earned: money(sum('delivery_fee') + sum('bonus')),
-    paidOut: money(-sum('payout')),
+    unpaid: roundMoney(balance + cashHeld),
+    earned: roundMoney(sum('delivery_fee') + sum('bonus')),
+    paidOut: roundMoney(-sum('payout')),
   };
 }
 
@@ -68,14 +65,14 @@ export async function riderMoneyMany(client: Client, riderIds: string[]): Promis
   for (const riderId of riderIds) {
     const mine = rows.filter((r) => r.riderId === riderId);
     const sum = (type: string) => Number(mine.find((r) => r.type === type)?._sum.amount ?? 0);
-    const balance = money(mine.reduce((total, r) => total + Number(r._sum.amount ?? 0), 0));
-    const cashHeld = money(-(sum('cod_collected') + sum('cash_deposit')));
+    const balance = roundMoney(mine.reduce((total, r) => total + Number(r._sum.amount ?? 0), 0));
+    const cashHeld = roundMoney(-(sum('cod_collected') + sum('cash_deposit')));
     out.set(riderId, {
       balance,
       cashHeld,
-      unpaid: money(balance + cashHeld),
-      earned: money(sum('delivery_fee') + sum('bonus')),
-      paidOut: money(-sum('payout')),
+      unpaid: roundMoney(balance + cashHeld),
+      earned: roundMoney(sum('delivery_fee') + sum('bonus')),
+      paidOut: roundMoney(-sum('payout')),
     });
   }
   return out;
@@ -91,10 +88,10 @@ export async function postDeliveryEntries(
 ) {
   const data: Prisma.RiderLedgerEntryCreateManyInput[] = [];
   const base = { riderId: opts.riderId, deliveryId: opts.deliveryId, orderId: opts.orderId };
-  if (opts.fee > 0) data.push({ ...base, type: 'delivery_fee', amount: money(opts.fee), note: `Delivery fee, order #${opts.orderNumber}` });
-  if (opts.bonus > 0) data.push({ ...base, type: 'bonus', amount: money(opts.bonus), note: `Route bonus, order #${opts.orderNumber}` });
+  if (opts.fee > 0) data.push({ ...base, type: 'delivery_fee', amount: roundMoney(opts.fee), note: `Delivery fee, order #${opts.orderNumber}` });
+  if (opts.bonus > 0) data.push({ ...base, type: 'bonus', amount: roundMoney(opts.bonus), note: `Route bonus, order #${opts.orderNumber}` });
   if (opts.cashCollected > 0) {
-    data.push({ ...base, type: 'cod_collected', amount: -money(opts.cashCollected), note: `Cash collected, order #${opts.orderNumber}` });
+    data.push({ ...base, type: 'cod_collected', amount: -roundMoney(opts.cashCollected), note: `Cash collected, order #${opts.orderNumber}` });
   }
   if (data.length) await tx.riderLedgerEntry.createMany({ data, skipDuplicates: true });
 }
@@ -105,14 +102,14 @@ async function lockRider(tx: Prisma.TransactionClient, riderId: string) {
 }
 
 function positiveAmount(amount: unknown): number {
-  const value = money(Number(amount));
+  const value = roundMoney(Number(amount));
   if (!Number.isFinite(value) || value <= 0) throw new AppError('Enter an amount above zero', 400, 'INVALID_AMOUNT');
   return value;
 }
 
 function nonNegativeAmount(amount: unknown): number {
   if (amount == null || amount === '') return 0;
-  const value = money(Number(amount));
+  const value = roundMoney(Number(amount));
   if (!Number.isFinite(value) || value < 0) throw new AppError('Amounts cannot be negative', 400, 'INVALID_AMOUNT');
   return value;
 }
@@ -205,7 +202,7 @@ async function recordPayoutEntry(riderId: string, adminId: string, input: { amou
 
 /** A correction (e.g. paying for a failed delivery that wasn't the rider's fault). */
 export async function recordAdjustment(riderId: string, adminId: string, input: { amount: number; note: string }) {
-  const amount = money(Number(input.amount));
+  const amount = roundMoney(Number(input.amount));
   if (!Number.isFinite(amount) || amount === 0) throw new AppError('Enter a non-zero amount', 400, 'INVALID_AMOUNT');
   if (!input.note?.trim()) throw new AppError('Say what the adjustment is for', 400, 'NOTE_REQUIRED');
   return prisma.$transaction(async (tx) => {
@@ -218,7 +215,7 @@ export async function recordAdjustment(riderId: string, adminId: string, input: 
 export async function setCashLimit(riderId: string, cashLimit: number | null) {
   let value: number | null = null;
   if (cashLimit != null) {
-    value = money(Number(cashLimit));
+    value = roundMoney(Number(cashLimit));
     if (!Number.isFinite(value) || value < 0 || value > 1_000_000) {
       throw new AppError('Enter a cash limit between Rs 0 and Rs 1,000,000', 400, 'INVALID_AMOUNT');
     }
@@ -233,8 +230,7 @@ export async function setCashLimit(riderId: string, cashLimit: number | null) {
  * most cash first. `filter`: holding_cash (cash to collect), owed (the platform owes them).
  */
 export async function listRidersWithMoney(opts: { search?: string; filter?: string; page?: number; limit?: number }) {
-  const page = Math.max(1, Math.trunc(Number(opts.page)) || 1);
-  const limit = Math.min(100, Math.max(1, Math.trunc(Number(opts.limit)) || 25));
+  const { page, limit, skip } = pageArgs(opts.page, opts.limit, 25);
   const search = (opts.search ?? '').trim().slice(0, 100);
   const pattern = `%${search.replace(/[\\%_]/g, (c) => `\\${c}`)}%`;
   const searchSql = search
@@ -270,7 +266,7 @@ export async function listRidersWithMoney(opts: { search?: string; filter?: stri
              MAX(e.created_at) AS last_entry_at
       ${base}
       ORDER BY cash_held DESC, balance DESC, p.full_name ASC NULLS LAST
-      LIMIT ${limit} OFFSET ${(page - 1) * limit}`,
+      LIMIT ${limit} OFFSET ${skip}`,
     prisma.$queryRaw<Array<{ total: number }>>`SELECT COUNT(*)::int AS total FROM (SELECT r.id ${base}) matched`,
   ]);
 
@@ -294,12 +290,12 @@ export async function listRidersWithMoney(opts: { search?: string; filter?: stri
       isAvailable: r.is_available,
       totalDeliveries: r.total_deliveries,
       ratingAverage: Number(r.rating_average),
-      balance: money(r.balance),
-      cashHeld: money(r.cash_held),
+      balance: roundMoney(r.balance),
+      cashHeld: roundMoney(r.cash_held),
       cashLimit: cashLimitOf({ cashLimit: r.cash_limit }),
       lastEntryAt: r.last_entry_at,
     })),
-    totals: { cashHeld: money(totals[0]?.cash_held ?? 0), owedToRiders: money(totals[0]?.owed ?? 0) },
+    totals: { cashHeld: roundMoney(totals[0]?.cash_held ?? 0), owedToRiders: roundMoney(totals[0]?.owed ?? 0) },
     pagination: { page, limit, total, totalPages: Math.ceil(total / limit) },
   };
 }
@@ -336,13 +332,12 @@ export async function riderMoneyForAdmin(riderId: string, page = 1) {
 }
 
 export async function listRiderEntries(riderId: string, page = 1, limit = 30) {
-  const safePage = Math.max(1, Math.trunc(page) || 1);
-  const safeLimit = Math.min(100, Math.max(1, Math.trunc(limit) || 30));
+  const { page: safePage, limit: safeLimit, skip } = pageArgs(page, limit, 30);
   const [rows, total] = await Promise.all([
     prisma.riderLedgerEntry.findMany({
       where: { riderId },
       orderBy: { createdAt: 'desc' },
-      skip: (safePage - 1) * safeLimit,
+      skip,
       take: safeLimit,
     }),
     prisma.riderLedgerEntry.count({ where: { riderId } }),
@@ -378,7 +373,7 @@ export async function riderEarningsSummary(rider: { id: string; cashLimit: unkno
       where: { riderId: rider.id, type: { in: ['delivery_fee', 'bonus'] }, createdAt: { gte: since } },
       _sum: { amount: true },
     });
-    return money(Number(agg._sum.amount ?? 0));
+    return roundMoney(Number(agg._sum.amount ?? 0));
   };
   const deliveriesSince = (since: Date) =>
     prisma.delivery.count({ where: { riderId: rider.id, status: 'delivered', deliveryTime: { gte: since } } });

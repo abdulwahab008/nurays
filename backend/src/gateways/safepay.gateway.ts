@@ -24,6 +24,7 @@
  */
 
 import crypto from 'crypto';
+import { roundMoney } from '../utils/pricing';
 import type {
   IPaymentGateway,
   CreatePaymentRequest,
@@ -67,7 +68,7 @@ export async function createSafepayCheckout(opts: {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       client: publicKey(),
-      amount: Math.round(opts.amount * 100) / 100,
+      amount: roundMoney(opts.amount),
       currency: 'PKR',
       environment: env(),
     }),

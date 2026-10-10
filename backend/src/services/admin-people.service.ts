@@ -1,10 +1,12 @@
 import { realPhoneOrNull } from '../utils/otp';
 import { reopenDeliveryData } from './delivery-lifecycle.service';
+import { BEFORE_PICKUP_STATUSES, ON_THE_WAY_STATUSES } from '../utils/deliveryStatus';
 import { Prisma } from '@prisma/client';
 import prisma from '../config/database';
 import socketManager from '../config/socket';
 import { AppError } from '../middleware/errorHandler';
 import { formatPhoneNumber } from '../utils/otp';
+import { pageArgs } from '../utils/pagination';
 
 /**
  * People, for admins: every account (search, suspend, reactivate), riders' standing, and the
@@ -15,8 +17,7 @@ const ACCOUNT_STATUSES = ['active', 'suspended'] as const;
 type AccountStatus = (typeof ACCOUNT_STATUSES)[number];
 
 export async function listUsers(opts: { search?: string; type?: string; status?: string; page?: number; limit?: number }) {
-  const page = Math.max(1, Math.trunc(Number(opts.page)) || 1);
-  const limit = Math.min(100, Math.max(1, Math.trunc(Number(opts.limit)) || 25));
+  const { page, limit, skip } = pageArgs(opts.page, opts.limit, 25);
   const search = (opts.search ?? '').trim().slice(0, 100);
   const where: Prisma.UserWhereInput = {
     ...(opts.type ? { userType: opts.type } : {}),
@@ -36,7 +37,7 @@ export async function listUsers(opts: { search?: string; type?: string; status?:
     prisma.user.findMany({
       where,
       orderBy: { createdAt: 'desc' },
-      skip: (page - 1) * limit,
+      skip,
       take: limit,
       select: {
         id: true,
@@ -118,37 +119,35 @@ export async function setUserStatus(adminId: string, userId: string, status: str
  */
 export async function setRiderStatus(riderId: string, status: string) {
   if (!ACCOUNT_STATUSES.includes(status as AccountStatus)) throw new AppError('Status must be active or suspended', 400, 'INVALID_STATUS');
-  const rider = await prisma.rider.findUnique({ where: { id: riderId }, select: { id: true } });
+  const rider = await prisma.rider.findUnique({ where: { id: riderId }, select: { id: true, userId: true } });
   if (!rider) throw new AppError('Rider not found', 404, 'RIDER_NOT_FOUND');
 
-  return prisma.$transaction(async (tx) => {
+  const result = await prisma.$transaction(async (tx) => {
     await tx.rider.update({ where: { id: riderId }, data: { status, ...(status === 'suspended' ? { isAvailable: false } : {}) } });
     const none: Array<{ deliveryId: string; orderId: string }> = [];
     if (status !== 'suspended') return { id: riderId, status, releasedJobs: none, jobsWithFood: none };
     const toRelease = await tx.delivery.findMany({
-      where: { riderId, status: { in: ['assigned', 'arrived_at_pickup'] } },
+      where: { riderId, status: { in: BEFORE_PICKUP_STATUSES } },
       select: { id: true, orderId: true },
     });
     if (toRelease.length) {
       await tx.delivery.updateMany({
-        where: { id: { in: toRelease.map((d) => d.id) }, riderId, status: { in: ['assigned', 'arrived_at_pickup'] } },
+        where: { id: { in: toRelease.map((d) => d.id) }, riderId, status: { in: BEFORE_PICKUP_STATUSES } },
         data: reopenDeliveryData(riderId),
       });
     }
     const withFood = await tx.delivery.findMany({
-      where: { riderId, status: { in: ['picked_up', 'in_transit', 'arrived_at_customer'] } },
+      where: { riderId, status: { in: ON_THE_WAY_STATUSES } },
       select: { id: true, orderId: true },
     });
     const shape = (d: { id: string; orderId: string }) => ({ deliveryId: d.id, orderId: d.orderId });
     return { id: riderId, status, releasedJobs: toRelease.map(shape), jobsWithFood: withFood.map(shape) };
-  }).then(async (result) => {
-    // No longer a party to the jobs they lost: out of those orders' live rooms.
-    if (result.releasedJobs.length) {
-      const owner = await prisma.rider.findUnique({ where: { id: riderId }, select: { userId: true } });
-      if (owner) for (const job of result.releasedJobs) socketManager.removeUserFromOrder(owner.userId, job.orderId);
-    }
-    return result;
   });
+  // No longer a party to the jobs they lost: out of those orders' live rooms.
+  for (const job of result.releasedJobs) socketManager.removeUserFromOrder(rider.userId, job.orderId);
+  // Suspending takes them off duty (and out of the pool announcements); reactivating leaves them off until they switch on.
+  void socketManager.syncRiderDuty(rider.userId);
+  return result;
 }
 
 async function findAccount(identifier: string) {

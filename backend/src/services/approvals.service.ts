@@ -1,6 +1,7 @@
 import prisma from '../config/database';
 import { notify } from './notify.service';
 import { can, Permission } from '../utils/permissions';
+import { logger } from '../utils/logger';
 
 /**
  * Everything waiting for a staff decision, in one place, and a nudge to the people who decide
@@ -17,7 +18,7 @@ export function notifyApprovers(input: { title: string; message: string; actionU
     for (const a of approvers) {
       await notify({ userId: a.id, category: 'orders', type: 'approval', title: input.title, message: input.message, actionUrl: input.actionUrl, channels: [], dedupeKey: `${input.dedupeKey}:${a.id}` });
     }
-  })().catch((err) => console.error('Could not notify approvers:', err));
+  })().catch((err) => logger.error({ err }, 'Could not notify approvers'));
 }
 
 interface Queue {
@@ -41,6 +42,7 @@ const QUEUES: Queue[] = [
   { key: 'refunds', label: 'Refunds to send', permission: 'money.write', href: '/admin/refunds', count: () => prisma.refund.count({ where: { status: 'pending' } }), oldest: async () => oldestOf(await prisma.refund.findFirst({ where: { status: 'pending' }, orderBy: { createdAt: 'asc' }, select: { createdAt: true } })) },
   { key: 'transfers', label: 'Transfers to check or disputed', permission: 'money.write', href: '/admin/orders?paymentStatus=disputed', count: () => prisma.order.count({ where: { paymentStatus: { in: ['payment_submitted', 'disputed'] }, orderStatus: { notIn: ['cancelled', 'refunded'] } } }), oldest: async () => oldestOf(await prisma.order.findFirst({ where: { paymentStatus: { in: ['payment_submitted', 'disputed'] }, orderStatus: { notIn: ['cancelled', 'refunded'] } }, orderBy: { createdAt: 'asc' }, select: { createdAt: true } })) },
   { key: 'failedDeliveries', label: 'Failed deliveries to resolve', permission: 'read.core', href: '/admin/orders?orderStatus=delivery_failed', count: () => prisma.order.count({ where: { orderStatus: 'delivery_failed' } }), oldest: async () => oldestOf(await prisma.order.findFirst({ where: { orderStatus: 'delivery_failed' }, orderBy: { createdAt: 'asc' }, select: { createdAt: true } })) },
+  { key: 'reviews', label: 'Reported reviews', permission: 'support.handle', href: '/admin/reviews', count: () => prisma.review.count({ where: { isFlagged: true, isApproved: true } }), oldest: async () => (await prisma.review.findFirst({ where: { isFlagged: true, isApproved: true }, orderBy: { updatedAt: 'asc' }, select: { updatedAt: true } }))?.updatedAt ?? null },
   { key: 'tickets', label: 'Complaints waiting for a reply', permission: 'support.handle', href: '/admin/support', count: () => prisma.supportTicket.count({ where: { status: { in: ['open', 'in_progress'] } } }), oldest: async () => oldestOf(await prisma.supportTicket.findFirst({ where: { status: { in: ['open', 'in_progress'] } }, orderBy: { createdAt: 'asc' }, select: { createdAt: true } })) },
 ];
 

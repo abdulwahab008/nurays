@@ -153,7 +153,7 @@ export function CategoryRequestModal({
             <div>
               <h2 className="text-xl font-bold text-gray-900">Request New Category</h2>
               <p className="text-sm text-gray-500 mt-1">
-                Suggest a category that's missing from our list
+                Suggest a category that&apos;s missing from our list
               </p>
             </div>
             <button
@@ -341,7 +341,7 @@ export function CategoryRequestModal({
                 <p className="font-medium mb-1">What happens next?</p>
                 <ul className="space-y-1 text-blue-600">
                   <li>• Admin will review your request</li>
-                  <li>• You'll be notified when approved</li>
+                  <li>• You&apos;ll be notified when approved</li>
                   <li>• Category will appear in your product form</li>
                 </ul>
               </div>

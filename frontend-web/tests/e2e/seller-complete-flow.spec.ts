@@ -54,7 +54,7 @@ interface TestUserSession {
 async function createSellerUser(suffix: string): Promise<TestUserSession> {
   const ctx = await api();
   const email = `seller-spec-${suffix}@example.com`;
-  const password = 'Password123!';
+  const password = 'Lantern-Quartz-71!';
 
   // 1. Register User as customer applicant
   await postJson(ctx, '/auth/register', {
@@ -86,7 +86,7 @@ async function createSellerUser(suffix: string): Promise<TestUserSession> {
 async function createCustomerUser(suffix: string): Promise<TestUserSession> {
   const ctx = await api();
   const email = `buyer-spec-${suffix}@example.com`;
-  const password = 'Password123!';
+  const password = 'Lantern-Quartz-71!';
 
   await postJson(ctx, '/auth/register', {
     email,
@@ -301,7 +301,7 @@ test.describe.serial('Complete Seller End-to-End Workflow (Sections 1-14)', () =
     const ctx = await api();
     const loginResp = await postJson(ctx, '/auth/login', {
       phoneOrEmail: sellerSession.email,
-      otpCodeOrPassword: 'Password123!',
+      otpCodeOrPassword: 'Lantern-Quartz-71!',
       loginMethod: 'email',
     });
     const body = await loginResp.json();

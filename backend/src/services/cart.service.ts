@@ -5,6 +5,7 @@ import { getDeliveryFeeForSeller } from '../utils/deliveryFee';
 import { isOnMenu } from '../utils/menu';
 import { SELLER_COMMUNITY_DELIVERY_SELECT } from '../utils/sellerDeliverySelect';
 import { communityService } from './community.service';
+import promotionService from './promotion.service';
 import { sellableBatchWhere } from '../utils/hubStock';
 
 export class CartService {
@@ -107,11 +108,6 @@ export class CartService {
       totalItems += item.quantity;
     });
 
-    // Calculate delivery fee (will be calculated at checkout)
-    const deliveryFee = 0; // Placeholder
-    const discount = 0; // Placeholder
-    const total = subtotal + deliveryFee - discount;
-
     const baseUrl = process.env.BASE_URL || 'http://localhost:3001';
     return {
       items: items.map((item) => {
@@ -162,11 +158,10 @@ export class CartService {
         priceSnapshot: Number(item.priceSnapshot),
       };
       }),
+      // What the tray holds at the kitchens' prices. Delivery, discounts and tax are worked out where they are known:
+      // GET /cart/delivery-estimate for the fee, and at checkout for the rest.
       summary: {
         subtotal,
-        deliveryFee,
-        discount,
-        total,
         totalItems,
         totalSellers: sellers.size,
       },
@@ -198,6 +193,7 @@ export class CartService {
       where: { cartId: cart.id },
       include: {
         product: { select: { price: true } },
+        variant: { select: { price: true } },
         seller: {
           select: {
             id: true,
@@ -223,7 +219,7 @@ export class CartService {
       },
     });
     if (items.length === 0) {
-      return { deliveryFee: 0, isFree: true, isDeliverable: true, reason: null };
+      return { deliveryFee: 0, isFree: true, isDeliverable: true, reason: null, freeDeliveryThreshold: null, deliverySubtotal: 0 };
     }
     const address = await prisma.userAddress.findFirst({
       where: { id: addressId, userId },
@@ -241,13 +237,21 @@ export class CartService {
       communityId: resolvedCommunityId,
       communityUnresolved: !resolvedCommunityId,
     };
+    // The amount the kitchen's rules are checked against is the one checkout checks them against (createOrder): the dishes
+    // at today's prices, after the kitchen's own deals, before any voucher code.
+    const { discountedUnitPrices } = await promotionService.computeOrderCatalogDiscounts(
+      userId,
+      items.map((item) => ({
+        productId: item.productId,
+        sellerId: item.sellerId,
+        unitPrice: Number(item.variant?.price ?? item.product.price),
+        quantity: item.quantity,
+      }))
+    );
     const sellerSubtotals = new Map<string, number>();
-    for (const item of items) {
-      sellerSubtotals.set(
-        item.sellerId,
-        (sellerSubtotals.get(item.sellerId) ?? 0) + Number(item.priceSnapshot) * item.quantity
-      );
-    }
+    items.forEach((item, i) => {
+      sellerSubtotals.set(item.sellerId, (sellerSubtotals.get(item.sellerId) ?? 0) + discountedUnitPrices[i] * item.quantity);
+    });
     const pricing = await getPlatformDeliveryPricing();
     const sellerResults = new Map<string, ReturnType<typeof getDeliveryFeeForSeller>>();
     const undeliverable: string[] = [];
@@ -267,7 +271,7 @@ export class CartService {
       if (!result.deliverable) undeliverable.push(`${item.seller.businessName}: ${result.reason}`);
     }
     if (undeliverable.length > 0) {
-      return { deliveryFee: 0, isFree: false, isDeliverable: false, reason: undeliverable.join('; ') };
+      return { deliveryFee: 0, isFree: false, isDeliverable: false, reason: undeliverable.join('; '), freeDeliveryThreshold: null, deliverySubtotal: [...sellerSubtotals.values()].reduce((a, b) => a + b, 0) };
     }
     // A fee priced by Nuray is for a Nuray rider and is paid by the kitchen, not the customer.
     const all = [...sellerResults.values()];
@@ -275,8 +279,16 @@ export class CartService {
     const paidByKitchen = all.filter((r) => r.pricing != null).reduce((a, b) => a + b.fee, 0);
     const isFree = deliveryFee === 0;
     let reason: string | null = null;
-    if (isFree && sellerResults.size > 0) reason = paidByKitchen > 0 ? 'Free delivery: the kitchen covers it' : 'Free delivery to your area';
-    return { deliveryFee, isFree, isDeliverable: true, reason, kitchenPaysDelivery: paidByKitchen > 0 };
+    if (isFree && sellerResults.size > 0) {
+      reason = paidByKitchen > 0 ? 'Free delivery: the kitchen covers it' : (all.find((r) => r.freeAbove != null)?.reason ?? 'Free delivery to your area');
+    }
+    // The order amount at which a kitchen's own fee goes away, when a rule says so: still to reach while the fee is
+    // charged, reached once it is waived (a tray holds one kitchen's dishes; with more, the nearest amount). It is
+    // compared with deliverySubtotal, the amount counted above.
+    const thresholds = all.filter((r) => r.pricing == null && r.freeAbove != null).map((r) => r.freeAbove as number);
+    const freeDeliveryThreshold = thresholds.length > 0 ? Math.min(...thresholds) : null;
+    const deliverySubtotal = [...sellerSubtotals.values()].reduce((a, b) => a + b, 0);
+    return { deliveryFee, isFree, isDeliverable: true, reason, kitchenPaysDelivery: paidByKitchen > 0, freeDeliveryThreshold, deliverySubtotal };
   }
 
   /**

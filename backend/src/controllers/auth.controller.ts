@@ -2,9 +2,10 @@ import { Request, Response } from 'express';
 import authService from '../services/auth.service';
 import googleAuthService from '../services/google-auth.service';
 import { AppError } from '../middleware/errorHandler';
-import prisma from '../config/database';
 import socketManager from '../config/socket';
 import { recordAudit } from '../middleware/audit';
+import { removeAllSubscriptions } from '../services/push.service';
+import { logger } from '../utils/logger';
 
 export const requestOTP = async (req: Request, res: Response) => {
   const { phone, purpose } = req.body;
@@ -145,13 +146,14 @@ export const getCurrentUser = async (req: Request, res: Response) => {
 };
 
 export const loginWithGoogle = async (req: Request, res: Response) => {
-  const { accessToken } = req.body;
+  const { accessToken, idToken } = req.body;
 
-  if (!accessToken) {
-    throw new AppError('Google access token is required', 400, 'MISSING_GOOGLE_TOKEN');
+  if (!accessToken && !idToken) {
+    throw new AppError('A Google access token or ID token is required', 400, 'MISSING_GOOGLE_TOKEN');
   }
 
-  const result = await googleAuthService.authenticateWithGoogle(accessToken);
+  // The web button sends an access token; a native app's Google sign-in produces an ID token.
+  const result = idToken ? await googleAuthService.authenticateWithGoogleIdToken(idToken) : await googleAuthService.authenticateWithGoogle(accessToken);
 
   res.status(200).json({
     success: true,
@@ -162,13 +164,24 @@ export const loginWithGoogle = async (req: Request, res: Response) => {
   });
 };
 
+export const changePassword = async (req: Request, res: Response) => {
+  if (!req.user) {
+    throw new AppError('Authentication required', 401, 'AUTH_REQUIRED');
+  }
+  const { currentPassword, newPassword } = req.body;
+  const result = await authService.changePassword(req.user.userId, currentPassword, newPassword, { ip: req.ip });
+  res.status(200).json({ success: true, message: 'Password changed. Your other devices were signed out.', data: result });
+};
+
 export const logout = async (req: Request, res: Response) => {
   // Logging out ends every session the account has, on every device: a copied token (and the
   // 30-day refresh token with it) stops working at once. Tokens are stateless, so this is the
   // only way a sign-out can mean anything.
   if (req.user) {
-    await prisma.user.update({ where: { id: req.user.userId }, data: { tokensValidAfter: new Date() } });
+    await authService.revokeSessions(req.user.userId);
     socketManager.disconnectUser(req.user.userId);
+    // ...and no device goes on receiving the account's push notifications (an order's status, a new job) once nobody is signed in on it.
+    await removeAllSubscriptions(req.user.userId).catch((err) => logger.warn({ err: (err as Error)?.message, userId: req.user?.userId }, 'Could not forget the push subscriptions at logout'));
     if (req.user.userType === 'admin') {
       void recordAudit({ userId: req.user.userId, action: 'auth:LOGOUT', entityType: 'user', entityId: req.user.userId, ipAddress: req.ip, responseStatus: 200 });
     }

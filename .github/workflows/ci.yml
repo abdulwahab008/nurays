@@ -23,9 +23,9 @@ jobs:
       run:
         working-directory: backend
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - uses: actions/setup-node@v7
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: "22"
           cache: npm
@@ -40,6 +40,15 @@ jobs:
       - name: Typecheck
         run: npx tsc --noEmit
 
+      # The API checks and the load tooling are scripts, outside the API's own tsconfig: a change to the API
+      # that breaks them must fail here and not on the day somebody runs them.
+      - name: Typecheck the evidence scripts
+        run: npm run typecheck:scripts
+
+      - name: Lint
+        # Fails on any error, and on more warnings than the cap in package.json: lower the cap when you fix some.
+        run: npm run lint
+
       - name: Unit tests
         run: npm test
 
@@ -53,9 +62,9 @@ jobs:
       run:
         working-directory: frontend-web
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - uses: actions/setup-node@v7
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: "22"
           cache: npm
@@ -66,6 +75,14 @@ jobs:
 
       - name: Typecheck
         run: npx tsc --noEmit
+
+      - name: Lint
+        # Fails on any error, and on more warnings than the cap in package.json: lower the cap when you fix some.
+        run: npm run lint
+
+      - name: Unit tests
+        # Pure helpers in lib/, run by Node's own test runner (tests/unit); the screens are covered by Playwright.
+        run: npm test
 
       - name: Build
         # NEXT_PUBLIC_* are inlined at build time; provide non-secret defaults
@@ -114,9 +131,9 @@ jobs:
       # a job-wide PORT=3001 makes the frontend collide with the backend.
       # PORT is set only on the backend start step below.
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - uses: actions/setup-node@v7
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: "22"
           cache: npm
@@ -188,15 +205,164 @@ jobs:
           # purchase.spec reads the email-verification token straight from the
           # DB via psql (no mailbox in CI). Point it at the CI database.
           E2E_DB_URL: postgresql://nuray:nuray@localhost:5432/nuray_test
-        run: npx playwright test tests/e2e/smoke.spec.ts tests/e2e/rider-navigation.spec.ts --project=chromium
+          # Sample values for the files that tie the website to the store apps: the server serves them from its
+          # environment and public-pages.spec checks it does.
+          ANDROID_APP_PACKAGE: pk.nuray.app
+          ANDROID_SHA256_CERT_FINGERPRINTS: "14:6D:E9:83:C5:73:06:50:D8:EE:B9:95:2F:34:FC:64:16:A0:83:42:E6:1D:BE:A8:8A:04:96:B2:3F:CF:44:E5"
+          IOS_APP_IDS: ABCDE12345.pk.nuray.app
+        run: npx playwright test tests/e2e/smoke.spec.ts tests/e2e/rider-navigation.spec.ts tests/e2e/rider-location-resume.spec.ts tests/e2e/csp.spec.ts tests/e2e/geocode-proxy.spec.ts tests/e2e/public-pages.spec.ts tests/e2e/mobile.spec.ts --project=chromium --project=mobile
 
       - name: Upload Playwright report
         if: ${{ !cancelled() }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: playwright-report
           path: frontend-web/playwright-report/
           retention-days: 7
+
+      # The API checks talk to the backend started above (automatic rider assignment is off, so they claim
+      # delivery jobs by hand) and use its database, where they make their own users, kitchens and orders.
+      # After Playwright, so the data they leave behind cannot affect the browser specs.
+      - name: API checks
+        if: ${{ !cancelled() }}
+        working-directory: backend
+        env:
+          API_URL: http://localhost:3001/api/v1
+        run: npm run api-checks
+
+  money-flows:
+    name: Money flows (real database)
+    runs-on: ubuntu-latest
+    needs: [backend]
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_USER: nuray
+          POSTGRES_PASSWORD: nuray
+          POSTGRES_DB: nuray_money
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U nuray"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    defaults:
+      run:
+        working-directory: backend
+    env:
+      DATABASE_URL: postgresql://nuray:nuray@localhost:5432/nuray_money
+      JWT_SECRET: ci-money-flows-secret-key-at-least-32-characters
+      # Test mode: no SMS provider, no Redis, the payment gateway stubbed by the script itself.
+      NODE_ENV: test
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+
+      - name: Install
+        run: npm ci
+
+      - name: Prisma generate + migrate
+        run: |
+          npx prisma generate
+          npx prisma migrate deploy
+
+      # Orders, promotions, refunds, payouts, ledgers, hubs, sessions and sign-in rules, called through the
+      # services against the real schema. Exits 1 when a check fails and 2 when the script itself crashes.
+      - name: Verify money flows
+        run: npx ts-node scripts/verify-money-flows.ts
+
+  load-tooling:
+    # The launch load test is run by hand against staging, months after it is written. This keeps it from rotting
+    # meanwhile: it seeds a small *_load database, starts the API on it and runs every scenario for a few seconds,
+    # failing on errors only (a shared CI machine says nothing about speed).
+    name: Load tooling (seed and a short run)
+    runs-on: ubuntu-latest
+    needs: [backend]
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_USER: nuray
+          POSTGRES_PASSWORD: nuray
+          POSTGRES_DB: nuray_load
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U nuray"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      redis:
+        image: redis:7
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    defaults:
+      run:
+        working-directory: backend
+    env:
+      DATABASE_URL: postgresql://nuray:nuray@localhost:5432/nuray_load
+      REDIS_URL: redis://localhost:6379
+      JWT_SECRET: ci-load-secret-key-at-least-32-characters-long
+      API_VERSION: v1
+      FRONTEND_URL: http://localhost:3000
+      API_URL: http://localhost:3001/api/v1
+      LOAD_SCALE: "0.02"
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+
+      - name: Install
+        run: npm ci
+
+      - name: Prisma generate + migrate
+        run: |
+          npx prisma generate
+          npx prisma migrate deploy
+
+      - name: Seed the load database (small)
+        run: npm run load:seed
+
+      - name: Build and start the API
+        env:
+          PORT: "3001"
+          NODE_ENV: development
+          # The sockets scenario needs every job to reach the open pool.
+          AUTO_ASSIGN_ENABLED: "false"
+        run: |
+          npm run build
+          node dist/index.js &
+          for i in $(seq 1 30); do
+            if curl -sf http://localhost:3001/api/v1/health > /dev/null; then
+              echo "API up"; break
+            fi
+            sleep 2
+          done
+
+      - name: Tokens, then every scenario for a few seconds
+        run: |
+          npm run load:tokens -- --customers 100 --riders 6 --kitchens 10 --rate 20
+          npm run load:run -- browse --vus 5 --duration 8 --ramp 2 --smoke
+          npm run load:run -- checkout --rate 30 --duration 10 --smoke
+          npm run load:run -- rider-loop --vus 6 --duration 30 --ramp 3 --smoke
+          npm run load:run -- login-storm --rate 5 --duration 5 --smoke
+          npm run load:run -- sockets --sockets 100 --duration 15 --ramp 3 --jobs-per-minute 12 --smoke
 
   docker-build:
     # Sanity: confirm the Dockerfiles actually build on CI infra. No push here.
@@ -204,13 +370,13 @@ jobs:
     runs-on: ubuntu-latest
     needs: [backend, frontend]
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3.12.0
 
       - name: Build backend image
-        uses: docker/build-push-action@v7
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
           context: ./backend
           push: false
@@ -230,7 +396,7 @@ jobs:
           severity: CRITICAL,HIGH
 
       - name: Build frontend image
-        uses: docker/build-push-action@v7
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
           context: ./frontend-web
           push: false
@@ -257,13 +423,17 @@ jobs:
     name: Dependency audit + secret scan
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
 
-      - uses: actions/setup-node@v7
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: "22"
+
+      # A tag such as v7 can be moved after the fact; a commit cannot. Dependabot moves the pin and its comment together.
+      - name: Every action is pinned to a commit
+        run: bash .github/scripts/check-pinned-actions.sh
 
       - name: Backend dependency audit
         working-directory: backend
@@ -276,6 +446,6 @@ jobs:
         run: npm audit --omit=dev --audit-level=high
 
       - name: Secret scan (gitleaks)
-        uses: gitleaks/gitleaks-action@v2
+        uses: gitleaks/gitleaks-action@ff98106e4c7b2bc287b24eaf42907196329070c7 # v2.3.9
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

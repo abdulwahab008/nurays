@@ -1,4 +1,5 @@
 import { apiClient, ApiResponse } from '../api-client';
+import type { User } from '../store/auth-store';
 
 export interface RegisterRequest {
   email: string;
@@ -33,20 +34,8 @@ export interface AuthTokens {
   expires_in: number;
 }
 
-export interface User {
-  id: string;
-  phone: string;
-  email?: string;
-  user_type?: string;
-  userType?: string;
-  profile?: {
-    fullName: string;
-    avatarUrl?: string;
-    city?: string;
-    area?: string;
-  };
-  emailVerified?: boolean;
-}
+/** The signed-in user is one type, the one the auth store keeps (a sign-in answers with the same fields). */
+export type { User };
 
 export interface AuthResponse {
   user: User;
@@ -151,6 +140,21 @@ export const authService = {
     const response = await apiClient.post<ApiResponse<{ message: string }>>(
       '/auth/resend-verification'
     );
+    return response.data;
+  },
+
+  // Signed in: change the password. Every other device is signed out; this one is handed new tokens (store them with apiClient.setTokens).
+  changePassword: async (currentPassword: string, newPassword: string) => {
+    const response = await apiClient.post<ApiResponse<{ tokens: AuthTokens }>>('/auth/change-password', {
+      currentPassword,
+      newPassword,
+    });
+    return response.data;
+  },
+
+  // E-mails a one-time link to set a new password (always answers the same, whether or not the address has an account).
+  forgotPassword: async (email: string) => {
+    const response = await apiClient.post<ApiResponse<{ message?: string }>>('/auth/forgot-password', { email });
     return response.data;
   },
 

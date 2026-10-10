@@ -831,8 +831,9 @@ export default function Home() {
         }}
       />
 
-      {/* Top Notification / Platform Status Bar */}
-      <div className="bg-[#0C1016] text-white px-4 py-1.5 text-xs font-medium border-b border-white/5">
+      {/* Top Notification / Platform Status Bar. It starts below the status bar, and it covers the header's own status-bar
+          padding (the header keeps that padding for when it sticks), so the two do not leave a gap between them. */}
+      <div className="relative z-[41] -mb-(--safe-top) bg-[#0C1016] text-white px-4 pt-[calc(0.375rem+var(--safe-top))] pb-1.5 text-xs font-medium border-b border-white/5">
         <div className="max-w-[1440px] mx-auto flex items-center justify-between">
           <div className="flex items-center gap-2">
             <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
@@ -861,7 +862,7 @@ export default function Home() {
       {/* ============================================================
           MAIN TOP NAVIGATION BAR (Streamlined Nordic/US Standards)
           ============================================================ */}
-      <header className="sticky top-0 z-40 bg-white/95 backdrop-blur-md border-b border-slate-200/80 shadow-xs">
+      <header className="sticky top-0 z-40 pt-(--safe-top) bg-white/95 backdrop-blur-md border-b border-slate-200/80 shadow-xs">
         <div className="max-w-[1440px] mx-auto px-4 sm:px-8 h-16 flex items-center justify-between gap-3 sm:gap-6">
           {/* Left section: Hamburger & Logo */}
           <div className="flex items-center gap-3 sm:gap-4 flex-shrink-0">
@@ -1065,7 +1066,7 @@ export default function Home() {
       {/* ============================================================
           QUICK FILTER CHIPS BAR
           ============================================================ */}
-      <section className="bg-white/90 backdrop-blur-md border-b border-slate-200/70 py-2.5 sticky top-16 z-30">
+      <section className="bg-white/90 backdrop-blur-md border-b border-slate-200/70 py-2.5 sticky top-(--header-offset) z-30">
         <div className="max-w-[1440px] mx-auto px-4 sm:px-8 flex items-center justify-between gap-3">
           <div className="flex items-center gap-2 overflow-x-auto scrollbar-none pb-0.5">
             {filterChips.map((chip) => {
@@ -1641,7 +1642,7 @@ export default function Home() {
               <Link href="/products?productType=frozen" className="hover:text-[#FF5500]">{t('frozenPantry')}</Link>
               <Link href="/sellers/register" className="hover:text-[#FF5500]">{t('openKitchen')}</Link>
               <Link href="/riders/dashboard" className="hover:text-[#FF5500]">{t('riderPortal')}</Link>
-              <Link href="/support" className="hover:text-[#FF5500]">{t('help')}</Link>
+              <Link href="/help" className="hover:text-[#FF5500]">{t('help')}</Link>
             </div>
           </div>
 

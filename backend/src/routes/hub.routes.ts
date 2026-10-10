@@ -16,6 +16,7 @@ import { auditWrites } from '../middleware/audit';
 import { ifStaffRequire, requirePermission } from '../middleware/staff';
 import { validate } from '../middleware/validation.middleware';
 import hubService from '../services/hub.service';
+import { AppError } from '../middleware/errorHandler';
 import { hubsManagedBy } from '../services/admin-places.service';
 import { batchIntakeSchema, batchStatusSchema, temperatureProbeSchema, assignManagerSchema } from '../validators/hub.validator';
 
@@ -32,7 +33,11 @@ router.get('/:id/inventory', getHubInventory);
 
 // A hub manager may only operate the hub they manage (admins: any hub).
 const hubAccess = (req: Request, _res: Response, next: NextFunction) => {
-  hubService.assertHubAccess(req.params.id, req.user as any).then(() => next(), next);
+  if (!req.user) {
+    next(new AppError('Authentication required', 401, 'AUTH_REQUIRED'));
+    return;
+  }
+  hubService.assertHubAccess(req.params.id, req.user).then(() => next(), next);
 };
 
 // Hub operations & admin routes

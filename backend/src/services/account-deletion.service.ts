@@ -1,5 +1,5 @@
-import bcrypt from 'bcrypt';
 import { logger } from '../utils/logger';
+import { ACTIVE_DELIVERY_STATUSES } from '../utils/deliveryStatus';
 import { isPrivateRef, keyOfPrivateRef, storage } from '../storage';
 import prisma from '../config/database';
 import socketManager from '../config/socket';
@@ -7,6 +7,7 @@ import { AppError } from '../middleware/errorHandler';
 import { recordAudit } from '../middleware/audit';
 import { riderMoney } from './rider-ledger.service';
 import { placeholderPhone } from './auth.service';
+import { assertCurrentPassword } from './reauth.service';
 
 /**
  * A person closes their own account (the app stores require this to be possible from inside the app).
@@ -23,9 +24,8 @@ import { placeholderPhone } from './auth.service';
  */
 
 const ORDER_OPEN_NOT = ['delivered', 'completed', 'cancelled', 'refunded'];
-const DELIVERY_ACTIVE = ['assigned', 'arrived_at_pickup', 'picked_up', 'in_transit', 'arrived_at_customer'];
 
-export async function deleteOwnAccount(userId: string, password?: string) {
+export async function deleteOwnAccount(userId: string, password?: string, ctx: { ip?: string | null } = {}) {
   const user = await prisma.user.findUnique({ where: { id: userId }, include: { seller: { select: { id: true } } } });
   if (!user) throw new AppError('User not found', 404, 'USER_NOT_FOUND');
   if (user.status !== 'active') throw new AppError(`This account is ${user.status}`, 409, 'ACCOUNT_NOT_ACTIVE');
@@ -34,7 +34,7 @@ export async function deleteOwnAccount(userId: string, password?: string) {
   }
   if (user.passwordHash) {
     if (!password) throw new AppError('Enter your password to close the account', 400, 'PASSWORD_REQUIRED');
-    if (!(await bcrypt.compare(password, user.passwordHash))) throw new AppError('Wrong password', 401, 'INVALID_PASSWORD');
+    await assertCurrentPassword({ id: user.id, passwordHash: user.passwordHash }, password, ctx);
   }
 
   // Nothing may be left half-done or unpaid.
@@ -46,7 +46,7 @@ export async function deleteOwnAccount(userId: string, password?: string) {
   }
   const rider = await prisma.rider.findUnique({ where: { userId }, select: { id: true } });
   if (rider) {
-    const active = await prisma.delivery.count({ where: { riderId: rider.id, status: { in: DELIVERY_ACTIVE } } });
+    const active = await prisma.delivery.count({ where: { riderId: rider.id, status: { in: ACTIVE_DELIVERY_STATUSES } } });
     if (active > 0) throw new AppError('Finish or hand back your active deliveries first', 409, 'ACTIVE_DELIVERIES');
     const money = await riderMoney(prisma, rider.id);
     if (Math.round(money.cashHeld) !== 0 || Math.round(money.unpaid) !== 0) {

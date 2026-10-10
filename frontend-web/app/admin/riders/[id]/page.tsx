@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
-import { UserLayout } from '@/components/layout/UserLayout';
+import { AdminShell } from '@/components/layout/AdminShell';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/toast';
 import { apiClient, apiErrorMessage } from '@/lib/api-client';
@@ -109,22 +109,22 @@ export default function AdminRiderMoneyPage() {
 
   if (loadError) {
     return (
-      <UserLayout showSidebar={true} showNavbar={true}>
+      <AdminShell>
         <div className="max-w-3xl mx-auto bg-white border border-red-200 rounded-lg p-8 text-center">
           <p className="text-red-700 font-semibold">{loadError}</p>
           <Link href="/admin/riders" className="text-sm text-gray-600 underline mt-3 inline-block">
             Back to riders
           </Link>
         </div>
-      </UserLayout>
+      </AdminShell>
     );
   }
 
   if (!data) {
     return (
-      <UserLayout showSidebar={true} showNavbar={true}>
+      <AdminShell>
         <div className="max-w-5xl mx-auto py-16 text-center text-gray-500">Loading rider…</div>
-      </UserLayout>
+      </AdminShell>
     );
   }
 
@@ -159,7 +159,7 @@ export default function AdminRiderMoneyPage() {
   const adjValid = Number.isFinite(toAmount(adjAmount)) && toAmount(adjAmount) !== 0 && adjNote.trim().length > 0;
 
   return (
-    <UserLayout showSidebar={true} showNavbar={true}>
+    <AdminShell>
       <div className="max-w-5xl mx-auto space-y-5 pb-16">
         <div>
           <Link href="/admin/riders" className="text-sm text-gray-500 hover:underline">
@@ -426,7 +426,7 @@ export default function AdminRiderMoneyPage() {
           )}
         </section>
       </div>
-    </UserLayout>
+    </AdminShell>
   );
 }
 

@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState, useRef } from 'react';
-import { getStackedDiscountedPrice } from '@/lib/pricing';
+import { getPromotionLabel, getStackedDiscountedPrice } from '@/lib/pricing';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import {
@@ -38,6 +38,8 @@ import { paymentService } from '@/lib/services/payment.service';
 import { useT } from '@/lib/i18n';
 import { commonMessages } from '@/lib/i18n/messages/common';
 import { checkoutMessages, richText } from '@/lib/i18n/messages/checkout';
+import { ExternalLink } from '@/components/ExternalLink';
+import { useDeliveryEstimate } from '@/lib/hooks/use-delivery-estimate';
 
 type CopyField = 'iban' | 'jazzcash' | 'easypaisa';
 
@@ -46,12 +48,6 @@ interface CatalogPromotion {
   name: string;
   type: string;
   discountValue: number;
-}
-
-function getPromotionLabel(p: CatalogPromotion, t: (key: 'percentOff' | 'amountOff' | 'deal', vars?: Record<string, string | number>) => string): string {
-  if (p.type === 'percentage' && p.discountValue > 0) return t('percentOff', { value: p.discountValue });
-  if (p.type === 'fixed' && p.discountValue > 0) return t('amountOff', { amount: formatPrice(p.discountValue) });
-  return p.name || t('deal');
 }
 
 export default function CheckoutPage() {
@@ -80,11 +76,8 @@ export default function CheckoutPage() {
   const [copiedField, setCopiedField] = useState<CopyField | null>(null);
   const [showClearModal, setShowClearModal] = useState(false);
   const [clearingCart, setClearingCart] = useState(false);
-  const [deliveryEstimate, setDeliveryEstimate] = useState<{
-    deliveryFee: number;
-    isFree: boolean;
-    reason: string | null;
-  } | null>(null);
+  // Bumped whenever the tray changed on the server, so the delivery estimate is asked for again.
+  const [trayVersion, setTrayVersion] = useState(0);
   const [promotionsByProductId, setPromotionsByProductId] = useState<Record<string, CatalogPromotion[]>>({});
 
   const sidebarItems = CUSTOMER_SIDEBAR_ITEMS;
@@ -107,16 +100,13 @@ export default function CheckoutPage() {
       .catch(() => setWalletBalance(null));
   }, [isAuthenticated]);
 
-  useEffect(() => {
-    if (!selectedAddress || !cart?.items?.length) {
-      setDeliveryEstimate(null);
-      return;
-    }
-    cartService
-      .getDeliveryFeeEstimate(selectedAddress)
-      .then((res) => setDeliveryEstimate(res.data))
-      .catch(() => setDeliveryEstimate(null));
-  }, [selectedAddress, cart?.items?.length]);
+  // What delivery to the chosen address costs is the server's to say (the kitchen, the address and the order's amount
+  // decide it); nothing is assumed while it is not known.
+  const { estimate: deliveryEstimate, pending: estimatePending } = useDeliveryEstimate({
+    enabled: !loading && !!cart?.items?.length,
+    addressId: selectedAddress || null,
+    version: trayVersion,
+  });
 
   const loadData = async () => {
     setLoading(true);
@@ -237,6 +227,7 @@ export default function CheckoutPage() {
     if (newQty <= 0) {
       try {
         await cartService.removeCartItem(itemId);
+        setTrayVersion((v) => v + 1);
         useCartStore.getState().removeItem(itemId);
         const fresh = await cartService.getCart();
         setCart(fresh.data);
@@ -267,7 +258,6 @@ export default function CheckoutPage() {
           summary: {
             ...prev.summary,
             subtotal,
-            total: subtotal + (prev.summary.deliveryFee || 0) - (prev.summary.discount || 0),
             totalItems: nextItems.reduce((acc, it) => acc + it.quantity, 0),
           },
         };
@@ -275,6 +265,7 @@ export default function CheckoutPage() {
       useCartStore.getState().updateItem(itemId, newQty);
 
       await cartService.updateCartItem(itemId, newQty);
+      setTrayVersion((v) => v + 1);
     } catch (err: any) {
       showToast(err?.response?.data?.error?.message || t('couldNotUpdatePortion'), 'error');
       const fresh = await cartService.getCart();
@@ -385,7 +376,13 @@ export default function CheckoutPage() {
       } else {
         // The server refused it, so nothing was placed: a new attempt gets a new key.
         checkoutKeyRef.current = null;
-        showToast(error.response?.data?.error?.message || t('placeFailed'), 'error');
+        const code = error.response?.data?.error?.code;
+        if (code === 'GATEWAY_UNAVAILABLE') {
+          // The gateway went away after the page loaded: take the option off, so the next press does not fail the same way.
+          setOnlineAvailable(false);
+          setPaymentMethod('cod');
+        }
+        showToast(code === 'GATEWAY_UNAVAILABLE' ? t('onlineUnavailable') : error.response?.data?.error?.message || t('placeFailed'), 'error');
       }
     } finally {
       setProcessing(false);
@@ -441,7 +438,10 @@ export default function CheckoutPage() {
     return sum + unitPrice * item.quantity;
   }, 0);
   const promotionSavings = Math.max(0, cart.summary.subtotal - discountedSubtotal);
-  const effectiveDeliveryFee = deliveryEstimate?.isFree ? 0 : (deliveryEstimate?.deliveryFee ?? 0);
+  // Delivery is added to the total only once the server has said what it costs to the chosen address.
+  const deliveryKnown = !!deliveryEstimate && deliveryEstimate.isDeliverable !== false;
+  const notDeliverable = !!deliveryEstimate && deliveryEstimate.isDeliverable === false;
+  const effectiveDeliveryFee = deliveryKnown && !deliveryEstimate.isFree ? deliveryEstimate.deliveryFee : 0;
   const promoDiscountAmount = appliedPromo?.discountAmount || 0;
   // Exactly what the server charges (priceOrder in order.service.ts): GST on the goods after
   // all discounts, the total in whole rupees, so this is the amount the rider collects.
@@ -1042,7 +1042,7 @@ export default function CheckoutPage() {
 
           {/* Right Column: Sticky Order Summary & Portions (5 of 12) */}
           <div className="lg:col-span-5">
-            <div className="bg-white rounded-3xl p-5 sm:p-6 border border-slate-200/90 shadow-xs sticky top-20 space-y-5">
+            <div className="bg-white rounded-3xl p-5 sm:p-6 border border-slate-200/90 shadow-xs sticky top-[calc(5rem+var(--safe-top))] space-y-5">
               <div className="flex items-center justify-between pb-3 border-b border-slate-100">
                 <h3 className="text-sm font-bold text-slate-900 tracking-tight">{t('orderSummary')}</h3>
                 <div className="flex items-center gap-3">
@@ -1068,7 +1068,7 @@ export default function CheckoutPage() {
                   const promos = promotionsByProductId[item.product.id] || [];
                   const unitPrice = promos.length > 0 ? getStackedDiscountedPrice(base, promos) : base;
                   const lineTotal = unitPrice * item.quantity;
-                  const label = promos.length > 0 ? promos.map((p) => getPromotionLabel(p, t)).join(' + ') : null;
+                  const label = promos.length > 0 ? promos.map((p) => getPromotionLabel(p, t, formatPrice)).join(' + ') : null;
 
                   return (
                     <div key={item.id} className="p-3 rounded-2xl bg-slate-50/80 border border-slate-100 space-y-2">
@@ -1226,16 +1226,25 @@ export default function CheckoutPage() {
                   </div>
                 )}
 
-                <div className="flex justify-between text-slate-600">
+                <div className={`flex justify-between text-slate-600 transition-opacity ${estimatePending && deliveryEstimate ? 'opacity-60' : ''}`}>
                   <span>{t('estimatedDelivery')}</span>
                   <span>
-                    {deliveryEstimate?.isFree || effectiveDeliveryFee === 0 ? (
+                    {!selectedAddress ? (
+                      <span className="font-medium text-slate-500">{t('deliveryChooseAddress')}</span>
+                    ) : notDeliverable ? (
+                      <span className="font-bold text-rose-600">{t('deliveryNotAvailable')}</span>
+                    ) : !deliveryEstimate ? (
+                      <span className="font-medium text-slate-500">{estimatePending ? t('deliveryWorkingOut') : t('deliveryAtPlacing')}</span>
+                    ) : deliveryEstimate.isFree ? (
                       <span className="font-bold text-emerald-600">{t('freeCaps')}</span>
                     ) : (
                       <span className="font-semibold text-slate-900">{formatPrice(effectiveDeliveryFee)}</span>
                     )}
                   </span>
                 </div>
+                {notDeliverable && deliveryEstimate?.reason && (
+                  <p className="text-[11px] text-rose-600 -mt-1">{deliveryEstimate.reason}</p>
+                )}
 
                 <div className="flex justify-between text-slate-500 text-[11px]">
                   <span>{t('salesTax5')}</span>
@@ -1244,8 +1253,8 @@ export default function CheckoutPage() {
 
                 <div className="pt-3 border-t border-slate-200/80 flex items-baseline justify-between">
                   <div>
-                    <span className="text-sm font-black text-slate-900 block">{t('totalPayable')}</span>
-                    <span className="text-[11px] text-slate-400">{t('includesDeliveryTax')}</span>
+                    <span className="text-sm font-black text-slate-900 block">{deliveryKnown ? t('totalPayable') : t('totalBeforeDelivery')}</span>
+                    <span className="text-[11px] text-slate-400">{deliveryKnown ? t('includesDeliveryTax') : t('deliveryAddedWhenPlaced')}</span>
                   </div>
                   <span className="text-xl font-black text-[#FF5500]">{formatPrice(totalPayable)}</span>
                 </div>
@@ -1254,7 +1263,7 @@ export default function CheckoutPage() {
               {/* Place Order CTA Button */}
               <Button
                 type="button"
-                disabled={processing || !selectedAddress}
+                disabled={processing || !selectedAddress || notDeliverable || (estimatePending && !deliveryEstimate)}
                 onClick={handleCreateOrder}
                 className="w-full py-3.5 bg-[#FF5500] hover:bg-[#e04400] text-white font-black text-sm rounded-2xl shadow-md transition-all active:scale-[0.99] flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
               >
@@ -1265,7 +1274,7 @@ export default function CheckoutPage() {
                   </>
                 ) : (
                   <>
-                    <span>{t('placeOrder', { amount: formatPrice(totalPayable) })}</span>
+                    <span>{deliveryKnown ? t('placeOrder', { amount: formatPrice(totalPayable) }) : t('placeOrderPlain')}</span>
                     <ArrowRight className="rtl:-scale-x-100 w-4 h-4" />
                   </>
                 )}
@@ -1274,14 +1283,14 @@ export default function CheckoutPage() {
               <p className="text-center text-[11px] leading-relaxed text-slate-500">
                 {richText(t('agreeTerms'), {
                   terms: (
-                    <Link href="/terms" target="_blank" className="font-semibold text-slate-700 underline hover:text-[#FF5500]">
+                    <ExternalLink href="/terms" className="font-semibold text-slate-700 underline hover:text-[#FF5500]">
                       {t('terms')}
-                    </Link>
+                    </ExternalLink>
                   ),
                   refund: (
-                    <Link href="/refund-policy" target="_blank" className="font-semibold text-slate-700 underline hover:text-[#FF5500]">
+                    <ExternalLink href="/refund-policy" className="font-semibold text-slate-700 underline hover:text-[#FF5500]">
                       {t('refundPolicy')}
-                    </Link>
+                    </ExternalLink>
                   ),
                 })}
               </p>

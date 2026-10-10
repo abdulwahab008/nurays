@@ -349,7 +349,7 @@ export default function SellerDeliveryPage() {
                   </div>
                   <div>
                     <h4 className="text-xs font-bold text-slate-900">Nuray Rider Fleet</h4>
-                    <p className="text-[11px] text-slate-500 mt-0.5">Platform riders pick up and deliver your orders; customers pay Nuray's delivery price</p>
+                    <p className="text-[11px] text-slate-500 mt-0.5">Platform riders pick up and deliver your orders; customers pay Nuray&apos;s delivery price</p>
                   </div>
                 </div>
               </div>

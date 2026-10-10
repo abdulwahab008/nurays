@@ -5,6 +5,7 @@ import { RedisStore, type RedisReply } from 'rate-limit-redis';
 import { isProduction } from '../config/env';
 import { getRedis } from '../config/redis';
 import { verifyToken } from '../utils/jwt';
+import { formatPhoneNumber } from '../utils/otp';
 
 /**
  * Counters live in Redis when it is configured, so every app instance enforces the same
@@ -56,17 +57,38 @@ export const byTokenOrIp = (req: Request) => {
 
 /**
  * Credential guessing is one attacker trying one account: counted per address and
- * account together, so a whole mobile network is not locked out by one person's typos
- * and one address cannot try many accounts freely.
+ * account together, so a whole mobile network is not locked out by one person's typos.
+ * (An address trying many accounts is counted separately: loginAddressLimiter.)
  */
 export const byIpAndAccount = (req: Request) => {
   const account = typeof req.body?.phoneOrEmail === 'string' ? req.body.phoneOrEmail.trim().toLowerCase() : '';
   return `${ipKeyGenerator(req.ip ?? '')}:${account}`;
 };
 
+const digest = (value: string) => createHash('sha256').update(value).digest('hex').slice(0, 32);
+
+/**
+ * Counted by the phone number a code is for, whoever asks and from wherever: "0300 1234567" and
+ * "+923001234567" are one number. Hashed, so the counter store never holds a phone number. A
+ * request with no usable number is counted by address instead.
+ */
+export const byPhoneTarget = (req: Request) => {
+  const raw = typeof req.body?.phone === 'string' ? req.body.phone.trim() : '';
+  return raw ? `p:${digest(formatPhoneNumber(raw))}` : ipKeyGenerator(req.ip ?? '');
+};
+
+/** The same for an e-mail address (what a link is sent to): case and stray spaces do not make a new address. */
+export const byEmailTarget = (req: Request) => {
+  const raw = typeof req.body?.email === 'string' ? req.body.email.trim().toLowerCase() : '';
+  return raw ? `e:${digest(raw)}` : ipKeyGenerator(req.ip ?? '');
+};
+
+/** One address, whatever it asks for. */
+export const byAddress = (req: Request) => ipKeyGenerator(req.ip ?? '');
+
 function limiter(
   name: string,
-  opts: { windowMs: number; limit: number; message: string; perUser?: boolean; keyGenerator?: (req: Request) => string; skipSuccessfulRequests?: boolean }
+  opts: { windowMs: number; limit: number | (() => number); message: string; perUser?: boolean; keyGenerator?: (req: Request) => string; skipSuccessfulRequests?: boolean }
 ) {
   return rateLimit({
     windowMs: opts.windowMs,
@@ -105,11 +127,62 @@ export const loginLimiter = limiter('login', {
   message: 'Too many login attempts. Please try again later.',
 });
 
-// OTP requests cost real SMS credits — keep this tight.
-export const otpLimiter = limiter('otp', {
+/** Production gets the real figure; development and tests one nobody reaches. Read per request, so a test can switch modes. */
+const live = (real: number, relaxed = 10_000) => () => (isProduction() ? real : relaxed);
+
+// Codes and links cost real SMS credits and e-mail reputation, and a person typing a wrong number is the common case.
+// Two limits do the work: the address (loose: a mobile network puts many customers behind one address) and the
+// number or e-mail the message goes to (tight, whoever asks). The database also caps each number (otp.service).
+export const otpIpLimiter = limiter('otp-ip', {
   windowMs: 15 * MINUTE,
-  limit: 5,
+  limit: live(30),
+  keyGenerator: byAddress,
   message: 'Too many OTP requests. Please try again later.',
+});
+export const otpTargetLimiter = limiter('otp-phone', {
+  windowMs: 15 * MINUTE,
+  limit: live(3),
+  keyGenerator: byPhoneTarget,
+  message: 'A code was already sent to this number. Please wait a few minutes before asking again.',
+});
+// Adding a phone number to a signed-in account: counted by account.
+export const phoneVerifyRequestLimiter = limiter('phone-request', {
+  windowMs: 60 * MINUTE,
+  limit: live(5),
+  perUser: true,
+  message: 'Too many verification codes requested. Please try again later.',
+});
+
+// "Forgot password" mails a one-time link, and every new link cancels the last one.
+export const forgotIpLimiter = limiter('forgot-ip', {
+  windowMs: 15 * MINUTE,
+  limit: live(20),
+  keyGenerator: byAddress,
+  message: 'Too many requests. Please try again later.',
+});
+export const forgotTargetLimiter = limiter('forgot-email', {
+  windowMs: 60 * MINUTE,
+  limit: live(3),
+  keyGenerator: byEmailTarget,
+  message: 'A reset link was already requested for this address. Please check your e-mail, or try again in an hour.',
+});
+
+// Re-sending the e-mail-verification link.
+export const resendVerificationLimiter = limiter('resend-verification', {
+  windowMs: 60 * MINUTE,
+  limit: live(3),
+  perUser: true,
+  message: 'Too many verification e-mails requested. Please try again later.',
+});
+
+// Guessing across accounts from one address: failed sign-ins only, so a shared address never runs out of logins.
+// Generous (a mobile network is one address); loginLimiter covers one address trying one account.
+export const loginAddressLimiter = limiter('login-ip', {
+  windowMs: 15 * MINUTE,
+  limit: live(100, 100_000),
+  keyGenerator: byAddress,
+  skipSuccessfulRequests: true,
+  message: 'Too many login attempts. Please try again later.',
 });
 
 // Prevent scripted mass account creation from one IP.

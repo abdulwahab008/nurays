@@ -1,4 +1,5 @@
-import { codCollectorOf, deliveryProviderOf } from '../utils/paymentCustody';
+import type { Prisma } from '@prisma/client';
+import { codCollectorOf, deliveryProviderOf, isCashAtDoor } from '../utils/paymentCustody';
 import { verifyHandoverCode } from './handover.service';
 import { presentFile } from '../storage';
 import { cancelOpenDelivery, notifyDeliveryCancelled, CancelledDelivery } from './delivery-lifecycle.service';
@@ -11,7 +12,8 @@ import { releasePromotionUsage } from './promotion.service';
 import { refundForCancelledItems } from './refund.service';
 import ledgerService from './ledger.service';
 import { releaseHubAllocations } from './hub-allocation.service';
-import { selfDeliveryFeeFor, sellerPaidDeliveryFor } from '../utils/deliveryEarnings';
+import { kitchenOrderSelect, presentKitchenOrder } from '../utils/kitchenOrderView';
+import { logger } from '../utils/logger';
 
 export class SellerOrderService {
   /**
@@ -40,7 +42,7 @@ export class SellerOrderService {
     const { page, limit, skip } = pageArgs(filters.page, filters.limit);
 
     // Build where clause for order items
-    const where: any = {
+    const where: Prisma.OrderItemWhereInput = {
       sellerId: seller.id,
     };
 
@@ -49,7 +51,7 @@ export class SellerOrderService {
     }
 
     // Build order where clause
-    const orderWhere: any = {};
+    const orderWhere: Prisma.OrderWhereInput = {};
     if (filters.orderStatus) {
       orderWhere.orderStatus = filters.orderStatus;
     }
@@ -191,7 +193,7 @@ export class SellerOrderService {
     for (const o of orders) o.order.paymentProofUrl = await presentFile(o.order.paymentProofUrl);
 
     // Get total count
-    const totalWhere: any = { ...where };
+    const totalWhere: Prisma.OrderItemWhereInput = { ...where };
     if (Object.keys(orderWhere).length > 0) {
       totalWhere.order = orderWhere;
     }
@@ -211,7 +213,7 @@ export class SellerOrderService {
   }
 
   /**
-   * Get seller order details
+   * Get seller order details: the kitchen's view of one order (see utils/kitchenOrderView.ts for what it holds).
    */
   async getSellerOrderDetails(orderId: string, sellerId: string) {
     // Get seller by userId
@@ -223,42 +225,10 @@ export class SellerOrderService {
       throw new AppError('Seller not found', 404, 'SELLER_NOT_FOUND');
     }
 
-    // Get order with items for this seller
+    // Get the order with only this seller's items
     const order = await prisma.order.findUnique({
       where: { id: orderId },
-      include: {
-        items: {
-          where: { sellerId: seller.id },
-          include: {
-            product: {
-              select: {
-                id: true,
-                name: true,
-                slug: true,
-                images: {
-                  where: { isPrimary: true },
-                  take: 1,
-                },
-              },
-            },
-          },
-        },
-        customer: {
-          select: {
-            id: true,
-            phone: true,
-            profile: {
-              select: {
-                fullName: true,
-              },
-            },
-          },
-        },
-        deliveryAddress: true,
-        statusHistory: {
-          orderBy: { createdAt: 'asc' },
-        },
-      },
+      select: kitchenOrderSelect(seller.id),
     });
 
     if (!order) {
@@ -269,43 +239,14 @@ export class SellerOrderService {
       throw new AppError('No items found for this seller in this order', 404, 'NO_ITEMS_FOUND');
     }
 
-    // Calculate seller totals
-    const sellerSubtotal = order.items.reduce(
-      (sum, item) => sum + Number(item.totalPrice),
-      0
-    );
-    const sellerCommission = order.items.reduce(
-      (sum, item) => sum + Number(item.commissionAmount),
-      0
-    );
-    const sellerPayout = order.items.reduce(
-      (sum, item) => sum + Number(item.sellerPayout),
-      0
-    );
-
-    // The kitchen needs the door to hand food over itself; never the address row's owner id, pin or postcode.
-    const { userId: _addrUser, latitude: _lat, longitude: _lng, postalCode: _pc, ...addressForSeller } = order.deliveryAddress ?? ({} as Record<string, unknown>);
-    return {
-      ...order,
-      deliveryAddress: order.deliveryAddress ? addressForSeller : null,
+    return presentKitchenOrder(order, {
+      sellerId: seller.id,
+      businessName: seller.businessName,
+      businessNameUrdu: seller.businessNameUrdu,
+      sellerDeliveryProvider: seller.deliveryProvider,
+      // The receipt is private: the kitchen gets a short-lived link to it.
       paymentProofUrl: await presentFile(order.paymentProofUrl),
-      sellerHandsOver:
-        order.deliveryType === 'self_pickup' || deliveryProviderOf(order, seller.deliveryProvider) === 'self',
-      subtotal: Number(order.subtotal),
-      deliveryFee: Number(order.deliveryFee),
-      discountAmount: Number(order.discountAmount),
-      taxAmount: Number(order.taxAmount),
-      totalAmount: Number(order.totalAmount),
-      sellerTotals: {
-        subtotal: sellerSubtotal,
-        commission: sellerCommission,
-        payout: sellerPayout,
-        // Delivery fee this seller keeps because they deliver the order themselves.
-        deliveryFeeKept: selfDeliveryFeeFor(order.deliveryFeeBreakdown, order.items[0]?.sellerId ?? ''),
-        // Nuray's delivery fee for a Nuray rider, paid by the kitchen out of its earnings.
-        deliveryFeePaid: sellerPaidDeliveryFor(order.deliveryFeeBreakdown, order.items[0]?.sellerId ?? ''),
-      },
-    };
+    });
   }
 
   /**
@@ -470,10 +411,7 @@ export class SellerOrderService {
         // COD payment is collected at the door — delivered IS the payment
         // confirmation for COD (online payments are already 'paid' via the
         // gateway verification flow well before delivery).
-        const isCodPayment =
-          derivedOrderStatus === 'delivered' &&
-          orderItem.order.paymentMethod === 'cod' &&
-          orderItem.order.paymentStatus !== 'paid';
+        const isCodPayment = derivedOrderStatus === 'delivered' && isCashAtDoor(orderItem.order);
 
         // Guard the write on the order still being in the exact state we
         // derived from — if a concurrent transaction on another item already
@@ -510,7 +448,7 @@ export class SellerOrderService {
       try {
         await ledgerService.recordOrderCompletion(orderItem.orderId);
       } catch (ledgerErr) {
-        console.error('Failed to record ledger entries for order:', orderItem.orderId, ledgerErr);
+        logger.error({ err: ledgerErr, orderId: orderItem.orderId }, 'Failed to record ledger entries');
       }
     }
 
@@ -758,7 +696,7 @@ export class SellerOrderService {
     try {
       await riderService.ensureDeliveryForOrder(order.id, maxPrepMinutes);
     } catch (err) {
-      console.warn('Rider dispatch warning during acceptOrder:', err);
+      logger.warn({ err, orderId: order.id }, 'Rider dispatch warning during acceptOrder');
     }
 
     await realtimeOrderService.emitOrderStatusUpdate(order.id, 'preparing', sellerUserId);
@@ -1054,7 +992,7 @@ export class SellerOrderService {
     try {
       await riderService.ensureDeliveryForOrder(order.id, 0);
     } catch (err) {
-      console.warn('Rider dispatch warning during markOrderReady:', err);
+      logger.warn({ err, orderId: order.id }, 'Rider dispatch warning during markOrderReady');
     }
 
     await realtimeOrderService.emitOrderStatusUpdate(order.id, 'ready', sellerUserId);

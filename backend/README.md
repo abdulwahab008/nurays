@@ -33,7 +33,7 @@ npm run dev              # http://localhost:3001
 | `npm run prisma:generate`, `prisma:studio` | generate the client, browse data |
 | `npm run seed:e2e` | communities, kitchens, a test kitchen account |
 
-Other helpers in `scripts/`: `create-admin.js <email> <password> "<name>"`, `list-admin-users.js`,
+Other helpers in `scripts/`: `create-admin.js <email> <password> "<name>"` (staff password: 12+ characters, not a common one), `reset-admin-password.js <email> <password>`, `list-admin-users.js`,
 `seed-ideal-flow-users.ts` (demo accounts), and `verify-money-flows.ts` (run only against a throwaway database; see
 [`docs/TESTING_STRATEGY.md`](../docs/TESTING_STRATEGY.md)).
 

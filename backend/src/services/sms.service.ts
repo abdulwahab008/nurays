@@ -8,6 +8,8 @@
  * never tell a user "code sent" when it wasn't.
  */
 import { smsProvider } from '../config/env';
+import { maskPhone } from '../utils/mask';
+import { logger } from '../utils/logger';
 
 let twilioClient: any = null;
 
@@ -17,7 +19,8 @@ function getTwilioClient() {
   const token = process.env.TWILIO_AUTH_TOKEN;
   if (!sid || !token) return null;
   try {
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    // Loaded on first use so a deployment without Twilio never needs the package.
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
     const twilio = require('twilio');
     twilioClient = twilio(sid, token, { timeout: 15000 });
     return twilioClient;
@@ -27,7 +30,6 @@ function getTwilioClient() {
 }
 
 /** Last 4 digits only, for logs. */
-const maskPhone = (phone: string) => (phone.length > 4 ? `***${phone.slice(-4)}` : '***');
 
 export async function sendSMS(phone: string, message: string): Promise<boolean> {
   const provider = smsProvider();
@@ -36,7 +38,7 @@ export async function sendSMS(phone: string, message: string): Promise<boolean> 
     const client = getTwilioClient();
     const from = process.env.TWILIO_PHONE_NUMBER;
     if (!client || !from) {
-      console.error('SMS: Twilio is selected but not configured correctly');
+      logger.error('SMS: Twilio is selected but not configured correctly');
       return false;
     }
     // One retry for a transient failure (network, 5xx).
@@ -46,7 +48,7 @@ export async function sendSMS(phone: string, message: string): Promise<boolean> 
         return true;
       } catch (err: any) {
         const transient = !err?.status || err.status >= 500;
-        console.error(`SMS to ${maskPhone(phone)} failed (attempt ${attempt}): ${err?.message ?? err}`);
+        logger.error({ phone: maskPhone(phone), attempt, err }, 'SMS failed');
         if (!transient) break;
       }
     }
@@ -54,13 +56,16 @@ export async function sendSMS(phone: string, message: string): Promise<boolean> 
   }
 
   if (provider === 'console') {
+    // The message itself is the output here (a developer reads the code from it): printed, not logged.
+    /* eslint-disable no-console */
     console.log('\n📱 SMS (console provider, development only)');
     console.log(`To: ${phone}`);
     console.log(`Message: ${message}\n`);
+    /* eslint-enable no-console */
     return true;
   }
 
-  console.error(`SMS to ${maskPhone(phone)} not sent: no SMS provider is configured (SMS_PROVIDER=none)`);
+  logger.error({ phone: maskPhone(phone) }, 'SMS not sent: no SMS provider is configured (SMS_PROVIDER=none)');
   return false;
 }
 

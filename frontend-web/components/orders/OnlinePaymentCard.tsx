@@ -21,19 +21,21 @@ export default function OnlinePaymentCard({ orderId, totalAmount }: Props) {
   const t = useT(paymentsMessages);
   const { showToast } = useToast();
   const [status, setStatus] = useState<OrderPaymentStatus | null>(null);
+  // Whether a payment page was opened in the last half hour, decided when the status arrives (the time is not read while rendering).
+  const [recentAttempt, setRecentAttempt] = useState(false);
   const [opening, setOpening] = useState(false);
 
   useEffect(() => {
     paymentService
       .getOrderPaymentStatus(orderId)
-      .then(setStatus)
+      .then((next) => {
+        setStatus(next);
+        setRecentAttempt(next.lastAttempt?.status === 'pending' && Date.now() - new Date(next.lastAttempt.createdAt).getTime() < 30 * 60 * 1000);
+      })
       .catch(() => setStatus(null));
   }, [orderId]);
 
   if (!status || status.paymentStatus === 'paid') return null;
-
-  const recentAttempt =
-    status.lastAttempt?.status === 'pending' && Date.now() - new Date(status.lastAttempt.createdAt).getTime() < 30 * 60 * 1000;
 
   const pay = async () => {
     try {

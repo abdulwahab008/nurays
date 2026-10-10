@@ -1,6 +1,7 @@
 import prisma from '../config/database';
 import adminOrderService from './admin-order.service';
 import { notify } from './notify.service';
+import { logger } from '../utils/logger';
 
 /**
  * Orders that nobody is moving forward release their stock and the customer's money.
@@ -43,7 +44,7 @@ export async function sweepStaleOrders(now: Date = new Date()) {
       // Moved on in the meantime (accepted, paid, cancelled by someone else): nothing to do.
       if (err?.code !== 'ORDER_NOT_CANCELLABLE') {
         result.failed++;
-        console.error(`Stale-order sweep could not cancel ${orderId}:`, err?.message ?? err);
+        logger.error({ err, orderId }, 'Stale-order sweep could not cancel an order');
       }
     }
   };
@@ -102,7 +103,7 @@ export async function sweepStaleOrders(now: Date = new Date()) {
   }
 
   if (result.cancelledUnpaid || result.cancelledUnaccepted || result.escalated || result.failed) {
-    console.log(`Stale-order sweep: ${JSON.stringify(result)}`);
+    logger.info(result, 'Stale-order sweep');
   }
   return result;
 }

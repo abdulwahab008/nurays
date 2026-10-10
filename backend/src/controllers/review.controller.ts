@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import reviewService from '../services/review.service';
+import { reportReview as reportReviewForStaff } from '../services/review-moderation.service';
 import { AppError } from '../middleware/errorHandler';
 
 export const addReview = async (req: Request, res: Response) => {
@@ -30,3 +31,16 @@ export const getProductReviews = async (req: Request, res: Response) => {
   });
 };
 
+
+export const reportReview = async (req: Request, res: Response) => {
+  if (!req.user) {
+    throw new AppError('Authentication required', 401, 'AUTH_REQUIRED');
+  }
+
+  await reportReviewForStaff(req.user.userId, req.params.id, req.body, { ip: req.ip });
+
+  res.status(200).json({
+    success: true,
+    message: 'Thank you. Our team will look at this review.',
+  });
+};

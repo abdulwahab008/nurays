@@ -1,7 +1,7 @@
 'use client';
 
 import { FormEvent, useCallback, useEffect, useState } from 'react';
-import { UserLayout } from '@/components/layout/UserLayout';
+import { AdminShell } from '@/components/layout/AdminShell';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/toast';
 import { apiClient, apiErrorMessage } from '@/lib/api-client';
@@ -80,7 +80,7 @@ export default function AdminStaffPage() {
   };
 
   return (
-    <UserLayout showSidebar showNavbar>
+    <AdminShell>
       <div className="max-w-5xl mx-auto p-4 sm:p-6">
         <div className="mb-6">
           <h1 className="text-2xl font-bold text-gray-900">Staff</h1>
@@ -166,6 +166,6 @@ export default function AdminStaffPage() {
           </>
         )}
       </div>
-    </UserLayout>
+    </AdminShell>
   );
 }

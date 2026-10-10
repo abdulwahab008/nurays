@@ -3,12 +3,13 @@
 import { useState, useEffect } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import Link from 'next/link';
-import { UserLayout } from '@/components/layout/UserLayout';
+import { AdminShell } from '@/components/layout/AdminShell';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/toast';
 import { useAuthStore } from '@/lib/store/auth-store';
 import { apiClient } from '@/lib/api-client';
 import { formatPrice, formatDate } from '@/lib/utils';
+import { ExternalLink } from '@/components/ExternalLink';
 
 interface OrderDetail {
   id: string;
@@ -273,7 +274,7 @@ export default function AdminOrderDetailPage() {
     : [];
 
   return (
-    <UserLayout showSidebar={true} showNavbar={true}>
+    <AdminShell>
       <div className="max-w-4xl mx-auto">
         <div className="mb-6">
           <Link
@@ -340,9 +341,9 @@ export default function AdminOrderDetailPage() {
                       </p>
                       {order.paymentDisputeReason && <p>Kitchen: &ldquo;{order.paymentDisputeReason}&rdquo;</p>}
                       {order.paymentProofUrl && (
-                        <a href={order.paymentProofUrl} target="_blank" rel="noopener noreferrer" className="underline font-medium">
+                        <ExternalLink href={order.paymentProofUrl} className="underline font-medium">
                           Open the customer&apos;s receipt
-                        </a>
+                        </ExternalLink>
                       )}
                     </div>
                     <p className="mt-3 text-xs text-gray-600">
@@ -433,7 +434,7 @@ export default function AdminOrderDetailPage() {
                   <div className="rounded-lg border border-amber-200 bg-amber-50 p-4">
                     <h2 className="text-sm font-semibold text-amber-900 mb-1">Delivery failed</h2>
                     <p className="text-sm text-amber-800 mb-3">
-                      The rider or seller couldn't complete this delivery. Send it back out for another attempt, or cancel and refund below.
+                      The rider or seller couldn&apos;t complete this delivery. Send it back out for another attempt, or cancel and refund below.
                     </p>
                     <button
                       onClick={handleRetryDelivery}
@@ -674,6 +675,6 @@ export default function AdminOrderDetailPage() {
           </div>
         )}
       </div>
-    </UserLayout>
+    </AdminShell>
   );
 }

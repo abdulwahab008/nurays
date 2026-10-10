@@ -13,7 +13,7 @@ describe('the super admin', () => {
 
 describe('an admin', () => {
   it('runs the platform: approvals, orders, money actions, complaints, reading the audit log', () => {
-    for (const [m, p] of [['POST', '/sellers/s1/approve'], ['POST', '/riders/r1/approve'], ['POST', '/products/p1/moderate'], ['POST', '/orders/o1/cancel'], ['POST', '/orders/o1/refund'], ['POST', '/refunds/f1/complete'], ['POST', '/payouts/p1/complete'], ['POST', '/riders/r1/settlements'], ['PATCH', '/riders/r1/cash-limit'], ['POST', '/support/tickets/t1/reply'], ['GET', '/audit-logs'], ['GET', '/riders/money'], ['GET', '/payouts'], ['GET', '/pending-sellers'], ['POST', '/users/u1/status']]) {
+    for (const [m, p] of [['POST', '/sellers/s1/approve'], ['POST', '/riders/r1/approve'], ['POST', '/products/p1/moderate'], ['POST', '/orders/o1/cancel'], ['POST', '/orders/o1/refund'], ['POST', '/refunds/f1/complete'], ['POST', '/payouts/p1/complete'], ['POST', '/riders/r1/settlements'], ['PATCH', '/riders/r1/cash-limit'], ['POST', '/support/tickets/t1/reply'], ['GET', '/audit-logs'], ['GET', '/riders/money'], ['GET', '/payouts'], ['GET', '/pending-sellers'], ['POST', '/users/u1/status'], ['GET', '/reviews'], ['POST', '/reviews/r1/hide']]) {
       expect(allowed('admin', m, p)).toBe(true);
     }
   });
@@ -25,8 +25,8 @@ describe('an admin', () => {
 });
 
 describe('a support person', () => {
-  it('looks things up and handles complaints', () => {
-    for (const [m, p] of [['GET', '/orders'], ['GET', '/orders/o1'], ['GET', '/users'], ['GET', '/sellers'], ['GET', '/riders'], ['GET', '/support/tickets'], ['POST', '/support/tickets/t1/reply'], ['GET', '/approvals'], ['GET', '/communities']]) {
+  it('looks things up and handles complaints and reported reviews', () => {
+    for (const [m, p] of [['GET', '/orders'], ['GET', '/orders/o1'], ['GET', '/users'], ['GET', '/sellers'], ['GET', '/riders'], ['GET', '/support/tickets'], ['POST', '/support/tickets/t1/reply'], ['GET', '/approvals'], ['GET', '/communities'], ['GET', '/reviews'], ['POST', '/reviews/r1/hide'], ['POST', '/reviews/r1/keep'], ['POST', '/reviews/r1/restore']]) {
       expect(allowed('support', m, p)).toBe(true);
     }
   });
@@ -50,6 +50,9 @@ describe('a support person', () => {
 describe('defaults are closed', () => {
   it('a write route nobody listed needs ops.write, so support cannot use it', () => {
     expect(allowed('support', 'POST', '/some-new-thing')).toBe(false);
+    // the review rules name hide, keep and restore and nothing else under /reviews
+    expect(allowed('support', 'POST', '/reviews/r1/delete')).toBe(false);
+    expect(allowed('support', 'POST', '/reviews/r1/hide/extra')).toBe(false);
     expect(allowed('admin', 'POST', '/some-new-thing')).toBe(true);
   });
   it('people who are not staff have no permissions at all', () => {

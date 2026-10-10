@@ -6,6 +6,7 @@ import { AppError } from '../middleware/errorHandler';
 import { presentFile } from '../storage';
 import { notify, notifySeller } from './notify.service';
 import { DELIVERY_SETTING_DEFAULTS, invalidateDeliveryPricing } from './delivery-pricing.service';
+import socketManager from '../config/socket';
 
 /** Verification documents with short-lived links an admin can open. */
 async function presentDocuments(docs: Array<{ id: string; documentType: string; documentUrl: string; createdAt?: Date; uploadedAt?: Date }>) {
@@ -390,6 +391,8 @@ export class AdminService {
         rejectionReason: approved ? null : reason || 'Application rejected',
       },
     });
+    // A rider is on duty by default: once approved they hear about jobs in the pool, rejected they do not.
+    void socketManager.syncRiderDuty(rider.userId);
 
     void notify({
       userId: rider.userId,
