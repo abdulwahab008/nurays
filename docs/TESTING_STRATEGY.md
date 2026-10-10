@@ -197,7 +197,7 @@ countryside, Urdu and English names, the order of the map's fields, and that not
 discount maths and label (`pricing.test.ts`: percentage and fixed deals, stacking in either order, never below zero,
 whole rupees, a deal with no size), and the reading of the map service's answer (`geocode.test.ts`: which field is the
 area, the street and the city, the pin's own city when the service is down or answers garbage, text trimmed, non-text
-ignored, the request carrying the pin), and the token store (`token-store.test.ts`: which storage a pair goes to, a tab kept apart, what sign-out forgets, no browser, a replaced store). Screens are covered by Playwright (next section), not here.
+ignored, the request carrying the pin), and the token store (`token-store.test.ts`: which storage a pair goes to, a tab kept apart, what sign-out forgets, no browser, a replaced store), and the page titles and link previews (`seo.test.ts`: the site's address, text cut at a word, which address-bar values may reach the API, a dish's and a kitchen's title, description, picture and whether search engines may list it). Screens are covered by Playwright (next section), not here.
 
 ## 3. Frontend end-to-end (Playwright)
 

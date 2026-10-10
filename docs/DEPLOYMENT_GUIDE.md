@@ -112,6 +112,8 @@ All `NEXT_PUBLIC_*` values are inlined into the JavaScript at build time. Changi
 |---|---|---|
 | `NEXT_PUBLIC_API_URL` | yes | Public API URL including `/api/v1`, e.g. `https://api.example.pk/api/v1`. Also decides where the Next.js rewrites send `/media`, `/files`, `/uploads`. |
 | `NEXT_PUBLIC_WS_URL` | no | Socket.IO origin when it is not the API's origin. |
+| `NEXT_PUBLIC_SITE_URL` | production | Build time. The address the site is served from, the origin only (`https://nuray.pk`). It gives a shared dish or kitchen link its canonical address and picture, and opens the public pages to search engines (`/robots.txt`, `/sitemap.xml`). While it is empty (development, staging) every page is marked `noindex` and `robots.txt` disallows everything, so a test site never turns up in a search. |
+| `API_INTERNAL_URL` | in Docker | Server-side, runtime (no rebuild). The API's address as the web server sees it (`http://backend:3001/api/v1` in the compose file), when the browser's `NEXT_PUBLIC_API_URL` is not reachable from inside the container. The web server reads a dish or kitchen from it for its page title and link preview; when it cannot, the page is served with the site's own title. |
 | `NEXT_PUBLIC_GOOGLE_CLIENT_ID` | no | Same client ID as the backend's `GOOGLE_CLIENT_ID`. |
 | `NEXT_PUBLIC_SENTRY_DSN`, `NEXT_PUBLIC_SENTRY_ENVIRONMENT`, `NEXT_PUBLIC_SENTRY_RELEASE` | no | Browser error tracking; nothing loads when empty. Build time, like every `NEXT_PUBLIC_*`: the publish workflow passes them as build args (the release defaults to the commit). |
 | `NEXT_PUBLIC_LEGAL_COMPANY_NAME`, `NEXT_PUBLIC_LEGAL_ADDRESS`, `NEXT_PUBLIC_SUPPORT_EMAIL` | set before launch | Shown on the Terms, Privacy and Refund pages; bracketed placeholders appear until set. |

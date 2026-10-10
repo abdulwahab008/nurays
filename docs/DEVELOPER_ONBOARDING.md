@@ -142,6 +142,10 @@ Frontend:
   or `''` when nothing says), and the city fields start empty. To ask the map service what is at a pin, use
   `reverseGeocode` in `lib/geocode.ts` (it never throws; it returns the area, street, house number, postcode and city,
   and the pin's own city when the service is down) instead of calling `/api/geocode/reverse` yourself.
+- A page that people share (a dish, a kitchen) is a small server `page.tsx` that exports `generateMetadata` and renders the
+  client page beside it (`ProductDetailPage.tsx`, `KitchenStorefrontPage.tsx`): the title and link preview are built by
+  `lib/seo.ts` from what `lib/server/public-api.ts` reads. Copy that shape for another public page; never put `metadata` in a
+  `'use client'` file. With `NEXT_PUBLIC_SITE_URL` empty every page is `noindex`, which is what you want in development.
 - Sign-in tokens are read and written only through `tokenStore()` in `lib/token-store.ts` (or the API client's `getAccessToken`, `setTokens` and `clearTokens`, which use it), never with `localStorage` directly: a native shell swaps the store.
 - State: Zustand stores in `lib/store/` (auth, cart, community); live updates through `lib/hooks/use-socket.ts` and
   `use-live-refresh.ts`.
