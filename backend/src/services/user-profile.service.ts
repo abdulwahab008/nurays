@@ -333,7 +333,7 @@ export class UserProfileService {
     const existing = await prisma.userAddress.findFirst({ where: { id: addressId, userId } });
     if (!existing) throw new AppError('Address not found', 404, 'ADDRESS_NOT_FOUND');
 
-    const locationChanged = ['communityId', 'latitude', 'longitude', 'area', 'city'].some((k) => (data as any)[k] !== undefined);
+    const locationChanged = ['communityId', 'latitude', 'longitude', 'area', 'city'].some((k) => (data as Record<string, unknown>)[k] !== undefined);
     const merged = {
       communityId: data.communityId !== undefined ? data.communityId : null,
       latitude: data.latitude !== undefined ? data.latitude : existing.latitude != null ? Number(existing.latitude) : null,

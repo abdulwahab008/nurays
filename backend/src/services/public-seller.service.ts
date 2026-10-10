@@ -23,7 +23,7 @@ export interface PublicSellerFilters {
 export async function listPublicSellers(filters: PublicSellerFilters) {
   const { communityId, city, businessType, search, limit, sort } = filters;
 
-  const whereClause: any = {
+  const whereClause: Prisma.SellerWhereInput = {
     isVerified: true,
     status: 'active',
     verificationStatus: 'approved',

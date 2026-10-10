@@ -43,7 +43,7 @@ export class NotificationService {
   ) {
     const { page, limit, skip } = pageArgs(filters.page, filters.limit);
 
-    const where: any = {
+    const where: Prisma.NotificationWhereInput = {
       userId,
     };
 

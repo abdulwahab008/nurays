@@ -1,3 +1,4 @@
+import type { Prisma } from '@prisma/client';
 import { codCollectorOf, deliveryProviderOf, isCashAtDoor } from '../utils/paymentCustody';
 import { verifyHandoverCode } from './handover.service';
 import { presentFile } from '../storage';
@@ -41,7 +42,7 @@ export class SellerOrderService {
     const { page, limit, skip } = pageArgs(filters.page, filters.limit);
 
     // Build where clause for order items
-    const where: any = {
+    const where: Prisma.OrderItemWhereInput = {
       sellerId: seller.id,
     };
 
@@ -50,7 +51,7 @@ export class SellerOrderService {
     }
 
     // Build order where clause
-    const orderWhere: any = {};
+    const orderWhere: Prisma.OrderWhereInput = {};
     if (filters.orderStatus) {
       orderWhere.orderStatus = filters.orderStatus;
     }
@@ -192,7 +193,7 @@ export class SellerOrderService {
     for (const o of orders) o.order.paymentProofUrl = await presentFile(o.order.paymentProofUrl);
 
     // Get total count
-    const totalWhere: any = { ...where };
+    const totalWhere: Prisma.OrderItemWhereInput = { ...where };
     if (Object.keys(orderWhere).length > 0) {
       totalWhere.order = orderWhere;
     }

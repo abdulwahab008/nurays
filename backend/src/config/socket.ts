@@ -61,7 +61,7 @@ class SocketManager {
         // the JWT payload's stale snapshot (mirrors the HTTP authenticate()
         // fix; otherwise a role change doesn't take effect for socket room
         // membership until the client reconnects with a new token).
-        (socket as any).user = {
+        socket.data.user = {
           userId: payload.userId,
           userType: user.userType,
         };
@@ -74,7 +74,7 @@ class SocketManager {
 
     // Connection handler
     this.io.on('connection', (socket) => {
-      const user = (socket as any).user as { userId: string; userType: string };
+      const user = socket.data.user as { userId: string; userType: string };
 
       logger.debug({ userId: user.userId, userType: user.userType, socketId: socket.id }, 'Socket connected');
 
@@ -228,13 +228,13 @@ class SocketManager {
    * One event to everyone in any of these rooms. A connection in several of them (a customer
    * who is in the order's room and their own user room) receives it once, not once per room.
    */
-  emitToRooms(rooms: string[], event: string, data: any) {
+  emitToRooms(rooms: string[], event: string, data: unknown) {
     if (this.io && rooms.length > 0) {
       this.io.to(Array.from(new Set(rooms))).emit(event, data);
     }
   }
 
-  emitToUser(userId: string, event: string, data: any) {
+  emitToUser(userId: string, event: string, data: unknown) {
     if (this.io) {
       this.io.to(`user:${userId}`).emit(event, data);
     }
@@ -243,7 +243,7 @@ class SocketManager {
   /**
    * Emit event to all users of specific role
    */
-  emitToRole(role: string, event: string, data: any) {
+  emitToRole(role: string, event: string, data: unknown) {
     if (this.io) {
       this.io.to(`role:${role}`).emit(event, data);
     }
@@ -259,7 +259,7 @@ class SocketManager {
   /**
    * Emit event to order room
    */
-  emitToOrder(orderId: string, event: string, data: any) {
+  emitToOrder(orderId: string, event: string, data: unknown) {
     if (this.io) {
       this.io.to(`order:${orderId}`).emit(event, data);
     }
@@ -268,7 +268,7 @@ class SocketManager {
   /**
    * Broadcast to all connected clients
    */
-  broadcast(event: string, data: any) {
+  broadcast(event: string, data: unknown) {
     if (this.io) {
       this.io.emit(event, data);
     }

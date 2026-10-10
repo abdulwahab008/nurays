@@ -73,12 +73,12 @@ function formatDelivery(delivery: DeliveryWithOrder & {
   arrivedAtCustomer?: Date | null;
   estimatedReadyAt?: Date | null;
   otpVerifiedAt?: Date | null;
-  pickupLatitude?: any;
-  pickupLongitude?: any;
-  deliveryLatitude?: any;
-  deliveryLongitude?: any;
-  riderFee?: any;
-  riderBonus?: any;
+  pickupLatitude?: unknown;
+  pickupLongitude?: unknown;
+  deliveryLatitude?: unknown;
+  deliveryLongitude?: unknown;
+  riderFee?: unknown;
+  riderBonus?: unknown;
   isRouteMatch?: boolean;
   batchBonus?: number;
   corridorDistanceKm?: number;

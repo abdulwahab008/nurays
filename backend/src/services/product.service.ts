@@ -326,7 +326,7 @@ export class ProductService {
     const skip = (page - 1) * limit;
 
     // Build where clause
-    const where: any = {};
+    const where: Prisma.ProductWhereInput = {};
 
     if (filters.categoryId) {
       where.categoryId = filters.categoryId;
@@ -1032,7 +1032,7 @@ export class ProductService {
       throw new AppError('Seller not found', 404, 'SELLER_NOT_FOUND');
     }
 
-    const where: any = {
+    const where: Prisma.ProductWhereInput = {
       sellerId: seller.id,
     };
 

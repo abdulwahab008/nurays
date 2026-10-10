@@ -1,3 +1,4 @@
+import type { Prisma } from '@prisma/client';
 import prisma from '../config/database';
 import { pageArgs } from '../utils/pagination';
 import { ACTIVE_DELIVERY_STATUSES, ON_THE_WAY_STATUSES } from '../utils/deliveryStatus';
@@ -95,7 +96,7 @@ export class OrderQueries {
   ) {
     const { page, limit, skip } = pageArgs(filters.page, filters.limit);
 
-    const where: any = {
+    const where: Prisma.OrderWhereInput = {
       customerId: userId,
     };
 

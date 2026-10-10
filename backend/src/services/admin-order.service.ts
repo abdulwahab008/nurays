@@ -1,3 +1,4 @@
+import type { Prisma } from '@prisma/client';
 import { realPhoneOrNull } from '../utils/otp';
 import { codCollectorOf, isCashAtDoor } from '../utils/paymentCustody';
 import { presentFile } from '../storage';
@@ -60,7 +61,7 @@ export class AdminOrderService {
   }) {
     const { page, limit, skip } = pageArgs(filters.page, filters.limit);
 
-    const where: any = {};
+    const where: Prisma.OrderWhereInput = {};
 
     if (filters.orderStatus) {
       where.orderStatus = filters.orderStatus;

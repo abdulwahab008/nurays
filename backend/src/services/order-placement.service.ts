@@ -1,4 +1,5 @@
 import { randomInt } from 'crypto';
+import type { Prisma, Seller } from '@prisma/client';
 import prisma from '../config/database';
 import { getPlatformDeliveryPricing } from './delivery-pricing.service';
 import { AppError } from '../middleware/errorHandler';
@@ -154,14 +155,14 @@ export class OrderPlacement {
       quantity: number;
       unitPrice: number;
       totalPrice: number;
-      commissionRate: any;
+      commissionRate: Prisma.Decimal;
       commissionAmount: number;
       sellerPayout: number;
       promoDiscount: number;
       fulfillmentType: string;
       hubId: string | null;
     }> = [];
-    const sellersInOrder = new Map<string, any>();
+    const sellersInOrder = new Map<string, Seller>();
 
     for (const item of data.items) {
       // Get product
@@ -489,7 +490,7 @@ export class OrderPlacement {
           subtotal,
           deliveryFee,
           sellerDeliveryCharge,
-          deliveryFeeBreakdown: deliveryFeeBreakdown as any,
+          deliveryFeeBreakdown: deliveryFeeBreakdown as unknown as Prisma.InputJsonValue,
           deliveryProvider,
           discountAmount,
           taxAmount,
@@ -511,7 +512,7 @@ export class OrderPlacement {
                 landmark: deliveryAddress.landmark ?? null,
                 latitude: deliveryAddress.latitude != null ? Number(deliveryAddress.latitude) : null,
                 longitude: deliveryAddress.longitude != null ? Number(deliveryAddress.longitude) : null,
-              } as any)
+              } as Prisma.InputJsonObject)
             : undefined,
           hubId: data.hubId,
           deliverySlotDate: data.deliverySlotDate ? new Date(data.deliverySlotDate) : null,

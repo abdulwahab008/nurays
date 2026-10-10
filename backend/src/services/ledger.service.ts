@@ -1,3 +1,4 @@
+import type { Prisma } from '@prisma/client';
 import prisma from '../config/database';
 import { pageArgs } from '../utils/pagination';
 import { parseBreakdown, platformDeliveryFee } from '../utils/deliveryEarnings';
@@ -57,7 +58,7 @@ export class LedgerService {
       const selfDeliveryShares =
         collectedBy === 'seller' ? [] : liveBreakdown.filter((r) => r.provider === 'self');
 
-      const entries: Array<Record<string, unknown>> = [
+      const entries: Prisma.LedgerEntryCreateManyInput[] = [
         // 1. Customer Payment (Asset / Receivable debited)
         {
           orderId,
@@ -142,7 +143,7 @@ export class LedgerService {
         });
       }
 
-      await tx.ledgerEntry.createMany({ data: entries as any });
+      await tx.ledgerEntry.createMany({ data: entries });
       return { recorded: true, orderId };
     });
   }
@@ -159,7 +160,7 @@ export class LedgerService {
   }) {
     const { page, limit, skip } = pageArgs(filters.page, filters.limit, 50, 100);
 
-    const where: any = {};
+    const where: Prisma.LedgerEntryWhereInput = {};
     if (filters.orderId) where.orderId = filters.orderId;
     if (filters.sellerId) where.sellerId = filters.sellerId;
     if (filters.transactionType) where.transactionType = filters.transactionType;
