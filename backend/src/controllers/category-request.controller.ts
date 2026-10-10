@@ -1,11 +1,12 @@
 import { Request, Response } from 'express';
 import { categoryRequestService } from '../services/category-request.service';
+import { currentUserId } from '../middleware/auth.middleware';
 
 // A rejected handler reaches the central error handler (Express 5), so these do not catch and rethrow.
 
 // Create a category request (seller)
 export const createCategoryRequest = async (req: Request, res: Response) => {
-  const sellerId = (req as any).seller?.id;
+  const sellerId = req.seller?.id;
 
   if (!sellerId) {
     return res.status(403).json({
@@ -51,7 +52,7 @@ export const createCategoryRequest = async (req: Request, res: Response) => {
 
 // Get seller's category requests
 export const getMyRequests = async (req: Request, res: Response) => {
-  const sellerId = (req as any).seller?.id;
+  const sellerId = req.seller?.id;
 
   if (!sellerId) {
     return res.status(403).json({
@@ -108,7 +109,7 @@ export const getRequestById = async (req: Request, res: Response) => {
 // Approve a category request (admin)
 export const approveRequest = async (req: Request, res: Response) => {
   const { id } = req.params;
-  const adminId = (req as any).user?.id;
+  const adminId = currentUserId(req);
   const customSlug = req.body?.customSlug;
 
   const category = await categoryRequestService.approveRequest(id, adminId, customSlug);
@@ -123,7 +124,7 @@ export const approveRequest = async (req: Request, res: Response) => {
 // Reject a category request (admin)
 export const rejectRequest = async (req: Request, res: Response) => {
   const { id } = req.params;
-  const adminId = (req as any).user?.id;
+  const adminId = currentUserId(req);
   const { reason } = req.body;
 
   if (!reason) {

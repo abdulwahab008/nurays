@@ -1,8 +1,9 @@
 import { Request, Response } from 'express';
 import { favoriteService } from '../services/favorite.service';
+import { currentUserId } from '../middleware/auth.middleware';
 
 export async function getFavorites(req: Request, res: Response) {
-  const userId = (req as any).user.userId || (req as any).user.id;
+  const userId = currentUserId(req);
   const lat = req.query.lat ? Number(req.query.lat) : undefined;
   const lng = req.query.lng ? Number(req.query.lng) : undefined;
 
@@ -11,7 +12,7 @@ export async function getFavorites(req: Request, res: Response) {
 }
 
 export async function addFavorite(req: Request, res: Response) {
-  const userId = (req as any).user.userId || (req as any).user.id;
+  const userId = currentUserId(req);
   const { sellerId } = req.params;
 
   const data = await favoriteService.addFavorite(userId, sellerId);
@@ -19,7 +20,7 @@ export async function addFavorite(req: Request, res: Response) {
 }
 
 export async function removeFavorite(req: Request, res: Response) {
-  const userId = (req as any).user.userId || (req as any).user.id;
+  const userId = currentUserId(req);
   const { sellerId } = req.params;
 
   const data = await favoriteService.removeFavorite(userId, sellerId);
@@ -27,7 +28,7 @@ export async function removeFavorite(req: Request, res: Response) {
 }
 
 export async function checkFavorite(req: Request, res: Response) {
-  const userId = (req as any).user.userId || (req as any).user.id;
+  const userId = currentUserId(req);
   const { sellerId } = req.params;
 
   const data = await favoriteService.checkFavorite(userId, sellerId);
