@@ -27,9 +27,6 @@ function RegisterForm() {
     full_name: '',
     phone: '',
     city: '',
-    community: 'Askari 11',
-    house_apt: '',
-    area: '',
     user_type: 'customer',
     business_name: '',
     termsAccepted: false,
@@ -133,7 +130,6 @@ function RegisterForm() {
         phone: formData.phone ? formData.phone.trim() : undefined,
         phone_otp: formData.phone && phoneOtp.trim() ? phoneOtp.trim() : undefined,
         city: formData.city ? formData.city.trim() : undefined,
-        area: formData.area ? formData.area.trim() : undefined,
         business_name: formData.user_type === 'seller' ? formData.business_name.trim() : undefined,
       });
       
@@ -485,47 +481,6 @@ function RegisterForm() {
               value={formData.city}
               onChange={(e) => setFormData({ ...formData, city: e.target.value })}
               placeholder="Karachi"
-              className={inputClass}
-              style={inputStyle}
-            />
-          </div>
-
-          <div className="mb-4">
-            <label htmlFor="community" className={labelClass}>
-              {t('community')}
-            </label>
-            <select
-              id="community"
-              value={formData.community}
-              onChange={(e) => setFormData({ ...formData, community: e.target.value })}
-              className={inputClass}
-              style={inputStyle}
-              required
-            >
-              <option value="Askari 11">Askari 11 (Sector A/B/C)</option>
-              <option value="Askari 10">Askari 10 (Main / Sector D)</option>
-              <option value="DHA Phase 6">DHA Phase 6</option>
-              <option value="DHA Phase 5">DHA Phase 5 (Commercial & Residential)</option>
-              <option value="Bahria Town">Bahria Town Karachi</option>
-              <option value="Gulshan-e-Iqbal">Gulshan-e-Iqbal</option>
-              <option value="Clifton">Clifton (Blocks 1-9)</option>
-              <option value="Other">{t('otherCommunity')}</option>
-            </select>
-            <p className={helperClass} style={helperStyle}>
-              {t('communityHelper')}
-            </p>
-          </div>
-
-          <div className="mb-4">
-            <label htmlFor="house_apt" className={labelClass}>
-              {t('houseApt')}
-            </label>
-            <input
-              type="text"
-              id="house_apt"
-              value={formData.house_apt}
-              onChange={(e) => setFormData({ ...formData, house_apt: e.target.value })}
-              placeholder={t('houseAptPlaceholder')}
               className={inputClass}
               style={inputStyle}
             />
