@@ -235,7 +235,11 @@ but that is convenience, not the security boundary.
   reconnect.
 - **Logout ends every session** of the account (`tokensValidAfter`) and closes its live Socket.IO connections; so
   do suspension, a staff role change, a password reset, a password change and account closure
-  (`socketManager.disconnectUser`).
+  (`socketManager.disconnectUser`). Logout also **forgets the account's push subscriptions**, so a browser or phone
+  that someone else uses next is not told about the previous account's orders; the web app drops its own
+  subscription on sign-out and registers it again for whoever signs in on that browser (`lib/push.ts`,
+  `components/AuthProvider.tsx`). A session that simply expired keeps its subscription until the next person signs
+  in on that browser, who takes it over.
 - **Changing the password while signed in** (`POST /auth/change-password`) asks for the current password again (the
   re-check budget above), judges the new one first so that a weak one costs no attempt, refuses the same password,
   and ends every session of the account; the session that made the change is handed fresh tokens, so the person

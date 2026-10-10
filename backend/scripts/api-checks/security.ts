@@ -47,11 +47,18 @@ export default async function security() {
   const asOwner = await kitchen.owner.as('GET', `/product-variants/product/${productId}`);
   ok('the kitchen itself still can', asOwner.status === 200, asOwner.code);
 
-  // 4. logging out ends the session: access token and refresh token
+  // 4. logging out ends the session: access token and refresh token, and no device goes on receiving the account's push notifications
   const leaver = await makeUser('customer');
+  const staying = await makeUser('customer');
+  const device = (who: string, n: number) => ({ endpoint: `https://push.example.test/${who}/${n}`, keys: { p256dh: `p256dh-${who}-${n}-0123456789`, auth: `auth-${who}-${n}-012345` } });
+  const subscribed = [];
+  for (const sub of [device(leaver.id, 1), device(leaver.id, 2)]) subscribed.push(await leaver.as('POST', '/notifications/push/subscriptions', sub));
+  subscribed.push(await staying.as('POST', '/notifications/push/subscriptions', device(staying.id, 1)));
+  ok('two devices of one account and one of another are subscribed to push', subscribed.every((r) => r.status === 201) && (await prisma.pushSubscription.count({ where: { userId: leaver.id } })) === 2, subscribed.map((r) => r.status).join());
   await sleep(1100); // tokens are dated to the second; the logout must come after
   const out = await leaver.as('POST', '/auth/logout', {});
   ok('logout answers 200', out.status === 200, out.code);
+  ok("and the account's push subscriptions are forgotten, on every device (nobody is signed in on any of them any more), the other account's are not", (await prisma.pushSubscription.count({ where: { userId: leaver.id } })) === 0 && (await prisma.pushSubscription.count({ where: { userId: staying.id } })) === 1);
   const meAfter = await leaver.as('GET', '/auth/me');
   ok('the access token is dead after logout', meAfter.status === 401 || meAfter.status === 403, meAfter.code);
   const refreshAfter = await call(null, 'POST', '/auth/refresh', { refreshToken: leaver.refresh });

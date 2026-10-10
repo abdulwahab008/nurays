@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import { useCartStore } from './cart-store';
 import { apiClient } from '../api-client';
+import { dropPushSubscription } from '../push';
 
 export interface User {
   id: string;
@@ -73,6 +74,8 @@ export const useAuthStore = create<AuthState>()(
         // their own server cart) the previous user's items.
         useCartStore.getState().clearCart();
         useCartStore.getState().setAppliedPromoCode(null);
+        // Nor should the next person on this browser inherit the previous account's push notifications.
+        void dropPushSubscription();
         if (typeof window !== 'undefined') {
           sessionStorage.removeItem('access_token');
           sessionStorage.removeItem('refresh_token');

@@ -5,6 +5,8 @@ import { AppError } from '../middleware/errorHandler';
 import prisma from '../config/database';
 import socketManager from '../config/socket';
 import { recordAudit } from '../middleware/audit';
+import { removeAllSubscriptions } from '../services/push.service';
+import { logger } from '../utils/logger';
 
 export const requestOTP = async (req: Request, res: Response) => {
   const { phone, purpose } = req.body;
@@ -179,6 +181,8 @@ export const logout = async (req: Request, res: Response) => {
   if (req.user) {
     await prisma.user.update({ where: { id: req.user.userId }, data: { tokensValidAfter: new Date() } });
     socketManager.disconnectUser(req.user.userId);
+    // ...and no device goes on receiving the account's push notifications (an order's status, a new job) once nobody is signed in on it.
+    await removeAllSubscriptions(req.user.userId).catch((err) => logger.warn({ err: (err as Error)?.message, userId: req.user?.userId }, 'Could not forget the push subscriptions at logout'));
     if (req.user.userType === 'admin') {
       void recordAudit({ userId: req.user.userId, action: 'auth:LOGOUT', entityType: 'user', entityId: req.user.userId, ipAddress: req.ip, responseStatus: 200 });
     }

@@ -136,7 +136,7 @@ Uploaded public images are served from the storage layer's public URL. Private f
 | `GET /auth/me` | authenticated | none | `{ id, phone, email, userType, status, emailVerified, phoneVerified, profile, defaultAddress }` |
 | `POST /auth/resend-verification` | authenticated | none | message |
 | `POST /auth/change-password` | authenticated | `currentPassword` (asked for again: a wrong one is 400 `INVALID_PASSWORD`, never 401, and five wrong ones in 15 minutes stop even the right one with 429 `RATE_LIMITED`, the same budget as changing the e-mail or closing the account), `newPassword` (the same rules as sign-up, judged first, so a weak one costs no attempt: 400 `WEAK_PASSWORD` with `details.reason` and `details.minLength`, staff 12 characters; the same password again is 400 `PASSWORD_UNCHANGED`) | `{ tokens: { access_token, refresh_token, expires_in } }` for this session; every older session, on this device and every other, is void (401 `SESSION_REVOKED`) and the account's sockets are closed. An account with no password (it signs in with Google) is refused with 400 `NO_PASSWORD_SET`: it sets one through `forgot-password`, which writes to its verified address. The change is audited (`auth:PASSWORD_CHANGED`) and the verified address is e-mailed a notice |
-| `POST /auth/logout` | authenticated | none | message; ends every session the account has, on every device (older access and refresh tokens are refused with 401 `SESSION_REVOKED`) and closes its sockets |
+| `POST /auth/logout` | authenticated | none | message; ends every session the account has, on every device (older access and refresh tokens are refused with 401 `SESSION_REVOKED`), closes its sockets and forgets every push subscription the account has (nobody is signed in on those devices any more; the web app registers a browser's own subscription again for whoever signs in on it) |
 | `POST /auth/phone/request` | authenticated, otp limit | `phone` | `{ message, phone }`; sends a code to that number |
 | `POST /auth/phone/verify` | authenticated, login limit | `phone`, `otp` (6 digits) | `{ phone, phoneVerified }`; the number becomes the account's |
 
@@ -410,7 +410,7 @@ All routes need authentication (`notification.routes.ts`, `notification.validato
 | `GET /notifications/preferences` | none | which categories reach the user on which channels |
 | `PUT /notifications/preferences` | `preferences`: object with optional keys `orders`, `payments`, `deliveries`, each an object with optional booleans `push`, `email`, `sms` | the saved preferences |
 | `GET /notifications/push/public-key` | none | `{ publicKey }`: the VAPID public key for web push |
-| `POST /notifications/push/subscriptions` | `endpoint` (URL), `keys: { p256dh, auth }` (the browser's `PushSubscription`) | 201 message |
+| `POST /notifications/push/subscriptions` | `endpoint` (URL), `keys: { p256dh, auth }` (the browser's `PushSubscription`) | 201 message; a device that already belonged to another account moves to this one |
 | `DELETE /notifications/push/subscriptions` | `endpoint` | message |
 | `PATCH /notifications/:id/read` | none | message |
 | `PATCH /notifications/read-all` | none | message |

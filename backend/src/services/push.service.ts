@@ -47,6 +47,15 @@ export async function removeSubscription(userId: string, endpoint: string) {
   await prisma.pushSubscription.deleteMany({ where: { userId, endpoint } });
 }
 
+/**
+ * Forget every device the user turned push on for. Signing out ends every session of the account on every
+ * device, so none of them goes on being told about the account's orders afterwards; a device signs up again
+ * the next time its owner signs in on it (the web app re-registers the browser's own subscription).
+ */
+export async function removeAllSubscriptions(userId: string) {
+  await prisma.pushSubscription.deleteMany({ where: { userId } });
+}
+
 export interface PushPayload {
   title: string;
   body: string;
