@@ -220,9 +220,10 @@ Limitations to know about:
 | Job | Steps |
 |---|---|
 | `backend` | `npm ci`, `prisma generate`, `tsc --noEmit`, `npm run typecheck:scripts` (the API checks and the load tooling), `npm run lint` (no errors, at most the warning count set in `package.json`), `npm test`, `npm run build` |
-| `frontend` | `npm ci`, `tsc --noEmit`, `npm run build` (with placeholder `NEXT_PUBLIC_*`) |
+| `frontend` | `npm ci`, `tsc --noEmit`, `npm run lint` (no errors, at most the warning count set in `package.json`), `npm run build` (with placeholder `NEXT_PUBLIC_*`) |
 | `e2e` (after both above) | PostgreSQL 15 and Redis 7 services, `prisma migrate deploy`, schema drift check (`npm run db:check`), `seed:e2e`, build and start the backend on 3001 (automatic rider assignment off), build the frontend, install Chromium, run the `smoke`, `rider-navigation`, `rider-location-resume`, `csp` and `geocode-proxy` specs, upload the Playwright report, then `npm run api-checks` against the backend |
 | `money-flows` (after `backend`) | its own PostgreSQL 15, `prisma migrate deploy`, `scripts/verify-money-flows.ts` in test mode |
+| `load-tooling` (after `backend`) | PostgreSQL 15 (`nuray_load`) and Redis 7 services, `prisma migrate deploy`, `npm run load:seed` at 2 % of the launch size, build and start the API (automatic rider assignment off), `load:tokens`, then each load scenario for a few seconds with `--smoke` (fails on a 5xx or an unanswered request, not on speed); see [LOAD_TESTING.md](LOAD_TESTING.md) |
 | `docker-build` (after backend and frontend) | builds both images without pushing |
 
 The drift check fails a PR that changes `schema.prisma` without a migration.

@@ -7,15 +7,15 @@ Written 2026-10-10 from `docs/PRODUCTION_READINESS_AUDIT.md`. Every finding the 
 Done on `claude/epic-johnson-r4eep6`. The audit report's second addendum has the detail; nothing here needed a schema change.
 
 - **Phase 0:** the fonts are bundled (0.1), the API checks are in the repository and in CI (0.3: eleven suites, 323 checks, plus `verify-money-flows` with 360 checks in a job of its own), the Dependabot rules are in (0.4; closing the old Dependabot pull requests is yours), and the report is corrected (0.5).
-- **Phase 1, the code part:** the geocoder's key, pace and queue are settings and one address has a flood guard (INTEG-2), and a release guard keeps draft legal pages out of a release (MOBILE-5).
-- **Phase 2:** NEW-priv-1, PRIV-6, NEW-priv-2 and INTEG-3, then the findings of an independent review of them; NEW-auth-1, SEC-4, the staff password rules and SEC-5; the CSP collector, its Playwright check and the enforce switch (SEC-7); PERF-5 (a job is offered to the best rider first, and only riders on duty hear of a job nobody took); the backend lint gate (BE-1); the delivery status machine and its tests (DELIV-11).
-- **Defects the new checks found and fixed on the way:** the rider's view of an order mixed the old street text with the new pin after the customer edited the saved address; the kitchen dashboard counted dishes as orders and counted cancelled lines in today's sales; the delivery row on `GET /orders/:id` listed the riders who had handed the job back to every viewer; and a sweep with absurd values found 500s on huge page numbers, impossible dates, non-finite price filters and amounts beyond a column's range; none is a 500 now (the request is refused with a 400, or the value is capped or ignored).
+- **Phase 1, the code part:** the geocoder's key, pace and queue are settings and one address has a flood guard (INTEG-2), a release guard keeps draft legal pages out of a release (MOBILE-5), and the load-test tooling is written, unit-tested, run in CI on a small database and smoke-tested at full size (`backend/scripts/load`, guide in `docs/LOAD_TESTING.md`). The run against staging is yours.
+- **Phase 2:** NEW-priv-1, PRIV-6, NEW-priv-2 and INTEG-3, then the findings of an independent review of them; NEW-auth-1, SEC-4, the staff password rules and SEC-5; the CSP collector, its Playwright check and the enforce switch (SEC-7); PERF-5 (a job is offered to the best rider first, and only riders on duty hear of a job nobody took); the backend lint gate (BE-1); the delivery status machine and its tests (DELIV-11); the web app's lint is green (FE-6: no errors, and CI fails on more warnings than the cap); a busy database answers 503 with `Retry-After` instead of a bare 500 (NEW-perf-3).
+- **Defects the new checks found and fixed on the way:** the rider's view of an order mixed the old street text with the new pin after the customer edited the saved address; the kitchen dashboard counted dishes as orders and counted cancelled lines in today's sales; the delivery row on `GET /orders/:id` listed the riders who had handed the job back to every viewer; and a sweep with absurd values found 500s on huge page numbers, impossible dates, non-finite price filters and amounts beyond a column's range; none is a 500 now (the request is refused with a 400, or the value is capped or ignored). The load scenarios found two more: an exhausted database pool answered 500 (now 503), and the dish search and the rider dashboard lists turned out to be the expensive reads (NEW-perf-2 and NEW-perf-1 below).
 
 Still ahead, in order:
 
 1. **Merge PR #38** (yours), which runs CI on `main` again (Phase 0.2).
-2. **Phase 1:** everything outside the code, plus the load-test scripts.
-3. **Phase 2, what is left:** FE-6 (web lint to zero), the seven days of CSP reports and then enforcing, MOBILE-6, MOBILE-1, MOBILE-4 and MOBILE-7, and the device checks for DELIV-7 (the automated resume test is in).
+2. **Phase 1:** everything outside the code, and the load test on staging (the tooling is ready).
+3. **Phase 2, what is left:** NEW-perf-1 (the rider dashboard's lists are too heavy for hundreds of riders), the seven days of CSP reports and then enforcing, MOBILE-6, MOBILE-1, MOBILE-4 and MOBILE-7, and the device checks for DELIV-7 (the automated resume test is in).
 4. **Phase 3:** waits for your answers to decisions 1–20; anything with a migration waits for your approval.
 
 ## Where things stand (when the plan was written)
@@ -59,7 +59,7 @@ Estimates are for one experienced engineer and include tests. The calendar time 
 4. **Privacy fixes, one PR (about 1 day):** NEW-priv-1, PRIV-6, NEW-priv-2, INTEG-3. Done.
 5. **Auth hardening (about 3 days):** NEW-auth-1, SEC-4, staff password rules, SEC-5. Done.
 6. **Bring the API checks into the repo and CI** (Phase 0.3), before any refactor. Done.
-7. **Rider fan-out (PERF-5)**, then write the load-test scripts. The fan-out is done; the load-test scripts are next.
+7. **Rider fan-out (PERF-5)**, then write the load-test scripts. Both are done; the run on staging is next, and it needs your environment.
 8. **Answer decisions 1–7 in Phase 3.** They unlock the remaining P1 work.
 
 ---
@@ -87,14 +87,16 @@ Most of this is outside the code. Items marked **(you)** need the owner or ops; 
 - [ ] **Launch data (you).** Create the super admin with `scripts/create-admin.js` from a checkout (the runtime image has no scripts). Set up communities and delivery prices, and approve the first kitchens and riders. If an existing database is migrated, check that the oldest admin, who becomes super admin, is the right person.
 - [ ] **Device checks (you, plus Claude S).** On one Android phone and one iPhone, each with and without Google Maps installed: Start navigation opens Maps at the pin; position sharing resumes within about 5 s after coming back from Maps; the screen stays on; the PIN handover completes. Record the iOS version: the wake lock doesn't work in home-screen web apps before iOS 18.4.
   - **(Claude)** An automated Playwright test of the resume path on a mobile viewport (DELIV-7). **Done:** `tests/e2e/rider-location-resume.spec.ts`, run in CI; it fails when the position is not sent on return.
-- [ ] **Load test (Claude writes it, L; you provide staging).**
-  - `backend/scripts/seed-load.ts` (10k products, 2k kitchens, 50k orders; refuses to run on a database whose name doesn't end in `_load`).
-  - A token-minting script, because tokens expire after 1 hour and the whole run takes longer.
-  - k6 scenarios: browse, checkout, rider loop, login storm.
-  - A Node Socket.IO harness for 2,000 sockets that copies what the rider dashboard does after each event.
-  - The audit's EXPLAIN queries committed to the repo.
-  - On the managed Postgres: `log_min_duration_statement=200ms` and `pg_stat_statements`.
-  - Do PERF-5 first, or the rider scenario measures a problem that is already known.
+- [ ] **Load test (Claude writes it, L; you provide staging).** **Tooling done; the run on staging is yours** (`docs/LOAD_TESTING.md` has the steps and how to read the results).
+  - `backend/scripts/load/seed-load.ts`: 2,000 kitchens, 10,000 dishes, 5,000 customers, 300 riders, 50,000 orders, 400 open jobs, 300,000 audit rows, 20,000 complaints; refuses a database whose name doesn't end in `_load` or that holds accounts that aren't its own. **Done.**
+  - A token-minting script, because tokens expire after 1 hour and the whole run takes longer. **Done** (`mint-tokens.ts`, signs in through the API).
+  - Scenarios: browse, checkout, rider loop, login storm. **Done**, in plain Node with no extra tool to install (not k6); the verdict is the audit's targets (p95 under 300 ms for reads and 800 ms for writes, no 5xx), and the report says why each refusal happened.
+  - A Socket.IO harness for 2,000 sockets that times `delivery:new` from the kitchen's accept to each rider socket. **Done.**
+  - The audit's EXPLAIN queries committed to the repo. **Done** (`explain.sql`, 13 queries).
+  - **Kept from rotting:** the arithmetic of the runner has unit tests, the scripts are type-checked in CI, and a CI job seeds a small database and runs every scenario for a few seconds.
+  - **Left (you):** on the managed Postgres, `log_min_duration_statement=200ms` and `pg_stat_statements`; the staging stack; running it and reading the results.
+  - Do PERF-5 first, or the rider scenario measures a problem that is already known. **Done.**
+  - **What the smoke run at full seed size found** (one process, development machine; not capacity): the rider dashboard's lists are the heaviest reads (NEW-perf-1), the dish search scans every dish (NEW-perf-2), and an exhausted database pool answered 500 (NEW-perf-3, fixed).
 - [ ] **Launch-day smoke checks (you).** From `docs/DEPLOYMENT_GUIDE.md`: a registration email and an OTP arrive; an S3 upload and a private receipt link work; one real small Safepay payment completes an order; `db:check` passes.
 
 ## Phase 2: P1 code that needs no decision (Claude can start now)
@@ -117,7 +119,7 @@ Most of this is outside the code. Items marked **(you)** need the owner or ops; 
 - [x] **INTEG-2** Geocoding limits: keep the global queue cap, and add only a generous per-IP flood guard (many Pakistani mobile users share one IP). The proper per-account limit comes when the geocode routes move behind the API sign-in. **Done** (see Phase 1).
 
 **Quality gates**
-- [ ] **FE-6** Get the web lint errors to zero, including the 13 React hook errors (some are real bugs). Gate CI on errors, with a warning cap that only goes down.
+- [x] **FE-6** Get the web lint errors to zero, including the 13 React hook errors (some are real bugs). Gate CI on errors, with a warning cap that only goes down. **Done:** 0 errors, 439 warnings, and `npm run lint` (`--max-warnings 439`) runs in CI. The hook-rule errors were fixed in the code and none was silenced except one development-only page: the Google sign-in button called a hook conditionally, the role guard, the phone menu, the date picker, the reviews list and the prefilled modals set state from effects (the promotion form could reset what was typed whenever the page re-rendered), the live-refresh hook wrote refs while rendering, and the payment card read the clock while rendering. `no-explicit-any` is a warning, counted by the cap.
 - [x] **BE-1** Add an ESLint config to the backend and a CI lint step (half a day). **Done:** `npm run lint` runs in CI; 0 errors, at most 168 warnings.
 - [x] **DELIV-11** Unit tests for the delivery status machine, before anyone touches the rider or dispatch code. **Done:** `utils/deliveryStatus.ts` and 19 tests that fail when a transition or a guard changes.
 
@@ -201,7 +203,7 @@ Each line gives the options, the recommendation, and what it unlocks. Effort is 
 
 ## Report corrections
 
-Made in `docs/PRODUCTION_READINESS_AUDIT.md` (Phase 0.5), including the status counts, which are now 88 fixed, 16 partly fixed and 36 open:
+Made in `docs/PRODUCTION_READINESS_AUDIT.md` (Phase 0.5), including the status counts, which are now 89 fixed, 16 partly fixed and 35 open:
 
 - **Header and Deliverable 7:**
   - The branch was merged through PR #26, and the index migrations add a schema change.
@@ -269,7 +271,7 @@ Status now: what the code shows today. Needs: code = can be done now; decision =
 | OPS-10 | Partly fixed | Partly open | code | P2 | M | 5 | Pin GitHub Actions to commit SHAs and add a lint gate |
 | D10-PRISMA7 | — | Report wrong | decision | P2 | S | 3 (#19) | Prisma CLI advisories: Prisma 7 does not fix them; remaining npm audit findings |
 | D2-W4 | — | Open | decision | P2 | M | 3 (#17) | In-process scheduler and queue worker: add run flags now, a worker process later |
-| D5-LOADTEST | — | Open | outside | P0 | L | 1 | Write and run the Deliverable 5 load test (seed, scenarios, socket harness) |
+| D5-LOADTEST | — | Partly open | outside | P0 | L | 1 | Write and run the Deliverable 5 load test: seed, scenarios, socket harness and EXPLAIN file are written, tested and smoke-run (`docs/LOAD_TESTING.md`); the run on staging is left |
 | NEW-ops-1 | — | Done | code | P2 | M | 0 | Commit the API flow scripts the report cites as evidence |
 | NEW-fe-hub-1 | — | Open | code | P2 | XS | 5 | Hub console intake picker never shows the product photo |
 | BE-1 | Open | Done | code | P2 | S | 2 | Backend ESLint config and a CI lint gate |
@@ -289,8 +291,8 @@ Status now: what the code shows today. Needs: code = can be done now; decision =
 | NEW-flow-scripts | — | Done | code | P2 | M | 0 | Bring the flow/56-64 API checks the report cites into the repo |
 | FE-4 | Partly fixed | Partly open | code | P2 | XS | 5 | One promotion label helper and remove the last private copy of the discount maths |
 | FE-5 | Partly fixed | Partly open | code | P2 | S | 5 | Make UserLayout a thin admin shell; drop the dead sidebar lists and 17 emoji icon keys |
-| FE-6 | Open | Open | code | P1 | M | 2 | Make web ESLint green, fix the hook-rule errors, gate CI on lint |
-| SEC-R9 | — | Open | code | P1 | XS | 2 | Web ESLint red (remaining-risk entry): closed by FE-6 |
+| FE-6 | Open | Done | code | P1 | M | 2 | Make web ESLint green, fix the hook-rule errors, gate CI on lint |
+| SEC-R9 | — | Done | code | P1 | XS | 2 | Web ESLint red (remaining-risk entry): closed by FE-6 |
 | FE-7 | Open | Open | code | P2 | L | 5 | Type the API shapes the pages read and remove `any` (ratchet the lint gate) |
 | FE-8 | Open | Open | code | P2 | L | 5 | One seller product form; split the largest single-component pages |
 | FE-9 | Open | Open | code | P2 | M | 5 | One geocode/city module for reverse geocoding and city matching |
@@ -320,6 +322,9 @@ Status now: what the code shows today. Needs: code = can be done now; decision =
 | NEW-addr-1 | — | Open | decision | P2 | S | 5 | A customer cannot enter a house number: no field in the address form, the validator drops it, so `house_number` stays empty. Add the field (form and validator, then the snapshot has something to freeze) or stop showing it to riders |
 | NEW-priv-3 | — | Open | code | P2 | XS | 5 | Rider notifications stored before NEW-priv-2 still hold the street: a one-off scrub, only needed if production has such rows |
 | NEW-admin-1 | — | Open | code | P2 | XS | 5 | `GET /admin/orders?sellerId=` takes the kitchen owner's account id; accept the kitchen's own id (and keep the old one working) |
-| NEW-ops-2 | — | Open | code | P2 | XS | 5 | The error handler logs and reports every 5xx `AppError`, so the deliberate `GATEWAY_UNAVAILABLE` (no gateway configured) is reported like a crash: give expected states their own flag |
+| NEW-ops-2 | — | Open | code | P2 | XS | 5 | The error handler logs and reports every 5xx `AppError`, so the deliberate `GATEWAY_UNAVAILABLE` (no gateway configured) is reported like a crash: give expected states their own flag (not `SERVICE_BUSY`, which should keep being reported) |
+| NEW-perf-1 | — | Open | code | P1 | S | 2 | The rider dashboard's lists are heavy: `GET /riders/deliveries/mine` returns up to 200 jobs, finished ones included and each with the fee corridor (about 120 KB and 67 ms of API time for a rider with 200 jobs), `/available` 95 KB with 100 open jobs. 300 riders reloading every 30 s saturate one process (p95 over 4 s). Return the active jobs and the last few finished ones with a page for the rest, leave the corridor off finished jobs, and re-measure |
+| NEW-perf-2 | — | Open | approval | P2 | S | 3 | The dish search is a sequential scan of every dish (71 ms in the database at 10,000 dishes, p95 352 ms at 50 users, the only read over its target): a trigram index on the searched columns is a schema change, so it waits for your approval; re-run `explain.sql` after it |
+| NEW-perf-3 | — | Done | code | P2 | XS | 2 | An exhausted database pool or a transaction out of time (Prisma P2024, P2028) answered a bare 500; it is now 503 `SERVICE_BUSY` with `Retry-After: 2`, still reported to error tracking |
 
 Effort: XS under 2 hours, S half a day, M 1–2 days, L 3–5 days, XL over a week. The launch tasks found by the coverage pass (configuration, hosting, map provider, backups, staging, launch data, smoke checks, fonts, Dependabot) are in Phases 0 and 1 above without IDs.

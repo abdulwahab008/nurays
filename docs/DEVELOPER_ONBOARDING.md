@@ -196,11 +196,11 @@ advisory lock so only one instance runs it at a time; make the function safe to 
 | backend | `npm run seed:e2e` | sample data |
 | backend | `npx ts-node scripts/verify-money-flows.ts` | money flows on a scratch database |
 | frontend-web | `npm run dev` / `build` / `start` | Next.js |
-| frontend-web | `npm run lint` | ESLint |
+| frontend-web | `npm run lint` | ESLint (CI fails on errors and on more warnings than the cap in `package.json`) |
 | frontend-web | `npx tsc --noEmit` | typecheck (CI does this) |
 | frontend-web | `npm run test:e2e` | Playwright |
 
-Before pushing, run `npx tsc --noEmit` in both folders and `npm run lint` and `npm test` in `backend`. Details of each test layer are in
+Before pushing, run `npx tsc --noEmit` and `npm run lint` in both folders and `npm test` in `backend`. Details of each test layer are in
 [TESTING_STRATEGY.md](TESTING_STRATEGY.md).
 
 ## Troubleshooting
