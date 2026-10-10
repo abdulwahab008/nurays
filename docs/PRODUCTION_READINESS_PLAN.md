@@ -15,7 +15,7 @@ Still ahead, in order:
 
 1. **Merge PR #38** (yours), which runs CI on `main` again (Phase 0.2).
 2. **Phase 1:** everything outside the code, plus the load-test scripts.
-3. **Phase 2, what is left:** FE-6 (web lint to zero), the seven days of CSP reports and then enforcing, MOBILE-6, MOBILE-1, MOBILE-4 and MOBILE-7, and the automated resume test for DELIV-7.
+3. **Phase 2, what is left:** FE-6 (web lint to zero), the seven days of CSP reports and then enforcing, MOBILE-6, MOBILE-1, MOBILE-4 and MOBILE-7, and the device checks for DELIV-7 (the automated resume test is in).
 4. **Phase 3:** waits for your answers to decisions 1–20; anything with a migration waits for your approval.
 
 ## Where things stand (when the plan was written)
@@ -86,7 +86,7 @@ Most of this is outside the code. Items marked **(you)** need the owner or ops; 
 - [ ] **Staging environment (you).** Production images, managed Postgres and Redis, two API instances behind a real load balancer. Needed for the load test and for the store reviewers' test accounts.
 - [ ] **Launch data (you).** Create the super admin with `scripts/create-admin.js` from a checkout (the runtime image has no scripts). Set up communities and delivery prices, and approve the first kitchens and riders. If an existing database is migrated, check that the oldest admin, who becomes super admin, is the right person.
 - [ ] **Device checks (you, plus Claude S).** On one Android phone and one iPhone, each with and without Google Maps installed: Start navigation opens Maps at the pin; position sharing resumes within about 5 s after coming back from Maps; the screen stays on; the PIN handover completes. Record the iOS version: the wake lock doesn't work in home-screen web apps before iOS 18.4.
-  - **(Claude)** An automated Playwright test of the resume path on a mobile viewport (DELIV-7).
+  - **(Claude)** An automated Playwright test of the resume path on a mobile viewport (DELIV-7). **Done:** `tests/e2e/rider-location-resume.spec.ts`, run in CI; it fails when the position is not sent on return.
 - [ ] **Load test (Claude writes it, L; you provide staging).**
   - `backend/scripts/seed-load.ts` (10k products, 2k kitchens, 50k orders; refuses to run on a database whose name doesn't end in `_load`).
   - A token-minting script, because tokens expire after 1 hour and the whole run takes longer.
@@ -312,7 +312,7 @@ Status now: what the code shows today. Needs: code = can be done now; decision =
 | MOBILE-10 | Open | Open | decision | P2 | S | 4 | Capacitor in remote-URL mode: confirm the decision, navigation allow-list and offline page |
 | MOBILE-11 | Open | Open | code | P2 | S | 4 | Token storage behind one store in api-client (native secure storage later) |
 | MOBILE-12 | Partly fixed | Partly open | code | P2 | S | 4 | Mobile Playwright project and store assets (icons, feature graphic, screenshots) |
-| DELIV-7 | Partly fixed | Partly open | outside | P0 | S | 1 | Device check of the position resume and wake lock, plus an automated resume test |
+| DELIV-7 | Partly fixed | Partly done | outside | P0 | S | 1 | Device check of the position resume and wake lock (the automated resume test is in) |
 | D8-CHECKLIST | — | Open | native app | P1 | XL | 4 | Capacitor shell for Android and iOS, and the Deliverable 8 pre-submission checklist |
 | D8-TWA | — | Open | outside | P2 | M | 4 | Play-only Trusted Web Activity stop-gap (Bubblewrap) |
 | NEW-push-1 | — | Open | code | P2 | S | 4 | A browser's push subscription stays with the first account that enabled it, even after sign-out |

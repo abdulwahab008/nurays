@@ -192,7 +192,7 @@ jobs:
           # purchase.spec reads the email-verification token straight from the
           # DB via psql (no mailbox in CI). Point it at the CI database.
           E2E_DB_URL: postgresql://nuray:nuray@localhost:5432/nuray_test
-        run: npx playwright test tests/e2e/smoke.spec.ts tests/e2e/rider-navigation.spec.ts tests/e2e/csp.spec.ts tests/e2e/geocode-proxy.spec.ts --project=chromium
+        run: npx playwright test tests/e2e/smoke.spec.ts tests/e2e/rider-navigation.spec.ts tests/e2e/rider-location-resume.spec.ts tests/e2e/csp.spec.ts tests/e2e/geocode-proxy.spec.ts --project=chromium
 
       - name: Upload Playwright report
         if: ${{ !cancelled() }}
