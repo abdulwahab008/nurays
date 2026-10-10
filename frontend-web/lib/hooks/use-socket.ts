@@ -5,6 +5,23 @@ import type { Socket } from 'socket.io-client';
 import { useAuthStore } from '../store/auth-store';
 import { acquireSocket, currentSocket, onSocketChange, releaseSocket } from '../realtime/socket';
 
+/** `order:status:update`: an order's status changed. The payload carries no account ids (see the server's realtime-order service). */
+export interface OrderStatusEvent {
+  orderId: string;
+  orderNumber?: string;
+  status: string;
+  updatedAt?: string;
+}
+
+/** `order:delivery:tracking`: where the rider is, sent to the customer and to admins. */
+export interface DeliveryTrackingEvent {
+  orderId?: string;
+  location?: { latitude: number; longitude: number };
+  distanceKm?: number | null;
+  estimatedArrival?: string;
+  updatedAt?: string;
+}
+
 /**
  * Live updates over the tab's shared realtime connection (lib/realtime/socket.ts).
  *
@@ -64,10 +81,8 @@ export function useSocket() {
     [socket]
   );
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const onOrderStatusUpdate = useCallback((callback: (data: any) => void) => subscribe('order:status:update', callback), [subscribe]);
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const onDeliveryTracking = useCallback((callback: (data: any) => void) => subscribe('order:delivery:tracking', callback), [subscribe]);
+  const onOrderStatusUpdate = useCallback((callback: (data: OrderStatusEvent) => void) => subscribe('order:status:update', callback), [subscribe]);
+  const onDeliveryTracking = useCallback((callback: (data: DeliveryTrackingEvent) => void) => subscribe('order:delivery:tracking', callback), [subscribe]);
   const onNewOrder = useCallback(
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (callback: (data: { orderId: string; orderNumber: string; totalAmount: number; items?: any[]; createdAt: string }) => void) =>

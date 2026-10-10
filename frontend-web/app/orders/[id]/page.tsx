@@ -3,16 +3,16 @@
 import { Suspense, useEffect, useRef, useState } from 'react';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
-import { orderService } from '@/lib/services/order.service';
+import { orderService, type OrderDetails } from '@/lib/services/order.service';
 import { formatPrice, formatDateTime, formatDate } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/toast';
 import { useAuthStore } from '@/lib/store/auth-store';
-import { useSocket } from '@/lib/hooks/use-socket';
+import { useSocket, type DeliveryTrackingEvent } from '@/lib/hooks/use-socket';
 import { useLiveRefresh } from '@/lib/hooks/use-live-refresh';
 import { DashboardLayout, CUSTOMER_SIDEBAR_ITEMS } from '@/components/layout/DashboardShell';
 import WriteReviewForm from '@/components/products/WriteReviewForm';
-import { apiClient } from '@/lib/api-client';
+import { apiClient, apiErrorMessage } from '@/lib/api-client';
 import ManualPaymentCard from '@/components/orders/ManualPaymentCard';
 import OnlinePaymentCard from '@/components/orders/OnlinePaymentCard';
 import OrderChatModal from '@/components/orders/OrderChatModal';
@@ -30,7 +30,7 @@ const RiderLiveMap = dynamic(() => import('@/components/orders/RiderLiveMap'), {
 function playCancelSound() {
   if (typeof window === 'undefined') return;
   try {
-    const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
+    const AudioCtx = window.AudioContext || (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
     if (!AudioCtx) return;
     const ctx = new AudioCtx();
     const go = () => {
@@ -163,19 +163,16 @@ function paymentStatusLabel(t: OrdersT, method?: string, status?: string): strin
   }
 }
 
-function mapOrderToDetail(raw: any): OrderDetail {
+function mapOrderToDetail(raw: OrderDetails): OrderDetail {
+  // The server sends the address as the order was placed (even when the saved address has since been deleted).
   const addr = raw.deliveryAddress;
   const addressStr = addr
     ? [addr.addressLine1, addr.addressLine2, addr.area, addr.city].filter(Boolean).join(', ')
-    : (raw.deliveryAddressSnapshot as any)?.address || '—';
+    : '—';
   const slotDate = raw.deliverySlotDate
     ? new Date(raw.deliverySlotDate).toISOString().slice(0, 10)
     : undefined;
-  const sellerName =
-    raw.items?.[0]?.seller?.businessName ||
-    raw.items?.[0]?.sellerName ||
-    raw.seller?.businessName ||
-    '';
+  const sellerName = raw.items?.[0]?.seller?.businessName || '';
   return {
     id: raw.id,
     orderNumber: raw.orderNumber ?? '',
@@ -189,16 +186,14 @@ function mapOrderToDetail(raw: any): OrderDetail {
       : null,
     paymentProofUrl: raw.paymentProofUrl ?? null,
     paymentSenderAccount: raw.paymentSenderAccount ?? null,
-    customerName: raw.customer?.profile?.fullName || raw.deliveryAddress?.contactName || '',
-    customerPhone: raw.customer?.phone || raw.deliveryAddress?.contactPhone || '',
     createdAt: raw.createdAt ? new Date(raw.createdAt).toISOString() : new Date().toISOString(),
     sellerName,
-    items: (raw.items ?? []).map((i: any) => ({
+    items: (raw.items ?? []).map((i) => ({
       id: i.id,
       productId: i.productId ?? i.product?.id,
       productName: i.productName ?? i.product?.name ?? '—',
       variantName: i.variantName ?? undefined,
-      productImage: i.productImage ?? i.product?.images?.[0]?.url,
+      productImage: i.productImage ?? i.product?.images?.[0]?.imageUrl,
       sellerName: i.seller?.businessName ?? i.seller?.businessNameUrdu ?? '—',
       quantity: i.quantity ?? 0,
       unitPrice: Number(i.unitPrice ?? 0),
@@ -231,15 +226,15 @@ function mapOrderToDetail(raw: any): OrderDetail {
       rider:
         raw.delivery?.rider ?
           {
-            name: (raw.delivery.rider as any).name ?? '',
+            name: raw.delivery.rider.name ?? '',
             phone: '',
-            vehicle: [(raw.delivery.rider as any).vehicleType, (raw.delivery.rider as any).vehicleNumber].filter(Boolean).join(' - '),
+            vehicle: [raw.delivery.rider.vehicleType, raw.delivery.rider.vehicleNumber].filter(Boolean).join(' - '),
           }
         : undefined,
     },
-    timeline: (raw.statusHistory ?? []).map((h: any) => ({
+    timeline: (raw.statusHistory ?? []).map((h) => ({
       status: h.status ?? 'pending',
-      timestamp: typeof h.createdAt === 'string' ? h.createdAt : new Date(h.createdAt).toISOString(),
+      timestamp: h.createdAt,
     })),
   };
 }
@@ -268,7 +263,7 @@ function OrderDetailContent() {
   const { joinOrderRoom, onOrderStatusUpdate, onDeliveryTracking } = useSocket();
   const [order, setOrder] = useState<OrderDetail | null>(null);
   const [loading, setLoading] = useState(true);
-  const [trackingData, setTrackingData] = useState<any>(null);
+  const [trackingData, setTrackingData] = useState<DeliveryTrackingEvent | null>(null);
   const [showPlacedBanner, setShowPlacedBanner] = useState(false);
   const [showCancelModal, setShowCancelModal] = useState(false);
   const [cancelReason, setCancelReason] = useState('');
@@ -309,7 +304,7 @@ function OrderDetailContent() {
 
     const leaveRoom = joinOrderRoom(orderId);
 
-    const unsubscribeStatus = onOrderStatusUpdate((data: any) => {
+    const unsubscribeStatus = onOrderStatusUpdate((data) => {
       // The server also pushes every one of this customer's other orders to their
       // personal room; only this order's updates belong on this page.
       if (data?.orderId !== orderId) return;
@@ -325,7 +320,7 @@ function OrderDetailContent() {
       }
     });
 
-    const unsubscribeTracking = onDeliveryTracking((data: any) => {
+    const unsubscribeTracking = onDeliveryTracking((data) => {
       if (data?.orderId && data.orderId !== orderId) return;
       setTrackingData(data);
     });
@@ -353,8 +348,7 @@ function OrderDetailContent() {
     try {
       const response = await orderService.getOrderDetails(params.id as string);
       if (seq !== loadSeqRef.current) return; // a newer load superseded this one
-      const raw = (response as any)?.data ?? response;
-      setOrder(mapOrderToDetail(raw));
+      setOrder(mapOrderToDetail(response.data));
     } catch (error) {
       console.error('Failed to load order:', error);
     } finally {
@@ -400,8 +394,8 @@ function OrderDetailContent() {
       } else {
         showToast(t('detail.toastCancelled'), 'success');
       }
-    } catch (error: any) {
-      showToast(error.response?.data?.error?.message || t('detail.cancelFailed'), 'error');
+    } catch (error) {
+      showToast(apiErrorMessage(error, t('detail.cancelFailed')), 'error');
     } finally {
       setCancelling(false);
     }
@@ -422,8 +416,8 @@ function OrderDetailContent() {
       setReportDetails('');
       setReported(true);
       showToast(t('detail.toastReported'), 'success');
-    } catch (error: any) {
-      showToast(error.response?.data?.error?.message || t('detail.reportFailed'), 'error');
+    } catch (error) {
+      showToast(apiErrorMessage(error, t('detail.reportFailed')), 'error');
     } finally {
       setReporting(false);
     }

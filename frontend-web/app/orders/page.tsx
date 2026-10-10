@@ -17,15 +17,11 @@ import {
   Receipt,
   Search,
   Sparkles,
-  ShieldCheck,
-  AlertCircle,
   ExternalLink,
-  ChevronRight,
   CreditCard,
   Flame,
-  Store,
 } from 'lucide-react';
-import { orderService, Order } from '@/lib/services/order.service';
+import { orderService, Order, OrderItem } from '@/lib/services/order.service';
 import { formatPrice, formatDate } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { useAuthStore } from '@/lib/store/auth-store';
@@ -88,20 +84,20 @@ function OrdersContent() {
   useEffect(() => {
     if (!onOrderStatusUpdate) return;
     mountedRef.current = true;
-    const unsubscribe = onOrderStatusUpdate((data: any) => {
+    const unsubscribe = onOrderStatusUpdate((data) => {
       if (!mountedRef.current) return;
       // Keep the whole-history counts in step with the change (the order may not be
       // among the loaded ones, in which case only its old status is unknown).
-      const previous = ordersRef.current.find((o) => (o as any).id === data.orderId) as any;
+      const previous = ordersRef.current.find((o) => o.id === data.orderId);
       const previousStatus: string | undefined = previous?.orderStatus ?? previous?.status;
       if (!previousStatus) {
         // Not among the loaded orders (older page): its old status is unknown, so ask the
         // server for the true counts instead of letting the cards drift.
         orderService
           .getMyOrders({ page: 1, limit: 1 })
-          .then((r: any) => {
-            const d = r?.data ?? r;
-            if (mountedRef.current && d?.statusCounts) setStatusCounts(d.statusCounts);
+          .then((r) => {
+            const counts = r.data?.statusCounts;
+            if (mountedRef.current && counts) setStatusCounts(counts);
           })
           .catch(() => {});
       }
@@ -118,7 +114,7 @@ function OrdersContent() {
       }
       setOrders((prev) =>
         prev.map((o) =>
-          (o as any).id === data.orderId
+          o.id === data.orderId
             ? { ...o, orderStatus: data.status, status: data.status }
             : o
         )
@@ -155,12 +151,12 @@ function OrdersContent() {
     else setLoading(true);
     try {
       const response = await orderService.getMyOrders({ page: pageToLoad, limit: PAGE_SIZE });
-      const data = (response as any)?.data ?? response;
+      const data = response.data;
       const incoming: Order[] = data?.orders ?? [];
       setOrders((prev) => {
         if (!append) return incoming;
-        const seen = new Set(prev.map((o) => (o as any).id));
-        return [...prev, ...incoming.filter((o) => !seen.has((o as any).id))];
+        const seen = new Set(prev.map((o) => o.id));
+        return [...prev, ...incoming.filter((o) => !seen.has(o.id))];
       });
       setPage(data?.pagination?.page ?? pageToLoad);
       setTotalPages(data?.pagination?.totalPages ?? 1);
@@ -179,7 +175,7 @@ function OrdersContent() {
     setReorderingId(order.id);
     try {
       showToast(t('list.toastAddingToTray'), 'info');
-      let items = (order as any).items || [];
+      let items: OrderItem[] = order.items || [];
       if (!items.length || !items[0]?.productId) {
         try {
           const fullRes = await orderService.getOrder(order.id);
@@ -189,7 +185,7 @@ function OrdersContent() {
         }
       }
       for (const item of items) {
-        const pId = item.productId || (item as any).product?.id;
+        const pId = item.productId || item.product?.id;
         if (pId) {
           await cartService.addToCart({
             productId: pId,
@@ -210,11 +206,11 @@ function OrdersContent() {
   };
 
   // Derive effective status
-  const getOrderStatus = (o: Order | any): string => {
-    const raw = String(o?.orderStatus ?? o?.order_status ?? o?.status ?? 'pending');
+  const getOrderStatus = (o: Order): string => {
+    const raw = String(o.orderStatus ?? o.status ?? 'pending');
     if (raw === 'pending') {
-      const items: any[] = o?.items ?? [];
-      if (items.length > 0 && items.every((item: any) => item.status === 'cancelled')) {
+      const items = o.items ?? [];
+      if (items.length > 0 && items.every((item) => item.status === 'cancelled')) {
         return 'cancelled';
       }
     }
@@ -232,7 +228,7 @@ function OrdersContent() {
   // A pending order whose items were all cancelled is shown as cancelled (see getOrderStatus);
   // the server counts it as pending, so move the loaded ones across to keep cards and list in step.
   const derivedCancelled = orders.filter(
-    (o) => String((o as any)?.orderStatus ?? (o as any)?.status ?? 'pending') === 'pending' && getOrderStatus(o) === 'cancelled'
+    (o) => String(o.orderStatus ?? o.status ?? 'pending') === 'pending' && getOrderStatus(o) === 'cancelled'
   ).length;
   const inProgressCount = statusCounts
     ? Math.max(0, sumStatuses(['pending', 'confirmed', 'preparing', 'ready']) - derivedCancelled)
@@ -265,10 +261,7 @@ function OrdersContent() {
       if (searchQuery.trim()) {
         const q = searchQuery.toLowerCase().trim();
         const num = String(o.orderNumber || '').toLowerCase();
-        const items = (o as any).items || [];
-        const hasItemMatch = items.some((i: any) =>
-          (i.productName || i.name || '').toLowerCase().includes(q)
-        );
+        const hasItemMatch = (o.items || []).some((i) => (i.productName || '').toLowerCase().includes(q));
         return num.includes(q) || hasItemMatch;
       }
 
@@ -580,8 +573,8 @@ function OrdersContent() {
                 'dispatched',
                 'in_transit',
               ].includes(status);
-              const items = (order as any).items ?? [];
-              const itemCount = items.length || (order as any).itemsCount || 1;
+              const items = order.items ?? [];
+              const itemCount = items.length || order.itemsCount || 1;
               const step = getStepProgress(status);
 
               return (
@@ -647,7 +640,7 @@ function OrdersContent() {
                             { stepNum: 2, name: t('list.step.confirmed'), icon: Sparkles },
                             { stepNum: 3, name: t('list.step.cooking'), icon: ChefHat },
                             { stepNum: 4, name: t('list.step.onWay'), icon: Truck },
-                          ].map((st, idx) => {
+                          ].map((st) => {
                             const isDone = step >= st.stepNum;
                             const isCurrent = step === st.stepNum;
                             const IconComponent = st.icon;
@@ -687,7 +680,7 @@ function OrdersContent() {
                       <div className="flex-1 min-w-0">
                         {items.length > 0 ? (
                           <div className="flex flex-wrap items-center gap-2">
-                            {items.map((it: any, iIdx: number) => (
+                            {items.map((it, iIdx) => (
                               <div
                                 key={it.id ?? iIdx}
                                 className="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl bg-slate-50 border border-slate-200/70 text-xs font-bold text-slate-800"
@@ -696,7 +689,7 @@ function OrdersContent() {
                                   {it.quantity || 1}×
                                 </span>
                                 <span className="truncate max-w-[180px] sm:max-w-[240px]">
-                                  {it.productName || it.name || (it.product && it.product.name) || t('list.dishFallback')}
+                                  {it.productName || it.product?.name || t('list.dishFallback')}
                                 </span>
                               </div>
                             ))}
