@@ -40,6 +40,11 @@ jobs:
       - name: Typecheck
         run: npx tsc --noEmit
 
+      # The API checks and the load tooling are scripts, outside the API's own tsconfig: a change to the API
+      # that breaks them must fail here and not on the day somebody runs them.
+      - name: Typecheck the evidence scripts
+        run: npm run typecheck:scripts
+
       - name: Lint
         # Fails on any error, and on more warnings than the cap in package.json: lower the cap when you fix some.
         run: npm run lint
@@ -259,6 +264,92 @@ jobs:
       # services against the real schema. Exits 1 when a check fails and 2 when the script itself crashes.
       - name: Verify money flows
         run: npx ts-node scripts/verify-money-flows.ts
+
+  load-tooling:
+    # The launch load test is run by hand against staging, months after it is written. This keeps it from rotting
+    # meanwhile: it seeds a small *_load database, starts the API on it and runs every scenario for a few seconds,
+    # failing on errors only (a shared CI machine says nothing about speed).
+    name: Load tooling (seed and a short run)
+    runs-on: ubuntu-latest
+    needs: [backend]
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_USER: nuray
+          POSTGRES_PASSWORD: nuray
+          POSTGRES_DB: nuray_load
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U nuray"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      redis:
+        image: redis:7
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    defaults:
+      run:
+        working-directory: backend
+    env:
+      DATABASE_URL: postgresql://nuray:nuray@localhost:5432/nuray_load
+      REDIS_URL: redis://localhost:6379
+      JWT_SECRET: ci-load-secret-key-at-least-32-characters-long
+      API_VERSION: v1
+      FRONTEND_URL: http://localhost:3000
+      API_URL: http://localhost:3001/api/v1
+      LOAD_SCALE: "0.02"
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+
+      - name: Install
+        run: npm ci
+
+      - name: Prisma generate + migrate
+        run: |
+          npx prisma generate
+          npx prisma migrate deploy
+
+      - name: Seed the load database (small)
+        run: npm run load:seed
+
+      - name: Build and start the API
+        env:
+          PORT: "3001"
+          NODE_ENV: development
+          # The sockets scenario needs every job to reach the open pool.
+          AUTO_ASSIGN_ENABLED: "false"
+        run: |
+          npm run build
+          node dist/index.js &
+          for i in $(seq 1 30); do
+            if curl -sf http://localhost:3001/api/v1/health > /dev/null; then
+              echo "API up"; break
+            fi
+            sleep 2
+          done
+
+      - name: Tokens, then every scenario for a few seconds
+        run: |
+          npm run load:tokens -- --customers 100 --riders 6 --kitchens 10 --rate 20
+          npm run load:run -- browse --vus 5 --duration 8 --ramp 2 --smoke
+          npm run load:run -- checkout --rate 30 --duration 10 --smoke
+          npm run load:run -- rider-loop --vus 6 --duration 30 --ramp 3 --smoke
+          npm run load:run -- login-storm --rate 5 --duration 5 --smoke
+          npm run load:run -- sockets --sockets 100 --duration 15 --ramp 3 --jobs-per-minute 12 --smoke
 
   docker-build:
     # Sanity: confirm the Dockerfiles actually build on CI infra. No push here.

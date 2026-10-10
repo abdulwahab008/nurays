@@ -187,6 +187,8 @@ advisory lock so only one instance runs it at a time; make the function safe to 
 | backend | `npm test` | Jest unit tests |
 | backend | `npm run lint` | ESLint (CI fails on errors and on more warnings than the cap in `package.json`) |
 | backend | `npm run api-checks` | checks over HTTP against a running API on a throwaway database, see [TESTING_STRATEGY.md](TESTING_STRATEGY.md) |
+| backend | `npm run typecheck:scripts` | typecheck of the API checks and the load tooling, which the API's own `tsc` does not cover (CI does this) |
+| backend | `npm run load:seed` / `load:tokens` / `load:run` | the launch load test, see [LOAD_TESTING.md](LOAD_TESTING.md) |
 | backend | `npm run db:migrate` | apply migrations |
 | backend | `npm run db:check` | database vs `schema.prisma` (exit code 2 on drift) |
 | backend | `npm run prisma:migrate` | `prisma migrate dev` (create a migration) |

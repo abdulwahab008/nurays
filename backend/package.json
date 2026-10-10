@@ -16,11 +16,15 @@
     "prisma:studio": "prisma studio",
     "seed:e2e": "ts-node prisma/seed-e2e.ts",
     "api-checks": "ts-node scripts/api-checks/run-all.ts",
+    "typecheck:scripts": "tsc -p tsconfig.scripts.json",
     "test": "jest",
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage",
     "lint": "eslint src --max-warnings 168",
-    "lint:fix": "eslint src --fix"
+    "lint:fix": "eslint src --fix",
+    "load:seed": "ts-node scripts/load/seed-load.ts",
+    "load:tokens": "ts-node scripts/load/mint-tokens.ts",
+    "load:run": "ts-node scripts/load/run.ts"
   },
   "keywords": [
     "frozen-food",
