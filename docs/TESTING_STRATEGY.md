@@ -229,8 +229,14 @@ Limitations to know about:
 | `money-flows` (after `backend`) | its own PostgreSQL 15, `prisma migrate deploy`, `scripts/verify-money-flows.ts` in test mode |
 | `load-tooling` (after `backend`) | PostgreSQL 15 (`nuray_load`) and Redis 7 services, `prisma migrate deploy`, `npm run load:seed` at 2 % of the launch size, build and start the API (automatic rider assignment off), `load:tokens`, then each load scenario for a few seconds with `--smoke` (fails on a 5xx or an unanswered request, not on speed); see [LOAD_TESTING.md](LOAD_TESTING.md) |
 | `docker-build` (after backend and frontend) | builds both images without pushing |
+| `security` | `npm audit` of the production dependencies (backend at critical, web app at high), `.github/scripts/check-pinned-actions.sh` (every `uses:` in the workflows is a full commit SHA with its release in a comment, local actions excepted), and the gitleaks secret scan |
 
 The drift check fails a PR that changes `schema.prisma` without a migration.
+
+Actions are pinned to commits, not tags: a tag can be moved after the fact, a commit cannot. Dependabot proposes the
+update monthly (pin and release comment together). To pin one by hand, find the commit its tag points to with
+`git ls-remote --tags https://github.com/<owner>/<repo>` (the line ending in `^{}` is the commit of an annotated tag)
+and write `uses: <owner>/<repo>@<40-character commit> # vX.Y.Z`.
 
 `.github/workflows/docker-publish.yml` is not a test: it publishes images to GitHub Container Registry on pushes to
 `main`, on `v*` tags, and on manual dispatch.
