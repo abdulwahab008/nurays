@@ -686,6 +686,14 @@ export class AuthService {
   }
 
   /**
+   * Ends every session the account has, on every device: a token issued before now stops working. Tokens are stateless,
+   * so this cut-off (`tokensValidAfter`) is the only way a sign-out can mean anything.
+   */
+  async revokeSessions(userId: string): Promise<void> {
+    await prisma.user.update({ where: { id: userId }, data: { tokensValidAfter: new Date() } });
+  }
+
+  /**
    * Change the password of a signed-in account.
    *
    * The current password is asked for again, and counted like the other "confirm with your password" screens, so a

@@ -106,9 +106,10 @@ frontend-web/
 
 Backend:
 
-- Controllers are thin; services own the logic. A controller pulls `userId` from `req.user`, calls a service, and
-  answers `res.json({ success: true, data })`. Express 5 forwards rejected promises to the error handler, so most
-  controllers have no try/catch.
+- Controllers are thin; services own the logic. A controller reads the signed-in user with `currentUserId(req)` (or, for a
+  kitchen, `currentSellerId(req)`), calls a service, and answers `res.json({ success: true, data })`. A controller never
+  imports `prisma`: a query, and the shaping of what it returns, belong in a service. Express 5 forwards rejected promises
+  to the error handler, so most controllers have no try/catch.
 - Validate input with zod in `validators/` and attach it in the route: `validate(schema)` for the body (also
   `validateQuery`). Failures become a 400 `VALIDATION_ERROR` listing the fields.
 - Throw `AppError(message, statusCode, code)` from `middleware/errorHandler.ts` for expected failures

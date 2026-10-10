@@ -2,7 +2,7 @@ import { Request, Response } from 'express';
 import fs from 'fs';
 import path from 'path';
 import { AppError } from '../middleware/errorHandler';
-import prisma from '../config/database';
+import { imageInUse, isOwnLegacyImage } from '../services/product-image.service';
 import { legacyUploadsDir } from '../services/upload.service';
 import {
   storePublicImage,
@@ -61,8 +61,7 @@ export const deleteProductImage = async (req: Request, res: Response) => {
     if (!isAdmin && storedFileOwner(url) !== user.userId) {
       throw new AppError('You can only delete your own uploads', 403, 'FORBIDDEN');
     }
-    const inUse = await prisma.productImage.count({ where: { imageUrl: url } });
-    if (inUse > 0) throw new AppError('This image is still used by a product', 409, 'IMAGE_IN_USE');
+    if (await imageInUse(url)) throw new AppError('This image is still used by a product', 409, 'IMAGE_IN_USE');
     if (!(await deletePublicImage(url))) throw new AppError('Not an uploaded image', 400, 'INVALID_IMAGE_URL');
     res.status(200).json({ success: true, message: 'Image deleted successfully' });
     return;
@@ -75,11 +74,7 @@ export const deleteProductImage = async (req: Request, res: Response) => {
   // Legacy uploads are named "<uploaderId>_<uuid>.<ext>"; older ones may be deleted only
   // if attached to one of the caller's own products.
   if (!isAdmin && !filename.startsWith(`${user.userId}_`)) {
-    const ownLegacy =
-      !/^[0-9a-f-]{36}_/i.test(filename) &&
-      (await prisma.productImage.count({
-        where: { imageUrl: { endsWith: `/${filename}` }, product: { seller: { userId: user.userId } } },
-      })) > 0;
+    const ownLegacy = !/^[0-9a-f-]{36}_/i.test(filename) && (await isOwnLegacyImage(user.userId, filename));
     if (!ownLegacy) throw new AppError('You can only delete your own uploads', 403, 'FORBIDDEN');
   }
   await fs.promises.rm(path.join(legacyUploadsDir, filename), { force: true });

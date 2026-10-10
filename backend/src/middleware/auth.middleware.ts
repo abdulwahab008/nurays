@@ -26,6 +26,16 @@ export function currentUserId(req: Request): string {
 }
 
 /**
+ * The signed-in user's kitchen id, for a route that sits behind `authenticate` and is open to a kitchen still awaiting approval
+ * (a route behind `requireSeller` reads `req.seller` instead). 404 SELLER_NOT_FOUND when the account has no kitchen.
+ */
+export async function currentSellerId(req: Request): Promise<string> {
+  const seller = await prisma.seller.findUnique({ where: { userId: currentUserId(req) }, select: { id: true } });
+  if (!seller) throw new AppError('Seller account not found', 404, 'SELLER_NOT_FOUND');
+  return seller.id;
+}
+
+/**
  * Authentication middleware - verifies JWT token
  */
 export const authenticate = async (

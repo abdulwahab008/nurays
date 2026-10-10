@@ -2,7 +2,6 @@ import { Request, Response } from 'express';
 import authService from '../services/auth.service';
 import googleAuthService from '../services/google-auth.service';
 import { AppError } from '../middleware/errorHandler';
-import prisma from '../config/database';
 import socketManager from '../config/socket';
 import { recordAudit } from '../middleware/audit';
 import { removeAllSubscriptions } from '../services/push.service';
@@ -179,7 +178,7 @@ export const logout = async (req: Request, res: Response) => {
   // 30-day refresh token with it) stops working at once. Tokens are stateless, so this is the
   // only way a sign-out can mean anything.
   if (req.user) {
-    await prisma.user.update({ where: { id: req.user.userId }, data: { tokensValidAfter: new Date() } });
+    await authService.revokeSessions(req.user.userId);
     socketManager.disconnectUser(req.user.userId);
     // ...and no device goes on receiving the account's push notifications (an order's status, a new job) once nobody is signed in on it.
     await removeAllSubscriptions(req.user.userId).catch((err) => logger.warn({ err: (err as Error)?.message, userId: req.user?.userId }, 'Could not forget the push subscriptions at logout'));

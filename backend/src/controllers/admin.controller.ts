@@ -1,10 +1,10 @@
 import { Request, Response } from 'express';
 import { qstr } from '../utils/query';
 import adminService from '../services/admin.service';
-import prisma from '../config/database';
 import { AppError } from '../middleware/errorHandler';
 import { recordAudit } from '../middleware/audit';
 import { pageArgs } from '../utils/pagination';
+import * as auditLogService from '../services/audit-log.service';
 
 export const getPendingSellers = async (_req: Request, res: Response) => {
   const sellers = await adminService.getPendingSellers();
@@ -196,82 +196,17 @@ export const moderateProduct = async (req: Request, res: Response) => {
 };
 
 
-const auditFilter = (query: Request['query']) => {
-  const str = (v: unknown) => (typeof v === 'string' && v.trim() ? v.trim() : undefined);
-  const date = (v: unknown) => {
-    const s = str(v);
-    if (!s) return undefined;
-    const d = new Date(s);
-    if (Number.isNaN(d.getTime())) throw new AppError('Invalid date', 400, 'VALIDATION_ERROR');
-    return d;
-  };
-  const from = date(query.dateFrom);
-  const to = date(query.dateTo);
-  const result = str(query.result);
-  return {
-    ...(str(query.entityType) ? { entityType: str(query.entityType) } : {}),
-    ...(str(query.entityId) ? { entityId: str(query.entityId) } : {}),
-    ...(str(query.userId) ? { userId: str(query.userId) } : {}),
-    ...(str(query.action) ? { action: { contains: str(query.action)!, mode: 'insensitive' as const } } : {}),
-    ...(from || to ? { createdAt: { ...(from ? { gte: from } : {}), ...(to ? { lte: to } : {}) } } : {}),
-    // result: ok (2xx/3xx), refused (4xx/5xx)
-    ...(result === 'ok' ? { responseStatus: { lt: 400 } } : result === 'refused' ? { responseStatus: { gte: 400 } } : {}),
-  };
-};
-
 /** The audit trail as a CSV file (at most 5,000 rows, same filters). The export itself is recorded. */
 export const exportAuditLogs = async (req: Request, res: Response) => {
-  const where = auditFilter(req.query);
-  const rows = await prisma.auditLog.findMany({
-    where,
-    orderBy: { createdAt: 'desc' },
-    take: 5000,
-    include: { user: { select: { email: true } } },
-  });
-  // A cell that starts like a formula gets a leading apostrophe, so a spreadsheet shows it as text.
-  const cell = (v: unknown) => {
-    let text = String(v ?? '').replace(/\r?\n/g, ' ');
-    if (/^[=+\-@\t\r]/.test(text)) text = `'${text}`;
-    return `"${text.replace(/"/g, '""')}"`;
-  };
-  const lines = [['time', 'admin', 'action', 'record_type', 'record_id', 'status', 'ip', 'details'].join(',')].concat(
-    rows.map((l) => [l.createdAt.toISOString(), l.user?.email, l.action, l.entityType, l.entityId, l.responseStatus, l.ipAddress, l.requestData ? JSON.stringify(l.requestData) : ''].map(cell).join(','))
-  );
-  void recordAudit({ userId: req.user?.userId, action: 'admin:EXPORT audit-logs', entityType: 'audit-logs', ipAddress: req.ip, userAgent: req.get('user-agent'), data: { rows: rows.length, filters: req.query }, responseStatus: 200 });
+  const { csv, rows } = await auditLogService.auditLogsCsv(req.query);
+  void recordAudit({ userId: req.user?.userId, action: 'admin:EXPORT audit-logs', entityType: 'audit-logs', ipAddress: req.ip, userAgent: req.get('user-agent'), data: { rows, filters: req.query }, responseStatus: 200 });
   res.setHeader('Content-Type', 'text/csv; charset=utf-8');
   res.setHeader('Content-Disposition', `attachment; filename="audit-log-${new Date().toISOString().slice(0, 10)}.csv"`);
-  res.status(200).send(lines.join('\n'));
+  res.status(200).send(csv);
 };
 
 /** The audit trail of admin changes, newest first, filterable by record, admin, action, date and result. */
 export const getAuditLogs = async (req: Request, res: Response) => {
-  const { page, limit, skip } = pageArgs(req.query.page, req.query.limit, 50);
-  const where = auditFilter(req.query);
-  const [logs, total] = await Promise.all([
-    prisma.auditLog.findMany({
-      where,
-      orderBy: { createdAt: 'desc' },
-      skip,
-      take: limit,
-      include: { user: { select: { id: true, email: true, profile: { select: { fullName: true } } } } },
-    }),
-    prisma.auditLog.count({ where }),
-  ]);
-  res.status(200).json({
-    success: true,
-    data: {
-      logs: logs.map((l) => ({
-        id: l.id,
-        action: l.action,
-        entityType: l.entityType,
-        entityId: l.entityId,
-        responseStatus: l.responseStatus,
-        requestData: l.requestData,
-        ipAddress: l.ipAddress,
-        createdAt: l.createdAt,
-        admin: l.user ? { id: l.user.id, name: l.user.profile?.fullName ?? null, email: l.user.email } : null,
-      })),
-      pagination: { page, limit, total, totalPages: Math.ceil(total / limit) },
-    },
-  });
+  const data = await auditLogService.listAuditLogs(req.query, pageArgs(req.query.page, req.query.limit, 50));
+  res.status(200).json({ success: true, data });
 };
