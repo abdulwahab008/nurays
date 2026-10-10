@@ -22,6 +22,7 @@ export interface CartItem {
     jazzcashAccountTitle?: string | null;
     easypaisaNumber?: string | null;
     easypaisaAccountTitle?: string | null;
+    community?: { id?: string; name: string; slug?: string } | null;
   };
   quantity: number;
   stockType: 'direct' | 'hub';

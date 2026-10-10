@@ -188,7 +188,8 @@ export default function ProfilePage() {
         response = await submit(currentPassword);
       }
       setProfile(response.data);
-      setUser(response.data as any);
+      // The profile answer has no staff role or permissions: keep the signed-in user's, and take the rest from the answer.
+      setUser(user ? { ...user, ...response.data } : null);
       setEditing(false);
       showToast(t('profileUpdated'), 'success');
     } catch (error: any) {

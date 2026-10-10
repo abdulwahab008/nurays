@@ -9,6 +9,7 @@ import { formatPrice } from '@/lib/utils';
 import { useToast } from '@/components/ui/toast';
 import { useT } from '@/lib/i18n';
 import { kitchenOrderMessages } from '@/lib/i18n/messages/kitchen-orders';
+import { newAudioContext } from '@/lib/audio';
 
 interface NewOrderData {
   orderId: string;
@@ -25,9 +26,8 @@ interface NewOrderData {
 function playNewOrderSound() {
   if (typeof window === 'undefined') return;
   try {
-    const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
-    if (!AudioCtx) return;
-    const ctx = new AudioCtx();
+    const ctx = newAudioContext();
+    if (!ctx) return;
     const t = ctx.currentTime;
 
     const go = () => {

@@ -12,6 +12,8 @@ export interface User {
   user_type?: string;
   userType?: string;
   emailVerified?: boolean;
+  phoneVerified?: boolean;
+  status?: string;
   /** Staff accounts only: super_admin, admin or support, and what that role may do. */
   staffRole?: 'super_admin' | 'admin' | 'support' | null;
   permissions?: string[];

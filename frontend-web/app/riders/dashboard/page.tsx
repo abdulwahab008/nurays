@@ -458,7 +458,7 @@ export default function RiderDashboardPage() {
             <div>
               <div className="flex items-center gap-2 flex-wrap">
                 <h2 className="font-black text-lg text-white">
-                  {profile?.name || (user as any)?.profile?.fullName || t('nameNotSet')}
+                  {profile?.name || user?.profile?.fullName || t('nameNotSet')}
                 </h2>
                 <span className="px-2 py-0.5 rounded text-[11px] font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
                   ⭐ {riderRating ? t('fleetScore', { rating: riderRating }) : t('newRider')}

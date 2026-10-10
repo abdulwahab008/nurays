@@ -7,6 +7,7 @@ import { useSocket } from '@/lib/hooks/use-socket';
 import { useT } from '@/lib/i18n';
 import { commonMessages, statusKey } from '@/lib/i18n/messages/common';
 import { ordersMessages } from '@/lib/i18n/messages/orders';
+import { newAudioContext } from '@/lib/audio';
 
 interface OrderItemUpdate {
   orderItemId: string;
@@ -27,9 +28,8 @@ interface Notification extends OrderItemUpdate {
 function playCustomerNotificationSound() {
   if (typeof window === 'undefined') return;
   try {
-    const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
-    if (!AudioCtx) return;
-    const ctx = new AudioCtx();
+    const ctx = newAudioContext();
+    if (!ctx) return;
     const t = ctx.currentTime;
 
     const tone = (freq: number, start: number, vol: number, decay: number) => {

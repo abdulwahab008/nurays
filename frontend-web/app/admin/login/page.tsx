@@ -37,36 +37,24 @@ export default function AdminLoginPage() {
         formData.password
       );
 
-      // Response structure: authService.loginWithEmail returns response.data
-      // response.data = ApiResponse<AuthResponse>
-      // So: response.data.data = AuthResponse
-      // But backend returns { user, accessToken, refreshToken } not { user, tokens }
-      // So we need to handle both structures
-      const authData = (response as any).data?.data || (response as any).data;
+      // The sign-in answers { user, tokens } (authService returns the API's { success, data } envelope).
+      const authData = response.data;
       const user = authData?.user;
-      
+
       if (user) {
         // Check if user is admin
-        const userType = (user as any).user_type || (user as any).userType;
+        const userType = user.userType || user.user_type;
         if (userType !== 'admin') {
           setError('Access denied. Admin credentials required.');
           showToast('Access denied. Admin credentials required.', 'error');
           return;
         }
 
-        // Store tokens - backend returns accessToken and refreshToken directly
-        if (authData?.accessToken && authData?.refreshToken) {
-          apiClient.setTokens(authData.accessToken, authData.refreshToken);
-        } else if (authData?.tokens) {
-          // Fallback: if tokens are nested
-          apiClient.setTokens(authData.tokens.access_token, authData.tokens.refresh_token);
-        }
-
-        // Set user
-        setUser(user as any);
+        apiClient.setTokens(authData.tokens.access_token, authData.tokens.refresh_token);
+        setUser(user);
 
         showToast('Login successful!', 'success');
-        router.push((user as any)?.permissions?.includes('read.finance') ? '/admin/dashboard' : '/admin/approvals');
+        router.push(user.permissions?.includes('read.finance') ? '/admin/dashboard' : '/admin/approvals');
       } else {
         throw new Error('Invalid response from server');
       }

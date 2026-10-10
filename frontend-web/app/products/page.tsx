@@ -4,7 +4,7 @@ import { Suspense, useEffect, useRef, useState } from 'react';
 import { getStackedDiscountedPrice } from '@/lib/pricing';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
-import { productService, Product } from '@/lib/services/product.service';
+import { productService, Product, ProductFilters } from '@/lib/services/product.service';
 import { addressService } from '@/lib/services/address.service';
 import { displayRating, formatPrice, imageVariant } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
@@ -50,6 +50,8 @@ import {
 import { useT } from '@/lib/i18n';
 import { commonMessages } from '@/lib/i18n/messages/common';
 import { browseMessages, productTypeKey, type BrowseT } from '@/lib/i18n/messages/browse';
+
+type SortOption = NonNullable<ProductFilters['sort']>;
 
 interface CatalogPromotion {
   id: string;
@@ -141,7 +143,7 @@ function ProductsContent() {
   const [searchInput, setSearchInput] = useState(searchParams.get('search') || '');
   const [selectedCategory, setSelectedCategory] = useState('all');
   const [selectedProductType, setSelectedProductType] = useState(searchParams.get('productType') || 'all');
-  const [sortBy, setSortBy] = useState('newest');
+  const [sortBy, setSortBy] = useState<SortOption>('newest');
   const [openNow, setOpenNow] = useState(false);
   const [deliveryAvailable, setDeliveryAvailable] = useState(false);
   const [pickupAvailable, setPickupAvailable] = useState(false);
@@ -304,13 +306,13 @@ function ProductsContent() {
     setLoading(true);
     setError('');
     try {
-      const productTypeValue = selectedProductType !== 'all' ? (selectedProductType as any) : undefined;
+      const productTypeValue = selectedProductType !== 'all' ? (selectedProductType as ProductFilters['productType']) : undefined;
       const response = await productService.getProducts({
         page,
         limit: 24,
         categoryId: selectedCategory !== 'all' ? selectedCategory : undefined,
         productType: productTypeValue,
-        sort: sortBy as any,
+        sort: sortBy,
         search: searchQuery || undefined,
         communityId: selectedCommunity?.id,
         openNow: openNow || undefined,
@@ -592,7 +594,7 @@ function ProductsContent() {
             <select
               value={sortBy}
               onChange={(e) => {
-                setSortBy(e.target.value);
+                setSortBy(e.target.value as SortOption);
                 setPage(1);
               }}
               className="border border-slate-200 rounded-xl px-3 py-1 text-xs font-semibold text-slate-700 bg-white hover:border-slate-300 focus:ring-2 focus:ring-slate-900 h-10 cursor-pointer"

@@ -1490,7 +1490,7 @@ export default function HubOperationsConsole({ mode }: { mode: 'admin' | 'manage
                 </label>
                 <select
                   value={newStatusChoice}
-                  onChange={(e) => setNewStatusChoice(e.target.value as any)}
+                  onChange={(e) => setNewStatusChoice(e.target.value as 'available' | 'damaged')}
                   className="w-full border border-gray-300 rounded-xl px-3 py-2 text-sm font-semibold focus:ring-2 focus:ring-cyan-500 outline-none"
                 >
                   <option value="available">🟢 Available (Release to Sellable Inventory)</option>

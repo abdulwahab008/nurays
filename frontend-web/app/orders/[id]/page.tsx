@@ -13,6 +13,7 @@ import { useLiveRefresh } from '@/lib/hooks/use-live-refresh';
 import { DashboardLayout, CUSTOMER_SIDEBAR_ITEMS } from '@/components/layout/DashboardShell';
 import WriteReviewForm from '@/components/products/WriteReviewForm';
 import { apiClient, apiErrorMessage } from '@/lib/api-client';
+import { newAudioContext } from '@/lib/audio';
 import ManualPaymentCard from '@/components/orders/ManualPaymentCard';
 import OnlinePaymentCard from '@/components/orders/OnlinePaymentCard';
 import OrderChatModal from '@/components/orders/OrderChatModal';
@@ -30,9 +31,8 @@ const RiderLiveMap = dynamic(() => import('@/components/orders/RiderLiveMap'), {
 function playCancelSound() {
   if (typeof window === 'undefined') return;
   try {
-    const AudioCtx = window.AudioContext || (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
-    if (!AudioCtx) return;
-    const ctx = new AudioCtx();
+    const ctx = newAudioContext();
+    if (!ctx) return;
     const go = () => {
       // Low descending two-tone — signals something went wrong
       const playNote = (freq: number, start: number, dur: number, vol = 0.25) => {

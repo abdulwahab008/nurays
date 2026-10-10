@@ -92,6 +92,13 @@ interface ProductDetail {
   dietaryInfo?: string[];
   heatingInstructions?: string | null;
   heatingInstructionsUrdu?: string | null;
+  /**
+   * How close the kitchen is to the viewer's community. Only the dish list carries these; the dish's own answer does not,
+   * so the badge below shows only if a response ever fills them in.
+   */
+  community?: { name: string } | null;
+  communityBadge?: string;
+  isSameCommunity?: boolean;
 }
 
 export default function ProductDetailPage() {
@@ -694,19 +701,19 @@ export default function ProductDetailPage() {
           </div>
 
           {/* Proximity / Community Badge */}
-          {((product as any).isSameCommunity || (product as any).communityBadge || (product as any).community?.name) && (
+          {(product.isSameCommunity || product.communityBadge || product.community?.name) && (
             <div className="pt-2 flex items-center gap-2">
-              {(product as any).isSameCommunity ? (
+              {product.isSameCommunity ? (
                 <span className="px-2.5 py-1 rounded-lg bg-emerald-100 text-emerald-900 text-xs font-black flex items-center gap-1.5">
                   <span>🏡</span> {t('inYourCommunity')}
                 </span>
-              ) : (product as any).communityBadge ? (
+              ) : product.communityBadge ? (
                 <span className="px-2.5 py-1 rounded-lg bg-orange-100 text-[#FF5500] text-xs font-black flex items-center gap-1.5">
-                  <span>📍</span> {(product as any).communityBadge}
+                  <span>📍</span> {product.communityBadge}
                 </span>
               ) : (
                 <span className="px-2.5 py-1 rounded-lg bg-slate-100 text-slate-700 text-xs font-bold flex items-center gap-1.5">
-                  <span>📍</span> {(product as any).community?.name}
+                  <span>📍</span> {product.community?.name}
                 </span>
               )}
             </div>

@@ -527,10 +527,10 @@ export default function CartPage() {
                   <h3 className="font-extrabold text-slate-950 text-base">
                     {activeSeller.businessName}
                   </h3>
-                  {(activeSeller as any).community?.name && (
+                  {activeSeller.community?.name && (
                     <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-white text-slate-700 border border-slate-200 shadow-2xs">
                       <MapPin className="w-3 h-3 text-[#FF5500]" />
-                      <span>{(activeSeller as any).community.name}</span>
+                      <span>{activeSeller.community.name}</span>
                     </span>
                   )}
                   <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-emerald-100 text-emerald-800">

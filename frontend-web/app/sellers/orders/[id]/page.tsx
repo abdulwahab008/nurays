@@ -84,7 +84,7 @@ export default function SellerOrderDetailPage() {
       router.push('/login');
       return;
     }
-    const role = user?.userType || (user as any)?.user_type;
+    const role = user?.userType || user?.user_type;
     if (role !== 'seller' && role !== 'admin') {
       router.push('/dashboard');
       return;

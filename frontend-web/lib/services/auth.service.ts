@@ -1,4 +1,5 @@
 import { apiClient, ApiResponse } from '../api-client';
+import type { User } from '../store/auth-store';
 
 export interface RegisterRequest {
   email: string;
@@ -33,20 +34,8 @@ export interface AuthTokens {
   expires_in: number;
 }
 
-export interface User {
-  id: string;
-  phone: string;
-  email?: string;
-  user_type?: string;
-  userType?: string;
-  profile?: {
-    fullName: string;
-    avatarUrl?: string;
-    city?: string;
-    area?: string;
-  };
-  emailVerified?: boolean;
-}
+/** The signed-in user is one type, the one the auth store keeps (a sign-in answers with the same fields). */
+export type { User };
 
 export interface AuthResponse {
   user: User;
