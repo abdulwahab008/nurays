@@ -35,7 +35,7 @@ export function onlinePaymentsAvailable(): boolean {
 }
 
 function requireGateway() {
-  if (!onlinePaymentsAvailable()) throw new AppError('Online payment is not available right now', 503, 'GATEWAY_UNAVAILABLE');
+  if (!onlinePaymentsAvailable()) throw AppError.expected('Online payment is not available right now', 503, 'GATEWAY_UNAVAILABLE');
 }
 
 /** Start paying an order online. The order must have been placed for online payment. */

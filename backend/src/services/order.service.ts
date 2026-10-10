@@ -194,7 +194,7 @@ export class OrderService {
     // An online-payment order needs a working gateway. Without one it could never be paid and would sit
     // until the stale-order sweep cancelled it, so refuse it now, before anything is reserved or charged.
     if (ONLINE_GATEWAY_METHODS.includes(data.paymentMethod) && !onlinePaymentsAvailable()) {
-      throw new AppError('Online payment is not available right now. Please pay with cash or your wallet instead.', 503, 'GATEWAY_UNAVAILABLE');
+      throw AppError.expected('Online payment is not available right now. Please pay with cash or your wallet instead.', 503, 'GATEWAY_UNAVAILABLE');
     }
 
     // Verify customer exists

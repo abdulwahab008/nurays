@@ -476,7 +476,7 @@ Every route under `/admin` needs role `admin` (`admin.routes.ts`, `admin-order.r
 |---|---|---|
 | `GET /admin/analytics` | query `dateFrom`, `dateTo` | platform analytics |
 | `GET /admin/statistics` | none | order statistics |
-| `GET /admin/orders` | query `page`, `limit`, `orderStatus`, `paymentStatus` (`pending`, `paid`, `failed`, `refunded`, `refund_pending`, `payment_submitted`, `disputed`), `customerId`, `sellerId`, `dateFrom`, `dateTo`, `orderNumber` | `{ orders, pagination }` |
+| `GET /admin/orders` | query `page`, `limit`, `orderStatus`, `paymentStatus` (`pending`, `paid`, `failed`, `refunded`, `refund_pending`, `payment_submitted`, `disputed`), `customerId`, `sellerId` (a kitchen's own id, as in `items[].seller.id` of the rows; the id of the account that owns it also works; an unknown id lists nothing), `dateFrom`, `dateTo`, `orderNumber` | `{ orders, pagination }` |
 | `GET /admin/orders/:id` | none | full order |
 | `PATCH /admin/orders/:id/status` | `status` (`pending` ... `completed`, `cancelled`, `refunded`), optional `notes` (max 500) | the order |
 | `POST /admin/orders/:id/cancel` | `reason` (5-500) | cancels, restocks, refunds if paid, closes any delivery job |

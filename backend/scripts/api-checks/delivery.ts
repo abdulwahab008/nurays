@@ -162,7 +162,7 @@ export default async function delivery() {
   const taken = await claimJob(second, failedJob);
   ok('another rider can take it and is paid afresh', taken.status === 200 && taken.body.data?.riderFee === listed?.standardFee, `${said(taken)} ${taken.body.data?.riderFee} vs ${listed?.standardFee}`);
 
-  // 5. the admin order list filtered by kitchen (the filter takes the kitchen owner's user id)
+  // 5. the admin order list filtered by kitchen (by the kitchen's own id, or by its owner's user id as before)
   const kitchenA = await makeKitchen();
   const kitchenB = await makeKitchen();
   const [dishA1, dishA2, dishB] = [await makeProduct(kitchenA.sellerId), await makeProduct(kitchenA.sellerId), await makeProduct(kitchenB.sellerId)];
@@ -177,6 +177,9 @@ export default async function delivery() {
   const listedIds: string[] = (byKitchen.body.data?.orders ?? []).map((o: { id: string }) => o.id);
   ok("admin orders filtered by a kitchen count that kitchen's orders", byKitchen.status === 200 && ordersOfA.length === 2 && total === ordersOfA.length, `${total} vs ${ordersOfA.length}`);
   ok("and list exactly those orders, none of the other kitchen's", listedIds.length === ordersOfA.length && ordersOfA.every((id) => listedIds.includes(id)));
+  const byOwnId = await admin.as('GET', `/admin/orders?sellerId=${kitchenA.sellerId}&limit=100`);
+  const idsByOwnId: string[] = (byOwnId.body.data?.orders ?? []).map((o: { id: string }) => o.id);
+  ok("the kitchen's own id (the one the rows carry) filters the same orders", byOwnId.status === 200 && idsByOwnId.length === ordersOfA.length && ordersOfA.every((id) => idsByOwnId.includes(id)), `${byOwnId.status} ${idsByOwnId.length} vs ${ordersOfA.length}`);
   const unknown = await admin.as('GET', `/admin/orders?sellerId=${randomUUID()}&limit=5`);
   ok('an unknown kitchen filters to nothing', unknown.status === 200 && unknown.body.data?.pagination?.total === 0 && unknown.body.data.orders.length === 0, `${unknown.status} ${unknown.body.data?.pagination?.total}`);
 

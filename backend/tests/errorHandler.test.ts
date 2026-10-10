@@ -1,5 +1,7 @@
 import type { Request, Response } from 'express';
 import { toAppError, errorHandler, AppError } from '../src/middleware/errorHandler';
+import { logger } from '../src/utils/logger';
+import { reportError } from '../src/config/sentry';
 
 jest.mock('../src/utils/logger', () => ({ logger: { warn: jest.fn(), error: jest.fn(), info: jest.fn(), debug: jest.fn() } }));
 jest.mock('../src/config/sentry', () => ({ reportError: jest.fn() }));
@@ -60,6 +62,23 @@ describe('errorHandler', () => {
     expect(res.status).toHaveBeenCalledWith(503);
     expect(res.setHeader).toHaveBeenCalledWith('Retry-After', '2');
     expect(res.json.mock.calls[0][0].error.code).toBe('SERVICE_BUSY');
+  });
+
+  it('reports a 5xx as an incident, but not one the system gives on purpose in a known state', () => {
+    send(new AppError('boom', 500, 'INTERNAL_ERROR'));
+    send(new AppError('Google is down', 503, 'GOOGLE_UNAVAILABLE'));
+    send(prismaError('P2028')); // a busy database is an incident too
+    expect(logger.error).toHaveBeenCalledTimes(3);
+    expect(reportError).toHaveBeenCalledTimes(3);
+
+    jest.mocked(logger.error).mockClear();
+    jest.mocked(reportError).mockClear();
+    const res = send(AppError.expected('Online payment is not available right now', 503, 'GATEWAY_UNAVAILABLE'));
+    expect(res.status).toHaveBeenCalledWith(503);
+    expect(res.json.mock.calls[0][0].error.code).toBe('GATEWAY_UNAVAILABLE');
+    expect(logger.error).not.toHaveBeenCalled();
+    expect(reportError).not.toHaveBeenCalled();
+    expect(logger.warn).toHaveBeenCalled();
   });
 
   it('does not ask for a retry on other errors', () => {

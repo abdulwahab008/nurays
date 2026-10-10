@@ -83,10 +83,11 @@ export class AdminOrderService {
       if (filters.dateTo) where.createdAt.lte = new Date(filters.dateTo);
     }
 
-    // If sellerId filter, need to filter by order items
+    // A kitchen is named by its own id, the one every row of this list carries; the id of the account that owns
+    // it is accepted too, as before. Either way the orders are those with a dish from that kitchen.
     if (filters.sellerId) {
-      const seller = await prisma.seller.findUnique({
-        where: { userId: filters.sellerId },
+      const seller = await prisma.seller.findFirst({
+        where: { OR: [{ id: filters.sellerId }, { userId: filters.sellerId }] },
       });
 
       // An unknown seller filters to nothing (it used to be ignored, listing every order).

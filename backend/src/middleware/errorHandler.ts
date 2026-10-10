@@ -6,6 +6,8 @@ export class AppError extends Error {
   statusCode: number;
   code: string;
   details?: any;
+  /** A 5xx the system gives on purpose, in a state it knows about (see `AppError.expected`). */
+  isExpected = false;
 
   constructor(message: string, statusCode: number = 500, code: string = 'INTERNAL_ERROR', details?: any) {
     super(message);
@@ -13,6 +15,16 @@ export class AppError extends Error {
     this.code = code;
     this.details = details;
     Error.captureStackTrace(this, this.constructor);
+  }
+
+  /**
+   * An answer of 5xx that is the system working as set up, not a fault (a feature that is switched off, such as
+   * online payment with no gateway configured): it is logged as a warning and not reported to error tracking.
+   */
+  static expected(message: string, statusCode: number, code: string, details?: unknown): AppError {
+    const err = new AppError(message, statusCode, code, details);
+    err.isExpected = true;
+    return err;
   }
 }
 
@@ -76,10 +88,10 @@ export const errorHandler = (
   const err = toAppError(rawErr);
   const requestId = (req as Request & { id?: string }).id;
   const isDev = process.env.NODE_ENV === 'development';
-  const expected = err instanceof AppError && err.statusCode < 500;
+  const expected = err instanceof AppError && (err.statusCode < 500 || err.isExpected);
 
   if (expected) {
-    // A client mistake (validation, not found, forbidden...): worth a line, not an alert.
+    // A client mistake (validation, not found, forbidden...) or a known state such as a switched-off feature: worth a line, not an alert.
     logger.warn({ code: (err as AppError).code, status: (err as AppError).statusCode, path: req.path, method: req.method }, err.message);
   } else {
     // A bug or an outage: the full stack goes to the logs and to error tracking, never to the client.
