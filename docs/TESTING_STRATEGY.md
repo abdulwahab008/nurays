@@ -56,6 +56,7 @@ Suites and what each protects:
 | `notify.test.ts` | notification preferences, fan-out per channel, push delivery |
 | `gateways.test.ts`, `bank-gateway-verify.test.ts` | payment gateway status and fail-closed behaviour, bank transfer verification |
 | `storage.test.ts` | signed file links, local storage driver |
+| `media-partial-writes.test.ts` | a failed image upload removes the sizes it wrote (the failing one too), a cleanup failure never hides the real error, deleting tries every size, and a multi-photo request removes the photos stored before a later one failed |
 | `permissions.test.ts`, `audit.test.ts` | staff roles and what each may do on the admin API; the admin audit trail |
 | `menu.test.ts` | fixed, weekly and daily menus (Pakistan time) |
 | `dispatch.test.ts`, `post-delivery.test.ts` | which rider gets a new job and the stored notification (area only); a job taken at once is never announced to the pool |

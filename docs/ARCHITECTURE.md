@@ -102,7 +102,7 @@ Events emitted by services: `notification:new`, `order:new`, `order:status:updat
 
 `storage/index.ts` picks the driver from `STORAGE_DRIVER` (`local` or `s3`).
 
-- Public objects (key prefix `p/`: product images, avatars, covers) are served from `ASSET_BASE_URL` (or `/media` with the local driver) with immutable cache headers. Images are decoded and re-encoded to WebP in three sizes by sharp (`services/media.service.ts`).
+- Public objects (key prefix `p/`: product images, avatars, covers) are served from `ASSET_BASE_URL` (or `/media` with the local driver) with immutable cache headers. Images are decoded and re-encoded to WebP in three sizes by sharp (`services/media.service.ts`). An upload is all or nothing: when a size cannot be written the sizes already stored are removed, deleting an image tries every size, and an upload request with several photos removes the ones it stored if a later one fails.
 - Private objects (prefix `x/`: payment receipts, CNIC and licence photos, chat media) are never public. The database stores `private:<key>`; an API that has checked the viewer turns it into a signed link valid for 10 minutes (`presentFile`). With the local driver the link is served by `/files/...` (HMAC-signed).
 - Files uploaded before the storage layer are still served from `/uploads/products`.
 

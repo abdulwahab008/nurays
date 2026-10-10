@@ -1,6 +1,7 @@
 import crypto from 'crypto';
 import sharp from 'sharp';
 import { AppError } from '../middleware/errorHandler';
+import { logger } from '../utils/logger';
 import {
   storage,
   newPublicKey,
@@ -24,6 +25,7 @@ import {
  */
 
 const IMAGE_SIZES: Record<ImageSize, number> = { lg: 1280, md: 640, sm: 320 };
+const SIZES = Object.keys(IMAGE_SIZES) as ImageSize[];
 const MAX_INPUT_PIXELS = 40_000_000;
 
 async function decodeImage(buffer: Buffer) {
@@ -45,32 +47,54 @@ export interface StoredImage {
   thumbnailUrl: string;
 }
 
-/** A public image (product photo, avatar, cover) in three sizes; returns their URLs. */
+/**
+ * A public image (product photo, avatar, cover) in three sizes; returns their URLs. It is all or nothing: when a size
+ * cannot be written, the sizes already stored are removed, so a failed upload leaves no files behind that nothing
+ * points to (a retry gets a new id, and would never find them).
+ */
 export async function storePublicImage(kind: PublicKind, ownerId: string, buffer: Buffer): Promise<StoredImage> {
   const img = await decodeImage(buffer);
   const id = crypto.randomUUID();
   const urls: Partial<Record<ImageSize, string>> = {};
-  for (const size of Object.keys(IMAGE_SIZES) as ImageSize[]) {
-    const out = await img
-      .clone()
-      .resize({ width: IMAGE_SIZES[size], height: IMAGE_SIZES[size], fit: 'inside', withoutEnlargement: true })
-      .webp({ quality: 80 })
-      .toBuffer();
-    const key = newPublicKey(kind, ownerId, size, id);
-    await storage().put(key, out, 'image/webp', 'public');
-    urls[size] = storage().publicUrl(key);
+  try {
+    for (const size of SIZES) {
+      const out = await img
+        .clone()
+        .resize({ width: IMAGE_SIZES[size], height: IMAGE_SIZES[size], fit: 'inside', withoutEnlargement: true })
+        .webp({ quality: 80 })
+        .toBuffer();
+      const key = newPublicKey(kind, ownerId, size, id);
+      await storage().put(key, out, 'image/webp', 'public');
+      urls[size] = storage().publicUrl(key);
+    }
+  } catch (err) {
+    // Every size, including the one that failed: a write that timed out may still have reached the store.
+    await Promise.all(
+      SIZES.map(async (size) => {
+        const key = newPublicKey(kind, ownerId, size, id);
+        try {
+          await storage().delete(key, 'public');
+        } catch (cleanupErr) {
+          logger.warn({ err: cleanupErr, key }, 'Could not remove a size of an image that failed to upload');
+        }
+      })
+    );
+    throw err;
   }
   return { url: urls.lg!, mediumUrl: urls.md!, thumbnailUrl: urls.sm! };
 }
 
-/** Delete all sizes of a public image we stored (no-op for anything else). */
+/**
+ * Delete all sizes of a public image we stored (false for anything else). Every size is tried even when one fails;
+ * the first failure is thrown afterwards, so the caller does not report a deletion that left files behind.
+ */
 export async function deletePublicImage(url: string): Promise<boolean> {
   const key = publicKeyFromUrl(url);
   if (!key) return false;
   const base = key.replace(/-(lg|md|sm)\.webp$/, '');
-  for (const size of Object.keys(IMAGE_SIZES)) {
-    await storage().delete(`${base}-${size}.webp`, 'public');
-  }
+  const results = await Promise.allSettled(SIZES.map((size) => storage().delete(`${base}-${size}.webp`, 'public')));
+  const failed = results.find((r): r is PromiseRejectedResult => r.status === 'rejected');
+  if (failed) throw failed.reason;
   return true;
 }
 

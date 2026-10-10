@@ -10,6 +10,7 @@ import {
   storePrivateImage,
   storePrivateAudio,
   storePrivatePdf,
+  StoredImage,
 } from '../services/media.service';
 import { storedFileOwner } from '../storage';
 
@@ -27,10 +28,16 @@ export const uploadProductImages = async (req: Request, res: Response) => {
   const files = (req.files as Express.Multer.File[]) || [];
   if (files.length === 0) throw new AppError('No images uploaded', 400, 'NO_FILES');
 
-  const images = [];
-  for (const [index, file] of files.entries()) {
-    const stored = await storePublicImage('products', user.userId, file.buffer);
-    images.push({ ...stored, originalName: file.originalname, size: file.size, isPrimary: index === 0 });
+  const images: Array<StoredImage & { originalName: string; size: number; isPrimary: boolean }> = [];
+  try {
+    for (const [index, file] of files.entries()) {
+      const stored = await storePublicImage('products', user.userId, file.buffer);
+      images.push({ ...stored, originalName: file.originalname, size: file.size, isPrimary: index === 0 });
+    }
+  } catch (err) {
+    // The request fails as a whole, so the client never learns the addresses of the photos already stored: remove them.
+    await Promise.allSettled(images.map((image) => deletePublicImage(image.url)));
+    throw err;
   }
 
   res.status(200).json({
