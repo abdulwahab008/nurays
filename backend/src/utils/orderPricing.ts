@@ -40,7 +40,12 @@ export function priceLines(
 
 /**
  * What a promotion code takes off the part of the order it covers (`eligibleSubtotal`): a percentage, up to the code's cap if
- * it has one, or a fixed amount; never more than the part it covers.
+ * it has one, or a fixed amount; never more than the part it covers. The preview of a code (promotion.service.ts) and the
+ * order both come here, so the total checkout shows is the total the order charges.
+ *
+ * A percentage is multiplied first and divided by 100 after: that is exact for a whole-rupee total and a whole percentage
+ * (3,500 at 54% is 1,890), where dividing the percentage first leaves a trace in the last place (1,890.0000000000002) that
+ * moved a total sitting on a half rupee by one.
  */
 export function codeDiscount(
   promotion: { discountType: string; discountValue: unknown; maxDiscountAmount?: unknown },
@@ -48,7 +53,7 @@ export function codeDiscount(
 ): number {
   let discountAmount: number;
   if (promotion.discountType === 'percentage') {
-    discountAmount = eligibleSubtotal * (Number(promotion.discountValue) / 100);
+    discountAmount = (eligibleSubtotal * Number(promotion.discountValue)) / 100;
     if (promotion.maxDiscountAmount) {
       discountAmount = Math.min(discountAmount, Number(promotion.maxDiscountAmount));
     }

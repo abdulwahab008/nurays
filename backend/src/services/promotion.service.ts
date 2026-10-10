@@ -1,5 +1,6 @@
 import prisma from '../config/database';
 import { AppError } from '../middleware/errorHandler';
+import { codeDiscount } from '../utils/orderPricing';
 
 /**
  * Stack multiple catalog discounts onto a base price, percentage discounts
@@ -268,18 +269,8 @@ export class PromotionService {
       throw new AppError('You have already used this promotion code', 400, 'PROMO_ALREADY_USED');
     }
 
-    // Calculate discount
-    let discountAmount: number;
-    if (promotion.discountType === 'percentage') {
-      discountAmount = (cartTotal * Number(promotion.discountValue)) / 100;
-      if (promotion.maxDiscountAmount) {
-        discountAmount = Math.min(discountAmount, Number(promotion.maxDiscountAmount));
-      }
-    } else {
-      discountAmount = Number(promotion.discountValue);
-    }
-    // Never let a discount exceed the cart it applies to, regardless of the promo's configured value.
-    discountAmount = Math.min(discountAmount, cartTotal);
+    // The same sum the order does (never more than the cart it applies to, whatever the promo's configured value).
+    const discountAmount = codeDiscount(promotion, cartTotal);
 
     const finalAmount = cartTotal - discountAmount;
 

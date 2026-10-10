@@ -24,6 +24,7 @@ import cartService from '../src/services/cart.service';
 import productService from '../src/services/product.service';
 import ledgerService from '../src/services/ledger.service';
 import sellerService from '../src/services/seller.service';
+import { priceOrder } from '../src/utils/pricing';
 import sellerOrderService from '../src/services/seller-order.service';
 import reviewService from '../src/services/review.service';
 import '../src/middleware/auth.middleware'; // brings in the Request.user type, for calling a controller directly
@@ -1702,6 +1703,26 @@ async function main() {
     ok('a kitchen can put a daily dish on today\'s menu', (await code(productService.updateProduct(pDailyOff.id, kM.userId, { menuDate: 'today' }))) === 'OK' && (await prisma.product.findUnique({ where: { id: pDailyOff.id } }))!.menuDate?.getTime() === karachiDay().date.getTime());
     ok('a weekly dish needs at least one day', (await code(productService.updateProduct(pWeekOn.id, kM.userId, { menuType: 'weekly', availableDays: [] }))) === 'MENU_DAYS_REQUIRED');
     process.env.AUTO_ASSIGN_ENABLED = 'false';
+  }
+
+  // ---- a code's preview and the order add up to the same rupee ----
+  // The preview (POST /promotions/validate) and the order used to write a percentage in two ways that differ in the last
+  // place for some totals, and at a half rupee that moved the total by one: Rs 3,500 at 54% showed Rs 1,691 and charged
+  // Rs 1,690. The eight cases are six such totals (of 62 under Rs 20,000) and two that never differed.
+  {
+    const kPrev = await mkSeller();
+    const cPrev = await mkUser();
+    const mismatches: string[] = [];
+    for (const [price, percent] of [[3500, 54], [6500, 54], [200, 55], [1400, 55], [3000, 55], [3400, 55], [1000, 10], [999, 15]]) {
+      const prod = await mkProduct(kPrev.id, 5, price);
+      const prevCode = `PREV${uniq()}`;
+      await promotionSvc.createPlatform({ name: 'Preview', code: prevCode, discountType: 'percentage', discountValue: percent, minOrderAmount: 0, usageLimitPerUser: 5, validFrom: new Date(Date.now() - 1e6), validUntil: new Date(Date.now() + 1e9) });
+      const preview = await promotionSvc.validatePromotionCode(cPrev.id, prevCode, price);
+      const placed: any = (await order(cPrev.id, [{ productId: prod.id, quantity: 1 }], { promotionCode: prevCode })).order;
+      const shown = priceOrder(price - preview.discountAmount, 0).totalAmount; // what checkout adds up from the preview
+      if (Number(placed.totalAmount) !== shown) mismatches.push(`Rs ${price} at ${percent}%: shown ${shown}, charged ${placed.totalAmount}`);
+    }
+    ok('the total checkout shows for a percentage code is the total the order charges', mismatches.length === 0, mismatches.join('; '));
   }
 
   // OTP SMS cap per number

@@ -1,5 +1,6 @@
 import { Prisma } from '@prisma/client';
 import { codeDiscount, priceLines, shareCodeDiscount, splitDeliveryFees } from '../src/utils/orderPricing';
+import { priceOrder, roundMoney } from '../src/utils/pricing';
 
 // The arithmetic of placing an order: no database, so every figure below can be worked out by hand.
 
@@ -75,6 +76,27 @@ describe('codeDiscount', () => {
   it('reads the values as database decimals', () => {
     expect(codeDiscount(fixed(new Prisma.Decimal('250')), 1000)).toBe(250);
     expect(codeDiscount(percent(new Prisma.Decimal('15'), new Prisma.Decimal('90')), 1000)).toBe(90);
+  });
+
+  it('is exact for a whole-rupee total and a whole percentage, with nothing left in the last place', () => {
+    // Dividing the percentage by 100 first made the first of these 1890.0000000000002.
+    expect(codeDiscount(percent(54), 3500)).toBe(1890);
+    expect(codeDiscount(percent(55), 200)).toBe(110);
+    for (let total = 100; total <= 20000; total += 37) {
+      for (const value of [5, 10, 15, 20, 25, 33, 50, 54, 55, 56, 67, 81]) {
+        const discount = codeDiscount(percent(value), total);
+        if (roundMoney(discount) !== discount) throw new Error(`${value}% of ${total} is ${discount}`);
+      }
+    }
+  });
+
+  it('gives the total checkout adds up: 54% off Rs 3,500 leaves Rs 1,610 and a total of Rs 1,691', () => {
+    // The total is whole rupees: 1,610 + 5% GST is 1,690.50, which rounds up. A discount of 1890.0000000000002 rounded it down.
+    const total = (price: number, value: number) => priceOrder(price - codeDiscount(percent(value), price), 0).totalAmount;
+    expect(total(3500, 54)).toBe(1691);
+    expect(total(6500, 54)).toBe(3140);
+    expect(total(200, 55)).toBe(95);
+    expect(total(1000, 10)).toBe(945);
   });
 });
 
