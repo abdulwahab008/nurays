@@ -97,6 +97,32 @@ export default async function validation() {
   const hot = await kitchen.owner.as('PATCH', '/sellers/me', { coverImageUrl: 'https://evil.example/p.png' });
   ok('a hot-linked cover photo is refused (INVALID_IMAGE) and not stored', hot.status === 400 && hot.code === 'INVALID_IMAGE' && (await stored()).coverImageUrl === null, hot.code);
 
+  // 6b. a kitchen's profile choices are the ones the screens offer (and a null no column can hold is a 400, not a 500)
+  const choices = () => prisma.seller.findUniqueOrThrow({ where: { id: kitchen.sellerId }, select: { businessType: true, deliveryModes: true, availabilityOverride: true, orderCutoffTime: true } });
+  const choicesBefore = await choices();
+  const refusedChoices: Array<[string, Record<string, unknown>]> = [
+    ['a business type the app does not offer', { businessType: 'palace' }],
+    ['a null business type (the column cannot hold one)', { businessType: null }],
+    ['a delivery mode the app does not offer', { deliveryModes: ['teleport'] }],
+    ['null delivery modes (the column cannot hold them)', { deliveryModes: null }],
+    ['an availability override the app does not know', { availabilityOverride: 'party' }],
+    ['a cut-off time that is not HH:MM', { orderCutoffTime: 'soon' }],
+    ['a cut-off time past 23:59', { orderCutoffTime: '25:00' }],
+  ];
+  for (const [what, body] of refusedChoices) {
+    const r = await kitchen.owner.as('PATCH', '/sellers/me', body);
+    ok(`${what} is refused with 400`, r.status === 400 && r.code === 'VALIDATION_ERROR', `${r.status} ${r.code}`);
+  }
+  ok('and none of them was stored', JSON.stringify(await choices()) === JSON.stringify(choicesBefore), JSON.stringify(await choices()));
+  const offered = await kitchen.owner.as('PATCH', '/sellers/me', { businessType: 'bakery', deliveryModes: ['delivery', 'pickup', 'dine_in'], availabilityOverride: 'holiday', orderCutoffTime: '21:30' });
+  const offeredStored = await choices();
+  ok('the values the app offers are accepted and stored', offered.status === 200 && offeredStored.businessType === 'bakery' && offeredStored.deliveryModes.join() === 'delivery,pickup,dine_in' && offeredStored.availabilityOverride === 'holiday' && offeredStored.orderCutoffTime === '21:30', `${offered.status} ${JSON.stringify(offeredStored)}`);
+  const cleared = await kitchen.owner.as('PATCH', '/sellers/me', { availabilityOverride: null, orderCutoffTime: null });
+  const clearedStored = await choices();
+  ok('and an override and a cut-off can be cleared with null', cleared.status === 200 && clearedStored.availabilityOverride === null && clearedStored.orderCutoffTime === null, `${cleared.status} ${JSON.stringify(clearedStored)}`);
+  const styles = await kitchen.owner.as('PATCH', '/sellers/me', { mealCategories: ['Biryani', 'lunch'] });
+  ok('meal categories stay free text (sign-up sends dish styles, the settings page meal times)', styles.status === 200, `${styles.status} ${styles.code}`);
+
   // 7. a category update cannot carry relation writes
   const category = await prisma.category.create({ data: { name: `Check Category ${u}`, slug: `check-category-${u}` } });
   await prisma.product.update({ where: { id: dish }, data: { categoryId: category.id } });

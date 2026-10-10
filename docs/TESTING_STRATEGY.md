@@ -63,6 +63,7 @@ Suites and what each protects:
 | `kitchen-order-view.test.ts`, `public-seller-privacy.test.ts` | what a kitchen sees of an order, and what the public kitchen endpoints return |
 | `order-party-privacy.test.ts` | live events, the tracking snapshot and the chat name people by role, never by account id; the rider's view of the door; the online-payment guard |
 | `address-snapshot.test.ts` | the one rule for the address an order was placed to |
+| `seller-validator.test.ts` | what a kitchen may choose for its profile (business type, delivery modes, availability override, cut-off time) is what the screens offer: each list accepted, anything else, and a null no column can hold, refused; meal categories stay free text |
 | `review-moderation.test.ts` | reporting a review (not your own, not a hidden one, the first reason kept, audited), the staff queue and its three tabs, hide / keep / restore and the ratings worked out again after each |
 | `password-policy.test.ts`, `reauth.test.ts`, `attempt-budget.test.ts`, `mail-budget.test.ts` | new-password rules; "confirm with your password" counting only wrong passwords; shared counters in Redis or memory |
 | `auth-limits.test.ts`, `rate-limit-keys.test.ts` | per-phone and per-e-mail request limits over real HTTP; how limiter keys are built |
