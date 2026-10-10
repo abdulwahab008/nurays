@@ -2,6 +2,15 @@
  * Which rider gets a new job: a rider already on the way gets nearby work, then the community's own
  * riders, then anyone with room; nobody over their limits.
  */
+jest.mock('../src/config/database', () => ({ __esModule: true, default: { delivery: { count: jest.fn() } } }));
+jest.mock('../src/config/socket', () => ({ __esModule: true, default: { emitToUser: jest.fn() } }));
+jest.mock('../src/services/notify.service', () => ({ notify: jest.fn() }));
+jest.mock('../src/services/realtime-order.service', () => ({ __esModule: true, default: { emitDeliveryClaimed: jest.fn() } }));
+
+import prisma from '../src/config/database';
+import socketManager from '../src/config/socket';
+import { notify } from '../src/services/notify.service';
+import { announceAssignment, JobRow } from '../src/services/dispatch.service';
 import { canShareTrip, chooseRider, DispatchCandidate, DispatchJob, JobEnds } from '../src/utils/dispatch';
 import { assignmentMessage, dropoffAreaOf } from '../src/utils/riderJobs';
 
@@ -125,5 +134,40 @@ describe('the stored "new delivery" notification', () => {
     expect(assignmentMessage({ orderNumber: 'FN2', pickupAddress: 'K', dropoffArea: '', cashToCollect: 1250.4 })).toBe(
       'Order #FN2: pick up from K, open the job for the drop-off. Collect Rs 1250 in cash.'
     );
+  });
+});
+
+describe('announcing an automatic assignment', () => {
+  const assigned = {
+    id: 'd1',
+    orderId: 'o1',
+    pickupAddress: 'Block 3, Gulshan',
+    deliveryAddress: 'House 9, Street 5, Askari 11, Lahore',
+    order: {
+      orderNumber: 'FN1',
+      paymentMethod: 'cod',
+      paymentStatus: 'pending',
+      totalAmount: '1250.40',
+      deliveryAddress: { communityId: null, area: 'Askari 11', city: 'Lahore' },
+      deliveryAddressSnapshot: { addressLine1: 'House 9, Street 5', houseNumber: '9', area: 'Askari 11', city: 'Lahore', latitude: 31.4, longitude: 74.4 },
+      items: [],
+    },
+  } as unknown as JobRow;
+
+  beforeEach(() => {
+    (prisma as any).delivery.count.mockResolvedValue(1);
+  });
+
+  it('stores and pushes the area only, while the rider\'s own screen gets the whole address', async () => {
+    await announceAssignment(assigned, 'rider-user', 150);
+
+    const stored = (notify as jest.Mock).mock.calls[0][0];
+    expect(stored).toMatchObject({ userId: 'rider-user', type: 'delivery', channels: ['push'] });
+    expect(stored.message).toBe('Order #FN1: pick up from Block 3, Gulshan, deliver to Askari 11, Lahore. Collect Rs 1250 in cash.');
+    expect(JSON.stringify(stored)).not.toMatch(/House 9|Street 5/);
+
+    const offered = (socketManager as any).emitToUser.mock.calls.find((c: unknown[]) => c[1] === 'delivery:offered');
+    expect(offered[0]).toBe('rider-user');
+    expect(offered[2]).toMatchObject({ deliveryId: 'd1', deliveryAddress: 'House 9, Street 5, Askari 11, Lahore', riderFee: 150, cashToCollect: 1250, activeJobs: 1 });
   });
 });

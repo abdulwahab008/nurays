@@ -294,8 +294,8 @@ All routes need authentication (`order.routes.ts`, `order.validator.ts`). Access
 | `GET /orders/:id/payment-details` | none | the kitchen's transfer details (bank, JazzCash, EasyPaisa) for a manual-transfer order |
 | `POST /orders/:id/submit-payment` | submission limit. Body (not schema-validated): `referenceNumber` (required), optional `senderName`, `senderAccount`, `proofUrl` (from `POST /upload/payment-proof`), `notes` | records the customer's transfer, status `payment_submitted`; 400 for paid, cancelled, COD or wallet orders |
 | `POST /orders/:id/confirm-payment` | `confirmed` (boolean), `disputeReason` (not schema-validated) | for the receiving kitchen only (403 `NOT_PAYEE` otherwise): `confirmed: true` marks the order paid, `false` marks the payment `disputed` for admins |
-| `GET /orders/:id/messages` | query `role` (`customer` \| `seller` \| `rider`) | the order's chat messages; reading marks them read and emits `order:messages:read` |
-| `POST /orders/:id/messages` | message limit. Body: `message` (text, max 2000) or `mediaUrl`; optional `messageType` (`text` \| `voice` \| `image`), `role`, `duration` (seconds, 0-3600). `mediaUrl` must be a chat upload by the sender (`POST /upload/chat-media`) | 201 the message; emits `order:message` |
+| `GET /orders/:id/messages` | query `role` (`customer` \| `seller` \| `rider`) | the order's chat messages (each with `senderRole`, `senderName` and `isMe`, never the sender's account id); reading marks them read and emits `order:messages:read` |
+| `POST /orders/:id/messages` | message limit. Body: `message` (text, max 2000) or `mediaUrl`; optional `messageType` (`text` \| `voice` \| `image`), `role`, `duration` (seconds, 0-3600). `mediaUrl` must be a chat upload by the sender (`POST /upload/chat-media`) | 201 the message (same fields as above); emits `order:message` |
 
 ## Payments, wallet and Safepay: `/payments`
 
@@ -431,7 +431,7 @@ All routes need authentication. Admin support routes are under `/admin/support`.
 
 | Method and path | Access | Returns |
 |---|---|---|
-| `GET /realtime/orders/:id/track` | authenticated; the order's customer, a seller with an item in it, or an admin | status snapshot: status, payment status, history (last 10), items, delivery summary |
+| `GET /realtime/orders/:id/track` | authenticated; the order's customer, a seller with an item in it, or an admin | status snapshot: status, payment status, history (last 10: status, notes, time), items (a seller sees its own only), delivery summary |
 
 The Socket.IO server itself is documented in [REALTIME_ORDER_MANAGEMENT.md](./REALTIME_ORDER_MANAGEMENT.md).
 

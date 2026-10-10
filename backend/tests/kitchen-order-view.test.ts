@@ -163,6 +163,29 @@ describe('presentKitchenOrder', () => {
     expect(presentKitchenOrder(hostileRow({ deliveryAddressSnapshot: null, deliveryAddress: null, deliveryType: 'self_pickup' }), ctx).deliveryAddress).toBeNull();
   });
 
+  it("takes a field the snapshot does not have from the saved address, and never overrides one it has", () => {
+    // Placed before snapshots kept the house number and landmark: only the saved address knows them.
+    const older = presentKitchenOrder(
+      hostileRow({
+        deliveryAddressSnapshot: { addressLine1: 'Street 5', addressLine2: null, area: 'Askari 11', city: 'Lahore', postalCode: '54000' },
+        deliveryAddress: { label: 'Home', addressLine1: 'Street 5 (edited)', addressLine2: 'Lane 2', houseNumber: '99', landmark: 'Green gate', area: 'Askari 11', city: 'Lahore' },
+      }),
+      ctx
+    );
+    expect(older.deliveryAddress).toEqual({
+      label: 'Home', addressLine1: 'Street 5', addressLine2: null, houseNumber: '99', landmark: 'Green gate', area: 'Askari 11', city: 'Lahore',
+    });
+    // A snapshot that has the keys is final: a field the customer left empty is not filled from an address they edited later.
+    const current = presentKitchenOrder(
+      hostileRow({
+        deliveryAddressSnapshot: { addressLine1: 'Street 5', addressLine2: null, area: 'Askari 11', city: 'Lahore', houseNumber: null, landmark: null },
+        deliveryAddress: { label: 'Home', addressLine1: 'Street 5 (edited)', addressLine2: 'Lane 2', houseNumber: '99', landmark: 'Green gate', area: 'Askari 11', city: 'Lahore' },
+      }),
+      ctx
+    );
+    expect(current.deliveryAddress).toMatchObject({ addressLine1: 'Street 5', houseNumber: null, landmark: null });
+  });
+
   it('says who hands the order over', () => {
     expect(presentKitchenOrder(hostileRow({ deliveryProvider: 'self' }), ctx).sellerHandsOver).toBe(true);
     expect(presentKitchenOrder(hostileRow({ deliveryProvider: 'platform' }), ctx).sellerHandsOver).toBe(false);

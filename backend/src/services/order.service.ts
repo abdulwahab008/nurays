@@ -18,7 +18,7 @@ import { createStockAlert } from './stock-alert.service';
 import promotionService from './promotion.service';
 import { isAcceptingOrders, validateOrderTiming } from './availability.service';
 import { ONLINE_GATEWAY_METHODS, SELLER_DIRECT_METHODS } from '../utils/paymentCustody';
-import { safepayGateway } from '../gateways/safepay.gateway';
+import { onlinePaymentsAvailable } from './online-payment.service';
 import ledgerService from './ledger.service';
 import { newHandoverCode } from './handover.service';
 import { cancelOpenDelivery, notifyDeliveryCancelled, CancelledDelivery } from './delivery-lifecycle.service';
@@ -188,7 +188,7 @@ export class OrderService {
 
     // An online-payment order needs a working gateway. Without one it could never be paid and would sit
     // until the stale-order sweep cancelled it, so refuse it now, before anything is reserved or charged.
-    if (ONLINE_GATEWAY_METHODS.includes(data.paymentMethod) && !safepayGateway.isConfigured()) {
+    if (ONLINE_GATEWAY_METHODS.includes(data.paymentMethod) && !onlinePaymentsAvailable()) {
       throw new AppError('Online payment is not available right now. Please pay with cash or your wallet instead.', 503, 'GATEWAY_UNAVAILABLE');
     }
 
@@ -1709,7 +1709,7 @@ export class OrderService {
         readAt: new Date(),
       },
     });
-    if (markedRead.count > 0) void realtimeOrderService.emitMessagesRead(orderId, userId);
+    if (markedRead.count > 0) void realtimeOrderService.emitMessagesRead(orderId);
 
     const messages = await prisma.orderMessage.findMany({
       where: { orderId },
@@ -1733,7 +1733,7 @@ export class OrderService {
     return Promise.all(messages.map(async (m) => ({
       id: m.id,
       orderId: m.orderId,
-      senderId: m.senderId,
+      // Who sent it is shown by role, name and `isMe`; the sender's account id stays on the server.
       senderRole: m.senderRole,
       senderName: m.sender.profile?.fullName || m.sender.userType,
       senderAvatar: m.sender.profile?.avatarUrl || null,
@@ -1846,12 +1846,11 @@ export class OrderService {
       },
     });
 
-    void realtimeOrderService.emitOrderMessage(orderId, orderMsg.id, userId, effectiveRole);
+    void realtimeOrderService.emitOrderMessage(orderId, orderMsg.id, effectiveRole);
 
     return {
       id: orderMsg.id,
       orderId: orderMsg.orderId,
-      senderId: orderMsg.senderId,
       senderRole: orderMsg.senderRole,
       senderName: orderMsg.sender.profile?.fullName || orderMsg.sender.userType,
       senderAvatar: orderMsg.sender.profile?.avatarUrl || null,

@@ -101,22 +101,27 @@ export interface KitchenOrderContext {
 
 const text = (v: unknown): string | null => (typeof v === 'string' && v.trim() !== '' ? v : null);
 
-/** The door the kitchen hands the order to: the snapshot taken at checkout, else the saved address. Never the pin or postcode. */
+/**
+ * The door the kitchen hands the order to: the address as it was when the order was placed, never
+ * the pin or postcode. A field the snapshot does not have at all (orders placed before it kept the
+ * house number and landmark) comes from the saved address, which is all there is for it; a field the
+ * snapshot has, even an empty one, is final, so a later edit of the saved address cannot move it.
+ */
 function kitchenAddress(order: KitchenOrderRow) {
-  const live = order.deliveryAddress;
+  const live = order.deliveryAddress as Record<string, unknown> | null;
   const snap = order.deliveryAddressSnapshot && typeof order.deliveryAddressSnapshot === 'object' && !Array.isArray(order.deliveryAddressSnapshot)
     ? (order.deliveryAddressSnapshot as Record<string, unknown>)
     : null;
   if (!live && !snap) return null;
-  const src: Record<string, unknown> = snap ?? (live as Record<string, unknown>);
+  const pick = (key: string) => (snap && key in snap ? text(snap[key]) : text(live?.[key]));
   return {
-    label: live?.label ?? null,
-    addressLine1: text(src.addressLine1),
-    addressLine2: text(src.addressLine2),
-    houseNumber: text(src.houseNumber),
-    landmark: text(src.landmark),
-    area: text(src.area),
-    city: text(src.city),
+    label: (live?.label as string | null | undefined) ?? null,
+    addressLine1: pick('addressLine1'),
+    addressLine2: pick('addressLine2'),
+    houseNumber: pick('houseNumber'),
+    landmark: pick('landmark'),
+    area: pick('area'),
+    city: pick('city'),
   };
 }
 

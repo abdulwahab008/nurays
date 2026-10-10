@@ -1,7 +1,7 @@
 import prisma from '../config/database';
 import { AppError } from '../middleware/errorHandler';
 import { getGateway } from '../gateways';
-import { PAYABLE_STATUSES } from '../utils/paymentCustody';
+import { ONLINE_GATEWAY_METHODS, PAYABLE_STATUSES } from '../utils/paymentCustody';
 import { debitWallet, getWallet, listWalletTransactions } from './wallet.service';
 import { onlinePaymentsAvailable, startOrderCheckout } from './online-payment.service';
 
@@ -99,7 +99,7 @@ export class PaymentService {
       return { paymentId: `COD-${orderId}`, status: 'pending', message: 'Payment will be collected on delivery', redirectUrl: null, expiresAt: null };
     }
 
-    if (paymentMethod === 'safepay' || paymentMethod === 'card') {
+    if (ONLINE_GATEWAY_METHODS.includes(paymentMethod)) {
       const checkout = await startOrderCheckout(orderId, userId);
       return {
         paymentId: checkout.tracker,

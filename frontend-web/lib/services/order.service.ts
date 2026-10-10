@@ -51,7 +51,6 @@ export interface SellerPaymentDetails {
 export interface OrderMessage {
   id: string;
   orderId: string;
-  senderId: string;
   senderRole: string;
   senderName?: string;
   senderAvatar?: string | null;

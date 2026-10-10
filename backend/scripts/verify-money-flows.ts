@@ -229,6 +229,8 @@ async function main() {
   await completeRefund(bRefund!.id, admin.id, 'TXN-1');
   const bDone = await prisma.order.findUnique({ where: { id: bankOrder.id } });
   ok('marking the manual refund sent completes it', (await prisma.refund.findUnique({ where: { id: bRefund!.id } }))!.status === 'completed' && bDone!.paymentStatus === 'refunded');
+  const bankNotes = (await prisma.orderStatusHistory.findMany({ where: { orderId: bankOrder.id }, select: { notes: true } })).map((h) => h.notes ?? '').join(' | ');
+  ok('the order history says the refund was sent, without the transfer reference', bankNotes.includes('sent to the customer') && !bankNotes.includes('TXN-1'), bankNotes);
   ok('a refund can only be completed once', (await code(completeRefund(bRefund!.id, admin.id))) === 'REFUND_NOT_PENDING');
 
   const unpaid: any = (await order(rc.id, [{ productId: rp.id, quantity: 1 }])).order;
@@ -452,7 +454,7 @@ async function main() {
   ok("GET /seller/orders/:id: no pin, postcode, customer id or internal keys", !kvPrivate.some((k) => deepKeys(kvSeller).has(k)), kvPrivate.filter((k) => deepKeys(kvSeller).has(k)).join(','));
   ok('GET /orders/:id gives the kitchen the same view', !kvPrivate.some((k) => deepKeys(kvOrders).has(k)) && kvOrders.orderNumber === kvSeller.orderNumber && kvOrders.sellerTotals?.subtotal === kvSeller.sellerTotals.subtotal, kvPrivate.filter((k) => deepKeys(kvOrders).has(k)).join(','));
   ok('the kitchen still gets the door and the customer\'s contact', kvSeller.deliveryAddress?.houseNumber === '9' && kvSeller.deliveryAddress?.addressLine1 === 'House 9 Street 5' && kvSeller.deliveryAddress?.area === 'Askari 11' && !!kvSeller.customer?.phone);
-  ok('the pin and postcode are not anywhere in the kitchen payload text', !/54000|31\.4|74\.4/.test(JSON.stringify(kvSeller)) && !/54000|74\.4/.test(JSON.stringify(kvOrders)));
+  ok('the pin and postcode are not anywhere in the kitchen payload text', !/\b(54000|31\.4|74\.4)\b/.test(JSON.stringify(kvSeller)) && !/\b(54000|74\.4)\b/.test(JSON.stringify(kvOrders)));
   const kvCustomer: any = await orderService.getOrderDetails(kvOrder.id, hoCust.id);
   ok('the customer still gets their own full order, pin included', Number(kvCustomer.deliveryAddress?.latitude) === 31.4 && kvCustomer.customerId === hoCust.id);
 
@@ -1205,6 +1207,9 @@ async function main() {
     const dup = await op.settleAttempt(second.paymentId, 'webhook');
     const walletAfter = Number((await prisma.wallet.findUnique({ where: { userId: payC.id } }))!.balance);
     ok('online payment: paying twice credits the second payment to the wallet', dup.outcome === 'duplicate' && walletAfter - walletBefore === total, `${dup.outcome} ${walletBefore}->${walletAfter}`);
+    // A kitchen reads the order's history, so it never names the gateway's tracker or reference.
+    const gatewayNotes = (await prisma.orderStatusHistory.findMany({ where: { orderId: onlineOrder.id }, select: { notes: true } })).map((h) => h.notes ?? '').join(' | ');
+    ok('online payment: the order history says it was paid, without the gateway tracker or reference', gatewayNotes.includes('Paid online') && gatewayNotes.includes('extra online payment') && ![started.paymentId, second.paymentId, 'REF1'].some((v) => gatewayNotes.includes(v)), gatewayNotes);
 
     // Paid after the order was cancelled: recorded and refunded (queued for the admin).
     const lateC = await mkUser();

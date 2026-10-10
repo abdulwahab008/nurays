@@ -386,6 +386,11 @@ export default function CheckoutPage() {
         // The server refused it, so nothing was placed: a new attempt gets a new key.
         checkoutKeyRef.current = null;
         const code = error.response?.data?.error?.code;
+        if (code === 'GATEWAY_UNAVAILABLE') {
+          // The gateway went away after the page loaded: take the option off, so the next press does not fail the same way.
+          setOnlineAvailable(false);
+          setPaymentMethod('cod');
+        }
         showToast(code === 'GATEWAY_UNAVAILABLE' ? t('onlineUnavailable') : error.response?.data?.error?.message || t('placeFailed'), 'error');
       }
     } finally {

@@ -304,7 +304,8 @@ async function completeRefundRecord(refundId: string, adminId: string, reference
       data: {
         orderId: order.id,
         status: order.orderStatus,
-        notes: `Refund of ${Number(refund.amount)} sent to the customer${reference ? ` (ref ${reference})` : ''}`,
+        // The transfer reference is kept on the refund record; kitchens read this history.
+        notes: `Refund of ${Number(refund.amount)} sent to the customer`,
         changedBy: adminId,
       },
     });

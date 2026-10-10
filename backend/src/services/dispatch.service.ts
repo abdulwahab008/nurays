@@ -34,7 +34,7 @@ const JOB_INCLUDE = {
   },
 } as const;
 
-type JobRow = NonNullable<Awaited<ReturnType<typeof loadJob>>>;
+export type JobRow = NonNullable<Awaited<ReturnType<typeof loadJob>>>;
 
 function loadJob(deliveryId: string) {
   return prisma.delivery.findUnique({ where: { id: deliveryId }, include: JOB_INCLUDE });
@@ -139,7 +139,7 @@ export async function dispatchDelivery(deliveryId: string): Promise<DispatchResu
   return { assigned: true, riderId: rider.id, reason: choice.reason };
 }
 
-async function announceAssignment(job: JobRow, riderUserId: string, riderPay: number) {
+export async function announceAssignment(job: JobRow, riderUserId: string, riderPay: number) {
   void realtimeOrderService.emitDeliveryClaimed(job.id, job.orderId);
   const cod = job.order.paymentMethod === 'cod' && job.order.paymentStatus !== 'paid';
   const activeNow = await prisma.delivery.count({ where: { rider: { userId: riderUserId }, status: { in: ACTIVE } } });

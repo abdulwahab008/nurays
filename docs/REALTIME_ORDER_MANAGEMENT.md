@@ -61,10 +61,10 @@ Order events go through `emitToRooms`, which sends one event to the union of sev
 |---|---|---|---|
 | `order:new` | each seller's `user:` room | `{ orderId, orderNumber, totalAmount, items: [{ productName, quantity, totalPrice }], createdAt }`. `items` are only that seller's items. | an order is placed (`order.service.ts`, via `emitNewOrderNotification`), including online-payment orders that are not paid yet |
 | `order:new` | `role:admin` | `{ orderId, orderNumber, totalAmount, customerId, createdAt }` | same moment |
-| `order:status:update` | order audience and `role:admin` | `{ orderId, orderNumber, status, updatedAt, changedBy }` | the order's status changes or its payment is settled: kitchen accepts/rejects/prepares/readies/cancels, rider updates the delivery, customer cancels, admin changes status/cancels/retries/refunds, sweeps cancel an order, Safepay confirms a payment |
+| `order:status:update` | order audience and `role:admin` | `{ orderId, orderNumber, status, updatedAt }` | the order's status changes or its payment is settled: kitchen accepts/rejects/prepares/readies/cancels, rider updates the delivery, customer cancels, admin changes status/cancels/retries/refunds, sweeps cancel an order, Safepay confirms a payment |
 | `order:item:status:update` | order audience | `{ orderItemId, orderId, orderNumber, status, updatedAt }` | a single item's status changes (seller item routes) |
-| `order:message` | order audience | `{ orderId, messageId, senderId, senderRole }` | a chat message is posted on the order |
-| `order:messages:read` | order audience | `{ orderId, readerId }` | someone read the order's messages |
+| `order:message` | order audience | `{ orderId, messageId, senderRole }` | a chat message is posted on the order |
+| `order:messages:read` | order audience | `{ orderId }` | someone read the order's messages |
 | `order:delivery:tracking` | `order:<id>` and the customer's `user:` room | `{ orderId, location: { latitude, longitude }, distanceKm?, estimatedArrival?, updatedAt }` | the rider reports a position (see below) |
 | `delivery:new` | `role:rider` | `{ deliveryId, orderId }` | a Nuray delivery job is created (`ensureDeliveryForOrder`, when the kitchen accepts or starts preparing, or an admin moves the order on), or jobs are released back to the pool when a rider is suspended |
 | `delivery:removed` | `role:rider` | `{ deliveryId, orderId, reason: 'claimed' }` when a rider claims it; `{ deliveryId, orderId }` when it is cancelled | the job is no longer available |
@@ -74,7 +74,7 @@ Order events go through `emitToRooms`, which sends one event to the union of sev
 
 Notes:
 
-- `status` in `order:status:update` is the order status (`pending`, `confirmed`, `preparing`, `ready`, `dispatched`, `in_transit`, `delivered`, `delivery_failed`, `completed`, `cancelled`, `refunded`). `changedBy` is a user id, `system`, or `payment`.
+- `status` in `order:status:update` is the order status (`pending`, `confirmed`, `preparing`, `ready`, `dispatched`, `in_transit`, `delivered`, `delivery_failed`, `completed`, `cancelled`, `refunded`). Who made the change (a user, the system or a payment) decides who is notified but is not in the payload: this event reaches the customer, every kitchen and the rider, and none of them learns another's account id. The chat events likewise name the sender by role only.
 - `emitOrderStatusUpdate` also creates the in-app notification (and push/email/SMS where applicable) for the customer for statuses with a message, and tells kitchens about cancellations they did not make. That is where most `notification:new` events for orders come from (`backend/src/services/notify.service.ts`).
 - Alongside `order:new`, each kitchen gets a notification (`notification:new`, plus push, email and SMS). For online-payment orders (`safepay` or `card`) still unpaid, it is a "waiting for payment" notification without push/email/SMS, and the "New paid order" notification follows once Safepay confirms (`online-payment.service.ts`). The `order:new` socket event itself is not held back, so the seller pop-up can appear before payment.
 - `order:new` goes to each seller only, never to the customer; the customer gets an "Order placed" notification instead.
@@ -93,7 +93,7 @@ Sellers and admins in the order room also receive `order:delivery:tracking`; the
 
 ## Order tracking endpoint
 
-`GET /api/v1/realtime/orders/:id/track` (authenticated) returns a status snapshot: `orderId`, `orderNumber`, `orderStatus`, `paymentStatus`, `estimatedDeliveryAt`, `deliveredAt`, the last 10 `statusHistory` rows, `items` (id, name, quantity, status) and `delivery` (status, estimated arrival, distance, duration) or `null`. Allowed for the order's customer, a seller with an item in it, or an admin; others get 403 `ACCESS_DENIED`. Note that an assigned rider is not allowed here (they can still join the socket room). The shipped frontend does not call this endpoint.
+`GET /api/v1/realtime/orders/:id/track` (authenticated) returns a status snapshot: `orderId`, `orderNumber`, `orderStatus`, `paymentStatus`, `estimatedDeliveryAt`, `deliveredAt`, the last 10 `statusHistory` rows (status, notes, time; not who made the change), `items` (id, name, quantity, status; a kitchen sees its own items only, the customer and admins all of them) and `delivery` (status, estimated arrival, distance, duration) or `null`. Allowed for the order's customer, a seller with an item in it, or an admin; others get 403 `ACCESS_DENIED`. Note that an assigned rider is not allowed here (they can still join the socket room). The shipped frontend does not call this endpoint.
 
 ## Frontend
 

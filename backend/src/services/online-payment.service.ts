@@ -164,7 +164,8 @@ export async function settleAttempt(tracker: string, via: 'return' | 'webhook', 
         data: {
           orderId: order.id,
           status: order.orderStatus,
-          notes: `An extra online payment of Rs ${amount} (Safepay ${tracker}) was credited to the customer's wallet`,
+          // Kitchens read this history: the gateway's tracker stays in payment_attempts and the wallet entry.
+          notes: `An extra online payment of Rs ${amount} was credited back to the customer`,
           changedBy: null,
         },
       });
@@ -186,7 +187,8 @@ export async function settleAttempt(tracker: string, via: 'return' | 'webhook', 
       data: {
         orderId: order.id,
         status: order.orderStatus,
-        notes: `Paid online: Rs ${amount} through Safepay${reference ? ` (ref ${reference.slice(0, 60)})` : ''}`,
+        // No tracker or gateway reference here: kitchens read this history (they are kept in payment_attempts).
+        notes: `Paid online: Rs ${amount}`,
         changedBy: null,
       },
     });
