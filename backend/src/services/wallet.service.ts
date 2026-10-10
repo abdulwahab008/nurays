@@ -2,6 +2,7 @@ import { Prisma } from '@prisma/client';
 import prisma from '../config/database';
 import { AppError } from '../middleware/errorHandler';
 import { pageArgs } from '../utils/pagination';
+import { roundMoney } from '../utils/pricing';
 
 /**
  * The Nuray Wallet: money the platform holds for a customer (top-ups, refunds of wallet-paid
@@ -11,9 +12,6 @@ import { pageArgs } from '../utils/pagination';
 
 type Tx = Prisma.TransactionClient;
 
-const money = (n: number) => Math.round(n * 100) / 100;
-
-export type WalletEntryType = 'debit' | 'credit' | 'topup';
 
 async function walletOf(tx: Tx, userId: string) {
   return tx.wallet.upsert({
@@ -32,7 +30,7 @@ export async function debitWallet(
   tx: Tx,
   opts: { userId: string; amount: number; orderId?: string | null; description: string }
 ) {
-  const amount = money(opts.amount);
+  const amount = roundMoney(opts.amount);
   const wallet = await walletOf(tx, opts.userId);
   if (wallet.isLocked) throw new AppError('Your wallet is locked. Please contact support.', 400, 'WALLET_LOCKED');
   const { count } = await tx.wallet.updateMany({
@@ -54,7 +52,7 @@ export async function debitWallet(
       orderId: opts.orderId ?? null,
       transactionType: 'debit',
       amount,
-      balanceBefore: money(after + amount),
+      balanceBefore: roundMoney(after + amount),
       balanceAfter: after,
       description: opts.description,
       status: 'completed',
@@ -67,7 +65,7 @@ export async function creditWallet(
   tx: Tx,
   opts: { userId: string; amount: number; type: 'credit' | 'topup'; description: string; orderId?: string | null; referenceId?: string | null }
 ) {
-  const amount = money(opts.amount);
+  const amount = roundMoney(opts.amount);
   const wallet = await walletOf(tx, opts.userId);
   const updated = await tx.wallet.update({ where: { id: wallet.id }, data: { balance: { increment: amount } } });
   const after = Number(updated.balance);
@@ -77,7 +75,7 @@ export async function creditWallet(
       orderId: opts.orderId ?? null,
       transactionType: opts.type,
       amount,
-      balanceBefore: money(after - amount),
+      balanceBefore: roundMoney(after - amount),
       balanceAfter: after,
       description: opts.description,
       referenceId: opts.referenceId ?? null,

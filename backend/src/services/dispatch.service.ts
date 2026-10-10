@@ -7,6 +7,7 @@ import { notify } from './notify.service';
 import { cashLimitOf, riderMoney, riderMoneyMany } from './rider-ledger.service';
 import { calculateDeliveryFeeCorridor } from '../utils/deliveryFee';
 import { assignmentMessage, cashToCollect, dropoffAreaOf, endsOf, routeMatch } from '../utils/riderJobs';
+import { cashAtDoor, isCashAtDoor } from '../utils/paymentCustody';
 import { chooseRider, DispatchCandidate, JobEnds, MAX_ACTIVE_JOBS } from '../utils/dispatch';
 import { ON_DUTY_RIDER } from '../utils/riderDuty';
 
@@ -105,9 +106,9 @@ export async function dispatchDelivery(deliveryId: string, opts: { announced?: b
     });
   }
 
-  const cod = job.order.paymentMethod === 'cod' && job.order.paymentStatus !== 'paid';
+  const cod = isCashAtDoor(job.order);
   const choice = chooseRider(
-    { ...endsWithCommunities(job), cashToTake: cod ? Number(job.order.totalAmount) : 0 },
+    { ...endsWithCommunities(job), cashToTake: cashAtDoor(job.order) },
     candidates
   );
   if (!choice) {
@@ -146,7 +147,7 @@ export async function dispatchDelivery(deliveryId: string, opts: { announced?: b
 
 export async function announceAssignment(job: JobRow, riderUserId: string, riderPay: number, announced = true) {
   void realtimeOrderService.emitDeliveryClaimed(job.id, job.orderId, { toRiders: announced });
-  const cod = job.order.paymentMethod === 'cod' && job.order.paymentStatus !== 'paid';
+  const cash = cashAtDoor(job.order);
   const activeNow = await prisma.delivery.count({ where: { rider: { userId: riderUserId }, status: { in: ACTIVE } } });
   socketManager.emitToUser(riderUserId, 'delivery:assigned', { deliveryId: job.id, orderId: job.orderId });
   // The rider's screen pops this up, even while they are already carrying another job.
@@ -156,7 +157,7 @@ export async function announceAssignment(job: JobRow, riderUserId: string, rider
     orderNumber: job.order.orderNumber,
     pickupAddress: job.pickupAddress,
     deliveryAddress: job.deliveryAddress,
-    cashToCollect: cod ? Math.round(Number(job.order.totalAmount)) : 0,
+    cashToCollect: Math.round(cash), // the pop-up shows whole rupees
     riderFee: riderPay,
     activeJobs: activeNow,
     mode: 'auto',
@@ -171,7 +172,7 @@ export async function announceAssignment(job: JobRow, riderUserId: string, rider
       orderNumber: job.order.orderNumber,
       pickupAddress: job.pickupAddress,
       dropoffArea: dropoffAreaOf(job.order),
-      cashToCollect: cod ? Number(job.order.totalAmount) : 0,
+      cashToCollect: cash,
     }),
     actionUrl: '/riders/dashboard#active',
     data: { deliveryId: job.id, orderId: job.orderId },

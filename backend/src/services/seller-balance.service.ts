@@ -1,11 +1,11 @@
 import prisma from '../config/database';
 import { selfDeliveryFeeFor, sellerPaidDeliveryFor } from '../utils/deliveryEarnings';
 import { collectorOf } from '../utils/paymentCustody';
+import { roundMoney } from '../utils/pricing';
 
 type Tx = Parameters<Parameters<typeof prisma.$transaction>[0]>[0];
 type Client = typeof prisma | Tx;
 
-const money = (n: number) => Math.round(n * 100) / 100;
 
 export interface SellerBalance {
   /** Seller's share of delivered, paid orders, whoever collected the money. */
@@ -164,12 +164,12 @@ export async function computeSellerBalance(client: Client, sellerId: string): Pr
   const pendingPayout = payouts.filter((p) => p.status !== 'completed').reduce((s, p) => s + Number(p.netAmount), 0);
 
   return {
-    totalEarnings: money(totalEarnings),
-    platformOwesSeller: money(platformOwesSeller),
-    sellerOwesPlatform: money(sellerOwesPlatform),
-    awaitingRiderCash: money(awaitingRiderCash),
-    paidOut: money(paidOut),
-    pendingPayout: money(pendingPayout),
-    available: money(platformOwesSeller - sellerOwesPlatform - paidOut - pendingPayout),
+    totalEarnings: roundMoney(totalEarnings),
+    platformOwesSeller: roundMoney(platformOwesSeller),
+    sellerOwesPlatform: roundMoney(sellerOwesPlatform),
+    awaitingRiderCash: roundMoney(awaitingRiderCash),
+    paidOut: roundMoney(paidOut),
+    pendingPayout: roundMoney(pendingPayout),
+    available: roundMoney(platformOwesSeller - sellerOwesPlatform - paidOut - pendingPayout),
   };
 }

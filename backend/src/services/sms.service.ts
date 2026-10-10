@@ -8,6 +8,7 @@
  * never tell a user "code sent" when it wasn't.
  */
 import { smsProvider } from '../config/env';
+import { maskPhone } from '../utils/mask';
 
 let twilioClient: any = null;
 
@@ -28,7 +29,6 @@ function getTwilioClient() {
 }
 
 /** Last 4 digits only, for logs. */
-const maskPhone = (phone: string) => (phone.length > 4 ? `***${phone.slice(-4)}` : '***');
 
 export async function sendSMS(phone: string, message: string): Promise<boolean> {
   const provider = smsProvider();

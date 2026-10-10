@@ -13,6 +13,8 @@
  * is charged to the customer and kept by the kitchen (paidBy 'customer').
  */
 
+import { roundMoney } from './pricing';
+
 export interface DeliveryFeeShare {
   sellerId: string;
   fee: number;
@@ -20,8 +22,6 @@ export interface DeliveryFeeShare {
   /** Who pays the fee: the kitchen (Nuray rider) or the customer (self-delivery; older orders). */
   paidBy?: 'seller' | 'customer';
 }
-
-const money = (n: number) => Math.round(n * 100) / 100;
 
 export function parseBreakdown(raw: unknown): DeliveryFeeShare[] {
   if (!Array.isArray(raw)) return [];
@@ -38,7 +38,7 @@ export function parseBreakdown(raw: unknown): DeliveryFeeShare[] {
 
 /** The delivery fee a self-delivering seller keeps on this order. */
 export function selfDeliveryFeeFor(breakdown: unknown, sellerId: string): number {
-  return money(
+  return roundMoney(
     parseBreakdown(breakdown)
       .filter((r) => r.provider === 'self' && r.sellerId === sellerId)
       .reduce((sum, r) => sum + r.fee, 0)
@@ -47,7 +47,7 @@ export function selfDeliveryFeeFor(breakdown: unknown, sellerId: string): number
 
 /** What a kitchen pays Nuray for the rider delivery of this order (taken from its payout). */
 export function sellerPaidDeliveryFor(breakdown: unknown, sellerId: string): number {
-  return money(
+  return roundMoney(
     parseBreakdown(breakdown)
       .filter((r) => r.paidBy === 'seller' && r.sellerId === sellerId)
       .reduce((sum, r) => sum + r.fee, 0)
@@ -59,7 +59,7 @@ export function platformDeliveryFee(deliveryFee: number, breakdown: unknown): nu
   const selfTotal = parseBreakdown(breakdown)
     .filter((r) => r.provider === 'self')
     .reduce((sum, r) => sum + r.fee, 0);
-  return money(Math.max(0, deliveryFee - selfTotal));
+  return roundMoney(Math.max(0, deliveryFee - selfTotal));
 }
 
 /**
@@ -81,5 +81,5 @@ export function sumSelfDeliveryFees(
     if (opts.onlineOnly && o.paymentMethod === 'cod') continue;
     total += selfDeliveryFeeFor(o.deliveryFeeBreakdown, sellerId);
   }
-  return money(total);
+  return roundMoney(total);
 }

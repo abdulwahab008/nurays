@@ -1,5 +1,5 @@
 import { realPhoneOrNull } from '../utils/otp';
-import { codCollectorOf } from '../utils/paymentCustody';
+import { codCollectorOf, isCashAtDoor } from '../utils/paymentCustody';
 import { presentFile } from '../storage';
 import { cancelOpenDelivery, notifyDeliveryCancelled, reopenDeliveryData, CancelledDelivery } from './delivery-lifecycle.service';
 import { postDeliverySoon } from './dispatch.service';
@@ -362,7 +362,7 @@ export class AdminOrderService {
     // side effects as the seller/rider paths: delivery time, and COD is paid
     // at the door.
     const isDelivered = status === 'delivered';
-    const isCodDelivery = isDelivered && order.paymentMethod === 'cod' && order.paymentStatus !== 'paid';
+    const isCodDelivery = isDelivered && isCashAtDoor(order);
     const applied = await prisma.order.updateMany({
       where: { id: orderId, orderStatus: order.orderStatus },
       data: {

@@ -1,21 +1,21 @@
 /** Small helpers about a rider's jobs, shared by the rider and dispatch services. */
 import { haversineKm } from './deliveryFee';
-
-export const num = (v: unknown): number | null => (v != null && Number.isFinite(Number(v)) ? Number(v) : null);
+import { cashAtDoor } from './paymentCustody';
+import { finiteOrNull } from './numbers';
 
 /** A job's two ends, or nulls where a location isn't known (never a made-up one). */
 export function endsOf(d: { pickupLatitude?: unknown; pickupLongitude?: unknown; deliveryLatitude?: unknown; deliveryLongitude?: unknown }) {
   return {
-    pickupLat: num(d.pickupLatitude),
-    pickupLng: num(d.pickupLongitude),
-    deliveryLat: num(d.deliveryLatitude),
-    deliveryLng: num(d.deliveryLongitude),
+    pickupLat: finiteOrNull(d.pickupLatitude),
+    pickupLng: finiteOrNull(d.pickupLongitude),
+    deliveryLat: finiteOrNull(d.deliveryLatitude),
+    deliveryLng: finiteOrNull(d.deliveryLongitude),
   };
 }
 
 /** Cash the rider will take at the door on jobs they already have (unpaid cash orders). */
 export function cashToCollect(jobs: Array<{ order: { paymentMethod: string; paymentStatus: string; totalAmount: unknown } }>) {
-  return jobs.reduce((sum, d) => sum + (d.order.paymentMethod === 'cod' && d.order.paymentStatus !== 'paid' ? Number(d.order.totalAmount) : 0), 0);
+  return jobs.reduce((sum, d) => sum + cashAtDoor(d.order), 0);
 }
 
 export const PAYMENT_INCLUDE = { order: { select: { paymentMethod: true, paymentStatus: true, totalAmount: true } } } as const;

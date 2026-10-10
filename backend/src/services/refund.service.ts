@@ -3,7 +3,7 @@ import { pageArgs } from '../utils/pagination';
 import { notify } from './notify.service';
 import { AppError } from '../middleware/errorHandler';
 import { parseBreakdown } from '../utils/deliveryEarnings';
-import { GST_RATE, priceOrder } from '../utils/pricing';
+import { GST_RATE, priceOrder, roundMoney } from '../utils/pricing';
 
 type Tx = Parameters<Parameters<typeof prisma.$transaction>[0]>[0];
 
@@ -16,7 +16,6 @@ export interface IssuedRefund {
   fullyRefunded: boolean;
 }
 
-const money = (n: number) => Math.round(n * 100) / 100;
 
 /**
  * Create the refund owed on a paid order, inside the caller's transaction.
@@ -55,12 +54,12 @@ export async function issueRefund(
     _sum: { amount: true },
   });
   const alreadyRefunded = Number(agg._sum.amount ?? 0);
-  const remaining = money(total - alreadyRefunded);
-  const amount = money(Math.min(opts.amount ?? remaining, remaining));
+  const remaining = roundMoney(total - alreadyRefunded);
+  const amount = roundMoney(Math.min(opts.amount ?? remaining, remaining));
   if (amount <= 0) return null;
 
   const isWallet = order.paymentMethod === 'wallet';
-  const fullyRefunded = money(alreadyRefunded + amount) >= total;
+  const fullyRefunded = roundMoney(alreadyRefunded + amount) >= total;
 
   if (isWallet) {
     if (!order.customerId) {
@@ -84,7 +83,7 @@ export async function issueRefund(
         orderId,
         transactionType: 'credit',
         amount,
-        balanceBefore: money(balanceAfter - amount),
+        balanceBefore: roundMoney(balanceAfter - amount),
         balanceAfter,
         description: `Refund for order ${order.orderNumber}`,
         status: 'completed',
@@ -165,11 +164,11 @@ async function shrinkUnpaidOrder(tx: Tx, order: any) {
   if (live.length === 0) return;
   const hasShares = items.some((i: any) => Number(i.promoDiscount) > 0);
 
-  const subtotal = money(live.reduce((sum: number, i: any) => sum + Number(i.totalPrice), 0));
+  const subtotal = roundMoney(live.reduce((sum: number, i: any) => sum + Number(i.totalPrice), 0));
   const oldSubtotal = Number(order.subtotal);
   const discount = hasShares
-    ? money(live.reduce((sum: number, i: any) => sum + Number(i.promoDiscount), 0))
-    : money(oldSubtotal > 0 ? Number(order.discountAmount) * (subtotal / oldSubtotal) : 0);
+    ? roundMoney(live.reduce((sum: number, i: any) => sum + Number(i.promoDiscount), 0))
+    : roundMoney(oldSubtotal > 0 ? Number(order.discountAmount) * (subtotal / oldSubtotal) : 0);
 
   const liveSellers = new Set(live.map((i: any) => i.sellerId));
   const breakdown = parseBreakdown(order.deliveryFeeBreakdown);
@@ -177,10 +176,10 @@ async function shrinkUnpaidOrder(tx: Tx, order: any) {
   // Legacy orders have no per-seller split, so their delivery fee stays as it was.
   // The customer's delivery fee is only the shares they pay; a kitchen-paid fee is not on their bill.
   const deliveryFee = breakdown.length
-    ? money(liveBreakdown.filter((r) => r.paidBy !== 'seller').reduce((sum, r) => sum + r.fee, 0))
+    ? roundMoney(liveBreakdown.filter((r) => r.paidBy !== 'seller').reduce((sum, r) => sum + r.fee, 0))
     : Number(order.deliveryFee);
   const sellerDeliveryCharge = breakdown.length
-    ? money(liveBreakdown.filter((r) => r.paidBy === 'seller').reduce((sum, r) => sum + r.fee, 0))
+    ? roundMoney(liveBreakdown.filter((r) => r.paidBy === 'seller').reduce((sum, r) => sum + r.fee, 0))
     : Number(order.sellerDeliveryCharge ?? 0);
 
   const { taxAmount, totalAmount } = priceOrder(subtotal - discount, deliveryFee);
@@ -243,7 +242,7 @@ export async function refundForCancelledItems(
   }
 
   return issueRefund(tx, orderId, {
-    amount: money(itemsPaid + deliveryBack),
+    amount: roundMoney(itemsPaid + deliveryBack),
     reason: opts.reason,
     createdBy: opts.createdBy,
   });

@@ -6,11 +6,3 @@
 export const PAKISTAN_BOUNDS = { minLat: 23.5, maxLat: 37.5, minLng: 60.5, maxLng: 77.5 } as const;
 
 export const PIN_OUTSIDE = 'The map pin must be inside Pakistan';
-
-export function isInsidePakistan(lat: number, lng: number): boolean {
-  return (
-    Number.isFinite(lat) && Number.isFinite(lng) &&
-    lat >= PAKISTAN_BOUNDS.minLat && lat <= PAKISTAN_BOUNDS.maxLat &&
-    lng >= PAKISTAN_BOUNDS.minLng && lng <= PAKISTAN_BOUNDS.maxLng
-  );
-}

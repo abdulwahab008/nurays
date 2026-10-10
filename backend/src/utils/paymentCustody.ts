@@ -19,8 +19,6 @@ export type DeliveryProvider = 'platform' | 'self';
 
 /** Payment methods that send the money straight to the seller (see getSellerPaymentDetails). */
 export const SELLER_DIRECT_METHODS = ['jazzcash', 'easypaisa', 'bank'];
-/** Payment methods whose money the platform receives. */
-export const PLATFORM_METHODS = ['wallet', 'safepay', 'card'];
 /** Payment methods settled through the online gateway (Safepay). 'card' is the older name for the same thing. */
 export const ONLINE_GATEWAY_METHODS = ['safepay', 'card'];
 /** Payment states from which a gateway / transfer payment may still be accepted. */
@@ -42,6 +40,19 @@ export function deliveryProviderOf(order: OrderDeliveryShape, fallback?: string 
   const rows = Array.isArray(order.deliveryFeeBreakdown) ? (order.deliveryFeeBreakdown as Array<Record<string, unknown>>) : [];
   if (rows.length > 0) return rows.some((r) => r && r.provider === 'self') ? 'self' : 'platform';
   return fallback === 'self' ? 'self' : 'platform';
+}
+
+/**
+ * Money is still to be taken at the door: a cash-on-delivery order that has not been paid. One rule for the rider's
+ * cash limit, the job offer, the delivery that marks it paid and the kitchen's own handover.
+ */
+export function isCashAtDoor(order: { paymentMethod: string; paymentStatus: string }): boolean {
+  return order.paymentMethod === 'cod' && order.paymentStatus !== 'paid';
+}
+
+/** The cash to take at the door for an order: its total when it is cash on delivery and unpaid, else 0. */
+export function cashAtDoor(order: { paymentMethod: string; paymentStatus: string; totalAmount: unknown }): number {
+  return isCashAtDoor(order) ? Number(order.totalAmount) : 0;
 }
 
 /** Who takes the cash for a COD order. */

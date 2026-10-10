@@ -1,7 +1,11 @@
 /** GST charged on (subtotal - discount). Used when an order is priced and when a part of it is refunded. */
 export const GST_RATE = 0.05;
 
-export const roundMoney = (n: number): number => Math.round(n * 100) / 100;
+/** An amount to whole paisa (Rs 0.01), so sums of prices carry no float dust. Never -0. */
+export const roundMoney = (n: number): number => {
+  const rounded = Math.round(n * 100) / 100;
+  return rounded === 0 ? 0 : rounded;
+};
 
 /**
  * An order's GST and total. GST is charged on the goods after discounts; the total is then

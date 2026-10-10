@@ -1,4 +1,4 @@
-import { codCollectorOf, deliveryProviderOf } from '../utils/paymentCustody';
+import { codCollectorOf, deliveryProviderOf, isCashAtDoor } from '../utils/paymentCustody';
 import { verifyHandoverCode } from './handover.service';
 import { presentFile } from '../storage';
 import { cancelOpenDelivery, notifyDeliveryCancelled, CancelledDelivery } from './delivery-lifecycle.service';
@@ -409,10 +409,7 @@ export class SellerOrderService {
         // COD payment is collected at the door — delivered IS the payment
         // confirmation for COD (online payments are already 'paid' via the
         // gateway verification flow well before delivery).
-        const isCodPayment =
-          derivedOrderStatus === 'delivered' &&
-          orderItem.order.paymentMethod === 'cod' &&
-          orderItem.order.paymentStatus !== 'paid';
+        const isCodPayment = derivedOrderStatus === 'delivered' && isCashAtDoor(orderItem.order);
 
         // Guard the write on the order still being in the exact state we
         // derived from — if a concurrent transaction on another item already

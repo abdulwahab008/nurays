@@ -13,12 +13,6 @@ import { logger } from '../utils/logger';
  */
 export const ON_DUTY_RIDERS_ROOM = 'riders:on-duty';
 
-export interface SocketUser {
-  userId: string;
-  userType: string;
-  socketId: string;
-}
-
 class SocketManager {
   private io: SocketIOServer | null = null;
   private userSockets: Map<string, Set<string>> = new Map(); // userId -> Set of socketIds

@@ -7,7 +7,9 @@ import realtimeOrderService from './realtime-order.service';
 import ledgerService from './ledger.service';
 import { dispatchSoon, postDeliverySoon } from './dispatch.service';
 import { haversineKm, calculateDeliveryFeeCorridor } from '../utils/deliveryFee';
-import { num, endsOf, cashToCollect, PAYMENT_INCLUDE, routeMatch } from '../utils/riderJobs';
+import { endsOf, cashToCollect, PAYMENT_INCLUDE, routeMatch } from '../utils/riderJobs';
+import { finiteOrNull } from '../utils/numbers';
+import { isCashAtDoor } from '../utils/paymentCustody';
 import { jobScore } from '../utils/ranking';
 import { newHandoverCode, verifyHandoverCode } from './handover.service';
 import { realPhoneOrNull } from '../utils/otp';
@@ -28,6 +30,7 @@ const DELIVERY_INCLUDE = {
       orderNumber: true,
       totalAmount: true,
       paymentMethod: true,
+      paymentStatus: true,
       orderStatus: true,
       deliveryInstructions: true,
       deliveryAddressSnapshot: true,
@@ -135,8 +138,8 @@ function formatDelivery(delivery: DeliveryWithOrder & {
     corridorDistanceKm: delivery.corridorDistanceKm ?? corridor.distanceKm,
     riderAskFee: delivery.riderAskFee ?? null,
     // Fixed when the job is claimed: what this rider is paid for it.
-    riderFee: num(delivery.riderFee),
-    riderBonus: num(delivery.riderBonus),
+    riderFee: finiteOrNull(delivery.riderFee),
+    riderBonus: finiteOrNull(delivery.riderBonus),
     // A cash order that would take the rider past their cash limit.
     exceedsCashLimit: Boolean(delivery.exceedsCashLimit),
     // Handed over once the job is theirs: the customer, how to reach them, and the exact spot.
@@ -200,10 +203,10 @@ export class RiderService {
 
     const pickupSeller = (order.items.find((i) => i.status !== 'cancelled' && (i.fulfillmentType === 'hub' || i.seller?.deliveryProvider !== 'self')) ?? order.items[0])?.seller;
     // Unknown locations stay unknown (null): a guessed point would misprice the job.
-    const pickupLat = num(pickupSeller?.latitude);
-    const pickupLng = num(pickupSeller?.longitude);
-    const deliveryLat = num(doorField(order.deliveryAddressSnapshot, order.deliveryAddress, 'latitude') as number | null | undefined);
-    const deliveryLng = num(doorField(order.deliveryAddressSnapshot, order.deliveryAddress, 'longitude') as number | null | undefined);
+    const pickupLat = finiteOrNull(pickupSeller?.latitude);
+    const pickupLng = finiteOrNull(pickupSeller?.longitude);
+    const deliveryLat = finiteOrNull(doorField(order.deliveryAddressSnapshot, order.deliveryAddress, 'latitude') as number | null | undefined);
+    const deliveryLng = finiteOrNull(doorField(order.deliveryAddressSnapshot, order.deliveryAddress, 'longitude') as number | null | undefined);
 
     try {
       const created = await prisma.delivery.create({
@@ -288,7 +291,7 @@ export class RiderService {
     const now = Date.now();
     const ranked = deliveries.map((d) => {
       const match = routeMatch(activeOne, d);
-      const cashOrder = d.order.paymentMethod === 'cod';
+      const cashOrder = isCashAtDoor(d.order);
       const job = formatDelivery({
         ...d,
         isRouteMatch: !!match,
@@ -397,7 +400,7 @@ export class RiderService {
 
       // No more customer cash than the rider's limit, counting what they hold and what they'll
       // collect on the jobs they already have. Prepaid jobs are always fine.
-      if (liveOrder.paymentMethod === 'cod' && liveOrder.paymentStatus !== 'paid') {
+      if (isCashAtDoor(liveOrder)) {
         const { cashHeld } = await riderMoney(tx, rider.id);
         const toCollect = cashToCollect(active);
         const limit = cashLimitOf(rider);
@@ -506,7 +509,7 @@ export class RiderService {
       }
 
       // Cash the rider takes at the door: an unpaid cash order being delivered.
-      const isCodPayment = order.paymentMethod === 'cod' && order.paymentStatus !== 'paid';
+      const isCodPayment = isCashAtDoor(order);
       const newOrderStatus = ORDER_STATUS_FOR_DELIVERY_STATUS[status] ?? null;
       if (newOrderStatus && newOrderStatus !== order.orderStatus) {
         await tx.order.update({

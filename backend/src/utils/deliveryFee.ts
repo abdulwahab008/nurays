@@ -1,3 +1,5 @@
+import { finiteOrNull } from './numbers';
+
 /**
  * Haversine distance in km between two points.
  */
@@ -201,12 +203,6 @@ function platformDefaultFee(city?: string | null): number {
   return fee;
 }
 
-function toNumber(value: unknown): number | null {
-  if (value == null) return null;
-  const n = Number(value);
-  return Number.isFinite(n) ? n : null;
-}
-
 /**
  * Community-aware delivery rules. Returns a final result when the buyer's
  * community settles the question, or null to fall through to the seller-wide
@@ -272,7 +268,7 @@ function resolveCommunityDelivery(
     };
   }
 
-  const minOrder = toNumber(rule.minOrderAmount) ?? toNumber(seller.minOrderAmountForDelivery);
+  const minOrder = finiteOrNull(rule.minOrderAmount) ?? finiteOrNull(seller.minOrderAmountForDelivery);
   if (minOrder != null && subtotal != null && subtotal < minOrder) {
     return {
       deliverable: false,
@@ -282,12 +278,12 @@ function resolveCommunityDelivery(
     };
   }
 
-  const freeAbove = toNumber(rule.freeAbove);
+  const freeAbove = finiteOrNull(rule.freeAbove);
   if (freeAbove != null && subtotal != null && subtotal >= freeAbove) {
     return { deliverable: true, fee: 0, reason: `Free delivery above Rs ${freeAbove}`, distanceKm, freeAbove };
   }
 
-  return { deliverable: true, fee: Math.max(0, toNumber(rule.fee) ?? 0), reason: null, distanceKm };
+  return { deliverable: true, fee: Math.max(0, finiteOrNull(rule.fee) ?? 0), reason: null, distanceKm };
 }
 
 /**
@@ -316,7 +312,7 @@ function freeAboveFor(seller: SellerDeliveryPolicy, address: AddressForDelivery)
   const rules = Array.isArray(seller.communityDeliveries) ? seller.communityDeliveries : [];
   const buyerCommunityId = address.communityId ?? null;
   const rule = buyerCommunityId && rules.length > 0 ? rules.find((r) => r.communityId === buyerCommunityId) : undefined;
-  return toNumber(rule ? rule.freeAbove : seller.freeDeliveryThreshold);
+  return finiteOrNull(rule ? rule.freeAbove : seller.freeDeliveryThreshold);
 }
 
 function deliveryFeeForSeller(
