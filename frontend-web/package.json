@@ -11,7 +11,7 @@
     "test:e2e:ui": "playwright test --ui"
   },
   "dependencies": {
-    "@react-oauth/google": "^0.12.2",
+    "@react-oauth/google": "^0.13.5",
     "@sentry/browser": "^11.2.0",
     "axios": "^1.13.2",
     "clsx": "^2.1.1",
