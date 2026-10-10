@@ -21,6 +21,8 @@ export type DeliveryProvider = 'platform' | 'self';
 export const SELLER_DIRECT_METHODS = ['jazzcash', 'easypaisa', 'bank'];
 /** Payment methods whose money the platform receives. */
 export const PLATFORM_METHODS = ['wallet', 'safepay', 'card'];
+/** Payment methods settled through the online gateway (Safepay). 'card' is the older name for the same thing. */
+export const ONLINE_GATEWAY_METHODS = ['safepay', 'card'];
 /** Payment states from which a gateway / transfer payment may still be accepted. */
 export const PAYABLE_STATUSES = ['pending', 'failed', 'payment_submitted', 'disputed'];
 

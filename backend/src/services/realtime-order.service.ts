@@ -3,6 +3,7 @@ import socketManager from '../config/socket';
 import { AppError } from '../middleware/errorHandler';
 import { notify, notifyMany } from './notify.service';
 import type { DeliveryChannel } from '../jobs/notify.jobs';
+import { ONLINE_GATEWAY_METHODS } from '../utils/paymentCustody';
 
 // What each order status tells the customer, and which channels besides the app it is worth.
 const ORDER_STATUS_MESSAGES: Record<
@@ -241,7 +242,7 @@ export class RealtimeOrderService {
 
     // An order waiting for its online payment is only worth an alert once it is paid
     // (see online-payment.service): a kitchen shouldn't start on an unpaid order.
-    const awaitingOnlinePayment = ['safepay', 'card'].includes(order.paymentMethod) && order.paymentStatus !== 'paid';
+    const awaitingOnlinePayment = ONLINE_GATEWAY_METHODS.includes(order.paymentMethod) && order.paymentStatus !== 'paid';
 
     // Emit to each seller and create a persistent notification for the Notifications page
     sellerOrders.forEach((items, sellerUserId) => {

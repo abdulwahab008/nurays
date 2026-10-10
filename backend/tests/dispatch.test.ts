@@ -3,6 +3,7 @@
  * riders, then anyone with room; nobody over their limits.
  */
 import { canShareTrip, chooseRider, DispatchCandidate, DispatchJob, JobEnds } from '../src/utils/dispatch';
+import { assignmentMessage, dropoffAreaOf } from '../src/utils/riderJobs';
 
 const pt = (lat: number, lng: number) => ({ lat, lng });
 const none = { lat: null, lng: null };
@@ -97,5 +98,32 @@ describe('chooseRider', () => {
 
   it('nobody available means no choice (the job stays in the pool)', () => {
     expect(chooseRider(job, [])).toBeNull();
+  });
+});
+
+describe('the stored "new delivery" notification', () => {
+  const order = {
+    deliveryAddressSnapshot: { addressLine1: 'House 9, Street 5', houseNumber: '9', area: 'Askari 11', city: 'Lahore', latitude: 31.4, longitude: 74.4 },
+    deliveryAddress: { area: 'Askari 11 (edited)', city: 'Lahore' },
+  };
+
+  it('names the area and city of the drop-off, never the street or the house', () => {
+    const area = dropoffAreaOf(order);
+    expect(area).toBe('Askari 11, Lahore');
+    const message = assignmentMessage({ orderNumber: 'FN1', pickupAddress: 'Block 3, Gulshan', dropoffArea: area, cashToCollect: 0 });
+    expect(message).toBe('Order #FN1: pick up from Block 3, Gulshan, deliver to Askari 11, Lahore.');
+    expect(message).not.toContain('House 9');
+    expect(message).not.toContain('Street 5');
+  });
+
+  it('uses the saved address for orders placed before snapshots', () => {
+    expect(dropoffAreaOf({ deliveryAddressSnapshot: null, deliveryAddress: { area: 'DHA', city: 'Karachi' } })).toBe('DHA, Karachi');
+  });
+
+  it('says to open the job when no area is known, and mentions cash to collect', () => {
+    expect(dropoffAreaOf({ deliveryAddressSnapshot: null, deliveryAddress: null })).toBe('');
+    expect(assignmentMessage({ orderNumber: 'FN2', pickupAddress: 'K', dropoffArea: '', cashToCollect: 1250.4 })).toBe(
+      'Order #FN2: pick up from K, open the job for the drop-off. Collect Rs 1250 in cash.'
+    );
   });
 });

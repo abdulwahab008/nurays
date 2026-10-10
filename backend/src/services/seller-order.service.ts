@@ -11,7 +11,7 @@ import { releasePromotionUsage } from './promotion.service';
 import { refundForCancelledItems } from './refund.service';
 import ledgerService from './ledger.service';
 import { releaseHubAllocations } from './hub-allocation.service';
-import { selfDeliveryFeeFor, sellerPaidDeliveryFor } from '../utils/deliveryEarnings';
+import { kitchenOrderSelect, presentKitchenOrder } from '../utils/kitchenOrderView';
 
 export class SellerOrderService {
   /**
@@ -211,7 +211,7 @@ export class SellerOrderService {
   }
 
   /**
-   * Get seller order details
+   * Get seller order details: the kitchen's view of one order (see utils/kitchenOrderView.ts for what it holds).
    */
   async getSellerOrderDetails(orderId: string, sellerId: string) {
     // Get seller by userId
@@ -223,42 +223,10 @@ export class SellerOrderService {
       throw new AppError('Seller not found', 404, 'SELLER_NOT_FOUND');
     }
 
-    // Get order with items for this seller
+    // Get the order with only this seller's items
     const order = await prisma.order.findUnique({
       where: { id: orderId },
-      include: {
-        items: {
-          where: { sellerId: seller.id },
-          include: {
-            product: {
-              select: {
-                id: true,
-                name: true,
-                slug: true,
-                images: {
-                  where: { isPrimary: true },
-                  take: 1,
-                },
-              },
-            },
-          },
-        },
-        customer: {
-          select: {
-            id: true,
-            phone: true,
-            profile: {
-              select: {
-                fullName: true,
-              },
-            },
-          },
-        },
-        deliveryAddress: true,
-        statusHistory: {
-          orderBy: { createdAt: 'asc' },
-        },
-      },
+      select: kitchenOrderSelect(seller.id),
     });
 
     if (!order) {
@@ -269,43 +237,14 @@ export class SellerOrderService {
       throw new AppError('No items found for this seller in this order', 404, 'NO_ITEMS_FOUND');
     }
 
-    // Calculate seller totals
-    const sellerSubtotal = order.items.reduce(
-      (sum, item) => sum + Number(item.totalPrice),
-      0
-    );
-    const sellerCommission = order.items.reduce(
-      (sum, item) => sum + Number(item.commissionAmount),
-      0
-    );
-    const sellerPayout = order.items.reduce(
-      (sum, item) => sum + Number(item.sellerPayout),
-      0
-    );
-
-    // The kitchen needs the door to hand food over itself; never the address row's owner id, pin or postcode.
-    const { userId: _addrUser, latitude: _lat, longitude: _lng, postalCode: _pc, ...addressForSeller } = order.deliveryAddress ?? ({} as Record<string, unknown>);
-    return {
-      ...order,
-      deliveryAddress: order.deliveryAddress ? addressForSeller : null,
+    return presentKitchenOrder(order, {
+      sellerId: seller.id,
+      businessName: seller.businessName,
+      businessNameUrdu: seller.businessNameUrdu,
+      sellerDeliveryProvider: seller.deliveryProvider,
+      // The receipt is private: the kitchen gets a short-lived link to it.
       paymentProofUrl: await presentFile(order.paymentProofUrl),
-      sellerHandsOver:
-        order.deliveryType === 'self_pickup' || deliveryProviderOf(order, seller.deliveryProvider) === 'self',
-      subtotal: Number(order.subtotal),
-      deliveryFee: Number(order.deliveryFee),
-      discountAmount: Number(order.discountAmount),
-      taxAmount: Number(order.taxAmount),
-      totalAmount: Number(order.totalAmount),
-      sellerTotals: {
-        subtotal: sellerSubtotal,
-        commission: sellerCommission,
-        payout: sellerPayout,
-        // Delivery fee this seller keeps because they deliver the order themselves.
-        deliveryFeeKept: selfDeliveryFeeFor(order.deliveryFeeBreakdown, order.items[0]?.sellerId ?? ''),
-        // Nuray's delivery fee for a Nuray rider, paid by the kitchen out of its earnings.
-        deliveryFeePaid: sellerPaidDeliveryFor(order.deliveryFeeBreakdown, order.items[0]?.sellerId ?? ''),
-      },
-    };
+    });
   }
 
   /**

@@ -6,7 +6,7 @@ import { issueRefund } from './refund.service';
 import { creditWallet } from './wallet.service';
 import realtimeOrderService from './realtime-order.service';
 import { notify, notifyMany } from './notify.service';
-import { PAYABLE_STATUSES } from '../utils/paymentCustody';
+import { ONLINE_GATEWAY_METHODS, PAYABLE_STATUSES } from '../utils/paymentCustody';
 import { logger } from '../utils/logger';
 import { reportError } from '../config/sentry';
 
@@ -47,7 +47,7 @@ export async function startOrderCheckout(orderId: string, userId: string) {
   if (['refund_pending', 'refunded'].includes(order.paymentStatus)) throw new AppError('This order has been refunded', 400, 'ORDER_REFUNDED');
   if (['cancelled', 'refunded'].includes(order.orderStatus)) throw new AppError('Cannot pay for cancelled order', 400, 'ORDER_CANCELLED');
   requireGateway();
-  if (!['safepay', 'card'].includes(order.paymentMethod)) {
+  if (!ONLINE_GATEWAY_METHODS.includes(order.paymentMethod)) {
     throw new AppError('This order was not placed for online payment', 400, 'NOT_AN_ONLINE_ORDER');
   }
 
@@ -339,7 +339,7 @@ export async function orderPaymentStatus(orderId: string, userId: string) {
     paymentMethod: order.paymentMethod,
     orderStatus: order.orderStatus,
     paidAt: order.paidAt,
-    canPayOnline: onlinePaymentsAvailable() && ['safepay', 'card'].includes(order.paymentMethod) && PAYABLE_STATUSES.includes(order.paymentStatus) && !['cancelled', 'refunded'].includes(order.orderStatus),
+    canPayOnline: onlinePaymentsAvailable() && ONLINE_GATEWAY_METHODS.includes(order.paymentMethod) && PAYABLE_STATUSES.includes(order.paymentStatus) && !['cancelled', 'refunded'].includes(order.orderStatus),
     lastAttempt: latest ? { status: latest.status, createdAt: latest.createdAt, amount: Number(latest.amount) } : null,
   };
 }

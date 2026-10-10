@@ -249,7 +249,6 @@ export const getPublicSellers = async (req: Request, res: Response) => {
     include: {
       user: {
         select: {
-          id: true,
           profile: {
             select: {
               fullName: true,
@@ -298,7 +297,6 @@ export const getPublicSellers = async (req: Request, res: Response) => {
 
   const formatted = sellers.map((s) => ({
     id: s.id,
-    userId: s.userId,
     businessName: s.businessName,
     businessNameUrdu: s.businessNameUrdu,
     description: s.description,
@@ -354,7 +352,8 @@ export const getPublicSellers = async (req: Request, res: Response) => {
 export const getPublicSellerById = async (req: Request, res: Response) => {
   const { id } = req.params;
 
-  // Search by seller.id OR seller.userId
+  // Search by seller.id, or by the owner's user id so older bookmarks keep working. The user id is
+  // accepted as input but never returned: the response carries the seller id only.
   const seller = await prisma.seller.findFirst({
     where: {
       OR: [
@@ -368,7 +367,6 @@ export const getPublicSellerById = async (req: Request, res: Response) => {
     include: {
       user: {
         select: {
-          id: true,
           profile: {
             select: {
               fullName: true,
@@ -443,7 +441,6 @@ export const getPublicSellerById = async (req: Request, res: Response) => {
 
   const result = {
     id: seller.id,
-    userId: seller.userId,
     businessName: seller.businessName,
     businessNameUrdu: seller.businessNameUrdu,
     description: seller.description,

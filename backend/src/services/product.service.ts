@@ -672,11 +672,6 @@ export class ProductService {
         category: true,
         seller: {
           include: {
-            user: {
-              select: {
-                phone: true,
-              },
-            },
             community: { select: { id: true, name: true, slug: true, crossCommunityEnabled: true } },
             communityDeliveries: SELLER_COMMUNITY_DELIVERY_SELECT.communityDeliveries,
           },

@@ -6,7 +6,7 @@ import realtimeOrderService from './realtime-order.service';
 import { notify } from './notify.service';
 import { cashLimitOf, riderMoney, riderMoneyMany } from './rider-ledger.service';
 import { calculateDeliveryFeeCorridor } from '../utils/deliveryFee';
-import { cashToCollect, endsOf, routeMatch } from '../utils/riderJobs';
+import { assignmentMessage, cashToCollect, dropoffAreaOf, endsOf, routeMatch } from '../utils/riderJobs';
 import { chooseRider, DispatchCandidate, JobEnds, MAX_ACTIVE_JOBS } from '../utils/dispatch';
 
 /**
@@ -27,7 +27,8 @@ const JOB_INCLUDE = {
       paymentMethod: true,
       paymentStatus: true,
       totalAmount: true,
-      deliveryAddress: { select: { communityId: true } },
+      deliveryAddress: { select: { communityId: true, area: true, city: true } },
+      deliveryAddressSnapshot: true,
       items: { select: { status: true, seller: { select: { communityId: true } } }, take: 5 },
     },
   },
@@ -160,7 +161,13 @@ async function announceAssignment(job: JobRow, riderUserId: string, riderPay: nu
     category: 'deliveries',
     type: 'delivery',
     title: 'New delivery assigned to you',
-    message: `Order #${job.order.orderNumber}: pick up from ${job.pickupAddress}, deliver to ${job.deliveryAddress}.${cod ? ` Collect Rs ${Math.round(Number(job.order.totalAmount))} in cash.` : ''}`,
+    // Stored and pushed: the area only. The street is in the job, which the rider can open while it is theirs.
+    message: assignmentMessage({
+      orderNumber: job.order.orderNumber,
+      pickupAddress: job.pickupAddress,
+      dropoffArea: dropoffAreaOf(job.order),
+      cashToCollect: cod ? Number(job.order.totalAmount) : 0,
+    }),
     actionUrl: '/riders/dashboard#active',
     data: { deliveryId: job.id, orderId: job.orderId },
     channels: ['push'],

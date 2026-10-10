@@ -32,6 +32,12 @@ const ok = (name: string, cond: boolean, extra = '') => { cond ? pass++ : fail++
 const code = async (p: Promise<any>) => { try { await p; return 'OK'; } catch (e: any) { return e.code || e.message; } };
 let n = 0;
 const uniq = () => `${Date.now()}${++n}`;
+/** Every key anywhere in a JSON-like value (to prove a payload carries none of a list of private fields). */
+const deepKeys = (v: any, out = new Set<string>()): Set<string> => {
+  if (Array.isArray(v)) v.forEach((x) => deepKeys(x, out));
+  else if (v && typeof v === 'object' && !(v instanceof Date)) for (const [k, x] of Object.entries(v)) { out.add(k); deepKeys(x, out); }
+  return out;
+};
 
 async function mkUser(type = 'customer') {
   const u = uniq();
@@ -409,6 +415,20 @@ async function main() {
   ok('without an online gateway, JazzCash means a transfer to the kitchen (no fake payment page)', (await paymentService.processPayment(gwO.id, gwC.id, 'jazzcash').then(() => 'OK', (e: any) => e.code)) === 'MANUAL_TRANSFER_METHOD');
   ok('card payment without a configured gateway is refused, not faked', (await paymentService.processPayment(gwO.id, gwC.id, 'card').then(() => 'OK', (e: any) => e.code)) === 'GATEWAY_UNAVAILABLE');
 
+  // ---- 17c2. an order for online payment is refused while no gateway is configured ----
+  const savedGw = { pk: process.env.SAFEPAY_PUBLIC_KEY, sk: process.env.SAFEPAY_SECRET_KEY };
+  delete process.env.SAFEPAY_PUBLIC_KEY;
+  delete process.env.SAFEPAY_SECRET_KEY;
+  const ogP = await mkProduct(seller.id, 5, 100);
+  const ogOrders = await prisma.order.count({ where: { customerId: gwC.id } });
+  for (const method of ['safepay', 'card']) {
+    ok(`an order for online payment (${method}) is refused while the gateway is not configured`, (await code(order(gwC.id, [{ productId: ogP.id, quantity: 1 }], { paymentMethod: method }))) === 'GATEWAY_UNAVAILABLE');
+  }
+  ok('...and nothing was placed or reserved', (await prisma.order.count({ where: { customerId: gwC.id } })) === ogOrders && (await prisma.product.findUnique({ where: { id: ogP.id } }))!.stockQuantity === 5);
+  ok('cash orders are not affected', (await code(order(gwC.id, [{ productId: ogP.id, quantity: 1 }], { paymentMethod: 'cod' }))) === 'OK');
+  if (savedGw.pk !== undefined) process.env.SAFEPAY_PUBLIC_KEY = savedGw.pk;
+  if (savedGw.sk !== undefined) process.env.SAFEPAY_SECRET_KEY = savedGw.sk;
+
   // ---- 17d. handover code: only the customer sees it; it gates every handover ----
   const { default: riderService } = require('../src/services/rider.service');
   const hoCust = await mkUser();
@@ -422,6 +442,19 @@ async function main() {
   const asCustomer: any = await orderService.getOrderDetails(hoOrder.id, hoCust.id);
   const asSeller: any = await orderService.getOrderDetails(hoOrder.id, platUser);
   ok('the customer sees the code, the kitchen does not', asCustomer.handoverCode === hoCode && !('handoverCode' in asSeller), `${asCustomer.handoverCode} / ${'handoverCode' in asSeller}`);
+
+  // ---- 17d1. a kitchen's view of an order has the door it needs and none of the customer's pin, postcode, account id or internal keys ----
+  const kvAddr = await prisma.userAddress.create({ data: { userId: hoCust.id, addressLine1: 'House 9 Street 5', houseNumber: '9', area: 'Askari 11', city: 'Lahore', postalCode: '54000', latitude: 31.4, longitude: 74.4 } as any });
+  const kvOrder: any = await orderService.createOrder(hoCust.id, { items: [{ productId: hoProd.id, quantity: 1 }], deliveryType: 'home_delivery', deliveryAddressId: kvAddr.id, paymentMethod: 'cod' } as any, { idempotencyKey: 'kv-' + uniq() });
+  const kvSeller: any = await sellerOrderService.getSellerOrderDetails(kvOrder.id, platUser);
+  const kvOrders: any = await orderService.getOrderDetails(kvOrder.id, platUser);
+  const kvPrivate = ['latitude', 'longitude', 'postalCode', 'userId', 'customerId', 'idempotencyKey', 'paymentTransactionId', 'handoverCode', 'deliveryAddressSnapshot', 'deliveryAddressId', 'hubId', 'changedBy'];
+  ok("GET /seller/orders/:id: no pin, postcode, customer id or internal keys", !kvPrivate.some((k) => deepKeys(kvSeller).has(k)), kvPrivate.filter((k) => deepKeys(kvSeller).has(k)).join(','));
+  ok('GET /orders/:id gives the kitchen the same view', !kvPrivate.some((k) => deepKeys(kvOrders).has(k)) && kvOrders.orderNumber === kvSeller.orderNumber && kvOrders.sellerTotals?.subtotal === kvSeller.sellerTotals.subtotal, kvPrivate.filter((k) => deepKeys(kvOrders).has(k)).join(','));
+  ok('the kitchen still gets the door and the customer\'s contact', kvSeller.deliveryAddress?.houseNumber === '9' && kvSeller.deliveryAddress?.addressLine1 === 'House 9 Street 5' && kvSeller.deliveryAddress?.area === 'Askari 11' && !!kvSeller.customer?.phone);
+  ok('the pin and postcode are not anywhere in the kitchen payload text', !/54000|31\.4|74\.4/.test(JSON.stringify(kvSeller)) && !/54000|74\.4/.test(JSON.stringify(kvOrders)));
+  const kvCustomer: any = await orderService.getOrderDetails(kvOrder.id, hoCust.id);
+  ok('the customer still gets their own full order, pin included', Number(kvCustomer.deliveryAddress?.latitude) === 31.4 && kvCustomer.customerId === hoCust.id);
 
   // a Nuray rider delivers it
   const riderUser = await mkUser('rider');
@@ -491,7 +524,7 @@ async function main() {
   const riderView: any = await orderService.getOrderDetails(limOrder.id, riderUser.id);
   ok('the customer sees where the rider is, but not what the rider is paid',
     custView.delivery?.riderLocation?.latitude === 31.5204 && !('riderFee' in custView.delivery) && !('riderLatitude' in custView.delivery), JSON.stringify(custView.delivery?.riderLocation ?? null));
-  ok('the kitchen sees neither', kitchenView.delivery?.riderLocation === null && !('riderFee' in kitchenView.delivery));
+  ok('the kitchen sees neither the rider\'s position nor their pay, anywhere in its view', !deepKeys(kitchenView).has('riderLocation') && !deepKeys(kitchenView).has('riderFee') && !deepKeys(kitchenView).has('riderBonus') && !deepKeys(kitchenView).has('riderLatitude'));
   const limFee = Number((await prisma.delivery.findUnique({ where: { id: limJob.id } }))!.riderFee);
   ok('the rider sees their own pay', limFee > 0 && riderView.delivery?.riderFee === limFee, `${riderView.delivery?.riderFee} vs ${limFee}`);
   const limCode = (await prisma.order.findUnique({ where: { id: limOrder.id }, select: { handoverCode: true } }))!.handoverCode!;
@@ -1538,6 +1571,8 @@ async function main() {
     const j1 = await jobFor(o1);
     ok("a new job goes straight to the rider who serves the kitchen's community", j1.riderId === rdA.rider.id && j1.status === 'assigned' && j1.assignmentMode === 'auto' && Number(j1.riderFee) >= 120, `${j1.riderId} ${j1.status} ${j1.assignmentMode}`);
     ok('the rider is told about it', (await prisma.notification.count({ where: { userId: rdA.user.id, title: 'New delivery assigned to you' } })) === 1);
+    const assignedNote = await prisma.notification.findFirst({ where: { userId: rdA.user.id, title: 'New delivery assigned to you' } });
+    ok("the stored notification names the area and city, not the customer's street or house", !!assignedNote && assignedNote.message.includes('deliver to A, Lahore') && !assignedNote.message.includes('House 9'), assignedNote?.message);
     const mine: any[] = await rSvc.getMyDeliveries(rdA.user.id);
     const mj = mine.find((d) => d.id === j1.id);
     ok("the assigned rider sees the customer's phone, house, landmark and note", !!mj?.customer?.phone && mj?.dropoffDetails?.houseNumber === '9' && mj?.dropoffDetails?.landmark === 'Green gate' && mj?.dropoffDetails?.instructions === 'Ring twice', JSON.stringify(mj?.customer));

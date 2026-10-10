@@ -17,12 +17,14 @@ import { assertOnMenu } from '../utils/menu';
 import { createStockAlert } from './stock-alert.service';
 import promotionService from './promotion.service';
 import { isAcceptingOrders, validateOrderTiming } from './availability.service';
-import { SELLER_DIRECT_METHODS } from '../utils/paymentCustody';
+import { ONLINE_GATEWAY_METHODS, SELLER_DIRECT_METHODS } from '../utils/paymentCustody';
+import { safepayGateway } from '../gateways/safepay.gateway';
 import ledgerService from './ledger.service';
 import { newHandoverCode } from './handover.service';
 import { cancelOpenDelivery, notifyDeliveryCancelled, CancelledDelivery } from './delivery-lifecycle.service';
 import { debitWallet } from './wallet.service';
 import { notify } from './notify.service';
+import sellerOrderService from './seller-order.service';
 
 /** The kitchen a customer pays directly by transfer (the first item's seller). */
 async function payeeSellerUserId(orderId: string): Promise<string | null> {
@@ -182,6 +184,12 @@ export class OrderService {
         select: { id: true },
       });
       if (existing) return this.loadPlacedOrder(existing.id);
+    }
+
+    // An online-payment order needs a working gateway. Without one it could never be paid and would sit
+    // until the stale-order sweep cancelled it, so refuse it now, before anything is reserved or charged.
+    if (ONLINE_GATEWAY_METHODS.includes(data.paymentMethod) && !safepayGateway.isConfigured()) {
+      throw new AppError('Online payment is not available right now. Please pay with cash or your wallet instead.', 503, 'GATEWAY_UNAVAILABLE');
     }
 
     // Verify customer exists
@@ -1097,6 +1105,12 @@ export class OrderService {
 
     const isOrderRider = !!viewerRider && order.delivery?.riderId === viewerRider.id;
     const isSeller = !!seller && order.items.some((i: { sellerId: string }) => i.sellerId === seller.id);
+    // A kitchen gets its own view of the order, never the customer's full row: no map pin, postcode,
+    // customer account id or internal keys (utils/kitchenOrderView.ts). A customer who also runs a
+    // kitchen, and an admin, are not treated as the kitchen here.
+    if (isSeller && !isAdmin && order.customerId !== userId) {
+      return sellerOrderService.getSellerOrderDetails(order.id, userId);
+    }
     // The customer is told their rider's first name.
     const riderUserId = order.delivery?.riderId
       ? (await prisma.rider.findUnique({ where: { id: order.delivery.riderId }, select: { userId: true } }))?.userId

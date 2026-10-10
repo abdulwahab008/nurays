@@ -385,7 +385,8 @@ export default function CheckoutPage() {
       } else {
         // The server refused it, so nothing was placed: a new attempt gets a new key.
         checkoutKeyRef.current = null;
-        showToast(error.response?.data?.error?.message || t('placeFailed'), 'error');
+        const code = error.response?.data?.error?.code;
+        showToast(code === 'GATEWAY_UNAVAILABLE' ? t('onlineUnavailable') : error.response?.data?.error?.message || t('placeFailed'), 'error');
       }
     } finally {
       setProcessing(false);
