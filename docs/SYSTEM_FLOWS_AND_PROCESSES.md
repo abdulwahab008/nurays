@@ -46,7 +46,7 @@ The link in the email carries the token; `POST /auth/verify-email` marks the tok
 
 ### Google (`POST /auth/google`)
 
-The client sends a Google access token. The server checks it with Google's `tokeninfo` endpoint (the token must have been issued to `GOOGLE_CLIENT_ID`) and requires `verified_email`. An existing account with that email is signed in and marked email-verified; if its email had never been verified, any password already set on it is cleared and old sessions are revoked (so nobody can pre-register a victim's email). Otherwise a new `customer` account is created with a placeholder phone. Without `GOOGLE_CLIENT_ID` it answers 503.
+The client sends a Google access token. The server checks it with Google's `tokeninfo` endpoint (the token must have been issued to `GOOGLE_CLIENT_ID`) and requires `verified_email`. An existing account with that email is signed in and marked email-verified; if its email had never been verified, any password already set on it is cleared and old sessions are revoked (so nobody can pre-register a victim's email). Otherwise a new `customer` account is created with a placeholder phone. Without `GOOGLE_CLIENT_ID` it answers 503. A native app sends `idToken` (a Google ID token) instead of `accessToken`; the server verifies its signature and claims itself against Google's published keys (audience `GOOGLE_CLIENT_ID` or one of `GOOGLE_NATIVE_CLIENT_IDS`) and then signs in the same way.
 
 ### Sessions
 

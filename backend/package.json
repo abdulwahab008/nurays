@@ -20,7 +20,7 @@
     "test": "jest",
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage",
-    "lint": "eslint src --max-warnings 168",
+    "lint": "eslint src --max-warnings 167",
     "lint:fix": "eslint src --fix",
     "load:seed": "ts-node scripts/load/seed-load.ts",
     "load:tokens": "ts-node scripts/load/mint-tokens.ts",

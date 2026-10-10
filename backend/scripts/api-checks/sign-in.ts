@@ -2,8 +2,9 @@
  * Sign-up and sign-in hardening as the outside sees it: which new passwords are refused, that a wrong
  * password and an unknown account look the same, that a password-reset link works once, how many wrong
  * passwords "confirm with your password" puts up with, how often an e-mail address can be changed, and
- * that staff need longer passwords. The limits per address, phone number and e-mail address are
- * relaxed on a development server (see live() in src/middleware/rateLimiter.ts), so they are not tried.
+ * that staff need longer passwords, and which Google sign-in requests are refused. The limits per
+ * address, phone number and e-mail address are relaxed on a development server (see live() in
+ * src/middleware/rateLimiter.ts), so they are not tried.
  */
 import { createHash, randomBytes } from 'crypto';
 import { Actor, call, login, makeUser, ok, PASSWORD, prisma, Reply, unique } from './lib';
@@ -139,5 +140,20 @@ export default async function signIn() {
     ok('a staff password of 12 characters is accepted', accepted.status === 200, said(accepted));
     const [replaced, former] = [await tryLogin(staff.email, 'Pewter-Lamp9'), await tryLogin(staff.email, TWELVE)];
     ok('and the staff member signs in with it only', replaced.status === 200 && former.status === 401, `${replaced.status} / ${former.status}`);
+  }
+
+  // 7. Google sign-in takes an access token (the web button) or an ID token (a native app): not both, not neither, and nothing forged
+  const longString = (c: string) => c.repeat(24);
+  const both = await call(null, 'POST', '/auth/google', { accessToken: longString('a'), idToken: longString('b') });
+  ok('Google sign-in with an access token and an ID token together is refused', both.status === 400 && both.code === 'VALIDATION_ERROR', said(both));
+  const neither = await call(null, 'POST', '/auth/google', {});
+  ok('and with neither', neither.status === 400 && neither.code === 'VALIDATION_ERROR', said(neither));
+  const tooLong = await call(null, 'POST', '/auth/google', { idToken: 'x'.repeat(9000) });
+  ok('an ID token beyond any real size is refused before it is looked at', tooLong.status === 400 && tooLong.code === 'VALIDATION_ERROR', said(tooLong));
+  const unsigned = `${Buffer.from('{"alg":"none","typ":"JWT"}').toString('base64url')}.${Buffer.from('{"iss":"https://accounts.google.com","email":"victim@example.com","email_verified":true}').toString('base64url')}.`;
+  for (const [what, idToken] of [['junk', 'this.is-not.a-jwt'], ['an unsigned token that claims a verified Google e-mail', unsigned]] as const) {
+    const r = await call(null, 'POST', '/auth/google', { idToken });
+    // 401 when a Google client is configured; 503 while none is (and the token is never looked at): either way nobody is signed in
+    ok(`an ID token that is ${what} signs nobody in`, (r.status === 401 || r.status === 503) && !r.body?.data?.tokens, said(r));
   }
 }

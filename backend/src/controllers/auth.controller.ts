@@ -145,13 +145,14 @@ export const getCurrentUser = async (req: Request, res: Response) => {
 };
 
 export const loginWithGoogle = async (req: Request, res: Response) => {
-  const { accessToken } = req.body;
+  const { accessToken, idToken } = req.body;
 
-  if (!accessToken) {
-    throw new AppError('Google access token is required', 400, 'MISSING_GOOGLE_TOKEN');
+  if (!accessToken && !idToken) {
+    throw new AppError('A Google access token or ID token is required', 400, 'MISSING_GOOGLE_TOKEN');
   }
 
-  const result = await googleAuthService.authenticateWithGoogle(accessToken);
+  // The web button sends an access token; a native app's Google sign-in produces an ID token.
+  const result = idToken ? await googleAuthService.authenticateWithGoogleIdToken(idToken) : await googleAuthService.authenticateWithGoogle(accessToken);
 
   res.status(200).json({
     success: true,

@@ -35,6 +35,10 @@ Code: `backend/src/services/auth.service.ts`, `utils/jwt.ts`, `middleware/auth.m
   `verified_email`. In production an unset `GOOGLE_CLIENT_ID` makes Google sign-in answer 503; in development the
   audience check is skipped when it is unset. If the matching account's email was never verified, its password is
   dropped and its sessions are voided, so someone who pre-registered a victim's email cannot keep access.
+  A native app sends a Google *ID token* instead, which the server verifies itself (`utils/google-id-token.ts`):
+  RS256 only (never `none`, never a symmetric algorithm), the signature against Google's published keys, Google as
+  issuer, an audience in `GOOGLE_CLIENT_ID` or `GOOGLE_NATIVE_CLIENT_IDS`, not expired, e-mail verified. With no client
+  id configured an ID token is always refused, development included.
 - **Privileged roles** (`admin`, `hub_manager`) cannot be self-registered: the register schema only accepts
   `customer`, `seller` and `rider`. Admins are created with `backend/scripts/create-admin.js`; hub managers are
   assigned by an admin.

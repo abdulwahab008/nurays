@@ -88,4 +88,10 @@ export const resetPasswordSchema = z.object({
   password: z.string().min(8, 'Password must be at least 8 characters').max(200),
 });
 
-export const googleLoginSchema = z.object({ accessToken: z.string().min(10).max(4096) });
+// Exactly one proof of who is signing in: the web button's access token, or a native app's ID token (a signed JWT).
+export const googleLoginSchema = z
+  .object({
+    accessToken: z.string().min(10).max(4096).optional(),
+    idToken: z.string().min(10).max(8192).optional(),
+  })
+  .refine((body) => (body.accessToken === undefined) !== (body.idToken === undefined), { message: 'Send either accessToken or idToken' });
