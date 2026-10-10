@@ -39,6 +39,7 @@ import { useT } from '@/lib/i18n';
 import { commonMessages } from '@/lib/i18n/messages/common';
 import { checkoutMessages, richText } from '@/lib/i18n/messages/checkout';
 import { ExternalLink } from '@/components/ExternalLink';
+import { useDeliveryEstimate } from '@/lib/hooks/use-delivery-estimate';
 
 type CopyField = 'iban' | 'jazzcash' | 'easypaisa';
 
@@ -81,11 +82,8 @@ export default function CheckoutPage() {
   const [copiedField, setCopiedField] = useState<CopyField | null>(null);
   const [showClearModal, setShowClearModal] = useState(false);
   const [clearingCart, setClearingCart] = useState(false);
-  const [deliveryEstimate, setDeliveryEstimate] = useState<{
-    deliveryFee: number;
-    isFree: boolean;
-    reason: string | null;
-  } | null>(null);
+  // Bumped whenever the tray changed on the server, so the delivery estimate is asked for again.
+  const [trayVersion, setTrayVersion] = useState(0);
   const [promotionsByProductId, setPromotionsByProductId] = useState<Record<string, CatalogPromotion[]>>({});
 
   const sidebarItems = CUSTOMER_SIDEBAR_ITEMS;
@@ -108,16 +106,13 @@ export default function CheckoutPage() {
       .catch(() => setWalletBalance(null));
   }, [isAuthenticated]);
 
-  useEffect(() => {
-    if (!selectedAddress || !cart?.items?.length) {
-      setDeliveryEstimate(null);
-      return;
-    }
-    cartService
-      .getDeliveryFeeEstimate(selectedAddress)
-      .then((res) => setDeliveryEstimate(res.data))
-      .catch(() => setDeliveryEstimate(null));
-  }, [selectedAddress, cart?.items?.length]);
+  // What delivery to the chosen address costs is the server's to say (the kitchen, the address and the order's amount
+  // decide it); nothing is assumed while it is not known.
+  const { estimate: deliveryEstimate, pending: estimatePending } = useDeliveryEstimate({
+    enabled: !loading && !!cart?.items?.length,
+    addressId: selectedAddress || null,
+    version: trayVersion,
+  });
 
   const loadData = async () => {
     setLoading(true);
@@ -238,6 +233,7 @@ export default function CheckoutPage() {
     if (newQty <= 0) {
       try {
         await cartService.removeCartItem(itemId);
+        setTrayVersion((v) => v + 1);
         useCartStore.getState().removeItem(itemId);
         const fresh = await cartService.getCart();
         setCart(fresh.data);
@@ -268,7 +264,6 @@ export default function CheckoutPage() {
           summary: {
             ...prev.summary,
             subtotal,
-            total: subtotal + (prev.summary.deliveryFee || 0) - (prev.summary.discount || 0),
             totalItems: nextItems.reduce((acc, it) => acc + it.quantity, 0),
           },
         };
@@ -276,6 +271,7 @@ export default function CheckoutPage() {
       useCartStore.getState().updateItem(itemId, newQty);
 
       await cartService.updateCartItem(itemId, newQty);
+      setTrayVersion((v) => v + 1);
     } catch (err: any) {
       showToast(err?.response?.data?.error?.message || t('couldNotUpdatePortion'), 'error');
       const fresh = await cartService.getCart();
@@ -448,7 +444,10 @@ export default function CheckoutPage() {
     return sum + unitPrice * item.quantity;
   }, 0);
   const promotionSavings = Math.max(0, cart.summary.subtotal - discountedSubtotal);
-  const effectiveDeliveryFee = deliveryEstimate?.isFree ? 0 : (deliveryEstimate?.deliveryFee ?? 0);
+  // Delivery is added to the total only once the server has said what it costs to the chosen address.
+  const deliveryKnown = !!deliveryEstimate && deliveryEstimate.isDeliverable !== false;
+  const notDeliverable = !!deliveryEstimate && deliveryEstimate.isDeliverable === false;
+  const effectiveDeliveryFee = deliveryKnown && !deliveryEstimate.isFree ? deliveryEstimate.deliveryFee : 0;
   const promoDiscountAmount = appliedPromo?.discountAmount || 0;
   // Exactly what the server charges (priceOrder in order.service.ts): GST on the goods after
   // all discounts, the total in whole rupees, so this is the amount the rider collects.
@@ -1233,16 +1232,25 @@ export default function CheckoutPage() {
                   </div>
                 )}
 
-                <div className="flex justify-between text-slate-600">
+                <div className={`flex justify-between text-slate-600 transition-opacity ${estimatePending && deliveryEstimate ? 'opacity-60' : ''}`}>
                   <span>{t('estimatedDelivery')}</span>
                   <span>
-                    {deliveryEstimate?.isFree || effectiveDeliveryFee === 0 ? (
+                    {!selectedAddress ? (
+                      <span className="font-medium text-slate-500">{t('deliveryChooseAddress')}</span>
+                    ) : notDeliverable ? (
+                      <span className="font-bold text-rose-600">{t('deliveryNotAvailable')}</span>
+                    ) : !deliveryEstimate ? (
+                      <span className="font-medium text-slate-500">{estimatePending ? t('deliveryWorkingOut') : t('deliveryAtPlacing')}</span>
+                    ) : deliveryEstimate.isFree ? (
                       <span className="font-bold text-emerald-600">{t('freeCaps')}</span>
                     ) : (
                       <span className="font-semibold text-slate-900">{formatPrice(effectiveDeliveryFee)}</span>
                     )}
                   </span>
                 </div>
+                {notDeliverable && deliveryEstimate?.reason && (
+                  <p className="text-[11px] text-rose-600 -mt-1">{deliveryEstimate.reason}</p>
+                )}
 
                 <div className="flex justify-between text-slate-500 text-[11px]">
                   <span>{t('salesTax5')}</span>
@@ -1251,8 +1259,8 @@ export default function CheckoutPage() {
 
                 <div className="pt-3 border-t border-slate-200/80 flex items-baseline justify-between">
                   <div>
-                    <span className="text-sm font-black text-slate-900 block">{t('totalPayable')}</span>
-                    <span className="text-[11px] text-slate-400">{t('includesDeliveryTax')}</span>
+                    <span className="text-sm font-black text-slate-900 block">{deliveryKnown ? t('totalPayable') : t('totalBeforeDelivery')}</span>
+                    <span className="text-[11px] text-slate-400">{deliveryKnown ? t('includesDeliveryTax') : t('deliveryAddedWhenPlaced')}</span>
                   </div>
                   <span className="text-xl font-black text-[#FF5500]">{formatPrice(totalPayable)}</span>
                 </div>
@@ -1261,7 +1269,7 @@ export default function CheckoutPage() {
               {/* Place Order CTA Button */}
               <Button
                 type="button"
-                disabled={processing || !selectedAddress}
+                disabled={processing || !selectedAddress || notDeliverable || (estimatePending && !deliveryEstimate)}
                 onClick={handleCreateOrder}
                 className="w-full py-3.5 bg-[#FF5500] hover:bg-[#e04400] text-white font-black text-sm rounded-2xl shadow-md transition-all active:scale-[0.99] flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
               >
@@ -1272,7 +1280,7 @@ export default function CheckoutPage() {
                   </>
                 ) : (
                   <>
-                    <span>{t('placeOrder', { amount: formatPrice(totalPayable) })}</span>
+                    <span>{deliveryKnown ? t('placeOrder', { amount: formatPrice(totalPayable) }) : t('placeOrderPlain')}</span>
                     <ArrowRight className="rtl:-scale-x-100 w-4 h-4" />
                   </>
                 )}

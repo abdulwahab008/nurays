@@ -7,8 +7,6 @@ import {
   ShoppingCart,
   Trash2,
   Store,
-  Zap,
-  Package,
   Truck,
   Tag,
   ShoppingBag,
@@ -25,8 +23,6 @@ import {
   Flame,
   Snowflake,
   ArrowRight,
-  Clock,
-  AlertCircle,
 } from 'lucide-react';
 import { cartService, CartResponse } from '@/lib/services/cart.service';
 import { formatPrice, imageVariant, orderTotals } from '@/lib/utils';
@@ -36,8 +32,8 @@ import { useCartStore, CartItem as LocalCartItem } from '@/lib/store/cart-store'
 import { DashboardLayout, CUSTOMER_SIDEBAR_ITEMS } from '@/components/layout/DashboardShell';
 import { apiClient } from '@/lib/api-client';
 import { useToast } from '@/components/ui/toast';
-import { addressService } from '@/lib/services/address.service';
 import { ConfirmModal } from '@/components/ui/ConfirmModal';
+import { DEFAULT_ADDRESS, useDeliveryEstimate } from '@/lib/hooks/use-delivery-estimate';
 import { useT } from '@/lib/i18n';
 import { commonMessages } from '@/lib/i18n/messages/common';
 import { checkoutMessages, richText } from '@/lib/i18n/messages/checkout';
@@ -94,9 +90,6 @@ function localItemsToCartResponse(localItems: LocalCartItem[]): CartResponse {
     })),
     summary: {
       subtotal,
-      deliveryFee: 0,
-      discount: 0,
-      total: subtotal,
       totalItems,
       totalSellers: 1,
     },
@@ -125,11 +118,8 @@ export default function CartPage() {
   const [cartPromoInput, setCartPromoInput] = useState('');
   const [promoValidating, setPromoValidating] = useState(false);
   const [promotionsByProductId, setPromotionsByProductId] = useState<Record<string, CatalogPromotion[]>>({});
-  const [deliveryEstimate, setDeliveryEstimate] = useState<{
-    deliveryFee: number;
-    isFree: boolean;
-    reason: string | null;
-  } | null>(null);
+  // Bumped whenever the tray changed on the server, so the delivery estimate is asked for again.
+  const [trayVersion, setTrayVersion] = useState(0);
   const [showClearModal, setShowClearModal] = useState(false);
   const [clearingCart, setClearingCart] = useState(false);
 
@@ -176,29 +166,6 @@ export default function CartPage() {
   useEffect(() => {
     loadCart();
   }, [isAuthenticated]);
-
-  useEffect(() => {
-    if (!cart?.items?.length) {
-      setDeliveryEstimate(null);
-      return;
-    }
-    let cancelled = false;
-    (async () => {
-      try {
-        const addrRes = await addressService.getAddresses();
-        const defaultAddr = addrRes.data?.find((a) => a.isDefault) || addrRes.data?.[0];
-        if (cancelled || !defaultAddr) {
-          if (!defaultAddr) setDeliveryEstimate(null);
-          return;
-        }
-        const feeRes = await cartService.getDeliveryFeeEstimate(defaultAddr.id);
-        if (!cancelled) setDeliveryEstimate(feeRes.data);
-      } catch {
-        if (!cancelled) setDeliveryEstimate(null);
-      }
-    })();
-    return () => { cancelled = true; };
-  }, [cart?.items?.length]);
 
   const loadCart = async () => {
     setLoading(true);
@@ -324,7 +291,6 @@ export default function CartPage() {
           summary: {
             ...prev.summary,
             subtotal,
-            total: subtotal + (prev.summary.deliveryFee || 0) - (prev.summary.discount || 0),
             totalItems: nextItems.reduce((acc, it) => acc + it.quantity, 0),
           },
         };
@@ -334,6 +300,7 @@ export default function CartPage() {
       const token = apiClient.getAccessToken();
       if (token || isAuthenticated) {
         await cartService.updateCartItem(itemId, quantity);
+        setTrayVersion((v) => v + 1);
       }
     } catch (error: any) {
       showToast(error?.response?.data?.error?.message || t('couldNotUpdateQty'), 'error');
@@ -374,7 +341,6 @@ export default function CartPage() {
           summary: {
             ...prev.summary,
             subtotal,
-            total: subtotal + (prev.summary.deliveryFee || 0) - (prev.summary.discount || 0),
             totalItems: nextItems.reduce((acc, it) => acc + it.quantity, 0),
           },
         };
@@ -384,6 +350,7 @@ export default function CartPage() {
       const token = apiClient.getAccessToken();
       if (token || isAuthenticated) {
         await cartService.removeCartItem(itemId);
+        setTrayVersion((v) => v + 1);
       }
     } catch (error: any) {
       showToast(error?.response?.data?.error?.message || t('failedRemoveItem'), 'error');
@@ -425,14 +392,26 @@ export default function CartPage() {
   }, [cart, promotionsByProductId, hasItems]);
 
   const promotionSavings = hasItems ? Math.max(0, cart.summary.subtotal - discountedSubtotal) : 0;
-  const deliveryFee = deliveryEstimate ? deliveryEstimate.deliveryFee : (discountedSubtotal >= 800 ? 0 : 80);
-  const isFreeDelivery = deliveryEstimate ? deliveryEstimate.isFree : discountedSubtotal >= 800;
-  const { gst, total: displayTotal } = orderTotals(discountedSubtotal - (cart?.summary.discount || 0), isFreeDelivery ? 0 : deliveryFee);
 
-  // Free delivery threshold progress (target Rs 800)
-  const freeDeliveryThreshold = 800;
-  const freeDeliveryProgress = Math.min(100, Math.round((discountedSubtotal / freeDeliveryThreshold) * 100));
-  const freeDeliveryRemaining = Math.max(0, freeDeliveryThreshold - discountedSubtotal);
+  // What delivery costs is the server's to say (it depends on the kitchen, the address and the order's amount), so nothing
+  // is assumed here: with no sign-in, no saved address or no answer the page says it is worked out at checkout.
+  const { estimate: deliveryEstimate, pending: estimatePending } = useDeliveryEstimate({
+    enabled: isAuthenticated && !loading && !!hasItems,
+    addressId: DEFAULT_ADDRESS,
+    version: trayVersion,
+  });
+  const deliveryKnown = !!deliveryEstimate && deliveryEstimate.isDeliverable !== false;
+  const isFreeDelivery = deliveryKnown && deliveryEstimate.isFree;
+  const deliveryFee = deliveryKnown && !deliveryEstimate.isFree ? deliveryEstimate.deliveryFee : 0;
+  const { gst, total: displayTotal } = orderTotals(discountedSubtotal, deliveryFee);
+
+  // Progress towards free delivery, only for a kitchen that has an order amount which waives its fee, and measured the
+  // way the server measures it.
+  const offeredThreshold = deliveryKnown ? deliveryEstimate.freeDeliveryThreshold : null;
+  const freeDeliveryThreshold = offeredThreshold != null && offeredThreshold > 0 ? offeredThreshold : null;
+  const countedForDelivery = deliveryEstimate?.deliverySubtotal ?? discountedSubtotal;
+  const freeDeliveryProgress = freeDeliveryThreshold ? Math.min(100, Math.floor((countedForDelivery / freeDeliveryThreshold) * 100)) : 0;
+  const freeDeliveryRemaining = freeDeliveryThreshold ? Math.max(0, freeDeliveryThreshold - countedForDelivery) : 0;
 
   if (loading) {
     return (
@@ -595,35 +574,40 @@ export default function CartPage() {
           </div>
         )}
 
-        {/* Free Delivery Unlocker Progress Bar */}
-        <div className="bg-white rounded-2xl p-4 border border-slate-200/80 shadow-2xs">
-          <div className="flex items-center justify-between gap-3 text-xs mb-2">
-            <span className="font-bold text-slate-800 flex items-center gap-1.5">
-              <Truck className="w-4 h-4 text-[#FF5500]" />
-              {isFreeDelivery ? (
-                <span className="text-emerald-700 font-extrabold">{t('unlockedFree')}</span>
-              ) : (
-                <span>
-                  {richText(t('addMoreForFree'), {
-                    amount: <strong className="text-slate-950 font-black">{formatPrice(freeDeliveryRemaining)}</strong>,
-                    free: <span className="text-[#FF5500] font-bold">{t('freeDelivery')}</span>,
-                  })}
-                </span>
-              )}
-            </span>
-            <span className="font-extrabold text-slate-500">{freeDeliveryProgress}%</span>
+        {/* Free Delivery Unlocker Progress Bar: only for a kitchen that has an order amount which waives its delivery fee */}
+        {freeDeliveryThreshold != null && (
+          <div
+            className={`bg-white rounded-2xl p-4 border border-slate-200/80 shadow-2xs transition-opacity ${estimatePending ? 'opacity-60' : ''}`}
+            aria-busy={estimatePending}
+          >
+            <div className="flex items-center justify-between gap-3 text-xs mb-2">
+              <span className="font-bold text-slate-800 flex items-center gap-1.5">
+                <Truck className="w-4 h-4 text-[#FF5500]" />
+                {isFreeDelivery ? (
+                  <span className="text-emerald-700 font-extrabold">{t('unlockedFree')}</span>
+                ) : (
+                  <span>
+                    {richText(t('addMoreForFree'), {
+                      amount: <strong className="text-slate-950 font-black">{formatPrice(freeDeliveryRemaining)}</strong>,
+                      free: <span className="text-[#FF5500] font-bold">{t('freeDelivery')}</span>,
+                    })}
+                  </span>
+                )}
+              </span>
+              <span className="font-extrabold text-slate-500">{freeDeliveryProgress}%</span>
+            </div>
+            <div className="w-full h-2 rounded-full bg-slate-100 overflow-hidden">
+              <div
+                className={`h-full rounded-full transition-all duration-500 ${
+                  isFreeDelivery
+                    ? 'bg-gradient-to-r from-emerald-500 to-teal-500'
+                    : 'bg-gradient-to-r from-amber-400 to-[#FF5500]'
+                }`}
+                style={{ width: `${freeDeliveryProgress}%` }}
+              />
+            </div>
           </div>
-          <div className="w-full h-2 rounded-full bg-slate-100 overflow-hidden">
-            <div
-              className={`h-full rounded-full transition-all duration-500 ${
-                isFreeDelivery
-                  ? 'bg-gradient-to-r from-emerald-500 to-teal-500'
-                  : 'bg-gradient-to-r from-amber-400 to-[#FF5500]'
-              }`}
-              style={{ width: `${freeDeliveryProgress}%` }}
-            />
-          </div>
-        </div>
+        )}
 
         {/* Main Grid: Left Cart Items, Right Order Summary */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
@@ -815,15 +799,24 @@ export default function CartPage() {
                   <span className="text-emerald-700 font-bold uppercase text-[11px]">{tc('free')}</span>
                 </div>
 
-                <div className="flex justify-between text-slate-600 font-medium">
+                <div className={`flex justify-between text-slate-600 font-medium transition-opacity ${estimatePending ? 'opacity-60' : ''}`}>
                   <span className="flex items-center gap-1.5">
                     <Truck className="w-3.5 h-3.5 text-slate-400" />
                     <span>{t('estimatedDelivery')}</span>
                   </span>
-                  <span className={`font-bold ${isFreeDelivery ? 'text-emerald-600' : 'text-slate-900'}`}>
-                    {isFreeDelivery ? t('freeCaps') : formatPrice(deliveryFee)}
-                  </span>
+                  {!deliveryEstimate ? (
+                    <span className="font-semibold text-slate-500">{t('deliveryAtCheckout')}</span>
+                  ) : !deliveryKnown ? (
+                    <span className="font-bold text-rose-600">{t('deliveryNotAvailable')}</span>
+                  ) : (
+                    <span className={`font-bold ${isFreeDelivery ? 'text-emerald-600' : 'text-slate-900'}`}>
+                      {isFreeDelivery ? t('freeCaps') : formatPrice(deliveryFee)}
+                    </span>
+                  )}
                 </div>
+                {deliveryEstimate && !deliveryKnown && deliveryEstimate.reason && (
+                  <p className="text-[11px] text-rose-600 -mt-1">{deliveryEstimate.reason}</p>
+                )}
 
                 <div className="flex justify-between text-slate-600 font-medium">
                   <span>{t('salesTaxRegional')}</span>
@@ -881,11 +874,11 @@ export default function CartPage() {
               {/* Total Row */}
               <div className="pt-3 border-t border-slate-100">
                 <div className="flex items-baseline justify-between">
-                  <span className="text-sm font-bold text-slate-900">{t('totalPayable')}</span>
+                  <span className="text-sm font-bold text-slate-900">{deliveryKnown ? t('totalPayable') : t('totalBeforeDelivery')}</span>
                   <span className="text-2xl font-black text-slate-950">{formatPrice(displayTotal)}</span>
                 </div>
                 <span className="text-[11px] text-slate-400 block mt-0.5">
-                  {t('includesAll')}
+                  {deliveryKnown ? t('includesAll') : t('deliveryAddedAtCheckout')}
                 </span>
               </div>
 

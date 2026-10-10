@@ -94,6 +94,13 @@ export interface DeliveryFeeResult {
   distanceKm: number | null;
   /** How a Nuray-rider fee was priced (absent when the kitchen delivers itself). */
   pricing?: 'same_community' | 'community_pair' | 'cross_community' | 'distance';
+  /**
+   * When the kitchen delivers itself and has a rule that waives its fee above an order amount for this buyer: that
+   * amount, both while the fee is being charged (the amount still to reach) and when the order has reached it (the
+   * amount that waived the fee). Absent for a Nuray rider's fee, for a fee that is zero for another reason, and
+   * when nothing waives it.
+   */
+  freeAbove?: number;
 }
 
 /**
@@ -277,7 +284,7 @@ function resolveCommunityDelivery(
 
   const freeAbove = toNumber(rule.freeAbove);
   if (freeAbove != null && subtotal != null && subtotal >= freeAbove) {
-    return { deliverable: true, fee: 0, reason: `Free delivery above Rs ${freeAbove}`, distanceKm };
+    return { deliverable: true, fee: 0, reason: `Free delivery above Rs ${freeAbove}`, distanceKm, freeAbove };
   }
 
   return { deliverable: true, fee: Math.max(0, toNumber(rule.fee) ?? 0), reason: null, distanceKm };
@@ -289,6 +296,30 @@ function resolveCommunityDelivery(
  * subtotal, if passed, enables minOrderAmountForDelivery and freeDeliveryThreshold checks.
  */
 export function getDeliveryFeeForSeller(
+  seller: SellerDeliveryPolicy,
+  address: AddressForDelivery,
+  originLat?: number | null,
+  originLng?: number | null,
+  subtotal?: number,
+  options: DeliveryFeeOptions = {}
+): DeliveryFeeResult {
+  const result = deliveryFeeForSeller(seller, address, originLat, originLng, subtotal, options);
+  // A fee that is being charged by the kitchen: say what would make it go away, so a screen can show real progress.
+  // (A fee that amount has already waived says so itself, where it was waived.)
+  if (!result.deliverable || result.fee <= 0 || result.pricing) return result;
+  const above = freeAboveFor(seller, address);
+  return above != null ? { ...result, freeAbove: above } : result;
+}
+
+/** The order amount above which this kitchen waives its own fee for this buyer: the buyer's community terms when the kitchen has any for it, otherwise its own threshold. */
+function freeAboveFor(seller: SellerDeliveryPolicy, address: AddressForDelivery): number | null {
+  const rules = Array.isArray(seller.communityDeliveries) ? seller.communityDeliveries : [];
+  const buyerCommunityId = address.communityId ?? null;
+  const rule = buyerCommunityId && rules.length > 0 ? rules.find((r) => r.communityId === buyerCommunityId) : undefined;
+  return toNumber(rule ? rule.freeAbove : seller.freeDeliveryThreshold);
+}
+
+function deliveryFeeForSeller(
   seller: SellerDeliveryPolicy,
   address: AddressForDelivery,
   originLat?: number | null,
@@ -354,7 +385,7 @@ export function getDeliveryFeeForSeller(
 
   const freeThreshold = seller.freeDeliveryThreshold != null ? Number(seller.freeDeliveryThreshold) : null;
   if (freeThreshold != null && subtotal != null && subtotal >= freeThreshold) {
-    return { deliverable: true, fee: 0, reason: `Free delivery above Rs ${freeThreshold}`, distanceKm };
+    return { deliverable: true, fee: 0, reason: `Free delivery above Rs ${freeThreshold}`, distanceKm, freeAbove: freeThreshold };
   }
 
   // Free if customer is within seller's free-delivery radius (from business/hub location)

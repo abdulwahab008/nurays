@@ -273,9 +273,9 @@ All routes need authentication (`cart.routes.ts`, `cart.validator.ts`). One cart
 
 | Method and path | Body / query | Returns |
 |---|---|---|
-| `GET /cart` | none | the cart with items grouped and priced |
+| `GET /cart` | none | `{ items, summary: { subtotal, totalItems, totalSellers }, activeSeller }`: the dishes at the kitchens' prices. The summary carries no delivery fee, discount or total: those are worked out where they are known (the estimate below, and checkout) |
 | `GET /cart/validate` | none | checkout validation of the cart (stock, availability, rules) |
-| `GET /cart/delivery-estimate` | query `addressId` (required, else 400 `VALIDATION_ERROR`) | delivery fee estimate for that address |
+| `GET /cart/delivery-estimate` | query `addressId` (required, else 400 `VALIDATION_ERROR`) | what delivering the cart to that address costs the customer, worked out as an order for the same dishes would be: `{ deliveryFee, isFree, isDeliverable, reason, kitchenPaysDelivery, freeDeliveryThreshold, deliverySubtotal }`. `deliverySubtotal` is the amount the kitchen's rules were checked against: the dishes at today's prices after the kitchen's own deals, before any voucher code. `freeDeliveryThreshold` is the order amount at which a self-delivering kitchen's fee is waived (still to reach while the fee is charged, reached once it is waived) and is `null` when no rule says so or a Nuray rider delivers (the kitchen pays that fee); progress is `deliverySubtotal / freeDeliveryThreshold`. `isDeliverable: false` means the kitchen does not deliver to that address (`reason` says why) and `deliveryFee` is then 0 and must not be shown as free |
 | `POST /cart/items` | `productId` (id or slug), `quantity` (>=1); optional `variantId` (uuid), `stockType`, `hubId`, `clearAndAdd` (empty the cart first) | 201 the item |
 | `PATCH /cart/items/:id` | optional `quantity` (>=0; 0 removes the item), `stockType`, `hubId` | the item, or a message when removed |
 | `DELETE /cart/items/:id` | none | message |
