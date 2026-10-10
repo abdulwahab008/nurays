@@ -85,7 +85,7 @@ backend/src/
   services/         business logic and all database work (order, payment, refund, ledger, rider-ledger, hub, ...)
   validators/       zod schemas, one file per area
   middleware/       auth (authenticate, authorize, requireSeller, ...), validate, errorHandler, rate limits, audit
-  utils/            pure helpers: pricing.ts, deliveryFee.ts, ranking.ts, paymentCustody.ts, jwt.ts, logger.ts
+  utils/            pure helpers: pricing.ts, orderPricing.ts, deliveryFee.ts, ranking.ts, paymentCustody.ts, jwt.ts, logger.ts
   config/           env.ts (validation), database.ts (Prisma), redis.ts, socket.ts, sentry.ts
   gateways/         payment gateways (safepay, jazzcash, easypaisa, bank)
   jobs/             queue.ts (BullMQ or in-process), scheduler.ts, email and notification jobs

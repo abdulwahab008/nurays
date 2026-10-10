@@ -6,7 +6,8 @@ import realtimeOrderService from './realtime-order.service';
 import { SELLER_COMMUNITY_DELIVERY_SELECT } from '../utils/sellerDeliverySelect';
 import { communityService } from './community.service';
 import { eligibleSubtotalForPromotion, isItemEligibleForPromotion } from './promotion.service';
-import { allocateDiscount, priceOrder } from '../utils/pricing';
+import { priceOrder } from '../utils/pricing';
+import { codeDiscount, priceLines, shareCodeDiscount, splitDeliveryFees, type KitchenDeliveryFee } from '../utils/orderPricing';
 import { allocateHubStock } from './hub-allocation.service';
 import { DeliveryFeeShare } from '../utils/deliveryEarnings';
 import { getDeliveryFeeForSeller } from '../utils/deliveryFee';
@@ -62,10 +63,6 @@ export class OrderPlacement {
     }
   }
 
-  /**
-   * Calculate delivery fee.
-   * Free when: self_pickup/hub_pickup, or subtotal >= 2000, or delivery address is in all sellers' freeDeliveryAreas.
-   */
   /**
    * Create order from items
    */
@@ -164,7 +161,6 @@ export class OrderPlacement {
       fulfillmentType: string;
       hubId: string | null;
     }> = [];
-    let subtotal = 0;
     const sellersInOrder = new Map<string, any>();
 
     for (const item of data.items) {
@@ -307,21 +303,15 @@ export class OrderPlacement {
           quantity: i.quantity,
         }))
       );
-    orderItems.forEach((item, i) => {
-      const discountedUnitPrice = discountedUnitPrices[i];
-      item.unitPrice = discountedUnitPrice;
-      item.totalPrice = discountedUnitPrice * item.quantity;
-      const commissionRate = Number(item.commissionRate) / 100;
-      item.commissionAmount = item.totalPrice * commissionRate;
-      item.sellerPayout = item.totalPrice - item.commissionAmount;
-      subtotal += item.totalPrice;
-    });
+    const priced = priceLines(orderItems, discountedUnitPrices);
+    orderItems.forEach((item, i) => Object.assign(item, priced.lines[i]));
+    const subtotal = priced.subtotal;
 
     // Calculate delivery fee: per-seller (free in their areas, fixed or distance-based outside), then sum
     let deliveryFee: number;
     // What the kitchen pays Nuray for a Nuray rider's delivery (the customer pays no delivery fee for it).
     let sellerDeliveryCharge = 0;
-    const deliveryFeeBreakdown: DeliveryFeeShare[] = [];
+    let deliveryFeeBreakdown: DeliveryFeeShare[] = [];
     if (data.deliveryType === 'home_delivery' && !deliveryAddress) {
       // The delivery address carries the buyer's community, which decides whether
       // each seller delivers there and at what fee — it can't be skipped.
@@ -376,7 +366,7 @@ export class OrderPlacement {
       communityUnresolved: !resolvedCommunityId,
       };
       const pricing = await getPlatformDeliveryPricing();
-      let total = 0;
+      const kitchenFees: KitchenDeliveryFee[] = [];
       for (const seller of sellers) {
         const hubId = sellerToHubId.get(seller.id) ?? null;
         const hub = hubId ? hubById.get(hubId) : null;
@@ -390,19 +380,12 @@ export class OrderPlacement {
           throw new AppError(`${seller.businessName}: ${result.reason}`, 400, 'ADDRESS_NOT_DELIVERABLE');
         }
         // A fee priced by Nuray (result.pricing) is for a Nuray rider: the kitchen pays it.
-        const paidByKitchen = result.pricing != null;
-        if (paidByKitchen) sellerDeliveryCharge += result.fee;
-        else total += result.fee;
-        if (result.fee > 0) {
-          deliveryFeeBreakdown.push({
-            sellerId: seller.id,
-            fee: result.fee,
-            provider: paidByKitchen ? 'platform' : 'self',
-            paidBy: paidByKitchen ? 'seller' : 'customer',
-          });
-        }
+        kitchenFees.push({ sellerId: seller.id, fee: result.fee, pricedByPlatform: result.pricing != null });
       }
-      deliveryFee = total;
+      const split = splitDeliveryFees(kitchenFees);
+      deliveryFee = split.deliveryFee;
+      sellerDeliveryCharge = split.sellerDeliveryCharge;
+      deliveryFeeBreakdown = split.breakdown;
     } else {
       // Every branch above prices the order; reaching here means there is nothing to price.
       throw new AppError('Order has no items', 400, 'NO_ITEMS');
@@ -463,16 +446,7 @@ export class OrderPlacement {
             throw new AppError(`Minimum order amount is ${promotion.minOrderAmount}`, 400, 'MIN_ORDER_NOT_MET');
           }
           {
-            if (promotion.discountType === 'percentage') {
-              discountAmount = eligibleSubtotal * (Number(promotion.discountValue) / 100);
-              if (promotion.maxDiscountAmount) {
-                discountAmount = Math.min(discountAmount, Number(promotion.maxDiscountAmount));
-              }
-            } else {
-              discountAmount = Number(promotion.discountValue);
-            }
-            // Never let a discount exceed the part of the order it applies to.
-            discountAmount = Math.min(discountAmount, eligibleSubtotal);
+            discountAmount = codeDiscount(promotion, eligibleSubtotal);
             promotionId = promotion.id;
 
             // Record each eligible item's share of the discount (to the cent), so a later partial
@@ -480,18 +454,10 @@ export class OrderPlacement {
             const eligibleItems = orderItems.filter((i) =>
               isItemEligibleForPromotion(promotion, { productId: i.productId, sellerId: i.sellerId, total: i.totalPrice })
             );
-            const shares = allocateDiscount(eligibleItems.map((i) => ({ total: i.totalPrice })), discountAmount);
-            eligibleItems.forEach((i, idx) => {
-              i.promoDiscount = shares[idx];
-              // A seller's own code is funded by the seller: their share (and the commission
-              // on it) is worked out on what the customer actually pays for the item. A
-              // platform code is funded by the platform, so the seller's share is unchanged.
-              if (promotion.sellerId) {
-                const net = i.totalPrice - i.promoDiscount;
-                i.commissionAmount = net * (Number(i.commissionRate) / 100);
-                i.sellerPayout = net - i.commissionAmount;
-              }
-            });
+            // A seller's own code is funded by the seller: their share (and the commission on it) is worked
+            // out on what the customer actually pays for the item.
+            const shares = shareCodeDiscount(eligibleItems, discountAmount, !!promotion.sellerId);
+            eligibleItems.forEach((i, idx) => Object.assign(i, shares[idx]));
           }
         }
       }

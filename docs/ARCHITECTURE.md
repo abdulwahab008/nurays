@@ -240,7 +240,7 @@ Next.js 16 App Router, React 19, Tailwind 4. Root `app/layout.tsx` wraps everyth
 | I want to... | Look at |
 |---|---|
 | Add an endpoint | `routes/<area>.routes.ts` -> controller -> service; schema in `validators/`; mount in `index.ts` if it is a new router. |
-| Change how an order is priced | `utils/pricing.ts` (`priceOrder`), `order-placement.service.ts` `createOrder`, delivery fee in `utils/deliveryFee.ts` and `delivery-pricing.service.ts`. |
+| Change how an order is priced | `utils/pricing.ts` (`priceOrder`), `utils/orderPricing.ts` (line prices, a code's discount, the delivery-fee split), `order-placement.service.ts` `createOrder`, delivery fee in `utils/deliveryFee.ts` and `delivery-pricing.service.ts`. |
 | Change who holds money / who owes whom | `utils/paymentCustody.ts`, `ledger.service.ts`, `seller-balance.service.ts`, `rider-ledger.service.ts`. |
 | Change order status rules | `seller-order.service.ts`, `rider.service.ts` (`VALID_TRANSITIONS`), `admin-order.service.ts` (`ORDER_FORWARD_SEQUENCE`). |
 | Change an auto-cancel timeout or add a sweep | `order-maintenance.service.ts`; register in `index.ts` with `scheduleJob`. |

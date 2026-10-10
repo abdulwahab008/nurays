@@ -50,6 +50,7 @@ Suites and what each protects:
 | `delivery-provider.test.ts` | `ensureDeliveryForOrder`: platform vs self delivery decides whether a rider job exists |
 | `deliveryEarnings.test.ts` | who owns the delivery fee, self-delivery fee sums |
 | `promotion-catalog-discount.test.ts` | stacked discounts and catalogue discounts on an order |
+| `order-pricing.test.ts` | the arithmetic of placing an order (`utils/orderPricing.ts`): each line's price, commission and payout, a promotion code's discount (percentage, cap, fixed, never above what it covers) and each line's share of it (platform- or kitchen-funded), and who pays each kitchen's delivery fee |
 | `rider-ledger.test.ts` | rider money, settlements, payouts, delivery ledger entries, cash limit on claim, location updates |
 | `rider-approval-gate.test.ts` | an unapproved rider cannot see or claim jobs |
 | `ranking.test.ts` | Bayesian rating, trending, recommendations, rider job order (`utils/ranking.ts`) |

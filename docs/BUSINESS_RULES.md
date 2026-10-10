@@ -22,7 +22,7 @@ tax    = total - goods - deliveryFee                      // takes the rounding,
 
 ### Discounts and who pays them
 
-Code: `backend/src/services/order-placement.service.ts` (`createOrder`), `promotion.service.ts`.
+Code: `backend/src/services/order-placement.service.ts` (`createOrder`), `backend/src/utils/orderPricing.ts` (`codeDiscount`, `shareCodeDiscount`), `promotion.service.ts`.
 
 - Catalog deals are applied to item prices first. A promo code is applied after that, and the same promotion cannot be applied twice.
 - A code that is unknown, switched off, expired, used up (in total or by this customer) or below its minimum order is **refused at checkout** (`INVALID_PROMO_CODE`, `PROMO_INACTIVE`, `PROMO_EXPIRED`, `PROMO_LIMIT_REACHED`, `PROMO_ALREADY_USED`, `MIN_ORDER_NOT_MET`), the same answers as `/promotions/validate`; the order is never placed at full price with a code the customer typed.
@@ -34,7 +34,7 @@ Code: `backend/src/services/order-placement.service.ts` (`createOrder`), `promot
 
 ## 2. Commission
 
-Code: `order-placement.service.ts` (item commission), `admin.service.ts` (default setting), `ledger.service.ts`.
+Code: `backend/src/utils/orderPricing.ts` (`priceLines`: item commission), `admin.service.ts` (default setting), `ledger.service.ts`.
 
 ```
 item.commissionAmount = item.totalPrice x seller.commissionRate / 100
