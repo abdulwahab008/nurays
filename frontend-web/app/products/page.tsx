@@ -16,6 +16,7 @@ import { apiClient } from '@/lib/api-client';
 import { DashboardLayout, CUSTOMER_SIDEBAR_ITEMS } from '@/components/layout/DashboardShell';
 import { BrandLockup } from '@/components/ui/Mark';
 import { useCommunityStore } from '@/lib/store/community-store';
+import { useHydrated } from '@/lib/hooks/use-hydrated';
 import { CommunitySelector } from '@/components/community/CommunitySelector';
 import { communityService, CommunityDetail, CommunityKitchen } from '@/lib/services/community.service';
 import { favoriteService } from '@/lib/services/favorite.service';
@@ -107,6 +108,9 @@ function deliveryEtaLabel(p: Product, t: BrowseT): string | null {
 }
 
 /** The API's delivery fee. Nothing when the API didn't compute one (no area or address known). */
+/** How long a signed-in buyer's first dish list waits for their saved address before it goes without a distance. */
+const ADDRESS_WAIT_MS = 2000;
+
 function deliveryFeeLabel(p: Product, t: BrowseT): string | null {
   if (!p.delivery) return null;
   if (!p.delivery.deliverable) return t('deliveryNotHere');
@@ -242,9 +246,15 @@ function ProductsContent() {
     }).catch(() => {});
   }, [isAuthenticated]);
 
-  // Customer coordinates for accurate delivery distance
+  // Customer coordinates for accurate delivery distance. A signed-in buyer's first list waits for them (for at most
+  // ADDRESS_WAIT_MS), so the dishes are asked for once with the distance in, not again when the address arrives.
+  const [addressSettled, setAddressSettled] = useState(false);
   useEffect(() => {
     if (!isAuthenticated) return;
+    let live = true;
+    const giveUp = setTimeout(() => {
+      if (live) setAddressSettled(true);
+    }, ADDRESS_WAIT_MS);
     addressService
       .getAddresses()
       .then((res) => {
@@ -254,15 +264,28 @@ function ProductsContent() {
           setCustomerLocation({ lat: withCoords.coordinates.latitude, lng: withCoords.coordinates.longitude });
         }
       })
-      .catch(() => setCustomerLocation(null));
+      .catch(() => setCustomerLocation(null))
+      .finally(() => {
+        clearTimeout(giveUp);
+        if (live) setAddressSettled(true);
+      });
+    return () => {
+      live = false;
+      clearTimeout(giveUp);
+    };
   }, [isAuthenticated]);
+  // The first render still sees the signed-out state the server drew, so nothing is asked for until the browser has
+  // read the session.
+  const hydrated = useHydrated();
+  const waitingForAddress = !hydrated || (isAuthenticated && !addressSettled);
 
   useEffect(() => {
+    if (waitingForAddress) return;
     loadProducts();
   }, [
     page, selectedCategory, selectedProductType, sortBy, searchQuery, openNow,
     deliveryAvailable, pickupAvailable, freeDelivery, offersAvailable,
-    businessType, maxDistanceKm, fastDeliveryOnly, customerLocation, selectedCommunity?.id,
+    businessType, maxDistanceKm, fastDeliveryOnly, customerLocation, selectedCommunity?.id, waitingForAddress,
   ]);
 
   useEffect(() => {
