@@ -35,8 +35,8 @@ const SECURITY_HEADERS = [
     value: [
       "default-src 'self'",
       "script-src 'self' 'unsafe-inline' https://accounts.google.com",
-      "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://accounts.google.com",
-      "font-src 'self' data: https://fonts.gstatic.com",
+      "style-src 'self' 'unsafe-inline' https://accounts.google.com",
+      "font-src 'self' data:",
       "img-src 'self' data: blob: https:",
       `connect-src ${connectSources()}`,
       "frame-src https://accounts.google.com https://getsafepay.com https://*.getsafepay.com",
