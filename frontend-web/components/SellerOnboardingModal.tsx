@@ -41,15 +41,8 @@ interface FormData {
   kitchenVideoUrl: string;
 }
 
-const PAKISTANI_CITIES = [
-  'Karachi', 'Lahore', 'Islamabad', 'Rawalpindi', 'Faisalabad',
-  'Multan', 'Peshawar', 'Quetta', 'Sialkot', 'Gujranwala',
-  'Hyderabad', 'Bahawalpur', 'Sargodha', 'Sukkur', 'Larkana',
-  'Sheikhupura', 'Jhang', 'Rahim Yar Khan', 'Mardan', 'Kasur',
-  'Mingora', 'Dera Ghazi Khan', 'Sahiwal', 'Nawabshah', 'Okara'
-];
-
 import LocationMap from '@/components/ui/LocationMap';
+import { CITIES, cityFromGeocoder } from '@/lib/cities';
 
 export function SellerOnboardingModal({ isOpen, onClose, onComplete }: SellerOnboardingModalProps) {
   const { showToast } = useToast();
@@ -102,23 +95,10 @@ export function SellerOnboardingModal({ isOpen, onClose, onComplete }: SellerOnb
       const data = await response.json();
       
       if (data.address) {
-        // City mapping for Pakistani cities
-        const cityMapping: Record<string, string> = {
-          'لاہور': 'Lahore', 'کراچی': 'Karachi', 'اسلام آباد': 'Islamabad',
-          'راولپنڈی': 'Rawalpindi', 'فیصل آباد': 'Faisalabad', 'ملتان': 'Multan',
-          'پشاور': 'Peshawar', 'کوئٹہ': 'Quetta',
-        };
-
-        let city = data.address.city || data.address.town || data.address.village || data.address.county || '';
-        city = cityMapping[city] || city;
-
-        // Coordinate-based city detection
-        if (!city || !PAKISTANI_CITIES.includes(city)) {
-          if (lat >= 31.4 && lat <= 31.7 && lng >= 74.1 && lng <= 74.5) city = 'Lahore';
-          else if (lat >= 24.8 && lat <= 25.0 && lng >= 66.9 && lng <= 67.2) city = 'Karachi';
-          else if (lat >= 33.6 && lat <= 33.8 && lng >= 72.8 && lng <= 73.2) city = 'Islamabad';
-          else if (lat >= 33.5 && lat <= 33.7 && lng >= 73.0 && lng <= 73.2) city = 'Rawalpindi';
-        }
+        // The city the map's words name, else the one the pin is in. The list below only offers listed cities, so an
+        // unlisted one leaves the choice as it was.
+        const named = cityFromGeocoder(data.address, lat, lng);
+        const city = (CITIES as readonly string[]).includes(named) ? named : '';
 
         const area = data.address.suburb || data.address.neighbourhood || data.address.road || '';
         const fullAddress = data.display_name || '';
@@ -421,7 +401,7 @@ export function SellerOnboardingModal({ isOpen, onClose, onComplete }: SellerOnb
             }`}
           >
             <option value="">{t('ob.selectCity')}</option>
-            {PAKISTANI_CITIES.map(city => (
+            {CITIES.map(city => (
               <option key={city} value={city}>{city}</option>
             ))}
           </select>

@@ -178,6 +178,20 @@ control). When a real defect turns up, leave the check failing and fix the code;
 unfixed code, and several did (the rider's job text used the edited saved address, the kitchen dashboard counted
 dishes as orders, a huge page number answered 500).
 
+## 2c. Web unit tests
+
+```bash
+cd frontend-web
+npm test        # node --test on tests/unit/*.test.ts
+```
+
+Pure helpers in `frontend-web/lib/` (no React, no `@/` imports) are tested with Node's own test runner, which reads
+TypeScript directly (`--experimental-strip-types`): there is no extra package. A test imports its subject with the `.ts`
+extension (`../../lib/cities.ts`; the web `tsconfig.json` allows that). The suite so far is the city module
+(`cities.test.ts`): the list and its centres, Rawalpindi against Islamabad, the big cities from anywhere in them, the
+countryside, Urdu and English names, the order of the map's fields, and that nothing ever defaults to Karachi. Screens
+are covered by Playwright (next section), not here.
+
 ## 3. Frontend end-to-end (Playwright)
 
 Config: `frontend-web/playwright.config.ts`. One project (`chromium`), specs in `tests/e2e/`, base URL
@@ -226,7 +240,7 @@ Limitations to know about:
 | Job | Steps |
 |---|---|
 | `backend` | `npm ci`, `prisma generate`, `tsc --noEmit`, `npm run typecheck:scripts` (the API checks and the load tooling), `npm run lint` (no errors, at most the warning count set in `package.json`), `npm test`, `npm run build` |
-| `frontend` | `npm ci`, `tsc --noEmit`, `npm run lint` (no errors, at most the warning count set in `package.json`), `npm run build` (with placeholder `NEXT_PUBLIC_*`) |
+| `frontend` | `npm ci`, `tsc --noEmit`, `npm run lint` (no errors, at most the warning count set in `package.json`), `npm test` (the web unit tests), `npm run build` (with placeholder `NEXT_PUBLIC_*`) |
 | `e2e` (after both above) | PostgreSQL 15 and Redis 7 services, `prisma migrate deploy`, schema drift check (`npm run db:check`), `seed:e2e`, build and start the backend on 3001 (automatic rider assignment off), build the frontend, install Chromium, run the `smoke`, `rider-navigation`, `rider-location-resume`, `csp`, `geocode-proxy` and `public-pages` specs (the last with sample app-link settings in the environment), upload the Playwright report, then `npm run api-checks` against the backend |
 | `money-flows` (after `backend`) | its own PostgreSQL 15, `prisma migrate deploy`, `scripts/verify-money-flows.ts` in test mode |
 | `load-tooling` (after `backend`) | PostgreSQL 15 (`nuray_load`) and Redis 7 services, `prisma migrate deploy`, `npm run load:seed` at 2 % of the launch size, build and start the API (automatic rider assignment off), `load:tokens`, then each load scenario for a few seconds with `--smoke` (fails on a 5xx or an unanswered request, not on speed); see [LOAD_TESTING.md](LOAD_TESTING.md) |
@@ -248,6 +262,7 @@ and write `uses: <owner>/<repo>@<40-character commit> # vX.Y.Z`.
 | You changed | Run |
 |---|---|
 | A pure function (pricing, ranking, fees, validators, env checks) | add or extend a Jest test |
+| A pure helper in the web app's `lib/` | add or extend a test in `frontend-web/tests/unit/` (`npm test`) |
 | A service that only reads or maps data | Jest with mocked Prisma |
 | Anything that moves money, stock, ledger rows, refunds, payouts, rider cash, or relies on a lock, transaction or CHECK constraint | `verify-money-flows.ts` on a scratch database, plus Jest where logic is pure |
 | `schema.prisma` | create a migration (`npx prisma migrate dev`); CI's drift check enforces it; run the money-flow script if constraints changed |

@@ -138,6 +138,8 @@ Frontend:
   corner pop-up or a drawer (they swap in Urdu), `--safe-left`/`--safe-right` for a bar that spans the screen (a notch
   does not mirror). Every value is 0 on a screen without insets. To see a new bar with a notch, give Chromium
   `Emulation.setSafeAreaInsetsOverride` over the DevTools protocol.
+- A form never invents a city: `lib/cities.ts` has the list, the Urdu names and the matching (a map's answer to a city,
+  or `''` when nothing says), and the city fields start empty.
 - State: Zustand stores in `lib/store/` (auth, cart, community); live updates through `lib/hooks/use-socket.ts` and
   `use-live-refresh.ts`.
 
@@ -204,9 +206,10 @@ advisory lock so only one instance runs it at a time; make the function safe to 
 | frontend-web | `npm run dev` / `build` / `start` | Next.js |
 | frontend-web | `npm run lint` | ESLint (CI fails on errors and on more warnings than the cap in `package.json`) |
 | frontend-web | `npx tsc --noEmit` | typecheck (CI does this) |
+| frontend-web | `npm test` | unit tests of the pure helpers in `lib/` (Node's test runner, see [TESTING_STRATEGY.md](TESTING_STRATEGY.md)) |
 | frontend-web | `npm run test:e2e` | Playwright |
 
-Before pushing, run `npx tsc --noEmit` and `npm run lint` in both folders and `npm test` in `backend`. Details of each test layer are in
+Before pushing, run `npx tsc --noEmit` and `npm run lint` in both folders and `npm test` in both. Details of each test layer are in
 [TESTING_STRATEGY.md](TESTING_STRATEGY.md).
 
 ## Troubleshooting

@@ -26,7 +26,7 @@ function RegisterForm() {
     confirmPassword: '',
     full_name: '',
     phone: '',
-    city: 'Karachi',
+    city: '',
     community: 'Askari 11',
     house_apt: '',
     area: '',

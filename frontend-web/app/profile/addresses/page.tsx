@@ -12,6 +12,7 @@ import { DashboardLayout, CUSTOMER_SIDEBAR_ITEMS } from '@/components/layout/Das
 import { useT } from '@/lib/i18n';
 import { commonMessages } from '@/lib/i18n/messages/common';
 import { accountMessages } from '@/lib/i18n/messages/account';
+import { CITIES, cityFromCoords, cityFromGeocoder } from '@/lib/cities';
 
 function MapLoading() {
   const t = useT(accountMessages);
@@ -82,11 +83,10 @@ const popularAreasByCity: Record<string, string[]> = {
 
 // Get areas based on selected city
 const getAreasForCity = (city: string): string[] => {
-  return popularAreasByCity[city] || popularAreasByCity['Karachi'];
+  return popularAreasByCity[city] || [];
 };
 
 // Cities for dropdown
-const cities = ['Karachi', 'Lahore', 'Islamabad', 'Rawalpindi', 'Faisalabad', 'Multan', 'Peshawar', 'Quetta', 'Hyderabad', 'Sialkot'];
 
 export default function AddressesPage() {
   const router = useRouter();
@@ -115,7 +115,7 @@ export default function AddressesPage() {
     addressLine2: '',
     houseNumber: '',
     area: '',
-    city: 'Karachi',
+    city: '',
     postalCode: '',
     landmark: '',
     isDefault: false,
@@ -147,84 +147,6 @@ export default function AddressesPage() {
     }
   };
 
-  // City name mappings (Urdu to English) for Pakistan
-  const cityMappings: Record<string, string> = {
-    'لاہور': 'Lahore',
-    'ضلع لاہور': 'Lahore',
-    'کراچی': 'Karachi',
-    'اسلام آباد': 'Islamabad',
-    'راولپنڈی': 'Rawalpindi',
-    'فیصل آباد': 'Faisalabad',
-    'ملتان': 'Multan',
-    'پشاور': 'Peshawar',
-    'کوئٹہ': 'Quetta',
-    'حیدرآباد': 'Hyderabad',
-    'سیالکوٹ': 'Sialkot',
-  };
-
-  // Detect city from coordinates (approximate bounding boxes for major cities)
-  const detectCityFromCoords = (lat: number, lng: number): string | null => {
-    // Lahore: ~31.3-31.7 lat, ~74.1-74.5 lng
-    if (lat >= 31.3 && lat <= 31.7 && lng >= 74.1 && lng <= 74.5) return 'Lahore';
-    // Karachi: ~24.7-25.1 lat, ~66.8-67.3 lng
-    if (lat >= 24.7 && lat <= 25.1 && lng >= 66.8 && lng <= 67.3) return 'Karachi';
-    // Islamabad: ~33.5-33.8 lat, ~72.8-73.3 lng
-    if (lat >= 33.5 && lat <= 33.8 && lng >= 72.8 && lng <= 73.3) return 'Islamabad';
-    // Rawalpindi: ~33.4-33.7 lat, ~73.0-73.2 lng
-    if (lat >= 33.4 && lat <= 33.7 && lng >= 73.0 && lng <= 73.2) return 'Rawalpindi';
-    // Faisalabad: ~31.3-31.6 lat, ~72.9-73.2 lng
-    if (lat >= 31.3 && lat <= 31.6 && lng >= 72.9 && lng <= 73.2) return 'Faisalabad';
-    // Multan: ~29.9-30.3 lat, ~71.3-71.6 lng
-    if (lat >= 29.9 && lat <= 30.3 && lng >= 71.3 && lng <= 71.6) return 'Multan';
-    // Peshawar: ~33.9-34.1 lat, ~71.4-71.7 lng
-    if (lat >= 33.9 && lat <= 34.1 && lng >= 71.4 && lng <= 71.7) return 'Peshawar';
-    // Quetta: ~30.1-30.3 lat, ~66.9-67.1 lng
-    if (lat >= 30.1 && lat <= 30.3 && lng >= 66.9 && lng <= 67.1) return 'Quetta';
-    // Hyderabad: ~25.3-25.5 lat, ~68.3-68.5 lng
-    if (lat >= 25.3 && lat <= 25.5 && lng >= 68.3 && lng <= 68.5) return 'Hyderabad';
-    // Sialkot: ~32.4-32.6 lat, ~74.4-74.6 lng
-    if (lat >= 32.4 && lat <= 32.6 && lng >= 74.4 && lng <= 74.6) return 'Sialkot';
-    return null;
-  };
-
-  // Match city name (handles English, Urdu, and partial matches)
-  const matchCityName = (addressData: Record<string, string>, lat: number, lng: number): string => {
-    // Collect all possible city fields
-    const possibleCityFields = [
-      addressData.city,
-      addressData.town,
-      addressData.village,
-      addressData.county,
-      addressData.district,
-      addressData.state_district,
-      addressData.municipality,
-    ].filter(Boolean);
-
-    // First, try to match from Urdu mappings
-    for (const field of possibleCityFields) {
-      if (cityMappings[field]) {
-        return cityMappings[field];
-      }
-    }
-
-    // Then, try to match English names (case-insensitive, partial match)
-    for (const field of possibleCityFields) {
-      const fieldLower = field.toLowerCase();
-      const match = cities.find(city => 
-        fieldLower.includes(city.toLowerCase()) ||
-        city.toLowerCase().includes(fieldLower)
-      );
-      if (match) return match;
-    }
-
-    // Finally, fallback to coordinate-based detection
-    const coordCity = detectCityFromCoords(lat, lng);
-    if (coordCity) return coordCity;
-
-    // Default fallback
-    return 'Karachi';
-  };
-
   // Detect current location using GPS
   const detectCurrentLocation = useCallback(() => {
     if (!navigator.geolocation) {
@@ -253,16 +175,15 @@ export default function AddressesPage() {
           if (data && data.address) {
             const addr = data.address;
             
-            // Use our smart city matching (handles Urdu names + coordinate fallback)
-            const matchedCity = matchCityName(addr, latitude, longitude);
+            // The city the map's words name, else the one the pin is in; empty when neither says (the person types it)
+            const matchedCity = cityFromGeocoder(addr, latitude, longitude);
             
             // Auto-fill form fields from reverse geocoding
             setFormData(prev => ({
               ...prev,
               latitude: latitude.toString(),
               longitude: longitude.toString(),
-              // Set matched city from our dropdown list
-              city: matchedCity,
+              city: matchedCity || prev.city,
               // Try to get area/suburb (handle Urdu suburb names)
               area: addr.suburb || addr.neighbourhood || addr.quarter || addr.residential || prev.area,
               // Try to get street address
@@ -271,10 +192,10 @@ export default function AddressesPage() {
               postalCode: addr.postcode || prev.postalCode,
             }));
             
-            showToast(t('locationDetectedCity', { city: matchedCity }), 'success');
+            showToast(matchedCity ? t('locationDetectedCity', { city: matchedCity }) : t('locationDetectedFill'), 'success');
           } else {
             // No address data, use coordinate-based city detection
-            const coordCity = detectCityFromCoords(latitude, longitude);
+            const coordCity = cityFromCoords(latitude, longitude);
             setFormData(prev => ({
               ...prev,
               latitude: latitude.toString(),
@@ -286,7 +207,7 @@ export default function AddressesPage() {
         } catch (error) {
           console.error('Reverse geocoding error:', error);
           // Use coordinate-based detection as fallback
-          const coordCity = detectCityFromCoords(latitude, longitude);
+          const coordCity = cityFromCoords(latitude, longitude);
           setFormData(prev => ({
             ...prev,
             latitude: latitude.toString(),
@@ -409,7 +330,7 @@ export default function AddressesPage() {
       addressLine2: address.addressLine2 || '',
       houseNumber: address.houseNumber || '',
       area: address.area || '',
-      city: address.city || 'Karachi',
+      city: address.city || '',
       postalCode: address.postalCode || '',
       landmark: address.landmark || '',
       isDefault: address.isDefault || false,
@@ -431,7 +352,7 @@ export default function AddressesPage() {
       addressLine2: '',
       houseNumber: '',
       area: '',
-      city: 'Karachi',
+      city: '',
       postalCode: '',
       landmark: '',
       isDefault: false,
@@ -604,24 +525,23 @@ export default function AddressesPage() {
                       if (data && data.address) {
                         const addr = data.address;
                         
-                        // Use smart city matching (handles Urdu + coordinate fallback)
-                        const matchedCity = matchCityName(addr, coords.lat, coords.lng);
+                        const matchedCity = cityFromGeocoder(addr, coords.lat, coords.lng);
                         
                         setFormData(prev => ({
                           ...prev,
                           latitude: coords.lat.toString(),
                           longitude: coords.lng.toString(),
-                          city: matchedCity,
+                          city: matchedCity || prev.city,
                           area: addr.suburb || addr.neighbourhood || addr.quarter || addr.residential || prev.area,
                           addressLine1: addr.road ? addr.road : prev.addressLine1,
                           houseNumber: addr.house_number || prev.houseNumber,
                           postalCode: addr.postcode || prev.postalCode,
                         }));
                         
-                        showToast(t('citySelected', { city: matchedCity }), 'success');
+                        if (matchedCity) showToast(t('citySelected', { city: matchedCity }), 'success');
                       } else {
                         // No address data, use coordinate-based detection
-                        const coordCity = detectCityFromCoords(coords.lat, coords.lng);
+                        const coordCity = cityFromCoords(coords.lat, coords.lng);
                         if (coordCity) {
                           setFormData(prev => ({ ...prev, city: coordCity }));
                           showToast(t('citySelected', { city: coordCity }), 'success');
@@ -630,7 +550,7 @@ export default function AddressesPage() {
                     } catch (error) {
                       console.error('Reverse geocoding error:', error);
                       // Fallback to coordinate-based detection
-                      const coordCity = detectCityFromCoords(coords.lat, coords.lng);
+                      const coordCity = cityFromCoords(coords.lat, coords.lng);
                       if (coordCity) {
                         setFormData(prev => ({ ...prev, city: coordCity }));
                         showToast(t('citySelected', { city: coordCity }), 'success');
@@ -698,15 +618,21 @@ export default function AddressesPage() {
                   <label className="block text-sm font-semibold text-gray-700 mb-2">
                     {t('city')} <span className="text-red-500">*</span>
                   </label>
-                  <select
+                  <input
+                    type="text"
+                    list="address-cities"
+                    required
+                    maxLength={100}
                     value={formData.city}
                     onChange={(e) => setFormData({ ...formData, city: e.target.value })}
+                    placeholder={t('cityPlaceholder')}
                     className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all bg-white"
-                  >
-                    {cities.map(city => (
-                      <option key={city} value={city}>{city}</option>
+                  />
+                  <datalist id="address-cities">
+                    {CITIES.map(city => (
+                      <option key={city} value={city} />
                     ))}
-                  </select>
+                  </datalist>
                 </div>
                 
                 <div className="relative">
