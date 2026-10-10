@@ -1,6 +1,7 @@
 import axios, { AxiosInstance, AxiosError, AxiosRequestConfig, InternalAxiosRequestConfig } from 'axios';
 
 import { API_BASE_URL } from './config';
+import { tokenStore } from './token-store';
 
 // Endpoints that must never trigger a refresh-token retry. /auth/refresh
 // itself is the obvious one; logging in/out shouldn't retry either.
@@ -140,48 +141,34 @@ class ApiClient {
   }
 
   getAccessToken(): string | null {
-    if (typeof window === 'undefined') return null;
-    return sessionStorage.getItem('access_token') || localStorage.getItem('access_token');
+    return tokenStore().access();
   }
 
   getRefreshToken(): string | null {
-    if (typeof window === 'undefined') return null;
-    return sessionStorage.getItem('refresh_token') || localStorage.getItem('refresh_token');
+    return tokenStore().refresh();
   }
 
   clearTokens(): void {
-    if (typeof window === 'undefined') return;
-    sessionStorage.removeItem('access_token');
-    sessionStorage.removeItem('refresh_token');
-    sessionStorage.removeItem('tab_isolated');
-    localStorage.removeItem('access_token');
-    localStorage.removeItem('refresh_token');
-    window.dispatchEvent(new CustomEvent('auth:tokens-changed'));
+    tokenStore().clear();
+    this.announceTokens();
   }
 
   setToken(token: string, isolated = false): void {
-    if (typeof window === 'undefined') return;
-    if (isolated || sessionStorage.getItem('tab_isolated') === 'true') {
-      sessionStorage.setItem('tab_isolated', 'true');
-      sessionStorage.setItem('access_token', token);
-    } else {
-      localStorage.setItem('access_token', token);
-    }
-    window.dispatchEvent(new CustomEvent('auth:tokens-changed'));
+    tokenStore().saveAccess(token, isolated);
+    this.announceTokens();
   }
 
   setTokens(accessToken: string, refreshToken: string, isolated = false): void {
+    tokenStore().savePair(accessToken, refreshToken, isolated);
+    this.announceTokens();
+  }
+
+  /**
+   * Tell long-lived consumers (sockets) that the tokens changed: they reconnect with the new access token, or close
+   * when there is none.
+   */
+  private announceTokens(): void {
     if (typeof window === 'undefined') return;
-    if (isolated || sessionStorage.getItem('tab_isolated') === 'true') {
-      sessionStorage.setItem('tab_isolated', 'true');
-      sessionStorage.setItem('access_token', accessToken);
-      sessionStorage.setItem('refresh_token', refreshToken);
-    } else {
-      localStorage.setItem('access_token', accessToken);
-      localStorage.setItem('refresh_token', refreshToken);
-    }
-    // Signal to long-lived consumers (sockets) that the access token has
-    // changed — they should reconnect with the new token.
     window.dispatchEvent(new CustomEvent('auth:tokens-changed'));
   }
 

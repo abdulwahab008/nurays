@@ -337,4 +337,4 @@ anything else: orders, ledger entries, chat, uploaded documents and receipts are
   public by URL; new ones are private. `backend/scripts/migrate-private-uploads.ts` exists for moving them.
 - **`create-admin.js` resets the password** of an account that already has the email (and signs it out everywhere); it no longer prints the password.
 - **Staff roles are coarse.** There are three (super admin, admin, support; see Staff roles) and no separate finance role, no limits or second approval on refunds, payouts and rider corrections, and no two-factor sign-in. Reading screens (customer details, payment proofs, rider money) is not logged.
-- **The frontend stores tokens in browser storage** like most SPAs, so an XSS bug would expose them.
+- **The frontend stores tokens in browser storage** like most SPAs, so an XSS bug would expose them. All token reads and writes go through one store (`frontend-web/lib/token-store.ts`), which a native shell replaces (`setTokenStore()`) to keep them in the phone's keychain or keystore; that native store is not written yet.

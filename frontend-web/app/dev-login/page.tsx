@@ -110,10 +110,6 @@ function DevLoginContent() {
     setStatusMessage(`Authenticating as ${role.name}...`);
 
     try {
-      if (typeof window !== 'undefined' && isolate) {
-        sessionStorage.setItem('tab_isolated', 'true');
-      }
-
       const res = await apiClient.post('/auth/login', {
         phoneOrEmail: role.email,
         otpCodeOrPassword: role.pass,

@@ -3,6 +3,7 @@ import { persist, createJSONStorage } from 'zustand/middleware';
 import { useCartStore } from './cart-store';
 import { apiClient } from '../api-client';
 import { dropPushSubscription } from '../push';
+import { tokenStore } from '../token-store';
 
 export interface User {
   id: string;
@@ -76,13 +77,7 @@ export const useAuthStore = create<AuthState>()(
         useCartStore.getState().setAppliedPromoCode(null);
         // Nor should the next person on this browser inherit the previous account's push notifications.
         void dropPushSubscription();
-        if (typeof window !== 'undefined') {
-          sessionStorage.removeItem('access_token');
-          sessionStorage.removeItem('refresh_token');
-          sessionStorage.removeItem('tab_isolated');
-          localStorage.removeItem('access_token');
-          localStorage.removeItem('refresh_token');
-        }
+        tokenStore().clear();
         set({ user: null, isAuthenticated: false });
       },
     }),
@@ -97,7 +92,7 @@ export const useAuthStore = create<AuthState>()(
         },
         setItem: (name: string, value: string) => {
           if (typeof window === 'undefined') return;
-          if (sessionStorage.getItem('tab_isolated') === 'true') {
+          if (tokenStore().tabIsolated()) {
             sessionStorage.setItem(name, value);
           } else {
             localStorage.setItem(name, value);
@@ -115,10 +110,7 @@ export const useAuthStore = create<AuthState>()(
           const hasToken = !!apiClient.getAccessToken();
           // If we have a token but no user, clear the token (invalid state)
           if (hasToken && !state.user) {
-            sessionStorage.removeItem('access_token');
-            sessionStorage.removeItem('refresh_token');
-            localStorage.removeItem('access_token');
-            localStorage.removeItem('refresh_token');
+            tokenStore().clear();
             state.isAuthenticated = false;
           } else {
             // Update isAuthenticated based on user and token
