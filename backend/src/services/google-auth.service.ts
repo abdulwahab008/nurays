@@ -3,6 +3,7 @@ import { isProduction } from '../config/env';
 import { generateToken, generateRefreshToken, tokenTtlSeconds, JWTPayload } from '../utils/jwt';
 import { AppError } from '../middleware/errorHandler';
 import { GoogleIdTokenError, verifyGoogleIdToken } from '../utils/google-id-token';
+import { logger } from '../utils/logger';
 
 /** How long a Google call may take before sign-in gives up (Google is normally well under a second). */
 const GOOGLE_TIMEOUT_MS = 10_000;
@@ -20,7 +21,7 @@ export class GoogleAuthService {
       // as the victim. tokeninfo reports the client it was issued to.
       const expectedClientId = process.env.GOOGLE_CLIENT_ID;
       if (!expectedClientId && isProduction()) {
-        console.error('GOOGLE_CLIENT_ID is not set; refusing Google sign-in');
+        logger.error('GOOGLE_CLIENT_ID is not set; refusing Google sign-in');
         throw new AppError('Google sign-in is not configured', 503, 'GOOGLE_NOT_CONFIGURED');
       }
       if (expectedClientId) {
@@ -253,7 +254,7 @@ function mapGoogleError(error: unknown): Error {
   if (name === 'TimeoutError' || name === 'AbortError') {
     return new AppError('Google sign-in is temporarily unavailable', 503, 'GOOGLE_UNAVAILABLE');
   }
-  console.error('Google authentication error:', error);
+  logger.error({ err: error }, 'Google authentication error');
   return new AppError('Google authentication failed', 401, 'GOOGLE_AUTH_FAILED');
 }
 

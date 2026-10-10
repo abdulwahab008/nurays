@@ -16,6 +16,7 @@ import { assertVerifyMailAllowed } from '../utils/mailBudget';
 import { assertPasswordStrength, MIN_PASSWORD_LENGTH, MIN_STAFF_PASSWORD_LENGTH } from '../utils/password-policy';
 import { assertCurrentPassword } from './reauth.service';
 import { notifyPasswordChanged } from './account-notice.service';
+import { logger } from '../utils/logger';
 
 /** A unique stand-in number for an account with no (or an evicted) real phone. Never a real number: +999 isn't assigned. */
 export const placeholderPhone = (seed: string): string =>
@@ -212,7 +213,7 @@ export class AuthService {
       await queueVerificationEmail(user.id);
     } catch (err) {
       emailSendFailed = true;
-      console.error(`[register] Could not queue the verification email for ${normalizedEmail}; the user can resend it.`, err);
+      logger.error({ err, email: maskEmail(normalizedEmail) }, 'Could not queue the verification e-mail at registration; the user can resend it');
     }
 
     // Generate tokens (user can use app but should verify email)
@@ -631,7 +632,7 @@ export class AuthService {
     try {
       await queuePasswordResetEmail(user.id);
     } catch (err) {
-      console.error(`[forgotPassword] Could not queue the reset email for ${maskEmail(normalizedEmail)}`, err);
+      logger.error({ err, email: maskEmail(normalizedEmail) }, 'Could not queue the password reset e-mail');
     }
   }
 

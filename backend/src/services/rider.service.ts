@@ -19,6 +19,7 @@ import { presentFile } from '../storage';
 import { notifyApprovers } from './approvals.service';
 import { canMoveDelivery, ORDER_STATUS_FOR_DELIVERY_STATUS, refuseDeliveryMove } from '../utils/deliveryStatus';
 import { doorField } from '../utils/addressSnapshot';
+import { logger } from '../utils/logger';
 
 // The delivery status machine (which status follows which, and what the order must look like) is in utils/deliveryStatus.ts.
 
@@ -573,7 +574,7 @@ export class RiderService {
       try {
         await ledgerService.recordOrderCompletion(result.orderId);
       } catch (ledgerErr) {
-        console.error('Failed to record financial ledger entries for order:', result.orderId, ledgerErr);
+        logger.error({ err: ledgerErr, orderId: result.orderId }, 'Failed to record financial ledger entries');
       }
     }
 
@@ -773,7 +774,7 @@ export class RiderService {
       const distanceKm = toDropoffKm != null ? Math.round(toDropoffKm * 10) / 10 : undefined;
       realtimeOrderService
         .emitDeliveryTrackingUpdate(current.orderId, { latitude, longitude }, distanceKm)
-        .catch((err) => console.error('Delivery tracking update failed:', err));
+        .catch((err) => logger.error({ err, orderId: current.orderId }, 'Delivery tracking update failed'));
     }
 
     return {

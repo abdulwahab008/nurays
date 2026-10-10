@@ -2,6 +2,7 @@ import nodemailer from 'nodemailer';
 import type { Mail } from 'nodemailer';
 import { AppError } from '../middleware/errorHandler';
 import { emailProvider, runtimeMode } from '../config/env';
+import { logger } from '../utils/logger';
 
 interface EmailOptions {
   to: string;
@@ -78,9 +79,9 @@ class EmailService {
           auth: { user: testAccount.user, pass: testAccount.pass },
           ...timeouts,
         });
-        console.log(`📧 Development email goes to an Ethereal test inbox (https://ethereal.email, login ${testAccount.user})`);
+        logger.info({ login: testAccount.user }, 'Development email goes to an Ethereal test inbox (https://ethereal.email)');
       } catch {
-        console.warn('📧 Could not create an Ethereal test inbox; development emails are printed to the console.');
+        logger.warn('Could not create an Ethereal test inbox; development emails are printed to the console');
         this.transporter = null;
       }
     } else {
@@ -99,6 +100,8 @@ class EmailService {
 
     if (!this.transporter) {
       if (runtimeMode() === 'development') {
+        // The message itself is the output here (a developer copies the link from it): printed, not logged.
+        // eslint-disable-next-line no-console
         console.log(`\n📧 EMAIL (not sent, development console)\nTo: ${to}\nSubject: ${subject}\n${text || html}\n`);
       }
       return;
@@ -115,11 +118,11 @@ class EmailService {
         });
         if (runtimeMode() === 'development') {
           const previewUrl = nodemailer.getTestMessageUrl(info);
-          if (previewUrl) console.log(`📬 Email preview: ${previewUrl}`);
+          if (previewUrl) logger.info({ previewUrl }, 'Email preview');
         }
         return;
       } catch (error) {
-        console.error(`Email "${subject}" failed (attempt ${attempt}): ${(error as Error)?.message ?? error}`);
+        logger.error({ err: error, attempt, subject }, 'Email failed');
       }
     }
     throw new AppError('Failed to send email', 502, 'EMAIL_SEND_FAILED');

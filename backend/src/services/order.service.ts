@@ -26,6 +26,7 @@ import { cancelOpenDelivery, notifyDeliveryCancelled, CancelledDelivery } from '
 import { debitWallet } from './wallet.service';
 import { notify } from './notify.service';
 import sellerOrderService from './seller-order.service';
+import { logger } from '../utils/logger';
 
 /** The kitchen a customer pays directly by transfer (the first item's seller). */
 async function payeeSellerUserId(orderId: string): Promise<string | null> {
@@ -847,13 +848,13 @@ export class OrderService {
     try {
       await realtimeOrderService.emitNewOrderNotification(order.order.id);
     } catch (err) {
-      console.error(`New-order notification failed for ${order.order.id}:`, err);
+      logger.error({ err, orderId: order.order.id }, 'New-order notification failed');
     }
 
     // Low-stock / out-of-stock alerts (may send email): in the background, never
     // holding up the customer's checkout.
     void this.raiseStockAlerts(order.updatedProducts).catch((err) =>
-      console.error('Stock alerts after order failed:', err)
+      logger.error({ err }, 'Stock alerts after order failed')
     );
 
     return this.loadPlacedOrder(order.order.id);
@@ -1555,7 +1556,7 @@ export class OrderService {
     // entries now (they're only posted once the money is actually in).
     if (confirmed && ['delivered', 'completed'].includes(updated.orderStatus)) {
       await ledgerService.recordOrderCompletion(orderId).catch((err) =>
-        console.error(`Ledger posting failed for order ${orderId}:`, err)
+        logger.error({ err, orderId }, 'Ledger posting failed')
       );
     }
 
@@ -1630,7 +1631,7 @@ export class OrderService {
       },
     });
     if (['delivered', 'completed'].includes(order.orderStatus)) {
-      await ledgerService.recordOrderCompletion(orderId).catch((err) => console.error(`Ledger posting failed for order ${orderId}:`, err));
+      await ledgerService.recordOrderCompletion(orderId).catch((err) => logger.error({ err, orderId }, 'Ledger posting failed'));
     }
     await realtimeOrderService.emitOrderStatusUpdate(orderId, order.orderStatus, adminId);
     const settled = await prisma.order.findUnique({ where: { id: orderId }, select: { orderNumber: true, customerId: true } });

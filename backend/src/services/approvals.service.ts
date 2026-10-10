@@ -1,6 +1,7 @@
 import prisma from '../config/database';
 import { notify } from './notify.service';
 import { can, Permission } from '../utils/permissions';
+import { logger } from '../utils/logger';
 
 /**
  * Everything waiting for a staff decision, in one place, and a nudge to the people who decide
@@ -17,7 +18,7 @@ export function notifyApprovers(input: { title: string; message: string; actionU
     for (const a of approvers) {
       await notify({ userId: a.id, category: 'orders', type: 'approval', title: input.title, message: input.message, actionUrl: input.actionUrl, channels: [], dedupeKey: `${input.dedupeKey}:${a.id}` });
     }
-  })().catch((err) => console.error('Could not notify approvers:', err));
+  })().catch((err) => logger.error({ err }, 'Could not notify approvers'));
 }
 
 interface Queue {

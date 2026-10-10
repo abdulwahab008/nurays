@@ -16,6 +16,7 @@ jest.mock('../src/utils/google-id-token', () => {
 });
 
 import googleAuthService from '../src/services/google-auth.service';
+import { logger } from '../src/utils/logger';
 import prisma from '../src/config/database';
 import { GoogleIdTokenError, verifyGoogleIdToken } from '../src/utils/google-id-token';
 
@@ -106,7 +107,7 @@ describe('authenticateWithGoogleIdToken', () => {
   });
 
   it('answers a failure of its own as a failed sign-in, not with a stack trace', async () => {
-    jest.spyOn(console, 'error').mockImplementation(() => undefined);
+    jest.spyOn(logger, 'error').mockImplementation(() => undefined);
     verify.mockRejectedValueOnce(new Error('boom'));
     await expect(googleAuthService.authenticateWithGoogleIdToken('tok-tok-tok')).rejects.toMatchObject({ statusCode: 401, code: 'GOOGLE_AUTH_FAILED' });
   });

@@ -1,5 +1,6 @@
 import { Queue, Worker, type Job } from 'bullmq';
 import { redisUrl, newRedisConnection } from '../config/redis';
+import { logger } from '../utils/logger';
 
 /**
  * Background jobs: work that shouldn't hold up a request and must be retried when it fails
@@ -64,7 +65,7 @@ async function runLocally(name: string, payload: unknown, attempts: number, dela
       return;
     } catch (err) {
       const last = attempt === attempts;
-      console.error(`Job ${name} failed (attempt ${attempt}/${attempts})${last ? ', giving up' : ''}: ${(err as Error)?.message ?? err}`);
+      logger.error({ err, job: name, attempt, attempts, final: last }, last ? 'Job failed; giving up' : 'Job failed; will retry');
       if (!last) await sleep(Math.min(1000 * 2 ** (attempt - 1), 10_000));
     }
   }
@@ -90,7 +91,7 @@ export async function enqueue<T>(name: string, payload: T, opts: EnqueueOptions 
       await withTimeout(added, ENQUEUE_TIMEOUT_MS);
       return;
     } catch (err) {
-      console.error(`Could not queue job ${name} (${(err as Error)?.message ?? err}); running it in this process.`);
+      logger.error({ err, job: name }, 'Could not queue the job; running it in this process');
       // If the add lands later all the same, withdraw it: the job is being run here.
       added.then((job) => job.remove().catch(() => undefined)).catch(() => undefined);
     }
@@ -124,9 +125,9 @@ export function startWorkers(concurrency = 5) {
   worker.on('failed', (job, err) => {
     const attempts = job?.opts.attempts ?? 1;
     const final = (job?.attemptsMade ?? 0) >= attempts;
-    console.error(`Job ${job?.name} (${job?.id}) failed (attempt ${job?.attemptsMade}/${attempts})${final ? ', giving up' : ''}: ${err.message}`);
+    logger.error({ err, job: job?.name, jobId: job?.id, attempt: job?.attemptsMade, attempts, final }, final ? 'Job failed; giving up' : 'Job failed; will retry');
   });
-  worker.on('error', (err) => console.error('Job worker error:', err.message));
+  worker.on('error', (err) => logger.error({ err }, 'Job worker error'));
 }
 
 /** Finish running jobs and stop (graceful shutdown). */

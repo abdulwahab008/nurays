@@ -76,7 +76,7 @@ class SocketManager {
     this.io.on('connection', (socket) => {
       const user = (socket as any).user as { userId: string; userType: string };
 
-      console.log(`🔌 User ${user.userId} (${user.userType}) connected: ${socket.id}`);
+      logger.debug({ userId: user.userId, userType: user.userType, socketId: socket.id }, 'Socket connected');
 
       // Track user socket
       if (!this.userSockets.has(user.userId)) {
@@ -113,25 +113,25 @@ class SocketManager {
               },
             })) > 0;
           if (!allowed) {
-            console.warn(`⛔ User ${user.userId} denied order room: ${orderId}`);
+            logger.warn({ userId: user.userId, orderId }, 'Socket denied an order room');
             return;
           }
           socket.join(`order:${orderId}`);
-          console.log(`📦 User ${user.userId} joined order room: ${orderId}`);
+          logger.debug({ userId: user.userId, orderId }, 'Socket joined an order room');
         } catch (err) {
-          console.error('join:order failed:', err);
+          logger.error({ err, userId: user.userId, orderId }, 'join:order failed');
         }
       });
 
       // Leave order room
       socket.on('leave:order', (orderId: string) => {
         socket.leave(`order:${orderId}`);
-        console.log(`📦 User ${user.userId} left order room: ${orderId}`);
+        logger.debug({ userId: user.userId, orderId }, 'Socket left an order room');
       });
 
       // Handle disconnection
       socket.on('disconnect', () => {
-        console.log(`🔌 User ${user.userId} disconnected: ${socket.id}`);
+        logger.debug({ userId: user.userId, socketId: socket.id }, 'Socket disconnected');
         const userSockets = this.userSockets.get(user.userId);
         if (userSockets) {
           userSockets.delete(socket.id);
@@ -143,7 +143,7 @@ class SocketManager {
 
       // Error handler
       socket.on('error', (error) => {
-        console.error(`Socket error for user ${user.userId}:`, error);
+        logger.error({ err: error, userId: user.userId }, 'Socket error');
       });
     });
 

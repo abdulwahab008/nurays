@@ -9,6 +9,7 @@ import { assertCurrentPassword } from './reauth.service';
 import { budgetAdd } from '../utils/attemptBudget';
 import { assertVerifyMailAllowed } from '../utils/mailBudget';
 import { notifyEmailChanged } from './account-notice.service';
+import { logger } from '../utils/logger';
 
 /** How many times an account may point itself at a new e-mail address in an hour. */
 const MAX_EMAIL_CHANGES_PER_HOUR = 3;
@@ -117,7 +118,7 @@ export class UserProfileService {
       try {
         await queueVerificationEmail(userId);
       } catch (err) {
-        console.error(`[updateProfile] Could not queue the verification email for ${maskEmail(newEmail)}`, err);
+        logger.error({ err, email: maskEmail(newEmail) }, 'Could not queue the verification e-mail after an address change');
       }
       // The address the account leaves hears of it (when its owner had proven it), so that a change they did not make is noticed.
       void notifyEmailChanged({ email: user.email, emailVerified: user.emailVerified, fullName: user.profile?.fullName }, newEmail);

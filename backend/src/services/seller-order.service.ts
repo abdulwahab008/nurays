@@ -12,6 +12,7 @@ import { refundForCancelledItems } from './refund.service';
 import ledgerService from './ledger.service';
 import { releaseHubAllocations } from './hub-allocation.service';
 import { kitchenOrderSelect, presentKitchenOrder } from '../utils/kitchenOrderView';
+import { logger } from '../utils/logger';
 
 export class SellerOrderService {
   /**
@@ -446,7 +447,7 @@ export class SellerOrderService {
       try {
         await ledgerService.recordOrderCompletion(orderItem.orderId);
       } catch (ledgerErr) {
-        console.error('Failed to record ledger entries for order:', orderItem.orderId, ledgerErr);
+        logger.error({ err: ledgerErr, orderId: orderItem.orderId }, 'Failed to record ledger entries');
       }
     }
 
@@ -694,7 +695,7 @@ export class SellerOrderService {
     try {
       await riderService.ensureDeliveryForOrder(order.id, maxPrepMinutes);
     } catch (err) {
-      console.warn('Rider dispatch warning during acceptOrder:', err);
+      logger.warn({ err, orderId: order.id }, 'Rider dispatch warning during acceptOrder');
     }
 
     await realtimeOrderService.emitOrderStatusUpdate(order.id, 'preparing', sellerUserId);
@@ -990,7 +991,7 @@ export class SellerOrderService {
     try {
       await riderService.ensureDeliveryForOrder(order.id, 0);
     } catch (err) {
-      console.warn('Rider dispatch warning during markOrderReady:', err);
+      logger.warn({ err, orderId: order.id }, 'Rider dispatch warning during markOrderReady');
     }
 
     await realtimeOrderService.emitOrderStatusUpdate(order.id, 'ready', sellerUserId);

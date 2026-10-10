@@ -4,6 +4,7 @@ import { AppError } from '../middleware/errorHandler';
 import { notify, notifyMany } from './notify.service';
 import type { DeliveryChannel } from '../jobs/notify.jobs';
 import { ONLINE_GATEWAY_METHODS } from '../utils/paymentCustody';
+import { logger } from '../utils/logger';
 
 // What each order status tells the customer, and which channels besides the app it is worth.
 const ORDER_STATUS_MESSAGES: Record<
@@ -150,7 +151,7 @@ export class RealtimeOrderService {
       const audience = await orderAudience(orderId);
       if (audience) socketManager.emitToRooms(audience.rooms, 'order:message', { orderId, messageId, senderRole });
     } catch (err) {
-      console.error('order:message event failed:', err);
+      logger.error({ err, orderId }, 'order:message event failed');
     }
   }
 
@@ -160,7 +161,7 @@ export class RealtimeOrderService {
       const audience = await orderAudience(orderId);
       if (audience) socketManager.emitToRooms(audience.rooms, 'order:messages:read', { orderId });
     } catch (err) {
-      console.error('order:messages:read event failed:', err);
+      logger.error({ err, orderId }, 'order:messages:read event failed');
     }
   }
 
@@ -179,7 +180,7 @@ export class RealtimeOrderService {
       const audience = await orderAudience(orderId);
       if (audience) socketManager.emitToRooms(audience.rooms, 'delivery:assigned', { deliveryId, orderId });
     } catch (err) {
-      console.error('delivery:assigned event failed:', err);
+      logger.error({ err, orderId, deliveryId }, 'delivery:assigned event failed');
     }
   }
 

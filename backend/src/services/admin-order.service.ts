@@ -14,6 +14,7 @@ import { issueRefund, IssuedRefund } from './refund.service';
 import ledgerService from './ledger.service';
 import { postDeliveryEntries } from './rider-ledger.service';
 import { releaseHubAllocations } from './hub-allocation.service';
+import { logger } from '../utils/logger';
 
 // The main happy-path order pipeline — admin can only move an order exactly
 // one step forward at a time (no skipping straight to 'dispatched'/'delivered',
@@ -407,12 +408,12 @@ export class AdminOrderService {
           });
         });
       } catch (jobErr) {
-        console.error('Failed to close the rider job for order:', orderId, jobErr);
+        logger.error({ err: jobErr, orderId }, 'Failed to close the rider job');
       }
       try {
         await ledgerService.recordOrderCompletion(orderId);
       } catch (ledgerErr) {
-        console.error('Failed to record ledger entries for order:', orderId, ledgerErr);
+        logger.error({ err: ledgerErr, orderId }, 'Failed to record ledger entries');
       }
     }
 
@@ -679,10 +680,7 @@ export class AdminOrderService {
     );
 
     if (!isWallet) {
-      console.warn(
-        `[Refund] Order ${orderId} (${order.paymentMethod}) — DB marked refund_pending; ` +
-          `process the actual refund in the gateway dashboard.`,
-      );
+      logger.warn({ orderId, paymentMethod: order.paymentMethod }, 'Refund marked refund_pending in the database; process the actual refund in the gateway dashboard');
     }
 
     return {

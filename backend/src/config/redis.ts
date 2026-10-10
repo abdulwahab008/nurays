@@ -1,4 +1,5 @@
 import Redis, { RedisOptions } from 'ioredis';
+import { logger } from '../utils/logger';
 
 /**
  * Redis is what lets several app instances act as one: shared rate-limit counters, live
@@ -24,10 +25,10 @@ function connect(name: string, options: RedisOptions): Redis {
   client.on('error', (err) => {
     if (err.message === lastError) return;
     lastError = err.message;
-    console.error(`Redis (${name}): ${err.message}`);
+    logger.error({ redis: name, err }, 'Redis error');
   });
   client.on('ready', () => {
-    if (lastError) console.log(`Redis (${name}) reconnected`);
+    if (lastError) logger.info({ redis: name }, 'Redis reconnected');
     lastError = '';
   });
   return client;
