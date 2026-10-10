@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { UserLayout } from '@/components/layout/UserLayout';
+import { AdminShell } from '@/components/layout/AdminShell';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/toast';
 import LocationMap from '@/components/ui/LocationMap';
@@ -141,7 +141,7 @@ export default function AdminCommunitiesPage() {
   const neighbours = form ? communities.filter((c) => c.id !== form.id && (!form.city.trim() || c.city.toLowerCase() === form.city.trim().toLowerCase())) : [];
 
   return (
-    <UserLayout showSidebar={true} showNavbar={true}>
+    <AdminShell>
       <div className="max-w-6xl mx-auto space-y-5">
         <div className="flex flex-wrap items-end justify-between gap-3">
           <div>
@@ -293,6 +293,6 @@ export default function AdminCommunitiesPage() {
 
         <CommunityPairFees communities={communities} />
       </div>
-    </UserLayout>
+    </AdminShell>
   );
 }

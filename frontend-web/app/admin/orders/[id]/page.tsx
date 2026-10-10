@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import Link from 'next/link';
-import { UserLayout } from '@/components/layout/UserLayout';
+import { AdminShell } from '@/components/layout/AdminShell';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/toast';
 import { useAuthStore } from '@/lib/store/auth-store';
@@ -274,7 +274,7 @@ export default function AdminOrderDetailPage() {
     : [];
 
   return (
-    <UserLayout showSidebar={true} showNavbar={true}>
+    <AdminShell>
       <div className="max-w-4xl mx-auto">
         <div className="mb-6">
           <Link
@@ -675,6 +675,6 @@ export default function AdminOrderDetailPage() {
           </div>
         )}
       </div>
-    </UserLayout>
+    </AdminShell>
   );
 }

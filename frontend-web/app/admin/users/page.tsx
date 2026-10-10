@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
-import { UserLayout } from '@/components/layout/UserLayout';
+import { AdminShell } from '@/components/layout/AdminShell';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/toast';
 import { apiClient, apiErrorMessage } from '@/lib/api-client';
@@ -93,7 +93,7 @@ export default function AdminUsersPage() {
   };
 
   return (
-    <UserLayout showSidebar={true} showNavbar={true}>
+    <AdminShell>
       <div className="max-w-6xl mx-auto space-y-5">
         <div>
           <h1 className="text-3xl font-bold text-gray-900">People</h1>
@@ -237,6 +237,6 @@ export default function AdminUsersPage() {
           )}
         </div>
       </div>
-    </UserLayout>
+    </AdminShell>
   );
 }

@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
-import { UserLayout } from '@/components/layout/UserLayout';
+import { AdminShell } from '@/components/layout/AdminShell';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/toast';
 import LocationMap from '@/components/ui/LocationMap';
@@ -178,7 +178,7 @@ export default function AdminHubSetupPage() {
   const label = 'block text-xs font-semibold text-gray-700 mb-1';
 
   return (
-    <UserLayout showSidebar={true} showNavbar={true}>
+    <AdminShell>
       <div className="max-w-6xl mx-auto space-y-6">
         <div className="flex flex-wrap items-end justify-between gap-3">
           <div>
@@ -390,6 +390,6 @@ export default function AdminHubSetupPage() {
           )}
         </section>
       </div>
-    </UserLayout>
+    </AdminShell>
   );
 }

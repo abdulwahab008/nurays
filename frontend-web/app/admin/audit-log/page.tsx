@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { UserLayout } from '@/components/layout/UserLayout';
+import { AdminShell } from '@/components/layout/AdminShell';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/toast';
 import { apiClient, apiErrorMessage } from '@/lib/api-client';
@@ -89,7 +89,7 @@ export default function AdminAuditLogPage() {
   }, [load]);
 
   return (
-    <UserLayout showSidebar={true} showNavbar={true}>
+    <AdminShell>
       <div className="max-w-6xl mx-auto space-y-5">
         <div>
           <h1 className="text-3xl font-bold text-gray-900">Audit log</h1>
@@ -208,6 +208,6 @@ export default function AdminAuditLogPage() {
           )}
         </div>
       </div>
-    </UserLayout>
+    </AdminShell>
   );
 }
