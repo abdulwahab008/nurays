@@ -115,18 +115,22 @@ vCPUs, `NODE_ENV=development` (the request limits are off), the full seed (50,00
 |---|---|---|---|
 | `browse` | 50 users, 60 s (about 3,900 requests) | one miss | Every read under 190 ms at p95 except the search: p95 352 ms (p50 194 ms). |
 | `checkout` | 50 orders a minute, 60 s | met | Placing an order p95 118 ms; the reads p95 11 to 104 ms. |
-| `rider-loop` | 300 riders, 90 s | missed | The three dashboard lists p95 4.1 to 5.1 s, claim 1.3 s, status 7.9 s, position 4.9 s. No 5xx. |
+| `rider-loop` | 300 riders, 90 s | missed | After the job list was trimmed (below): the three dashboard lists p95 0.8 to 1.2 s, claim 0.26 s, position 0.6 s, status 2.0 s; before it 4.1 to 5.1 s, 1.3 s, 4.9 s and 7.9 s. No 5xx. |
 | `login-storm` | 20 sign-ins a second, 30 s | met | p95 91 ms (p99 119 ms) for 600 sign-ins. |
 | `sockets` | 2,000 connections (400 riders on duty), 11 jobs | met | Connecting p95 216 ms; `delivery:new` reached all 400 riders of every job, p95 81 ms. |
 
 What the run showed, in the order to look at it:
 
-- **The rider dashboard is the heaviest read.** A rider with 200 jobs in their history gets about 120 KB from
-  `GET /riders/deliveries/mine` (up to 200 jobs, finished ones included, each with the fee corridor) and the open pool is
-  95 KB from `/available`. In isolation they take 67 ms and 48 ms of the API's time; 300 riders reloading every 30 s is
-  more than one process can serve, so everything queues (p50 under 300 ms, p95 over 4 s). This is the first thing to
-  watch on staging with two instances; the fix is on the plan (cap the history, trim the finished jobs, stretch the safety-net
-  reload).
+- **The rider dashboard was the heaviest read, and is lighter now.** A rider with 200 jobs in their history got 120 KB
+  from `GET /riders/deliveries/mine` (every job, finished ones included, each with the fee corridor), 57 ms of the
+  API's time on its own; 300 riders reloading every 30 s was more than one process could serve, so everything queued
+  (p50 160 to 290 ms, p95 4 to 5 s for every call). The list now carries the running jobs and the latest 30 finished
+  ones (29 KB, 15 ms; `?history=` asks for more, and the history tab has a "Show older deliveries" button), the pop-up that
+  announces a pool job counts running jobs only (`?history=0`, it used to fetch the whole list for every pool event), and
+  the open-pool list no longer loads the customer it never shows (39 ms to 27 ms). Same scenario, same machine, nothing
+  else running: the lists went from p95 4.1 to 5.1 s to 0.8 to 1.2 s, claim from 1.3 s to 0.26 s and position updates
+  from 4.9 s to 0.6 s. Three hundred riders on one process that shares four vCPUs with the generator still miss the 300 ms
+  target for the lists, so this stays the first thing to watch on staging with two instances.
 - **The dish search scans every dish.** The plan of the search (Q3 in `explain.sql`) is a sequential scan of 10,000 dishes
   and takes 71 ms in the database (the next slowest, the total behind the listing pages, 19 ms; everything else under
   10 ms). At 50 users it is the only read over its target. A trigram index is the usual answer; it is a schema change,
