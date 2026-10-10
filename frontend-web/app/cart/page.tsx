@@ -35,6 +35,7 @@ import { useToast } from '@/components/ui/toast';
 import { ConfirmModal } from '@/components/ui/ConfirmModal';
 import { DEFAULT_ADDRESS, useDeliveryEstimate } from '@/lib/hooks/use-delivery-estimate';
 import { useT } from '@/lib/i18n';
+import { getPromotionLabel, getStackedDiscountedPrice } from '@/lib/pricing';
 import { commonMessages } from '@/lib/i18n/messages/common';
 import { checkoutMessages, richText } from '@/lib/i18n/messages/checkout';
 
@@ -43,25 +44,6 @@ interface CatalogPromotion {
   name: string;
   type: string;
   discountValue: number;
-}
-
-function getPromotionLabel(p: CatalogPromotion, t: (key: 'percentOff' | 'amountOff' | 'deal', vars?: Record<string, string | number>) => string): string {
-  if (p.type === 'percentage' && p.discountValue > 0) return t('percentOff', { value: p.discountValue });
-  if (p.type === 'fixed' && p.discountValue > 0) return t('amountOff', { amount: formatPrice(p.discountValue) });
-  return p.name || t('deal');
-}
-
-function getStackedDiscountedPrice(originalPrice: number, promos: CatalogPromotion[]): number {
-  if (!promos?.length) return originalPrice;
-  const sorted = [...promos].sort((a, b) =>
-    a.type === 'percentage' && b.type === 'fixed' ? -1 : a.type === 'fixed' && b.type === 'percentage' ? 1 : 0
-  );
-  const result = sorted.reduce((price, p) => {
-    if (p.type === 'percentage' && p.discountValue > 0) return price * (1 - p.discountValue / 100);
-    if (p.type === 'fixed' && p.discountValue > 0) return Math.max(0, price - p.discountValue);
-    return price;
-  }, originalPrice);
-  return Math.round(result);
 }
 
 function localItemsToCartResponse(localItems: LocalCartItem[]): CartResponse {
@@ -643,7 +625,7 @@ export default function CartPage() {
                 const originalPrice = item.variant?.price ?? item.product.price;
                 const unitPrice = promos.length > 0 ? getStackedDiscountedPrice(originalPrice, promos) : originalPrice;
                 const lineTotal = unitPrice * item.quantity;
-                const promotionLabel = promos.length > 0 ? promos.map((p) => getPromotionLabel(p, t)).join(' + ') : null;
+                const promotionLabel = promos.length > 0 ? promos.map((p) => getPromotionLabel(p, t, formatPrice)).join(' + ') : null;
                 const isItemUpdating = updatingItem === item.id;
 
                 return (

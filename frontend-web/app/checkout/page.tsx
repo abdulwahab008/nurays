@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState, useRef } from 'react';
-import { getStackedDiscountedPrice } from '@/lib/pricing';
+import { getPromotionLabel, getStackedDiscountedPrice } from '@/lib/pricing';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import {
@@ -48,12 +48,6 @@ interface CatalogPromotion {
   name: string;
   type: string;
   discountValue: number;
-}
-
-function getPromotionLabel(p: CatalogPromotion, t: (key: 'percentOff' | 'amountOff' | 'deal', vars?: Record<string, string | number>) => string): string {
-  if (p.type === 'percentage' && p.discountValue > 0) return t('percentOff', { value: p.discountValue });
-  if (p.type === 'fixed' && p.discountValue > 0) return t('amountOff', { amount: formatPrice(p.discountValue) });
-  return p.name || t('deal');
 }
 
 export default function CheckoutPage() {
@@ -1074,7 +1068,7 @@ export default function CheckoutPage() {
                   const promos = promotionsByProductId[item.product.id] || [];
                   const unitPrice = promos.length > 0 ? getStackedDiscountedPrice(base, promos) : base;
                   const lineTotal = unitPrice * item.quantity;
-                  const label = promos.length > 0 ? promos.map((p) => getPromotionLabel(p, t)).join(' + ') : null;
+                  const label = promos.length > 0 ? promos.map((p) => getPromotionLabel(p, t, formatPrice)).join(' + ') : null;
 
                   return (
                     <div key={item.id} className="p-3 rounded-2xl bg-slate-50/80 border border-slate-100 space-y-2">

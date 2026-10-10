@@ -190,10 +190,11 @@ npm test        # node --test on tests/unit/*.test.ts
 
 Pure helpers in `frontend-web/lib/` (no React, no `@/` imports) are tested with Node's own test runner, which reads
 TypeScript directly (`--experimental-strip-types`): there is no extra package. A test imports its subject with the `.ts`
-extension (`../../lib/cities.ts`; the web `tsconfig.json` allows that). The suite so far is the city module
-(`cities.test.ts`): the list and its centres, Rawalpindi against Islamabad, the big cities from anywhere in them, the
-countryside, Urdu and English names, the order of the map's fields, and that nothing ever defaults to Karachi. Screens
-are covered by Playwright (next section), not here.
+extension (`../../lib/cities.ts`; the web `tsconfig.json` allows that). The suites so far are the city module
+(`cities.test.ts`: the list and its centres, Rawalpindi against Islamabad, the big cities from anywhere in them, the
+countryside, Urdu and English names, the order of the map's fields, and that nothing ever defaults to Karachi) and the
+discount maths and label (`pricing.test.ts`: percentage and fixed deals, stacking in either order, never below zero,
+whole rupees, a deal with no size). Screens are covered by Playwright (next section), not here.
 
 ## 3. Frontend end-to-end (Playwright)
 

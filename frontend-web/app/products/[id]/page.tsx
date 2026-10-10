@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { getStackedDiscountedPrice } from '@/lib/pricing';
+import { getPromotionLabel, getStackedDiscountedPrice } from '@/lib/pricing';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { productService } from '@/lib/services/product.service';
@@ -31,12 +31,6 @@ interface CatalogPromotion {
 
 function formatClock(iso: string): string {
   return new Date(iso).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
-}
-
-function getPromotionLabel(p: CatalogPromotion, t: BrowseT): string {
-  if (p.type === 'percentage' && p.discountValue > 0) return t('pctOff', { value: p.discountValue });
-  if (p.type === 'fixed' && p.discountValue > 0) return t('amountOff', { amount: formatPrice(p.discountValue) });
-  return p.name || t('deal');
 }
 
 interface ProductDetail {
@@ -583,15 +577,15 @@ export default function ProductDetailPage() {
             {catalogPromotions.length > 0 && (
               <span className="text-sm font-medium text-gray-600 bg-white border border-gray-200 px-2.5 py-1 rounded-lg">
                 {catalogPromotions.length === 1
-                  ? getPromotionLabel(catalogPromotions[0], t)
-                  : catalogPromotions.map((p) => getPromotionLabel(p, t)).join(' + ')}
+                  ? getPromotionLabel(catalogPromotions[0], t, formatPrice)
+                  : catalogPromotions.map((p) => getPromotionLabel(p, t, formatPrice)).join(' + ')}
               </span>
             )}
             {catalogPromotions.length === 0 &&
               product.originalPrice != null &&
               Math.round(product.originalPrice) > Math.round(product.price) && (
                 <span className="text-sm font-medium text-gray-600 bg-white border border-gray-200 px-2.5 py-1 rounded-lg">
-                  {t('pctOff', { value: Math.round((1 - product.price / product.originalPrice) * 100) })}
+                  {t('percentOff', { value: Math.round((1 - product.price / product.originalPrice) * 100) })}
                 </span>
               )}
             <span className="text-gray-500 text-sm">{t('perUnit', { unit: product.unit })}</span>

@@ -57,12 +57,6 @@ interface CatalogPromotion {
   discountValue: number;
 }
 
-function getPromotionLabel(p: CatalogPromotion): string {
-  if (p.type === 'percentage' && p.discountValue > 0) return `${p.discountValue}% off`;
-  if (p.type === 'fixed' && p.discountValue > 0) return `${formatPrice(p.discountValue)} off`;
-  return p.name || 'Deal';
-}
-
 interface Category {
   id: string;
   name: string;
