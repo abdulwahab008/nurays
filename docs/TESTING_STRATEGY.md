@@ -35,6 +35,10 @@ Suites and what each protects:
 | `auth-hardening.test.ts` | legacy (type-less) tokens are rejected, revoked sessions (`isTokenRevoked`), upload path checks |
 | `jwt.test.ts` | access/refresh token creation and verification, token types |
 | `google-auth.test.ts` | Google sign-in (`authenticateWithGoogle`) |
+| `reauth.test.ts` | "confirm with your password": only wrong passwords count, five stop even the right one, a 400 not a 401 |
+| `change-password.test.ts` | changing the password while signed in: the current one re-checked and counted, the new one judged first, older sessions void and fresh tokens for this one, the owner told, no password given by a token alone |
+| `account-notice.test.ts` | the e-mails that say the password or the e-mail address changed: the words, the time in Pakistan, the new address only in part, escaping, only a verified address is written to |
+| `profile-notices.test.ts` | what `GET /users/me` says about the account (e-mail verified, has a password, never the hash) and who is told when the e-mail address changes: the address the account leaves, and nobody when the change is refused |
 | `config-env.test.ts` | startup configuration validation (`config/env.ts`): what is missing or unsafe in production |
 | `errorHandler.test.ts`, `observability.test.ts` | `AppError` conversion, error responses, audit logging of writes |
 | `validation.middleware.test.ts` | `validateQuery` against Express 5's getter-only `req.query` |
@@ -141,7 +145,7 @@ JSON that leaves the API (what a rider or a kitchen is shown, what a wrong input
 | `small-fixes` | literal `%` and `_` in search, malformed links, token types, spreadsheet formulas in the audit export |
 | `privacy` | public listings and the open pool carry no pin, door link, e-mail or phone |
 | `kitchen-view` | what a kitchen may see of an order, the tracking snapshot, chat and live events |
-| `sign-in` | password rules, one answer for a wrong password and an unknown account, reset links, the re-authentication budget, staff passwords |
+| `sign-in` | password rules, one answer for a wrong password and an unknown account, reset links, the re-authentication budget, staff passwords, Google sign-in requests, changing the password while signed in (older sessions void, fresh tokens, no password for a Google account), the one-time code purposes |
 
 Every suite makes its own users, kitchens, dishes and orders with unique values, so it runs on any database that has had
 `prisma migrate deploy` and any number of times. It never depends on seeded accounts. Because it leaves its data

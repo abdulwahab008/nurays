@@ -13,6 +13,7 @@ import {
   verifyPhone,
   forgotPassword,
   resetPassword,
+  changePassword,
 } from '../controllers/auth.controller';
 import { validate } from '../middleware/validation.middleware';
 import {
@@ -25,6 +26,7 @@ import {
   verifyPhoneSchema,
   forgotPasswordSchema,
   resetPasswordSchema,
+  changePasswordSchema,
   googleLoginSchema,
 } from '../validators/auth.validator';
 import { authenticate } from '../middleware/auth.middleware';
@@ -56,6 +58,8 @@ router.post('/refresh', validate(refreshTokenSchema), refreshToken);
 router.get('/me', authenticate, getCurrentUser);
 router.post('/resend-verification', authenticate, resendVerificationLimiter, resendVerificationEmail);
 router.post('/logout', authenticate, logout);
+// Asks for the current password again; wrong ones are counted per account (services/reauth.service.ts).
+router.post('/change-password', authenticate, validate(changePasswordSchema), changePassword);
 
 // Phone verification for the signed-in account (also how an account adds a real number)
 router.post('/phone/request', authenticate, phoneVerifyRequestLimiter, otpTargetLimiter, validate(requestPhoneVerificationSchema), requestPhoneVerification);

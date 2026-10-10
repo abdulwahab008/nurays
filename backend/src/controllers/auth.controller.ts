@@ -163,6 +163,15 @@ export const loginWithGoogle = async (req: Request, res: Response) => {
   });
 };
 
+export const changePassword = async (req: Request, res: Response) => {
+  if (!req.user) {
+    throw new AppError('Authentication required', 401, 'AUTH_REQUIRED');
+  }
+  const { currentPassword, newPassword } = req.body;
+  const result = await authService.changePassword(req.user.userId, currentPassword, newPassword, { ip: req.ip });
+  res.status(200).json({ success: true, message: 'Password changed. Your other devices were signed out.', data: result });
+};
+
 export const logout = async (req: Request, res: Response) => {
   // Logging out ends every session the account has, on every device: a copied token (and the
   // 30-day refresh token with it) stops working at once. Tokens are stateless, so this is the

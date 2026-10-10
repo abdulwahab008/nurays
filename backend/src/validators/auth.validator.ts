@@ -2,7 +2,7 @@ import { z } from 'zod';
 
 export const requestOTPSchema = z.object({
   phone: z.string().min(10).max(15),
-  purpose: z.enum(['registration', 'login', 'reset_password']),
+  purpose: z.enum(['registration', 'login']),
 });
 
 export const registerSchema = z.object({
@@ -81,6 +81,12 @@ export const verifyPhoneSchema = z.object({
 
 export const forgotPasswordSchema = z.object({
   email: z.string().email('Invalid email format'),
+});
+
+// The strength of the new password is judged by the service (it knows whose password it is), which says why in `details.reason`.
+export const changePasswordSchema = z.object({
+  currentPassword: z.string().min(1, 'Enter your current password').max(200),
+  newPassword: z.string().min(1, 'Enter a new password').max(200),
 });
 
 export const resetPasswordSchema = z.object({

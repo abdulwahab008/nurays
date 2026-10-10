@@ -6,7 +6,9 @@ export interface UserProfile {
   phoneVerified?: boolean;
   email?: string;
   userType: string;
-  isEmailVerified?: boolean;
+  emailVerified?: boolean;
+  /** Whether there is a password to change: an account that only signs in with Google has none. */
+  hasPassword?: boolean;
   profile?: {
     fullName: string;
     avatarUrl?: string;

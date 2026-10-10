@@ -14,6 +14,8 @@ import { permissionsFor } from '../utils/permissions';
 import { generateVerificationToken } from '../utils/email-verification';
 import { assertVerifyMailAllowed } from '../utils/mailBudget';
 import { assertPasswordStrength, MIN_PASSWORD_LENGTH, MIN_STAFF_PASSWORD_LENGTH } from '../utils/password-policy';
+import { assertCurrentPassword } from './reauth.service';
+import { notifyPasswordChanged } from './account-notice.service';
 
 /** A unique stand-in number for an account with no (or an evicted) real phone. Never a real number: +999 isn't assigned. */
 export const placeholderPhone = (seed: string): string =>
@@ -519,7 +521,7 @@ export class AuthService {
   /**
    * Request OTP for login/registration
    */
-  async requestOTP(phone: string, purpose: 'registration' | 'login' | 'reset_password') {
+  async requestOTP(phone: string, purpose: 'registration' | 'login') {
     const formattedPhone = formatPhoneNumber(phone);
 
     if (!isValidPhoneNumber(formattedPhone)) {
@@ -680,6 +682,68 @@ export class AuthService {
     // Every session ends with a password reset: leave a trail of who and when.
     if (resetUserId) socketManager.disconnectUser(resetUserId);
     if (resetUserId) void recordAudit({ userId: resetUserId, action: 'auth:PASSWORD_RESET', entityType: 'user', entityId: resetUserId, responseStatus: 200 });
+  }
+
+  /**
+   * Change the password of a signed-in account.
+   *
+   * The current password is asked for again, and counted like the other "confirm with your password" screens, so a
+   * token that leaks cannot be used to guess it. An account with no password (it signs in with Google or a code) has
+   * nothing to change, and a token alone must not be able to give it one: it sets one through "forgot password",
+   * which writes to the address its owner has proven. As with a password reset every other session ends, and this one
+   * is handed a fresh pair of tokens so that the person stays signed in here. The owner is told by e-mail.
+   */
+  async changePassword(userId: string, currentPassword: string, newPassword: string, ctx: { ip?: string | null } = {}) {
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: {
+        id: true,
+        email: true,
+        emailVerified: true,
+        phone: true,
+        userType: true,
+        status: true,
+        passwordHash: true,
+        profile: { select: { fullName: true } },
+      },
+    });
+    if (!user || user.status !== 'active') {
+      throw new AppError('User not found', 404, 'USER_NOT_FOUND');
+    }
+    if (!user.passwordHash) {
+      throw new AppError('This account has no password. Use "Forgot password" to set one.', 400, 'NO_PASSWORD_SET');
+    }
+    // What is wrong with the new password is said before the old one is checked: it costs the person no attempt.
+    assertPasswordStrength(newPassword, {
+      minLength: user.userType === 'admin' ? MIN_STAFF_PASSWORD_LENGTH : MIN_PASSWORD_LENGTH,
+      email: user.email,
+      phone: realPhoneOrNull(user.phone),
+      name: user.profile?.fullName,
+    });
+    await assertCurrentPassword({ id: user.id, passwordHash: user.passwordHash }, currentPassword, ctx);
+    if (await bcrypt.compare(newPassword, user.passwordHash)) {
+      throw new AppError('Choose a password different from the current one', 400, 'PASSWORD_UNCHANGED');
+    }
+
+    // Hashed first: the cut-off is taken as late as possible, so a session another device starts meanwhile is not spared.
+    const passwordHash = await bcrypt.hash(newPassword, 10);
+    const changedAt = new Date();
+    await prisma.user.update({ where: { id: userId }, data: { passwordHash, tokensValidAfter: changedAt } });
+    socketManager.disconnectUser(userId);
+    void recordAudit({ userId, action: 'auth:PASSWORD_CHANGED', entityType: 'user', entityId: userId, ipAddress: ctx.ip ?? null, responseStatus: 200 });
+    void notifyPasswordChanged({ email: user.email, emailVerified: user.emailVerified, fullName: user.profile?.fullName }, changedAt);
+
+    // Tokens made after the cut-off: this session carries on, every older one is void.
+    const tokenPayload: JWTPayload = { userId: user.id, userType: user.userType, phone: user.phone };
+    const accessToken = generateToken(tokenPayload);
+    const refreshToken = generateRefreshToken(tokenPayload);
+    return {
+      tokens: {
+        access_token: accessToken,
+        refresh_token: refreshToken,
+        expires_in: tokenTtlSeconds(accessToken),
+      },
+    };
   }
 
   /**

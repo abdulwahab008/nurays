@@ -1,13 +1,15 @@
 /**
  * Sign-up and sign-in hardening as the outside sees it: which new passwords are refused, that a wrong
  * password and an unknown account look the same, that a password-reset link works once, how many wrong
- * passwords "confirm with your password" puts up with, how often an e-mail address can be changed, and
- * that staff need longer passwords, and which Google sign-in requests are refused. The limits per
+ * passwords "confirm with your password" puts up with, how often an e-mail address can be changed,
+ * that staff need longer passwords, which Google sign-in requests are refused, how a signed-in person
+ * changes their password (and what that does to their other devices), and which one-time codes can be
+ * asked for. The limits per
  * address, phone number and e-mail address are relaxed on a development server (see live() in
  * src/middleware/rateLimiter.ts), so they are not tried.
  */
 import { createHash, randomBytes } from 'crypto';
-import { Actor, call, login, makeUser, ok, PASSWORD, prisma, Reply, unique } from './lib';
+import { Actor, call, login, makeUser, ok, PASSWORD, prisma, Reply, sleep, unique } from './lib';
 
 const STRONG = 'Marble-Orchard-58';
 const TWELVE = 'Orchid-Mapl8'; // the shortest password a staff member may have
@@ -156,4 +158,64 @@ export default async function signIn() {
     // 401 when a Google client is configured; 503 while none is (and the token is never looked at): either way nobody is signed in
     ok(`an ID token that is ${what} signs nobody in`, (r.status === 401 || r.status === 503) && !r.body?.data?.tokens, said(r));
   }
+
+  // 8. changing the password while signed in
+  const changePassword = (who: Actor, currentPassword: string, newPassword: string) => who.as('POST', '/auth/change-password', { currentPassword, newPassword });
+  const refreshWith = (refreshToken: string) => call(null, 'POST', '/auth/refresh', { refreshToken });
+  const anonymous = await call(null, 'POST', '/auth/change-password', { currentPassword: PASSWORD, newPassword: STRONG });
+  ok('changing a password needs a signed-in account (401)', anonymous.status === 401, said(anonymous));
+
+  const changer = await makeUser('customer');
+  const otherDevice = await login(changer.email); // the same account signed in somewhere else
+  const wrongCurrent = await changePassword(changer, 'Wrong-Wrong-9', STRONG);
+  ok('a wrong current password answers 400 INVALID_PASSWORD (never 401) and changes nothing', wrongCurrent.status === 400 && wrongCurrent.code === 'INVALID_PASSWORD' && (await tryLogin(changer.email, PASSWORD)).status === 200, said(wrongCurrent));
+  const commonNew = await changePassword(changer, PASSWORD, 'password123');
+  ok('a common new password is refused with WEAK_PASSWORD / COMMON', weak(commonNew, 'COMMON', 8), said(commonNew));
+  const personalNew = await changePassword(changer, PASSWORD, `${nameOf(changer.email)}-Tulip7`);
+  ok("one built from the account's e-mail name is refused with PERSONAL", weak(personalNew, 'PERSONAL', 8), said(personalNew));
+  const shortNew = await changePassword(changer, PASSWORD, 'Ab3-xyz');
+  ok('a 7-character one is refused with TOO_SHORT', weak(shortNew, 'TOO_SHORT', 8), said(shortNew));
+  const sameAgain = await changePassword(changer, PASSWORD, PASSWORD);
+  ok('the same password again is refused with 400 PASSWORD_UNCHANGED', sameAgain.status === 400 && sameAgain.code === 'PASSWORD_UNCHANGED', said(sameAgain));
+  ok('and none of those refusals changed the password or ended a session', (await tryLogin(changer.email, PASSWORD)).status === 200 && (await changer.as('GET', '/auth/me')).status === 200 && (await call(otherDevice.access, 'GET', '/auth/me')).status === 200);
+
+  const didChange = await changePassword(changer, PASSWORD, STRONG);
+  const issued = didChange.body?.data?.tokens;
+  ok('a good new password changes it (200) and hands back tokens for this session', didChange.status === 200 && !!issued?.access_token && !!issued?.refresh_token && issued.expires_in > 0, said(didChange));
+  const [signsInNew, signsInOld] = [await tryLogin(changer.email, STRONG), await tryLogin(changer.email, PASSWORD)];
+  ok('the new password signs in and the old one does not', signsInNew.status === 200 && signsInOld.status === 401, `${signsInNew.status} / ${signsInOld.status}`);
+  const [oldHere, oldThere] = [await changer.as('GET', '/auth/me'), await call(otherDevice.access, 'GET', '/auth/me')];
+  ok('the tokens from before the change are void, on this device and on the other one', oldHere.status === 401 && oldThere.status === 401, `${oldHere.status} / ${oldThere.status}`);
+  const oldRefresh = await refreshWith(otherDevice.refresh);
+  ok("and the other device's refresh token cannot get a new session", oldRefresh.status === 401 && oldRefresh.code === 'SESSION_REVOKED', said(oldRefresh));
+  const [newHere, newRefresh] = [await call(issued?.access_token, 'GET', '/auth/me'), await refreshWith(issued?.refresh_token ?? 'none')];
+  ok('the tokens it handed back work, and refresh', newHere.status === 200 && newRefresh.status === 200 && !!newRefresh.body?.data?.accessToken, `${newHere.status} / ${newRefresh.status}`);
+  let trail = 0;
+  for (let i = 0; i < 10 && trail === 0; i++) {
+    trail = await prisma.auditLog.count({ where: { userId: changer.id, action: 'auth:PASSWORD_CHANGED' } });
+    if (trail === 0) await sleep(200);
+  }
+  ok('the change leaves a trail in the audit log', trail === 1, String(trail));
+
+  const googleOnly = await makeUser('customer');
+  await prisma.user.update({ where: { id: googleOnly.id }, data: { passwordHash: null } });
+  const passwordless = await changePassword(googleOnly, PASSWORD, STRONG);
+  ok('an account with no password cannot be given one by a token alone (400 NO_PASSWORD_SET)', passwordless.status === 400 && passwordless.code === 'NO_PASSWORD_SET' && (await prisma.user.findUniqueOrThrow({ where: { id: googleOnly.id }, select: { passwordHash: true } })).passwordHash === null, said(passwordless));
+
+  const pestered = await makeUser('customer');
+  const guesses: Reply[] = [];
+  for (let i = 0; i < 5; i++) guesses.push(await changePassword(pestered, 'Wrong-Wrong-9', STRONG));
+  const afterGuesses = await changePassword(pestered, PASSWORD, STRONG);
+  ok('five wrong current passwords stop even the right one (429 RATE_LIMITED), as on the other confirm-with-password screens', guesses.every((r) => r.code === 'INVALID_PASSWORD') && afterGuesses.status === 429 && afterGuesses.code === 'RATE_LIMITED', `${guesses.map((r) => r.status).join()} then ${said(afterGuesses)}`);
+
+  const staffMember = await makeUser('admin');
+  const staffShortNew = await changePassword(staffMember, PASSWORD, ELEVEN);
+  ok('a staff member needs 12 characters for the new password too', weak(staffShortNew, 'TOO_SHORT', 12), said(staffShortNew));
+  const staffChanged = await changePassword(staffMember, PASSWORD, TWELVE);
+  ok('and 12 are accepted', staffChanged.status === 200, said(staffChanged));
+
+  // 9. a one-time code is asked for to register or to sign in, and for nothing else
+  const number = `+92301${String(Math.floor(Math.random() * 1e7)).padStart(7, '0')}`;
+  const unusedPurpose = await call(null, 'POST', '/auth/otp/request', { phone: number, purpose: 'reset_password' });
+  ok('a code "for a password reset" is not offered (a reset goes through the link sent by e-mail): 400, and no code is made or sent', unusedPurpose.status === 400 && unusedPurpose.code === 'VALIDATION_ERROR' && (await prisma.otpVerification.count({ where: { phone: number } })) === 0, said(unusedPurpose));
 }

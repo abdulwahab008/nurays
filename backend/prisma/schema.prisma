@@ -119,7 +119,7 @@ model OtpVerification {
   id         String   @id @default(uuid())
   phone      String
   otpCode    String   @map("otp_code")
-  purpose    String   // registration, login, reset_password
+  purpose    String   // registration, login
   attempts   Int      @default(0)
   isVerified Boolean  @default(false) @map("is_verified")
   expiresAt  DateTime @map("expires_at")

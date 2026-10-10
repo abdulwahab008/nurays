@@ -8,6 +8,7 @@ import { generateVerificationToken } from '../utils/email-verification';
 import { assertCurrentPassword } from './reauth.service';
 import { budgetAdd } from '../utils/attemptBudget';
 import { assertVerifyMailAllowed } from '../utils/mailBudget';
+import { notifyEmailChanged } from './account-notice.service';
 
 /** How many times an account may point itself at a new e-mail address in an hour. */
 const MAX_EMAIL_CHANGES_PER_HOUR = 3;
@@ -33,6 +34,9 @@ export class UserProfileService {
       phone: user.phone,
       phoneVerified: user.phoneVerified,
       email: user.email,
+      emailVerified: user.emailVerified,
+      // Whether there is a password to change (a Google account has none); the password itself never leaves the server.
+      hasPassword: !!user.passwordHash,
       userType: user.userType,
       status: user.status,
       profile: user.profile
@@ -65,6 +69,7 @@ export class UserProfileService {
   ) {
     const user = await prisma.user.findUnique({
       where: { id: userId },
+      include: { profile: { select: { fullName: true } } },
     });
 
     if (!user) {
@@ -114,6 +119,8 @@ export class UserProfileService {
       } catch (err) {
         console.error(`[updateProfile] Could not queue the verification email for ${maskEmail(newEmail)}`, err);
       }
+      // The address the account leaves hears of it (when its owner had proven it), so that a change they did not make is noticed.
+      void notifyEmailChanged({ email: user.email, emailVerified: user.emailVerified, fullName: user.profile?.fullName }, newEmail);
     }
 
     // Get or create profile

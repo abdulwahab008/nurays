@@ -15,9 +15,9 @@ Code: `backend/src/services/auth.service.ts`, `utils/jwt.ts`, `middleware/auth.m
   must exist and be `active` (suspended gives 403), and the role used is the current one, not the one in the token.
   Socket.IO connections run the same check (`config/socket.ts`).
 - **Session revocation.** `User.tokensValidAfter`: any token issued before it is refused (401 `SESSION_REVOKED`),
-  access and refresh alike. It is set on password reset, when a phone number is taken over by its proven owner,
-  when an unverified-email account is claimed through Google sign-in, when an admin suspends a user, and when a
-  user's role changes (hub manager assigned or removed, `admin-people.service.ts`).
+  access and refresh alike. It is set on logout, password reset and password change, when a phone number is taken
+  over by its proven owner, when an unverified-email account is claimed through Google sign-in, when an admin
+  suspends a user, and when a user's role changes (hub manager assigned or removed, `admin-people.service.ts`).
 - **Passwords.** bcrypt, cost 10. Login for an unknown email still runs a bcrypt comparison against a dummy hash, so
   timing does not reveal whether an account exists; the error is the same for both cases.
 - **Email verification.** A random 32-byte token, valid 24 hours, mailed as a link. Password-reset tokens are random,
@@ -81,7 +81,7 @@ is the production setting; development relaxes some.
 | Reset link | 20 / 15 min / IP, and 3 / hour / e-mail address | forgot-password (answers the same whether or not the address has an account). A link made in the last minute is not replaced by a new request |
 | Verification e-mail | 3 / hour / account (resend); 3 / hour / inbox (also for e-mail changes: `+tags` and Gmail dots count as the same inbox) | resend-verification, changing the e-mail |
 | E-mail change | 3 / hour / account | `PATCH /users/me` with a new `email` |
-| Password re-check | 5 wrong passwords / 15 min / account | changing the e-mail (accounts with a password) and closing the account. Only wrong answers are counted; five stop even the right password until the window ends. A wrong password is a 400 `INVALID_PASSWORD` (a 401 would look like an expired session to the web app) and is written to the audit log (`auth:REAUTH_FAILED`) |
+| Password re-check | 5 wrong passwords / 15 min / account | changing the e-mail (accounts with a password), changing the password and closing the account. Only wrong answers are counted; five stop even the right password until the window ends. A wrong password is a 400 `INVALID_PASSWORD` (a 401 would look like an expired session to the web app) and is written to the audit log (`auth:REAUTH_FAILED`) |
 | Register | 10 / hour / IP | registration |
 | Promo validation | 20 / minute / IP | promo codes |
 | Uploads | 60 / 10 min / user | all uploads |
@@ -234,7 +234,19 @@ but that is convenience, not the security boundary.
   connection or a server error keeps the session). The realtime connection presents the current token on every
   reconnect.
 - **Logout ends every session** of the account (`tokensValidAfter`) and closes its live Socket.IO connections; so
-  do suspension, a staff role change, a password reset and account closure (`socketManager.disconnectUser`).
+  do suspension, a staff role change, a password reset, a password change and account closure
+  (`socketManager.disconnectUser`).
+- **Changing the password while signed in** (`POST /auth/change-password`) asks for the current password again (the
+  re-check budget above), judges the new one first so that a weak one costs no attempt, refuses the same password,
+  and ends every session of the account; the session that made the change is handed fresh tokens, so the person
+  stays signed in. An account with no password cannot be given one by a token alone (400 `NO_PASSWORD_SET`): it
+  sets one through "forgot password", which writes only to a verified address. The change is audited
+  (`auth:PASSWORD_CHANGED`) and the owner is e-mailed.
+- **The owner hears of a change they may not have made.** A password change e-mails the account's verified address,
+  and so does an e-mail change, to the address the account *leaves*, naming the new one only in part (never in full)
+  and the time (Pakistan time). Both are queued (a mail server that is down neither undoes nor delays the change)
+  and neither is sent to an address nobody has proven (it may be a stranger's). There is no link to undo a change
+  in the notice yet: it points to the help page, where the person can write to support.
 - **Changing the email address** on an account that has a password requires the current password
   (`PATCH /users/me` with `currentPassword`, else 400 `PASSWORD_REQUIRED`), and the new address is unverified until
   its owner confirms it. **Password-reset links are only ever sent to a verified address**, so a copied token cannot
@@ -293,7 +305,7 @@ anything else: orders, ledger entries, chat, uploaded documents and receipts are
 
 - **Refresh tokens are not rotated or revocable one by one.** `/auth/refresh` mints a new pair but the old refresh
   token stays valid until it expires or the account's sessions are ended as a whole (`tokensValidAfter`: logout,
-  password reset, suspension, role change, account closure). There is no per-device session list.
+  password reset, password change, suspension, role change, account closure). There is no per-device session list.
 - **OTP codes and email-verification tokens are stored in plain text** in the database (reset tokens are hashed).
   They are short-lived and purged, but a database read exposes live ones.
 - **No breached-password lookup.** Passwords are checked against a bundled list of common ones, not against a live

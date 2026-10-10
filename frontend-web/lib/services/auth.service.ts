@@ -154,6 +154,21 @@ export const authService = {
     return response.data;
   },
 
+  // Signed in: change the password. Every other device is signed out; this one is handed new tokens (store them with apiClient.setTokens).
+  changePassword: async (currentPassword: string, newPassword: string) => {
+    const response = await apiClient.post<ApiResponse<{ tokens: AuthTokens }>>('/auth/change-password', {
+      currentPassword,
+      newPassword,
+    });
+    return response.data;
+  },
+
+  // E-mails a one-time link to set a new password (always answers the same, whether or not the address has an account).
+  forgotPassword: async (email: string) => {
+    const response = await apiClient.post<ApiResponse<{ message?: string }>>('/auth/forgot-password', { email });
+    return response.data;
+  },
+
   // Token refresh lives in lib/api-client.ts (transparent on 401).
 
   logout: async () => {

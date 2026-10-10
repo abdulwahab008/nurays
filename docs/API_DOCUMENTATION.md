@@ -40,7 +40,7 @@ Where a route is only "authenticated" but the service enforces ownership or a ro
 3. The response is `{ success, data: { accessToken, refreshToken } }` (camelCase, no `expires_in`): both tokens are replaced. The old refresh token is not invalidated server-side.
 4. Retry the original request once. If refresh fails (401 `INVALID_REFRESH_TOKEN`), sign out.
 
-The web client (`frontend-web/lib/api-client.ts`) does exactly this, shares one in-flight refresh between concurrent 401s, and never retries `/auth/refresh`, `/auth/login`, `/auth/logout` or `/auth/register`. `POST /auth/logout` does nothing server-side (stateless JWT): the client discards its tokens.
+The web client (`frontend-web/lib/api-client.ts`) does exactly this, shares one in-flight refresh between concurrent 401s, and never retries `/auth/refresh`, `/auth/login`, `/auth/logout` or `/auth/register`. `POST /auth/logout` ends every session the account has (it sets `tokensValidAfter`), so the client discards its tokens and every other device has to sign in again.
 
 ### Response envelope
 
@@ -125,7 +125,7 @@ Uploaded public images are served from the storage layer's public URL. Private f
 
 | Method and path | Access | Body / notes | Returns |
 |---|---|---|---|
-| `POST /auth/otp/request` | public, otp limit | `phone` (10-15 chars), `purpose`: `registration` \| `login` \| `reset_password` | `{ message, phone }` (the normalised number); sends an SMS code |
+| `POST /auth/otp/request` | public, otp limit | `phone` (10-15 chars), `purpose`: `registration` \| `login` (a code for a password reset is not offered, a reset goes through the e-mailed link: 400 `VALIDATION_ERROR`) | `{ message, phone }` (the normalised number); sends an SMS code |
 | `POST /auth/register` | public, register limit | `email`, `password` (8-200 characters; a common password, or one built from the person's own name, phone or e-mail, is refused with 400 `WEAK_PASSWORD` and `details.reason`; one that is too short is refused by the request schema as 400 `VALIDATION_ERROR`), `user_type`: `customer` \| `seller` \| `rider`, `full_name` (2-255); optional `phone`, `phone_otp` (6 digits, from `/otp/request` with purpose `registration`; without it the phone is saved unverified), `city`, `area`, `business_name` (required for sellers, else 400 `BUSINESS_NAME_REQUIRED`) | 201 `{ user, seller?, tokens, requiresEmailVerification: true, emailSendFailed }`; seller and rider accounts start pending approval |
 | `POST /auth/login` | public, login limit | `loginMethod`: `email` (default) or `otp`; `phoneOrEmail`; `otpCodeOrPassword` (password min 6, or 6-digit OTP). Email login needs a valid email, OTP login a phone of 10-15 chars | `{ user, tokens, requiresEmailVerification }`. An unverified email does not block login |
 | `POST /auth/google` | public, login limit | exactly one of `accessToken` (the web button's Google access token) or `idToken` (a native app's Google ID token, a signed JWT verified against Google's keys); both or neither is 400 `VALIDATION_ERROR` | same shape as login. 401 `INVALID_GOOGLE_TOKEN`, 401 `GOOGLE_EMAIL_UNVERIFIED`, 503 `GOOGLE_NOT_CONFIGURED` / `GOOGLE_UNAVAILABLE` |
@@ -135,7 +135,8 @@ Uploaded public images are served from the storage layer's public URL. Private f
 | `POST /auth/refresh` | public | `refreshToken` | `{ accessToken, refreshToken }` (see Refresh flow) |
 | `GET /auth/me` | authenticated | none | `{ id, phone, email, userType, status, emailVerified, phoneVerified, profile, defaultAddress }` |
 | `POST /auth/resend-verification` | authenticated | none | message |
-| `POST /auth/logout` | authenticated | none | message only (no server-side effect) |
+| `POST /auth/change-password` | authenticated | `currentPassword` (asked for again: a wrong one is 400 `INVALID_PASSWORD`, never 401, and five wrong ones in 15 minutes stop even the right one with 429 `RATE_LIMITED`, the same budget as changing the e-mail or closing the account), `newPassword` (the same rules as sign-up, judged first, so a weak one costs no attempt: 400 `WEAK_PASSWORD` with `details.reason` and `details.minLength`, staff 12 characters; the same password again is 400 `PASSWORD_UNCHANGED`) | `{ tokens: { access_token, refresh_token, expires_in } }` for this session; every older session, on this device and every other, is void (401 `SESSION_REVOKED`) and the account's sockets are closed. An account with no password (it signs in with Google) is refused with 400 `NO_PASSWORD_SET`: it sets one through `forgot-password`, which writes to its verified address. The change is audited (`auth:PASSWORD_CHANGED`) and the verified address is e-mailed a notice |
+| `POST /auth/logout` | authenticated | none | message; ends every session the account has, on every device (older access and refresh tokens are refused with 401 `SESSION_REVOKED`) and closes its sockets |
 | `POST /auth/phone/request` | authenticated, otp limit | `phone` | `{ message, phone }`; sends a code to that number |
 | `POST /auth/phone/verify` | authenticated, login limit | `phone`, `otp` (6 digits) | `{ phone, phoneVerified }`; the number becomes the account's |
 
@@ -145,8 +146,8 @@ All routes need authentication (`user-profile.routes.ts`).
 
 | Method and path | Body / notes | Returns |
 |---|---|---|
-| `GET /users/me` | none | the user's profile |
-| `PATCH /users/me` | optional `fullName` (min 2), `email`, `city`, `area`, `languagePreference`: `en` \| `ur`; `currentPassword` is required when `email` changes on an account that has a password (400 `PASSWORD_REQUIRED`, 400 `INVALID_PASSWORD` for a wrong one, never 401, which would make the web app refresh its session and retry; five wrong passwords an hour per account end in 429 `RATE_LIMITED`, and so does the fourth e-mail change an hour) | updated profile; a changed email is unverified until confirmed |
+| `GET /users/me` | none | `{ id, phone, phoneVerified, email, emailVerified, hasPassword, userType, status, profile, createdAt }`: `hasPassword` says whether there is a password to change (a Google account has none); the password itself never leaves the server |
+| `PATCH /users/me` | optional `fullName` (min 2), `email`, `city`, `area`, `languagePreference`: `en` \| `ur`; `currentPassword` is required when `email` changes on an account that has a password (400 `PASSWORD_REQUIRED`, 400 `INVALID_PASSWORD` for a wrong one, never 401, which would make the web app refresh its session and retry; five wrong passwords an hour per account end in 429 `RATE_LIMITED`, and so does the fourth e-mail change an hour) | updated profile; a changed email is unverified until confirmed, and the address the account leaves is e-mailed a notice (only if its owner had verified it) that names the new address in part |
 | `DELETE /users/me` | `confirm: "DELETE"`, `password` (required when the account has one) | closes the account (see Security: account closure); 409 `OPEN_ORDERS` \| `WALLET_BALANCE` \| `ACTIVE_DELIVERIES` \| `RIDER_BALANCE` \| `PENDING_PAYOUT`, 403 `STAFF_ACCOUNT` |
 | `POST /users/me/avatar` | `avatarUrl` (a URL; upload the image first with `POST /upload/avatar`) | updated avatar |
 | `GET /users/me/addresses` | none | the user's addresses (bare array) |
@@ -597,7 +598,7 @@ The super admin and your own account cannot be changed. Login and `GET /auth/me`
 
 ## Limitations
 
-- `POST /auth/logout` and the refresh endpoint do not revoke tokens; sessions are only revoked by password reset or account takeover handling (`tokensValidAfter`).
+- The refresh endpoint hands out a new refresh token without invalidating the old one (no rotation with reuse detection), and sessions are not listed per device: logout, a password reset or change, a suspension, a role change, an account takeover and account closure each end every session of the account at once (`tokensValidAfter`).
 - `GET /realtime/orders/:id/track` rejects the order's assigned rider, although a rider can join the order's socket room.
 - Several routes read their body without a zod schema (seller reject reason, manual payment submission, order-payment confirmation, rider location, category requests, Google sign-in). Their checks are in the controller or service.
 - Error shapes are not completely uniform: `community.controller.ts` returns its 400s as `{ success: false, message }` without an `error` object.

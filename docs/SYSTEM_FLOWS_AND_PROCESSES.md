@@ -50,7 +50,7 @@ The client sends a Google access token. The server checks it with Google's `toke
 
 ### Sessions
 
-Access tokens last 24 h, refresh tokens 30 d. `POST /auth/refresh` checks the user is still active and the token not revoked. Password reset (`POST /auth/forgot-password` queues an email with a one-hour single-use link; `POST /auth/reset-password` consumes it) and admin suspension set `tokens_valid_after`, which invalidates every earlier token. Adding a phone to an existing account is `POST /auth/phone/request` then `/phone/verify`.
+Access tokens last 1 h (`JWT_EXPIRES_IN`), refresh tokens 30 d. `POST /auth/refresh` checks the user is still active and the token not revoked. A signed-in person changes the password with `POST /auth/change-password` (the current password again; every other session ends, this one gets fresh tokens, and the verified address is e-mailed a notice), and logout ends every session of the account. Password reset (`POST /auth/forgot-password` queues an email with a one-hour single-use link; `POST /auth/reset-password` consumes it) and admin suspension set `tokens_valid_after`, which invalidates every earlier token. Adding a phone to an existing account is `POST /auth/phone/request` then `/phone/verify`.
 
 ## 2. Kitchen application and approval
 
