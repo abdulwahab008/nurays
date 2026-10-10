@@ -220,9 +220,10 @@ jobs:
           cache-to: type=gha,scope=backend,mode=max
 
       - name: Scan backend image (OS and library vulnerabilities)
-        uses: aquasecurity/trivy-action@0.28.0
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
           image-ref: nuray-backend:ci
+          trivyignores: .trivyignore
           format: table
           exit-code: "1"
           ignore-unfixed: true
@@ -242,9 +243,10 @@ jobs:
             NEXT_PUBLIC_SAFEPAY_SANDBOX=true
 
       - name: Scan frontend image (OS and library vulnerabilities)
-        uses: aquasecurity/trivy-action@0.28.0
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
           image-ref: nuray-frontend:ci
+          trivyignores: .trivyignore
           format: table
           exit-code: "1"
           ignore-unfixed: true

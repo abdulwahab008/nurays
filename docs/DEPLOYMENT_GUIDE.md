@@ -191,7 +191,14 @@ in the same release as the code that stops using the old shape).
 | `docker-compose.yml` | Builds both images for local use. Expects PostgreSQL and Redis on the host (`host.docker.internal`), mounts a named `uploads` volume, `stop_grace_period: 30s`, and starts the frontend after the backend is healthy. It is not a full production stack: it has no database, Redis, TLS or proxy. |
 | `.github/workflows/docker-publish.yml` | On pushes to `main` and `v*` tags (or manually), builds both images and pushes them to GitHub Container Registry as `ghcr.io/<owner>/nuray-backend` and `nuray-frontend`. Tags: `main` and `sha-<short>` on `main`; the version, `major.minor` and `latest` on `v*` tags. Frontend build args come from repository variables (`vars.NEXT_PUBLIC_API_URL`, and so on). Without them it bakes in `http://localhost:3001/api/v1`, so set the variables before using these images in production. |
 
-`.github/workflows/ci.yml` (typecheck, build, Docker build, Playwright) runs on pull requests and on `main`.
+Both runtime images take Debian's pending security updates at build time and contain `node` only: npm, npx, corepack
+and yarn are removed after the build, which takes their bundled libraries out of the image scan. Run one-off Prisma
+commands from a checkout of the release, or inside the backend container as `node_modules/.bin/prisma ...`
+(`MIGRATE_ON_START` uses the same path).
+
+`.github/workflows/ci.yml` (typecheck, build, Docker build with a Trivy scan of both images, Playwright) runs on pull
+requests and on `main`. The scan fails on fixable high and critical vulnerabilities; accepted exceptions live in
+`.trivyignore` at the repository root, each with a reason and an expiry date.
 
 ## Health and readiness
 

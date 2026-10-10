@@ -5,6 +5,8 @@
  *   - one parent category
  *   - one verified, active seller (user + seller record)
  *   - three active products under that seller
+ *   - one approved rider carrying one order to a customer's pinned address (the rider
+ *     navigation spec signs in as e2e-rider@nuray.test and presses Start on that job)
  *
  * Safe to run repeatedly (upserts keyed on unique fields).
  *
@@ -120,7 +122,126 @@ async function main() {
     });
   }
 
-  console.log(`✅ E2E seed done: category=${category.slug}, seller=${seller.businessName}, products=${1 + more.length}`);
+  // --- a rider with one job on the move ---
+  // Fixed ids and unique keys keep this idempotent; a re-run puts the job back on the road.
+  const riderUser = await prisma.user.upsert({
+    where: { email: 'e2e-rider@nuray.test' },
+    update: { status: 'active' },
+    create: {
+      email: 'e2e-rider@nuray.test',
+      phone: '+923009990002',
+      userType: 'rider',
+      status: 'active',
+      emailVerified: true,
+      passwordHash: await bcrypt.hash('RiderPass123!', 10),
+      profile: { create: { fullName: 'E2E Rider' } },
+    },
+  });
+  const rider = await prisma.rider.upsert({
+    where: { userId: riderUser.id },
+    update: { status: 'active', verificationStatus: 'approved', isAvailable: true, communityId: gulshan?.id },
+    create: {
+      userId: riderUser.id,
+      city: 'Karachi',
+      vehicleType: 'motorcycle',
+      status: 'active',
+      verificationStatus: 'approved',
+      isAvailable: true,
+      communityId: gulshan?.id,
+    },
+  });
+
+  const customer = await prisma.user.upsert({
+    where: { email: 'e2e-customer@nuray.test' },
+    update: {},
+    create: {
+      email: 'e2e-customer@nuray.test',
+      phone: '+923009990003',
+      userType: 'customer',
+      status: 'active',
+      emailVerified: true,
+      passwordHash: await bcrypt.hash('CustomerPass123!', 10),
+      profile: { create: { fullName: 'E2E Customer' } },
+    },
+  });
+  // The customer's door, pinned in Gulshan-e-Iqbal, Karachi.
+  const door = { latitude: 24.918, longitude: 67.0971 };
+  const address = await prisma.userAddress.upsert({
+    where: { id: '6f1d2c4e-3b5a-4e7f-9a1b-2c3d4e5f6a7b' },
+    update: {},
+    create: {
+      id: '6f1d2c4e-3b5a-4e7f-9a1b-2c3d4e5f6a7b',
+      userId: customer.id,
+      label: 'Home',
+      houseNumber: '7',
+      addressLine1: 'House 7, Block 13-D',
+      area: 'Gulshan-e-Iqbal',
+      city: 'Karachi',
+      landmark: 'Opposite the park',
+      communityId: gulshan?.id,
+      latitude: door.latitude,
+      longitude: door.longitude,
+      isDefault: true,
+    },
+  });
+
+  const order = await prisma.order.upsert({
+    where: { orderNumber: 'E2E-RIDER-JOB-1' },
+    update: { orderStatus: 'dispatched' },
+    create: {
+      orderNumber: 'E2E-RIDER-JOB-1',
+      customerId: customer.id,
+      subtotal: 650,
+      deliveryFee: 0,
+      totalAmount: 650,
+      paymentMethod: 'cod',
+      deliveryType: 'home_delivery',
+      orderStatus: 'dispatched',
+      deliveryAddressId: address.id,
+      deliveryAddressSnapshot: {
+        addressLine1: address.addressLine1,
+        area: address.area,
+        city: address.city,
+        houseNumber: address.houseNumber,
+        landmark: address.landmark,
+        latitude: door.latitude,
+        longitude: door.longitude,
+      },
+      items: {
+        create: {
+          sellerId: seller.id,
+          productId: FIXED_ID,
+          productName: 'E2E Chicken Seekh Kabab',
+          quantity: 1,
+          unitPrice: 650,
+          totalPrice: 650,
+          commissionRate: 10,
+          commissionAmount: 65,
+          sellerPayout: 585,
+          status: 'dispatched',
+        },
+      },
+    },
+  });
+  const job = {
+    riderId: rider.id,
+    status: 'picked_up',
+    assignmentMode: 'auto',
+    riderFee: 120,
+    pickupAddress: 'E2E Test Kitchen, Gulshan-e-Iqbal, Karachi',
+    pickupLatitude: 24.9206,
+    pickupLongitude: 67.0889,
+    deliveryAddress: 'House 7, Block 13-D, Gulshan-e-Iqbal, Karachi',
+    deliveryLatitude: door.latitude,
+    deliveryLongitude: door.longitude,
+  };
+  await prisma.delivery.upsert({
+    where: { orderId: order.id },
+    update: job,
+    create: { orderId: order.id, ...job },
+  });
+
+  console.log(`✅ E2E seed done: category=${category.slug}, seller=${seller.businessName}, products=${1 + more.length}, rider job=${order.orderNumber}`);
 }
 
 main()

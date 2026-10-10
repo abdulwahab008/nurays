@@ -29,10 +29,20 @@ WORKDIR /app
 ENV NODE_ENV=production \
     PORT=3001
 
-# Install only production deps (no dev/test, no ts-node etc.)
+# Debian security fixes the upstream Node image has not picked up yet (the CI image scan
+# fails on fixable high and critical issues). Nothing new is installed.
+RUN apt-get update \
+ && DEBIAN_FRONTEND=noninteractive apt-get -y upgrade \
+ && rm -rf /var/lib/apt/lists/*
+
+# Install only production deps (no dev/test, no ts-node etc.) and generate the Prisma client,
+# then remove npm, npx, corepack and yarn: the running service needs none of them and they
+# bring their own vulnerable libraries. (Migrations run the local Prisma CLI, see CMD.)
 COPY package.json package-lock.json* ./
 COPY prisma ./prisma
-RUN npm ci --omit=dev && npx prisma generate && npm cache clean --force
+RUN npm ci --omit=dev && npx prisma generate && npm cache clean --force \
+ && rm -rf /usr/local/lib/node_modules/npm /usr/local/lib/node_modules/corepack /opt/yarn-* \
+      /usr/local/bin/npm /usr/local/bin/npx /usr/local/bin/corepack /usr/local/bin/yarn /usr/local/bin/yarnpkg
 
 # Copy compiled JS from the builder
 COPY --from=builder /app/dist ./dist
@@ -56,4 +66,4 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
 # Safe with several instances starting at once: Prisma serialises migrations with a database
 # lock. Otherwise run `npm run db:migrate` as a release step before rolling out a new image.
 # `exec` keeps node as PID 1 so it receives SIGTERM for the graceful shutdown.
-CMD ["sh", "-c", "if [ \"$MIGRATE_ON_START\" = \"true\" ]; then npx prisma migrate deploy || exit 1; fi; exec node dist/index.js"]
+CMD ["sh", "-c", "if [ \"$MIGRATE_ON_START\" = \"true\" ]; then node_modules/.bin/prisma migrate deploy || exit 1; fi; exec node dist/index.js"]

@@ -61,8 +61,17 @@ ENV NODE_ENV=production \
     PORT=3000 \
     HOSTNAME=0.0.0.0
 
-# Non-root user
-RUN useradd --system --uid 1001 --shell /usr/sbin/nologin nextjs
+# Debian security fixes the upstream Node image has not picked up yet (the CI image scan
+# fails on fixable high and critical issues). Nothing new is installed.
+RUN apt-get update \
+ && DEBIAN_FRONTEND=noninteractive apt-get -y upgrade \
+ && rm -rf /var/lib/apt/lists/*
+
+# The standalone server runs on node alone: remove npm, npx, corepack and yarn (and the
+# vulnerable libraries they carry), then add the non-root user.
+RUN rm -rf /usr/local/lib/node_modules/npm /usr/local/lib/node_modules/corepack /opt/yarn-* \
+      /usr/local/bin/npm /usr/local/bin/npx /usr/local/bin/corepack /usr/local/bin/yarn /usr/local/bin/yarnpkg \
+ && useradd --system --uid 1001 --shell /usr/sbin/nologin nextjs
 
 # Standalone output already contains a minimal node_modules + server.js
 COPY --from=builder --chown=nextjs:nextjs /app/public ./public

@@ -35,9 +35,10 @@ test.describe('navigation links', () => {
 test('the rider dashboard offers Start navigation only on a job that is on the move', async ({ page }) => {
   await page.goto('/login');
   await page.getByRole('button', { name: 'Email', exact: true }).click();
-  // The CI seed's rider by default; a local stack passes its own (E2E_RIDER_EMAIL / E2E_RIDER_PASSWORD).
-  await page.getByLabel(/Email Address/).fill(process.env.E2E_RIDER_EMAIL ?? 'rider@nuray.test');
-  await page.getByLabel('Password').fill(process.env.E2E_RIDER_PASSWORD ?? 'Password123!');
+  // The rider from backend/prisma/seed-e2e.ts (it carries one job on the move); a local stack
+  // with other accounts passes its own (E2E_RIDER_EMAIL / E2E_RIDER_PASSWORD).
+  await page.getByLabel(/Email Address/).fill(process.env.E2E_RIDER_EMAIL ?? 'e2e-rider@nuray.test');
+  await page.getByLabel('Password').fill(process.env.E2E_RIDER_PASSWORD ?? 'RiderPass123!');
   await page.getByRole('button', { name: 'Login', exact: true }).click();
   await expect(page).toHaveURL(/\/riders\/dashboard/, { timeout: 15_000 });
   await page.waitForTimeout(2500);
