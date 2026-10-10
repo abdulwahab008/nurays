@@ -5,7 +5,7 @@
 # Stage 2: production runtime with only the artefacts it needs
 
 # -------- builder --------
-FROM node:22-bookworm-slim AS builder
+FROM node:25-bookworm-slim AS builder
 WORKDIR /app
 
 # Install dependencies first (better layer caching)
@@ -23,7 +23,7 @@ RUN npm run build
 
 
 # -------- runner --------
-FROM node:22-bookworm-slim AS runner
+FROM node:25-bookworm-slim AS runner
 WORKDIR /app
 
 ENV NODE_ENV=production \
