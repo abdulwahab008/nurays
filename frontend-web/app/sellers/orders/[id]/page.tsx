@@ -14,6 +14,7 @@ import { useLiveRefresh } from '@/lib/hooks/use-live-refresh';
 import { useT } from '@/lib/i18n';
 import { commonMessages } from '@/lib/i18n/messages/common';
 import { kitchenOrderMessages, kitchenStatusLabel, paymentMethodLabel, paymentStatusLabel } from '@/lib/i18n/messages/kitchen-orders';
+import { ExternalLink } from '@/components/ExternalLink';
 
 interface SellerOrderDetail {
   id: string;
@@ -229,9 +230,9 @@ export default function SellerOrderDetailPage() {
                 {order.paymentReferenceNumber && <p>{t('detail.reference')} <span className="font-mono" data-ltr>{order.paymentReferenceNumber}</span></p>}
                 {order.paymentSenderName && <p>{t('detail.sentBy', { name: order.paymentSenderName })}</p>}
                 {order.paymentProofUrl && (
-                  <a href={order.paymentProofUrl} target="_blank" rel="noopener noreferrer" className="text-indigo-700 underline">
+                  <ExternalLink href={order.paymentProofUrl} className="text-indigo-700 underline">
                     {t('detail.viewReceipt')}
-                  </a>
+                  </ExternalLink>
                 )}
                 {order.sellerTotals && (
                   <div className="pt-2 border-t border-gray-100 space-y-1">

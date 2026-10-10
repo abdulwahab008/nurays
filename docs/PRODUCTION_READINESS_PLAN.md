@@ -8,14 +8,14 @@ Done on `claude/epic-johnson-r4eep6`. The audit report's second addendum has the
 
 - **Phase 0:** the fonts are bundled (0.1), the API checks are in the repository and in CI (0.3: eleven suites, 341 checks, plus `verify-money-flows` with 360 checks in a job of its own), the Dependabot rules are in (0.4; closing the old Dependabot pull requests is yours), and the report is corrected (0.5).
 - **Phase 1, the code part:** the geocoder's key, pace and queue are settings and one address has a flood guard (INTEG-2), a release guard keeps draft legal pages out of a release (MOBILE-5), and the load-test tooling is written, unit-tested, run in CI on a small database and smoke-tested at full size (`backend/scripts/load`, guide in `docs/LOAD_TESTING.md`). The run against staging is yours.
-- **Phase 2:** NEW-priv-1, PRIV-6, NEW-priv-2 and INTEG-3, then the findings of an independent review of them; NEW-auth-1, SEC-4, the staff password rules and SEC-5; the CSP collector, its Playwright check and the enforce switch (SEC-7); PERF-5 (a job is offered to the best rider first, and only riders on duty hear of a job nobody took); the backend lint gate (BE-1); the delivery status machine and its tests (DELIV-11); the web app's lint is green (FE-6: no errors, and CI fails on more warnings than the cap); a busy database answers 503 with `Retry-After` instead of a bare 500 (NEW-perf-3); a customer can enter a house number on a saved address (NEW-addr-1); the admin order list filters by a kitchen's own id (NEW-admin-1); a switched-off online payment is no longer reported as a crash (NEW-ops-2); the rider dashboard's job list carries the running jobs and the latest 30 finished ones instead of 200 (NEW-perf-1: the lists went from p95 4 to 5 s to about 1 s with 300 riders on one process).
+- **Phase 2:** NEW-priv-1, PRIV-6, NEW-priv-2 and INTEG-3, then the findings of an independent review of them; NEW-auth-1, SEC-4, the staff password rules and SEC-5; the CSP collector, its Playwright check and the enforce switch (SEC-7); PERF-5 (a job is offered to the best rider first, and only riders on duty hear of a job nobody took); the backend lint gate (BE-1); the delivery status machine and its tests (DELIV-11); the web app's lint is green (FE-6: no errors, and CI fails on more warnings than the cap); a busy database answers 503 with `Retry-After` instead of a bare 500 (NEW-perf-3); a customer can enter a house number on a saved address (NEW-addr-1); the admin order list filters by a kitchen's own id (NEW-admin-1); a switched-off online payment is no longer reported as a crash (NEW-ops-2); the store preparation that works on the web: a public help page, the app link files and one way out of the app for every external link (MOBILE-6, MOBILE-7, MOBILE-4); the rider dashboard's job list carries the running jobs and the latest 30 finished ones instead of 200 (NEW-perf-1: the lists went from p95 4 to 5 s to about 1 s with 300 riders on one process).
 - **Defects the new checks found and fixed on the way:** the rider's view of an order mixed the old street text with the new pin after the customer edited the saved address; the kitchen dashboard counted dishes as orders and counted cancelled lines in today's sales; the delivery row on `GET /orders/:id` listed the riders who had handed the job back to every viewer; and a sweep with absurd values found 500s on huge page numbers, impossible dates, non-finite price filters and amounts beyond a column's range; none is a 500 now (the request is refused with a 400, or the value is capped or ignored). The load scenarios found more: an exhausted database pool answered 500 (now 503), the rider dashboard's lists were the expensive reads (now trimmed), and the dish search scans every dish (NEW-perf-2, waiting for your approval of an index).
 
 Still ahead, in order:
 
 1. **Merge PR #38** (yours), which runs CI on `main` again (Phase 0.2).
 2. **Phase 1:** everything outside the code, and the load test on staging (the tooling is ready).
-3. **Phase 2, what is left:** the seven days of CSP reports and then enforcing, MOBILE-6, MOBILE-1, MOBILE-4 and MOBILE-7, and the device checks for DELIV-7 (the automated resume test is in).
+3. **Phase 2, what is left:** the seven days of CSP reports and then enforcing, MOBILE-1 (Google id tokens for a native app), and the device checks for DELIV-7 (the automated resume test is in) and for the native branch of MOBILE-4.
 4. **Phase 3:** waits for your answers to decisions 1–20; anything with a migration waits for your approval.
 
 ## Where things stand (when the plan was written)
@@ -125,10 +125,10 @@ Most of this is outside the code. Items marked **(you)** need the owner or ops; 
 - [x] **DELIV-11** Unit tests for the delivery status machine, before anyone touches the rider or dispatch code. **Done:** `utils/deliveryStatus.ts` and 19 tests that fail when a transition or a guard changes.
 
 **Store preparation that works on the web today**
-- [ ] **MOBILE-6** A public help page with an FAQ and the support email, no sign-in needed.
+- [x] **MOBILE-6** A public help page with an FAQ and the support email, no sign-in needed. **Done:** `/help`, linked from the home footer and every legal page; the e-mail is `NEXT_PUBLIC_SUPPORT_EMAIL`, so it shows a bracketed placeholder until you set it.
 - [ ] **MOBILE-1** `POST /auth/google` also accepts Google id tokens, which a native app needs. The web keeps its current button.
-- [ ] **MOBILE-4** One `openExternal()` helper for maps, documents and legal links. Each rider map button keeps going to its own end of the trip.
-- [ ] **MOBILE-7** Serve `assetlinks.json` and `apple-app-site-association` from environment values; the values come once the store accounts exist.
+- [x] **MOBILE-4** One `openExternal()` helper for maps, documents and legal links. Each rider map button keeps going to its own end of the trip. **Done for the web** (`lib/open-external.ts`, `components/ExternalLink.tsx`; a browser check that Start navigation and both Maps buttons open their own addresses); the Capacitor branch is written against its documented plugins and needs a device once the shell exists.
+- [x] **MOBILE-7** Serve `assetlinks.json` and `apple-app-site-association` from environment values; the values come once the store accounts exist. **Done** (`ANDROID_APP_PACKAGE`, `ANDROID_SHA256_CERT_FINGERPRINTS`, `IOS_APP_IDS`, runtime settings of the web server; 404 while unset). **Yours:** set them when the apps exist.
 
 ## Phase 3: Your decisions
 
@@ -204,7 +204,7 @@ Each line gives the options, the recommendation, and what it unlocks. Effort is 
 
 ## Report corrections
 
-Made in `docs/PRODUCTION_READINESS_AUDIT.md` (Phase 0.5), including the status counts, which are now 89 fixed, 16 partly fixed and 35 open:
+Made in `docs/PRODUCTION_READINESS_AUDIT.md` (Phase 0.5), including the status counts, which are now 90 fixed, 18 partly fixed and 32 open:
 
 - **Header and Deliverable 7:**
   - The branch was merged through PR #26, and the index migrations add a schema change.
@@ -306,10 +306,10 @@ Status now: what the code shows today. Needs: code = can be done now; decision =
 | MOBILE-1 | Open | Open | code | P1 | S | 2 | Accept Google id tokens on POST /auth/google now; native Google sign-in comes with the shell |
 | MOBILE-2 | Open | Open | decision | P1 | S | 4 | iOS login under App Store guideline 4.8: hide Google on iOS, or add Sign in with Apple |
 | MOBILE-3 | Open | Open | approval | P1 | L | 4 | Native push through FCM (Android, and iOS via APNs) next to web push |
-| MOBILE-4 | Open | Open | code | P1 | M | 2 | One openExternal() helper for maps, documents and legal links (web now, native branch later) |
+| MOBILE-4 | Open | Partly done | code | P1 | M | 2 | One openExternal() helper for maps, documents and legal links: done for the web, the native branch waits for the shell and a device |
 | MOBILE-5 | Open | Partly done | outside | P0 | XS | 1 | Set the legal identity build args after lawyer sign-off (the release guard is in: a reviewed build without them fails, a release tag is refused) |
-| MOBILE-6 | Open | Open | code | P1 | S | 2 | Public help page with FAQ and support e-mail, no sign-in |
-| MOBILE-7 | Open | Open | code | P1 | S | 2 | Serve assetlinks.json and apple-app-site-association from env (values once the accounts exist) |
+| MOBILE-6 | Open | Done | code | P1 | S | 2 | Public help page with FAQ and support e-mail, no sign-in |
+| MOBILE-7 | Open | Partly done | code | P1 | S | 2 | Serve assetlinks.json and apple-app-site-association from env: done, the values come once the accounts and signing certificates exist |
 | MOBILE-8 | Open | Open | code | P2 | M | 4 | Safe-area insets on the fixed and sticky bars |
 | MOBILE-9 | Open | Open | decision | P1 | M | 4 | Decide how rider location works while the app is not in front |
 | MOBILE-10 | Open | Open | decision | P2 | S | 4 | Capacitor in remote-URL mode: confirm the decision, navigation allow-list and offline page |

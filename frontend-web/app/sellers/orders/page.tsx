@@ -15,6 +15,7 @@ import SelfHandoverActions from '@/components/orders/SelfHandoverActions';
 import { useT } from '@/lib/i18n';
 import { commonMessages } from '@/lib/i18n/messages/common';
 import { kitchenOrderMessages, paymentMethodLabel, paymentStatusLabel } from '@/lib/i18n/messages/kitchen-orders';
+import { ExternalLink } from '@/components/ExternalLink';
 
 const sidebarItems = SELLER_SIDEBAR_ITEMS;
 
@@ -451,14 +452,12 @@ export default function SellerOrdersPage() {
                               {ord.paymentReferenceNumber && ` • ${t('list.ref', { ref: ord.paymentReferenceNumber })}`}
                             </p>
                             {ord.paymentProofUrl && (
-                              <a
+                              <ExternalLink
                                 href={ord.paymentProofUrl}
-                                target="_blank"
-                                rel="noreferrer"
                                 className="text-emerald-700 hover:underline font-bold text-[11px] inline-flex items-center gap-1 mt-1"
                               >
                                 <span>{t('list.viewScreenshot')}</span>
-                              </a>
+                              </ExternalLink>
                             )}
                           </div>
                         </div>

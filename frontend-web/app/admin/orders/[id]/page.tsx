@@ -9,6 +9,7 @@ import { useToast } from '@/components/ui/toast';
 import { useAuthStore } from '@/lib/store/auth-store';
 import { apiClient } from '@/lib/api-client';
 import { formatPrice, formatDate } from '@/lib/utils';
+import { ExternalLink } from '@/components/ExternalLink';
 
 interface OrderDetail {
   id: string;
@@ -340,9 +341,9 @@ export default function AdminOrderDetailPage() {
                       </p>
                       {order.paymentDisputeReason && <p>Kitchen: &ldquo;{order.paymentDisputeReason}&rdquo;</p>}
                       {order.paymentProofUrl && (
-                        <a href={order.paymentProofUrl} target="_blank" rel="noopener noreferrer" className="underline font-medium">
+                        <ExternalLink href={order.paymentProofUrl} className="underline font-medium">
                           Open the customer&apos;s receipt
-                        </a>
+                        </ExternalLink>
                       )}
                     </div>
                     <p className="mt-3 text-xs text-gray-600">

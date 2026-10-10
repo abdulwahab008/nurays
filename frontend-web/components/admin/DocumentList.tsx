@@ -1,5 +1,7 @@
 'use client';
 
+
+import { ExternalLink } from '@/components/ExternalLink';
 const DOCUMENT_LABELS: Record<string, string> = {
   cnic_front: 'CNIC (front)',
   cnic_back: 'CNIC (back)',
@@ -14,15 +16,13 @@ export default function DocumentList({ documents }: { documents: Array<{ id: str
     <div className="mt-3 flex flex-wrap gap-2" data-testid="documents">
       {documents.map((d) =>
         d.url ? (
-          <a
+          <ExternalLink
             key={d.id}
             href={d.url}
-            target="_blank"
-            rel="noopener noreferrer"
             className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg border border-gray-200 text-xs font-medium text-gray-700 hover:bg-gray-50"
           >
             📄 {DOCUMENT_LABELS[d.type] ?? d.type}
-          </a>
+          </ExternalLink>
         ) : null
       )}
     </div>

@@ -1641,7 +1641,7 @@ export default function Home() {
               <Link href="/products?productType=frozen" className="hover:text-[#FF5500]">{t('frozenPantry')}</Link>
               <Link href="/sellers/register" className="hover:text-[#FF5500]">{t('openKitchen')}</Link>
               <Link href="/riders/dashboard" className="hover:text-[#FF5500]">{t('riderPortal')}</Link>
-              <Link href="/support" className="hover:text-[#FF5500]">{t('help')}</Link>
+              <Link href="/help" className="hover:text-[#FF5500]">{t('help')}</Link>
             </div>
           </div>
 

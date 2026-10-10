@@ -38,6 +38,7 @@ import { paymentService } from '@/lib/services/payment.service';
 import { useT } from '@/lib/i18n';
 import { commonMessages } from '@/lib/i18n/messages/common';
 import { checkoutMessages, richText } from '@/lib/i18n/messages/checkout';
+import { ExternalLink } from '@/components/ExternalLink';
 
 type CopyField = 'iban' | 'jazzcash' | 'easypaisa';
 
@@ -1280,14 +1281,14 @@ export default function CheckoutPage() {
               <p className="text-center text-[11px] leading-relaxed text-slate-500">
                 {richText(t('agreeTerms'), {
                   terms: (
-                    <Link href="/terms" target="_blank" className="font-semibold text-slate-700 underline hover:text-[#FF5500]">
+                    <ExternalLink href="/terms" className="font-semibold text-slate-700 underline hover:text-[#FF5500]">
                       {t('terms')}
-                    </Link>
+                    </ExternalLink>
                   ),
                   refund: (
-                    <Link href="/refund-policy" target="_blank" className="font-semibold text-slate-700 underline hover:text-[#FF5500]">
+                    <ExternalLink href="/refund-policy" className="font-semibold text-slate-700 underline hover:text-[#FF5500]">
                       {t('refundPolicy')}
-                    </Link>
+                    </ExternalLink>
                   ),
                 })}
               </p>

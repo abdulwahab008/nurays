@@ -8,7 +8,7 @@ Nuray has five layers of checks. Each one catches a different kind of mistake, s
 | Backend unit tests (Jest) | `backend/tests/*.test.ts` | nothing (no database, no network) | yes, `npm test` |
 | Real-database money-flow script | `backend/scripts/verify-money-flows.ts` | a throwaway PostgreSQL | yes, the `money-flows` job |
 | API checks over HTTP | `backend/scripts/api-checks/` | the running API and its (throwaway) database | yes, the last step of the `e2e` job |
-| Playwright end-to-end | `frontend-web/tests/e2e/` | backend + database + frontend running | `smoke`, `rider-navigation`, `rider-location-resume`, `csp` and `geocode-proxy` specs |
+| Playwright end-to-end | `frontend-web/tests/e2e/` | backend + database + frontend running | `smoke`, `rider-navigation`, `rider-location-resume`, `csp`, `geocode-proxy` and `public-pages` specs |
 | Load test | `backend/scripts/load/` | a staging stack and a `*_load` database | no, run by hand before launch: [LOAD_TESTING.md](LOAD_TESTING.md); its arithmetic is in Jest (`load-engine.test.ts`) and its scripts are typechecked in CI |
 | Lint, typecheck, build, schema drift, Docker | `.github/workflows/ci.yml` | GitHub Actions | yes |
 
@@ -221,7 +221,7 @@ Limitations to know about:
 |---|---|
 | `backend` | `npm ci`, `prisma generate`, `tsc --noEmit`, `npm run typecheck:scripts` (the API checks and the load tooling), `npm run lint` (no errors, at most the warning count set in `package.json`), `npm test`, `npm run build` |
 | `frontend` | `npm ci`, `tsc --noEmit`, `npm run lint` (no errors, at most the warning count set in `package.json`), `npm run build` (with placeholder `NEXT_PUBLIC_*`) |
-| `e2e` (after both above) | PostgreSQL 15 and Redis 7 services, `prisma migrate deploy`, schema drift check (`npm run db:check`), `seed:e2e`, build and start the backend on 3001 (automatic rider assignment off), build the frontend, install Chromium, run the `smoke`, `rider-navigation`, `rider-location-resume`, `csp` and `geocode-proxy` specs, upload the Playwright report, then `npm run api-checks` against the backend |
+| `e2e` (after both above) | PostgreSQL 15 and Redis 7 services, `prisma migrate deploy`, schema drift check (`npm run db:check`), `seed:e2e`, build and start the backend on 3001 (automatic rider assignment off), build the frontend, install Chromium, run the `smoke`, `rider-navigation`, `rider-location-resume`, `csp`, `geocode-proxy` and `public-pages` specs (the last with sample app-link settings in the environment), upload the Playwright report, then `npm run api-checks` against the backend |
 | `money-flows` (after `backend`) | its own PostgreSQL 15, `prisma migrate deploy`, `scripts/verify-money-flows.ts` in test mode |
 | `load-tooling` (after `backend`) | PostgreSQL 15 (`nuray_load`) and Redis 7 services, `prisma migrate deploy`, `npm run load:seed` at 2 % of the launch size, build and start the API (automatic rider assignment off), `load:tokens`, then each load scenario for a few seconds with `--smoke` (fails on a 5xx or an unanswered request, not on speed); see [LOAD_TESTING.md](LOAD_TESTING.md) |
 | `docker-build` (after backend and frontend) | builds both images without pushing |

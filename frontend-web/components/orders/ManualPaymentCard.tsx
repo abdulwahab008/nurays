@@ -10,6 +10,8 @@ import { useT } from '@/lib/i18n';
 import { commonMessages } from '@/lib/i18n/messages/common';
 import { paymentsMessages } from '@/lib/i18n/messages/payments';
 import { richText } from '@/lib/i18n/messages/checkout';
+import { ExternalLink } from '@/components/ExternalLink';
+import { openExternal } from '@/lib/open-external';
 
 interface ManualPaymentCardProps {
   orderId: string;
@@ -285,19 +287,14 @@ export default function ManualPaymentCard({
                   src={proofToDisplay}
                   alt={t('receiptAlt')}
                   className="w-full h-full object-cover cursor-pointer hover:opacity-90"
-                  onClick={() => window.open(proofToDisplay, '_blank')}
+                  onClick={() => openExternal(proofToDisplay)}
                 />
               </div>
               <div className="text-xs">
                 <span className="font-bold text-slate-800 block">{t('screenshotAttached')}</span>
-                <a
-                  href={proofToDisplay}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="text-[#FF5500] hover:underline font-bold text-[11px]"
-                >
+                <ExternalLink href={proofToDisplay} className="text-[#FF5500] hover:underline font-bold text-[11px]">
                   {t('viewReceipt')}
-                </a>
+                </ExternalLink>
               </div>
             </div>
           )}
