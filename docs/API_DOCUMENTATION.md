@@ -150,7 +150,7 @@ All routes need authentication (`user-profile.routes.ts`).
 | `DELETE /users/me` | `confirm: "DELETE"`, `password` (required when the account has one) | closes the account (see Security: account closure); 409 `OPEN_ORDERS` \| `WALLET_BALANCE` \| `ACTIVE_DELIVERIES` \| `RIDER_BALANCE` \| `PENDING_PAYOUT`, 403 `STAFF_ACCOUNT` |
 | `POST /users/me/avatar` | `avatarUrl` (a URL; upload the image first with `POST /upload/avatar`) | updated avatar |
 | `GET /users/me/addresses` | none | the user's addresses (bare array) |
-| `POST /users/me/addresses` | `addressLine1` (min 5), `area` (min 2), `city` (min 2); optional `label`, `addressLine2`, `postalCode`, `landmark`, `latitude` (23.5..37.5), `longitude` (60.5..77.5) (the pin must be inside Pakistan, else 400 `VALIDATION_ERROR`), `communityId`, `isDefault`. There is no house-number field: the `houseNumber` column exists and is read by the rider screen, but the API does not accept it | 201 the address |
+| `POST /users/me/addresses` | `addressLine1` (min 5), `area` (min 2), `city` (min 2); optional `label`, `addressLine2`, `houseNumber` (max 50, spaces trimmed: the house, flat or shop number a rider looks for on the door), `postalCode`, `landmark`, `latitude` (23.5..37.5), `longitude` (60.5..77.5) (the pin must be inside Pakistan, else 400 `VALIDATION_ERROR`), `communityId`, `isDefault` | 201 the address |
 | `PATCH /users/me/addresses/:id` | any subset of the address fields, at least one (for example `{ isDefault: true }`) | the address |
 | `DELETE /users/me/addresses/:id` | none | message |
 

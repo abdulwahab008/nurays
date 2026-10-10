@@ -221,25 +221,7 @@ export class UserProfileService {
       ],
     });
 
-    return addresses.map((addr) => ({
-      id: addr.id,
-      label: addr.label,
-      addressLine1: addr.addressLine1,
-      addressLine2: addr.addressLine2,
-      area: addr.area,
-      city: addr.city,
-      postalCode: addr.postalCode,
-      landmark: addr.landmark,
-      isDefault: addr.isDefault,
-      communityId: addr.communityId,
-      coordinates: addr.latitude && addr.longitude
-        ? {
-            latitude: Number(addr.latitude),
-            longitude: Number(addr.longitude),
-          }
-        : null,
-      createdAt: addr.createdAt,
-    }));
+    return addresses.map((addr) => this.formatAddress(addr));
   }
 
   /**
@@ -249,6 +231,7 @@ export class UserProfileService {
     label?: string;
     addressLine1: string;
     addressLine2?: string;
+    houseNumber?: string;
     area: string;
     city: string;
     postalCode?: string;
@@ -273,6 +256,7 @@ export class UserProfileService {
         label: data.label,
         addressLine1: data.addressLine1,
         addressLine2: data.addressLine2,
+        houseNumber: data.houseNumber,
         area: data.area,
         city: data.city,
         postalCode: data.postalCode,
@@ -327,6 +311,7 @@ export class UserProfileService {
       label: string;
       addressLine1: string;
       addressLine2: string;
+      houseNumber: string;
       area: string;
       city: string;
       postalCode: string;
@@ -360,6 +345,7 @@ export class UserProfileService {
           label: data.label,
           addressLine1: data.addressLine1,
           addressLine2: data.addressLine2,
+          houseNumber: data.houseNumber,
           area: data.area,
           city: data.city,
           postalCode: data.postalCode,
@@ -398,6 +384,7 @@ export class UserProfileService {
     label: string | null;
     addressLine1: string;
     addressLine2: string | null;
+    houseNumber: string | null;
     area: string;
     city: string;
     postalCode: string | null;
@@ -413,6 +400,7 @@ export class UserProfileService {
       label: address.label,
       addressLine1: address.addressLine1,
       addressLine2: address.addressLine2,
+      houseNumber: address.houseNumber,
       area: address.area,
       city: address.city,
       postalCode: address.postalCode,

@@ -21,9 +21,8 @@ export default async function snapshot() {
   const claimed = await claimJob(rider, deliveryId);
   ok('the rider has an assigned job', claimed.status === 200 && (await jobOf(rider, deliveryId))?.status === 'assigned', claimed.code);
 
-  // The saved address now says other things (the API has no house-number field, so that one goes straight to the database).
-  await placed.customer.as('PATCH', `/users/me/addresses/${placed.addressId}`, { addressLine2: LIVE.addressLine2, landmark: LIVE.landmark });
-  await prisma.userAddress.update({ where: { id: placed.addressId }, data: { houseNumber: LIVE.houseNumber } });
+  // The saved address now says other things.
+  await placed.customer.as('PATCH', `/users/me/addresses/${placed.addressId}`, { addressLine2: LIVE.addressLine2, landmark: LIVE.landmark, houseNumber: LIVE.houseNumber });
   await prisma.order.update({ where: { id: placed.orderId }, data: { deliveryAddressSnapshot: Prisma.DbNull } });
   const fallback = (await jobOf(rider, deliveryId))?.dropoffDetails;
   ok('with no copy on the order the rider gets the saved address (so the next check can tell the two apart)', doorIs(fallback, LIVE), fallback);
@@ -35,8 +34,7 @@ export default async function snapshot() {
   const kitchen = await makeKitchen();
   const productId = await makeProduct(kitchen.sellerId);
   const customer = await makeUser('customer');
-  const addressId = await makeAddress(customer, { landmark: 'Opposite the park', latitude: 24.8607, longitude: 67.0011 });
-  await prisma.userAddress.update({ where: { id: addressId }, data: { houseNumber: 'H-55' } });
+  const addressId = await makeAddress(customer, { landmark: 'Opposite the park', latitude: 24.8607, longitude: 67.0011, houseNumber: 'H-55' });
   const order = await placeOrder(customer, [{ productId }], { addressId });
   const orderId = orderIdOf(order);
   const copyOf = async () => (await prisma.order.findUnique({ where: { id: orderId }, select: { deliveryAddressSnapshot: true } }))?.deliveryAddressSnapshot as Record<string, unknown> | null;
@@ -44,8 +42,7 @@ export default async function snapshot() {
   ok('an order is placed to that address', order.status === 201, order.code);
   ok('its copy of the address holds the house number, the landmark and the map pin as numbers', frozen?.houseNumber === 'H-55' && frozen?.landmark === 'Opposite the park' && frozen?.latitude === 24.8607 && frozen?.longitude === 67.0011, frozen);
 
-  const edit = await customer.as('PATCH', `/users/me/addresses/${addressId}`, { addressLine1: 'Plot 1, Lane 2', area: 'Gulshan Block 7', landmark: 'Moved away', latitude: 31.5204, longitude: 74.3587 });
-  await prisma.userAddress.update({ where: { id: addressId }, data: { houseNumber: 'H-99' } });
+  const edit = await customer.as('PATCH', `/users/me/addresses/${addressId}`, { addressLine1: 'Plot 1, Lane 2', area: 'Gulshan Block 7', landmark: 'Moved away', latitude: 31.5204, longitude: 74.3587, houseNumber: 'H-99' });
   ok('the saved address was edited afterwards (street, area, landmark, pin)', edit.status === 200 && edit.body.data?.landmark === 'Moved away' && edit.body.data?.coordinates?.latitude === 31.5204, edit.code);
   ok('changing the saved address later leaves the order\'s copy untouched', JSON.stringify(await copyOf()) === JSON.stringify(frozen), await copyOf());
 
@@ -59,4 +56,24 @@ export default async function snapshot() {
   ok('and the street line as it was at checkout, not the edited one', String(job?.deliveryAddress).includes('House 9, Street 5') && !String(job?.deliveryAddress).includes('Plot 1'), job?.deliveryAddress);
   const page = (await rider2.as('GET', `/orders/${orderId}`)).body.data?.deliveryAddress;
   ok('the rider\'s order page shows the same door: street, landmark and pin as at checkout', page?.addressLine1 === 'House 9, Street 5' && page?.landmark === 'Opposite the park' && Math.abs(Number(page?.latitude) - 24.8607) < 1e-6, page);
+
+  // 3. a customer can enter a house number: it is trimmed, listed, editable, limited, and reaches the rider's door details
+  const typed = await makeUser('customer');
+  const base = { addressLine1: 'Street 5', area: 'DHA Phase 6', city: 'Karachi', latitude: 24.8015, longitude: 67.0655 };
+  const created = await typed.as('POST', '/users/me/addresses', { ...base, houseNumber: '  12-B ' });
+  ok('an address is saved with a house number (spaces trimmed)', created.status === 201 && created.body.data?.houseNumber === '12-B', created.body.data?.houseNumber ?? created.code);
+  const listed = ((await typed.as('GET', '/users/me/addresses')).body.data ?? []).find((a: { id: string }) => a.id === created.body.data?.id);
+  ok('and the address list carries it', listed?.houseNumber === '12-B', listed?.houseNumber);
+  const without = await typed.as('POST', '/users/me/addresses', { ...base, addressLine1: 'Street 6' });
+  ok('an address with none still saves, and has none', without.status === 201 && (without.body.data?.houseNumber ?? null) === null, without.body.data?.houseNumber ?? without.code);
+  const changed = await typed.as('PATCH', `/users/me/addresses/${created.body.data?.id}`, { houseNumber: 'Flat 4' });
+  ok('the house number can be changed', changed.status === 200 && changed.body.data?.houseNumber === 'Flat 4', changed.body.data?.houseNumber ?? changed.code);
+  const tooLong = await typed.as('PATCH', `/users/me/addresses/${created.body.data?.id}`, { houseNumber: 'x'.repeat(51) });
+  ok('and one over 50 characters is refused', tooLong.status === 400 && tooLong.code === 'VALIDATION_ERROR', `${tooLong.status} ${tooLong.code}`);
+  const placed3 = await placeHomeOrder({ address: { houseNumber: '7-C', landmark: 'Next to the bakery' } });
+  const rider3 = await makeRider();
+  const deliveryId3 = (await acceptOrder(placed3))!;
+  await claimJob(rider3, deliveryId3);
+  const door3 = (await jobOf(rider3, deliveryId3))?.dropoffDetails;
+  ok("a house number entered through the API reaches the rider's door details", door3?.houseNumber === '7-C' && door3?.landmark === 'Next to the bakery', door3);
 }

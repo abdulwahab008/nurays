@@ -39,8 +39,7 @@ export default async function kitchenView() {
   const customerName = `Sara ${unique()}`;
   const customer = await makeUser('customer', { fullName: customerName });
   const door = { addressLine1: 'House 9, Street 5', area: 'DHA Phase 6', city: 'Karachi', landmark: 'Opposite the Karachi park' };
-  const addressId = await makeAddress(customer, { ...door, ...PIN, postalCode: POSTCODE });
-  await prisma.userAddress.update({ where: { id: addressId }, data: { houseNumber: 'H-55' } }); // the API has no house-number field
+  const addressId = await makeAddress(customer, { ...door, ...PIN, postalCode: POSTCODE, houseNumber: 'H-55' });
   const placed = await placeOrder(customer, [{ productId, quantity: 2 }], { addressId, deliveryInstructions: 'Ring twice' });
   const orderId = orderIdOf(placed);
   const gatewayId = `gw-${unique()}`;
@@ -81,8 +80,7 @@ export default async function kitchenView() {
   ok('and the same key and text scans find all of that in the customer\'s answer, so an empty scan for the kitchen means something', scanned, found(mine.body, CORE_KEYS).join(','));
 
   // 3. editing the saved address afterwards does not change the door the kitchen sees
-  const edit = await customer.as('PATCH', `/users/me/addresses/${addressId}`, { addressLine1: 'Plot 77, Lane 12', area: 'Clifton Block 5', landmark: 'Moved away' });
-  await prisma.userAddress.update({ where: { id: addressId }, data: { houseNumber: 'H-99' } });
+  const edit = await customer.as('PATCH', `/users/me/addresses/${addressId}`, { addressLine1: 'Plot 77, Lane 12', area: 'Clifton Block 5', landmark: 'Moved away', houseNumber: 'H-99' });
   const later = await kitchen.owner.as('GET', `/seller/orders/${orderId}`);
   ok('the saved address really was edited', edit.status === 200 && edit.body.data?.landmark === 'Moved away', edit.code);
   ok('and the door the kitchen sees is still the one from checkout', text(later.body.data?.deliveryAddress) === text(seen), later.body.data?.deliveryAddress);

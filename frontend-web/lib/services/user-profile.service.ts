@@ -21,6 +21,8 @@ export interface Address {
   label?: string;
   addressLine1: string;
   addressLine2?: string;
+  /** The house, flat or shop number a rider looks for on the door. */
+  houseNumber?: string | null;
   area: string;
   city: string;
   postalCode?: string;
@@ -68,6 +70,7 @@ export const userProfileService = {
     label?: string;
     addressLine1: string;
     addressLine2?: string;
+    houseNumber?: string;
     area: string;
     city: string;
     postalCode?: string;
@@ -84,6 +87,7 @@ export const userProfileService = {
     label?: string;
     addressLine1?: string;
     addressLine2?: string;
+    houseNumber?: string;
     area?: string;
     city?: string;
     postalCode?: string;

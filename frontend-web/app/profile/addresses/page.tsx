@@ -113,6 +113,7 @@ export default function AddressesPage() {
     label: 'home',
     addressLine1: '',
     addressLine2: '',
+    houseNumber: '',
     area: '',
     city: 'Karachi',
     postalCode: '',
@@ -265,7 +266,8 @@ export default function AddressesPage() {
               // Try to get area/suburb (handle Urdu suburb names)
               area: addr.suburb || addr.neighbourhood || addr.quarter || addr.residential || prev.area,
               // Try to get street address
-              addressLine1: addr.road ? `${addr.house_number || ''} ${addr.road}`.trim() : prev.addressLine1,
+              addressLine1: addr.road ? addr.road : prev.addressLine1,
+              houseNumber: addr.house_number || prev.houseNumber,
               postalCode: addr.postcode || prev.postalCode,
             }));
             
@@ -350,6 +352,7 @@ export default function AddressesPage() {
         label: addressTypes.find(a => a.id === formData.label)?.label || formData.label,
         addressLine1: formData.addressLine1,
         addressLine2: formData.addressLine2,
+        houseNumber: formData.houseNumber,
         area: formData.area,
         city: formData.city,
         postalCode: formData.postalCode,
@@ -404,6 +407,7 @@ export default function AddressesPage() {
       label: typeId,
       addressLine1: address.addressLine1 || '',
       addressLine2: address.addressLine2 || '',
+      houseNumber: address.houseNumber || '',
       area: address.area || '',
       city: address.city || 'Karachi',
       postalCode: address.postalCode || '',
@@ -425,6 +429,7 @@ export default function AddressesPage() {
       label: 'home',
       addressLine1: '',
       addressLine2: '',
+      houseNumber: '',
       area: '',
       city: 'Karachi',
       postalCode: '',
@@ -608,7 +613,8 @@ export default function AddressesPage() {
                           longitude: coords.lng.toString(),
                           city: matchedCity,
                           area: addr.suburb || addr.neighbourhood || addr.quarter || addr.residential || prev.area,
-                          addressLine1: addr.road ? `${addr.house_number || ''} ${addr.road}`.trim() : prev.addressLine1,
+                          addressLine1: addr.road ? addr.road : prev.addressLine1,
+                          houseNumber: addr.house_number || prev.houseNumber,
                           postalCode: addr.postcode || prev.postalCode,
                         }));
                         
@@ -751,18 +757,33 @@ export default function AddressesPage() {
                 />
               </div>
 
-              {/* Flat/Floor */}
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">
-                  {t('flatFloor')}
-                </label>
-                <input
-                  type="text"
-                  value={formData.addressLine2}
-                  onChange={(e) => setFormData({ ...formData, addressLine2: e.target.value })}
-                  placeholder={t('flatFloorPlaceholder')}
-                  className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all"
-                />
+              {/* House number & Flat/Floor */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">
+                    {t('houseNumber')}
+                  </label>
+                  <input
+                    type="text"
+                    value={formData.houseNumber}
+                    onChange={(e) => setFormData({ ...formData, houseNumber: e.target.value })}
+                    placeholder={t('houseNumberPlaceholder')}
+                    maxLength={50}
+                    className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">
+                    {t('flatFloor')}
+                  </label>
+                  <input
+                    type="text"
+                    value={formData.addressLine2}
+                    onChange={(e) => setFormData({ ...formData, addressLine2: e.target.value })}
+                    placeholder={t('flatFloorPlaceholder')}
+                    className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all"
+                  />
+                </div>
               </div>
 
               {/* Landmark & Postal Code */}
@@ -931,7 +952,7 @@ export default function AddressesPage() {
                   {/* Card Body */}
                   <div className="p-5">
                     <div className="space-y-1 text-gray-700">
-                      <p className="font-medium">{address.addressLine1}</p>
+                      <p className="font-medium">{[address.houseNumber, address.addressLine1].filter(Boolean).join(', ')}</p>
                       {address.addressLine2 && <p className="text-gray-500">{address.addressLine2}</p>}
                       <p className="text-gray-500">{address.area}, {address.city}</p>
                     </div>

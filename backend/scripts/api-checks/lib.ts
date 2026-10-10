@@ -182,15 +182,10 @@ export async function makeRider(): Promise<Actor & { riderId: string }> {
   return { ...user, riderId: rider.id };
 }
 
-/**
- * A saved address with a map pin in Karachi (inside Pakistan), made through the API. The API has no
- * house-number field, so `houseNumber` is written straight to the database.
- */
+/** A saved address with a map pin in Karachi (inside Pakistan), made through the API. */
 export async function makeAddress(customer: Actor, over: Record<string, unknown> = {}): Promise<string> {
-  const { houseNumber, ...body } = over;
-  const r = await customer.as('POST', '/users/me/addresses', { addressLine1: 'House 9, Street 5', area: 'DHA Phase 6', city: 'Karachi', latitude: 24.8015, longitude: 67.0655, ...body });
+  const r = await customer.as('POST', '/users/me/addresses', { addressLine1: 'House 9, Street 5', area: 'DHA Phase 6', city: 'Karachi', latitude: 24.8015, longitude: 67.0655, ...over });
   if (r.status !== 201) throw new Error(`could not add an address: ${r.status} ${JSON.stringify(r.body?.error ?? r.body)}`);
-  if (houseNumber !== undefined) await prisma.userAddress.update({ where: { id: r.body.data.id }, data: { houseNumber: houseNumber as string | null } });
   return r.body.data.id;
 }
 

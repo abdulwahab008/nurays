@@ -10,6 +10,7 @@ import { getSellerOrdersQuerySchema } from '../src/validators/seller-order.valid
 import { createPromotionSchema } from '../src/validators/promotion.validator';
 import { addToCartSchema } from '../src/validators/cart.validator';
 import { calendarDay, readableDate } from '../src/validators/primitives';
+import { addAddressSchema, updateAddressSchema } from '../src/validators/user-profile.validator';
 
 describe('pageArgs', () => {
   it('turns a page nobody could reach into the deepest one served', () => {
@@ -112,5 +113,22 @@ describe('the rest of the numbers', () => {
     }
     expect(addToCartSchema.safeParse({ productId: '3f2b8a54-6a4a-4d33-9d0f-7a3f4a1c2b11', quantity: 2 }).success).toBe(true);
     expect(addToCartSchema.safeParse({ productId: '3f2b8a54-6a4a-4d33-9d0f-7a3f4a1c2b11', quantity: 3_000_000_000 }).success).toBe(false);
+  });
+});
+
+describe('the house number on a saved address', () => {
+  const address = { addressLine1: 'Street 5, DHA', area: 'DHA Phase 6', city: 'Karachi' };
+
+  it('is optional, trimmed and kept', () => {
+    expect(addAddressSchema.parse(address).houseNumber).toBeUndefined();
+    expect(addAddressSchema.parse({ ...address, houseNumber: '  12-B ' }).houseNumber).toBe('12-B');
+    expect(updateAddressSchema.parse({ houseNumber: 'Flat 4' })).toEqual({ houseNumber: 'Flat 4' });
+  });
+
+  it('stops at 50 characters, the most a door number needs', () => {
+    expect(addAddressSchema.safeParse({ ...address, houseNumber: 'x'.repeat(50) }).success).toBe(true);
+    expect(addAddressSchema.safeParse({ ...address, houseNumber: 'x'.repeat(51) }).success).toBe(false);
+    expect(updateAddressSchema.safeParse({ houseNumber: 'x'.repeat(51) }).success).toBe(false);
+    expect(addAddressSchema.safeParse({ ...address, houseNumber: 12 }).success).toBe(false);
   });
 });
