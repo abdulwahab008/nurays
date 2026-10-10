@@ -135,6 +135,7 @@ JSON that leaves the API (what a rider or a kitchen is shown, what a wrong input
 | `security` | token lifetime, what a rider and the customer see of an order, variants private to the kitchen, logout, e-mail change, reset links |
 | `validation` | bad paging, repeated keys, missing or wrong-typed bodies, oversized bodies, numbers the database cannot hold, unreal dates |
 | `delivery` | map pins inside Pakistan, the door shown only while a job runs, hand-back and retry, the admin order filter, the kitchen dashboard, live position, Maps links |
+| `pool` | who hears about jobs in the open pool, with real sockets: riders on duty, not those off duty or pending approval; going on or off duty, a second connection, an approval and a suspension change it without a reconnect |
 | `views` | the view counter, compression, rate-limit headers |
 | `small-fixes` | literal `%` and `_` in search, malformed links, token types, spreadsheet formulas in the audit export |
 | `privacy` | public listings and the open pool carry no pin, door link, e-mail or phone |

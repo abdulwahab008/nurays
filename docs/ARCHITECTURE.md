@@ -93,6 +93,7 @@ Timeouts are configurable: `ORDER_ACCEPT_TIMEOUT_MINUTES` (30), `ORDER_PAYMENT_T
 |---|---|
 | `user:<id>` | Every connection of that user. |
 | `role:<type>` | Everyone of that role (`rider`, `admin`, ...). |
+| `riders:on-duty` | A rider's connections while the rider is approved, active and on duty: the only ones told about jobs in the open pool. Joined on connect and kept in step when the rider goes on or off duty, is suspended or is approved. |
 | `order:<id>` | Joined on request (`join:order`), only for the order's customer, a kitchen on it, its rider, or an admin. |
 
 Events emitted by services: `notification:new`, `order:new`, `order:status:update`, `order:item:status:update`, `order:message`, `order:messages:read`, `order:delivery:tracking` (rider position), `delivery:new`, `delivery:assigned`, `delivery:removed`, `delivery:cancelled`. Payloads are small signals; clients reload the data they show (`frontend-web/lib/hooks/use-live-refresh.ts`), so payloads never carry anything a viewer may not see.

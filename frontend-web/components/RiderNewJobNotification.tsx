@@ -84,15 +84,15 @@ export function RiderNewJobNotification() {
         if (pending) clearTimeout(pending);
         show({ key: `a-${d.deliveryId}`, kind: 'assigned', ...d });
       }),
-      // Posted to every rider: only worth a pop-up if nobody has taken it a moment later.
+      // Posted to the riders on duty: only worth a pop-up if nobody has taken it a moment later.
       subscribe('delivery:new', (d) => {
         const timer = setTimeout(async () => {
           timers.delete(d.deliveryId);
-          // Only worth a pop-up for a rider who could take it: on duty, and with a free slot.
+          // Only worth a pop-up for a rider who has a free slot (the server tells only riders who are on duty).
           try {
-            const [mine, profile] = await Promise.all([riderService.getMyDeliveries(), riderService.getRiderProfile()]);
+            const mine = await riderService.getMyDeliveries();
             const active = (mine.data ?? []).filter((x) => !['delivered', 'delivery_failed', 'cancelled'].includes(x.status)).length;
-            if (active >= 2 || profile.data?.isAvailable === false) return;
+            if (active >= 2) return;
           } catch {
             return;
           }

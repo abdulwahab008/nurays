@@ -4,6 +4,14 @@ import { createAdapter } from '@socket.io/redis-adapter';
 import { redisUrl, newRedisConnection } from './redis';
 import { verifyToken, isTokenRevoked } from '../utils/jwt';
 import prisma from './database';
+import { canTakePoolJobs } from '../utils/riderDuty';
+import { logger } from '../utils/logger';
+
+/**
+ * The connections of riders who can take a job from the open pool (approved, active, on duty). Pool
+ * announcements go to this room and not to every rider, so a rider who cannot claim a job is not woken for it.
+ */
+export const ON_DUTY_RIDERS_ROOM = 'riders:on-duty';
 
 export interface SocketUser {
   userId: string;
@@ -88,6 +96,9 @@ class SocketManager {
       // Join role-specific rooms
       socket.join(`role:${user.userType}`);
 
+      // A rider on duty also hears about jobs in the open pool.
+      if (user.userType === 'rider') void this.joinOnDutyRoomIfEligible(socket, user.userId);
+
       // Join order tracking room if orderId provided
       // Only participants of an order may listen to it: its room carries status
       // changes and the rider's live location. (Any authenticated user could
@@ -160,6 +171,44 @@ class SocketManager {
     return this.io;
   }
 
+  /** Whether this rider can take a job from the open pool right now (approved, active, on duty). */
+  private async riderCanTakeJobs(userId: string): Promise<boolean> {
+    const rider = await prisma.rider.findUnique({ where: { userId }, select: { verificationStatus: true, status: true, isAvailable: true } });
+    return canTakePoolJobs(rider);
+  }
+
+  /** A rider's connection that opens while they are on duty joins the room pool announcements go to. */
+  private async joinOnDutyRoomIfEligible(socket: { join: (room: string) => unknown; leave: (room: string) => unknown }, userId: string): Promise<void> {
+    try {
+      if (!(await this.riderCanTakeJobs(userId))) return;
+      socket.join(ON_DUTY_RIDERS_ROOM);
+      // A duty change that landed between the read and the join already ran its own leave for the
+      // connections that were in the room, not for this one: look again, so the room never keeps an off-duty rider.
+      if (!(await this.riderCanTakeJobs(userId))) socket.leave(ON_DUTY_RIDERS_ROOM);
+    } catch (err) {
+      logger.error({ err, userId }, 'Could not place a rider in the on-duty room');
+    }
+  }
+
+  /**
+   * Put every connection a rider has into the on-duty room, or take them out (on all instances, via the
+   * Redis adapter). Called wherever it can change: going on or off duty, being suspended, approved or rejected.
+   */
+  setRiderOnDuty(userId: string, onDuty: boolean) {
+    const connections = this.io?.in(`user:${userId}`);
+    if (onDuty) connections?.socketsJoin(ON_DUTY_RIDERS_ROOM);
+    else connections?.socketsLeave(ON_DUTY_RIDERS_ROOM);
+  }
+
+  /** Read the rider's standing and put their connections in or out of the on-duty room accordingly. Best effort. */
+  async syncRiderDuty(userId: string): Promise<void> {
+    try {
+      this.setRiderOnDuty(userId, await this.riderCanTakeJobs(userId));
+    } catch (err) {
+      logger.error({ err, userId }, "Could not update a rider's on-duty room");
+    }
+  }
+
   /**
    * Emit event to specific user
    */
@@ -203,6 +252,13 @@ class SocketManager {
   emitToRole(role: string, event: string, data: any) {
     if (this.io) {
       this.io.to(`role:${role}`).emit(event, data);
+    }
+  }
+
+  /** An event for the riders who can take a job from the open pool (see ON_DUTY_RIDERS_ROOM). */
+  emitToOnDutyRiders(event: string, data: unknown) {
+    if (this.io) {
+      this.io.to(ON_DUTY_RIDERS_ROOM).emit(event, data);
     }
   }
 

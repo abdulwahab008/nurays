@@ -8,6 +8,7 @@ import { cashLimitOf, riderMoney, riderMoneyMany } from './rider-ledger.service'
 import { calculateDeliveryFeeCorridor } from '../utils/deliveryFee';
 import { assignmentMessage, cashToCollect, dropoffAreaOf, endsOf, routeMatch } from '../utils/riderJobs';
 import { chooseRider, DispatchCandidate, JobEnds, MAX_ACTIVE_JOBS } from '../utils/dispatch';
+import { ON_DUTY_RIDER } from '../utils/riderDuty';
 
 /**
  * Automatic assignment of delivery jobs to Nuray's own riders (see utils/dispatch.ts for the rules).
@@ -75,7 +76,7 @@ export async function dispatchDelivery(deliveryId: string, opts: { announced?: b
   if (LIVE_ORDER_NOT.includes(job.order.orderStatus)) return { assigned: false, reason: 'order_finished' };
 
   const riders = await prisma.rider.findMany({
-    where: { verificationStatus: 'approved', status: 'active', isAvailable: true, id: { notIn: job.releasedRiderIds } },
+    where: { ...ON_DUTY_RIDER, id: { notIn: job.releasedRiderIds } },
     select: { id: true, userId: true, communityId: true, cashLimit: true },
   });
   if (riders.length === 0) return { assigned: false, reason: 'no_riders' };

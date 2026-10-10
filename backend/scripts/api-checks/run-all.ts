@@ -16,6 +16,7 @@ const SUITES: Array<[name: string, load: () => Promise<{ default: () => Promise<
   ['security', () => import('./security')],
   ['validation', () => import('./validation')],
   ['delivery', () => import('./delivery')],
+  ['pool', () => import('./pool')],
   ['views', () => import('./views')],
   ['small-fixes', () => import('./small-fixes')],
   ['privacy', () => import('./privacy')],

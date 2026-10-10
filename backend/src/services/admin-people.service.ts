@@ -118,10 +118,10 @@ export async function setUserStatus(adminId: string, userId: string, status: str
  */
 export async function setRiderStatus(riderId: string, status: string) {
   if (!ACCOUNT_STATUSES.includes(status as AccountStatus)) throw new AppError('Status must be active or suspended', 400, 'INVALID_STATUS');
-  const rider = await prisma.rider.findUnique({ where: { id: riderId }, select: { id: true } });
+  const rider = await prisma.rider.findUnique({ where: { id: riderId }, select: { id: true, userId: true } });
   if (!rider) throw new AppError('Rider not found', 404, 'RIDER_NOT_FOUND');
 
-  return prisma.$transaction(async (tx) => {
+  const result = await prisma.$transaction(async (tx) => {
     await tx.rider.update({ where: { id: riderId }, data: { status, ...(status === 'suspended' ? { isAvailable: false } : {}) } });
     const none: Array<{ deliveryId: string; orderId: string }> = [];
     if (status !== 'suspended') return { id: riderId, status, releasedJobs: none, jobsWithFood: none };
@@ -141,14 +141,12 @@ export async function setRiderStatus(riderId: string, status: string) {
     });
     const shape = (d: { id: string; orderId: string }) => ({ deliveryId: d.id, orderId: d.orderId });
     return { id: riderId, status, releasedJobs: toRelease.map(shape), jobsWithFood: withFood.map(shape) };
-  }).then(async (result) => {
-    // No longer a party to the jobs they lost: out of those orders' live rooms.
-    if (result.releasedJobs.length) {
-      const owner = await prisma.rider.findUnique({ where: { id: riderId }, select: { userId: true } });
-      if (owner) for (const job of result.releasedJobs) socketManager.removeUserFromOrder(owner.userId, job.orderId);
-    }
-    return result;
   });
+  // No longer a party to the jobs they lost: out of those orders' live rooms.
+  for (const job of result.releasedJobs) socketManager.removeUserFromOrder(rider.userId, job.orderId);
+  // Suspending takes them off duty (and out of the pool announcements); reactivating leaves them off until they switch on.
+  void socketManager.syncRiderDuty(rider.userId);
+  return result;
 }
 
 async function findAccount(identifier: string) {

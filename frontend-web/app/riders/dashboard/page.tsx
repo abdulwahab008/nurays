@@ -126,6 +126,16 @@ export default function RiderDashboardPage() {
     }
   }, [showToast, activeTab, t]);
 
+  // The open pool alone: a job was posted or taken, so nothing but the list of available jobs can have changed.
+  const loadAvailable = useCallback(async () => {
+    try {
+      const res = await riderService.getAvailableDeliveries();
+      setAvailable(res.data || []);
+    } catch {
+      // The next full reload reports what is wrong (an account that cannot take jobs, a lost connection).
+    }
+  }, []);
+
   const isRider = user?.user_type === 'rider' || user?.userType === 'rider';
 
   // The sidebar links to #active / #available / #history.
@@ -157,12 +167,19 @@ export default function RiderDashboardPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isAuthenticated, user, isRider, router, showToast]);
 
-  // New jobs, jobs taken by other riders or cancelled, and status changes on this rider's
-  // orders (e.g. the kitchen marking food ready) arrive as live events.
+  // Jobs given to this rider or cancelled, and status changes on this rider's orders (e.g. the kitchen
+  // marking food ready), arrive as live events and reload everything.
   useLiveRefresh(() => loadAll(true), {
-    events: ['delivery:new', 'delivery:removed', 'delivery:cancelled', 'delivery:assigned', 'order:status:update'],
+    events: ['delivery:cancelled', 'delivery:assigned', 'order:status:update'],
     enabled: isAuthenticated && isRider && !blockedReason,
     intervalMs: 30_000,
+  });
+
+  // Jobs posted to the pool or taken from it (sent only to riders on duty) change nothing but the pool list.
+  useLiveRefresh(loadAvailable, {
+    events: ['delivery:new', 'delivery:removed'],
+    enabled: isAuthenticated && isRider && !blockedReason,
+    eventsOnly: true,
   });
 
   const activeDeliveries = mine.filter(
@@ -188,6 +205,8 @@ export default function RiderDashboardPage() {
         res.data.isAvailable ? t('nowOnDuty') : t('nowOffDuty'),
         'success'
       );
+      // Pool events reach only riders on duty, so the list may have moved on while they were off.
+      if (res.data.isAvailable) void loadAvailable();
     } catch (error: any) {
       showToast(error.response?.data?.error?.message || t('toggleDutyFailed'), 'error');
     } finally {

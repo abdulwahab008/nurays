@@ -164,18 +164,18 @@ export class RealtimeOrderService {
     }
   }
 
-  /** A delivery job joined the open pool: riders reload their list of available jobs. */
+  /** A delivery job joined the open pool: the riders who can take it (on duty) reload their list of available jobs. */
   emitDeliveryPosted(deliveryId: string, orderId: string) {
-    socketManager.emitToRole('rider', 'delivery:new', { deliveryId, orderId });
+    socketManager.emitToOnDutyRiders('delivery:new', { deliveryId, orderId });
   }
 
   /**
-   * A rider took a job: the order's parties reload, and it leaves every other rider's list, unless
+   * A rider took a job: the order's parties reload, and it leaves the list of every rider on duty, unless
    * `toRiders` is false because no rider ever heard of it (a job taken automatically the moment it was created).
    */
   async emitDeliveryClaimed(deliveryId: string, orderId: string, opts: { toRiders?: boolean } = {}) {
     try {
-      if (opts.toRiders !== false) socketManager.emitToRole('rider', 'delivery:removed', { deliveryId, orderId, reason: 'claimed' });
+      if (opts.toRiders !== false) socketManager.emitToOnDutyRiders('delivery:removed', { deliveryId, orderId, reason: 'claimed' });
       const audience = await orderAudience(orderId);
       if (audience) socketManager.emitToRooms(audience.rooms, 'delivery:assigned', { deliveryId, orderId });
     } catch (err) {

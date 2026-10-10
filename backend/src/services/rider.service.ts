@@ -681,6 +681,8 @@ export class RiderService {
       where: { id: rider.id },
       data: { isAvailable: newStatus },
     });
+    // Pool announcements reach the riders who are on duty: this rider's open connections follow the switch.
+    void socketManager.syncRiderDuty(userId);
     if (updated.isAvailable) dispatchSoon();
     return { isAvailable: updated.isAvailable };
   }

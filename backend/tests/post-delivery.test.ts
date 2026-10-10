@@ -1,6 +1,7 @@
 /**
  * A delivery job joining the open pool is offered to the best rider first. Riders hear that it is in
- * the pool only when nobody could take it, so an order that is assigned at once costs no rider a reload.
+ * the pool only when nobody could take it, so an order that is assigned at once costs no rider a reload,
+ * and only the riders who can take it (on duty) hear it at all.
  */
 
 jest.mock('../src/config/database', () => ({
@@ -9,7 +10,7 @@ jest.mock('../src/config/database', () => ({
 }));
 jest.mock('../src/config/socket', () => ({
   __esModule: true,
-  default: { emitToRole: jest.fn(), emitToRooms: jest.fn(), emitToUser: jest.fn() },
+  default: { emitToRole: jest.fn(), emitToOnDutyRiders: jest.fn(), emitToRooms: jest.fn(), emitToUser: jest.fn() },
 }));
 jest.mock('../src/services/notify.service', () => ({ notify: jest.fn(), notifyMany: jest.fn() }));
 
@@ -21,8 +22,8 @@ import { postDelivery } from '../src/services/dispatch.service';
 const socket = socketManager as any;
 const db = prisma as any;
 
-/** The events sent to every rider, as [event, payload]. */
-const toRiders = () => socket.emitToRole.mock.calls.filter((c: unknown[]) => c[0] === 'rider').map((c: unknown[]) => [c[1], c[2]]);
+/** The events sent to the riders who are on duty, as [event, payload]. */
+const toRiders = () => socket.emitToOnDutyRiders.mock.calls.map((c: unknown[]) => [c[0], c[1]]);
 
 describe('postDelivery', () => {
   it('says nothing to the riders when a rider takes the job at once', async () => {
@@ -32,12 +33,14 @@ describe('postDelivery', () => {
     expect(toRiders()).toEqual([]);
   });
 
-  it('announces the job to every rider when nobody can take it', async () => {
+  it('announces the job to the riders on duty when nobody can take it, and to no one else', async () => {
     for (const reason of ['no_riders', 'no_eligible_rider', 'disabled', 'lost_race']) {
-      socket.emitToRole.mockClear();
+      socket.emitToOnDutyRiders.mockClear();
       await postDelivery('d1', 'o1', jest.fn().mockResolvedValue({ assigned: false, reason }));
       expect(toRiders()).toEqual([['delivery:new', { deliveryId: 'd1', orderId: 'o1' }]]);
     }
+    // Not to every rider: one who is off duty cannot claim a job, so it would only make their dashboard reload.
+    expect(socket.emitToRole).not.toHaveBeenCalled();
   });
 
   it('never leaves a job unannounced when the dispatcher fails', async () => {
@@ -69,7 +72,7 @@ describe('a job taken from the pool', () => {
     });
   });
 
-  it('leaves every other rider\'s list, and the order\'s parties reload', async () => {
+  it('leaves the list of every rider on duty, and the order\'s parties reload', async () => {
     await realtimeOrderService.emitDeliveryClaimed('d1', 'o1');
     expect(toRiders()).toEqual([['delivery:removed', { deliveryId: 'd1', orderId: 'o1', reason: 'claimed' }]]);
     const [rooms, event] = socket.emitToRooms.mock.calls[0];

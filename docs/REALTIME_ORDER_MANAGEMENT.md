@@ -31,6 +31,7 @@ A connection joins automatically:
 |---|---|
 | `user:<userId>` | the user's own connections (all tabs and devices) |
 | `role:<userType>` | everyone of that role: `role:customer`, `role:seller`, `role:rider`, `role:admin`, `role:hub_manager` |
+| `riders:on-duty` | a rider's connections while the rider is approved, active and on duty (`utils/riderDuty.ts`, the dispatcher's own filter). Jobs in the open pool are announced here and not to `role:rider`: an off-duty rider cannot claim a job, so telling them would only make their dashboard reload. A connection that opens joins if the rider is on duty; going on or off duty, a suspension, an approval or a rejection move every connection of that rider in or out (`socketManager.syncRiderDuty`, across instances through the Redis adapter) |
 
 and can join on request:
 
@@ -66,8 +67,8 @@ Order events go through `emitToRooms`, which sends one event to the union of sev
 | `order:message` | order audience | `{ orderId, messageId, senderRole }` | a chat message is posted on the order |
 | `order:messages:read` | order audience | `{ orderId }` | someone read the order's messages |
 | `order:delivery:tracking` | the customer's `user:` room and `role:admin` (not the order's room: it holds the kitchens) | `{ orderId, location: { latitude, longitude }, distanceKm?, estimatedArrival?, updatedAt }` | the rider reports a position (see below) |
-| `delivery:new` | `role:rider` | `{ deliveryId, orderId }` | a Nuray delivery job is created (`ensureDeliveryForOrder`, when the kitchen accepts or starts preparing, or an admin moves the order on), handed back by its rider, reopened by an admin retry, or released when a rider is suspended, **and no rider could take it automatically**. The job is offered to the best rider first (`postDelivery`); one that is assigned at once is never announced to the pool |
-| `delivery:removed` | `role:rider` | `{ deliveryId, orderId, reason: 'claimed' }` when a rider claims it; `{ deliveryId, orderId }` when it is cancelled | the job is no longer available. A job taken automatically the moment it was posted sends no `delivery:removed` (no rider ever heard of it); the order's parties still get `delivery:assigned` |
+| `delivery:new` | `riders:on-duty` | `{ deliveryId, orderId }` | a Nuray delivery job is created (`ensureDeliveryForOrder`, when the kitchen accepts or starts preparing, or an admin moves the order on), handed back by its rider, reopened by an admin retry, or released when a rider is suspended, **and no rider could take it automatically**. The job is offered to the best rider first (`postDelivery`); one that is assigned at once is never announced to the pool |
+| `delivery:removed` | `riders:on-duty` | `{ deliveryId, orderId, reason: 'claimed' }` when a rider claims it; `{ deliveryId, orderId }` when it is cancelled | the job is no longer available. A job taken automatically the moment it was posted sends no `delivery:removed` (no rider ever heard of it); the order's parties still get `delivery:assigned` |
 | `delivery:assigned` | order audience | `{ deliveryId, orderId }` | a rider claimed the job |
 | `delivery:cancelled` | the assigned rider's `user:` room | `{ deliveryId, orderId }` | the order was cancelled while the rider held the job |
 | `notification:new` | the recipient's `user:` room | `{ id, type, title, message, actionUrl, createdAt }` | any in-app notification is created (`notify()` in `notify.service.ts`) |
@@ -120,7 +121,7 @@ Only the customer and admins receive `order:delivery:tracking`: the order's room
 | `components/SellerNewOrderNotification.tsx` | `order:new` | pop-up with a chime on `/sellers` pages; orders already waiting are also fetched on open |
 | `app/sellers/orders/page.tsx` | `order:new`, `order:status:update`, `order:item:status:update`, `delivery:assigned` | reloads the list |
 | `app/sellers/orders/[id]/page.tsx` | `order:status:update`, `order:item:status:update`, `delivery:assigned` | reloads the order |
-| `app/riders/dashboard/page.tsx` | `delivery:new`, `delivery:removed`, `delivery:cancelled`, `delivery:assigned`, `order:status:update`; also sends location | reloads available and own jobs |
+| `app/riders/dashboard/page.tsx` | `delivery:new`, `delivery:removed`, `delivery:cancelled`, `delivery:assigned`, `order:status:update`; also sends location | `delivery:new` and `delivery:removed` reload only the list of available jobs (a second `useLiveRefresh` with `eventsOnly`); the list is also reloaded when the rider goes on duty, because pool events reach only riders on duty and it may have moved on meanwhile. The other three events reload available and own jobs |
 | `app/riders/earnings/page.tsx` | `order:status:update` | reloads earnings |
 | `components/orders/OrderChatModal.tsx` | `order:message`, `order:messages:read` | reloads the conversation |
 | `components/layout/DashboardNavbar.tsx` | `notification:new` | increments the unread bell counter |
