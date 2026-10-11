@@ -693,7 +693,9 @@ export class AdminService {
       if (!Number.isFinite(v) || v < lo || v > hi) throw new AppError(`${key} must be between ${lo} and ${hi}`, 400, 'INVALID_SETTING');
       data[key] = v;
     }
-    await Promise.all(
+    // All of them or none: the settings belong together (the delivery prices, the commission), and a save that stopped half way
+    // must not leave some of the boxes the admin filled in applied and others not.
+    await prisma.$transaction(
       keys.map((key) =>
         prisma.systemSetting.upsert({
           where: { key },

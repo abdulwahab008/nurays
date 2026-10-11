@@ -166,6 +166,9 @@ export default function AdminSettingsPage() {
                   onChange={(e) => setFormData({ ...formData, commissionRate: e.target.value })}
                   className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500"
                 />
+                <p className="mt-1 text-xs text-gray-500">
+                  Applies to kitchens that join after you save. A kitchen already on Nuray keeps the rate it started with.
+                </p>
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
