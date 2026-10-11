@@ -58,7 +58,9 @@ export function ToastProvider({ children }: { children: ReactNode }) {
 
 function ToastContainer({ toasts, removeToast }: { toasts: Toast[]; removeToast: (id: string) => void }) {
   return (
-    <div className="fixed top-[calc(1rem+var(--safe-top))] end-[calc(1rem+var(--safe-end))] z-50 flex flex-col gap-2 max-w-md w-[calc(100%-2rem)]">
+    // Above every other layer (the new-order and job alerts, the dialogs, the community picker): a message about what just
+    // failed must never sit hidden behind one. Only the messages themselves take clicks.
+    <div className="fixed top-[calc(1rem+var(--safe-top))] end-[calc(1rem+var(--safe-end))] z-[100000] flex flex-col gap-2 max-w-md w-[calc(100%-2rem)] pointer-events-none">
       {toasts.map((toast) => (
         <ToastItem key={toast.id} toast={toast} onRemove={removeToast} />
       ))}
@@ -99,7 +101,7 @@ function ToastItem({ toast, onRemove }: { toast: Toast; onRemove: (id: string) =
 
   return (
     <div
-      className={`${bgColors[toast.type]} border-s-4 rounded-lg shadow-lg p-4 flex items-start gap-3 animate-in slide-in-from-end-full duration-300`}
+      className={`${bgColors[toast.type]} pointer-events-auto border-s-4 rounded-lg shadow-lg p-4 flex items-start gap-3 animate-in slide-in-from-end-full duration-300`}
       role="alert"
     >
       <div className="flex-shrink-0 mt-0.5">{icons[toast.type]}</div>
