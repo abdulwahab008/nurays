@@ -85,7 +85,6 @@ export default function TriPartiteReviewModal({
     setError(null);
     let created = 0;
     let alreadyReviewed = 0;
-    let alreadyReviewedMessage: string | null = null;
     let failureMessage: string | null = null;
 
     try {
@@ -104,7 +103,6 @@ export default function TriPartiteReviewModal({
           const apiError = isAxiosError<ApiError>(err) ? err.response?.data?.error : undefined;
           if (apiError?.code === 'REVIEW_ALREADY_EXISTS') {
             alreadyReviewed++;
-            alreadyReviewedMessage = apiError.message || null;
           } else if (!failureMessage) {
             failureMessage =
               apiError?.message || (err instanceof Error ? err.message : '') || t('review.failed');
@@ -128,8 +126,8 @@ export default function TriPartiteReviewModal({
     }
 
     if (created === 0) {
-      // Every item already had a review: nothing new was saved.
-      setError(alreadyReviewedMessage || t('review.already'));
+      // Every item already had a review: nothing new was saved. Said in the person's language (the server's own words are English).
+      setError(t('review.already'));
       return;
     }
 
