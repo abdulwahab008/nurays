@@ -7,9 +7,9 @@
  * cannot be reached the page is still served, with the site's own title and description.
  */
 import { API_BASE_URL } from '../config';
+import { classifyPublicRead, type PublicRead } from './public-read';
 
-/** What a read found: the data, nothing there (404), or no answer (the API was unreachable, slow or failed). */
-export type PublicRead<T> = { kind: 'ok'; data: T } | { kind: 'missing' } | { kind: 'unavailable' };
+export type { PublicRead };
 
 export async function publicApiGet<T>(path: string, { revalidate = 300, timeoutMs = 3000 } = {}): Promise<PublicRead<T>> {
   const base = (process.env.API_INTERNAL_URL || API_BASE_URL).replace(/\/+$/, '');
@@ -20,10 +20,8 @@ export async function publicApiGet<T>(path: string, { revalidate = 300, timeoutM
       signal: AbortSignal.timeout(timeoutMs),
       next: { revalidate },
     });
-    if (response.status === 404) return { kind: 'missing' };
-    if (!response.ok) return { kind: 'unavailable' };
-    const body = (await response.json()) as { success?: boolean; data?: T };
-    return body?.success && body.data ? { kind: 'ok', data: body.data } : { kind: 'unavailable' };
+    const body = await response.json().catch(() => null);
+    return classifyPublicRead<T>(response.status, body);
   } catch {
     return { kind: 'unavailable' };
   }
