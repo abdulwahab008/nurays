@@ -1,6 +1,7 @@
 import http from 'http';
 import type { AddressInfo } from 'net';
 import { closeHttpServer } from '../src/utils/lifecycle';
+import { within } from './within';
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -29,7 +30,7 @@ const get = (port: number, agent: http.Agent) =>
 /** How long closing took, or 'still open' if it had not finished by `limitMs`. */
 async function closing(server: http.Server, limitMs: number): Promise<number | 'still open'> {
   const started = Date.now();
-  return Promise.race([closeHttpServer(server, 20).then(() => Date.now() - started), sleep(limitMs).then(() => 'still open' as const)]);
+  return within(closeHttpServer(server, 20).then(() => Date.now() - started), limitMs, 'still open' as const);
 }
 
 describe('closing the HTTP server for a shutdown', () => {

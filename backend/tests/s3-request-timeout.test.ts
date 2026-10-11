@@ -2,8 +2,7 @@ import http from 'http';
 import type { AddressInfo } from 'net';
 import { resetStorage, storage } from '../src/storage';
 import { S3Storage } from '../src/storage/s3.driver';
-
-const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+import { within } from './within';
 
 /** An object store that accepts every request and answers it after `answerAfterMs`, or never. */
 async function listen(answerAfterMs: number | null) {
@@ -37,7 +36,7 @@ const driver = (endpoint: string, requestTimeoutMs?: number) =>
 
 /** What became of a call: its error's name, 'resolved', or 'still waiting' when nothing happened within `limitMs`. */
 const outcome = (call: Promise<unknown>, limitMs = 4_000) =>
-  Promise.race([call.then(() => 'resolved', (err: Error) => err.name), sleep(limitMs).then(() => 'still waiting')]);
+  within(call.then(() => 'resolved', (err: Error) => err.name), limitMs, 'still waiting');
 
 const originalEnv = { ...process.env };
 afterEach(() => {

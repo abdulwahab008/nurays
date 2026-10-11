@@ -1,4 +1,5 @@
 import net from 'net';
+import { within } from './within';
 
 type RedisModule = typeof import('../src/config/redis');
 
@@ -99,7 +100,7 @@ describe('the shared Redis connection', () => {
 
     redis.freeze();
     const started = Date.now();
-    const outcome = await Promise.race([client.ping().then(() => 'answered', (err: Error) => err.message), sleep(2_000).then(() => 'still waiting')]);
+    const outcome = await within(client.ping().then(() => 'answered', (err: Error) => err.message), 2_000, 'still waiting');
     expect(outcome).toBe('Command timed out');
     expect(Date.now() - started).toBeLessThan(1_500);
   });
