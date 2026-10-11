@@ -283,6 +283,13 @@ export default function ProductDetailPage() {
 
     if (!product) return;
 
+    // A kitchen that is closed, busy or away takes no orders. Say so now, as the kitchen's own page does, instead of letting the
+    // dish sit in a bag that cannot be checked out.
+    if (product.seller?.id && product.seller.isAcceptingOrders === false) {
+      showToast(product.seller.acceptingOrdersReason || t('toastKitchenClosed', { name: product.seller.businessName }), 'error');
+      return;
+    }
+
     const selectedVariant = product.variants.find((v) => v.id === selectedVariantId) ?? null;
     const availableStock = selectedVariant
       ? selectedVariant.stockQuantity
@@ -377,6 +384,13 @@ export default function ProductDetailPage() {
       return;
     }
     if (!product) return;
+
+    // A kitchen that is closed, busy or away takes no orders. Say so now, as the kitchen's own page does, instead of letting the
+    // dish sit in a bag that cannot be checked out.
+    if (product.seller?.id && product.seller.isAcceptingOrders === false) {
+      showToast(product.seller.acceptingOrdersReason || t('toastKitchenClosed', { name: product.seller.businessName }), 'error');
+      return;
+    }
     setAddToCartLoading(true);
     try {
       await cartService.addToCart({
