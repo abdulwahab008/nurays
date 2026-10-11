@@ -401,11 +401,12 @@ export default function ProductDetailPage() {
       });
       router.push('/checkout');
     } catch (err: any) {
-      if (err?.response?.data?.error?.code === 'CART_SELLER_CONFLICT' || err?.response?.data?.code === 'CART_SELLER_CONFLICT') {
-        const conflictDetails = err.response.data.error?.details || err.response.data.details;
+      // The tray holds another kitchen: ask what to do, as "Add to Bag" does (the code is the server's CART_SELLER_MISMATCH).
+      if (err?.response?.status === 409 || err?.response?.data?.error?.code === 'CART_SELLER_MISMATCH') {
+        const conflictDetails = err.response.data?.error?.details;
         setCartConflict({
-          existingSellerName: conflictDetails?.existingSellerName || t('anotherKitchen'),
-          newSellerName: product.seller.businessName,
+          existingSellerName: conflictDetails?.existingSeller?.name || t('anotherKitchen'),
+          newSellerName: conflictDetails?.newSeller?.name || product.seller.businessName,
           onConfirmClearAndAdd: async () => {
             try {
               await cartService.addToCart({

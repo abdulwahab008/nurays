@@ -6,7 +6,7 @@ import { AppError } from '../middleware/errorHandler';
 import realtimeOrderService from './realtime-order.service';
 import { SELLER_COMMUNITY_DELIVERY_SELECT } from '../utils/sellerDeliverySelect';
 import { communityService } from './community.service';
-import { eligibleSubtotalForPromotion, isItemEligibleForPromotion } from './promotion.service';
+import { eligibleSubtotalForPromotion, isItemEligibleForPromotion, promotionAlreadyApplied } from './promotion.service';
 import { priceOrder } from '../utils/pricing';
 import { codeDiscount, priceLines, shareCodeDiscount, splitDeliveryFees, type KitchenDeliveryFee } from '../utils/orderPricing';
 import { allocateHubStock } from './hub-allocation.service';
@@ -404,11 +404,7 @@ export class OrderPlacement {
       // items above — reject the code instead of silently stacking a second discount
       // for the same promotion on top of itself.
       if (promotion && catalogUsagesToRecord.some((u) => u.promotionId === promotion.id)) {
-        throw new AppError(
-          'This promotion is already applied to your order automatically',
-          400,
-          'PROMO_ALREADY_APPLIED'
-        );
+        throw promotionAlreadyApplied();
       }
 
       // The code must be real and usable. A code that is unknown, switched off, expired, used up or

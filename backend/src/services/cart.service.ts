@@ -342,10 +342,15 @@ export class CartService {
       const currentSeller = existingItems[0].seller;
       if (currentSeller.id !== product.sellerId) {
         if (!data.clearAndAdd) {
+          // The names are what the "start an order from a new kitchen?" window shows the customer.
           throw new AppError(
             `Your cart contains items from "${currentSeller.businessName}". You can only order from one seller at a time.`,
             409,
-            'CART_SELLER_MISMATCH'
+            'CART_SELLER_MISMATCH',
+            {
+              existingSeller: { id: currentSeller.id, name: currentSeller.businessName },
+              newSeller: { id: product.sellerId, name: product.seller.businessName },
+            }
           );
         } else {
           // User confirmed clearing the cart to order from new seller

@@ -22,6 +22,13 @@ export interface PromotionScopeItem {
 }
 
 /**
+ * A kitchen's promotion already takes its discount off the dishes as a menu deal, so typing its code too would count it twice.
+ * The order refuses it, and the checkout preview must refuse it with the same answer instead of showing a second saving.
+ */
+export const promotionAlreadyApplied = () =>
+  new AppError('This promotion is already applied to your order automatically', 400, 'PROMO_ALREADY_APPLIED');
+
+/**
  * The part of an order a manually-entered promotion code may discount. A
  * seller's code only covers that seller's items, and a code limited to specific
  * products only covers those; everything else is untouched. Without this, a
@@ -207,6 +214,21 @@ export class PromotionService {
           );
         }
         cartTotal = Math.min(cartTotal, eligible);
+
+        // A kitchen's promotion is also a menu deal that comes off the dishes by itself (see computeOrderCatalogDiscounts).
+        // Placing the order refuses its code in that case, so the preview must not promise a second discount.
+        if (promotion.sellerId) {
+          const { usagesToRecord } = await this.computeOrderCatalogDiscounts(
+            userId,
+            cartItems.map((i) => ({
+              productId: i.productId,
+              sellerId: i.sellerId,
+              unitPrice: Number(i.priceSnapshot),
+              quantity: i.quantity,
+            }))
+          );
+          if (usagesToRecord.some((u) => u.promotionId === promotion.id)) throw promotionAlreadyApplied();
+        }
       }
     }
 
