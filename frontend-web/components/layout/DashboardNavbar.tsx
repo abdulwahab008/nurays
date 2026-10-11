@@ -347,12 +347,12 @@ export function DashboardNavbar({ title, subtitle, userType = 'customer', onMenu
 
         {/* Center - Seller/Admin/Rider Title */}
         {(isSeller || isAdmin || isRider) && (
-          <div className="hidden md:flex flex-1 justify-center">
-            <div className="text-center">
-              <h2 className="font-display italic text-[22px]" style={{ color: 'var(--ink-900)' }}>
+          <div className="hidden md:flex flex-1 min-w-0 justify-center">
+            <div className="text-center min-w-0 max-w-full">
+              <h2 className="font-display italic text-[22px] truncate" style={{ color: 'var(--ink-900)' }} title={title}>
                 {title}
               </h2>
-              {subtitle && <p className="eyebrow mt-1">{subtitle}</p>}
+              {subtitle && <p className="eyebrow mt-1 truncate" title={subtitle}>{subtitle}</p>}
             </div>
           </div>
         )}

@@ -238,7 +238,8 @@ function DashboardSidebarContent({ items: allItems, userType }: DashboardSidebar
   // Flame for customer/admin, dark slate for seller, emerald for rider
   const accentColor = effectiveUserType === 'seller' ? '#0F172A' : effectiveUserType === 'rider' ? '#059669' : '#FF5500';
   const accentSoft = effectiveUserType === 'seller' ? '#F1F5F9' : effectiveUserType === 'rider' ? '#ECFDF5' : '#FFF5ED';
-  const accentText = effectiveUserType === 'seller' ? '#0F172A' : effectiveUserType === 'rider' ? '#065F46' : '#FF5500';
+  // Text on the tinted background: the brand orange is only 3:1 there, this is 5:1.
+  const accentText = effectiveUserType === 'seller' ? '#0F172A' : effectiveUserType === 'rider' ? '#065F46' : '#C2410C';
 
   const getIcon = (iconKey: string) => {
     const IconComponent = IconComponents[iconKey] || DefaultIcon;
