@@ -1,6 +1,7 @@
 import { randomInt, timingSafeEqual } from 'crypto';
 import prisma from '../config/database';
 import { AppError } from '../middleware/errorHandler';
+import { deliveryProviderOf } from '../utils/paymentCustody';
 
 /**
  * The customer's handover code.
@@ -64,6 +65,45 @@ export async function verifyHandoverCode(orderId: string, supplied: string | und
       "That code doesn't match. Ask the customer for the 4-digit code shown on their order screen.",
       400,
       'INVALID_DELIVERY_OTP'
+    );
+  }
+}
+
+/** What decides who may hand an order over and whether it may go out: how it is delivered and how it was paid. */
+export interface HandoverOrder {
+  deliveryType: string;
+  deliveryProvider?: string | null;
+  deliveryFeeBreakdown?: unknown;
+  paymentMethod: string;
+  paymentStatus: string;
+}
+
+/**
+ * The rules for moving an item of an order to `toStatus` that do not depend on the customer's code: only a kitchen that
+ * hands the order over itself may do it (a Nuray rider delivers the rest and enters the code), a refunded order is not
+ * delivered, and a payment by transfer or card is confirmed before the food leaves the kitchen.
+ *
+ * They are checked before the code is looked at, because a wrong code is counted against the order (it locks after five):
+ * a request that is going to be refused anyway must not use up the customer's attempts, or a kitchen whose order a rider
+ * delivers could lock the rider out of it.
+ */
+export function assertMayHandOver(order: HandoverOrder, sellerDeliveryProvider: string | null | undefined, toStatus: string): void {
+  if (toStatus === 'delivered' && ['refund_pending', 'refunded'].includes(order.paymentStatus)) {
+    throw new AppError('This order has been refunded and cannot be marked delivered', 400, 'ORDER_REFUNDED');
+  }
+  // A Nuray rider's delivery is completed by the rider with the customer's code; a seller marking it delivered would release
+  // earnings for food that may never have arrived.
+  if (['dispatched', 'in_transit', 'delivered', 'delivery_failed'].includes(toStatus)) {
+    const sellerHandsOver = order.deliveryType === 'self_pickup' || deliveryProviderOf(order, sellerDeliveryProvider) === 'self';
+    if (!sellerHandsOver) {
+      throw new AppError('A Nuray rider delivers this order. It is marked delivered when the rider hands it over.', 403, 'PLATFORM_DELIVERY');
+    }
+  }
+  if (['ready', 'dispatched'].includes(toStatus) && order.paymentMethod !== 'cod' && order.paymentStatus !== 'paid') {
+    throw new AppError(
+      "The customer's payment hasn't been confirmed yet. Confirm (or dispute) the transfer before handing the order over.",
+      409,
+      'PAYMENT_NOT_CONFIRMED'
     );
   }
 }
