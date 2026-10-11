@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
+import { loginUrlHere } from '@/lib/auth-redirect';
 import { useRouter } from 'next/navigation';
 import { Wallet, Banknote, TrendingUp, ArrowDownLeft, ArrowUpRight } from 'lucide-react';
 import { DashboardLayout, RIDER_SIDEBAR_ITEMS } from '@/components/layout/DashboardShell';
@@ -47,7 +48,7 @@ export default function RiderEarningsPage() {
 
   useEffect(() => {
     if (!isAuthenticated && !apiClient.getAccessToken()) {
-      router.push('/login');
+      router.push(loginUrlHere());
       return;
     }
     if (!user) return;

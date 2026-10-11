@@ -1,6 +1,7 @@
 'use client';
 
 import { Suspense, useEffect, useRef, useState } from 'react';
+import { loginUrlHere } from '@/lib/auth-redirect';
 import { getStackedDiscountedPrice } from '@/lib/pricing';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
@@ -374,7 +375,7 @@ function ProductsContent() {
     e.preventDefault();
     e.stopPropagation();
     if (!isAuthenticated) {
-      router.push('/login');
+      router.push(loginUrlHere());
       return;
     }
     setAddingProductId(product.id);
@@ -420,7 +421,7 @@ function ProductsContent() {
     e.preventDefault();
     e.stopPropagation();
     if (!isAuthenticated) {
-      router.push('/login');
+      router.push(loginUrlHere());
       return;
     }
     try {

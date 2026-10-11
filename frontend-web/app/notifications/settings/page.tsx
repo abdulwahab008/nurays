@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
+import { loginUrlHere } from '@/lib/auth-redirect';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Bell, Mail, MessageSquare, Smartphone } from 'lucide-react';
@@ -86,7 +87,7 @@ export default function NotificationSettingsPage() {
 
   useEffect(() => {
     if (!isAuthenticated && !apiClient.getAccessToken()) {
-      router.push('/login');
+      router.push(loginUrlHere());
       return;
     }
     load();

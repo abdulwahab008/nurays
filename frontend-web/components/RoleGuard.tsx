@@ -4,6 +4,7 @@ import { ReactNode, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuthStore } from '@/lib/store/auth-store';
 import { useAuthInit } from '@/lib/hooks/use-auth-init';
+import { loginUrlHere } from '@/lib/auth-redirect';
 
 interface RoleGuardProps {
   allowedRoles: Array<'customer' | 'seller' | 'admin' | 'rider' | 'hub_manager'>;
@@ -44,7 +45,9 @@ export function RoleGuard({
   // The redirect is the only side effect: a signed-out visitor goes to sign in, a signed-in one of the wrong role elsewhere.
   useEffect(() => {
     if (decision !== 'deny') return;
-    router.replace(isAuthenticated ? redirectWrongRole : redirectUnauthenticated);
+    // A signed-out visitor is sent to sign in and brought back to this page afterwards.
+    const signIn = /^\/(admin\/)?login$/.test(redirectUnauthenticated) ? loginUrlHere(redirectUnauthenticated) : redirectUnauthenticated;
+    router.replace(isAuthenticated ? redirectWrongRole : signIn);
   }, [decision, isAuthenticated, router, redirectUnauthenticated, redirectWrongRole]);
 
   if (decision !== 'allow') {

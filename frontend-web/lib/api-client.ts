@@ -1,4 +1,5 @@
 import axios, { AxiosInstance, AxiosError, AxiosRequestConfig, InternalAxiosRequestConfig } from 'axios';
+import { loginUrlHere } from '@/lib/auth-redirect';
 
 import { API_BASE_URL } from './config';
 import { tokenStore } from './token-store';
@@ -136,7 +137,7 @@ class ApiClient {
       path.startsWith('/sellers/register') ||
       path.startsWith('/admin/login');
     if (!onPublic) {
-      window.location.href = '/login';
+      window.location.href = loginUrlHere();
     }
   }
 

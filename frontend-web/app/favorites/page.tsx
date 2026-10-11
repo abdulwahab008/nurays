@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { DashboardLayout, CUSTOMER_SIDEBAR_ITEMS } from '@/components/layout/DashboardShell';
 import { favoriteService, FavoriteSellerItem } from '@/lib/services/favorite.service';
 import { useCommunityStore } from '@/lib/store/community-store';
@@ -9,9 +10,14 @@ import { useToast } from '@/components/ui/toast';
 import { Button } from '@/components/ui/button';
 import { formatPrice } from '@/lib/utils';
 import { useT } from '@/lib/i18n';
+import { useAuthStore } from '@/lib/store/auth-store';
+import { apiClient } from '@/lib/api-client';
+import { loginUrlHere } from '@/lib/auth-redirect';
 import { browseMessages, businessTypeKey } from '@/lib/i18n/messages/browse';
 
 export default function FavoritesPage() {
+  const router = useRouter();
+  const { isAuthenticated } = useAuthStore();
   const [favorites, setFavorites] = useState<FavoriteSellerItem[]>([]);
   const [loading, setLoading] = useState(true);
   const { selectedCommunity } = useCommunityStore();
@@ -34,8 +40,13 @@ export default function FavoritesPage() {
   };
 
   useEffect(() => {
+    // Signed out: go and sign in, without first asking the server for a list it will refuse.
+    if (!isAuthenticated && !apiClient.getAccessToken()) {
+      router.push(loginUrlHere());
+      return;
+    }
     fetchFavorites();
-  }, [selectedCommunity]);
+  }, [selectedCommunity, isAuthenticated]);
 
   const handleRemove = async (sellerId: string, name: string) => {
     try {

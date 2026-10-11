@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { loginUrlHere } from '@/lib/auth-redirect';
 import { apiClient, apiErrorMessage } from '@/lib/api-client';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
@@ -97,7 +98,7 @@ export default function ProfilePage() {
   useEffect(() => {
     const token = apiClient.getAccessToken();
     if (!token && !isAuthenticated) {
-      router.push('/login');
+      router.push(loginUrlHere());
       return;
     }
     loadProfile();

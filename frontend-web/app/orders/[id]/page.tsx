@@ -1,6 +1,7 @@
 'use client';
 
 import { Suspense, useEffect, useRef, useState } from 'react';
+import { loginUrlHere } from '@/lib/auth-redirect';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { orderService, type OrderDetails } from '@/lib/services/order.service';
@@ -287,7 +288,7 @@ function OrderDetailContent() {
   useEffect(() => {
     const token = apiClient.getAccessToken();
     if (!token && !isAuthenticated) {
-      router.push('/login');
+      router.push(loginUrlHere());
       return;
     }
     if (params.id) {

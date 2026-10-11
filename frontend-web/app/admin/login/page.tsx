@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { landingAfterLogin } from '@/lib/auth-redirect';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
@@ -54,7 +55,7 @@ export default function AdminLoginPage() {
         setUser(user);
 
         showToast('Login successful!', 'success');
-        router.push(user.permissions?.includes('read.finance') ? '/admin/dashboard' : '/admin/approvals');
+        router.push(landingAfterLogin(user.permissions?.includes('read.finance') ? '/admin/dashboard' : '/admin/approvals'));
       } else {
         throw new Error('Invalid response from server');
       }

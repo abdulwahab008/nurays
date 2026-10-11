@@ -1,6 +1,7 @@
 'use client';
 
 import PushPrompt from '@/components/notifications/PushPrompt';
+import { loginUrlHere } from '@/lib/auth-redirect';
 import { useState, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
@@ -152,7 +153,7 @@ function SellerDashboardContent() {
 
   useEffect(() => {
     if (!isAuthenticated) {
-      router.push('/login');
+      router.push(loginUrlHere());
       return;
     }
 

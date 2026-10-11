@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import { loginUrlHere } from '@/lib/auth-redirect';
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
@@ -76,7 +77,7 @@ export default function SellerNotificationsPage() {
 
   useEffect(() => {
     if (!isAuthenticated) {
-      router.push('/login');
+      router.push(loginUrlHere());
       return;
     }
 

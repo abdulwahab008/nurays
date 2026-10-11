@@ -8,6 +8,7 @@ import { useToast } from '@/components/ui/toast';
 import { useAuthStore } from '@/lib/store/auth-store';
 import { apiClient } from '@/lib/api-client';
 import { DatePicker } from '@/components/ui/DatePicker';
+import { loginUrlHere } from '@/lib/auth-redirect';
 
 
 interface Hub {
@@ -163,7 +164,7 @@ export default function HubOperationsConsole({ mode }: { mode: 'admin' | 'manage
   // Auth Guard
   useEffect(() => {
     if (!isAuthenticated) {
-      router.push(isManagerMode ? '/login' : '/admin/login');
+      router.push(loginUrlHere(isManagerMode ? '/login' : '/admin/login'));
       return;
     }
     const role = user?.userType ?? user?.user_type;

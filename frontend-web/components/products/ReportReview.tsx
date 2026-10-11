@@ -1,6 +1,7 @@
 'use client';
 
 import { useId, useState } from 'react';
+import { loginUrlHere } from '@/lib/auth-redirect';
 import { useRouter } from 'next/navigation';
 import { apiClient, apiErrorCode, apiErrorMessage } from '@/lib/api-client';
 import { useAuthStore } from '@/lib/store/auth-store';
@@ -43,7 +44,7 @@ export default function ReportReview({ reviewId }: { reviewId: string }) {
       <button
         type="button"
         data-testid="report-review"
-        onClick={() => (isAuthenticated ? setOpen(true) : router.push('/login'))}
+        onClick={() => (isAuthenticated ? setOpen(true) : router.push(loginUrlHere()))}
         className="text-xs text-gray-400 hover:text-gray-700 underline"
       >
         {t('reportReview')}
