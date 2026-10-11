@@ -37,8 +37,9 @@ export function ToastProvider({ children }: { children: ReactNode }) {
   const showToast = useCallback((message: string, type: ToastType = 'info', duration: number = 5000) => {
     const id = Math.random().toString(36).substring(2, 9);
     const toast: Toast = { id, message, type, duration };
-    
-    setToasts((prev) => [...prev, toast]);
+
+    // The same words shown again while they are still up (two loads of one page failing together) are one message.
+    setToasts((prev) => (prev.some((t) => t.message === message && t.type === type) ? prev : [...prev, toast]));
 
     if (duration > 0) {
       setTimeout(() => {

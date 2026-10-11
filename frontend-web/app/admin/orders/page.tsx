@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { AdminShell } from '@/components/layout/AdminShell';
 import { Button } from '@/components/ui/button';
+import { LoadError } from '@/components/ui/LoadError';
 import { useToast } from '@/components/ui/toast';
 import { useAuthStore } from '@/lib/store/auth-store';
 import { apiClient } from '@/lib/api-client';
@@ -46,6 +47,8 @@ function AdminOrdersContent() {
   const { isAuthenticated, user } = useAuthStore();
   const { showToast } = useToast();
   const [loading, setLoading] = useState(true);
+  // Why the orders could not be read; shown instead of "No orders found", which would be untrue.
+  const [loadError, setLoadError] = useState<unknown>(null);
   const [orders, setOrders] = useState<AdminOrder[]>([]);
   const [filter, setFilter] = useState<string>('all');
   const [page, setPage] = useState(1);
@@ -75,6 +78,7 @@ function AdminOrdersContent() {
   const loadOrders = async () => {
     try {
       setLoading(true);
+      setLoadError(null);
       const response = await apiClient.get(
         `/admin/orders?page=${page}&limit=20${filter !== 'all' ? `&orderStatus=${filter}` : ''}${paymentFilter ? `&paymentStatus=${paymentFilter}` : ''}`
       );
@@ -84,7 +88,7 @@ function AdminOrdersContent() {
       }
     } catch (error: any) {
       console.error('Failed to load orders:', error);
-      showToast('Failed to load orders', 'error');
+      setLoadError(error);
     } finally {
       setLoading(false);
     }
@@ -160,6 +164,8 @@ function AdminOrdersContent() {
             <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-green-600 mx-auto mb-4"></div>
             <p className="text-gray-600">Loading orders...</p>
           </div>
+        ) : loadError && orders.length === 0 ? (
+          <LoadError error={loadError} onRetry={loadOrders} title="We couldn't load the orders" />
         ) : orders.length === 0 ? (
           <div className="bg-white rounded-lg shadow-sm p-12 text-center">
             <div className="text-6xl mb-4">📦</div>

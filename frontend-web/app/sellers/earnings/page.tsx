@@ -5,6 +5,7 @@ import { loginUrlHere } from '@/lib/auth-redirect';
 import { useRouter } from 'next/navigation';
 import { DashboardLayout, SELLER_SIDEBAR_ITEMS } from '@/components/layout/DashboardShell';
 import { Button } from '@/components/ui/button';
+import { LoadError } from '@/components/ui/LoadError';
 import { useToast } from '@/components/ui/toast';
 import { useAuthStore } from '@/lib/store/auth-store';
 import { apiClient } from '@/lib/api-client';
@@ -85,6 +86,8 @@ export default function SellerEarningsPage() {
   const t = useT(kitchenEarningsMessages);
   const tc = useT(commonMessages);
   const [loading, setLoading] = useState(true);
+  // Why the earnings could not be read; shown instead of "no data", which would say there is nothing to see.
+  const [loadError, setLoadError] = useState<unknown>(null);
   const [earnings, setEarnings] = useState<EarningsData | null>(null);
   const [requestingPayout, setRequestingPayout] = useState(false);
   const [showPayoutForm, setShowPayoutForm] = useState(false);
@@ -109,6 +112,7 @@ export default function SellerEarningsPage() {
   const loadEarnings = async () => {
     try {
       setLoading(true);
+      setLoadError(null);
       const [dashboardRes, payoutsRes] = await Promise.all([
         apiClient.get('/sellers/me/dashboard'),
         apiClient.get('/sellers/me/payouts'),
@@ -132,9 +136,9 @@ export default function SellerEarningsPage() {
           payouts: payoutsRes.data.success ? payoutsRes.data.data : [],
         });
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Failed to load earnings:', error);
-      showToast(t('loadFailed'), 'error');
+      setLoadError(error);
     } finally {
       setLoading(false);
     }
@@ -410,6 +414,8 @@ export default function SellerEarningsPage() {
               </div>
             </div>
           </>
+        ) : loadError ? (
+          <LoadError error={loadError} onRetry={loadEarnings} title={t('loadFailed')} />
         ) : (
           <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-16 text-center">
             <div className="w-24 h-24 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-6">

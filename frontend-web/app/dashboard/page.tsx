@@ -17,6 +17,7 @@ import { communityService, CommunityDetail } from '@/lib/services/community.serv
 import { cartService } from '@/lib/services/cart.service';
 import { ConfirmModal } from '@/components/ui/ConfirmModal';
 import { CoverImage } from '@/components/ui/CoverImage';
+import { LoadError } from '@/components/ui/LoadError';
 import { CuisineCarousel, PLATFORM_CUISINES } from '@/components/marketplace/CuisineCarousel';
 import {
   Sparkles,
@@ -212,6 +213,9 @@ export default function CustomerDashboardPage() {
   // community are listed first by the API).
   const [trendingDishes, setTrendingDishes] = useState<DashboardDish[]>([]);
   const [dishesLoading, setDishesLoading] = useState(true);
+  // Why the dishes could not be read (shown with a retry, instead of rows that look as if there were no dishes at all).
+  const [dishesError, setDishesError] = useState<unknown>(null);
+  const [reloadNonce, setReloadNonce] = useState(0);
 
   // Label for selected cuisine
   const selectedCuisineLabel = useMemo(() => {
@@ -331,6 +335,7 @@ export default function CustomerDashboardPage() {
       .catch((err) => console.error('Failed to load sellers on dashboard:', err));
 
     setDishesLoading(true);
+    setDishesError(null);
     productService
       .getProducts({ sort: 'popular', limit: 40, communityId: selectedCommunity?.id })
       .then((res) => {
@@ -340,7 +345,10 @@ export default function CustomerDashboardPage() {
       })
       .catch((err) => {
         console.error('Failed to load dishes on dashboard:', err);
-        if (!cancelled) setTrendingDishes([]);
+        if (!cancelled) {
+          setTrendingDishes([]);
+          setDishesError(err);
+        }
       })
       .finally(() => {
         if (!cancelled) setDishesLoading(false);
@@ -380,7 +388,7 @@ export default function CustomerDashboardPage() {
     }
 
     return () => { cancelled = true; };
-  }, [isAuthenticated, selectedCommunity?.id, selectedCommunity?.slug]);
+  }, [isAuthenticated, selectedCommunity?.id, selectedCommunity?.slug, reloadNonce]);
 
   const handleAddToCart = async (dish: DashboardDish) => {
     // Server cart first: only show the dish in the tray once the API has accepted it.
@@ -469,6 +477,10 @@ export default function CustomerDashboardPage() {
       userType="customer"
     >
       <div className="space-y-6 pb-12">
+
+        {Boolean(dishesError) && !dishesLoading && trendingDishes.length === 0 && (
+          <LoadError compact error={dishesError} onRetry={() => setReloadNonce((n) => n + 1)} title={t('dishesLoadFailed')} />
+        )}
 
         {/* ── ACTIVE ORDER LIVE TRACKER ── */}
         {activeOrder && (

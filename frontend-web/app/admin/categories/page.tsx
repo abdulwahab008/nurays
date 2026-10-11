@@ -5,7 +5,9 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { DashboardLayout, ADMIN_SIDEBAR_ITEMS } from '@/components/layout/DashboardShell';
 import { Button } from '@/components/ui/button';
+import { LoadError } from '@/components/ui/LoadError';
 import { useToast } from '@/components/ui/toast';
+import { useDialogs } from '@/components/ui/Dialogs';
 import { useAuthStore } from '@/lib/store/auth-store';
 import { apiClient } from '@/lib/api-client';
 
@@ -424,6 +426,9 @@ export default function AdminCategoriesPage() {
   const router = useRouter();
   const { isAuthenticated, user } = useAuthStore();
   const { showToast } = useToast();
+  // Why the categories could not be read; shown with a retry instead of an empty list.
+  const [loadError, setLoadError] = useState<unknown>(null);
+  const { confirm: confirmDialog } = useDialogs();
   const [loading, setLoading] = useState(true);
   const [categories, setCategories] = useState<Category[]>([]);
   const [showModal, setShowModal] = useState(false);
@@ -447,102 +452,15 @@ export default function AdminCategoriesPage() {
   const loadCategories = async () => {
     try {
       setLoading(true);
+      setLoadError(null);
       const response = await apiClient.get('/categories?includeInactive=true');
       if (response.data.success) {
         setCategories(response.data.data || []);
       }
     } catch (error) {
       console.error('Failed to load categories:', error);
-      // Fallback to default categories for demo
-      setCategories([
-        {
-          id: '1',
-          name: 'Frozen Parathas',
-          nameUrdu: 'منجمد پراٹھے',
-          slug: 'frozen-parathas',
-          iconUrl: '🫓',
-          sortOrder: 1,
-          isActive: true,
-          productCount: 24,
-          children: [
-            {
-              id: '1-1',
-              name: 'Plain Parathas',
-              nameUrdu: 'سادہ پراٹھے',
-              slug: 'plain-parathas',
-              parentId: '1',
-              sortOrder: 1,
-              isActive: true,
-              productCount: 8,
-            },
-            {
-              id: '1-2',
-              name: 'Stuffed Parathas',
-              nameUrdu: 'بھرے ہوئے پراٹھے',
-              slug: 'stuffed-parathas',
-              parentId: '1',
-              sortOrder: 2,
-              isActive: true,
-              productCount: 16,
-            },
-          ],
-        },
-        {
-          id: '2',
-          name: 'Frozen Samosas',
-          nameUrdu: 'منجمد سموسے',
-          slug: 'frozen-samosas',
-          iconUrl: '🥟',
-          sortOrder: 2,
-          isActive: true,
-          productCount: 15,
-          children: [],
-        },
-        {
-          id: '3',
-          name: 'Frozen Rolls',
-          nameUrdu: 'منجمد رولز',
-          slug: 'frozen-rolls',
-          iconUrl: '🌯',
-          sortOrder: 3,
-          isActive: true,
-          productCount: 12,
-          children: [],
-        },
-        {
-          id: '4',
-          name: 'Kebabs & Tikkas',
-          nameUrdu: 'کباب اور ٹکے',
-          slug: 'kebabs-tikkas',
-          iconUrl: '🍢',
-          sortOrder: 4,
-          isActive: true,
-          productCount: 20,
-          children: [],
-        },
-        {
-          id: '5',
-          name: 'Ready Meals',
-          nameUrdu: 'تیار کھانے',
-          slug: 'ready-meals',
-          iconUrl: '🍱',
-          sortOrder: 5,
-          isActive: true,
-          productCount: 30,
-          children: [],
-        },
-        {
-          id: '6',
-          name: 'Frozen Desserts',
-          nameUrdu: 'منجمد میٹھے',
-          slug: 'frozen-desserts',
-          iconUrl: '🍨',
-          sortOrder: 6,
-          isActive: false,
-          productCount: 5,
-          children: [],
-        },
-      ]);
+      // Never made-up categories: an administrator who edits or deletes one of them would be changing nothing real.
+      setLoadError(error);
     } finally {
       setLoading(false);
     }
@@ -589,7 +507,7 @@ export default function AdminCategoriesPage() {
   };
 
   const handleDeleteCategory = async (id: string) => {
-    if (!confirm('Are you sure you want to delete this category? Products in this category will be moved to "Uncategorized".')) {
+    if (!(await confirmDialog({ title: 'Delete this category?', message: 'Are you sure you want to delete this category? Products in this category will be moved to "Uncategorized".', confirmText: 'Delete' }))) {
       return;
     }
     
@@ -683,6 +601,8 @@ export default function AdminCategoriesPage() {
             <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mx-auto mb-4"></div>
             <p className="text-gray-500">Loading categories...</p>
           </div>
+        ) : loadError && categories.length === 0 ? (
+          <LoadError error={loadError} onRetry={loadCategories} title="We couldn't load the categories" />
         ) : categories.length === 0 ? (
           <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-16 text-center">
             <div className="w-24 h-24 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-6">

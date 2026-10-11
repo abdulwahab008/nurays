@@ -8,7 +8,9 @@ import Link from 'next/link';
 import { userProfileService, UserProfile } from '@/lib/services/user-profile.service';
 import { formatPhoneNumber } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
+import { LoadError } from '@/components/ui/LoadError';
 import { useToast } from '@/components/ui/toast';
+import { useDialogs } from '@/components/ui/Dialogs';
 import { authService } from '@/lib/services/auth.service';
 import { useAuthStore } from '@/lib/store/auth-store';
 import { PasswordCard } from '@/components/profile/PasswordCard';
@@ -44,7 +46,7 @@ export default function ProfilePage() {
 
   // Closing the account: typed confirmation, then the password if the server asks for one.
   const handleDeleteAccount = async () => {
-    if (window.prompt(t('deleteConfirmPrompt')) !== 'DELETE') return;
+    if ((await askDialog({ title: t('deleteAccount'), message: t('deleteConfirmPrompt'), label: 'DELETE', mustEqual: 'DELETE' })) !== 'DELETE') return;
     const attempt = async (password?: string) => {
       await userProfileService.deleteAccount(password);
       showToast(t('accountDeleted'), 'success');
@@ -57,7 +59,7 @@ export default function ProfilePage() {
         await attempt();
       } catch (error: any) {
         if (error?.response?.data?.error?.code !== 'PASSWORD_REQUIRED') throw error;
-        const password = window.prompt(t('deletePasswordPrompt'));
+        const password = (await askDialog({ title: t('password'), message: t('deletePasswordPrompt'), type: 'password' }));
         if (!password) return;
         await attempt(password);
       }
@@ -68,6 +70,7 @@ export default function ProfilePage() {
     }
   };
   const { showToast } = useToast();
+  const { ask: askDialog } = useDialogs();
   const t = useT(accountMessages);
   const tc = useT(commonMessages);
   const { locale, setLocale } = useLocale();
@@ -77,6 +80,8 @@ export default function ProfilePage() {
   };
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
+  // Why the profile could not be read; shown instead of a blank profile ("Not provided", "Not set"), which Edit would then save.
+  const [loadError, setLoadError] = useState<unknown>(null);
   // Phone verification: a number only counts (for OTP login) once its owner has proven it.
   const [verifyingPhone, setVerifyingPhone] = useState(false);
   const [phoneInput, setPhoneInput] = useState('');
@@ -156,6 +161,7 @@ export default function ProfilePage() {
 
   const loadProfile = async () => {
     setLoading(true);
+    setLoadError(null);
     try {
       const response = await userProfileService.getProfile();
       setProfile(response.data);
@@ -168,6 +174,7 @@ export default function ProfilePage() {
       });
     } catch (error) {
       console.error('Failed to load profile:', error);
+      setLoadError(error);
     } finally {
       setLoading(false);
     }
@@ -184,7 +191,7 @@ export default function ProfilePage() {
         response = await submit();
       } catch (error: any) {
         if (!emailChanged || error?.response?.data?.error?.code !== 'PASSWORD_REQUIRED') throw error;
-        const currentPassword = window.prompt(t('emailChangePasswordPrompt'));
+        const currentPassword = (await askDialog({ title: t('password'), message: t('emailChangePasswordPrompt'), type: 'password' }));
         if (!currentPassword) return;
         response = await submit(currentPassword);
       }
@@ -211,6 +218,16 @@ export default function ProfilePage() {
             <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-green-600 mx-auto mb-4"></div>
             <p className="text-gray-600">{t('loadingProfile')}</p>
           </div>
+        </div>
+      </DashboardLayout>
+    );
+  }
+
+  if (loadError && !profile) {
+    return (
+      <DashboardLayout title={t('myProfile')} subtitle={t('manageAccount')} sidebarItems={sidebarItems} userType="customer">
+        <div className="max-w-xl mx-auto my-12">
+          <LoadError error={loadError} onRetry={loadProfile} title={t('profileLoadFailed')} />
         </div>
       </DashboardLayout>
     );

@@ -6,6 +6,7 @@ export const accountMessages = defineMessages({
     // Profile
     myProfile: 'My Profile',
     manageAccount: 'Manage your account',
+    profileLoadFailed: "We couldn't load your profile",
     manageAccountSettings: 'Manage your account settings',
     loadingProfile: 'Loading your profile...',
     enterValidPhone: 'Enter a valid phone number',
@@ -154,6 +155,7 @@ export const accountMessages = defineMessages({
     autoSelectedCheckout: 'This will be auto-selected at checkout',
     updateAddress: 'Update Address',
     saveAddress: 'Save Address',
+    addressesLoadFailed: "We couldn't load your addresses",
     noAddresses: 'No addresses saved yet',
     noAddressesDesc: 'Add your delivery addresses to make checkout faster and ensure your food arrives at the right place!',
     addFirstAddress: 'Add Your First Address',
@@ -324,6 +326,7 @@ export const accountMessages = defineMessages({
   ur: {
     myProfile: 'میرا پروفائل',
     manageAccount: 'اپنا اکاؤنٹ سنبھالیں',
+    profileLoadFailed: 'آپ کی پروفائل لوڈ نہیں ہو سکی',
     manageAccountSettings: 'اپنی اکاؤنٹ سیٹنگز سنبھالیں',
     loadingProfile: 'آپ کا پروفائل لوڈ ہو رہا ہے...',
     enterValidPhone: 'درست فون نمبر درج کریں',
@@ -471,6 +474,7 @@ export const accountMessages = defineMessages({
     autoSelectedCheckout: 'چیک آؤٹ پر یہ خود منتخب ہو جائے گا',
     updateAddress: 'پتہ اپڈیٹ کریں',
     saveAddress: 'پتہ محفوظ کریں',
+    addressesLoadFailed: 'آپ کے پتے لوڈ نہیں ہو سکے',
     noAddresses: 'ابھی کوئی پتہ محفوظ نہیں',
     noAddressesDesc: 'اپنے ڈیلیوری کے پتے شامل کریں تاکہ چیک آؤٹ جلدی ہو اور کھانا صحیح جگہ پہنچے!',
     addFirstAddress: 'اپنا پہلا پتہ شامل کریں',

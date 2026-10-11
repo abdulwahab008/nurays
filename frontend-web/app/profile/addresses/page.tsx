@@ -6,7 +6,9 @@ import { useRouter } from 'next/navigation';
 import dynamic from 'next/dynamic';
 import { userProfileService, Address } from '@/lib/services/user-profile.service';
 import { Button } from '@/components/ui/button';
+import { LoadError } from '@/components/ui/LoadError';
 import { useToast } from '@/components/ui/toast';
+import { useDialogs } from '@/components/ui/Dialogs';
 import { apiClient } from '@/lib/api-client';
 import { useAuthStore } from '@/lib/store/auth-store';
 import { DashboardLayout, CUSTOMER_SIDEBAR_ITEMS } from '@/components/layout/DashboardShell';
@@ -113,6 +115,7 @@ export default function AddressesPage() {
   const router = useRouter();
   const { isAuthenticated } = useAuthStore();
   const { showToast } = useToast();
+  const { confirm: confirmDialog } = useDialogs();
   const t = useT(accountMessages);
   const tc = useT(commonMessages);
   // A saved label we know (Home/Work/Other) is shown in the current language; anything else as typed.
@@ -122,6 +125,8 @@ export default function AddressesPage() {
   };
   const [addresses, setAddresses] = useState<Address[]>([]);
   const [loading, setLoading] = useState(true);
+  // Why the list could not be read; shown instead of "No addresses saved yet", which would be untrue.
+  const [loadError, setLoadError] = useState<unknown>(null);
   const [showAddForm, setShowAddForm] = useState(false);
   const [editingAddress, setEditingAddress] = useState<Address | null>(null);
   const [showMap, setShowMap] = useState(false);
@@ -158,11 +163,13 @@ export default function AddressesPage() {
 
   const loadAddresses = async () => {
     setLoading(true);
+    setLoadError(null);
     try {
       const response = await userProfileService.getAddresses();
       setAddresses(response.data);
     } catch (error) {
       console.error('Failed to load addresses:', error);
+      setLoadError(error);
     } finally {
       setLoading(false);
     }
@@ -279,7 +286,7 @@ export default function AddressesPage() {
   };
 
   const handleDeleteAddress = async (addressId: string) => {
-    if (!confirm(t('confirmDeleteAddress'))) return;
+    if (!(await confirmDialog({ message: t('confirmDeleteAddress') }))) return;
     try {
       await userProfileService.deleteAddress(addressId);
       showToast(t('addressDeleted'), 'success');
@@ -731,7 +738,9 @@ export default function AddressesPage() {
       )}
 
       {/* Addresses List */}
-      {addresses.length === 0 ? (
+      {loadError && addresses.length === 0 ? (
+        <LoadError error={loadError} onRetry={loadAddresses} title={t('addressesLoadFailed')} />
+      ) : addresses.length === 0 ? (
         <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-12 text-center">
           <div className="w-24 h-24 bg-gradient-to-br from-orange-100 to-red-100 rounded-full flex items-center justify-center mx-auto mb-6 text-[#FF5500]">
             <MapPin className="w-12 h-12" />

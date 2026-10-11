@@ -13,6 +13,7 @@ import { useAuthStore } from '@/lib/store/auth-store';
 import { apiClient } from '@/lib/api-client';
 import { BrandLockup } from '@/components/ui/Mark';
 import { useT } from '@/lib/i18n';
+import { useRequestErrorMessage } from '@/components/ui/LoadError';
 import { authMessages } from '@/lib/i18n/messages/auth';
 
 // The one-click demo accounts live in their own file, which only a build that switches them on loads (next.config.ts sets
@@ -29,6 +30,7 @@ export default function LoginPage() {
   const { setUser } = useAuthStore();
   const { showToast } = useToast();
   const t = useT(authMessages);
+  const requestError = useRequestErrorMessage();
   const [phoneOrEmail, setPhoneOrEmail] = useState('');
   const [otp, setOtp] = useState('');
   const [password, setPassword] = useState('');
@@ -63,7 +65,7 @@ export default function LoginPage() {
         }
       }
     } catch (err: any) {
-      const errorMessage = err.response?.data?.error?.message || err.response?.data?.message || t('googleFailed');
+      const errorMessage = requestError(err, t('googleFailed'));
       setError(errorMessage);
     } finally {
       setLoading(false);
@@ -79,7 +81,7 @@ export default function LoginPage() {
       await authService.loginSendOtp({ phone: phoneOrEmail });
       setStep('verify');
     } catch (err: any) {
-      const errorMessage = err.response?.data?.error?.message || err.response?.data?.message || t('errSendOtp');
+      const errorMessage = requestError(err, t('errSendOtp'));
       const errorCode = err.response?.data?.error?.code;
       
       if (errorCode === 'USER_NOT_FOUND') {
@@ -105,10 +107,12 @@ export default function LoginPage() {
       const userType = response.data.user?.userType || response.data.user?.user_type;
       router.push(landingAfterLogin(homeFor(userType)));
     } catch (err: any) {
-      const errorMessage = err.response?.data?.error?.message || err.response?.data?.message || t('errOtpFailed');
+      const errorMessage = requestError(err, t('errOtpFailed'));
       const errorCode = err.response?.data?.error?.code;
       
-      if (errorCode === 'INVALID_OTP' || errorMessage.includes('Invalid OTP')) {
+      if (errorCode === 'ACCOUNT_SUSPENDED') {
+        setError(t('errAccountSuspended'));
+      } else if (errorCode === 'INVALID_OTP' || errorMessage.includes('Invalid OTP')) {
         setError(t('errInvalidOtp'));
       } else if (errorCode === 'OTP_EXPIRED') {
         setError(t('errOtpExpired'));
@@ -137,10 +141,12 @@ export default function LoginPage() {
         router.push(landingAfterLogin(homeFor(userType)));
       }
     } catch (err: any) {
-      const errorMessage = err.response?.data?.error?.message || err.response?.data?.message || t('errLoginFailed');
+      const errorMessage = requestError(err, t('errLoginFailed'));
       const errorCode = err.response?.data?.error?.code;
       
-      if (errorCode === 'INVALID_CREDENTIALS' || errorMessage.includes('Invalid email or password')) {
+      if (errorCode === 'ACCOUNT_SUSPENDED') {
+        setError(t('errAccountSuspended'));
+      } else if (errorCode === 'INVALID_CREDENTIALS' || errorMessage.includes('Invalid email or password')) {
         setError(t('errInvalidCredentials'));
       } else if (errorCode === 'USER_NOT_FOUND') {
         setError(t('errNoAccountEmail'));

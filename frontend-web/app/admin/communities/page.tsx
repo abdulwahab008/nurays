@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { AdminShell } from '@/components/layout/AdminShell';
 import { Button } from '@/components/ui/button';
+import { LoadError } from '@/components/ui/LoadError';
 import { useToast } from '@/components/ui/toast';
 import LocationMap from '@/components/ui/LocationMap';
 import { apiClient, apiErrorMessage } from '@/lib/api-client';
@@ -82,20 +83,23 @@ export default function AdminCommunitiesPage() {
   const { showToast } = useToast();
   const [communities, setCommunities] = useState<Community[]>([]);
   const [loading, setLoading] = useState(true);
+  // Why the communities could not be read; shown instead of "No communities yet", which would be untrue.
+  const [loadError, setLoadError] = useState<unknown>(null);
   const [form, setForm] = useState<FormState | null>(null);
   const [saving, setSaving] = useState(false);
 
   const load = useCallback(async () => {
     try {
       setLoading(true);
+      setLoadError(null);
       const res = await apiClient.get('/admin/communities');
       setCommunities(res.data.data);
     } catch (error) {
-      showToast(apiErrorMessage(error, 'Failed to load communities'), 'error');
+      setLoadError(error);
     } finally {
       setLoading(false);
     }
-  }, [showToast]);
+  }, []);
 
   useEffect(() => {
     load();
@@ -244,6 +248,8 @@ export default function AdminCommunitiesPage() {
         <div className="bg-white border border-gray-200 rounded-lg overflow-x-auto">
           {loading && communities.length === 0 ? (
             <p className="p-10 text-center text-gray-500">Loading…</p>
+          ) : loadError && communities.length === 0 ? (
+            <LoadError error={loadError} onRetry={load} title="We couldn't load the communities" className="m-4" />
           ) : communities.length === 0 ? (
             <p className="p-10 text-center text-gray-500">No communities yet.</p>
           ) : (

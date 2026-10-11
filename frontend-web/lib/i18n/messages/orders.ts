@@ -9,6 +9,7 @@ export const ordersMessages = defineMessages({
     // ---- Order list (/orders) ----
     'list.title': 'My Orders',
     'list.subtitle': 'Track live preparations, dispatch status & view order receipts',
+    'list.loadFailed': "We couldn't load your orders",
     'list.toastCancelled': 'Order #{number} has been cancelled.',
     'list.toastStatus': 'Order #{number} status: {status}',
     'list.toastAddingToTray': 'Adding order items to tray...',
@@ -288,6 +289,7 @@ export const ordersMessages = defineMessages({
   ur: {
     'list.title': 'میرے آرڈرز',
     'list.subtitle': 'کھانے کی تیاری اور ڈیلیوری لائیو دیکھیں، اور آرڈر کی رسیدیں دیکھیں',
+    'list.loadFailed': 'آپ کے آرڈرز لوڈ نہیں ہو سکے',
     'list.toastCancelled': 'آرڈر \u2066#{number}\u2069 منسوخ ہو گیا ہے۔',
     'list.toastStatus': 'آرڈر \u2066#{number}\u2069: {status}',
     'list.toastAddingToTray': 'آرڈر کی چیزیں کارٹ میں ڈالی جا رہی ہیں...',

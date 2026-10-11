@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { DashboardLayout, SELLER_SIDEBAR_ITEMS } from '@/components/layout/DashboardShell';
 import { Button } from '@/components/ui/button';
+import { LoadError } from '@/components/ui/LoadError';
 import { useToast } from '@/components/ui/toast';
 import { useAuthStore } from '@/lib/store/auth-store';
 import { apiClient } from '@/lib/api-client';
@@ -206,8 +207,12 @@ export default function AddProductPage() {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [loading, showKeyboardHelp]);
 
+  // Why the categories could not be read; shown instead of "No categories available", which would be untrue.
+  const [categoriesError, setCategoriesError] = useState<unknown>(null);
+
   const loadCategories = async () => {
     try {
+      setCategoriesError(null);
       // Use the new grouped endpoint
       const response = await apiClient.get('/categories/grouped');
       if (response.data.success && response.data.data) {
@@ -215,13 +220,7 @@ export default function AddProductPage() {
       }
     } catch (error) {
       console.error('Failed to load categories:', error);
-      // Fallback to default structure
-      setGroupedCategories({
-        frozen: [],
-        fresh: [],
-        ready_to_eat: [],
-        ready_to_cook: [],
-      });
+      setCategoriesError(error);
     }
   };
 
@@ -824,6 +823,8 @@ export default function AddProductPage() {
                       </button>
                     ))}
                   </div>
+                ) : categoriesError ? (
+                  <LoadError compact error={categoriesError} onRetry={loadCategories} title="We couldn't load the categories" />
                 ) : (
                   <div className="bg-gray-50 rounded-xl p-4 text-center text-gray-500 text-sm">
                     No categories available for {productTypeOptions.find(t => t.value === formData.productType)?.label}

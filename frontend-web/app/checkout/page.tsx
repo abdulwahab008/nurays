@@ -28,6 +28,7 @@ import { addressService, Address } from '@/lib/services/address.service';
 import { orderService } from '@/lib/services/order.service';
 import { formatPrice, orderTotals } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
+import { LoadError } from '@/components/ui/LoadError';
 import { useToast } from '@/components/ui/toast';
 import { useAuthStore } from '@/lib/store/auth-store';
 import { useCartStore } from '@/lib/store/cart-store';
@@ -71,6 +72,8 @@ export default function CheckoutPage() {
   const [appliedPromo, setAppliedPromo] = useState<{ code: string; discountAmount: number } | null>(null);
   const [promoValidating, setPromoValidating] = useState(false);
   const [loading, setLoading] = useState(true);
+  // Why the tray and addresses could not be read; shown instead of "Your Tray is Empty", which would be untrue.
+  const [loadError, setLoadError] = useState<unknown>(null);
   const checkoutKeyRef = useRef<{ key: string; signature: string } | null>(null);
   const [processing, setProcessing] = useState(false);
   const [updatingItemId, setUpdatingItemId] = useState<string | null>(null);
@@ -111,6 +114,7 @@ export default function CheckoutPage() {
 
   const loadData = async () => {
     setLoading(true);
+    setLoadError(null);
     try {
       const [cartResponse, addressesResponse] = await Promise.all([
         cartService.getCart(),
@@ -188,6 +192,7 @@ export default function CheckoutPage() {
       }
     } catch (error) {
       console.error('Failed to load checkout data:', error);
+      setLoadError(error);
     } finally {
       setLoading(false);
     }
@@ -403,6 +408,16 @@ export default function CheckoutPage() {
         <div className="max-w-5xl mx-auto py-12 flex flex-col items-center justify-center gap-3">
           <div className="w-8 h-8 border-3 border-[#FF5500] border-t-transparent rounded-full animate-spin" />
           <p className="text-xs font-semibold text-slate-500">{t('preparingSummary')}</p>
+        </div>
+      </DashboardLayout>
+    );
+  }
+
+  if (loadError && !cart) {
+    return (
+      <DashboardLayout title={t('checkoutTitle')} subtitle={t('checkoutSubtitle')} sidebarItems={sidebarItems} userType="customer">
+        <div className="max-w-xl mx-auto my-12">
+          <LoadError error={loadError} onRetry={loadData} title={t('loadFailed')} />
         </div>
       </DashboardLayout>
     );

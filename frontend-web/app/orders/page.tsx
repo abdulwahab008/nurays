@@ -25,12 +25,13 @@ import {
 import { orderService, Order, OrderItem } from '@/lib/services/order.service';
 import { formatPrice, formatDate } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
+import { LoadError } from '@/components/ui/LoadError';
 import { useAuthStore } from '@/lib/store/auth-store';
 import { DashboardLayout, CUSTOMER_SIDEBAR_ITEMS } from '@/components/layout/DashboardShell';
 import { useSocket } from '@/lib/hooks/use-socket';
 import { useToast } from '@/components/ui/toast';
 import { cartService } from '@/lib/services/cart.service';
-import { apiClient } from '@/lib/api-client';
+import { apiClient, apiErrorMessage } from '@/lib/api-client';
 import { useT } from '@/lib/i18n';
 import { commonMessages, statusKey } from '@/lib/i18n/messages/common';
 import { ordersMessages } from '@/lib/i18n/messages/orders';
@@ -63,6 +64,8 @@ function OrdersContent() {
   const [loadingMore, setLoadingMore] = useState(false);
   const ordersRef = useRef<Order[]>([]);
   const [loading, setLoading] = useState(true);
+  // Why the first page of orders could not be loaded; shown instead of an empty list, which would say there are no orders.
+  const [loadError, setLoadError] = useState<unknown>(null);
   const [filter, setFilter] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [reorderingId, setReorderingId] = useState<string | null>(null);
@@ -149,7 +152,10 @@ function OrdersContent() {
   const loadOrders = async (pageToLoad = 1) => {
     const append = pageToLoad > 1;
     if (append) setLoadingMore(true);
-    else setLoading(true);
+    else {
+      setLoading(true);
+      setLoadError(null);
+    }
     try {
       const response = await orderService.getMyOrders({ page: pageToLoad, limit: PAGE_SIZE });
       const data = response.data;
@@ -164,6 +170,9 @@ function OrdersContent() {
       if (data?.statusCounts) setStatusCounts(data.statusCounts);
     } catch (error) {
       console.error('Failed to load orders:', error);
+      // The orders already on the screen stay; only the first page has nothing to fall back on.
+      if (append) showToast(apiErrorMessage(error, tc('somethingWrong')), 'error');
+      else setLoadError(error);
     } finally {
       if (append) setLoadingMore(false);
       else setLoading(false);
@@ -361,6 +370,10 @@ function OrdersContent() {
       userType="customer"
     >
       <div className="max-w-6xl mx-auto space-y-6 pb-12">
+        {loadError && !loading && orders.length === 0 ? (
+          <LoadError error={loadError} onRetry={() => loadOrders()} title={t('list.loadFailed')} />
+        ) : (
+        <>
         {/* ============================================================ */}
         {/* STATS SUMMARY METRICS (Rich Modern Bento Cards) */}
         {/* ============================================================ */}
@@ -761,6 +774,8 @@ function OrdersContent() {
               </p>
             )}
           </div>
+        )}
+        </>
         )}
       </div>
     </DashboardLayout>

@@ -6,6 +6,7 @@ import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { AdminShell } from '@/components/layout/AdminShell';
 import { Button } from '@/components/ui/button';
+import { LoadError } from '@/components/ui/LoadError';
 import { useToast } from '@/components/ui/toast';
 import { apiClient, apiErrorMessage } from '@/lib/api-client';
 import { formatPrice, formatDateTime } from '@/lib/utils';
@@ -107,6 +108,8 @@ function RidersMoney() {
   const { showToast } = useToast();
   const [data, setData] = useState<RidersMoneyResponse | null>(null);
   const [loading, setLoading] = useState(true);
+  // Why the riders could not be read; shown instead of "No riders here", which would be untrue.
+  const [loadError, setLoadError] = useState<unknown>(null);
   const [filter, setFilter] = useState<(typeof FILTERS)[number][0]>('all');
   const [search, setSearch] = useState('');
   const [query, setQuery] = useState('');
@@ -115,12 +118,13 @@ function RidersMoney() {
   const load = useCallback(async () => {
     try {
       setLoading(true);
+      setLoadError(null);
       const res = await apiClient.get('/admin/riders/money', {
         params: { filter: filter === 'all' ? undefined : filter, search: query || undefined, page },
       });
       setData(res.data.data);
     } catch (error) {
-      showToast(apiErrorMessage(error, 'Failed to load riders'), 'error');
+      setLoadError(error);
     } finally {
       setLoading(false);
     }
@@ -184,6 +188,8 @@ function RidersMoney() {
 
       {loading && !data ? (
         <div className="bg-white rounded-lg border border-gray-200 p-12 text-center text-gray-500">Loading riders…</div>
+      ) : loadError && !data ? (
+        <LoadError error={loadError} onRetry={load} title="We couldn't load the riders" />
       ) : !data || data.riders.length === 0 ? (
         <div className="bg-white rounded-lg border border-gray-200 p-12 text-center">
           <h3 className="text-lg font-semibold text-gray-900 mb-1">No riders here</h3>
@@ -261,6 +267,8 @@ function RidersMoney() {
 function Applications() {
   const { showToast } = useToast();
   const [loading, setLoading] = useState(true);
+  // Why the applications could not be read; shown instead of "No riders awaiting approval", which would be untrue.
+  const [loadError, setLoadError] = useState<unknown>(null);
   const [riders, setRiders] = useState<PendingRider[]>([]);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [rejecting, setRejecting] = useState<PendingRider | null>(null);
@@ -268,12 +276,13 @@ function Applications() {
   const loadRiders = useCallback(async () => {
     try {
       setLoading(true);
+      setLoadError(null);
       const response = await apiClient.get('/admin/pending-riders');
       if (response.data.success) {
         setRiders(response.data.data || []);
       }
     } catch (error) {
-      showToast(apiErrorMessage(error, 'Failed to load pending riders'), 'error');
+      setLoadError(error);
     } finally {
       setLoading(false);
     }
@@ -324,6 +333,8 @@ function Applications() {
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-green-600 mx-auto mb-4"></div>
           <p className="text-gray-600">Loading pending riders...</p>
         </div>
+      ) : loadError && riders.length === 0 ? (
+        <LoadError error={loadError} onRetry={loadRiders} title="We couldn't load the applications" />
       ) : riders.length === 0 ? (
         <div className="bg-white rounded-lg shadow-sm p-12 text-center">
           <h3 className="text-lg font-semibold text-gray-900 mb-2">No riders awaiting approval</h3>

@@ -54,6 +54,7 @@ export const authMessages = defineMessages({
     errOtpExpired: 'OTP has expired. Please request a new one.',
     errLoginFailed: 'Login failed',
     errInvalidCredentials: 'Invalid email or password. Please check your credentials and try again.',
+    errAccountSuspended: 'This account has been suspended. Please contact support if you think this is a mistake.',
     errNoAccountEmail: 'No account found with this email. Please register first.',
     errPasswordNotSet: 'Password not set for this account. Please use OTP login or reset your password.',
 
@@ -220,6 +221,7 @@ export const authMessages = defineMessages({
     errOtpExpired: 'او ٹی پی کی میعاد ختم ہو گئی۔ براہِ کرم نیا منگوائیں۔',
     errLoginFailed: 'لاگ اِن نہیں ہو سکا',
     errInvalidCredentials: 'ای میل یا پاس ورڈ غلط ہے۔ براہِ کرم چیک کر کے دوبارہ کوشش کریں۔',
+    errAccountSuspended: 'یہ اکاؤنٹ معطل کر دیا گیا ہے۔ اگر آپ کو لگتا ہے کہ یہ غلطی ہے تو براہِ کرم سپورٹ سے رابطہ کریں۔',
     errNoAccountEmail: 'اس ای میل سے کوئی اکاؤنٹ نہیں ملا۔ براہِ کرم پہلے رجسٹر کریں۔',
     errPasswordNotSet: 'اس اکاؤنٹ کا پاس ورڈ سیٹ نہیں ہے۔ براہِ کرم او ٹی پی سے لاگ اِن کریں یا پاس ورڈ ری سیٹ کریں۔',
 

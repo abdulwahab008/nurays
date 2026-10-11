@@ -6,7 +6,9 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { DashboardLayout, SELLER_SIDEBAR_ITEMS } from '@/components/layout/DashboardShell';
 import { Button } from '@/components/ui/button';
+import { LoadError } from '@/components/ui/LoadError';
 import { useToast } from '@/components/ui/toast';
+import { useDialogs } from '@/components/ui/Dialogs';
 import { useAuthStore } from '@/lib/store/auth-store';
 import { apiClient } from '@/lib/api-client';
 import { formatPrice } from '@/lib/utils';
@@ -135,8 +137,11 @@ function SellerProductsContent() {
   const isInventoryView = searchParams?.get('view') === 'inventory';
   const { isAuthenticated, user } = useAuthStore();
   const { showToast } = useToast();
+  const { confirm: confirmDialog } = useDialogs();
 
   const [loading, setLoading] = useState(true);
+  // Why the dishes could not be read; shown instead of "No Products in Kitchen Yet", which would be untrue.
+  const [loadError, setLoadError] = useState<unknown>(null);
   const [products, setProducts] = useState<Product[]>([]);
   const [updatingStock, setUpdatingStock] = useState<{ [key: string]: boolean }>({});
   const [stockValues, setStockValues] = useState<{ [key: string]: number }>({});
@@ -171,13 +176,15 @@ function SellerProductsContent() {
   const loadProducts = async () => {
     try {
       setLoading(true);
+      setLoadError(null);
       const response = await apiClient.get('/products/seller/my-products');
       if (response.data.success) {
         setProducts(response.data.data.products || []);
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Failed to load products:', error);
-      setProducts([]);
+      // The dishes already on the screen stay (a refresh after an action must not wipe the list).
+      setLoadError(error);
     } finally {
       setLoading(false);
     }
@@ -604,6 +611,8 @@ function SellerProductsContent() {
               </div>
             ))}
           </div>
+        ) : loadError && products.length === 0 ? (
+          <LoadError error={loadError} onRetry={loadProducts} title="We couldn't load your dishes" className="max-w-2xl mx-auto" />
         ) : products.length === 0 ? (
           <div className="bg-white rounded-3xl shadow-sm border border-slate-200 p-12 sm:p-16 text-center max-w-2xl mx-auto">
             <div className="w-16 h-16 bg-emerald-50 rounded-2xl flex items-center justify-center mx-auto mb-5 text-emerald-600 shadow-inner">
@@ -973,8 +982,8 @@ function SellerProductsContent() {
 
                       {/* Delete */}
                       <button
-                        onClick={() => {
-                          if (confirm(`Are you sure you want to permanently delete "${product.name}"?`)) {
+                        onClick={async () => {
+                          if ((await confirmDialog({ title: 'Delete this dish?', message: `Are you sure you want to permanently delete "${product.name}"?`, confirmText: 'Delete' }))) {
                             handleDeleteProduct(product.id);
                           }
                         }}

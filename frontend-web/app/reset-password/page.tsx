@@ -8,6 +8,7 @@ import { useToast } from '@/components/ui/toast';
 import { apiClient } from '@/lib/api-client';
 import { BrandLockup } from '@/components/ui/Mark';
 import { useT } from '@/lib/i18n';
+import { useRequestErrorMessage } from '@/components/ui/LoadError';
 import { authMessages } from '@/lib/i18n/messages/auth';
 import { weakPasswordMessage } from '@/lib/password-errors';
 
@@ -16,6 +17,7 @@ function ResetForm() {
   const token = useSearchParams().get('token') ?? '';
   const { showToast } = useToast();
   const t = useT(authMessages);
+  const requestError = useRequestErrorMessage();
   const [password, setPassword] = useState('');
   const [confirm, setConfirm] = useState('');
   const [loading, setLoading] = useState(false);
@@ -36,7 +38,7 @@ function ResetForm() {
       showToast(t('passwordUpdated'), 'success');
       router.push('/login');
     } catch (err: any) {
-      showToast(weakPasswordMessage(err, t) || err?.response?.data?.error?.message || t('resetLinkInvalid'), 'error');
+      showToast(weakPasswordMessage(err, t) || requestError(err, t('resetLinkInvalid')), 'error');
     } finally {
       setLoading(false);
     }

@@ -27,6 +27,7 @@ import {
 import { cartService, CartResponse } from '@/lib/services/cart.service';
 import { formatPrice, imageVariant, orderTotals } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
+import { LoadError } from '@/components/ui/LoadError';
 import { useAuthStore } from '@/lib/store/auth-store';
 import { useCartStore, CartItem as LocalCartItem } from '@/lib/store/cart-store';
 import { DashboardLayout, CUSTOMER_SIDEBAR_ITEMS } from '@/components/layout/DashboardShell';
@@ -96,6 +97,8 @@ export default function CartPage() {
     return null;
   });
   const [loading, setLoading] = useState(true);
+  // Why the tray could not be read; shown instead of "Your tray is empty", which would be untrue.
+  const [loadError, setLoadError] = useState<unknown>(null);
   const [updatingItem, setUpdatingItem] = useState<string | null>(null);
   const [cartPromoInput, setCartPromoInput] = useState('');
   const [promoValidating, setPromoValidating] = useState(false);
@@ -151,6 +154,7 @@ export default function CartPage() {
 
   const loadCart = async () => {
     setLoading(true);
+    setLoadError(null);
     try {
       const token = apiClient.getAccessToken();
       const localStoreItems = useCartStore.getState().items || [];
@@ -240,6 +244,8 @@ export default function CartPage() {
       const localStoreItems = useCartStore.getState().items || [];
       if (localStoreItems.length > 0) {
         setCart(localItemsToCartResponse(localStoreItems));
+      } else {
+        setLoadError(error);
       }
     } finally {
       setLoading(false);
@@ -409,6 +415,16 @@ export default function CartPage() {
             <p className="text-sm font-bold text-slate-900">{t('loadingTray')}</p>
             <p className="text-xs text-slate-500 mt-1">{t('loadingTrayHint')}</p>
           </div>
+        </div>
+      </DashboardLayout>
+    );
+  }
+
+  if (loadError && !hasItems) {
+    return (
+      <DashboardLayout title={t('cartTitle')} subtitle={t('emptySubtitle')} sidebarItems={sidebarItems} userType="customer">
+        <div className="max-w-xl mx-auto my-12">
+          <LoadError error={loadError} onRetry={loadCart} title={t('loadFailed')} />
         </div>
       </DashboardLayout>
     );

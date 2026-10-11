@@ -7,11 +7,13 @@ import { useToast } from '@/components/ui/toast';
 import { apiClient } from '@/lib/api-client';
 import { BrandLockup } from '@/components/ui/Mark';
 import { useT } from '@/lib/i18n';
+import { useRequestErrorMessage } from '@/components/ui/LoadError';
 import { authMessages } from '@/lib/i18n/messages/auth';
 
 export default function ForgotPasswordPage() {
   const { showToast } = useToast();
   const t = useT(authMessages);
+  const requestError = useRequestErrorMessage();
   const [email, setEmail] = useState('');
   const [loading, setLoading] = useState(false);
   const [sent, setSent] = useState(false);
@@ -25,7 +27,7 @@ export default function ForgotPasswordPage() {
       // The server answers the same whether or not the account exists.
       setSent(true);
     } catch (err: any) {
-      showToast(err?.response?.data?.error?.message || t('errResetEmail'), 'error');
+      showToast(requestError(err, t('errResetEmail')), 'error');
     } finally {
       setLoading(false);
     }

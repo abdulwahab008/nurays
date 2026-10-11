@@ -5,6 +5,7 @@ import { loginUrlHere } from '@/lib/auth-redirect';
 import { useRouter } from 'next/navigation';
 import { DashboardLayout, SELLER_SIDEBAR_ITEMS } from '@/components/layout/DashboardShell';
 import { Button } from '@/components/ui/button';
+import { useLoadFailureMessage } from '@/components/ui/LoadError';
 import { useToast } from '@/components/ui/toast';
 import { useAuthStore } from '@/lib/store/auth-store';
 import { apiClient } from '@/lib/api-client';
@@ -62,6 +63,7 @@ export default function SellerDeliveryPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const failureMessage = useLoadFailureMessage();
 
   // Delivery Model: 'model_a' (Platform Fleet) vs 'model_b' (Seller Self-Delivery)
   const [deliveryModel, setDeliveryModel] = useState<'model_a' | 'model_b'>('model_b');
@@ -152,7 +154,7 @@ export default function SellerDeliveryPage() {
       }
     } catch (err: any) {
       console.error('Failed to load delivery settings:', err);
-      setLoadError(err?.response?.data?.message || err?.message || 'Failed to load delivery settings');
+      setLoadError(failureMessage(err));
     } finally {
       if (!silent) setLoading(false);
     }
@@ -296,12 +298,7 @@ export default function SellerDeliveryPage() {
       }
     } catch (err: any) {
       console.error('Failed to save delivery settings:', err);
-      const errMsg =
-        err?.response?.data?.error?.message ||
-        err?.response?.data?.message ||
-        err?.message ||
-        'Failed to save delivery settings';
-      showToast(errMsg, 'error');
+      showToast(failureMessage(err), 'error');
       // The first request (settings) may have been saved before the second failed:
       // show what the server actually holds rather than the unsaved form.
       loadDeliverySettings(true);

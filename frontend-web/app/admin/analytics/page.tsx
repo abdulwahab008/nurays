@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { AdminShell } from '@/components/layout/AdminShell';
 import { useToast } from '@/components/ui/toast';
+import { LoadError } from '@/components/ui/LoadError';
 import { useAuthStore } from '@/lib/store/auth-store';
 import { apiClient } from '@/lib/api-client';
 import { formatPrice } from '@/lib/utils';
@@ -36,6 +37,8 @@ export default function AdminAnalyticsPage() {
   const { showToast } = useToast();
   const [loading, setLoading] = useState(true);
   const [analytics, setAnalytics] = useState<AnalyticsData | null>(null);
+  // Why the figures could not be read: never shown as zeros, which would read as "no business at all".
+  const [loadError, setLoadError] = useState<unknown>(null);
 
   useEffect(() => {
     if (!isAuthenticated) {
@@ -55,24 +58,16 @@ export default function AdminAnalyticsPage() {
   const loadAnalytics = async () => {
     try {
       setLoading(true);
+      setLoadError(null);
       const response = await apiClient.get('/admin/analytics');
       if (response.data.success) {
         setAnalytics(response.data.data);
       } else {
-        // Show placeholder data if endpoint doesn't exist
-        setAnalytics({
-          overview: { totalUsers: 0, totalSellers: 0, totalOrders: 0, totalRevenue: 0 },
-          revenue: { today: 0, thisWeek: 0, thisMonth: 0, total: 0 },
-          orders: { today: 0, thisWeek: 0, thisMonth: 0, total: 0 },
-        });
+        throw new Error('The analytics answer carried no figures');
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Failed to load analytics:', error);
-      setAnalytics({
-        overview: { totalUsers: 0, totalSellers: 0, totalOrders: 0, totalRevenue: 0 },
-        revenue: { today: 0, thisWeek: 0, thisMonth: 0, total: 0 },
-        orders: { today: 0, thisWeek: 0, thisMonth: 0, total: 0 },
-      });
+      setLoadError(error);
     } finally {
       setLoading(false);
     }
@@ -95,6 +90,8 @@ export default function AdminAnalyticsPage() {
             <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-green-600 mx-auto mb-4"></div>
             <p className="text-gray-600">Loading analytics...</p>
           </div>
+        ) : loadError ? (
+          <LoadError error={loadError} onRetry={loadAnalytics} title="We couldn't load the analytics" />
         ) : analytics ? (
           <>
             {/* Overview Cards */}

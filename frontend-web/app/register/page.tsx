@@ -11,6 +11,7 @@ import { useAuthStore } from '@/lib/store/auth-store';
 import { apiClient } from '@/lib/api-client';
 import { BrandLockup } from '@/components/ui/Mark';
 import { useT } from '@/lib/i18n';
+import { useRequestErrorMessage } from '@/components/ui/LoadError';
 import { authMessages } from '@/lib/i18n/messages/auth';
 import { weakPasswordMessage } from '@/lib/password-errors';
 
@@ -20,6 +21,7 @@ function RegisterForm() {
   const { setUser } = useAuthStore();
   const { showToast } = useToast();
   const t = useT(authMessages);
+  const requestError = useRequestErrorMessage();
   const [formData, setFormData] = useState({
     email: '',
     password: '',
@@ -83,7 +85,7 @@ function RegisterForm() {
         }
       }
     } catch (err: any) {
-      const errorMessage = err.response?.data?.error?.message || err.response?.data?.message || t('googleFailed');
+      const errorMessage = requestError(err, t('googleFailed'));
       setError(errorMessage);
     } finally {
       setLoading(false);
@@ -178,7 +180,7 @@ function RegisterForm() {
         throw new Error(t('errInvalidResponse'));
       }
     } catch (err: any) {
-      const errorMessage = err.response?.data?.error?.message || err.response?.data?.message || t('errRegistrationFailed');
+      const errorMessage = requestError(err, t('errRegistrationFailed'));
       const errorCode = err.response?.data?.error?.code;
       
       // Provide more specific error messages
@@ -441,7 +443,7 @@ function RegisterForm() {
                       setPhoneOtpSent(true);
                       setPhoneOtpMessage(t('codeSent'));
                     } catch (err: any) {
-                      setPhoneOtpMessage(err.response?.data?.error?.message || t('codeSendFailed'));
+                      setPhoneOtpMessage(requestError(err, t('codeSendFailed')));
                     } finally {
                       setSendingPhoneOtp(false);
                     }

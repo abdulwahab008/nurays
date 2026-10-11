@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { DashboardLayout, SELLER_SIDEBAR_ITEMS } from '@/components/layout/DashboardShell';
 import { Button } from '@/components/ui/button';
+import { useLoadFailureMessage } from '@/components/ui/LoadError';
 import { useToast } from '@/components/ui/toast';
 import { useAuthStore } from '@/lib/store/auth-store';
 import { apiClient } from '@/lib/api-client';
@@ -46,6 +47,7 @@ export default function SellerAnalyticsPage() {
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const failureMessage = useLoadFailureMessage();
   const [analytics, setAnalytics] = useState<AnalyticsData | null>(null);
   const [selectedPeriod, setSelectedPeriod] = useState<PeriodType>('30d');
   const [chartView, setChartView] = useState<'bar' | 'line'>('bar');
@@ -83,12 +85,7 @@ export default function SellerAnalyticsPage() {
       }
     } catch (err: any) {
       console.error('Failed to load analytics:', err);
-      const message =
-        err.response?.data?.error?.message ||
-        err.response?.data?.message ||
-        err.message ||
-        'Failed to fetch seller analytics';
-      setError(message);
+      setError(failureMessage(err));
     } finally {
       setLoading(false);
     }

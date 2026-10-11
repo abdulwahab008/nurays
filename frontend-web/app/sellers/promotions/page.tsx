@@ -6,7 +6,9 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { DashboardLayout, SELLER_SIDEBAR_ITEMS } from '@/components/layout/DashboardShell';
 import { Button } from '@/components/ui/button';
+import { LoadError } from '@/components/ui/LoadError';
 import { useToast } from '@/components/ui/toast';
+import { useDialogs } from '@/components/ui/Dialogs';
 import { useAuthStore } from '@/lib/store/auth-store';
 import { apiClient } from '@/lib/api-client';
 import { formatPrice } from '@/lib/utils';
@@ -576,8 +578,11 @@ export default function SellerPromotionsPage() {
   const router = useRouter();
   const { isAuthenticated, user } = useAuthStore();
   const { showToast } = useToast();
+  const { confirm: confirmDialog } = useDialogs();
 
   const [loading, setLoading] = useState(true);
+  // Why the promotions could not be read; shown instead of "No Active Promotions", which would be untrue.
+  const [loadError, setLoadError] = useState<unknown>(null);
   const [promotions, setPromotions] = useState<Promotion[]>([]);
   const [activeTab, setActiveTab] = useState<'all' | 'active' | 'scheduled' | 'expired'>('all');
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -603,6 +608,7 @@ export default function SellerPromotionsPage() {
   const loadPromotions = async () => {
     try {
       setLoading(true);
+      setLoadError(null);
       const response = await apiClient.get('/promotions');
       if (response.data.success && Array.isArray(response.data.data)) {
         const list = response.data.data as Array<{
@@ -638,9 +644,10 @@ export default function SellerPromotionsPage() {
           }))
         );
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Failed to load promotions:', error);
-      setPromotions([]);
+      // The promotions already on the screen stay (a refresh after an action must not wipe the list).
+      setLoadError(error);
     } finally {
       setLoading(false);
     }
@@ -742,7 +749,7 @@ export default function SellerPromotionsPage() {
   };
 
   const handleDeletePromotion = async (id: string) => {
-    if (!confirm('Are you sure you want to delete this promotion?')) return;
+    if (!(await confirmDialog({ title: 'Delete this promotion?', message: 'Are you sure you want to delete this promotion?', confirmText: 'Delete' }))) return;
     try {
       await apiClient.delete(`/promotions/${id}`);
       showToast('Promotion deleted', 'success');
@@ -1010,6 +1017,8 @@ export default function SellerPromotionsPage() {
               </div>
             ))}
           </div>
+        ) : loadError && promotions.length === 0 ? (
+          <LoadError error={loadError} onRetry={loadPromotions} title="We couldn't load your promotions" className="max-w-2xl mx-auto" />
         ) : filteredPromotions.length === 0 ? (
           <div className="bg-white rounded-3xl shadow-sm border border-slate-200 p-12 sm:p-16 text-center max-w-2xl mx-auto">
             <div className="w-16 h-16 bg-orange-50 rounded-2xl flex items-center justify-center mx-auto mb-5 text-orange-500 shadow-inner">

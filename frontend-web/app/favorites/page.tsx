@@ -8,6 +8,7 @@ import { favoriteService, FavoriteSellerItem } from '@/lib/services/favorite.ser
 import { useCommunityStore } from '@/lib/store/community-store';
 import { useToast } from '@/components/ui/toast';
 import { Button } from '@/components/ui/button';
+import { LoadError } from '@/components/ui/LoadError';
 import { formatPrice } from '@/lib/utils';
 import { useT } from '@/lib/i18n';
 import { useAuthStore } from '@/lib/store/auth-store';
@@ -20,20 +21,23 @@ export default function FavoritesPage() {
   const { isAuthenticated } = useAuthStore();
   const [favorites, setFavorites] = useState<FavoriteSellerItem[]>([]);
   const [loading, setLoading] = useState(true);
+  // Why the list could not be read; shown instead of "no favourites yet", which would be untrue.
+  const [loadError, setLoadError] = useState<unknown>(null);
   const { selectedCommunity } = useCommunityStore();
   const { showToast } = useToast();
   const t = useT(browseMessages);
 
   const fetchFavorites = async () => {
     setLoading(true);
+    setLoadError(null);
     try {
       const lat = selectedCommunity?.centerLatitude;
       const lng = selectedCommunity?.centerLongitude;
       const items = await favoriteService.getFavorites(lat, lng);
       setFavorites(items);
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error(err);
-      showToast(t('favLoadFailed'), 'error');
+      setLoadError(err);
     } finally {
       setLoading(false);
     }
@@ -91,6 +95,8 @@ export default function FavoritesPage() {
               <div key={i} className="h-64 rounded-2xl bg-neutral-100 animate-pulse" />
             ))}
           </div>
+        ) : loadError ? (
+          <LoadError error={loadError} onRetry={fetchFavorites} title={t('favLoadFailed')} />
         ) : favorites.length === 0 ? (
           <div className="text-center py-16 px-4 rounded-2xl border border-dashed border-neutral-300 bg-white shadow-sm">
             <div className="w-16 h-16 rounded-full bg-rose-50 text-rose-500 flex items-center justify-center text-3xl mx-auto mb-4">

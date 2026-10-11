@@ -6,6 +6,7 @@ import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { DashboardLayout, SELLER_SIDEBAR_ITEMS } from '@/components/layout/DashboardShell';
 import { useToast } from '@/components/ui/toast';
+import { LoadError } from '@/components/ui/LoadError';
 import { useAuthStore } from '@/lib/store/auth-store';
 import { apiClient } from '@/lib/api-client';
 import { formatPrice, formatDateTime, imageVariant } from '@/lib/utils';
@@ -64,17 +65,21 @@ export default function SellerOrderDetailPage() {
   const [order, setOrder] = useState<SellerOrderDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
+  // Why the order could not be read (anything but "it is not there"); shown with a retry instead of a blank page.
+  const [loadError, setLoadError] = useState<unknown>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [chatOpen, setChatOpen] = useState(false);
 
   const load = useCallback(async () => {
     try {
+      setLoadError(null);
       const res = await apiClient.get(`/seller/orders/${orderId}`);
       setOrder(res.data?.data ?? null);
       setNotFound(!res.data?.data);
     } catch (err: any) {
-      if (err.response?.status === 404 || err.response?.status === 403) setNotFound(true);
-      else showToast(t('detail.loadFailed'), 'error');
+      // 400 is an address that is not an order id at all (the server refuses it before looking).
+      if (err.response?.status === 404 || err.response?.status === 403 || err.response?.status === 400) setNotFound(true);
+      else setLoadError(err);
     } finally {
       setLoading(false);
     }
@@ -125,6 +130,10 @@ export default function SellerOrderDetailPage() {
         </Link>
 
         {loading && <div className="bg-white rounded-2xl p-8 text-center text-gray-500">{tc('loading')}</div>}
+
+        {!loading && Boolean(loadError) && !order && !notFound && (
+          <LoadError error={loadError} onRetry={load} title={t('detail.loadFailed')} />
+        )}
 
         {!loading && notFound && (
           <div className="bg-white rounded-2xl p-8 text-center">

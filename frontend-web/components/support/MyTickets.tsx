@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { apiClient } from '@/lib/api-client';
 import { Button } from '@/components/ui/button';
+import { LoadError } from '@/components/ui/LoadError';
 import { useToast } from '@/components/ui/toast';
 import { formatDateTime } from '@/lib/utils';
 import { useT } from '@/lib/i18n';
@@ -50,6 +51,8 @@ export default function MyTickets() {
   };
   const [tickets, setTickets] = useState<TicketSummary[]>([]);
   const [loading, setLoading] = useState(true);
+  // Why the tickets could not be read; shown instead of "no tickets", which would say the person never wrote to support.
+  const [loadError, setLoadError] = useState<unknown>(null);
   const [selected, setSelected] = useState<TicketDetail | null>(null);
   const [reply, setReply] = useState('');
   const [sending, setSending] = useState(false);
@@ -57,10 +60,11 @@ export default function MyTickets() {
   const loadTickets = async () => {
     try {
       setLoading(true);
+      setLoadError(null);
       const res = await apiClient.get('/support/tickets');
       if (res.data.success) setTickets(res.data.data.tickets || []);
-    } catch {
-      showToast(t('loadTicketsFailed'), 'error');
+    } catch (error) {
+      setLoadError(error);
     } finally {
       setLoading(false);
     }
@@ -146,6 +150,10 @@ export default function MyTickets() {
 
   if (loading) {
     return <div className="text-sm text-gray-500 py-6">{t('loadingTickets')}</div>;
+  }
+
+  if (loadError && tickets.length === 0) {
+    return <LoadError error={loadError} onRetry={loadTickets} title={t('loadTicketsFailed')} />;
   }
 
   if (tickets.length === 0) {
