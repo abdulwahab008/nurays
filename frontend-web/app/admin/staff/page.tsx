@@ -4,6 +4,7 @@ import { FormEvent, useCallback, useEffect, useState } from 'react';
 import { AdminShell } from '@/components/layout/AdminShell';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/toast';
+import { useDialogs } from '@/components/ui/Dialogs';
 import { apiClient, apiErrorMessage } from '@/lib/api-client';
 import { useAuthStore } from '@/lib/store/auth-store';
 import { formatDateTime } from '@/lib/utils';
@@ -26,6 +27,7 @@ const ROLE_HELP = {
 /** Super admin only: add, change, suspend and remove the people who work in the admin area. */
 export default function AdminStaffPage() {
   const { showToast } = useToast();
+  const { confirm: confirmDialog, ask: askDialog } = useDialogs();
   const { user } = useAuthStore();
   const allowed = !!user?.permissions?.includes('staff.manage');
   const [members, setMembers] = useState<Member[]>([]);
@@ -68,14 +70,14 @@ export default function AdminStaffPage() {
     setForm({ fullName: '', email: '', role: form.role, password: '' });
   };
 
-  const resetPassword = (m: Member) => {
-    const password = window.prompt(`New password for ${m.email} (at least 12 characters). Give it to them yourself; they are signed out now.`);
+  const resetPassword = async (m: Member) => {
+    const password = (await askDialog({ title: 'New password', message: `New password for ${m.email} (at least 12 characters). Give it to them yourself; they are signed out now.`, label: 'New password', type: 'password', minLength: 12, confirmText: 'Set password' }));
     if (!password) return;
     run(m.id, () => apiClient.post(`/admin/staff/${m.id}/password`, { password }), 'Password changed');
   };
 
-  const remove = (m: Member) => {
-    if (!window.confirm(`Remove ${m.email} from the staff? Their account becomes an ordinary customer account and they are signed out.`)) return;
+  const remove = async (m: Member) => {
+    if (!(await confirmDialog({ title: 'Remove from the staff?', message: `Remove ${m.email} from the staff? Their account becomes an ordinary customer account and they are signed out.`, confirmText: 'Remove' }))) return;
     run(m.id, () => apiClient.delete(`/admin/staff/${m.id}`), 'Staff access removed');
   };
 

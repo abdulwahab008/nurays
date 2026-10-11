@@ -6,6 +6,7 @@ import { useParams } from 'next/navigation';
 import { AdminShell } from '@/components/layout/AdminShell';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/toast';
+import { useDialogs } from '@/components/ui/Dialogs';
 import { apiClient, apiErrorMessage } from '@/lib/api-client';
 import { formatPrice, formatDateTime } from '@/lib/utils';
 import { LEDGER_LABELS, RiderLedgerEntry, RiderMoneySummary } from '@/lib/services/rider.service';
@@ -39,6 +40,7 @@ export default function AdminRiderMoneyPage() {
   const params = useParams();
   const riderId = params.id as string;
   const { showToast } = useToast();
+  const { confirm: confirmDialog } = useDialogs();
   const [data, setData] = useState<RiderMoneyDetail | null>(null);
   const [entries, setEntries] = useState<RiderLedgerEntry[]>([]);
   const [page, setPage] = useState(1);
@@ -131,7 +133,7 @@ export default function AdminRiderMoneyPage() {
   const { rider } = data;
 
   const changeStanding = async (status: 'active' | 'suspended') => {
-    if (status === 'suspended' && !window.confirm('Suspend this rider? Jobs they have not picked up go back to the pool, and they cannot take new ones.')) return;
+    if (status === 'suspended' && !(await confirmDialog({ title: 'Suspend this rider?', message: 'Suspend this rider? Jobs they have not picked up go back to the pool, and they cannot take new ones.', confirmText: 'Suspend' }))) return;
     try {
       setBusy('standing');
       const res = await apiClient.post(`/admin/riders/${riderId}/status`, { status });

@@ -8,6 +8,7 @@ import Link from 'next/link';
 import { DashboardLayout, SELLER_SIDEBAR_ITEMS } from '@/components/layout/DashboardShell';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/toast';
+import { useDialogs } from '@/components/ui/Dialogs';
 import { useAuthStore } from '@/lib/store/auth-store';
 import { apiClient } from '@/lib/api-client';
 import { formatPrice } from '@/lib/utils';
@@ -142,6 +143,7 @@ function SellerDashboardContent() {
   const searchParams = useSearchParams();
   const { isAuthenticated, user } = useAuthStore();
   const { showToast } = useToast();
+  const { confirm: confirmDialog } = useDialogs();
   const t = useT(kitchenOrderMessages);
   const tc = useT(commonMessages);
   const [loading, setLoading] = useState(true);
@@ -229,10 +231,10 @@ function SellerDashboardContent() {
     showToast(t('dash.onboardingDone'), 'success');
   };
 
-  const handleOnboardingClose = () => {
+  const handleOnboardingClose = async () => {
     if (needsOnboarding) {
       // If they haven't completed onboarding, show a warning
-      if (confirm(t('dash.onboardingCloseConfirm'))) {
+      if ((await confirmDialog({ message: t('dash.onboardingCloseConfirm'), variant: 'warning' }))) {
         setShowOnboarding(false);
         router.push('/products');
       }

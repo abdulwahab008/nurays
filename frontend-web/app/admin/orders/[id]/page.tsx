@@ -6,6 +6,7 @@ import Link from 'next/link';
 import { AdminShell } from '@/components/layout/AdminShell';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/toast';
+import { useDialogs } from '@/components/ui/Dialogs';
 import { useAuthStore } from '@/lib/store/auth-store';
 import { apiClient } from '@/lib/api-client';
 import { formatPrice, formatDate } from '@/lib/utils';
@@ -68,6 +69,7 @@ export default function AdminOrderDetailPage() {
   const id = params?.id as string;
   const { isAuthenticated, user } = useAuthStore();
   const { showToast } = useToast();
+  const { confirm: confirmDialog, ask: askDialog } = useDialogs();
   const [loading, setLoading] = useState(true);
   const [order, setOrder] = useState<OrderDetail | null>(null);
   const [updating, setUpdating] = useState(false);
@@ -130,7 +132,7 @@ export default function AdminOrderDetailPage() {
   // A transfer the kitchen disputed (or hasn't confirmed): support checked it and it arrived.
   const handleConfirmPayment = async () => {
     if (!order) return;
-    if (!window.confirm('Confirm that this transfer reached the kitchen? The order is then marked paid.')) return;
+    if (!(await confirmDialog({ title: 'Confirm the payment?', message: 'Confirm that this transfer reached the kitchen? The order is then marked paid.', confirmText: 'Confirm payment', variant: 'warning' }))) return;
     try {
       setConfirmingPayment(true);
       await apiClient.post(`/admin/orders/${order.id}/confirm-payment`, { note: confirmNote.trim() || undefined });
@@ -146,7 +148,7 @@ export default function AdminOrderDetailPage() {
 
   // A manual (bank / gateway) refund is owed until the admin has actually sent the money.
   const handleCompleteRefund = async (refundId: string) => {
-    const entered = window.prompt('Transfer reference for this refund (optional):');
+    const entered = (await askDialog({ title: 'Mark the refund as sent', message: 'Transfer reference for this refund (optional).', label: 'Transfer reference', optional: true, confirmText: 'Mark as sent' }));
     if (entered === null) return; // cancelled the prompt: don't mark the refund as sent
     const reference = entered.trim() || undefined;
     try {
@@ -162,7 +164,7 @@ export default function AdminOrderDetailPage() {
   };
 
   const handleDismissRefund = async (refundId: string) => {
-    const reason = window.prompt('Why is this refund not owed? (min 5 characters)');
+    const reason = (await askDialog({ title: 'Dismiss this refund', message: 'Why is this refund not owed?', label: 'Reason', minLength: 5, confirmText: 'Dismiss refund' }));
     if (reason === null) return;
     if (reason.trim().length < 5) {
       showToast('Please give a reason (at least 5 characters)', 'warning');

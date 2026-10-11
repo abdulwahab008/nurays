@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { AdminShell } from '@/components/layout/AdminShell';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/toast';
+import { useDialogs } from '@/components/ui/Dialogs';
 import { useAuthStore } from '@/lib/store/auth-store';
 import { apiClient } from '@/lib/api-client';
 import { formatPrice, formatDate } from '@/lib/utils';
@@ -28,6 +29,7 @@ export default function AdminPayoutsPage() {
   const router = useRouter();
   const { isAuthenticated, user } = useAuthStore();
   const { showToast } = useToast();
+  const { ask: askDialog } = useDialogs();
   const [loading, setLoading] = useState(true);
   const [payouts, setPayouts] = useState<Payout[]>([]);
   const [filter, setFilter] = useState<(typeof FILTERS)[number]>('pending');
@@ -62,10 +64,20 @@ export default function AdminPayoutsPage() {
     }
   };
 
-  const handleComplete = async (payoutId: string) => {
+  const handleComplete = async (payout: Payout) => {
+    // Marking a payout as sent is final and the kitchen is told it has been paid: ask first, and keep the transfer reference.
+    const reference = await askDialog({
+      title: 'Mark this payout as sent',
+      message: `${formatPrice(payout.netAmount)} to ${payout.seller.businessName} by ${payout.payoutMethod.replace('_', ' ')}${payout.accountDetails?.accountNumber ? ` (${payout.accountDetails.accountNumber})` : ''}. Only do this after the money has been sent. The reference is shown to the kitchen.`,
+      label: 'Transfer reference',
+      optional: true,
+      confirmText: 'Mark as sent',
+    });
+    if (reference === null) return;
+    const payoutId = payout.id;
     try {
       setProcessingId(payoutId);
-      await apiClient.post(`/admin/payouts/${payoutId}/complete`, {});
+      await apiClient.post(`/admin/payouts/${payoutId}/complete`, reference ? { transactionId: reference } : {});
       showToast('Payout marked as completed', 'success');
       loadPayouts();
     } catch (error: any) {
@@ -175,7 +187,7 @@ export default function AdminPayoutsPage() {
                     <div className="flex flex-col gap-2 items-end">
                       <div className="flex gap-2">
                         <Button
-                          onClick={() => handleComplete(payout.id)}
+                          onClick={() => handleComplete(payout)}
                           disabled={processingId === payout.id}
                           className="bg-green-600 hover:bg-green-700 text-white"
                         >

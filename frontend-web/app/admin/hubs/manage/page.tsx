@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { AdminShell } from '@/components/layout/AdminShell';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/toast';
+import { useDialogs } from '@/components/ui/Dialogs';
 import LocationMap from '@/components/ui/LocationMap';
 import { apiClient, apiErrorMessage } from '@/lib/api-client';
 
@@ -73,6 +74,7 @@ const STATUS_STYLE: Record<AdminHub['status'], string> = {
 /** Hubs (frozen-stock centres): set them up, switch them off, and give each its manager. */
 export default function AdminHubSetupPage() {
   const { showToast } = useToast();
+  const { confirm: confirmDialog } = useDialogs();
   const [hubs, setHubs] = useState<AdminHub[]>([]);
   const [managers, setManagers] = useState<HubManager[]>([]);
   const [loading, setLoading] = useState(true);
@@ -161,7 +163,7 @@ export default function AdminHubSetupPage() {
   };
 
   const removeManager = async (m: HubManager) => {
-    if (!window.confirm(`Remove ${m.name || m.phone} as a hub manager? They go back to a customer account${m.hubs.length ? ' and stop running their hubs' : ''}.`)) return;
+    if (!(await confirmDialog({ title: 'Remove hub manager?', message: `Remove ${m.name || m.phone} as a hub manager? They go back to a customer account${m.hubs.length ? ' and stop running their hubs' : ''}.`, confirmText: 'Remove' }))) return;
     try {
       setBusy(m.id);
       await apiClient.delete(`/admin/hub-managers/${m.id}`);

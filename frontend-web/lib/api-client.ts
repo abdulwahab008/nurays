@@ -1,4 +1,5 @@
 import axios, { AxiosInstance, AxiosError, AxiosRequestConfig, InternalAxiosRequestConfig } from 'axios';
+import { isHtmlPage } from '@/lib/load-error';
 import { loginUrlHere } from '@/lib/auth-redirect';
 
 import { API_BASE_URL } from './config';
@@ -39,7 +40,14 @@ class ApiClient {
 
     // Response interceptor - Handle 401 with one refresh attempt
     this.client.interceptors.response.use(
-      (response) => response,
+      (response) => {
+        // A web page where the API's JSON should be (a proxy's error page, a Wi-Fi sign-in page, even with status 200)
+        // is not an answer: it fails like a 5xx, instead of being read as "no data" and shown as an empty list.
+        if ((response.config.responseType ?? 'json') === 'json' && isHtmlPage(response.data)) {
+          throw new AxiosError('The server sent a web page instead of data', AxiosError.ERR_BAD_RESPONSE, response.config, response.request, response);
+        }
+        return response;
+      },
       async (error: AxiosError) => {
         const original = error.config as RetryableConfig | undefined;
         const status = error.response?.status;

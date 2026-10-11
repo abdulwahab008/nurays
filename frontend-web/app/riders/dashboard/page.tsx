@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import { DashboardLayout, RIDER_SIDEBAR_ITEMS } from '@/components/layout/DashboardShell';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/toast';
+import { useDialogs } from '@/components/ui/Dialogs';
 import { useAuthStore } from '@/lib/store/auth-store';
 import { riderService, Delivery, RiderProfile } from '@/lib/services/rider.service';
 import { formatPrice, displayRating } from '@/lib/utils';
@@ -56,6 +57,7 @@ export default function RiderDashboardPage() {
   const router = useRouter();
   const { isAuthenticated, user } = useAuthStore();
   const { showToast } = useToast();
+  const { confirm: confirmDialog } = useDialogs();
   const t = useT(riderMessages);
   const tc = useT(commonMessages);
 
@@ -255,7 +257,7 @@ export default function RiderDashboardPage() {
 
   // Hand a job back to the pool before the food is picked up
   const handleRelease = async (delivery: Delivery) => {
-    if (!window.confirm(t('handBackConfirm'))) return;
+    if (!(await confirmDialog({ message: t('handBackConfirm'), variant: 'warning' }))) return;
     try {
       setBusyId(delivery.id);
       await riderService.releaseDelivery(delivery.id);

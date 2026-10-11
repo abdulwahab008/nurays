@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { AdminShell } from '@/components/layout/AdminShell';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/toast';
+import { useDialogs } from '@/components/ui/Dialogs';
 import { apiClient, apiErrorMessage } from '@/lib/api-client';
 import { formatDate, formatDateTime } from '@/lib/utils';
 
@@ -46,6 +47,7 @@ const TYPE_LABEL: Record<string, string> = {
 /** Every account: find someone, see what they are, suspend or reactivate them. */
 export default function AdminUsersPage() {
   const { showToast } = useToast();
+  const { confirm: confirmDialog } = useDialogs();
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [total, setTotal] = useState(0);
   const [totalPages, setTotalPages] = useState(1);
@@ -79,7 +81,7 @@ export default function AdminUsersPage() {
 
   const changeStatus = async (u: AdminUser, next: 'active' | 'suspended') => {
     const extra = u.seller ? ' Their kitchen stops taking orders too.' : u.rider ? ' Their rider account is suspended too.' : '';
-    if (next === 'suspended' && !window.confirm(`Suspend ${u.name || u.phone}? They are signed out everywhere and can't sign in.${extra}`)) return;
+    if (next === 'suspended' && !(await confirmDialog({ title: 'Suspend this account?', message: `Suspend ${u.name || u.phone}? They are signed out everywhere and can't sign in.${extra}`, confirmText: 'Suspend' }))) return;
     try {
       setBusyId(u.id);
       await apiClient.post(`/admin/users/${u.id}/status`, { status: next });

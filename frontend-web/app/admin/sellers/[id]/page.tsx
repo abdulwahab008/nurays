@@ -6,6 +6,7 @@ import Link from 'next/link';
 import { AdminShell } from '@/components/layout/AdminShell';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/toast';
+import { useDialogs } from '@/components/ui/Dialogs';
 import { useAuthStore } from '@/lib/store/auth-store';
 import { apiClient } from '@/lib/api-client';
 import DocumentList from '@/components/admin/DocumentList';
@@ -47,6 +48,7 @@ export default function AdminSellerDetailPage() {
   const id = params?.id as string;
   const { isAuthenticated, user } = useAuthStore();
   const { showToast } = useToast();
+  const { confirm: confirmDialog } = useDialogs();
   const [loading, setLoading] = useState(true);
   const [seller, setSeller] = useState<SellerDetail | null>(null);
   const [actionLoading, setActionLoading] = useState(false);
@@ -117,7 +119,7 @@ export default function AdminSellerDetailPage() {
   const handleToggleSuspend = async () => {
     if (!seller) return;
     const nextStatus = seller.status === 'suspended' ? 'active' : 'suspended';
-    if (nextStatus === 'suspended' && !window.confirm('Suspend this seller? Their storefront will be hidden from customers.')) {
+    if (nextStatus === 'suspended' && !(await confirmDialog({ title: 'Suspend this kitchen?', message: 'Suspend this seller? Their storefront will be hidden from customers.', confirmText: 'Suspend' }))) {
       return;
     }
     try {

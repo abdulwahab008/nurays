@@ -7,6 +7,7 @@ import Link from 'next/link';
 import { DashboardLayout, SELLER_SIDEBAR_ITEMS } from '@/components/layout/DashboardShell';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/toast';
+import { useDialogs } from '@/components/ui/Dialogs';
 import { useAuthStore } from '@/lib/store/auth-store';
 import { apiClient } from '@/lib/api-client';
 import MenuTypeField, { DEFAULT_MENU, MenuType, MenuValue, menuError, menuPayload } from '@/components/sellers/MenuTypeField';
@@ -70,6 +71,7 @@ export default function EditProductPage() {
   const productId = params.id as string;
   const { isAuthenticated, user } = useAuthStore();
   const { showToast } = useToast();
+  const { confirm: confirmDialog } = useDialogs();
   const fileInputRef = useRef<HTMLInputElement>(null);
   
   const [loading, setLoading] = useState(true);
@@ -594,7 +596,7 @@ export default function EditProductPage() {
   };
 
   const handleDelete = async () => {
-    if (!confirm('Are you sure you want to delete this product? This action cannot be undone.')) {
+    if (!(await confirmDialog({ title: 'Delete this dish?', message: 'Are you sure you want to delete this product? This action cannot be undone.', confirmText: 'Delete' }))) {
       return;
     }
 

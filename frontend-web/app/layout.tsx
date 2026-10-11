@@ -3,6 +3,7 @@ import type { Metadata, Viewport } from "next";
 import { cookies } from "next/headers";
 import { GoogleOAuthProvider } from "@react-oauth/google";
 import { ToastProvider } from "@/components/ui/toast";
+import { DialogProvider } from "@/components/ui/Dialogs";
 import { AuthProvider } from "@/components/AuthProvider";
 import { RoleNotifications } from "@/components/RoleNotifications";
 import { LocaleProvider } from "@/lib/i18n";
@@ -60,15 +61,17 @@ export default async function RootLayout({
         <LocaleProvider initialLocale={locale}>
         <ToastProvider>
           <AuthProvider>
-            <ImageFallback />
-            <RoleNotifications />
-            {googleClientId ? (
-              <GoogleOAuthProvider clientId={googleClientId}>
-                {children}
-              </GoogleOAuthProvider>
-            ) : (
-              children
-            )}
+            <DialogProvider>
+              <ImageFallback />
+              <RoleNotifications />
+              {googleClientId ? (
+                <GoogleOAuthProvider clientId={googleClientId}>
+                  {children}
+                </GoogleOAuthProvider>
+              ) : (
+                children
+              )}
+            </DialogProvider>
           </AuthProvider>
         </ToastProvider>
         </LocaleProvider>
