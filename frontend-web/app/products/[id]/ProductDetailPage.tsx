@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
+import { loginUrlHere } from '@/lib/auth-redirect';
 import { getPromotionLabel, getStackedDiscountedPrice } from '@/lib/pricing';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
@@ -255,7 +256,7 @@ export default function ProductDetailPage() {
 
   const handleToggleFavorite = async () => {
     if (!isAuthenticated) {
-      router.push('/login');
+      router.push(loginUrlHere());
       return;
     }
     if (!product?.seller?.id) return;
@@ -276,7 +277,7 @@ export default function ProductDetailPage() {
 
   const handleAddToCart = async () => {
     if (!isAuthenticated) {
-      router.push('/login');
+      router.push(loginUrlHere());
       return;
     }
 
@@ -372,7 +373,7 @@ export default function ProductDetailPage() {
 
   const handleBuyNow = async () => {
     if (!isAuthenticated) {
-      router.push('/login');
+      router.push(loginUrlHere());
       return;
     }
     if (!product) return;
@@ -666,11 +667,17 @@ export default function ProductDetailPage() {
                 👩‍🍳
               </div>
               <div>
-                <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-0.5">
+                <p className="text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-0.5">
                   {t('homeKitchen')}
                 </p>
                 <p className="font-bold text-gray-900 flex items-center gap-2">
-                  <span>{product.seller?.businessName ?? t('seller')}</span>
+                  {product.seller?.id ? (
+                    <Link href={`/kitchens/${product.seller.id}`} className="hover:underline">
+                      {product.seller.businessName}
+                    </Link>
+                  ) : (
+                    <span>{product.seller?.businessName ?? t('seller')}</span>
+                  )}
                   {product.seller?.isVerified && (
                     <span className="text-[11px] font-bold text-emerald-800 bg-emerald-100 px-1.5 py-0.5 rounded">
                       {t('verifiedChef')}
@@ -694,7 +701,7 @@ export default function ProductDetailPage() {
                 />
               </button>
               <div className="text-end">
-                <p className="text-[11px] text-gray-400 font-bold uppercase">{t('rating')}</p>
+                <p className="text-[11px] text-gray-500 font-bold uppercase">{t('rating')}</p>
                 <p className="font-black text-sm text-gray-900">{product.seller?.rating ? `★ ${product.seller.rating.toFixed(1)}` : t('new')}</p>
               </div>
             </div>
