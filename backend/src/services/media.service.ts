@@ -2,6 +2,7 @@ import crypto from 'crypto';
 import sharp from 'sharp';
 import { AppError } from '../middleware/errorHandler';
 import { logger } from '../utils/logger';
+import { concurrencyLimit } from '../utils/concurrencyLimit';
 import {
   storage,
   newPublicKey,
@@ -27,6 +28,25 @@ import {
 const IMAGE_SIZES: Record<ImageSize, number> = { lg: 1280, md: 640, sm: 320 };
 const SIZES = Object.keys(IMAGE_SIZES) as ImageSize[];
 const MAX_INPUT_PIXELS = 40_000_000;
+const NOT_AN_IMAGE = 'That file is not a valid image (JPEG, PNG, WebP or GIF)';
+
+// A decoded photo takes about 3 bytes a pixel (115 MB for the largest one allowed), and the per-user upload limit does
+// nothing against a crowd of new accounts, so only a few are decoded at a time and the rest wait their turn.
+const decodeSlot = concurrencyLimit(Math.max(1, Number(process.env.IMAGE_DECODE_CONCURRENCY) || 2));
+
+/**
+ * The pixels are only read when the picture is encoded, so a file whose header is fine but whose data is cut short or
+ * damaged fails here, not in decodeImage: it is the person's file, so it is answered like any other file that is not an image.
+ */
+function encode(pipeline: ReturnType<typeof sharp>): Promise<Buffer> {
+  return decodeSlot(async () => {
+    try {
+      return await pipeline.toBuffer();
+    } catch {
+      throw new AppError(NOT_AN_IMAGE, 400, 'INVALID_FILE_TYPE');
+    }
+  });
+}
 
 async function decodeImage(buffer: Buffer) {
   try {
@@ -37,7 +57,7 @@ async function decodeImage(buffer: Buffer) {
     }
     return img.rotate(); // apply the EXIF orientation before the metadata is dropped
   } catch {
-    throw new AppError('That file is not a valid image (JPEG, PNG, WebP or GIF)', 400, 'INVALID_FILE_TYPE');
+    throw new AppError(NOT_AN_IMAGE, 400, 'INVALID_FILE_TYPE');
   }
 }
 
@@ -58,11 +78,12 @@ export async function storePublicImage(kind: PublicKind, ownerId: string, buffer
   const urls: Partial<Record<ImageSize, string>> = {};
   try {
     for (const size of SIZES) {
-      const out = await img
-        .clone()
-        .resize({ width: IMAGE_SIZES[size], height: IMAGE_SIZES[size], fit: 'inside', withoutEnlargement: true })
-        .webp({ quality: 80 })
-        .toBuffer();
+      const out = await encode(
+        img
+          .clone()
+          .resize({ width: IMAGE_SIZES[size], height: IMAGE_SIZES[size], fit: 'inside', withoutEnlargement: true })
+          .webp({ quality: 80 })
+      );
       const key = newPublicKey(kind, ownerId, size, id);
       await storage().put(key, out, 'image/webp', 'public');
       urls[size] = storage().publicUrl(key);
@@ -109,10 +130,9 @@ export interface StoredPrivateFile {
 /** A private image (payment receipt, document photo): re-encoded, metadata stripped. */
 export async function storePrivateImage(kind: PrivateKind, ownerId: string, buffer: Buffer): Promise<StoredPrivateFile> {
   const img = await decodeImage(buffer);
-  const out = await img
-    .resize({ width: 2000, height: 2000, fit: 'inside', withoutEnlargement: true })
-    .jpeg({ quality: 85, mozjpeg: true })
-    .toBuffer();
+  const out = await encode(
+    img.resize({ width: 2000, height: 2000, fit: 'inside', withoutEnlargement: true }).jpeg({ quality: 85, mozjpeg: true })
+  );
   const key = newPrivateKey(kind, ownerId, 'jpg');
   await storage().put(key, out, 'image/jpeg', 'private');
   const ref = privateRef(key);

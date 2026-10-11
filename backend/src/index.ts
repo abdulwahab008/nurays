@@ -25,6 +25,7 @@ import prisma from './config/database';
 import { closeRedis } from './config/redis';
 import { markShuttingDown, isShuttingDown } from './utils/lifecycle';
 import { apiLimiter } from './middleware/rateLimiter';
+import { rejectUnsafeText } from './middleware/unsafeText';
 import { requestId, httpLogger } from './middleware/requestContext';
 import { isProduction } from './config/env';
 import { logOpsSnapshot } from './services/ops-snapshot.service';
@@ -108,6 +109,7 @@ app.use(fileRoutes());
 // Routes. Health checks stay outside the flood limit (load balancers poll them).
 app.use(`/api/${API_VERSION}/health`, healthRoutes);
 app.use('/api', apiLimiter);
+app.use('/api', rejectUnsafeText);
 app.use(`/api/${API_VERSION}/stats`, statsRoutes);
 app.use(`/api/${API_VERSION}/auth`, authRoutes);
 app.use(`/api/${API_VERSION}/upload`, uploadRoutes);

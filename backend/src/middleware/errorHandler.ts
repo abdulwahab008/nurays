@@ -56,6 +56,12 @@ export const toAppError = (err: any): Error | AppError => {
     }
   }
 
+  // Text the database cannot store (a NUL byte, an unpaired surrogate). rejectUnsafeText stops these at the door; this is
+  // the net under it for a path that reaches a query some other way.
+  if (/invalid byte sequence for encoding|\b22021\b|unexpected end of hex escape/i.test(String(err?.message ?? ''))) {
+    return new AppError('The request contains characters that are not allowed', 400, 'INVALID_CHARACTERS');
+  }
+
   // Express decodes path parameters before the route runs: malformed percent-encoding is a bad request.
   if (err instanceof URIError) {
     return new AppError('The request path is not valid', 400, 'INVALID_PATH');

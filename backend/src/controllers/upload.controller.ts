@@ -68,7 +68,7 @@ export const deleteProductImage = async (req: Request, res: Response) => {
   }
 
   const { filename } = req.params;
-  if (!filename || filename.includes('..') || filename.includes('/') || !/^[A-Za-z0-9._-]+$/.test(filename)) {
+  if (!filename || filename === '.' || filename.includes('..') || filename.includes('/') || !/^[A-Za-z0-9._-]+$/.test(filename)) {
     throw new AppError('Invalid filename', 400, 'INVALID_FILENAME');
   }
   // Legacy uploads are named "<uploaderId>_<uuid>.<ext>"; older ones may be deleted only
