@@ -53,8 +53,14 @@ export const authenticate = async (
 
     const token = authHeader.substring(7); // Remove 'Bearer ' prefix
 
-    // Verify token
-    const payload = verifyToken(token);
+    // Verify token. Only a bad token is "invalid": whatever goes wrong afterwards (the database does not answer) is not the
+    // person's fault and must not look like one, because the web app signs a person out on an invalid token.
+    let payload: JWTPayload;
+    try {
+      payload = verifyToken(token);
+    } catch {
+      throw new AppError('Invalid or expired token', 401, 'INVALID_TOKEN');
+    }
 
     // Verify user still exists and is active
     const user = await prisma.user.findUnique({
@@ -88,11 +94,8 @@ export const authenticate = async (
 
     next();
   } catch (error) {
-    if (error instanceof AppError) {
-      next(error);
-    } else {
-      next(new AppError('Invalid or expired token', 401, 'INVALID_TOKEN'));
-    }
+    // An AppError is the answer as it is; anything else is the error handler's to name (a database that does not answer is a 503).
+    next(error);
   }
 };
 
