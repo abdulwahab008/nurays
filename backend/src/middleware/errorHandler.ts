@@ -54,6 +54,20 @@ export const toAppError = (err: any): Error | AppError => {
     if (err.code === 'P2024' || err.code === 'P2028') {
       return new AppError('The service is busy. Please try again in a moment.', 503, 'SERVICE_BUSY');
     }
+    // Two transactions in each other's way (a write conflict, a deadlock): PostgreSQL ended one and rolled it back, so trying again
+    // is safe and usually works.
+    if (err.code === 'P2034') {
+      return new AppError('The service is busy. Please try again in a moment.', 503, 'SERVICE_BUSY');
+    }
+    // The database could not be reached or closed the connection (P1001, P1002, P1008, P1017).
+    if (['P1001', 'P1002', 'P1008', 'P1017'].includes(err.code)) {
+      return new AppError('The service is temporarily unavailable. Please try again in a moment.', 503, 'SERVICE_UNAVAILABLE');
+    }
+  }
+  // A database that cannot be reached at all (stopped, restarting, the network cut): Prisma throws an initialization error with no
+  // code. A 503 is what a client or a load balancer can act on (try again); it is still logged and reported as the outage it is.
+  if (err?.name === 'PrismaClientInitializationError') {
+    return new AppError('The service is temporarily unavailable. Please try again in a moment.', 503, 'SERVICE_UNAVAILABLE');
   }
   // PostgreSQL cancelled a statement that ran past DB_STATEMENT_TIMEOUT_MS (SQLSTATE 57014): the same answer. Prisma reports
   // a raw query as P2010 with the SQLSTATE in meta, and any other query as an error without a code that names it in its message.

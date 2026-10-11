@@ -30,6 +30,23 @@ describe('toAppError', () => {
     expect(toAppError(prismaError('P2010')) instanceof AppError).toBe(false);
   });
 
+  it('maps a write conflict or deadlock (the transaction was rolled back) to the same 503', () => {
+    const e = toAppError(prismaError('P2034')) as AppError;
+    expect(e).toBeInstanceOf(AppError);
+    expect([e.statusCode, e.code]).toEqual([503, 'SERVICE_BUSY']);
+  });
+
+  it('maps a database that cannot be reached to 503, whether Prisma gave a code or only the kind of error', () => {
+    for (const code of ['P1001', 'P1002', 'P1008', 'P1017']) {
+      const e = toAppError(prismaError(code)) as AppError;
+      expect(e).toBeInstanceOf(AppError);
+      expect([e.statusCode, e.code]).toEqual([503, 'SERVICE_UNAVAILABLE']);
+    }
+    const down = Object.assign(new Error("Can't reach database server at `localhost:5432`"), { name: 'PrismaClientInitializationError', clientVersion: '6.19.3' });
+    const e = toAppError(down) as AppError;
+    expect([e.statusCode, e.code]).toEqual([503, 'SERVICE_UNAVAILABLE']);
+  });
+
   it('maps a statement PostgreSQL cancelled for running too long to the same 503, however Prisma reported it', () => {
     // a raw query: P2010, the SQLSTATE in meta
     const raw = Object.assign(new Error('Raw query failed. Code: `57014`. Message: `ERROR: canceling statement due to statement timeout`'), {
@@ -80,6 +97,16 @@ describe('errorHandler', () => {
     errorHandler(err, { path: '/x', method: 'GET' } as Request, res as unknown as Response, jest.fn());
     return res;
   };
+
+  it('keeps an outage an incident: it is logged as an error and reported, with Retry-After for the client', () => {
+    const down = Object.assign(new Error("Can't reach database server"), { name: 'PrismaClientInitializationError', clientVersion: '6.19.3' });
+    const res = send(down);
+    expect(res.status).toHaveBeenCalledWith(503);
+    expect(res.setHeader).toHaveBeenCalledWith('Retry-After', '2');
+    expect(res.json.mock.calls[0][0].error.code).toBe('SERVICE_UNAVAILABLE');
+    expect(res.json.mock.calls[0][0].error.message).not.toMatch(/localhost|database server/i);
+    expect(reportError).toHaveBeenCalled();
+  });
 
   it('tells a client to come back in a moment when the database was too busy, with the standard header', () => {
     const res = send(prismaError('P2028'));
