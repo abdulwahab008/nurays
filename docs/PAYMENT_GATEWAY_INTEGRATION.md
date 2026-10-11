@@ -131,7 +131,8 @@ backend/src/controllers/payment.controller.ts   return and webhook handlers
 - **Bank adapter** (`bank.gateway.ts`): configured only when `BANK_API_URL`, `BANK_MERCHANT_ID`, `BANK_API_KEY` and
   `BANK_RETURN_URL` are all set. Its endpoints and field names are a placeholder contract to be adapted to whichever
   bank or aggregator is chosen. `verifyPayment` reports `completed` only when an authenticated server call says
-  paid, and fails closed on errors and unknown states. `/payments/process` with `paymentMethod: "bank"` calls it only
+  paid, and fails closed on errors and unknown states. Each call to the bank API is given up after
+  `BANK_REQUEST_TIMEOUT_MS` (15 s unless set), like Safepay's. `/payments/process` with `paymentMethod: "bank"` calls it only
   when it is configured; otherwise the customer is told to pay by transfer from the order page.
 
 **Limitations.** The bank adapter is not wired into settlement: nothing calls its `verifyPayment` and there is no

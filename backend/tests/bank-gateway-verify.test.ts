@@ -5,6 +5,8 @@
  * explicit paid-like response.
  */
 
+import { within } from './within';
+
 const ENV = {
   BANK_API_URL: 'https://bank.example.test',
   BANK_MERCHANT_ID: 'merchant-1',
@@ -186,5 +188,60 @@ describe('bankGateway.createPayment', () => {
     const result = await gateway.createPayment(baseRequest);
     expect(result.success).toBe(false);
     expect(result.errorCode).toBe('BANK_INIT_FAILED');
+  });
+});
+
+describe('bankGateway against a bank API that stops answering', () => {
+  /** Like fetch: rejects when its signal aborts. With no signal it waits on the bank for as long as the bank likes. */
+  const silentBank = () =>
+    jest.fn(
+      (_url: string, init?: RequestInit) =>
+        new Promise<never>((_resolve, reject) => {
+          init?.signal?.addEventListener('abort', () => reject(init.signal!.reason));
+        })
+    );
+  const request = {
+    orderId: 'order-1',
+    orderNumber: 'FN20260101',
+    amountPkr: 1000,
+    returnUrl: 'https://app.example.test/return',
+    cancelUrl: 'https://app.example.test/cancel',
+  };
+
+  it('gives up on a payment request and reports the failure', async () => {
+    process.env.BANK_REQUEST_TIMEOUT_MS = '100';
+    const gateway = loadConfiguredGateway();
+    global.fetch = silentBank() as any;
+    expect(await within(gateway.createPayment(request), 2_000, 'still waiting')).toMatchObject({ success: false, errorCode: 'BANK_INIT_FAILED' });
+  });
+
+  it('gives up on a status check, which fails closed rather than assuming paid', async () => {
+    process.env.BANK_REQUEST_TIMEOUT_MS = '100';
+    const gateway = loadConfiguredGateway();
+    global.fetch = silentBank() as any;
+    expect(await within(gateway.verifyPayment({ paymentId: 'ref-1' }), 2_000, 'still waiting')).toMatchObject({ success: false, status: 'failed', errorCode: 'BANK_VERIFY_FAILED' });
+  });
+
+  it('waits 15 seconds for the bank unless told otherwise, and ignores a limit that is not a positive number', async () => {
+    const timeout = jest.spyOn(AbortSignal, 'timeout');
+    for (const configured of [undefined, '0', '-5', 'soon']) {
+      timeout.mockClear();
+      if (configured === undefined) delete process.env.BANK_REQUEST_TIMEOUT_MS;
+      else process.env.BANK_REQUEST_TIMEOUT_MS = configured;
+      const gateway = loadConfiguredGateway();
+      global.fetch = jest.fn().mockResolvedValue({ ok: true, json: async () => ({ reference: 'ref-1' }) }) as any;
+      await gateway.createPayment(request);
+      await gateway.verifyPayment({ paymentId: 'ref-1' });
+      expect(timeout.mock.calls).toEqual([[15_000], [15_000]]);
+    }
+  });
+
+  it('takes the limit from BANK_REQUEST_TIMEOUT_MS', async () => {
+    const timeout = jest.spyOn(AbortSignal, 'timeout');
+    process.env.BANK_REQUEST_TIMEOUT_MS = '4000';
+    const gateway = loadConfiguredGateway();
+    global.fetch = jest.fn().mockResolvedValue({ ok: true, json: async () => ({ reference: 'ref-1' }) }) as any;
+    await gateway.createPayment(request);
+    expect(timeout).toHaveBeenCalledWith(4_000);
   });
 });

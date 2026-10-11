@@ -98,7 +98,7 @@ payment receipts, seller and rider documents, chat media) are never public; the 
 | `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT` | optional, as a pair | Setting only one of the keys stops startup. `npx web-push generate-vapid-keys`. |
 | `RIDER_CASH_LIMIT` | no | Rs, default 10000; must be above 0 if set. |
 | `ORDER_ACCEPT_TIMEOUT_MINUTES` (30), `ORDER_PAYMENT_TIMEOUT_MINUTES` (60), `PAYMENT_CONFIRM_ESCALATE_HOURS` (6) | no | Used by the stale-order sweep. |
-| `BANK_API_URL`, `BANK_MERCHANT_ID`, `BANK_API_KEY`, `BANK_RETURN_URL` | no | Placeholder for a bank gateway that is not implemented. Leave empty. See [PAYMENT_GATEWAY_INTEGRATION.md](PAYMENT_GATEWAY_INTEGRATION.md). |
+| `BANK_API_URL`, `BANK_MERCHANT_ID`, `BANK_API_KEY`, `BANK_RETURN_URL`, `BANK_REQUEST_TIMEOUT_MS` | no | Placeholder for a bank gateway that is not implemented. Leave empty. (The timeout, default 15000 ms, is how long a call to the bank API may take.) See [PAYMENT_GATEWAY_INTEGRATION.md](PAYMENT_GATEWAY_INTEGRATION.md). |
 | `LOG_LEVEL`, `LOG_FORMAT` | no | Default `info`. |
 | `SLOW_REQUEST_MS` | no | A request slower than this is logged as a warning, so it can be alerted on. Default 2000. |
 | `SOCKET_EVENTS_PER_MINUTE` | no | Most events one user may send over the live-update socket in a minute, on all their connections together. Default 120; a page sends a couple (`join:order`, `leave:order`). The rest are dropped without an answer and logged once, so one client cannot starve the API of database connections. |
