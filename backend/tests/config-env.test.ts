@@ -7,6 +7,7 @@ const goodProd = {
   JWT_SECRET: 'f3a9c2e1b7d4a6f8c0e2b4d6a8f0c2e4b6d8f0a2c4e6b8d0f2a4c6e8b0d2f4a6',
   FRONTEND_URL: 'https://nuray.pk',
   CORS_ORIGIN: 'https://nuray.pk',
+  BASE_URL: 'https://api.nuray.pk',
   SMTP_HOST: 'smtp.example.com',
   SMTP_USER: 'u',
   SMTP_PASSWORD: 'p',
@@ -30,6 +31,21 @@ describe('startup configuration', () => {
     expect(runtimeMode({ NODE_ENV: 'prod' } as any)).toBe('production');
     expect(runtimeMode({} as any)).toBe('production');
     expect(runtimeMode({ NODE_ENV: 'development' } as any)).toBe('development');
+  });
+
+  it('refuses a production API with no public https address (photo links would point at localhost)', () => {
+    const { BASE_URL: _unused, ...withoutBaseUrl } = goodProd;
+    void _unused;
+    expect(configProblems(withoutBaseUrl as NodeJS.ProcessEnv).join(' ')).toMatch(/BASE_URL must be .*https/);
+    expect(configProblems({ ...goodProd, BASE_URL: 'http://api.nuray.pk' }).join(' ')).toMatch(/BASE_URL/);
+    expect(configProblems({ ...goodProd, BASE_URL: '  ' }).join(' ')).toMatch(/BASE_URL/);
+    expect(configProblems({ ...goodProd, BASE_URL: 'https://api.nuray.pk' })).toEqual([]);
+  });
+
+  it('does not ask for it in development, where the API is on localhost', () => {
+    const { BASE_URL: _unused, ...withoutBaseUrl } = goodProd;
+    void _unused;
+    expect(configProblems({ ...withoutBaseUrl, NODE_ENV: 'development' } as NodeJS.ProcessEnv).join(' ')).not.toMatch(/BASE_URL/);
   });
 
   it('refuses the sample JWT secret in production', () => {
@@ -63,7 +79,7 @@ describe('startup configuration', () => {
 
   it('requires an explicit Safepay mode, a return URL and the webhook secret when Safepay keys are set', () => {
     const withKeys = { ...goodProd, SAFEPAY_PUBLIC_KEY: 'pk', SAFEPAY_SECRET_KEY: 'sk' };
-    const problems = configProblems(withKeys).join(' ');
+    const problems = configProblems({ ...withKeys, BASE_URL: undefined }).join(' ');
     expect(problems).toMatch(/SAFEPAY_SANDBOX/);
     expect(problems).toMatch(/BASE_URL/);
     expect(problems).toMatch(/SAFEPAY_WEBHOOK_SECRET/);

@@ -46,7 +46,7 @@ Required means the server will not start in production without it (see "Startup 
 | `GOOGLE_NATIVE_CLIENT_IDS` | no | Comma-separated Android and iOS OAuth client IDs, for a native app's Google sign-in (ID tokens). Leave empty until the apps exist. |
 | `FRONTEND_URL` | yes (production) | Must be `https://`. Used in email links. |
 | `CORS_ORIGIN` | yes | The one browser origin allowed for HTTP and Socket.IO, an https:// origin (normally the same as `FRONTEND_URL`). Production refuses to start without it. |
-| `BASE_URL` | when Safepay is on | The API's public `https://` URL. |
+| `BASE_URL` | yes | The API's public `https://` URL. The links to photos in API answers are built from it (it defaults to `http://localhost:3001`, which no visitor can open), and Safepay sends customers back to it after paying. |
 
 ### Email (one of two)
 
@@ -142,7 +142,7 @@ else. It prints every problem and exits with code 1. In production (any `NODE_EN
 - `REDIS_URL` or `FRONTEND_URL` is missing, or `FRONTEND_URL` is not `https://`.
 - Email is not SMTP or Gmail, the chosen mode lacks its user and password, or `EMAIL_FROM` is missing.
 - `SMS_PROVIDER=console`, or SMS resolves to `none` without `SMS_PROVIDER=none` being set explicitly.
-- Safepay keys are set but `BASE_URL` is not `https://`, `SAFEPAY_WEBHOOK_SECRET` is empty, or `SAFEPAY_SANDBOX` is
+- `BASE_URL` is not an `https://` address, Safepay keys are set but `SAFEPAY_WEBHOOK_SECRET` is empty, or `SAFEPAY_SANDBOX` is
   not `true`/`false`.
 - `STORAGE_DRIVER=s3` without bucket, `ASSET_BASE_URL`, access key and secret; `STORAGE_DRIVER=local` without
   `UPLOADS_DIR`; or a driver other than `local`/`s3`.
