@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { AdminShell } from '@/components/layout/AdminShell';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/toast';
+import { LoadError } from '@/components/ui/LoadError';
 import { useDialogs } from '@/components/ui/Dialogs';
 import { useAuthStore } from '@/lib/store/auth-store';
 import { apiClient } from '@/lib/api-client';
@@ -32,6 +33,8 @@ export default function AdminPayoutsPage() {
   const { ask: askDialog } = useDialogs();
   const [loading, setLoading] = useState(true);
   const [payouts, setPayouts] = useState<Payout[]>([]);
+  // Why the payouts could not be read; shown instead of "No payouts", which would be untrue.
+  const [loadError, setLoadError] = useState<unknown>(null);
   const [filter, setFilter] = useState<(typeof FILTERS)[number]>('pending');
   const [processingId, setProcessingId] = useState<string | null>(null);
   const [failReasonFor, setFailReasonFor] = useState<string | null>(null);
@@ -57,8 +60,11 @@ export default function AdminPayoutsPage() {
       if (response.data.success) {
         setPayouts(response.data.data.payouts || []);
       }
+      setLoadError(null);
     } catch (error: any) {
-      showToast(error.response?.data?.error?.message || 'Failed to load payouts', 'error');
+      // The payouts on the screen belong to the filter before this change, so they go with the failure.
+      setPayouts([]);
+      setLoadError(error);
     } finally {
       setLoading(false);
     }
@@ -151,6 +157,8 @@ export default function AdminPayoutsPage() {
             <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-green-600 mx-auto mb-4"></div>
             <p className="text-gray-600">Loading payouts...</p>
           </div>
+        ) : loadError ? (
+          <LoadError error={loadError} onRetry={loadPayouts} title="We couldn't load the payouts" />
         ) : payouts.length === 0 ? (
           <div className="bg-white rounded-lg shadow-sm p-12 text-center">
             <h3 className="text-lg font-semibold text-gray-900 mb-2">No {filter !== 'all' ? filter : ''} payouts</h3>

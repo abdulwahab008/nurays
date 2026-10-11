@@ -6,6 +6,7 @@ import Link from 'next/link';
 import { AdminShell } from '@/components/layout/AdminShell';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/toast';
+import { LoadError } from '@/components/ui/LoadError';
 import { useAuthStore } from '@/lib/store/auth-store';
 import { apiClient } from '@/lib/api-client';
 import { formatDate } from '@/lib/utils';
@@ -29,6 +30,8 @@ export default function AdminAllSellersPage() {
   const { showToast } = useToast();
   const [loading, setLoading] = useState(true);
   const [sellers, setSellers] = useState<Seller[]>([]);
+  // Why the kitchens could not be read; shown instead of "No Sellers Found", which would be untrue.
+  const [loadError, setLoadError] = useState<unknown>(null);
   const [filter, setFilter] = useState<string>('all');
 
   useEffect(() => {
@@ -65,13 +68,11 @@ export default function AdminAllSellersPage() {
       } else {
         setSellers([]);
       }
+      setLoadError(null);
     } catch (error: any) {
-      console.error('Failed to load sellers:', error);
-      // Don't show error toast for 404 - endpoint might not exist yet
-      if (error.response?.status !== 404) {
-        showToast('Failed to load sellers', 'error');
-      }
+      // The kitchens on the screen belong to the filter before this change, so they go with the failure.
       setSellers([]);
+      setLoadError(error);
     } finally {
       setLoading(false);
     }
@@ -129,6 +130,8 @@ export default function AdminAllSellersPage() {
             <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-green-600 mx-auto mb-4"></div>
             <p className="text-gray-600">Loading sellers...</p>
           </div>
+        ) : loadError ? (
+          <LoadError error={loadError} onRetry={loadSellers} title="We couldn't load the kitchens" />
         ) : sellers.length === 0 ? (
           <div className="bg-white rounded-lg shadow-sm p-12 text-center">
             <div className="text-6xl mb-4">🏪</div>

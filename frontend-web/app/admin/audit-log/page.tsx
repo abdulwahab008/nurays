@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { AdminShell } from '@/components/layout/AdminShell';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/toast';
+import { LoadError } from '@/components/ui/LoadError';
 import { apiClient, apiErrorMessage } from '@/lib/api-client';
 import { formatDateTime } from '@/lib/utils';
 
@@ -45,6 +46,8 @@ export default function AdminAuditLogPage() {
   const { showToast } = useToast();
   const [entries, setEntries] = useState<AuditEntry[]>([]);
   const [loading, setLoading] = useState(true);
+  // Why the log could not be read; shown instead of "Nothing recorded yet", which would be untrue.
+  const [loadError, setLoadError] = useState<unknown>(null);
   const [area, setArea] = useState('');
   const [entityId, setEntityId] = useState('');
   const [query, setQuery] = useState('');
@@ -63,12 +66,15 @@ export default function AdminAuditLogPage() {
       });
       setEntries(res.data.data.logs);
       setTotalPages(res.data.data.pagination.totalPages || 1);
+      setLoadError(null);
     } catch (error) {
-      showToast(apiErrorMessage(error, 'Failed to load the audit log'), 'error');
+      // The rows still on the screen belong to the filters before this change, so they go with the failure.
+      setEntries([]);
+      setLoadError(error);
     } finally {
       setLoading(false);
     }
-  }, [area, query, dateFrom, dateTo, result, page, showToast]);
+  }, [area, query, dateFrom, dateTo, result, page]);
 
   const exportCsv = async () => {
     try {
@@ -145,6 +151,8 @@ export default function AdminAuditLogPage() {
         <div className="bg-white border border-gray-200 rounded-lg overflow-x-auto">
           {loading && entries.length === 0 ? (
             <p className="p-10 text-center text-gray-500">Loading…</p>
+          ) : loadError ? (
+            <LoadError error={loadError} onRetry={load} title="We couldn't load the audit log" className="m-4" />
           ) : entries.length === 0 ? (
             <p className="p-10 text-center text-gray-500">Nothing recorded yet.</p>
           ) : (

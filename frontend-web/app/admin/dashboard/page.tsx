@@ -6,6 +6,7 @@ import Link from 'next/link';
 import { DashboardLayout, ADMIN_SIDEBAR_ITEMS } from '@/components/layout/DashboardShell';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/toast';
+import { LoadError } from '@/components/ui/LoadError';
 import { useAuthStore } from '@/lib/store/auth-store';
 import { apiClient } from '@/lib/api-client';
 import { formatPrice } from '@/lib/utils';
@@ -52,7 +53,11 @@ export default function AdminDashboardPage() {
   const [stats, setStats] = useState<PlatformStats | null>(null);
   const [processingId, setProcessingId] = useState<string | null>(null);
   const [rejecting, setRejecting] = useState<PendingSeller | null>(null);
-  const [pendingCategoryRequests, setPendingCategoryRequests] = useState(0);
+  // null: the count could not be read (not "0 waiting").
+  const [pendingCategoryRequests, setPendingCategoryRequests] = useState<number | null>(0);
+  // Why each part could not be read; each is said on its own, instead of "No Pending Applications" or figures left out.
+  const [sellersError, setSellersError] = useState<unknown>(null);
+  const [statsError, setStatsError] = useState<unknown>(null);
 
 
   useEffect(() => {
@@ -78,40 +83,34 @@ export default function AdminDashboardPage() {
   }, [isAuthenticated, user, router]);
 
   const loadDashboardData = async () => {
-    try {
-      setLoading(true);
-      
-      // Load pending sellers
-      const sellersResponse = await apiClient.get('/admin/pending-sellers');
-      if (sellersResponse.data.success) {
-        const sellers = sellersResponse.data.data || [];
-        setPendingSellers(sellers);
-      }
+    setLoading(true);
+    // Three independent reads: one failing must not hide the other two, and none may be shown as "nothing" when it failed.
+    const [sellersRes, categoriesRes, statsRes] = await Promise.allSettled([
+      apiClient.get('/admin/pending-sellers'),
+      apiClient.get('/category-requests/pending-count'),
+      apiClient.get('/admin/statistics'),
+    ]);
 
-      // Load pending category requests count
-      try {
-        const categoryRequestsResponse = await apiClient.get('/category-requests/pending-count');
-        if (categoryRequestsResponse.data.success) {
-          const count = categoryRequestsResponse.data.data?.count || 0;
-          setPendingCategoryRequests(count);
-        }
-      } catch (error) {
-      }
-
-      // Load platform stats
-      try {
-        const statsResponse = await apiClient.get('/admin/statistics');
-        if (statsResponse.data.success) {
-          setStats(statsResponse.data.data);
-        }
-      } catch (error) {
-      }
-    } catch (error: any) {
-      const errorMessage = error.response?.data?.error?.message || error.response?.data?.message || 'Failed to load dashboard';
-      showToast(errorMessage, 'error');
-    } finally {
-      setLoading(false);
+    if (sellersRes.status === 'fulfilled' && sellersRes.value.data.success) {
+      setPendingSellers(sellersRes.value.data.data || []);
+      setSellersError(null);
+    } else {
+      setSellersError(sellersRes.status === 'rejected' ? sellersRes.reason : new Error('The applications came back empty'));
     }
+
+    if (categoriesRes.status === 'fulfilled' && categoriesRes.value.data.success) {
+      setPendingCategoryRequests(categoriesRes.value.data.data?.count || 0);
+    } else {
+      setPendingCategoryRequests(null);
+    }
+
+    if (statsRes.status === 'fulfilled' && statsRes.value.data.success) {
+      setStats(statsRes.value.data.data);
+      setStatsError(null);
+    } else {
+      setStatsError(statsRes.status === 'rejected' ? statsRes.reason : new Error('The figures came back empty'));
+    }
+    setLoading(false);
   };
 
   const handleApproveReject = async (sellerId: string, action: 'approve' | 'reject', reason?: string) => {
@@ -147,6 +146,9 @@ export default function AdminDashboardPage() {
       userType="admin"
     >
       {/* Platform Stats */}
+      {Boolean(statsError) && (
+        <LoadError compact error={statsError} onRetry={loadDashboardData} title={stats ? "We couldn't refresh the platform figures: the ones below may be out of date" : "We couldn't load the platform figures"} className="mb-8" />
+      )}
       {stats && (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6 mb-8">
           <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-200">
@@ -213,8 +215,8 @@ export default function AdminDashboardPage() {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-gray-600 mb-1">Category Requests</p>
-                <p className="text-3xl font-bold text-gray-900">{pendingCategoryRequests}</p>
-                <p className="text-xs text-gray-400 mt-1">pending review</p>
+                <p className="text-3xl font-bold text-gray-900">{pendingCategoryRequests ?? '—'}</p>
+                <p className="text-xs text-gray-400 mt-1">{pendingCategoryRequests === null ? "couldn't be read" : 'pending review'}</p>
               </div>
               <div className="w-12 h-12 bg-gray-100 rounded-lg flex items-center justify-center">
                 <span className="text-2xl">📝</span>
@@ -253,6 +255,8 @@ export default function AdminDashboardPage() {
               <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-gray-600 mx-auto mb-4"></div>
               <p className="text-gray-600">Loading pending applications...</p>
             </div>
+          ) : sellersError && pendingSellers.length === 0 ? (
+            <LoadError error={sellersError} onRetry={loadDashboardData} title="We couldn't load the applications" />
           ) : pendingSellers.length === 0 ? (
             <div className="text-center py-12">
               <div className="text-6xl mb-4">✅</div>

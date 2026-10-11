@@ -6,6 +6,7 @@ import Link from 'next/link';
 import { AdminShell } from '@/components/layout/AdminShell';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/toast';
+import { LoadError } from '@/components/ui/LoadError';
 import { useAuthStore } from '@/lib/store/auth-store';
 import { apiClient } from '@/lib/api-client';
 import DocumentList from '@/components/admin/DocumentList';
@@ -43,6 +44,8 @@ export default function AdminPendingSellersPage() {
   const { showToast } = useToast();
   const [loading, setLoading] = useState(true);
   const [pendingSellers, setPendingSellers] = useState<PendingSeller[]>([]);
+  // Why the applications could not be read; shown instead of "No Pending Applications", which would be untrue.
+  const [loadError, setLoadError] = useState<unknown>(null);
   const [processingId, setProcessingId] = useState<string | null>(null);
   const [rejecting, setRejecting] = useState<PendingSeller | null>(null);
 
@@ -68,9 +71,9 @@ export default function AdminPendingSellersPage() {
       if (response.data.success) {
         setPendingSellers(response.data.data || []);
       }
+      setLoadError(null);
     } catch (error: any) {
-      const errorMessage = error.response?.data?.error?.message || error.response?.data?.message || 'Failed to load pending sellers';
-      showToast(errorMessage, 'error');
+      setLoadError(error);
     } finally {
       setLoading(false);
     }
@@ -119,6 +122,8 @@ export default function AdminPendingSellersPage() {
             <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-green-600 mx-auto mb-4"></div>
             <p className="text-gray-600">Loading pending applications...</p>
           </div>
+        ) : loadError && pendingSellers.length === 0 ? (
+          <LoadError error={loadError} onRetry={loadPendingSellers} title="We couldn't load the applications" />
         ) : pendingSellers.length === 0 ? (
           <div className="bg-white rounded-lg shadow-sm p-12 text-center">
             <div className="text-6xl mb-4">✅</div>

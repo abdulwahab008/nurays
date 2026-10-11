@@ -6,6 +6,7 @@ import Link from 'next/link';
 import { AdminShell } from '@/components/layout/AdminShell';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/toast';
+import { LoadError } from '@/components/ui/LoadError';
 import { useDialogs } from '@/components/ui/Dialogs';
 import { useAuthStore } from '@/lib/store/auth-store';
 import { apiClient } from '@/lib/api-client';
@@ -71,6 +72,8 @@ export default function AdminOrderDetailPage() {
   const { showToast } = useToast();
   const { confirm: confirmDialog, ask: askDialog } = useDialogs();
   const [loading, setLoading] = useState(true);
+  // An order that could not be read is not an order that does not exist: only a 404 says "not found".
+  const [loadError, setLoadError] = useState<unknown>(null);
   const [order, setOrder] = useState<OrderDetail | null>(null);
   const [updating, setUpdating] = useState(false);
   const [selectedStatus, setSelectedStatus] = useState<string>('');
@@ -225,13 +228,11 @@ export default function AdminOrderDetailPage() {
       } else {
         setOrder(null);
       }
+      setLoadError(null);
     } catch (error: any) {
-      if (error.response?.status === 404) {
-        showToast('Order not found', 'error');
-      } else {
-        showToast('Failed to load order', 'error');
-      }
       setOrder(null);
+      // Only a 404 says the order does not exist; anything else is a read that failed, and says so.
+      setLoadError(error.response?.status === 404 ? null : error);
     } finally {
       setLoading(false);
     }
@@ -292,6 +293,8 @@ export default function AdminOrderDetailPage() {
             <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-green-600 mx-auto mb-4"></div>
             <p className="text-gray-600">Loading order...</p>
           </div>
+        ) : loadError ? (
+          <LoadError error={loadError} onRetry={loadOrder} title="We couldn't load this order" />
         ) : !order ? (
           <div className="bg-white rounded-lg shadow-sm p-12 text-center">
             <h3 className="text-lg font-semibold text-gray-900 mb-2">Order not found</h3>

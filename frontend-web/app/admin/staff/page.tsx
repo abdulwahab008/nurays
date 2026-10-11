@@ -4,6 +4,7 @@ import { FormEvent, useCallback, useEffect, useState } from 'react';
 import { AdminShell } from '@/components/layout/AdminShell';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/toast';
+import { LoadError } from '@/components/ui/LoadError';
 import { useDialogs } from '@/components/ui/Dialogs';
 import { apiClient, apiErrorMessage } from '@/lib/api-client';
 import { useAuthStore } from '@/lib/store/auth-store';
@@ -32,6 +33,8 @@ export default function AdminStaffPage() {
   const allowed = !!user?.permissions?.includes('staff.manage');
   const [members, setMembers] = useState<Member[]>([]);
   const [loading, setLoading] = useState(true);
+  // Why the staff could not be read; shown instead of an empty list.
+  const [loadError, setLoadError] = useState<unknown>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [form, setForm] = useState({ fullName: '', email: '', role: 'support' as 'admin' | 'support', password: '' });
 
@@ -39,12 +42,13 @@ export default function AdminStaffPage() {
     try {
       const res = await apiClient.get('/admin/staff');
       setMembers(res.data.data);
+      setLoadError(null);
     } catch (error) {
-      showToast(apiErrorMessage(error, 'Failed to load staff'), 'error');
+      setLoadError(error);
     } finally {
       setLoading(false);
     }
-  }, [showToast]);
+  }, []);
 
   useEffect(() => {
     if (allowed) load();
@@ -125,6 +129,8 @@ export default function AdminStaffPage() {
             <h2 className="mb-3 text-lg font-semibold text-gray-900">Everyone with admin access</h2>
             {loading ? (
               <p className="text-gray-500">Loading…</p>
+            ) : loadError && members.length === 0 ? (
+              <LoadError error={loadError} onRetry={load} title="We couldn't load the staff" />
             ) : (
               <ul className="grid gap-3" data-testid="staff-list">
                 {members.map((m) => {

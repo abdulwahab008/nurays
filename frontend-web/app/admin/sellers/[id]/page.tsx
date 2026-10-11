@@ -6,6 +6,7 @@ import Link from 'next/link';
 import { AdminShell } from '@/components/layout/AdminShell';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/toast';
+import { LoadError } from '@/components/ui/LoadError';
 import { useDialogs } from '@/components/ui/Dialogs';
 import { useAuthStore } from '@/lib/store/auth-store';
 import { apiClient } from '@/lib/api-client';
@@ -50,6 +51,8 @@ export default function AdminSellerDetailPage() {
   const { showToast } = useToast();
   const { confirm: confirmDialog } = useDialogs();
   const [loading, setLoading] = useState(true);
+  // A kitchen that could not be read is not a kitchen that does not exist: only a 404 says "not found".
+  const [loadError, setLoadError] = useState<unknown>(null);
   const [seller, setSeller] = useState<SellerDetail | null>(null);
   const [actionLoading, setActionLoading] = useState(false);
   const [rejecting, setRejecting] = useState(false);
@@ -76,14 +79,11 @@ export default function AdminSellerDetailPage() {
       } else {
         setSeller(null);
       }
+      setLoadError(null);
     } catch (error: any) {
-      console.error('Failed to load seller:', error);
-      if (error.response?.status === 404) {
-        showToast('Seller not found', 'error');
-      } else {
-        showToast('Failed to load seller details', 'error');
-      }
       setSeller(null);
+      // Only a 404 says the kitchen does not exist; anything else is a read that failed, and says so.
+      setLoadError(error.response?.status === 404 ? null : error);
     } finally {
       setLoading(false);
     }
@@ -166,6 +166,8 @@ export default function AdminSellerDetailPage() {
             <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-green-600 mx-auto mb-4"></div>
             <p className="text-gray-600">Loading seller...</p>
           </div>
+        ) : loadError ? (
+          <LoadError error={loadError} onRetry={loadSeller} title="We couldn't load this kitchen" />
         ) : !seller ? (
           <div className="bg-white rounded-lg shadow-sm p-12 text-center">
             <h3 className="text-lg font-semibold text-gray-900 mb-2">Seller not found</h3>

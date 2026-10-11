@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { AdminShell } from '@/components/layout/AdminShell';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/toast';
+import { LoadError } from '@/components/ui/LoadError';
 import { apiClient, apiErrorMessage } from '@/lib/api-client';
 import { formatDateTime } from '@/lib/utils';
 
@@ -55,6 +56,8 @@ export default function AdminReviewsPage() {
   const [tab, setTab] = useState<Tab>('reported');
   const [rows, setRows] = useState<ReviewRow[]>([]);
   const [loading, setLoading] = useState(true);
+  // Why the reviews could not be read; shown instead of "Nothing reported. Every review on the site stands.", which would be untrue.
+  const [loadError, setLoadError] = useState<unknown>(null);
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -65,12 +68,15 @@ export default function AdminReviewsPage() {
       const res = await apiClient.get('/admin/reviews', { params: { status: tab, page: String(page) } });
       setRows(res.data.data.reviews);
       setTotalPages(res.data.data.pagination.totalPages || 1);
+      setLoadError(null);
     } catch (error) {
-      showToast(apiErrorMessage(error, 'Failed to load reviews'), 'error');
+      // The rows on the screen belong to the tab and page before this change, so they go with the failure.
+      setRows([]);
+      setLoadError(error);
     } finally {
       setLoading(false);
     }
-  }, [tab, page, showToast]);
+  }, [tab, page]);
 
   useEffect(() => {
     load();
@@ -117,6 +123,8 @@ export default function AdminReviewsPage() {
 
         {loading && rows.length === 0 ? (
           <div className="bg-white border border-gray-200 rounded-lg p-10 text-center text-gray-500">Loading…</div>
+        ) : loadError ? (
+          <LoadError error={loadError} onRetry={load} title="We couldn't load the reviews" />
         ) : rows.length === 0 ? (
           <div className="bg-white border border-gray-200 rounded-lg p-10 text-center text-gray-500">{EMPTY[tab]}</div>
         ) : (

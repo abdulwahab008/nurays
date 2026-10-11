@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { AdminShell } from '@/components/layout/AdminShell';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/toast';
+import { LoadError } from '@/components/ui/LoadError';
 import { useDialogs } from '@/components/ui/Dialogs';
 import { apiClient, apiErrorMessage } from '@/lib/api-client';
 import { formatDate, formatDateTime } from '@/lib/utils';
@@ -57,6 +58,8 @@ export default function AdminUsersPage() {
   const [search, setSearch] = useState('');
   const [query, setQuery] = useState('');
   const [loading, setLoading] = useState(true);
+  // Why the accounts could not be read; shown instead of "No accounts match", which would be untrue.
+  const [loadError, setLoadError] = useState<unknown>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
@@ -68,12 +71,15 @@ export default function AdminUsersPage() {
       setUsers(res.data.data.users);
       setTotal(res.data.data.pagination.total);
       setTotalPages(res.data.data.pagination.totalPages || 1);
+      setLoadError(null);
     } catch (error) {
-      showToast(apiErrorMessage(error, 'Failed to load accounts'), 'error');
+      // The accounts on the screen belong to the search before this change, so they go with the failure.
+      setUsers([]);
+      setLoadError(error);
     } finally {
       setLoading(false);
     }
-  }, [query, type, status, page, showToast]);
+  }, [query, type, status, page]);
 
   useEffect(() => {
     load();
@@ -153,6 +159,8 @@ export default function AdminUsersPage() {
         <div className="bg-white rounded-lg border border-gray-200 overflow-x-auto">
           {loading && users.length === 0 ? (
             <p className="p-10 text-center text-gray-500">Loading…</p>
+          ) : loadError ? (
+            <LoadError error={loadError} onRetry={load} title="We couldn't load the accounts" className="m-4" />
           ) : users.length === 0 ? (
             <p className="p-10 text-center text-gray-500">No accounts match.</p>
           ) : (

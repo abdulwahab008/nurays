@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { AdminShell } from '@/components/layout/AdminShell';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/toast';
+import { LoadError } from '@/components/ui/LoadError';
 import { useAuthStore } from '@/lib/store/auth-store';
 import { apiClient } from '@/lib/api-client';
 import { formatDateTime } from '@/lib/utils';
@@ -54,6 +55,8 @@ export default function AdminSupportPage() {
   const { isAuthenticated, user } = useAuthStore();
   const { showToast } = useToast();
   const [loading, setLoading] = useState(true);
+  // Why the tickets could not be read; shown instead of "No tickets here", which would be untrue.
+  const [loadError, setLoadError] = useState<unknown>(null);
   const [tickets, setTickets] = useState<TicketSummary[]>([]);
   const [filter, setFilter] = useState<(typeof FILTERS)[number]>('open');
   const [selected, setSelected] = useState<TicketDetail | null>(null);
@@ -83,8 +86,11 @@ export default function AdminSupportPage() {
       setLoading(true);
       const res = await apiClient.get('/admin/support/tickets', { params: { status: filter !== 'all' ? filter : undefined, priority: priority || undefined, search: searchApplied || undefined } });
       if (res.data.success) setTickets(res.data.data.tickets || []);
+      setLoadError(null);
     } catch (error: any) {
-      showToast(error.response?.data?.error?.message || 'Failed to load tickets', 'error');
+      // The tickets on the screen belong to the filter before this change, so they go with the failure.
+      setTickets([]);
+      setLoadError(error);
     } finally {
       setLoading(false);
     }
@@ -239,6 +245,8 @@ export default function AdminSupportPage() {
                 <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-green-600 mx-auto mb-4"></div>
                 <p className="text-gray-600">Loading tickets...</p>
               </div>
+            ) : loadError ? (
+              <LoadError error={loadError} onRetry={loadTickets} title="We couldn't load the tickets" />
             ) : tickets.length === 0 ? (
               <div className="bg-white rounded-lg shadow-sm p-12 text-center">
                 <h3 className="text-lg font-semibold text-gray-900 mb-2">No tickets here</h3>
