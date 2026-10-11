@@ -252,7 +252,8 @@ mandatory in production):
   the load balancer.
 - Background jobs: BullMQ queue `nuray-jobs` in Redis (emails, notification delivery, push). Jobs survive restarts and
   retry with backoff (5 attempts); every instance runs a worker. If Redis is unreachable at enqueue time the job runs
-  in the process that queued it and is lost if that process dies.
+  in the process that queued it and is lost if that process dies. (A job that arrives in the first moments after a
+  start waits, for at most 2 seconds, for the queue's connection to open instead of taking that route.)
 - Timed sweeps (below) take a Postgres advisory lock per job, so only one instance runs a given sweep at a time.
 - Files: with `STORAGE_DRIVER=local` every instance needs the same volume. Use `s3` once you run more than one.
 - Behind a load balancer or CDN: `TRUST_PROXY` is the number of proxy hops in front of the API (default `1`; `2`

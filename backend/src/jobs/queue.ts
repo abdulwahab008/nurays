@@ -39,12 +39,40 @@ export function defineJob<T>(name: string, handler: (payload: T) => Promise<void
 }
 
 let queueConnection: ReturnType<typeof newRedisConnection> | null = null;
+// Set while the queue's connection is opening for the first time.
+let connecting: Promise<void> | null = null;
+
+const CONNECT_WAIT_MS = 2_000;
+
+/**
+ * Resolves when the connection first becomes ready, fails or closes, or after CONNECT_WAIT_MS. A job that
+ * arrives while the connection is still opening waits for it, so a start is not taken for an outage and
+ * the job run in this process, without the durability of the queue.
+ */
+function firstReady(connection: NonNullable<typeof queueConnection>): Promise<void> {
+  return new Promise<void>((resolve) => {
+    const events = ['ready', 'error', 'close'] as const;
+    const done = () => {
+      clearTimeout(timer);
+      for (const event of events) connection.off(event, done);
+      resolve();
+    };
+    const timer = setTimeout(done, CONNECT_WAIT_MS);
+    timer.unref?.();
+    for (const event of events) connection.on(event, done);
+  });
+}
 
 function getQueue(): Queue | null {
   if (!redisUrl()) return null;
   if (!queue) {
     queueConnection = newRedisConnection('queue', { maxRetriesPerRequest: null });
     queue = new Queue(QUEUE_NAME, { connection: queueConnection });
+    const opening = firstReady(queueConnection);
+    connecting = opening;
+    void opening.then(() => {
+      if (connecting === opening) connecting = null;
+    });
   }
   return queue;
 }
@@ -75,6 +103,7 @@ async function runLocally(name: string, payload: unknown, attempts: number, dela
 export async function enqueue<T>(name: string, payload: T, opts: EnqueueOptions = {}): Promise<void> {
   if (!handlers.has(name)) throw new Error(`Unknown background job "${name}"`);
   const q = getQueue();
+  if (connecting) await connecting;
   // While Redis is unreachable the job runs here at once rather than holding the request
   // for the enqueue timeout on every call.
   if (q && queueReady()) {
@@ -113,6 +142,7 @@ function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
 /** Start processing queued jobs in this process (no-op without Redis: jobs run inline). */
 export function startWorkers(concurrency = 5) {
   if (!redisUrl() || worker) return;
+  getQueue(); // the queue's own connection opens now too, so the first job finds it ready
   worker = new Worker(
     QUEUE_NAME,
     async (job: Job) => {
