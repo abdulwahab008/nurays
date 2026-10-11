@@ -307,6 +307,12 @@ export class AdminService {
     approved: boolean,
     reason?: string
   ) {
+    // The kitchen is told the reason, so there has to be one (as for a kitchen or a rider that is turned down).
+    if (!approved && (!reason || reason.trim().length < 5)) {
+      throw new AppError('Say why the dish is not approved (at least 5 characters), so the kitchen knows what to fix.', 400, 'REASON_REQUIRED');
+    }
+    const why = reason?.trim();
+
     const product = await prisma.product.findUnique({
       where: { id: productId },
     });
@@ -320,13 +326,13 @@ export class AdminService {
       data: {
         approvalStatus: approved ? 'approved' : 'rejected',
         isActive: approved,
-        rejectionReason: approved ? null : reason || 'Product rejected',
+        rejectionReason: approved ? null : why,
       },
     });
 
     await notifySeller(product.sellerId, approved
       ? { title: 'Dish approved', message: `"${product.name}" is live. Customers can order it now.`, actionUrl: `/products/${product.id}`, dedupeKey: `product:${product.id}:approved:${Date.now()}` }
-      : { title: 'Dish not approved', message: `"${product.name}" wasn't approved: ${reason || 'Product rejected'}`, actionUrl: `/sellers/products/${product.id}/edit`, dedupeKey: `product:${product.id}:rejected:${Date.now()}` });
+      : { title: 'Dish not approved', message: `"${product.name}" wasn't approved: ${why}`, actionUrl: `/sellers/products/${product.id}/edit`, dedupeKey: `product:${product.id}:rejected:${Date.now()}` });
 
     return {
       productId: updatedProduct.id,
