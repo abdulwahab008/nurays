@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState, useRef } from 'react';
+import { loginUrlHere } from '@/lib/auth-redirect';
 import { getPromotionLabel, getStackedDiscountedPrice } from '@/lib/pricing';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
@@ -85,7 +86,7 @@ export default function CheckoutPage() {
   useEffect(() => {
     const token = apiClient.getAccessToken();
     if (!token && !isAuthenticated) {
-      router.push('/login');
+      router.push(loginUrlHere());
       return;
     }
     loadData();
@@ -292,6 +293,13 @@ export default function CheckoutPage() {
       return;
     }
 
+    // A code typed in the box but never applied (or refused when it was tried) is not sent: the server refuses a whole order
+    // that names a code it does not accept. Ask the person to apply it or clear it, instead of placing the order without it.
+    if (!appliedPromo && promoCode.trim()) {
+      showToast(t('promoNotApplied'), 'warning');
+      return;
+    }
+
     setProcessing(true);
     try {
       const orderItems = cart.items.map((item) => ({
@@ -316,7 +324,7 @@ export default function CheckoutPage() {
         deliverySlotDate: deliverySlot.date || undefined,
         deliverySlotTime: deliverySlot.time,
         paymentMethod: paymentMethod,
-        promotionCode: appliedPromo?.code || promoCode?.trim() || undefined,
+        promotionCode: appliedPromo?.code || undefined,
         deliveryInstructions: finalInstructions || undefined,
       };
 
