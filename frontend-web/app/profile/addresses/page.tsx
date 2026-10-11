@@ -364,6 +364,9 @@ export default function AddressesPage() {
     );
   }
 
+  // The addresses could not be read: the two counters would say "0" and "None" about a list nobody has seen.
+  const couldNotRead = !loading && Boolean(loadError) && addresses.length === 0;
+
   return (
     <DashboardLayout
       title={t('myAddresses')}
@@ -379,7 +382,7 @@ export default function AddressesPage() {
               <MapPin className="w-6 h-6" />
             </div>
             <div>
-              <p className="text-2xl font-bold text-gray-900">{addresses.length}</p>
+              <p className="text-2xl font-bold text-gray-900">{couldNotRead ? '–' : addresses.length}</p>
               <p className="text-sm text-gray-500">{t('savedAddresses')}</p>
             </div>
           </div>
@@ -392,7 +395,7 @@ export default function AddressesPage() {
             </div>
             <div>
               <p className="text-2xl font-bold text-gray-900">
-                {addressLabel(addresses.find(a => a.isDefault)?.label) || t('none')}
+                {couldNotRead ? '–' : addressLabel(addresses.find(a => a.isDefault)?.label) || t('none')}
               </p>
               <p className="text-sm text-gray-500">{t('defaultAddress')}</p>
             </div>

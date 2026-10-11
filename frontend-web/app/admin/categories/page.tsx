@@ -540,6 +540,9 @@ export default function AdminCategoriesPage() {
   const totalCategories = getFlatCategories(categories).length;
   const activeCategories = getFlatCategories(categories).filter(c => c.isActive).length;
   const totalProducts = getFlatCategories(categories).reduce((acc, c) => acc + (c.productCount || 0), 0);
+  // The categories could not be read: a dash, not "0" (a count of what nobody has seen).
+  const couldNotRead = !loading && Boolean(loadError) && categories.length === 0;
+  const figure = (n: number) => (couldNotRead ? '–' : n);
 
   return (
     <DashboardLayout
@@ -556,7 +559,7 @@ export default function AdminCategoriesPage() {
               <div className="text-3xl">📁</div>
               <div>
                 <p className="text-sm text-gray-500">Total Categories</p>
-                <p className="text-2xl font-bold text-gray-900">{totalCategories}</p>
+                <p className="text-2xl font-bold text-gray-900">{figure(totalCategories)}</p>
               </div>
             </div>
           </div>
@@ -565,7 +568,7 @@ export default function AdminCategoriesPage() {
               <div className="text-3xl">✅</div>
               <div>
                 <p className="text-sm text-gray-500">Active Categories</p>
-                <p className="text-2xl font-bold text-green-600">{activeCategories}</p>
+                <p className="text-2xl font-bold text-green-600">{figure(activeCategories)}</p>
               </div>
             </div>
           </div>
@@ -574,7 +577,7 @@ export default function AdminCategoriesPage() {
               <div className="text-3xl">🍽️</div>
               <div>
                 <p className="text-sm text-gray-500">Total Products</p>
-                <p className="text-2xl font-bold text-blue-600">{totalProducts}</p>
+                <p className="text-2xl font-bold text-blue-600">{figure(totalProducts)}</p>
               </div>
             </div>
           </div>

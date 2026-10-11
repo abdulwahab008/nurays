@@ -5,7 +5,7 @@ import { loginUrlHere } from '@/lib/auth-redirect';
 import { useRouter } from 'next/navigation';
 import { DashboardLayout, SELLER_SIDEBAR_ITEMS } from '@/components/layout/DashboardShell';
 import { Button } from '@/components/ui/button';
-import { useLoadFailureMessage } from '@/components/ui/LoadError';
+import { LoadError, useLoadFailureMessage } from '@/components/ui/LoadError';
 import { useToast } from '@/components/ui/toast';
 import { useAuthStore } from '@/lib/store/auth-store';
 import { apiClient } from '@/lib/api-client';
@@ -62,7 +62,12 @@ export default function SellerDeliveryPage() {
   const { showToast } = useToast();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [loadError, setLoadError] = useState<string | null>(null);
+  // Why the kitchen's settings could not be read. Until they were read there is no form: it would show made-up defaults, and saving them
+  // would replace what the kitchen really has (its delivery model, fees and pickup).
+  const [loadError, setLoadError] = useState<unknown>(null);
+  const [settingsRead, setSettingsRead] = useState(false);
+  // Why the per-community fees could not be read (saving without them would clear them).
+  const [communitiesError, setCommunitiesError] = useState<unknown>(null);
   const failureMessage = useLoadFailureMessage();
 
   // Delivery Model: 'model_a' (Platform Fleet) vs 'model_b' (Seller Self-Delivery)
@@ -134,6 +139,8 @@ export default function SellerDeliveryPage() {
           latitude: s.latitude != null ? parseFloat(String(s.latitude)) : 31.4720,
           longitude: s.longitude != null ? parseFloat(String(s.longitude)) : 74.4530,
         });
+      } else {
+        throw new Error('The settings were not in the answer');
       }
 
       // Its own try/catch: the seller's own settings above are already on screen, and
@@ -147,14 +154,17 @@ export default function SellerDeliveryPage() {
           setDrafts(Object.fromEntries(rows.map((r) => [r.id, toDraft(r)])));
           setAllowCrossCommunity(d.allowCrossCommunity !== false);
           setHomeCommunityName(d.homeCommunity?.name ?? null);
+          setCommunitiesError(null);
         }
-      } catch (err: any) {
+      } catch (err: unknown) {
         console.error('Failed to load community delivery fees:', err);
-        showToast('Could not load your per-community delivery fees. Reload the page before saving.', 'error');
+        setCommunitiesError(err);
+        showToast('Could not load your per-community delivery fees, so nothing can be saved yet. Try again first.', 'error');
       }
-    } catch (err: any) {
+      setSettingsRead(true);
+    } catch (err: unknown) {
       console.error('Failed to load delivery settings:', err);
-      setLoadError(failureMessage(err));
+      setLoadError(err);
     } finally {
       if (!silent) setLoading(false);
     }
@@ -191,6 +201,11 @@ export default function SellerDeliveryPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!settingsRead) return;
+    if (communitiesError) {
+      showToast('Your per-community fees could not be read, so nothing was saved. Try loading them again first.', 'error');
+      return;
+    }
     setSaving(true);
     try {
       const deliveryModes = ['delivery'];
@@ -307,6 +322,28 @@ export default function SellerDeliveryPage() {
     }
   };
 
+  // No form until the kitchen's own settings were read: the boxes would hold defaults, and saving them would replace the real ones.
+  if (!settingsRead) {
+    return (
+      <DashboardLayout
+        title="Delivery"
+        subtitle="Fulfillment options and local delivery rates"
+        sidebarItems={SELLER_SIDEBAR_ITEMS}
+        userType="seller"
+      >
+        <div className="max-w-3xl mx-auto space-y-6 pb-16">
+          {loadError ? (
+            <LoadError error={loadError} onRetry={() => loadDeliverySettings()} title="We couldn't load your delivery settings" />
+          ) : (
+            <div className="rounded-2xl border border-slate-200 bg-white p-10 text-center text-sm font-medium text-slate-600" role="status">
+              Loading your delivery settings…
+            </div>
+          )}
+        </div>
+      </DashboardLayout>
+    );
+  }
+
   return (
     <DashboardLayout
       title="Delivery"
@@ -315,9 +352,9 @@ export default function SellerDeliveryPage() {
       userType="seller"
     >
       <div className="max-w-3xl mx-auto space-y-6 pb-16">
-        {loadError && (
-          <div className="bg-red-50 border border-red-200 rounded-xl p-3.5 flex items-center justify-between text-xs text-red-700">
-            <span>{loadError}</span>
+        {Boolean(loadError) && (
+          <div className="bg-red-50 border border-red-200 rounded-xl p-3.5 flex items-center justify-between text-xs text-red-700" role="alert">
+            <span>{failureMessage(loadError)}</span>
             <button onClick={() => loadDeliverySettings()} className="font-semibold underline">
               Retry
             </button>
@@ -405,7 +442,9 @@ export default function SellerDeliveryPage() {
               />
             </label>
 
-            {communities.length === 0 ? (
+            {communitiesError ? (
+              <LoadError compact error={communitiesError} onRetry={() => loadDeliverySettings(true)} title="We couldn't load your community fees" />
+            ) : communities.length === 0 ? (
               <p className="text-xs text-slate-500">No communities are available yet.</p>
             ) : (
               <div className="divide-y divide-slate-100 border border-slate-200 rounded-xl">

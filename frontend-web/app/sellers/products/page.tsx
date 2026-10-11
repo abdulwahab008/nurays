@@ -282,6 +282,9 @@ function SellerProductsContent() {
     }
   };
 
+  // The dishes could not be read (and there is nothing older on the screen to show).
+  const couldNotRead = !loading && !!loadError && products.length === 0;
+
   // Metrics calculation
   const totalProducts = products.length;
   const inStockCount = products.filter((p) => p.stockQuantity > 10).length;
@@ -345,14 +348,14 @@ function SellerProductsContent() {
                 icon: Icons.products,
                 href: '/sellers/products',
                 isActive: !isInventoryView,
-                count: totalProducts,
+                count: couldNotRead ? undefined : totalProducts,
               },
               {
                 label: 'Inventory & Stock',
                 icon: Icons.inventory,
                 href: '/sellers/products?view=inventory',
                 isActive: isInventoryView,
-                alertCount: lowStockCount + outOfStockCount,
+                alertCount: couldNotRead ? undefined : lowStockCount + outOfStockCount,
               },
               {
                 label: 'Discounts & Deals',
@@ -429,170 +432,175 @@ function SellerProductsContent() {
           </div>
         </div>
 
-        {/* ========================================================================= */}
-        {/* KPI Strip: Highlights Key Metrics with Clean Icons */}
-        {/* ========================================================================= */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
-          {/* Card 1 */}
-          <div className="bg-white rounded-3xl p-4 sm:p-5 border border-slate-200 shadow-sm relative overflow-hidden group hover:border-slate-300 transition-all">
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-[11px] font-black uppercase tracking-wider text-slate-500">
-                {isInventoryView ? 'Tracked Items' : 'Total Listings'}
-              </span>
-              <div className="w-8 h-8 rounded-xl bg-slate-100 text-slate-700 flex items-center justify-center font-bold text-sm">
-                {Icons.box}
+        {/* Counters and filters describe a list; with no list to describe (it could not be read) they would say "0" and "Zero stockouts". */}
+        {!couldNotRead && (
+          <>
+            {/* ========================================================================= */}
+            {/* KPI Strip: Highlights Key Metrics with Clean Icons */}
+            {/* ========================================================================= */}
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+              {/* Card 1 */}
+              <div className="bg-white rounded-3xl p-4 sm:p-5 border border-slate-200 shadow-sm relative overflow-hidden group hover:border-slate-300 transition-all">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-[11px] font-black uppercase tracking-wider text-slate-500">
+                    {isInventoryView ? 'Tracked Items' : 'Total Listings'}
+                  </span>
+                  <div className="w-8 h-8 rounded-xl bg-slate-100 text-slate-700 flex items-center justify-center font-bold text-sm">
+                    {Icons.box}
+                  </div>
+                </div>
+                <div className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight">
+                  {totalProducts}
+                </div>
+                <div className="mt-2 text-xs font-medium text-slate-500">
+                  {activeCount} active in catalog
+                </div>
+              </div>
+
+              {/* Card 2 */}
+              <div className="bg-white rounded-3xl p-4 sm:p-5 border border-slate-200 shadow-sm relative overflow-hidden group hover:border-slate-300 transition-all">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-[11px] font-black uppercase tracking-wider text-emerald-600">
+                    Healthy Stock
+                  </span>
+                  <div className="w-8 h-8 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center font-bold text-sm">
+                    {Icons.check}
+                  </div>
+                </div>
+                <div className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight">
+                  {inStockCount}
+                </div>
+                <div className="mt-2 text-xs font-medium text-emerald-600 flex items-center gap-1">
+                  <span>Ready for fast dispatch</span>
+                </div>
+              </div>
+
+              {/* Card 3 */}
+              <div className="bg-white rounded-3xl p-4 sm:p-5 border border-slate-200 shadow-sm relative overflow-hidden group hover:border-slate-300 transition-all">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-[11px] font-black uppercase tracking-wider text-amber-600">
+                    Low Stock Warning
+                  </span>
+                  <div className="w-8 h-8 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center font-bold text-sm">
+                    {Icons.alertTriangle}
+                  </div>
+                </div>
+                <div className="text-2xl sm:text-3xl font-black text-amber-600 tracking-tight">
+                  {lowStockCount}
+                </div>
+                <div className="mt-2 text-xs font-medium text-amber-700">
+                  1 – 10 items remaining
+                </div>
+              </div>
+
+              {/* Card 4 */}
+              <div className="bg-white rounded-3xl p-4 sm:p-5 border border-slate-200 shadow-sm relative overflow-hidden group hover:border-slate-300 transition-all">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-[11px] font-black uppercase tracking-wider text-rose-600">
+                    Out of Stock
+                  </span>
+                  <div className="w-8 h-8 rounded-xl bg-rose-50 text-rose-600 flex items-center justify-center font-bold text-sm">
+                    {Icons.alertCircle}
+                  </div>
+                </div>
+                <div className="text-2xl sm:text-3xl font-black text-rose-600 tracking-tight">
+                  {outOfStockCount}
+                </div>
+                <div className="mt-2 text-xs font-medium text-rose-700">
+                  {outOfStockCount > 0 ? 'Restock immediately' : 'Zero stockouts'}
+                </div>
               </div>
             </div>
-            <div className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight">
-              {totalProducts}
-            </div>
-            <div className="mt-2 text-xs font-medium text-slate-500">
-              {activeCount} active in catalog
-            </div>
-          </div>
 
-          {/* Card 2 */}
-          <div className="bg-white rounded-3xl p-4 sm:p-5 border border-slate-200 shadow-sm relative overflow-hidden group hover:border-slate-300 transition-all">
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-[11px] font-black uppercase tracking-wider text-emerald-600">
-                Healthy Stock
-              </span>
-              <div className="w-8 h-8 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center font-bold text-sm">
-                {Icons.check}
-              </div>
-            </div>
-            <div className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight">
-              {inStockCount}
-            </div>
-            <div className="mt-2 text-xs font-medium text-emerald-600 flex items-center gap-1">
-              <span>Ready for fast dispatch</span>
-            </div>
-          </div>
-
-          {/* Card 3 */}
-          <div className="bg-white rounded-3xl p-4 sm:p-5 border border-slate-200 shadow-sm relative overflow-hidden group hover:border-slate-300 transition-all">
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-[11px] font-black uppercase tracking-wider text-amber-600">
-                Low Stock Warning
-              </span>
-              <div className="w-8 h-8 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center font-bold text-sm">
-                {Icons.alertTriangle}
-              </div>
-            </div>
-            <div className="text-2xl sm:text-3xl font-black text-amber-600 tracking-tight">
-              {lowStockCount}
-            </div>
-            <div className="mt-2 text-xs font-medium text-amber-700">
-              1 – 10 items remaining
-            </div>
-          </div>
-
-          {/* Card 4 */}
-          <div className="bg-white rounded-3xl p-4 sm:p-5 border border-slate-200 shadow-sm relative overflow-hidden group hover:border-slate-300 transition-all">
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-[11px] font-black uppercase tracking-wider text-rose-600">
-                Out of Stock
-              </span>
-              <div className="w-8 h-8 rounded-xl bg-rose-50 text-rose-600 flex items-center justify-center font-bold text-sm">
-                {Icons.alertCircle}
-              </div>
-            </div>
-            <div className="text-2xl sm:text-3xl font-black text-rose-600 tracking-tight">
-              {outOfStockCount}
-            </div>
-            <div className="mt-2 text-xs font-medium text-rose-700">
-              {outOfStockCount > 0 ? 'Restock immediately' : 'Zero stockouts'}
-            </div>
-          </div>
-        </div>
-
-        {/* ========================================================================= */}
-        {/* Search, Filter Chips & Controls */}
-        {/* ========================================================================= */}
-        <div className="bg-white rounded-3xl p-4 border border-slate-200 shadow-sm flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-3">
-          {/* Search Input: never squeezed below a usable width by the chips beside it */}
-          <div className="relative flex-1 lg:min-w-64">
-            <svg
-              className="w-4 h-4 text-slate-500 absolute start-3.5 top-1/2 -translate-y-1/2"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-              strokeWidth={2}
-            >
-              <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" />
-            </svg>
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search by product title, category, or cuisine..."
-              className="w-full ps-10 pe-9 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-900 focus:bg-white transition-all placeholder:text-slate-400"
-            />
-            {searchQuery && (
-              <button
-                onClick={() => setSearchQuery('')}
-                className="absolute end-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-600 text-xs font-bold"
-              >
-                ✕
-              </button>
-            )}
-          </div>
-
-          {/* Filter Chips Bar */}
-          <div className="flex flex-wrap items-center gap-1.5">
-            {/* Stock Filters */}
-            {[
-              { key: 'all', label: 'All Stock', count: products.length },
-              { key: 'in_stock', label: 'Healthy', dot: 'bg-emerald-500', count: inStockCount },
-              { key: 'low_stock', label: 'Low Stock', dot: 'bg-amber-500', count: lowStockCount },
-              { key: 'out_of_stock', label: 'Out of Stock', dot: 'bg-rose-500', count: outOfStockCount },
-            ].map((chip) => (
-              <button
-                key={chip.key}
-                onClick={() => setStockFilter(chip.key as StockFilter)}
-                className={`px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all flex items-center gap-1.5 ${
-                  stockFilter === chip.key
-                    ? 'bg-slate-900 text-white shadow-sm'
-                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200/70 hover:text-slate-900'
-                }`}
-              >
-                {chip.dot && <span className={`w-2 h-2 rounded-full ${chip.dot} shrink-0`} />}
-                <span>{chip.label}</span>
-                <span
-                  className={`ms-1 text-[11px] px-1.5 py-0.2 rounded-full font-bold ${
-                    stockFilter === chip.key ? 'bg-white/20 text-white' : 'bg-white text-slate-600 shadow-xs'
-                  }`}
+            {/* ========================================================================= */}
+            {/* Search, Filter Chips & Controls */}
+            {/* ========================================================================= */}
+            <div className="bg-white rounded-3xl p-4 border border-slate-200 shadow-sm flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-3">
+              {/* Search Input: never squeezed below a usable width by the chips beside it */}
+              <div className="relative flex-1 lg:min-w-64">
+                <svg
+                  className="w-4 h-4 text-slate-500 absolute start-3.5 top-1/2 -translate-y-1/2"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                  strokeWidth={2}
                 >
-                  {chip.count}
-                </span>
-              </button>
-            ))}
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" />
+                </svg>
+                <input
+                  type="text"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder="Search by product title, category, or cuisine..."
+                  className="w-full ps-10 pe-9 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-900 focus:bg-white transition-all placeholder:text-slate-400"
+                />
+                {searchQuery && (
+                  <button
+                    onClick={() => setSearchQuery('')}
+                    className="absolute end-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-600 text-xs font-bold"
+                  >
+                    ✕
+                  </button>
+                )}
+              </div>
 
-            {/* Status Filter (when in All Products view) */}
-            {!isInventoryView && (
-              <div className="flex items-center ps-2 border-s border-slate-200 gap-1">
+              {/* Filter Chips Bar */}
+              <div className="flex flex-wrap items-center gap-1.5">
+                {/* Stock Filters */}
                 {[
-                  { key: 'all', label: 'Status: All' },
-                  { key: 'active', label: 'Live' },
-                  { key: 'hidden', label: 'Hidden' },
-                  ...(pendingCount > 0 ? [{ key: 'pending', label: 'Pending Review' }] : []),
+                  { key: 'all', label: 'All Stock', count: products.length },
+                  { key: 'in_stock', label: 'Healthy', dot: 'bg-emerald-500', count: inStockCount },
+                  { key: 'low_stock', label: 'Low Stock', dot: 'bg-amber-500', count: lowStockCount },
+                  { key: 'out_of_stock', label: 'Out of Stock', dot: 'bg-rose-500', count: outOfStockCount },
                 ].map((chip) => (
                   <button
                     key={chip.key}
-                    onClick={() => setStatusFilter(chip.key as StatusFilter)}
-                    className={`px-2.5 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all ${
-                      statusFilter === chip.key
-                        ? 'bg-emerald-700 text-white shadow-sm'
-                        : 'bg-slate-100 text-slate-600 hover:bg-slate-200/70'
+                    onClick={() => setStockFilter(chip.key as StockFilter)}
+                    className={`px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all flex items-center gap-1.5 ${
+                      stockFilter === chip.key
+                        ? 'bg-slate-900 text-white shadow-sm'
+                        : 'bg-slate-100 text-slate-600 hover:bg-slate-200/70 hover:text-slate-900'
                     }`}
                   >
-                    {chip.label}
+                    {chip.dot && <span className={`w-2 h-2 rounded-full ${chip.dot} shrink-0`} />}
+                    <span>{chip.label}</span>
+                    <span
+                      className={`ms-1 text-[11px] px-1.5 py-0.2 rounded-full font-bold ${
+                        stockFilter === chip.key ? 'bg-white/20 text-white' : 'bg-white text-slate-600 shadow-xs'
+                      }`}
+                    >
+                      {chip.count}
+                    </span>
                   </button>
                 ))}
+
+                {/* Status Filter (when in All Products view) */}
+                {!isInventoryView && (
+                  <div className="flex items-center ps-2 border-s border-slate-200 gap-1">
+                    {[
+                      { key: 'all', label: 'Status: All' },
+                      { key: 'active', label: 'Live' },
+                      { key: 'hidden', label: 'Hidden' },
+                      ...(pendingCount > 0 ? [{ key: 'pending', label: 'Pending Review' }] : []),
+                    ].map((chip) => (
+                      <button
+                        key={chip.key}
+                        onClick={() => setStatusFilter(chip.key as StatusFilter)}
+                        className={`px-2.5 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all ${
+                          statusFilter === chip.key
+                            ? 'bg-emerald-700 text-white shadow-sm'
+                            : 'bg-slate-100 text-slate-600 hover:bg-slate-200/70'
+                        }`}
+                      >
+                        {chip.label}
+                      </button>
+                    ))}
+                  </div>
+                )}
               </div>
-            )}
-          </div>
-        </div>
+            </div>
+          </>
+        )}
 
         {/* ========================================================================= */}
         {/* Main Products Grid / Content */}

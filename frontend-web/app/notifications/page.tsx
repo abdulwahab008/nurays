@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { DashboardLayout, CUSTOMER_SIDEBAR_ITEMS } from '@/components/layout/DashboardShell';
 import { Button } from '@/components/ui/button';
+import { LoadError } from '@/components/ui/LoadError';
 import { useAuthStore } from '@/lib/store/auth-store';
 import { formatDate } from '@/lib/utils';
 import { apiClient, apiErrorCode, apiErrorMessage } from '@/lib/api-client';
@@ -43,7 +44,8 @@ export default function NotificationsPage() {
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [filter, setFilter] = useState<'all' | 'unread'>('all');
   const [loading, setLoading] = useState(true);
-  const [loadError, setLoadError] = useState<string | null>(null);
+  // Why the notifications could not be read; shown instead of "No notifications yet", which would be untrue.
+  const [loadError, setLoadError] = useState<unknown>(null);
 
   const sidebarItems = CUSTOMER_SIDEBAR_ITEMS;
 
@@ -72,15 +74,10 @@ export default function NotificationsPage() {
       } else {
         setNotifications([]);
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Failed to load notifications:', error);
-      setNotifications([]);
-      const isNetwork = error?.message === 'Network Error' || error?.code === 'ERR_NETWORK';
-      setLoadError(
-        isNetwork
-          ? t('networkError')
-          : error?.response?.data?.error?.message || t('loadNotificationsFailed')
-      );
+      // What is already on the screen stays (a refresh that fails must not wipe the list).
+      setLoadError(error);
     } finally {
       setLoading(false);
     }
@@ -150,6 +147,8 @@ export default function NotificationsPage() {
   );
 
   const unreadCount = notifications.filter(n => !n.isRead).length;
+  // Nothing could be read and nothing older is on the screen: no counters and no "No notifications yet", which would say what the page does not know.
+  const couldNotRead = !loading && Boolean(loadError) && notifications.length === 0;
 
   if (!isAuthenticated) {
     return null;
@@ -158,52 +157,51 @@ export default function NotificationsPage() {
   return (
     <DashboardLayout
       title={t('notifications')}
-      subtitle={t(unreadCount !== 1 ? 'unreadMany' : 'unreadOne', { count: unreadCount })}
+      subtitle={couldNotRead ? undefined : t(unreadCount !== 1 ? 'unreadMany' : 'unreadOne', { count: unreadCount })}
       sidebarItems={sidebarItems}
       userType="customer"
     >
       {/* Header Actions */}
-      <div className="flex items-center justify-between mb-6">
-        <div className="flex gap-2">
-          <button
-            onClick={() => setFilter('all')}
-            className={`px-4 py-2 rounded-xl text-sm font-medium transition-all ${
-              filter === 'all'
-                ? 'bg-green-600 text-white'
-                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-            }`}
-          >
-            {t('filterAll', { count: notifications.length })}
-          </button>
-          <button
-            onClick={() => setFilter('unread')}
-            className={`px-4 py-2 rounded-xl text-sm font-medium transition-all ${
-              filter === 'unread'
-                ? 'bg-green-600 text-white'
-                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-            }`}
-          >
-            {t('filterUnread', { count: unreadCount })}
-          </button>
+      {!couldNotRead && (
+        <div className="flex items-center justify-between mb-6">
+          <div className="flex gap-2">
+            <button
+              onClick={() => setFilter('all')}
+              className={`px-4 py-2 rounded-xl text-sm font-medium transition-all ${
+                filter === 'all'
+                  ? 'bg-green-600 text-white'
+                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+              }`}
+            >
+              {t('filterAll', { count: notifications.length })}
+            </button>
+            <button
+              onClick={() => setFilter('unread')}
+              className={`px-4 py-2 rounded-xl text-sm font-medium transition-all ${
+                filter === 'unread'
+                  ? 'bg-green-600 text-white'
+                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+              }`}
+            >
+              {t('filterUnread', { count: unreadCount })}
+            </button>
+          </div>
+          <div className="flex items-center gap-2">
+            <Link href="/notifications/settings" className="text-sm font-medium text-slate-600 hover:text-slate-900 underline">
+              {t('settings')}
+            </Link>
+            {unreadCount > 0 && (
+              <Button variant="outline" onClick={markAllAsRead} className="text-sm">
+                <CheckCheck className="w-4 h-4 me-2" /> {t('markAllRead')}
+              </Button>
+            )}
+          </div>
         </div>
-        <div className="flex items-center gap-2">
-          <Link href="/notifications/settings" className="text-sm font-medium text-slate-600 hover:text-slate-900 underline">
-            {t('settings')}
-          </Link>
-          {unreadCount > 0 && (
-            <Button variant="outline" onClick={markAllAsRead} className="text-sm">
-              <CheckCheck className="w-4 h-4 me-2" /> {t('markAllRead')}
-            </Button>
-          )}
-        </div>
-      </div>
+      )}
 
       {/* Notifications List */}
-      {loadError && (
-        <div className="mb-4 p-4 bg-red-50 border border-red-100 rounded-xl text-red-800 text-sm flex items-center justify-between gap-4">
-          <span>{loadError}</span>
-          <Button variant="outline" size="sm" onClick={loadNotifications}>{t('retry')}</Button>
-        </div>
+      {Boolean(loadError) && !loading && (
+        <LoadError compact={!couldNotRead} error={loadError} onRetry={loadNotifications} title={t('loadNotificationsFailed')} className="mb-4" />
       )}
       {loading ? (
         <div className="flex items-center justify-center h-64">
@@ -212,7 +210,7 @@ export default function NotificationsPage() {
             <p className="text-gray-600">{t('loadingNotifications')}</p>
           </div>
         </div>
-      ) : filteredNotifications.length === 0 ? (
+      ) : couldNotRead ? null : filteredNotifications.length === 0 ? (
         <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-12 text-center">
           <div className="w-20 h-20 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-6 text-gray-500">
             <BellOff className="w-10 h-10" />

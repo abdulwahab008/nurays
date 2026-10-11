@@ -464,6 +464,8 @@ export default function CustomerDashboardPage() {
   };
 
   const currentCommunityName = selectedCommunity?.name || null;
+  // The dishes could not be read (and none from an earlier read are on the screen): the alert says so, and the rows must not add "no dishes".
+  const dishesUnreadable = Boolean(dishesError) && !dishesLoading && trendingDishes.length === 0;
 
   return (
     <DashboardLayout
@@ -478,7 +480,7 @@ export default function CustomerDashboardPage() {
     >
       <div className="space-y-6 pb-12">
 
-        {Boolean(dishesError) && !dishesLoading && trendingDishes.length === 0 && (
+        {dishesUnreadable && (
           <LoadError compact error={dishesError} onRetry={() => setReloadNonce((n) => n + 1)} title={t('dishesLoadFailed')} />
         )}
 
@@ -772,7 +774,7 @@ export default function CustomerDashboardPage() {
                 ref={top10RowRef}
                 className="flex gap-4 overflow-x-auto scrollbar-none pb-2 scroll-smooth"
               >
-                {displayDishes.length === 0 && (
+                {displayDishes.length === 0 && !dishesUnreadable && (
                   <p className="text-xs text-slate-500 font-medium py-6">
                     {dishesLoading ? t('loadingDishes') : t('noCuisineDishes', { cuisine: selectedCuisineLabel })}
                   </p>
@@ -885,7 +887,7 @@ export default function CustomerDashboardPage() {
                   ref={top10RowRef}
                   className="flex gap-2 sm:gap-4 overflow-x-auto scrollbar-none pb-4 pt-1 px-1 scroll-smooth"
                 >
-                  {top10Dishes.length === 0 && (
+                  {top10Dishes.length === 0 && !dishesUnreadable && (
                     <p className="text-xs text-slate-500 font-medium py-6">
                       {dishesLoading
                         ? t('loadingDishes')

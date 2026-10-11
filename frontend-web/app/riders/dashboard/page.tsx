@@ -448,6 +448,9 @@ export default function RiderDashboardPage() {
       .filter(Boolean)
       .join(' ') || t('notSet');
 
+  // Nothing about the rider could be read: the bar would say "Vehicle: Not set", "0 / 2 Active" and "ON DUTY" about someone it knows nothing about.
+  const couldNotRead = Boolean(loadError) && !loading && !blockedReason && !profile && mine.length === 0 && available.length === 0;
+
   return (
     <DashboardLayout
       title={t('title')}
@@ -458,64 +461,66 @@ export default function RiderDashboardPage() {
       <div className="max-w-7xl mx-auto space-y-6">
 
         {/* 1. COMPACT COMMAND & TELEMETRY BAR */}
-        <div className="bg-slate-900 text-white rounded-2xl p-5 shadow-lg border border-slate-800 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <div className="w-12 h-12 rounded-xl bg-gradient-to-tr from-emerald-500 to-cyan-500 flex items-center justify-center text-2xl flex-shrink-0 shadow-md">
-              🛵
-            </div>
-            <div>
-              <div className="flex items-center gap-2 flex-wrap">
-                <h2 className="font-black text-lg text-white">
-                  {profile?.name || user?.profile?.fullName || t('nameNotSet')}
-                </h2>
-                <span className="px-2 py-0.5 rounded text-[11px] font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
-                  ⭐ {riderRating ? t('fleetScore', { rating: riderRating }) : t('newRider')}
-                </span>
+        {!couldNotRead && (
+          <div className="bg-slate-900 text-white rounded-2xl p-5 shadow-lg border border-slate-800 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <div className="w-12 h-12 rounded-xl bg-gradient-to-tr from-emerald-500 to-cyan-500 flex items-center justify-center text-2xl flex-shrink-0 shadow-md">
+                🛵
               </div>
-              <p className="text-xs text-slate-500 mt-0.5">
-                {t('vehicleLabel')} <strong className="text-slate-200">{vehicleLabel}</strong> • {t('cityLabel')} <strong className="text-slate-200">{profile?.city || t('notSet')}</strong>
-              </p>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-3 flex-wrap w-full md:w-auto justify-between md:justify-end">
-            {/* Location sharing, only while on a job */}
-            <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-slate-800/80 border border-slate-700 text-xs" data-testid="location-sharing">
-              <span className={`w-2 h-2 rounded-full ${SHARING_BADGE[locationSharing].dot}`} />
-              <span className={`font-semibold ${SHARING_BADGE[locationSharing].tone}`}>{t(SHARING_BADGE[locationSharing].labelKey)}</span>
-            </div>
-
-            {/* Capacity Limit Indicator */}
-            <div
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold border transition-colors ${
-                activeDeliveries.length >= 2
-                  ? 'bg-amber-500/20 text-amber-300 border-amber-500/40'
-                  : 'bg-slate-800/80 text-slate-300 border-slate-700'
-              }`}
-            >
-              <span>🛵</span>
-              <span>{t('capacity', { count: activeDeliveries.length })}</span>
+              <div>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <h2 className="font-black text-lg text-white">
+                    {profile?.name || user?.profile?.fullName || t('nameNotSet')}
+                  </h2>
+                  <span className="px-2 py-0.5 rounded text-[11px] font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
+                    ⭐ {riderRating ? t('fleetScore', { rating: riderRating }) : t('newRider')}
+                  </span>
+                </div>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  {t('vehicleLabel')} <strong className="text-slate-200">{vehicleLabel}</strong> • {t('cityLabel')} <strong className="text-slate-200">{profile?.city || t('notSet')}</strong>
+                </p>
+              </div>
             </div>
 
-            {/* Duty Status Switch */}
-            <button
-              onClick={handleToggleDuty}
-              disabled={togglingDuty}
-              className={`px-3.5 py-1.5 rounded-xl font-bold text-xs tracking-wider transition-all duration-200 flex items-center gap-2 border shadow-sm ${
-                profile?.isAvailable !== false
-                  ? 'bg-emerald-500/20 border-emerald-500/40 text-emerald-300 hover:bg-emerald-500/30'
-                  : 'bg-slate-800 border-slate-600 text-slate-400 hover:bg-slate-700'
-              }`}
-            >
-              <span
-                className={`w-2 h-2 rounded-full ${
-                  profile?.isAvailable !== false ? 'bg-emerald-400' : 'bg-slate-500'
+            <div className="flex items-center gap-3 flex-wrap w-full md:w-auto justify-between md:justify-end">
+              {/* Location sharing, only while on a job */}
+              <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-slate-800/80 border border-slate-700 text-xs" data-testid="location-sharing">
+                <span className={`w-2 h-2 rounded-full ${SHARING_BADGE[locationSharing].dot}`} />
+                <span className={`font-semibold ${SHARING_BADGE[locationSharing].tone}`}>{t(SHARING_BADGE[locationSharing].labelKey)}</span>
+              </div>
+
+              {/* Capacity Limit Indicator */}
+              <div
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold border transition-colors ${
+                  activeDeliveries.length >= 2
+                    ? 'bg-amber-500/20 text-amber-300 border-amber-500/40'
+                    : 'bg-slate-800/80 text-slate-300 border-slate-700'
                 }`}
-              />
-              {profile?.isAvailable !== false ? t('onDuty') : t('offDuty')}
-            </button>
+              >
+                <span>🛵</span>
+                <span>{t('capacity', { count: activeDeliveries.length })}</span>
+              </div>
+
+              {/* Duty Status Switch */}
+              <button
+                onClick={handleToggleDuty}
+                disabled={togglingDuty}
+                className={`px-3.5 py-1.5 rounded-xl font-bold text-xs tracking-wider transition-all duration-200 flex items-center gap-2 border shadow-sm ${
+                  profile?.isAvailable !== false
+                    ? 'bg-emerald-500/20 border-emerald-500/40 text-emerald-300 hover:bg-emerald-500/30'
+                    : 'bg-slate-800 border-slate-600 text-slate-400 hover:bg-slate-700'
+                }`}
+              >
+                <span
+                  className={`w-2 h-2 rounded-full ${
+                    profile?.isAvailable !== false ? 'bg-emerald-400' : 'bg-slate-500'
+                  }`}
+                />
+                {profile?.isAvailable !== false ? t('onDuty') : t('offDuty')}
+              </button>
+            </div>
           </div>
-        </div>
+        )}
 
         {/* 2. UNIFIED 2-COLUMN MISSION CONTROL COCKPIT */}
         {Boolean(loadError) && !blockedReason && (profile || mine.length > 0 || available.length > 0) && (

@@ -808,6 +808,9 @@ export default function SellerPromotionsPage() {
     return null;
   }
 
+  // The promotions could not be read (and none from an earlier read are on the screen).
+  const couldNotRead = !loading && Boolean(loadError) && promotions.length === 0;
+
   return (
     <DashboardLayout
       title="Promotions"
@@ -829,7 +832,7 @@ export default function SellerPromotionsPage() {
                 icon: Icons.discounts,
                 href: '/sellers/promotions',
                 isActive: true,
-                count: promotions.length,
+                count: couldNotRead ? undefined : promotions.length,
               },
             ].map((tab) => (
               <Link
@@ -870,136 +873,141 @@ export default function SellerPromotionsPage() {
           </div>
         </div>
 
-        {/* ========================================================================= */}
-        {/* KPI Summary Cards with Clean Icons */}
-        {/* ========================================================================= */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
-          {/* Active Deals */}
-          <div className="bg-white rounded-3xl p-4 sm:p-5 border border-slate-200 shadow-sm relative overflow-hidden group hover:border-orange-200 transition-all">
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-[11px] font-black uppercase tracking-wider text-orange-600">
-                Active Campaigns
-              </span>
-              <div className="w-8 h-8 rounded-xl bg-orange-50 text-orange-600 flex items-center justify-center font-bold text-sm">
-                {Icons.fire}
+        {/* Counters and filters describe a list; with no list to describe (it could not be read) they would all say "0". */}
+        {!couldNotRead && (
+          <>
+            {/* ========================================================================= */}
+            {/* KPI Summary Cards with Clean Icons */}
+            {/* ========================================================================= */}
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+              {/* Active Deals */}
+              <div className="bg-white rounded-3xl p-4 sm:p-5 border border-slate-200 shadow-sm relative overflow-hidden group hover:border-orange-200 transition-all">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-[11px] font-black uppercase tracking-wider text-orange-600">
+                    Active Campaigns
+                  </span>
+                  <div className="w-8 h-8 rounded-xl bg-orange-50 text-orange-600 flex items-center justify-center font-bold text-sm">
+                    {Icons.fire}
+                  </div>
+                </div>
+                <div className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight">
+                  {activeDeals.length}
+                </div>
+                <div className="mt-2 text-xs font-medium text-orange-600 flex items-center gap-1">
+                  <span>Currently live on storefront</span>
+                </div>
+              </div>
+
+              {/* Scheduled */}
+              <div className="bg-white rounded-3xl p-4 sm:p-5 border border-slate-200 shadow-sm relative overflow-hidden group hover:border-sky-200 transition-all">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-[11px] font-black uppercase tracking-wider text-sky-600">
+                    Scheduled Deals
+                  </span>
+                  <div className="w-8 h-8 rounded-xl bg-sky-50 text-sky-600 flex items-center justify-center font-bold text-sm">
+                    {Icons.calendar}
+                  </div>
+                </div>
+                <div className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight">
+                  {scheduledDeals.length}
+                </div>
+                <div className="mt-2 text-xs font-medium text-sky-600">
+                  Starts automatically
+                </div>
+              </div>
+
+              {/* Total Usage */}
+              <div className="bg-white rounded-3xl p-4 sm:p-5 border border-slate-200 shadow-sm relative overflow-hidden group hover:border-purple-200 transition-all">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-[11px] font-black uppercase tracking-wider text-purple-600">
+                    Total Redemptions
+                  </span>
+                  <div className="w-8 h-8 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center font-bold text-sm">
+                    {Icons.chart}
+                  </div>
+                </div>
+                <div className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight">
+                  {totalRedemptions}
+                </div>
+                <div className="mt-2 text-xs font-medium text-purple-600">
+                  Orders placed with vouchers
+                </div>
+              </div>
+
+              {/* Expired */}
+              <div className="bg-white rounded-3xl p-4 sm:p-5 border border-slate-200 shadow-sm relative overflow-hidden group hover:border-slate-300 transition-all">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-[11px] font-black uppercase tracking-wider text-slate-500">
+                    Completed & Expired
+                  </span>
+                  <div className="w-8 h-8 rounded-xl bg-slate-100 text-slate-600 flex items-center justify-center font-bold text-sm">
+                    {Icons.clock}
+                  </div>
+                </div>
+                <div className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight">
+                  {expiredDeals.length}
+                </div>
+                <div className="mt-2 text-xs font-medium text-slate-500">
+                  Archived campaigns
+                </div>
               </div>
             </div>
-            <div className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight">
-              {activeDeals.length}
-            </div>
-            <div className="mt-2 text-xs font-medium text-orange-600 flex items-center gap-1">
-              <span>Currently live on storefront</span>
-            </div>
-          </div>
 
-          {/* Scheduled */}
-          <div className="bg-white rounded-3xl p-4 sm:p-5 border border-slate-200 shadow-sm relative overflow-hidden group hover:border-sky-200 transition-all">
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-[11px] font-black uppercase tracking-wider text-sky-600">
-                Scheduled Deals
-              </span>
-              <div className="w-8 h-8 rounded-xl bg-sky-50 text-sky-600 flex items-center justify-center font-bold text-sm">
-                {Icons.calendar}
-              </div>
-            </div>
-            <div className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight">
-              {scheduledDeals.length}
-            </div>
-            <div className="mt-2 text-xs font-medium text-sky-600">
-              Starts automatically
-            </div>
-          </div>
-
-          {/* Total Usage */}
-          <div className="bg-white rounded-3xl p-4 sm:p-5 border border-slate-200 shadow-sm relative overflow-hidden group hover:border-purple-200 transition-all">
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-[11px] font-black uppercase tracking-wider text-purple-600">
-                Total Redemptions
-              </span>
-              <div className="w-8 h-8 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center font-bold text-sm">
-                {Icons.chart}
-              </div>
-            </div>
-            <div className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight">
-              {totalRedemptions}
-            </div>
-            <div className="mt-2 text-xs font-medium text-purple-600">
-              Orders placed with vouchers
-            </div>
-          </div>
-
-          {/* Expired */}
-          <div className="bg-white rounded-3xl p-4 sm:p-5 border border-slate-200 shadow-sm relative overflow-hidden group hover:border-slate-300 transition-all">
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-[11px] font-black uppercase tracking-wider text-slate-500">
-                Completed & Expired
-              </span>
-              <div className="w-8 h-8 rounded-xl bg-slate-100 text-slate-600 flex items-center justify-center font-bold text-sm">
-                {Icons.clock}
-              </div>
-            </div>
-            <div className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight">
-              {expiredDeals.length}
-            </div>
-            <div className="mt-2 text-xs font-medium text-slate-500">
-              Archived campaigns
-            </div>
-          </div>
-        </div>
-
-        {/* ========================================================================= */}
-        {/* Controls & Tab Filter Bar */}
-        {/* ========================================================================= */}
-        <div className="bg-white rounded-3xl p-4 border border-slate-200 shadow-sm flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3">
-          {/* Search Box */}
-          <div className="relative flex-1">
-            <svg
-              className="w-4 h-4 text-slate-500 absolute start-3.5 top-1/2 -translate-y-1/2"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-              strokeWidth={2}
-            >
-              <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" />
-            </svg>
-            <input
-              type="text"
-              value={searchFilter}
-              onChange={(e) => setSearchFilter(e.target.value)}
-              placeholder="Search promotions by campaign title or promo code..."
-              className="w-full ps-10 pe-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:bg-white transition-all placeholder:text-slate-400"
-            />
-          </div>
-
-          {/* Status Tabs */}
-          <div className="flex items-center gap-1.5 overflow-x-auto pb-1 md:pb-0">
-            {[
-              { id: 'all', label: 'All Deals', count: promotions.length },
-              { id: 'active', label: 'Active', count: activeDeals.length },
-              { id: 'scheduled', label: 'Scheduled', count: scheduledDeals.length },
-              { id: 'expired', label: 'Expired', count: expiredDeals.length },
-            ].map((tab) => (
-              <button
-                key={tab.id}
-                onClick={() => setActiveTab(tab.id as typeof activeTab)}
-                className={`px-3.5 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all flex items-center gap-1.5 ${
-                  activeTab === tab.id
-                    ? 'bg-slate-900 text-white shadow-sm'
-                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200/70'
-                }`}
-              >
-                <span>{tab.label}</span>
-                <span
-                  className={`text-[11px] px-1.5 py-0.2 rounded-full font-bold ${
-                    activeTab === tab.id ? 'bg-white/20 text-white' : 'bg-white text-slate-700 shadow-xs'
-                  }`}
+            {/* ========================================================================= */}
+            {/* Controls & Tab Filter Bar */}
+            {/* ========================================================================= */}
+            <div className="bg-white rounded-3xl p-4 border border-slate-200 shadow-sm flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3">
+              {/* Search Box */}
+              <div className="relative flex-1">
+                <svg
+                  className="w-4 h-4 text-slate-500 absolute start-3.5 top-1/2 -translate-y-1/2"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                  strokeWidth={2}
                 >
-                  {tab.count}
-                </span>
-              </button>
-            ))}
-          </div>
-        </div>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" />
+                </svg>
+                <input
+                  type="text"
+                  value={searchFilter}
+                  onChange={(e) => setSearchFilter(e.target.value)}
+                  placeholder="Search promotions by campaign title or promo code..."
+                  className="w-full ps-10 pe-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:bg-white transition-all placeholder:text-slate-400"
+                />
+              </div>
+
+              {/* Status Tabs */}
+              <div className="flex items-center gap-1.5 overflow-x-auto pb-1 md:pb-0">
+                {[
+                  { id: 'all', label: 'All Deals', count: promotions.length },
+                  { id: 'active', label: 'Active', count: activeDeals.length },
+                  { id: 'scheduled', label: 'Scheduled', count: scheduledDeals.length },
+                  { id: 'expired', label: 'Expired', count: expiredDeals.length },
+                ].map((tab) => (
+                  <button
+                    key={tab.id}
+                    onClick={() => setActiveTab(tab.id as typeof activeTab)}
+                    className={`px-3.5 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all flex items-center gap-1.5 ${
+                      activeTab === tab.id
+                        ? 'bg-slate-900 text-white shadow-sm'
+                        : 'bg-slate-100 text-slate-600 hover:bg-slate-200/70'
+                    }`}
+                  >
+                    <span>{tab.label}</span>
+                    <span
+                      className={`text-[11px] px-1.5 py-0.2 rounded-full font-bold ${
+                        activeTab === tab.id ? 'bg-white/20 text-white' : 'bg-white text-slate-700 shadow-xs'
+                      }`}
+                    >
+                      {tab.count}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          </>
+        )}
 
         {/* ========================================================================= */}
         {/* Promotions List */}

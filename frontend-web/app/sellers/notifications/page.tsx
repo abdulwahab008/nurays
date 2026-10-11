@@ -7,6 +7,7 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { DashboardLayout, SELLER_SIDEBAR_ITEMS } from '@/components/layout/DashboardShell';
 import { Button } from '@/components/ui/button';
+import { LoadError } from '@/components/ui/LoadError';
 import { useToast } from '@/components/ui/toast';
 import { useAuthStore } from '@/lib/store/auth-store';
 import { apiClient, apiErrorMessage } from '@/lib/api-client';
@@ -73,7 +74,8 @@ export default function SellerNotificationsPage() {
   const [loading, setLoading] = useState(true);
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [filter, setFilter] = useState<'all' | 'unread'>('all');
-  const [loadError, setLoadError] = useState<string | null>(null);
+  // Why the notifications could not be read; shown instead of "No notifications", which would be untrue.
+  const [loadError, setLoadError] = useState<unknown>(null);
 
   useEffect(() => {
     if (!isAuthenticated) {
@@ -104,15 +106,10 @@ export default function SellerNotificationsPage() {
           }))
         );
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Failed to load notifications:', error);
-      setNotifications([]);
-      const isNetwork = error?.message === 'Network Error' || error?.code === 'ERR_NETWORK';
-      setLoadError(
-        isNetwork
-          ? t('networkError')
-          : error?.response?.data?.error?.message || t('loadNotificationsFailed')
-      );
+      // What is already on the screen stays (a refresh that fails must not wipe the list).
+      setLoadError(error);
     } finally {
       setLoading(false);
     }
@@ -160,6 +157,8 @@ export default function SellerNotificationsPage() {
     : notifications;
 
   const unreadCount = notifications.filter(n => !n.isRead).length;
+  // Nothing could be read and nothing older is on the screen: no counters and no "No notifications", which would say what the page does not know.
+  const couldNotRead = !loading && Boolean(loadError) && notifications.length === 0;
 
   if (!isAuthenticated) {
     return null;
@@ -168,75 +167,72 @@ export default function SellerNotificationsPage() {
   return (
     <DashboardLayout
       title={t('notifications')}
-      subtitle={t(unreadCount !== 1 ? 'youHaveUnreadMany' : 'youHaveUnreadOne', { count: unreadCount })}
+      subtitle={couldNotRead ? undefined : t(unreadCount !== 1 ? 'youHaveUnreadMany' : 'youHaveUnreadOne', { count: unreadCount })}
       sidebarItems={sidebarItems}
       userType="seller"
     >
       <div className="max-w-4xl mx-auto">
         {/* Actions Bar */}
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4 mb-6">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <button
-                onClick={() => setFilter('all')}
-                className={`px-4 py-2 rounded-xl font-medium text-sm transition-all duration-200 ${
-                  filter === 'all'
-                    ? 'bg-blue-500 text-white shadow-lg'
-                    : 'text-gray-600 hover:bg-gray-100'
-                }`}
-              >
-                {t('all')}
-              </button>
-              <button
-                onClick={() => setFilter('unread')}
-                className={`px-4 py-2 rounded-xl font-medium text-sm transition-all duration-200 flex items-center gap-2 ${
-                  filter === 'unread'
-                    ? 'bg-blue-500 text-white shadow-lg'
-                    : 'text-gray-600 hover:bg-gray-100'
-                }`}
-              >
-                {t('unread')}
-                {unreadCount > 0 && (
-                  <span className={`px-2 py-0.5 rounded-full text-xs ${
-                    filter === 'unread' ? 'bg-white text-blue-600' : 'bg-blue-100 text-blue-600'
-                  }`}>
-                    {unreadCount}
-                  </span>
-                )}
-              </button>
-            </div>
-            <div className="flex items-center gap-2">
-              <Link href="/notifications/settings" className="text-sm font-medium text-slate-600 hover:text-slate-900 underline">
-                {t('alertSettings')}
-              </Link>
-              {unreadCount > 0 && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={handleMarkAllAsRead}
-                  className="text-blue-600 border-blue-200 hover:bg-blue-50"
+        {!couldNotRead && (
+          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4 mb-6">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setFilter('all')}
+                  className={`px-4 py-2 rounded-xl font-medium text-sm transition-all duration-200 ${
+                    filter === 'all'
+                      ? 'bg-blue-500 text-white shadow-lg'
+                      : 'text-gray-600 hover:bg-gray-100'
+                  }`}
                 >
-                  {t('markAllRead')}
-                </Button>
-              )}
+                  {t('all')}
+                </button>
+                <button
+                  onClick={() => setFilter('unread')}
+                  className={`px-4 py-2 rounded-xl font-medium text-sm transition-all duration-200 flex items-center gap-2 ${
+                    filter === 'unread'
+                      ? 'bg-blue-500 text-white shadow-lg'
+                      : 'text-gray-600 hover:bg-gray-100'
+                  }`}
+                >
+                  {t('unread')}
+                  {unreadCount > 0 && (
+                    <span className={`px-2 py-0.5 rounded-full text-xs ${
+                      filter === 'unread' ? 'bg-white text-blue-600' : 'bg-blue-100 text-blue-600'
+                    }`}>
+                      {unreadCount}
+                    </span>
+                  )}
+                </button>
+              </div>
+              <div className="flex items-center gap-2">
+                <Link href="/notifications/settings" className="text-sm font-medium text-slate-600 hover:text-slate-900 underline">
+                  {t('alertSettings')}
+                </Link>
+                {unreadCount > 0 && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleMarkAllAsRead}
+                    className="text-blue-600 border-blue-200 hover:bg-blue-50"
+                  >
+                    {t('markAllRead')}
+                  </Button>
+                )}
+              </div>
             </div>
           </div>
-        </div>
+        )}
 
-        {loadError && (
-          <div className="mb-6 bg-amber-50 border border-amber-200 rounded-2xl p-5 flex items-center justify-between gap-4 flex-wrap">
-            <p className="text-amber-800 text-sm">{loadError}</p>
-            <Button variant="outline" size="sm" onClick={() => loadNotifications()} className="border-amber-300 text-amber-800 hover:bg-amber-100">
-              {t('retry')}
-            </Button>
-          </div>
+        {Boolean(loadError) && !loading && (
+          <LoadError compact={!couldNotRead} error={loadError} onRetry={() => loadNotifications()} title={t('loadNotificationsFailed')} className="mb-6" />
         )}
         {loading ? (
           <div className="text-center py-16">
             <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mx-auto mb-4"></div>
             <p className="text-gray-500">{t('loadingNotifications')}</p>
           </div>
-        ) : filteredNotifications.length === 0 ? (
+        ) : couldNotRead ? null : filteredNotifications.length === 0 ? (
           <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-16 text-center">
             <div className="w-24 h-24 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-6">
               {Icons.bell}

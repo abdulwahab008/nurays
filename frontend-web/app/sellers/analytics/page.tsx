@@ -268,7 +268,8 @@ export default function SellerAnalyticsPage() {
             <h3 className="text-base font-bold text-slate-900">Aggregating Kitchen Telemetry...</h3>
             <p className="text-xs text-slate-500 mt-1">Calculating sales velocity, gross margins, and order fulfillment</p>
           </div>
-        ) : (
+        ) : !analytics ? null : (
+          // Nothing could be read (the alert above says so): no figures, which would read "Rs 0" and "100% Excellent".
           <>
             {/* 4 Core KPI Cards */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">

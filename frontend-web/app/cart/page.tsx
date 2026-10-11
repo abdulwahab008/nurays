@@ -422,7 +422,8 @@ export default function CartPage() {
 
   if (loadError && !hasItems) {
     return (
-      <DashboardLayout title={t('cartTitle')} subtitle={t('emptySubtitle')} sidebarItems={sidebarItems} userType="customer">
+      // No subtitle: "Your dining cart is currently empty" would say what the page could not find out.
+      <DashboardLayout title={t('cartTitle')} sidebarItems={sidebarItems} userType="customer">
         <div className="max-w-xl mx-auto my-12">
           <LoadError error={loadError} onRetry={loadCart} title={t('loadFailed')} />
         </div>

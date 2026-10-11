@@ -7,6 +7,7 @@ import Link from 'next/link';
 import { Bike, Store, ArrowRight, MapPin, Plus, X } from 'lucide-react';
 import { DashboardLayout, SELLER_SIDEBAR_ITEMS } from '@/components/layout/DashboardShell';
 import { Button } from '@/components/ui/button';
+import { LoadError } from '@/components/ui/LoadError';
 import { useDialogs } from '@/components/ui/Dialogs';
 import { useToast } from '@/components/ui/toast';
 import { useAuthStore } from '@/lib/store/auth-store';
@@ -51,7 +52,10 @@ export default function SellerSettingsPage() {
   const { showToast } = useToast();
   const { ask: askDialog } = useDialogs();
   const [loading, setLoading] = useState(false);
-  const [loadError, setLoadError] = useState<string | null>(null);
+  // Why the kitchen's settings could not be read. Until they were read there is no form: it would hold blanks and made-up defaults,
+  // and saving them would replace the kitchen's real profile, payout accounts, delivery terms and hours.
+  const [loadError, setLoadError] = useState<unknown>(null);
+  const [settingsRead, setSettingsRead] = useState(false);
   // What is wrong with a payout account number typed in the form, by field: customers pay into these, so a wrong digit pays a stranger.
   const [payoutErrors, setPayoutErrors] = useState<Record<string, string>>({});
   // The numbers the server holds (as loaded, or as last saved). One the kitchen has not touched is not checked again: it may have been
@@ -194,10 +198,13 @@ export default function SellerSettingsPage() {
           advanceBookingMinDays: seller.advanceBookingMinDays ?? null,
           advanceBookingMaxDays: seller.advanceBookingMaxDays ?? null,
         });
+        setSettingsRead(true);
+      } else {
+        throw new Error('The settings were not in the answer');
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Failed to load settings:', error);
-      setLoadError('Failed to load settings.');
+      setLoadError(error);
     } finally {
       setLoading(false);
     }
@@ -244,6 +251,7 @@ export default function SellerSettingsPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!settingsRead) return;
 
     const problems: Record<string, string> = {};
     const changed = (field: keyof typeof heldNumbers) => formData[field].trim() !== heldNumbers[field];
@@ -422,6 +430,28 @@ export default function SellerSettingsPage() {
     }
   };
 
+  // No form until the kitchen's own settings were read: the boxes would hold blanks, and saving them would replace the real ones.
+  if (!settingsRead) {
+    return (
+      <DashboardLayout
+        title="Settings"
+        subtitle="Manage kitchen profile, delivery, and schedule"
+        sidebarItems={SELLER_SIDEBAR_ITEMS}
+        userType="seller"
+      >
+        <div className="max-w-3xl mx-auto space-y-6 pb-16">
+          {loadError ? (
+            <LoadError error={loadError} onRetry={loadSettings} title="We couldn't load your kitchen settings" />
+          ) : (
+            <div className="rounded-2xl border border-slate-200 bg-white p-10 text-center text-sm font-medium text-slate-600" role="status">
+              Loading your settings…
+            </div>
+          )}
+        </div>
+      </DashboardLayout>
+    );
+  }
+
   return (
     <DashboardLayout
       title="Settings"
@@ -430,15 +460,6 @@ export default function SellerSettingsPage() {
       userType="seller"
     >
       <div className="max-w-3xl mx-auto space-y-6 pb-16">
-        {loadError && (
-          <div className="p-3.5 bg-red-50 border border-red-200 rounded-xl text-red-700 text-xs flex items-center justify-between">
-            <span>{loadError}</span>
-            <button onClick={loadSettings} className="font-semibold underline">
-              Retry
-            </button>
-          </div>
-        )}
-
         <form onSubmit={handleSubmit} className="space-y-6">
           {/* Kitchen Profile */}
           <div className="bg-white rounded-2xl p-5 sm:p-6 border border-slate-200/90 shadow-xs space-y-4">
