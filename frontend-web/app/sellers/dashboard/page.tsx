@@ -8,6 +8,7 @@ import Link from 'next/link';
 import { DashboardLayout, SELLER_SIDEBAR_ITEMS } from '@/components/layout/DashboardShell';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/toast';
+import { LoadError } from '@/components/ui/LoadError';
 import { useDialogs } from '@/components/ui/Dialogs';
 import { useAuthStore } from '@/lib/store/auth-store';
 import { apiClient } from '@/lib/api-client';
@@ -147,6 +148,9 @@ function SellerDashboardContent() {
   const t = useT(kitchenOrderMessages);
   const tc = useT(commonMessages);
   const [loading, setLoading] = useState(true);
+  // Why the dashboard could not be read when it was not a 404. A kitchen whose dashboard could not be read is not a kitchen
+  // that has to register, which is what the page said.
+  const [loadError, setLoadError] = useState<unknown>(null);
   const [dashboard, setDashboard] = useState<SellerDashboard | null>(null);
   const [showOnboarding, setShowOnboarding] = useState(false);
   const [needsOnboarding, setNeedsOnboarding] = useState(false);
@@ -186,6 +190,7 @@ function SellerDashboardContent() {
         setDashboard(response.data.data);
         setNeedsOnboarding(false);
       }
+      setLoadError(null);
     } catch (error: any) {
       console.error('Failed to load seller dashboard:', error);
       
@@ -193,11 +198,11 @@ function SellerDashboardContent() {
       if (error.response?.status === 404) {
         setNeedsOnboarding(true);
         setShowOnboarding(true);
-        return; // Don't show error toast for this case
+        setLoadError(null);
+        return;
       }
       
-      const errorMessage = error.response?.data?.error?.message || error.response?.data?.message || t('dash.loadFailed');
-      showToast(errorMessage, 'error');
+      setLoadError(error);
     } finally {
       setLoading(false);
     }
@@ -271,6 +276,14 @@ function SellerDashboardContent() {
         <div className="flex items-center justify-center h-64">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-gray-600"></div>
         </div>
+      </DashboardLayout>
+    );
+  }
+
+  if (!dashboard && loadError) {
+    return (
+      <DashboardLayout title={t('dash.title')} subtitle={t('dash.loadingSubtitle')} sidebarItems={sidebarItems} userType="seller">
+        <LoadError error={loadError} onRetry={loadDashboard} title={t('dash.loadFailed')} />
       </DashboardLayout>
     );
   }

@@ -5,6 +5,7 @@ import { loginUrlHere } from '@/lib/auth-redirect';
 import { useRouter } from 'next/navigation';
 import { DashboardLayout, RIDER_SIDEBAR_ITEMS } from '@/components/layout/DashboardShell';
 import { Button } from '@/components/ui/button';
+import { LoadError } from '@/components/ui/LoadError';
 import { useToast } from '@/components/ui/toast';
 import { useDialogs } from '@/components/ui/Dialogs';
 import { useAuthStore } from '@/lib/store/auth-store';
@@ -92,6 +93,9 @@ export default function RiderDashboardPage() {
 
   // title is a message key; message is the server's words (or null for our default text).
   const [blockedReason, setBlockedReason] = useState<{ title: RiderMessageKey; message: string | null; code: string } | null>(null);
+  // Why the jobs could not be read. A rider whose jobs could not be read must not be told "no active runs" (the food they
+  // are carrying is one) or "no jobs in the pool".
+  const [loadError, setLoadError] = useState<unknown>(null);
 
   const loadAll = useCallback(async (silent = false) => {
     try {
@@ -118,6 +122,7 @@ export default function RiderDashboardPage() {
       if (activeRuns.length > 0 && activeTab === 'available' && availableList.length === 0) {
         setActiveTab('active');
       }
+      setLoadError(null);
     } catch (error: any) {
       const code = error.response?.data?.error?.code;
       if (code && (code === 'RIDER_NOT_APPROVED' || code === 'RIDER_REJECTED' || code === 'RIDER_SUSPENDED')) {
@@ -126,13 +131,13 @@ export default function RiderDashboardPage() {
           message: error.response?.data?.error?.message || null,
           code,
         });
-      } else if (!silent) {
-        showToast(error.response?.data?.error?.message || t('loadFailed'), 'error');
+      } else {
+        setLoadError(error);
       }
     } finally {
       if (!silent) setLoading(false);
     }
-  }, [showToast, activeTab, t]);
+  }, [activeTab]);
 
   // The open pool alone: a job was posted or taken, so nothing but the list of available jobs can have changed.
   const loadAvailable = useCallback(async () => {
@@ -513,6 +518,9 @@ export default function RiderDashboardPage() {
         </div>
 
         {/* 2. UNIFIED 2-COLUMN MISSION CONTROL COCKPIT */}
+        {Boolean(loadError) && !blockedReason && (profile || mine.length > 0 || available.length > 0) && (
+          <LoadError compact error={loadError} onRetry={() => void loadAll()} title={t('loadFailed')} className="mb-4" />
+        )}
         {loading && !profile && mine.length === 0 ? (
           <div className="bg-white rounded-2xl p-16 text-center shadow-sm border border-slate-200">
             <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-emerald-600 mx-auto mb-4" />
@@ -528,6 +536,8 @@ export default function RiderDashboardPage() {
             <h2 className="text-xl font-bold text-slate-900 mb-2">{t(blockedReason.title)}</h2>
             <p className="text-slate-600 max-w-md mx-auto">{blockedReason.message ?? t('blockedContactSupport')}</p>
           </div>
+        ) : loadError && !profile && mine.length === 0 && available.length === 0 ? (
+          <LoadError error={loadError} onRetry={() => void loadAll()} title={t('loadFailed')} />
         ) : (
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
 

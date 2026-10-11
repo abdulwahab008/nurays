@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/toast';
+import { LoadError } from '@/components/ui/LoadError';
 import { useAuthStore } from '@/lib/store/auth-store';
 import { apiClient } from '@/lib/api-client';
 import LocationMap from '@/components/ui/LocationMap';
@@ -53,6 +54,9 @@ export default function SellerRegisterPage() {
   const [loading, setLoading] = useState(false);
   const [sellerInfo, setSellerInfo] = useState<any>(null);
   const [loadingSellerInfo, setLoadingSellerInfo] = useState(true);
+  // Why the kitchen's saved details could not be read when it was not a 404 (that one means "not registered yet"). Sending the
+  // form with the details missing would write the blanks over a kitchen that already has them.
+  const [loadError, setLoadError] = useState<unknown>(null);
   const [isEditing, setIsEditing] = useState(false);
   const [detectingGps, setDetectingGps] = useState(false);
 
@@ -108,6 +112,7 @@ export default function SellerRegisterPage() {
   const loadSellerInfo = async () => {
     try {
       setLoadingSellerInfo(true);
+      setLoadError(null);
       const response = await apiClient.get('/sellers/me/dashboard');
       if (response.data.success && response.data.data) {
         const seller = response.data.data;
@@ -126,8 +131,10 @@ export default function SellerRegisterPage() {
           kitchenVideoUrl: seller.kitchenVideoUrl || '',
         }));
       }
-    } catch {
-      // User is not yet a registered seller, standard registration form applies
+    } catch (error) {
+      // A 404 means the user is not a registered seller yet, and the registration form is the right page. Anything else is a read
+      // that failed.
+      if ((error as { response?: { status?: number } })?.response?.status !== 404) setLoadError(error);
     } finally {
       setLoadingSellerInfo(false);
     }
@@ -242,6 +249,19 @@ export default function SellerRegisterPage() {
     }
   };
 
+
+  if (loadError && !sellerInfo) {
+    return (
+      <div className="min-h-screen bg-slate-50 py-10 px-4 sm:px-6 lg:px-8">
+        <div className="max-w-xl mx-auto space-y-6">
+          <Link href="/dashboard" className="text-sm font-semibold text-orange-600 hover:text-orange-700 flex items-center gap-1">
+            {t('reg.back')}
+          </Link>
+          <LoadError error={loadError} onRetry={loadSellerInfo} />
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-slate-50 py-10 px-4 sm:px-6 lg:px-8">

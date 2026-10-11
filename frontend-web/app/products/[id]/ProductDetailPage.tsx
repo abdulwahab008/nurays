@@ -15,6 +15,7 @@ import { useCartStore } from '@/lib/store/cart-store';
 import { useAuthStore } from '@/lib/store/auth-store';
 import { DashboardLayout, CUSTOMER_SIDEBAR_ITEMS } from '@/components/layout/DashboardShell';
 import { apiClient } from '@/lib/api-client';
+import { LoadError } from '@/components/ui/LoadError';
 import ProductReviews from '@/components/products/ProductReviews';
 import { favoriteService } from '@/lib/services/favorite.service';
 import CartConflictModal, { CartConflictInfo } from '@/components/cart/CartConflictModal';
@@ -113,6 +114,8 @@ export default function ProductDetailPage() {
   const [product, setProduct] = useState<ProductDetail | null>(null);
   const [catalogPromotions, setCatalogPromotions] = useState<CatalogPromotion[]>([]);
   const [loading, setLoading] = useState(true);
+  // Why the dish could not be read when it was not a 404: a dish that could not be read is not a dish that does not exist.
+  const [loadError, setLoadError] = useState<unknown>(null);
   const [quantity, setQuantity] = useState(1);
   const [stockType, setStockType] = useState<'direct' | 'hub'>('hub');
   const [selectedHub, setSelectedHub] = useState<string>('');
@@ -175,6 +178,7 @@ export default function ProductDetailPage() {
       if (!data) return;
       appliedSeqRef.current = seq;
       loadedProductRef.current = requestedId;
+      setLoadError(null);
       // Ensure stock shape (API may return stockQuantity only or stock: { hub, direct })
       const stockHub = data.stock?.hub ?? data.stockQuantity ?? 0;
       const stockDirect = data.stock?.direct ?? data.stockQuantity ?? 0;
@@ -249,6 +253,8 @@ export default function ProductDetailPage() {
       }
     } catch (error) {
       console.error('Failed to load product:', error);
+      // A dish already on screen stays; with none, only a 404 says it does not exist, anything else is a read that failed.
+      if (!isRefresh) setLoadError((error as { response?: { status?: number } })?.response?.status === 404 ? null : error);
     } finally {
       if (seq === loadSeqRef.current || loadedProductRef.current === requestedId) setLoading(false);
     }
@@ -457,6 +463,19 @@ export default function ProductDetailPage() {
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-gray-600 mx-auto mb-4"></div>
           <p className="text-gray-600">{t('loadingProduct')}</p>
         </div>
+      </div>
+    );
+  }
+
+  if (!product && loadError) {
+    const failed = <LoadError error={loadError} onRetry={() => void loadProduct()} />;
+    return isAuthenticated ? (
+      <DashboardLayout title={tc('loadFailedTitle')} subtitle="" sidebarItems={sidebarItems} userType="customer">
+        {failed}
+      </DashboardLayout>
+    ) : (
+      <div className="min-h-screen flex items-center justify-center p-6" style={{ background: 'var(--cream-50)' }}>
+        <div className="w-full max-w-lg">{failed}</div>
       </div>
     );
   }

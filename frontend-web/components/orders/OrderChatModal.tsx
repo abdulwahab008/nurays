@@ -6,6 +6,7 @@ import { apiClient } from '@/lib/api-client';
 import { orderService, OrderMessage } from '@/lib/services/order.service';
 import { useToast } from '@/components/ui/toast';
 import { useLiveRefresh } from '@/lib/hooks/use-live-refresh';
+import { LoadError } from '@/components/ui/LoadError';
 import { useT } from '@/lib/i18n';
 import { ordersMessages } from '@/lib/i18n/messages/orders';
 
@@ -191,6 +192,8 @@ export default function OrderChatModal({
 }: OrderChatModalProps) {
   const [messages, setMessages] = useState<OrderMessage[]>([]);
   const [loading, setLoading] = useState(true);
+  // Why the messages could not be read; shown instead of "no messages yet", which would be untrue.
+  const [loadError, setLoadError] = useState<unknown>(null);
   const [newMessage, setNewMessage] = useState('');
   const [sending, setSending] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -238,8 +241,10 @@ export default function OrderChatModal({
         if (res.data) {
           setMessages(res.data);
         }
+        setLoadError(null);
       } catch (err) {
         console.error('Failed to load order messages:', err);
+        setLoadError(err);
       } finally {
         if (!silent) setLoading(false);
       }
@@ -476,6 +481,10 @@ export default function OrderChatModal({
                 } border-t-transparent rounded-full animate-spin`}
               />
               <span className="text-xs font-bold">{t('chat.loading')}</span>
+            </div>
+          ) : loadError && messages.length === 0 ? (
+            <div className="h-full flex items-center justify-center p-4">
+              <LoadError compact error={loadError} onRetry={() => void loadMessages()} title={t('chat.loadFailed')} />
             </div>
           ) : messages.length === 0 ? (
             <div className="h-full flex flex-col items-center justify-center text-center p-6 text-slate-400">

@@ -9,6 +9,7 @@ import { formatPrice, formatDateTime, formatDate } from '@/lib/utils';
 import { cancellationNotice } from '@/lib/order-cancellation';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/toast';
+import { LoadError } from '@/components/ui/LoadError';
 import { useAuthStore } from '@/lib/store/auth-store';
 import { useSocket, type DeliveryTrackingEvent } from '@/lib/hooks/use-socket';
 import { useLiveRefresh } from '@/lib/hooks/use-live-refresh';
@@ -269,6 +270,8 @@ function OrderDetailContent() {
   const { joinOrderRoom, onOrderStatusUpdate, onDeliveryTracking } = useSocket();
   const [order, setOrder] = useState<OrderDetail | null>(null);
   const [loading, setLoading] = useState(true);
+  // Why the order could not be read when it was not a 404: an order that could not be read is not an order that does not exist.
+  const [loadError, setLoadError] = useState<unknown>(null);
   const [trackingData, setTrackingData] = useState<DeliveryTrackingEvent | null>(null);
   const [showPlacedBanner, setShowPlacedBanner] = useState(false);
   const [showCancelModal, setShowCancelModal] = useState(false);
@@ -355,8 +358,11 @@ function OrderDetailContent() {
       const response = await orderService.getOrderDetails(params.id as string);
       if (seq !== loadSeqRef.current) return; // a newer load superseded this one
       setOrder(mapOrderToDetail(response.data));
+      setLoadError(null);
     } catch (error) {
       console.error('Failed to load order:', error);
+      // An order already on the screen stays (a refresh that fails changes nothing); with none, only a 404 says it does not exist.
+      if (seq === loadSeqRef.current) setLoadError((error as { response?: { status?: number } })?.response?.status === 404 ? null : error);
     } finally {
       if (seq === loadSeqRef.current) inFlightRef.current = false;
       if (!silent) setLoading(false);
@@ -441,6 +447,16 @@ function OrderDetailContent() {
       >
         <div className="flex items-center justify-center py-16">
           <p className="text-gray-600">{t('detail.loadingOrder')}</p>
+        </div>
+      </DashboardLayout>
+    );
+  }
+
+  if (!order && loadError) {
+    return (
+      <DashboardLayout title={tc('loadFailedTitle')} subtitle="" sidebarItems={customerSidebarItems} userType="customer">
+        <div className="max-w-xl mx-auto py-10 px-4">
+          <LoadError error={loadError} onRetry={() => void loadOrder()} />
         </div>
       </DashboardLayout>
     );

@@ -6,6 +6,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useAuthStore } from '@/lib/store/auth-store';
 import { useCartStore } from '@/lib/store/cart-store';
 import { apiClient, apiErrorMessage } from '@/lib/api-client';
+import { LoadError } from '@/components/ui/LoadError';
 import { useToast } from '@/components/ui/toast';
 import { useSocket } from '@/lib/hooks/use-socket';
 import { Mark, Wordmark } from '@/components/ui/Mark';
@@ -59,6 +60,8 @@ export function DashboardNavbar({ title, subtitle, userType = 'customer', onMenu
   const [notificationUnreadCount, setNotificationUnreadCount] = useState<number>(0);
   const [showNotificationsPanel, setShowNotificationsPanel] = useState<boolean>(false);
   const [recentNotifications, setRecentNotifications] = useState<NavbarNotification[]>([]);
+  // Why the recent notifications could not be read; shown instead of "All caught up", which would be untrue.
+  const [notificationsError, setNotificationsError] = useState<unknown>(null);
   const [loadingNotifications, setLoadingNotifications] = useState<boolean>(false);
   const notificationRef = useRef<HTMLDivElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -169,8 +172,10 @@ export function DashboardNavbar({ title, subtitle, userType = 'customer', onMenu
         );
         setNotificationUnreadCount(res.data.data.unreadCount ?? 0);
       }
+      setNotificationsError(null);
     } catch (error) {
       console.error('Failed to fetch recent notifications:', error);
+      setNotificationsError(error);
     } finally {
       setLoadingNotifications(false);
     }
@@ -466,6 +471,10 @@ export function DashboardNavbar({ title, subtitle, userType = 'customer', onMenu
                     <div className="py-8 flex flex-col items-center justify-center gap-2 text-gray-400">
                       <div className="w-5 h-5 border-2 border-amber-500 border-t-transparent rounded-full animate-spin" />
                       <span className="text-xs">{t('loadingUpdates')}</span>
+                    </div>
+                  ) : notificationsError && recentNotifications.length === 0 ? (
+                    <div className="p-3">
+                      <LoadError compact error={notificationsError} onRetry={fetchRecentNotifications} />
                     </div>
                   ) : recentNotifications.length === 0 ? (
                     <div className="py-10 px-4 text-center">

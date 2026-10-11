@@ -6,6 +6,7 @@ import { orderService, SellerPaymentDetails, SellerPaymentAccount } from '@/lib/
 import { apiClient } from '@/lib/api-client';
 import { formatPrice } from '@/lib/utils';
 import { useToast } from '@/components/ui/toast';
+import { LoadError } from '@/components/ui/LoadError';
 import { useT } from '@/lib/i18n';
 import { commonMessages } from '@/lib/i18n/messages/common';
 import { paymentsMessages } from '@/lib/i18n/messages/payments';
@@ -38,6 +39,9 @@ export default function ManualPaymentCard({
   const tc = useT(commonMessages);
   const [details, setDetails] = useState<SellerPaymentDetails | null>(null);
   const [loading, setLoading] = useState(true);
+  // Why the kitchen's account details could not be read: without them the customer would be told only "please transfer Rs X",
+  // with nobody to send it to.
+  const [loadError, setLoadError] = useState<unknown>(null);
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
 
   // Modal & Form State
@@ -71,6 +75,7 @@ export default function ManualPaymentCard({
 
   const loadDetails = async () => {
     setLoading(true);
+    setLoadError(null);
     try {
       const res = await orderService.getSellerPaymentDetails(orderId);
       if (res.data) {
@@ -82,6 +87,7 @@ export default function ManualPaymentCard({
       }
     } catch (err) {
       console.error('Failed to load seller payment details:', err);
+      setLoadError(err);
     } finally {
       setLoading(false);
     }
@@ -331,6 +337,8 @@ export default function ManualPaymentCard({
           <div className="w-6 h-6 border-2 border-[#FF5500] border-t-transparent rounded-full animate-spin mx-auto mb-2" />
           <span className="text-xs font-bold">{t('fetchingAccounts')}</span>
         </div>
+      ) : loadError && !details ? (
+        <LoadError compact error={loadError} onRetry={loadDetails} title={t('accountsLoadFailed')} />
       ) : details?.accounts && details.accounts.length > 0 ? (
         <div className="space-y-3">
           {details.accounts.map((acc: SellerPaymentAccount, idx: number) => {

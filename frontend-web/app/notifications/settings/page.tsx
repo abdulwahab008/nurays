@@ -15,6 +15,7 @@ import {
 } from '@/components/layout/DashboardShell';
 import { useAuthStore } from '@/lib/store/auth-store';
 import { useToast } from '@/components/ui/toast';
+import { LoadError } from '@/components/ui/LoadError';
 import { apiClient, apiErrorMessage } from '@/lib/api-client';
 import { disablePush, enablePush, getPushState, PushState } from '@/lib/push';
 import { useT } from '@/lib/i18n';
@@ -71,6 +72,8 @@ export default function NotificationSettingsPage() {
   const { showToast } = useToast();
   const t = useT(accountMessages);
   const [settings, setSettings] = useState<Settings | null>(null);
+  // Why the preferences could not be read; shown instead of a loading placeholder that never ends.
+  const [loadError, setLoadError] = useState<unknown>(null);
   const [pushState, setPushState] = useState<PushState | null>(null);
   const [busy, setBusy] = useState(false);
   const role = (user?.userType ?? user?.user_type ?? 'customer') as string;
@@ -79,11 +82,12 @@ export default function NotificationSettingsPage() {
     try {
       const res = await apiClient.get('/notifications/preferences');
       setSettings(res.data.data);
+      setLoadError(null);
     } catch (error) {
-      showToast(apiErrorMessage(error, t('loadSettingsFailed')), 'error');
+      setLoadError(error);
     }
     setPushState(await getPushState().catch(() => 'unsupported' as PushState));
-  }, [showToast, t]);
+  }, []);
 
   useEffect(() => {
     if (!isAuthenticated && !apiClient.getAccessToken()) {
@@ -163,7 +167,7 @@ export default function NotificationSettingsPage() {
         </div>
 
         {!settings ? (
-          <div className="h-48 rounded-3xl bg-slate-100 animate-pulse" />
+          loadError ? <LoadError error={loadError} onRetry={load} title={t('loadSettingsFailed')} /> : <div className="h-48 rounded-3xl bg-slate-100 animate-pulse" />
         ) : (
           <div className="rounded-3xl border border-slate-200 bg-white overflow-hidden" data-testid="notification-preferences">
             <div className="px-5 sm:px-6 pt-5">

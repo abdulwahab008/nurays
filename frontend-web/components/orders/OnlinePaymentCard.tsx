@@ -1,9 +1,10 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { CreditCard } from 'lucide-react';
 import { paymentService, OrderPaymentStatus } from '@/lib/services/payment.service';
 import { useToast } from '@/components/ui/toast';
+import { LoadError } from '@/components/ui/LoadError';
 import { formatPrice } from '@/lib/utils';
 import { useT } from '@/lib/i18n';
 import { paymentsMessages } from '@/lib/i18n/messages/payments';
@@ -24,17 +25,31 @@ export default function OnlinePaymentCard({ orderId, totalAmount }: Props) {
   // Whether a payment page was opened in the last half hour, decided when the status arrives (the time is not read while rendering).
   const [recentAttempt, setRecentAttempt] = useState(false);
   const [opening, setOpening] = useState(false);
+  // Why the payment status could not be read. Without it the card used to disappear, and a customer with an unpaid order saw
+  // no way to pay and no word about why.
+  const [statusError, setStatusError] = useState<unknown>(null);
 
-  useEffect(() => {
+  const loadStatus = useCallback(() => {
     paymentService
       .getOrderPaymentStatus(orderId)
       .then((next) => {
         setStatus(next);
+        setStatusError(null);
         setRecentAttempt(next.lastAttempt?.status === 'pending' && Date.now() - new Date(next.lastAttempt.createdAt).getTime() < 30 * 60 * 1000);
       })
-      .catch(() => setStatus(null));
+      .catch((err) => {
+        setStatus(null);
+        setStatusError(err);
+      });
   }, [orderId]);
 
+  useEffect(() => {
+    loadStatus();
+  }, [loadStatus]);
+
+  if (!status && statusError) {
+    return <LoadError compact error={statusError} onRetry={loadStatus} title={t('paymentStatusFailed')} />;
+  }
   if (!status || status.paymentStatus === 'paid') return null;
 
   const pay = async () => {
