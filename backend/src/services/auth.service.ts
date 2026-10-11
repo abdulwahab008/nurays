@@ -15,6 +15,7 @@ import { generateVerificationToken } from '../utils/email-verification';
 import { assertVerifyMailAllowed } from '../utils/mailBudget';
 import { assertPasswordStrength, MIN_PASSWORD_LENGTH, MIN_STAFF_PASSWORD_LENGTH } from '../utils/password-policy';
 import { assertCurrentPassword } from './reauth.service';
+import { budgetAdd, budgetReset } from '../utils/attemptBudget';
 import { notifyPasswordChanged } from './account-notice.service';
 import { logger } from '../utils/logger';
 
@@ -29,6 +30,7 @@ const DUMMY_PASSWORD_HASH = bcrypt.hashSync(randomBytes(16).toString('hex'), 10)
 /** An admin account is locked for a while after this many wrong passwords. */
 const ADMIN_MAX_FAILED_LOGINS = 5;
 const ADMIN_LOCK_MINUTES = 15;
+const adminLoginBudgetKey = (userId: string) => `admin-login:${userId}`;
 
 export class AuthService {
   /**
@@ -169,6 +171,8 @@ export class AuthService {
         data: {
           userId: user.id,
           businessName: sellerBusinessName,
+          // "Cook & Sell" is a home kitchen; the column's own default ("restaurant") is for the full onboarding form to change.
+          businessType: 'home_kitchen',
           commissionRate,
           // status tracks active/inactive/suspended account standing and
           // defaults to 'active' — approval state lives in verificationStatus
@@ -375,7 +379,11 @@ export class AuthService {
         const failures = await prisma.auditLog.count({
           where: { action: 'auth:LOGIN_FAILED', entityId: user.id, createdAt: { gte: lastOk?.createdAt ?? since } },
         });
-        if (failures >= ADMIN_MAX_FAILED_LOGINS) {
+        // The audit rows are only written after a password has been checked, so a burst of simultaneous guesses would
+        // all read the same count and every one of them would be checked. This attempt is counted before its password
+        // is looked at: at most ADMIN_MAX_FAILED_LOGINS passwords are compared in a window, however fast they arrive.
+        const attempts = failures >= ADMIN_MAX_FAILED_LOGINS ? Infinity : await budgetAdd(adminLoginBudgetKey(user.id), ADMIN_LOCK_MINUTES * 60 * 1000);
+        if (attempts > ADMIN_MAX_FAILED_LOGINS) {
           void recordAudit({ action: 'auth:LOGIN_LOCKED', entityType: 'user', entityId: user.id, responseStatus: 429 });
           throw new AppError(`Too many wrong passwords. This account is locked for ${ADMIN_LOCK_MINUTES} minutes.`, 429, 'ACCOUNT_LOCKED');
         }
@@ -387,6 +395,9 @@ export class AuthService {
         if (isAdmin) await recordAudit({ action: 'auth:LOGIN_FAILED', entityType: 'user', entityId: user.id, responseStatus: 401 });
         throw new AppError('Invalid email or password', 401, 'INVALID_CREDENTIALS');
       }
+
+      // A right password clears the count of wrong ones.
+      if (isAdmin) await budgetReset(adminLoginBudgetKey(user.id));
 
       if (user.status !== 'active') {
         throw new AppError(`Account is ${user.status}`, 403, 'ACCOUNT_SUSPENDED');
