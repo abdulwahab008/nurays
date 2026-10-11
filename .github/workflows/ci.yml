@@ -93,6 +93,15 @@ jobs:
           NEXT_PUBLIC_SAFEPAY_SANDBOX: "true"
         run: npm run build
 
+      - name: No demo accounts in the production JavaScript
+        # The one-click demo accounts and their shared password exist only in a build that switches them on
+        # (NEXT_PUBLIC_ENABLE_DEMO_LOGIN=true). This build does not, so none of it may reach a visitor's browser.
+        run: |
+          if grep -rIl --include='*.js' -e 'Password123' -e '@nuray\.test' -e 'admin@frozennuray' .next/static; then
+            echo "::error::Demo credentials are in the production build's JavaScript"
+            exit 1
+          fi
+
   e2e:
     name: E2E (Playwright, full stack)
     runs-on: ubuntu-latest

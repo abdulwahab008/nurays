@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { homeFor } from '@/lib/utils';
+import { landingAfterLogin } from '@/lib/auth-redirect';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { NurayButton as Button } from '@/components/ui/NurayButton';
@@ -13,103 +14,15 @@ import { apiClient } from '@/lib/api-client';
 import { BrandLockup } from '@/components/ui/Mark';
 import { useT } from '@/lib/i18n';
 import { authMessages } from '@/lib/i18n/messages/auth';
-import {
-  ShoppingCart,
-  ChefHat,
-  Clock,
-  AlertCircle,
-  Bike,
-  ShieldCheck,
-  Sparkles,
-  Layers,
-  ArrowRight,
-} from 'lucide-react';
 
-interface DemoAccount {
-  id: string;
-  role: string;
-  badge: string;
-  badgeClass: string;
-  name: string;
-  email: string;
-  subtitle: string;
-  targetUrl: string;
-  description: string;
-}
-
-// One-click demo accounts (with a shared password) are a development aid only.
-// They must never ship enabled in a production build.
-const SHOW_DEMO_LOGIN =
-  process.env.NODE_ENV !== 'production' || process.env.NEXT_PUBLIC_ENABLE_DEMO_LOGIN === 'true';
-
-const DEMO_ACCOUNTS: DemoAccount[] = [
-  {
-    id: 'customer',
-    role: 'Customer / Buyer',
-    badge: 'BUYER',
-    badgeClass: 'bg-emerald-50 text-emerald-800 border-emerald-200',
-    name: 'Ayesha Khan',
-    email: 'customer@nuray.test',
-    subtitle: 'Askari 11, Karachi • COD & JazzCash',
-    targetUrl: '/dashboard',
-    description: 'Browse dishes, manage single-seller cart, and track order deliveries.',
-  },
-  {
-    id: 'seller',
-    role: 'Approved Seller (Kitchen Active)',
-    badge: 'KITCHEN LIVE',
-    badgeClass: 'bg-emerald-100 text-emerald-800 border-emerald-300',
-    name: "Saima's Craft Kitchen",
-    email: 'seller@nuray.test',
-    subtitle: 'Verified Home Cook • Kitchen Cockpit',
-    targetUrl: '/sellers/dashboard',
-    description: 'Incoming order tickets, Store OPEN/CLOSED switch, 7-metric earnings breakdown.',
-  },
-  {
-    id: 'seller-pending',
-    role: 'Seller (Under Admin Review)',
-    badge: 'PENDING MODERATION',
-    badgeClass: 'bg-amber-100 text-amber-800 border-amber-300',
-    name: 'Chef Ahmed Khan',
-    email: 'seller.pending@nuray.test',
-    subtitle: 'Ahmed Tikka & Karahi • Awaiting Approval',
-    targetUrl: '/sellers/register',
-    description: 'Applicant view during hygiene & document verification review.',
-  },
-  {
-    id: 'seller-rejected',
-    role: 'Seller (Rejected / Needs Fix)',
-    badge: 'REJECTED • FIX',
-    badgeClass: 'bg-rose-100 text-rose-800 border-rose-300',
-    name: 'Chef Bilal Tariq',
-    email: 'seller.rejected@nuray.test',
-    subtitle: 'Bilal Shawarma • Rejection Reason Shown',
-    targetUrl: '/sellers/register',
-    description: 'Inspect blurry CNIC rejection reason and test Fix & Resubmit loop.',
-  },
-  {
-    id: 'rider',
-    role: 'Delivery Rider Fleet',
-    badge: 'RIDER',
-    badgeClass: 'bg-blue-50 text-blue-700 border-blue-200',
-    name: 'Tariq Mehmood',
-    email: 'rider@nuray.test',
-    subtitle: 'Motorcycle KHI-8921 • Corridor Dispatch',
-    targetUrl: '/riders/dashboard',
-    description: 'Claim deliveries, route batching bonus, and doorstep PIN handover.',
-  },
-  {
-    id: 'admin',
-    role: 'Super Admin Operations',
-    badge: 'SUPER ADMIN',
-    badgeClass: 'bg-purple-100 text-purple-800 border-purple-300',
-    name: 'Platform Ops',
-    email: 'admin@frozennuray.com',
-    subtitle: 'Governance, Telemetry & Payouts',
-    targetUrl: '/admin/dashboard',
-    description: 'Approve/reject kitchens, moderate catalog, double-entry ledger audits.',
-  },
-];
+// The one-click demo accounts live in their own file, which only a build that switches them on loads (next.config.ts sets
+// NEXT_PUBLIC_DEMO_LOGIN): elsewhere the condition is a constant false, the require is dropped, and no demo e-mail address or
+// password reaches the browser.
+/* eslint-disable @typescript-eslint/no-require-imports */
+const demo: typeof import('@/components/auth/DemoLoginPanel') | null =
+  process.env.NEXT_PUBLIC_DEMO_LOGIN === 'true' ? require('@/components/auth/DemoLoginPanel') : null;
+/* eslint-enable @typescript-eslint/no-require-imports */
+const SHOW_DEMO_LOGIN = demo !== null;
 
 export default function LoginPage() {
   const router = useRouter();
@@ -122,41 +35,7 @@ export default function LoginPage() {
   const [loginMethod, setLoginMethod] = useState<'otp' | 'email'>('email');
   const [step, setStep] = useState<'input' | 'verify'>('input');
   const [loading, setLoading] = useState(false);
-  const [quickLoadingId, setQuickLoadingId] = useState<string | null>(null);
   const [error, setError] = useState('');
-
-  const handleQuickLogin = async (acc: DemoAccount) => {
-    setQuickLoadingId(acc.id);
-    setError('');
-    setPhoneOrEmail(acc.email);
-    setPassword('Password123!');
-    setLoginMethod('email');
-
-    try {
-      const response = await authService.loginWithEmail(acc.email, 'Password123!');
-      apiClient.setTokens(response.data.tokens.access_token, response.data.tokens.refresh_token);
-      setUser(response.data.user);
-      showToast(`Logged in as ${acc.name}`, 'success');
-
-      if (acc.targetUrl) {
-        router.push(acc.targetUrl);
-      } else {
-        const userType = response.data.user?.userType || response.data.user?.user_type;
-        router.push(homeFor(userType));
-      }
-    } catch (err: any) {
-      setError(err.response?.data?.error?.message || err.message || 'Quick login failed');
-    } finally {
-      setQuickLoadingId(null);
-    }
-  };
-
-  const handleAutofill = (acc: DemoAccount) => {
-    setLoginMethod('email');
-    setPhoneOrEmail(acc.email);
-    setPassword('Password123!');
-    showToast(`Autofilled credentials for ${acc.role}`, 'info');
-  };
 
   const handleGoogleSuccess = async (accessToken: string) => {
     setLoading(true);
@@ -180,7 +59,7 @@ export default function LoginPage() {
           router.push('/verify-email-pending');
         } else {
           const userType = response.data.user?.userType || response.data.user?.user_type;
-          router.push(homeFor(userType));
+          router.push(landingAfterLogin(homeFor(userType)));
         }
       }
     } catch (err: any) {
@@ -224,7 +103,7 @@ export default function LoginPage() {
       setUser(response.data.user);
       
       const userType = response.data.user?.userType || response.data.user?.user_type;
-      router.push(homeFor(userType));
+      router.push(landingAfterLogin(homeFor(userType)));
     } catch (err: any) {
       const errorMessage = err.response?.data?.error?.message || err.response?.data?.message || t('errOtpFailed');
       const errorCode = err.response?.data?.error?.code;
@@ -255,7 +134,7 @@ export default function LoginPage() {
         router.push('/verify-email-pending');
       } else {
         const userType = response.data.user?.userType || response.data.user?.user_type;
-        router.push(homeFor(userType));
+        router.push(landingAfterLogin(homeFor(userType)));
       }
     } catch (err: any) {
       const errorMessage = err.response?.data?.error?.message || err.response?.data?.message || t('errLoginFailed');
@@ -292,15 +171,7 @@ export default function LoginPage() {
             <BrandLockup markSize={40} wordSize={28} />
           </Link>
           <div className="flex items-center gap-3">
-            {SHOW_DEMO_LOGIN && (
-            <Link
-              href="/dev-login"
-              className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-orange-50 hover:bg-orange-100 border border-orange-200 text-orange-800 text-xs font-bold transition-all shadow-2xs"
-            >
-              <Layers className="w-3.5 h-3.5" />
-              <span>Multi-Tab Isolator</span>
-            </Link>
-            )}
+            {demo && <demo.DemoDevLink />}
             <Link
               href="/register"
               className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-bold transition-all"
@@ -313,99 +184,16 @@ export default function LoginPage() {
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-12 items-start">
           
           {/* Left Column: Quick Role Login Area (development only) */}
-          {SHOW_DEMO_LOGIN && (
-          <div className="lg:col-span-7 bg-slate-50/80 rounded-2xl p-5 sm:p-6 border border-slate-200/70">
-            <div className="flex items-center justify-between mb-4">
-              <div>
-                <span className="text-[11px] font-bold tracking-wider text-[#FF5500] bg-orange-100/80 px-2.5 py-0.5 rounded-full uppercase">
-                  Instant Access
-                </span>
-                <h2 className="text-lg font-bold text-slate-900 mt-2 flex items-center gap-2">
-                  <Sparkles className="w-4 h-4 text-[#FF5500]" />
-                  <span>Quick Login via Role</span>
-                </h2>
-                <p className="text-xs text-slate-500 mt-0.5">
-                  Click any account below for 1-click authentication or autofill:
-                </p>
-              </div>
-              <span className="hidden sm:inline-block text-xs font-medium text-slate-400">
-                Password: <code className="bg-white px-1.5 py-0.5 rounded border border-slate-200 font-mono text-slate-700">Password123!</code>
-              </span>
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 mt-4">
-              {DEMO_ACCOUNTS.map((acc) => {
-                const isCurrentLoading = quickLoadingId === acc.id;
-                return (
-                  <div
-                    key={acc.id}
-                    className="bg-white rounded-2xl p-4 border border-slate-200 shadow-2xs hover:shadow-xs hover:border-orange-300 transition-all flex flex-col justify-between"
-                  >
-                    <div>
-                      <div className="flex items-start justify-between gap-2 mb-2">
-                        <div className="w-8 h-8 rounded-lg bg-slate-100 flex items-center justify-center">
-                          {acc.id === 'customer' && <ShoppingCart className="w-4 h-4 text-emerald-600" />}
-                          {acc.id === 'seller' && <ChefHat className="w-4 h-4 text-emerald-600" />}
-                          {acc.id === 'seller-pending' && <Clock className="w-4 h-4 text-amber-600" />}
-                          {acc.id === 'seller-rejected' && <AlertCircle className="w-4 h-4 text-rose-600" />}
-                          {acc.id === 'rider' && <Bike className="w-4 h-4 text-blue-600" />}
-                          {acc.id === 'admin' && <ShieldCheck className="w-4 h-4 text-purple-600" />}
-                        </div>
-                        <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full border ${acc.badgeClass}`}>
-                          {acc.badge}
-                        </span>
-                      </div>
-                      <h3 className="text-sm font-bold text-slate-900 leading-snug">{acc.role}</h3>
-                      <p className="text-xs text-slate-700 font-semibold mt-0.5">{acc.name}</p>
-                      <p className="text-[11px] text-slate-400 font-mono mt-0.5 truncate">{acc.email}</p>
-                      <p className="text-[11px] text-slate-500 mt-1.5 line-clamp-2 leading-relaxed">
-                        {acc.description}
-                      </p>
-                    </div>
-
-                    <div className="mt-4 pt-3 border-t border-slate-100 flex items-center gap-2">
-                      <button
-                        type="button"
-                        onClick={() => handleQuickLogin(acc)}
-                        disabled={isCurrentLoading || loading}
-                        className="flex-1 py-2 px-3 rounded-xl bg-slate-900 hover:bg-[#FF5500] text-white text-xs font-bold transition-all flex items-center justify-center gap-1.5 shadow-xs active:scale-95 disabled:opacity-50"
-                      >
-                        {isCurrentLoading ? (
-                          <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                        ) : (
-                          <>
-                            <span>Sign In</span>
-                            <ArrowRight className="rtl:-scale-x-100 w-3.5 h-3.5" />
-                          </>
-                        )}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handleAutofill(acc)}
-                        title="Fill into form without submitting"
-                        className="py-2 px-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold transition-all"
-                      >
-                        Fill
-                      </button>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-
-            <div className="mt-5 p-3 rounded-xl bg-amber-50/70 border border-amber-200/80 flex items-center justify-between text-xs text-amber-900">
-              <span className="font-medium flex items-center gap-1.5">
-                <Sparkles className="w-3.5 h-3.5 text-amber-600" />
-                <span>Need to test Buyer, Seller, Rider &amp; Admin simultaneously?</span>
-              </span>
-              <Link
-                href="/dev-login"
-                className="font-bold text-[#FF5500] hover:underline ms-2 flex-shrink-0"
-              >
-                Open Tab Isolator →
-              </Link>
-            </div>
-          </div>
+          {demo && (
+            <demo.DemoLoginPanel
+              busy={loading}
+              onError={setError}
+              onAutofill={(email, pw) => {
+                setLoginMethod('email');
+                setPhoneOrEmail(email);
+                setPassword(pw);
+              }}
+            />
           )}
 
           {/* Right Column: Standard Login Form */}
@@ -533,7 +321,7 @@ export default function LoginPage() {
                     <label htmlFor="password" className={labelClass}>
                       {t('password')}
                     </label>
-                    {SHOW_DEMO_LOGIN && <span className="text-[11px] text-slate-400">{t('defaultPassword')}</span>}
+                    {demo && <demo.DemoPasswordHint />}
                   </div>
                   <input
                     type="password"

@@ -73,6 +73,13 @@ const SECURITY_HEADERS = [
 ];
 
 const nextConfig: NextConfig = {
+  // One definite true or false for the one-click demo accounts. A NEXT_PUBLIC_* variable that is not set is not replaced in the
+  // code, so testing NEXT_PUBLIC_ENABLE_DEMO_LOGIN there directly would leave the demo accounts in every build. They are on in
+  // development, and in a production build only when that variable is "true".
+  env: {
+    NEXT_PUBLIC_DEMO_LOGIN:
+      process.env.NODE_ENV !== 'production' || process.env.NEXT_PUBLIC_ENABLE_DEMO_LOGIN === 'true' ? 'true' : 'false',
+  },
   // The framework's name is nobody's business.
   poweredByHeader: false,
   // Emit a self-contained server bundle for the Docker runtime image.

@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState, Suspense } from 'react';
-import { useRouter, useSearchParams, notFound } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { apiClient } from '@/lib/api-client';
 import { useAuthStore } from '@/lib/store/auth-store';
@@ -288,11 +288,8 @@ function DevLoginContent() {
   );
 }
 
-export default function DevLoginPage() {
-  // A page of one-click logins for seeded accounts: development only.
-  if (process.env.NODE_ENV === 'production' && process.env.NEXT_PUBLIC_ENABLE_DEMO_LOGIN !== 'true') {
-    notFound();
-  }
+/** A page of one-click logins for seeded accounts: see page.tsx, which only loads this in a build that switches them on. */
+export default function DevLogin() {
   return (
     <Suspense fallback={<div className="min-h-screen flex items-center justify-center text-slate-500 font-bold">Loading Nuray Testing Hub...</div>}>
       <DevLoginContent />
