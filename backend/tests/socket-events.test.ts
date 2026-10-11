@@ -47,8 +47,9 @@ beforeEach(() => {
   findUser.mockResolvedValue({ id: userId, status: 'active', userType: 'customer', tokensValidAfter: null });
   countOrders.mockResolvedValue(1);
 });
-afterEach(() => {
+afterEach(async () => {
   for (const client of clients.splice(0)) client.close();
+  await waitFor(() => socketManager.getIO().sockets.sockets.size === 0); // the server has seen them all go: the next test finds the rooms empty
   delete process.env.SOCKET_EVENTS_PER_MINUTE;
   jest.restoreAllMocks();
 });
