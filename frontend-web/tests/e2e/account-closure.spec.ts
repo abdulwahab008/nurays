@@ -1,43 +1,9 @@
-import { test, expect, request, type Page } from '@playwright/test';
-import { execSync } from 'node:child_process';
+import { test, expect } from '@playwright/test';
+import { CUSTOMER_PASSWORD, dbQuery, newCustomer, signIn } from './support/customer';
 
 // Signing out, and closing one's own account, from the profile page: both end on the home page with the person signed out. (The page's
 // "sign in to see your profile" redirect used to win the race against the move to the home page, so the person landed on the sign-in page
 // with ?next=/profile, which for a closed account leads nowhere.) Closing asks for the word DELETE, then the password.
-
-const API_BASE = (process.env.API_BASE ?? 'http://localhost:3001/api/v1').replace(/\/$/, '');
-const DB_URL = process.env.E2E_DB_URL ?? 'postgresql://localhost:5432/frozennuray_dev';
-const PASSWORD = 'Lantern-Quartz-71!';
-
-function dbQuery(sql: string): string {
-  return execSync(`psql "${DB_URL}" -tA -c "${sql.replace(/"/g, '\\"')}"`, { encoding: 'utf-8' }).trim();
-}
-
-/** A new customer with a verified e-mail, signed in through the API. */
-async function newCustomer(): Promise<{ id: string; email: string; jwt: string; user: unknown }> {
-  const api = await request.newContext();
-  const email = `closing-${Date.now()}-${Math.random().toString(36).slice(2, 7)}@example.com`;
-  await api.post(`${API_BASE}/auth/register`, { data: { email, password: PASSWORD, user_type: 'customer', full_name: 'Closing Customer' } });
-  dbQuery(`UPDATE users SET email_verified = true, status = 'active' WHERE email = '${email}'`);
-  const login = await api.post(`${API_BASE}/auth/login`, { data: { phoneOrEmail: email, otpCodeOrPassword: PASSWORD, loginMethod: 'email' } });
-  const body = await login.json();
-  return { id: body.data?.user?.id ?? '', email, jwt: body.data?.tokens?.access_token ?? '', user: body.data?.user ?? {} };
-}
-
-async function signIn(page: Page, session: { jwt: string; user: unknown }) {
-  await page.addInitScript(
-    ({ token, user }: { token: string; user: unknown }) => {
-      window.localStorage.setItem('auth_token', token);
-      window.localStorage.setItem('access_token', token);
-      window.localStorage.setItem('token', token);
-      window.localStorage.setItem('auth-storage', JSON.stringify({ state: { user, token, isAuthenticated: true }, version: 0 }));
-    },
-    { token: session.jwt, user: session.user }
-  );
-  await page.context().addCookies(
-    ['access_token', 'auth_token'].map((name) => ({ name, value: session.jwt, domain: 'localhost', path: '/', httpOnly: false, secure: false, sameSite: 'Lax' as const }))
-  );
-}
 
 test.describe('Leaving from the profile page', () => {
   test('signing out lands on the home page, not on the sign-in page', async ({ page }) => {
@@ -77,7 +43,7 @@ test.describe('Leaving from the profile page', () => {
     await closeButton.click();
     await page.locator('#ask-dialog-input').fill('DELETE');
     await page.locator('#ask-dialog-input').press('Enter');
-    await page.locator('#ask-dialog-input').fill(PASSWORD);
+    await page.locator('#ask-dialog-input').fill(CUSTOMER_PASSWORD);
     await page.locator('#ask-dialog-input').press('Enter');
     await expect(page).toHaveURL(/\/$/, { timeout: 15000 });
     await expect(page).not.toHaveURL(/\/login/);

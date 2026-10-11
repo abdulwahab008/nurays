@@ -8,11 +8,11 @@ Nuray has five layers of checks. Each one catches a different kind of mistake, s
 | Backend unit tests (Jest) | `backend/tests/*.test.ts` | nothing (no database, no network) | yes, `npm test` |
 | Real-database money-flow script | `backend/scripts/verify-money-flows.ts` | a throwaway PostgreSQL | yes, the `money-flows` job |
 | API checks over HTTP | `backend/scripts/api-checks/` | the running API and its (throwaway) database | yes, the last step of the `e2e` job |
-| Playwright end-to-end | `frontend-web/tests/e2e/` | backend + database + frontend running | `smoke`, `rider-navigation`, `rider-location-resume`, `csp`, `geocode-proxy`, `public-pages` and `mobile` specs |
+| Playwright end-to-end | `frontend-web/tests/e2e/` | backend + database + frontend running | `smoke`, `rider-navigation`, `rider-location-resume`, `csp`, `geocode-proxy`, `public-pages`, `mobile`, `account-closure` and `load-failures` specs |
 | Load test | `backend/scripts/load/` | a staging stack and a `*_load` database | no, run by hand before launch: [LOAD_TESTING.md](LOAD_TESTING.md); its arithmetic is in Jest (`load-engine.test.ts`) and its scripts are typechecked in CI |
 | Lint, typecheck, build, schema drift, Docker | `.github/workflows/ci.yml` | GitHub Actions | yes |
 
-A manual click-through checklist for a whole order is in [E2E_TESTING_GUIDE.md](E2E_TESTING_GUIDE.md).
+A manual click-through checklist for a whole order is in [E2E_TESTING_GUIDE.md](E2E_TESTING_GUIDE.md). The result of walking the whole app in a browser, role by role, and then breaking things on purpose (the API failing in seven ways, PostgreSQL and Redis stopped under a running API, hostile input) is in [E2E_TEST_REPORT.md](E2E_TEST_REPORT.md); what it found is kept from coming back by the checks listed here.
 
 ## 1. Backend unit tests
 
@@ -154,6 +154,7 @@ JSON that leaves the API (what a rider or a kitchen is shown, what a wrong input
 | `kitchen-view` | what a kitchen may see of an order, the tracking snapshot, chat and live events |
 | `moderation` | reporting a review (signed in, not your own, a reason from the list), the staff queue and the approvals count, hide / keep / restore, and that a hidden review is gone from the dish page, the kitchen's page, the review counts and every rating |
 | `sign-in` | password rules, one answer for a wrong password and an unknown account, reset links, the re-authentication budget, staff passwords, Google sign-in requests, changing the password while signed in (older sessions void, fresh tokens, no password for a Google account), the one-time code purposes |
+| `payout-accounts` | the numbers customers pay into and the account a payout goes to: a number must be a Pakistani mobile number or an IBAN (check digits verified) or 8-20 digits and is stored in one form; changing a saved account or asking for a payout asks for the password again (`PASSWORD_REQUIRED`, a wrong one is 400 `INVALID_PASSWORD`); a value saved before the checks never blocks saving something else; an account without a password is not asked |
 
 Every suite makes its own users, kitchens, dishes and orders with unique values, so it runs on any database that has had
 `prisma migrate deploy` and any number of times. It never depends on seeded accounts. Because it leaves its data
@@ -227,6 +228,8 @@ URL, used to read the email-verification token because there is no mailbox; the 
 | Spec | What it checks | Data it needs |
 |---|---|---|
 | `mobile.spec.ts` (the `mobile` project) | on a 412 px phone: ten public pages do not scroll sideways, a dish opens from the list and its page fits, the menu opens to the pages a visitor needs and fits the screen, the viewport allows the whole screen (`viewport-fit=cover`) and zooming, the manifest has an id, a scope, a start page and icons that load | `seed:e2e` |
+| `account-closure.spec.ts` | signing out from the profile page lands on the home page, not the sign-in page; closing the account asks for the exact word DELETE, then the password (a wrong one leaves the account open) and ends on the home page signed out | `E2E_DB_URL` |
+| `load-failures.spec.ts` | seven customer pages (tray, orders, profile, saved addresses, wallet, notifications, favourites) show the "could not load" block with Try again when the API answers 500, cannot be reached or answers with a proxy's web page, and Try again loads the page once the API answers | `E2E_DB_URL` |
 | `smoke.spec.ts` | landing page and links, `/products` lists items, product page, `/login` (OTP + Email tabs, Google), `/register` role choices, `/checkout` redirects to login, no console errors, API health | `seed:e2e` |
 | `purchase.spec.ts` | API register, verify, login, address, cart, COD order; UI login and order list; add to cart | `seed:e2e` (fixed product id), `E2E_DB_URL` |
 | `ideal-flow.spec.ts` | login redirects for customer, seller, rider and admin; one full order through kitchen, rider, PIN handover and ledger | runs `backend/scripts/seed-ideal-flow-users.ts` itself |
@@ -251,7 +254,7 @@ Limitations to know about:
 |---|---|
 | `backend` | `npm ci`, `prisma generate`, `tsc --noEmit`, `npm run typecheck:scripts` (the API checks and the load tooling), `npm run lint` (no errors, at most the warning count set in `package.json`), `npm test`, `npm run build` |
 | `frontend` | `npm ci`, `tsc --noEmit`, `npm run lint` (no errors, at most the warning count set in `package.json`), `npm test` (the web unit tests), `npm run build` (with placeholder `NEXT_PUBLIC_*`) |
-| `e2e` (after both above) | PostgreSQL 15 and Redis 7 services, `prisma migrate deploy`, schema drift check (`npm run db:check`), `seed:e2e`, build and start the backend on 3001 (automatic rider assignment off), build the frontend, install Chromium, run the `smoke`, `rider-navigation`, `rider-location-resume`, `csp`, `geocode-proxy`, `public-pages` (with sample app-link settings in the environment) and `mobile` specs, upload the Playwright report, then `npm run api-checks` against the backend |
+| `e2e` (after both above) | PostgreSQL 15 and Redis 7 services, `prisma migrate deploy`, schema drift check (`npm run db:check`), `seed:e2e`, build and start the backend on 3001 (automatic rider assignment off), build the frontend, install Chromium, run the `smoke`, `rider-navigation`, `rider-location-resume`, `csp`, `geocode-proxy`, `public-pages` (with sample app-link settings in the environment), `mobile`, `account-closure` and `load-failures` specs, upload the Playwright report, then `npm run api-checks` against the backend |
 | `money-flows` (after `backend`) | its own PostgreSQL 15, `prisma migrate deploy`, `scripts/verify-money-flows.ts` in test mode |
 | `load-tooling` (after `backend`) | PostgreSQL 15 (`nuray_load`) and Redis 7 services, `prisma migrate deploy`, `npm run load:seed` at 2 % of the launch size, build and start the API (automatic rider assignment off), `load:tokens`, then each load scenario for a few seconds with `--smoke` (fails on a 5xx or an unanswered request, not on speed); see [LOAD_TESTING.md](LOAD_TESTING.md) |
 | `docker-build` (after backend and frontend) | builds both images without pushing |

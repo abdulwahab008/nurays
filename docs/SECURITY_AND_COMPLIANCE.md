@@ -81,7 +81,7 @@ is the production setting; development relaxes some.
 | Reset link | 20 / 15 min / IP, and 3 / hour / e-mail address | forgot-password (answers the same whether or not the address has an account). A link made in the last minute is not replaced by a new request |
 | Verification e-mail | 3 / hour / account (resend); 3 / hour / inbox (also for e-mail changes: `+tags` and Gmail dots count as the same inbox) | resend-verification, changing the e-mail |
 | E-mail change | 3 / hour / account | `PATCH /users/me` with a new `email` |
-| Password re-check | 5 wrong passwords / 15 min / account | changing the e-mail (accounts with a password), changing the password and closing the account. Only wrong answers are counted; five stop even the right password until the window ends. A wrong password is a 400 `INVALID_PASSWORD` (a 401 would look like an expired session to the web app) and is written to the audit log (`auth:REAUTH_FAILED`) |
+| Password re-check | 5 wrong passwords / 15 min / account | changing the e-mail (accounts with a password), changing the password, closing the account, and, for a kitchen, changing its payout accounts or asking for a payout (customers pay into those accounts and earnings are sent to the account named in the request, so a stolen session must not move either alone). Only wrong answers are counted; five stop even the right password until the window ends. A wrong password is a 400 `INVALID_PASSWORD` (a 401 would look like an expired session to the web app) and is written to the audit log (`auth:REAUTH_FAILED`) |
 | Register | 10 / hour / IP | registration |
 | Promo validation | 20 / minute / IP | promo codes |
 | Uploads | 60 / 10 min / user | all uploads |
