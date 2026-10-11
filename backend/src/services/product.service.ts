@@ -922,6 +922,13 @@ export class ProductService {
       throw new AppError('Product not found or access denied', 404, 'PRODUCT_NOT_FOUND');
     }
 
+    // A kitchen may hide a dish at any time, but only the administrator's approval makes one visible: turning on a dish that is not
+    // approved is refused (it would otherwise be a way around the review). Sending "on" for a dish that is already on, as the edit
+    // form does with every save, changes nothing.
+    if (data.isActive === true && !product.isActive && product.approvalStatus !== 'approved') {
+      throw new AppError('This dish has to be approved before it can be shown to customers', 409, 'PRODUCT_NOT_APPROVED');
+    }
+
     // An approved (or rejected) dish whose content changed goes back to review; the kitchen's price, stock
     // and menu changes do not need one.
     const existingImages = data.images !== undefined ? await prisma.productImage.findMany({ where: { productId }, select: { imageUrl: true } }) : [];

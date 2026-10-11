@@ -80,9 +80,11 @@ export const createProductSchema = z.object({
   menuDate: z.union([z.literal('today'), z.null(), calendarDay]).optional(),
 });
 
-// An update only changes what it sends: the create schema's default productType must not be applied.
+// An update only changes what it sends: the create schema's default productType must not be applied. isActive is the kitchen
+// hiding a dish or showing it again (the list's "Hide from store" / "Publish to store"): it is dropped by the create schema,
+// where only an administrator's approval makes a new dish visible.
 export const updateProductSchema = createProductSchema
-  .extend({ productType: z.enum(['frozen', 'fresh', 'ready_to_eat', 'ready_to_cook']).optional() })
+  .extend({ productType: z.enum(['frozen', 'fresh', 'ready_to_eat', 'ready_to_cook']).optional(), isActive: z.boolean() })
   .partial();
 
 export const getSellerProductsQuerySchema = z.object({
