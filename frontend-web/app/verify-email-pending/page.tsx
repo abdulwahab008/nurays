@@ -7,6 +7,7 @@ import { NurayButton as Button } from '@/components/ui/NurayButton';
 import { useToast } from '@/components/ui/toast';
 import { authService } from '@/lib/services/auth.service';
 import { useAuthStore } from '@/lib/store/auth-store';
+import { apiClient } from '@/lib/api-client';
 import { useT } from '@/lib/i18n';
 import { authMessages } from '@/lib/i18n/messages/auth';
 
@@ -24,7 +25,9 @@ function VerifyEmailPendingContent() {
   const isSeller = user?.userType === 'seller' || user?.user_type === 'seller' || nextUrl === '/sellers/register';
 
   useEffect(() => {
-    if (!isAuthenticated) {
+    // The first render still sees the signed-out state the server drew: a stored token means the person is signed in and the store
+    // has not caught up yet, so only someone with neither is sent to sign in (a reload of this page used to bounce to /login).
+    if (!isAuthenticated && !apiClient.getAccessToken()) {
       router.push('/login');
     }
   }, [isAuthenticated, router]);
