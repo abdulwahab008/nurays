@@ -252,7 +252,12 @@ mandatory in production):
 - Files: with `STORAGE_DRIVER=local` every instance needs the same volume. Use `s3` once you run more than one.
 - Behind a load balancer or CDN: `TRUST_PROXY` is the number of proxy hops in front of the API (default `1`; `2`
   behind a CDN plus a load balancer; `0` when exposed directly; or an address list such as `loopback, 10.0.0.0/8`).
-  Getting it wrong either rate-limits everyone as one address or lets a client spoof its address. Idle keep-alive
+  Getting it wrong either rate-limits everyone as one address or lets a client spoof its address. With the default
+  `1`, the API believes the last `X-Forwarded-For` value its direct peer sends: if the API port can be reached
+  by anything other than the proxy (a health check from outside, a security group left open), a client can send a
+  fresh value on every request and every per-address limit (sign-in codes, promo-code checks, sign-ups) stops
+  counting it. Accept the API's port only from the proxy, and make the proxy overwrite `X-Forwarded-For` rather
+  than append to what the client sent. Idle keep-alive
   connections are held for `KEEP_ALIVE_TIMEOUT_MS` (default 65 000 ms): keep it above the balancer's idle timeout
   (60 s on AWS ALB and most nginx setups) or the balancer will hit sockets the API has just closed and answer 502.
 - Database connections: Prisma opens a pool per instance, sized by default from the host's CPU count
