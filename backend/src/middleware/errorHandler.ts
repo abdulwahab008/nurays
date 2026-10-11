@@ -55,6 +55,11 @@ export const toAppError = (err: any): Error | AppError => {
       return new AppError('The service is busy. Please try again in a moment.', 503, 'SERVICE_BUSY');
     }
   }
+  // PostgreSQL cancelled a statement that ran past DB_STATEMENT_TIMEOUT_MS (SQLSTATE 57014): the same answer. Prisma reports
+  // a raw query as P2010 with the SQLSTATE in meta, and any other query as an error without a code that names it in its message.
+  if (err?.clientVersion && (err.meta?.code === '57014' || /code: "57014"/.test(String(err.message)))) {
+    return new AppError('The service is busy. Please try again in a moment.', 503, 'SERVICE_BUSY');
+  }
 
   // Text the database cannot store (a NUL byte, an unpaired surrogate). rejectUnsafeText stops these at the door; this is
   // the net under it for a path that reaches a query some other way.

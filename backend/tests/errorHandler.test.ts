@@ -30,6 +30,30 @@ describe('toAppError', () => {
     expect(toAppError(prismaError('P2010')) instanceof AppError).toBe(false);
   });
 
+  it('maps a statement PostgreSQL cancelled for running too long to the same 503, however Prisma reported it', () => {
+    // a raw query: P2010, the SQLSTATE in meta
+    const raw = Object.assign(new Error('Raw query failed. Code: `57014`. Message: `ERROR: canceling statement due to statement timeout`'), {
+      code: 'P2010',
+      clientVersion: '6.19.3',
+      meta: { code: '57014', message: 'ERROR: canceling statement due to statement timeout' },
+    });
+    // any other query: no code, the SQLSTATE in the message
+    const model = Object.assign(
+      new Error(
+        'Invalid `prisma.category.findMany()` invocation:\nError occurred during query execution:\nConnectorError(ConnectorError { user_facing_error: None, kind: QueryError(PostgresError { code: "57014", message: "canceling statement due to statement timeout", severity: "ERROR" }), transient: false })'
+      ),
+      { clientVersion: '6.19.3' }
+    );
+    for (const err of [raw, model]) {
+      const e = toAppError(err) as AppError;
+      expect(e).toBeInstanceOf(AppError);
+      expect([e.statusCode, e.code]).toEqual([503, 'SERVICE_BUSY']);
+    }
+    // another failed raw query is still a fault, and so is an error that is not Prisma's and merely names the number
+    expect(toAppError(Object.assign(new Error('x'), { code: 'P2010', clientVersion: '6.19.3', meta: { code: '42P01' } })) instanceof AppError).toBe(false);
+    expect(toAppError(new Error('PostgresError { code: "57014" }')) instanceof AppError).toBe(false);
+  });
+
   it('maps oversized and malformed bodies', () => {
     expect((toAppError(Object.assign(new Error('x'), { type: 'entity.too.large' })) as AppError).statusCode).toBe(413);
     expect((toAppError(Object.assign(new Error('x'), { type: 'entity.parse.failed' })) as AppError).statusCode).toBe(400);

@@ -39,6 +39,7 @@ Required means the server will not start in production without it (see "Startup 
 | `PORT` | no | The Docker image sets 3001. Without it the code falls back to 3000. |
 | `API_VERSION` | no | Default `v1`. |
 | `DATABASE_URL` | yes | PostgreSQL connection string. |
+| `DB_STATEMENT_TIMEOUT_MS` | no | PostgreSQL cancels any statement that runs longer than this. Default 30000 (30 s), 0 for no limit. A request whose query is stuck behind a lock then gets `503 SERVICE_BUSY` (with `Retry-After`) instead of hanging for as long as the lock lasts. It covers the background sweeps and admin exports too, so raise it if one of those legitimately runs longer. The app sends it as a startup option on its own connections (the migration commands are not limited). It is not sent when `DATABASE_URL` has `pgbouncer=true` (PgBouncer refuses startup options) or an `options` parameter of its own: set it on the role there, `ALTER ROLE <app role> SET statement_timeout = '30s';`. |
 | `REDIS_URL` | yes (production) | |
 | `REDIS_COMMAND_TIMEOUT_MS` | no | How long a rate-limit or health-check command waits for Redis before it fails. Default 2000. A Redis that is up but not answering (frozen, or a network path that drops packets) then costs each request this long and the limits let it through, instead of every request hanging. The job queue and Socket.IO connections are not affected. |
 | `JWT_SECRET` | yes | 32+ characters, not a placeholder in production. `openssl rand -hex 32`. |
@@ -267,7 +268,7 @@ mandatory in production):
   (`2 × cores + 1`), not from how many instances run. Set it explicitly on `DATABASE_URL`
   (`?connection_limit=10&pool_timeout=10`) and keep `instances × connection_limit + 10` below PostgreSQL's
   `max_connections` (100 by default). Beyond about five instances put PgBouncer (transaction mode) in front
-  and add `&pgbouncer=true`. The load test in `docs/PRODUCTION_READINESS_AUDIT.md` showed that a larger pool
+  and add `&pgbouncer=true` (the app then does not send `DB_STATEMENT_TIMEOUT_MS`: set it on the role). The load test in `docs/PRODUCTION_READINESS_AUDIT.md` showed that a larger pool
   does not make the API faster on 4 cores: the limit there is CPU, so scale instances, not the pool.
 
 ## Background jobs
