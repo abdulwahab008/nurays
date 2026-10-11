@@ -325,6 +325,11 @@ export class CartService {
     if (!product.isActive || product.approvalStatus !== 'approved') {
       throw new AppError('Product is not available', 400, 'PRODUCT_UNAVAILABLE');
     }
+    // A suspended kitchen shows no dishes and takes no orders; one of its dishes (from a page opened earlier, or a
+    // saved link) must not be put in a tray either, to be refused only at checkout.
+    if (product.seller.status !== 'active') {
+      throw new AppError(`${product.seller.businessName} is not available right now`, 400, 'SELLER_UNAVAILABLE');
+    }
     // Weekly and daily dishes can only be ordered on the days they are on the menu.
     if (!isOnMenu(product)) {
       throw new AppError(`${product.name} is not on the menu today`, 400, 'NOT_ON_MENU_TODAY');

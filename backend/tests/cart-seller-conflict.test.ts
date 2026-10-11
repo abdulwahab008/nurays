@@ -11,7 +11,7 @@ jest.mock('../src/services/promotion.service', () => ({ __esModule: true, defaul
 
 import cartService from '../src/services/cart.service';
 
-const product = { id: 'p2', sellerId: 's2', isActive: true, approvalStatus: 'approved', name: 'Zafrani Biryani', menuType: 'fixed', availableDays: [], menuDate: null, seller: { id: 's2', businessName: "Naseem's Dum Pukht" } };
+const product = { id: 'p2', sellerId: 's2', isActive: true, approvalStatus: 'approved', name: 'Zafrani Biryani', menuType: 'fixed', availableDays: [], menuDate: null, seller: { id: 's2', businessName: "Naseem's Dum Pukht", status: 'active' } };
 
 function givenTray() {
   db.cart = { findUnique: jest.fn(async () => ({ id: 'c1', userId: 'u1' })), create: jest.fn() };
@@ -32,6 +32,15 @@ describe('adding a dish from another kitchen to a tray', () => {
       newSeller: { id: 's2', name: "Naseem's Dum Pukht" },
     });
     expect(err.message).toContain("Zainab's Tandoor Kitchen");
+    expect(db.cartItem.deleteMany).not.toHaveBeenCalled();
+  });
+
+  it('refuses a dish of a kitchen that has been suspended, before anything is changed', async () => {
+    givenTray();
+    db.product.findFirst = jest.fn(async () => ({ ...product, seller: { ...product.seller, status: 'suspended' } }));
+    const err: any = await cartService.addToCart('u1', { productId: 'p2', quantity: 1 }).then(() => null, (e) => e);
+    expect(err).toMatchObject({ statusCode: 400, code: 'SELLER_UNAVAILABLE' });
+    expect(err.message).toContain("Naseem's Dum Pukht");
     expect(db.cartItem.deleteMany).not.toHaveBeenCalled();
   });
 });
