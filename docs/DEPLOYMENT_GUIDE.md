@@ -229,7 +229,8 @@ These routes sit outside the API rate limit.
 On SIGTERM or SIGINT (`backend/src/index.ts`): readiness starts answering 503, the scheduler stops, the server waits
 `SHUTDOWN_DRAIN_MS` (default 5000 in production, 0 otherwise) so the load balancer takes it out of rotation, then it
 stops accepting connections, closes Socket.IO sockets (clients reconnect to another instance), finishes in-flight
-requests, stops job workers and disconnects Prisma, Redis and Sentry. If that takes longer than `SHUTDOWN_GRACE_MS`
+requests (a keep-alive connection is closed as soon as its request is done, not after `KEEP_ALIVE_TIMEOUT_MS`), stops
+job workers and disconnects Prisma, Redis and Sentry. If that takes longer than `SHUTDOWN_GRACE_MS`
 (default 25000) the process exits with code 1. Keep the orchestrator's kill timeout above the grace period
 (compose uses 30s), and `SHUTDOWN_DRAIN_MS` at least your load balancer's health-check interval. An uncaught
 exception also triggers this shutdown (exit code 1); unhandled promise rejections are logged and reported only.

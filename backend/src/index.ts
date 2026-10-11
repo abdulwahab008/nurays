@@ -23,7 +23,7 @@ import { startWorkers, stopWorkers } from './jobs/queue';
 import './jobs/email.jobs';
 import prisma from './config/database';
 import { closeRedis } from './config/redis';
-import { markShuttingDown, isShuttingDown } from './utils/lifecycle';
+import { markShuttingDown, isShuttingDown, closeHttpServer } from './utils/lifecycle';
 import { apiLimiter } from './middleware/rateLimiter';
 import { rejectUnsafeText } from './middleware/unsafeText';
 import { requestId, httpLogger } from './middleware/requestContext';
@@ -203,7 +203,7 @@ async function shutdown(signal: string, exitCode = 0) {
   if (SHUTDOWN_DRAIN_MS > 0) await new Promise((resolve) => setTimeout(resolve, SHUTDOWN_DRAIN_MS));
   // Stop accepting connections; in-flight requests finish. Live sockets never end on their
   // own, so they are closed (clients reconnect to another instance).
-  const httpClosed = new Promise<void>((resolve) => httpServer.close(() => resolve()));
+  const httpClosed = closeHttpServer(httpServer);
   await socketManager.close().catch((err) => logger.error({ err }, 'Closing sockets failed'));
   await httpClosed;
   await stopWorkers().catch((err) => logger.error({ err }, 'Stopping job workers failed'));
