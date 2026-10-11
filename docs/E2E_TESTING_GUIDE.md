@@ -96,7 +96,10 @@ One order from a brand-new dish to a delivered parcel. Do it in this order.
   kitchen photos, payout accounts, terms. Submit. Status page shows pending.
 - Admin rejects with a reason at `/admin/pending-sellers`; kitchen sees the reason on `/sellers/register`, fixes,
   resubmits; admin approves. After approval `/sellers/dashboard` is active.
-- `/sellers/dashboard`: open/closed toggle. `/sellers/settings`: hours, payment details (bank, JazzCash, EasyPaisa).
+- `/sellers/dashboard`: open/closed toggle. `/sellers/settings`: hours, payment details (bank, JazzCash, EasyPaisa). A number that is not a
+  Pakistani mobile number (JazzCash, EasyPaisa) or an IBAN with valid check digits or 8-20 digits (bank) is marked in red and not sent; changing an
+  account asks for the password in a window, and saving something else does not. `/sellers/earnings`: "Request Payout" checks the account the same way
+  and asks for the password.
 - `/sellers/delivery`: tick communities, set fee, free-delivery threshold and minimum order per community, choose who
   delivers (Nuray riders or self), Save. Saving other communities without a fee for the home community is refused.
 - `/sellers/products` (All Products, Inventory view, `/sellers/promotions` Discounts), `/sellers/analytics`,
@@ -118,6 +121,7 @@ One order from a brand-new dish to a delivered parcel. Do it in this order.
 - Kitchens: `/admin/sellers`, `/admin/pending-sellers`, `/admin/products`, `/admin/categories`,
   `/admin/category-requests`.
 - Riders: `/admin/riders`: cash held, settle up, payouts, adjustments, per-rider cash limit.
+- Everything here has also been walked in a browser, role by role and under failure, with screenshots: see [E2E_TEST_REPORT.md](E2E_TEST_REPORT.md).
 - `/admin/users` (People), `/admin/communities`, `/admin/promotions`, `/admin/payouts`, `/admin/support`,
   `/admin/analytics`, `/admin/audit-log`, `/admin/settings`.
 - Admin screens are English only.
