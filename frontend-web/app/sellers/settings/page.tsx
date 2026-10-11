@@ -7,10 +7,13 @@ import Link from 'next/link';
 import { Bike, Store, ArrowRight, MapPin, Plus, X } from 'lucide-react';
 import { DashboardLayout, SELLER_SIDEBAR_ITEMS } from '@/components/layout/DashboardShell';
 import { Button } from '@/components/ui/button';
+import { useDialogs } from '@/components/ui/Dialogs';
 import { useToast } from '@/components/ui/toast';
 import { useAuthStore } from '@/lib/store/auth-store';
 import { apiClient } from '@/lib/api-client';
 import { DatePicker } from '@/components/ui/DatePicker';
+import { bankAccountIsWrong, walletNumberIsWrong } from '@/lib/payout-account';
+import { sendAskingForPassword } from '@/lib/send-asking-for-password';
 
 const MEAL_CATEGORIES = [
   { value: 'breakfast', label: 'Breakfast' },
@@ -31,6 +34,9 @@ const BUSINESS_TYPES = [
   { value: 'cloud_kitchen', label: 'Cloud Kitchen' },
 ];
 
+const WALLET_NUMBER_PROBLEM = 'Enter a Pakistani mobile number such as 03001234567.';
+const BANK_ACCOUNT_PROBLEM = 'Enter an IBAN such as PK36SCBL0000001123456702, or an account number of 8 to 20 digits.';
+
 const AVAILABILITY_OVERRIDES = [
   { value: '', label: 'Normal Schedule' },
   { value: 'open', label: 'Force Open' },
@@ -43,8 +49,14 @@ export default function SellerSettingsPage() {
   const router = useRouter();
   const { isAuthenticated, user } = useAuthStore();
   const { showToast } = useToast();
+  const { ask: askDialog } = useDialogs();
   const [loading, setLoading] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
+  // What is wrong with a payout account number typed in the form, by field: customers pay into these, so a wrong digit pays a stranger.
+  const [payoutErrors, setPayoutErrors] = useState<Record<string, string>>({});
+  // The numbers the server holds (as loaded, or as last saved). One the kitchen has not touched is not checked again: it may have been
+  // saved before the numbers were checked, and it must not stop the rest of the settings from being saved.
+  const [heldNumbers, setHeldNumbers] = useState({ jazzcashNumber: '', easypaisaNumber: '', bankAccountNumber: '' });
 
   const [deliveryModel, setDeliveryModel] = useState<'model_a' | 'model_b'>('model_b');
   const [newAreaInput, setNewAreaInput] = useState('');
@@ -126,6 +138,11 @@ export default function SellerSettingsPage() {
         // deliveryProvider is the source of truth for who delivers; fee fields no longer imply it.
         setDeliveryModel(seller.deliveryProvider === 'self' ? 'model_b' : 'model_a');
 
+        setHeldNumbers({
+          jazzcashNumber: seller.jazzcashNumber || '',
+          easypaisaNumber: seller.easypaisaNumber || '',
+          bankAccountNumber: seller.bankAccountNumber || '',
+        });
         setFormData({
           businessName: seller.businessName || '',
           businessNameUrdu: seller.businessNameUrdu || '',
@@ -186,6 +203,15 @@ export default function SellerSettingsPage() {
     }
   };
 
+  /** A number typed again no longer shows the message about what was typed before. */
+  const clearPayoutError = (field: string) =>
+    setPayoutErrors((prev) => {
+      if (!(field in prev)) return prev;
+      const next = { ...prev };
+      delete next[field];
+      return next;
+    });
+
   const handleAddArea = () => {
     const trimmed = newAreaInput.trim();
     if (!trimmed) return;
@@ -218,6 +244,18 @@ export default function SellerSettingsPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    const problems: Record<string, string> = {};
+    const changed = (field: keyof typeof heldNumbers) => formData[field].trim() !== heldNumbers[field];
+    if (changed('jazzcashNumber') && walletNumberIsWrong(formData.jazzcashNumber)) problems.jazzcashNumber = WALLET_NUMBER_PROBLEM;
+    if (changed('easypaisaNumber') && walletNumberIsWrong(formData.easypaisaNumber)) problems.easypaisaNumber = WALLET_NUMBER_PROBLEM;
+    if (changed('bankAccountNumber') && bankAccountIsWrong(formData.bankAccountNumber)) problems.bankAccountNumber = BANK_ACCOUNT_PROBLEM;
+    setPayoutErrors(problems);
+    if (Object.keys(problems).length > 0) {
+      showToast('Check the payout account numbers marked in red.', 'error');
+      return;
+    }
+
     setLoading(true);
 
     try {
@@ -329,27 +367,51 @@ export default function SellerSettingsPage() {
         enableStockAlerts: Boolean(rest.enableStockAlerts),
       };
 
-      await apiClient.patch('/sellers/me', {
-        ...sanitizedRest,
-        ...deliveryPayload,
-        businessType,
-        mealCategories,
-        storeNotice: storeNotice || undefined,
-        scheduleMode,
-        operatingHours,
-        availabilityOverride: availabilityOverride || null,
-        availabilityOverrideUntil: availabilityOverride && availabilityOverrideUntil
-          ? new Date(availabilityOverrideUntil).toISOString()
-          : undefined,
-        availabilityNote: availabilityNote || undefined,
-        orderCutoffTime: orderCutoffTime || null,
-        maxDailyOrders: maxDailyOrders ?? undefined,
-        minPrepTimeMinutes: minPrepTimeMinutes ?? undefined,
-        preOrderOnly,
-        advanceBookingMinDays: advanceBookingMinDays ?? undefined,
-        advanceBookingMaxDays: advanceBookingMaxDays ?? undefined,
-      });
+      // Changing where customers send their money asks for the password again (a stolen session must not be able to re-point it
+      // alone): the server says so, we ask, and the same save goes again with the password. Nothing is saved until then.
+      const saved = await sendAskingForPassword(
+        (currentPassword) =>
+          apiClient.patch('/sellers/me', {
+            ...sanitizedRest,
+            ...deliveryPayload,
+            businessType,
+            mealCategories,
+            storeNotice: storeNotice || undefined,
+            scheduleMode,
+            operatingHours,
+            availabilityOverride: availabilityOverride || null,
+            availabilityOverrideUntil: availabilityOverride && availabilityOverrideUntil
+              ? new Date(availabilityOverrideUntil).toISOString()
+              : undefined,
+            availabilityNote: availabilityNote || undefined,
+            orderCutoffTime: orderCutoffTime || null,
+            maxDailyOrders: maxDailyOrders ?? undefined,
+            minPrepTimeMinutes: minPrepTimeMinutes ?? undefined,
+            preOrderOnly,
+            advanceBookingMinDays: advanceBookingMinDays ?? undefined,
+            advanceBookingMaxDays: advanceBookingMaxDays ?? undefined,
+            ...(currentPassword ? { currentPassword } : {}),
+          }),
+        () =>
+          askDialog({
+            title: 'Confirm with your password',
+            message: 'You are changing the accounts customers pay into. Enter your password to save the settings.',
+            type: 'password',
+            confirmText: 'Save settings',
+          })
+      );
+      if (!saved) {
+        showToast('Nothing was saved: your password was not entered.', 'info');
+        return;
+      }
 
+      // The server keeps each number in one form (03001234567, PK36…): show what it kept.
+      const kept = saved.data?.data;
+      if (kept) {
+        const numbers = { jazzcashNumber: kept.jazzcashNumber ?? '', easypaisaNumber: kept.easypaisaNumber ?? '', bankAccountNumber: kept.bankAccountNumber ?? '' };
+        setHeldNumbers(numbers);
+        setFormData((prev) => ({ ...prev, ...numbers }));
+      }
       showToast('Settings saved successfully.', 'success');
     } catch (error: any) {
       const firstIssue = error.response?.data?.error?.details?.[0]?.message;
@@ -705,7 +767,7 @@ export default function SellerSettingsPage() {
             <div>
               <h3 className="text-sm font-bold text-slate-900 tracking-tight">Direct Payout Accounts</h3>
               <p className="text-[11px] text-slate-500 mt-0.5">
-                Customers transfer funds directly to these accounts when selecting Bank Transfer, JazzCash, or EasyPaisa.
+                Customers transfer funds directly to these accounts when selecting Bank Transfer, JazzCash, or EasyPaisa. Check every digit: a wrong number sends their money to someone else. Changing an account asks for your password.
               </p>
             </div>
 
@@ -720,11 +782,17 @@ export default function SellerSettingsPage() {
                   <label className="text-[11px] font-semibold text-slate-600 block mb-1">JazzCash Mobile Number</label>
                   <input
                     type="tel"
+                    dir="ltr"
                     placeholder="03XXXXXXXXX"
                     value={formData.jazzcashNumber}
-                    onChange={(e) => setFormData({ ...formData, jazzcashNumber: e.target.value })}
-                    className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-[#FF5500] bg-white"
+                    onChange={(e) => {
+                      setFormData({ ...formData, jazzcashNumber: e.target.value });
+                      clearPayoutError('jazzcashNumber');
+                    }}
+                    aria-invalid={Boolean(payoutErrors.jazzcashNumber)}
+                    className={`w-full px-3 py-2 text-xs border rounded-lg outline-none focus:ring-2 focus:ring-[#FF5500] bg-white ${payoutErrors.jazzcashNumber ? 'border-red-500' : 'border-slate-300'}`}
                   />
+                  {payoutErrors.jazzcashNumber && <p role="alert" className="text-[11px] text-red-700 mt-1">{payoutErrors.jazzcashNumber}</p>}
                 </div>
                 <div>
                   <label className="text-[11px] font-semibold text-slate-600 block mb-1">Account Title (Name on JazzCash)</label>
@@ -750,11 +818,17 @@ export default function SellerSettingsPage() {
                   <label className="text-[11px] font-semibold text-slate-600 block mb-1">EasyPaisa Mobile Number</label>
                   <input
                     type="tel"
+                    dir="ltr"
                     placeholder="03XXXXXXXXX"
                     value={formData.easypaisaNumber}
-                    onChange={(e) => setFormData({ ...formData, easypaisaNumber: e.target.value })}
-                    className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-[#FF5500] bg-white"
+                    onChange={(e) => {
+                      setFormData({ ...formData, easypaisaNumber: e.target.value });
+                      clearPayoutError('easypaisaNumber');
+                    }}
+                    aria-invalid={Boolean(payoutErrors.easypaisaNumber)}
+                    className={`w-full px-3 py-2 text-xs border rounded-lg outline-none focus:ring-2 focus:ring-[#FF5500] bg-white ${payoutErrors.easypaisaNumber ? 'border-red-500' : 'border-slate-300'}`}
                   />
+                  {payoutErrors.easypaisaNumber && <p role="alert" className="text-[11px] text-red-700 mt-1">{payoutErrors.easypaisaNumber}</p>}
                 </div>
                 <div>
                   <label className="text-[11px] font-semibold text-slate-600 block mb-1">Account Title (Name on EasyPaisa)</label>
@@ -800,11 +874,17 @@ export default function SellerSettingsPage() {
                   <label className="text-[11px] font-semibold text-slate-600 block mb-1">IBAN / Account Number</label>
                   <input
                     type="text"
-                    placeholder="PK00XXXX..."
+                    dir="ltr"
+                    placeholder="PK36SCBL0000001123456702"
                     value={formData.bankAccountNumber}
-                    onChange={(e) => setFormData({ ...formData, bankAccountNumber: e.target.value })}
-                    className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-[#FF5500] bg-white"
+                    onChange={(e) => {
+                      setFormData({ ...formData, bankAccountNumber: e.target.value });
+                      clearPayoutError('bankAccountNumber');
+                    }}
+                    aria-invalid={Boolean(payoutErrors.bankAccountNumber)}
+                    className={`w-full px-3 py-2 text-xs border rounded-lg outline-none focus:ring-2 focus:ring-[#FF5500] bg-white ${payoutErrors.bankAccountNumber ? 'border-red-500' : 'border-slate-300'}`}
                   />
+                  {payoutErrors.bankAccountNumber && <p role="alert" className="text-[11px] text-red-700 mt-1">{payoutErrors.bankAccountNumber}</p>}
                 </div>
               </div>
             </div>

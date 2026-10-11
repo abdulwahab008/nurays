@@ -33,3 +33,19 @@ export async function assertCurrentPassword(
   void recordAudit({ userId: user.id, action: 'auth:REAUTH_FAILED', entityType: 'user', entityId: user.id, ipAddress: ctx.ip ?? null, responseStatus: 400 });
   throw new AppError('Wrong password', 400, 'INVALID_PASSWORD');
 }
+
+/**
+ * The same check for a request that carries the password along. An account that signs in with a password must send it:
+ * without it the answer is 400 PASSWORD_REQUIRED, so the page can ask and send the request again. An account that signs in
+ * another way (a phone code, Google) has no password to ask for.
+ */
+export async function confirmPasswordIfSet(
+  user: { id: string; passwordHash: string | null } | null,
+  password: string | undefined,
+  message: string,
+  ctx: { ip?: string | null } = {}
+): Promise<void> {
+  if (!user?.passwordHash) return;
+  if (!password) throw new AppError(message, 400, 'PASSWORD_REQUIRED');
+  await assertCurrentPassword({ id: user.id, passwordHash: user.passwordHash }, password, ctx);
+}

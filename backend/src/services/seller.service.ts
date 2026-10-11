@@ -9,6 +9,8 @@ import { computeSellerBalance } from './seller-balance.service';
 import { assertOwnDocument, assertOwnPublicImage } from '../utils/documents';
 import { notifyApprovers } from './approvals.service';
 import { kitchenApplicationGaps } from '../utils/kitchenApplication';
+import { changedPayoutDetails } from '../utils/payoutAccount';
+import { confirmPasswordIfSet } from './reauth.service';
 
 /** Shared shape for the business-operations fields — read by getSellerProfile, written by updateSellerProfile. */
 function formatBusinessOperationsFields(seller: {
@@ -285,18 +287,20 @@ export class SellerService {
   async updateSellerProfile(
     userId: string,
     data: {
+      /** Asked for when the payout accounts change (see PASSWORD_REQUIRED). */
+      currentPassword?: string;
       businessName?: string;
       businessNameUrdu?: string;
       description?: string;
       kitchenVideoUrl?: string;
       coverImageUrl?: string;
-      jazzcashNumber?: string;
-      jazzcashAccountTitle?: string;
-      easypaisaNumber?: string;
-      easypaisaAccountTitle?: string;
-      bankAccountName?: string;
-      bankAccountNumber?: string;
-      bankName?: string;
+      jazzcashNumber?: string | null;
+      jazzcashAccountTitle?: string | null;
+      easypaisaNumber?: string | null;
+      easypaisaAccountTitle?: string | null;
+      bankAccountName?: string | null;
+      bankAccountNumber?: string | null;
+      bankName?: string | null;
       lowStockThreshold?: number;
       enableStockAlerts?: boolean;
       freeDeliveryAreas?: string[];
@@ -330,7 +334,8 @@ export class SellerService {
       preOrderOnly?: boolean;
       advanceBookingMinDays?: number | null;
       advanceBookingMaxDays?: number | null;
-    }
+    },
+    ctx: { ip?: string | null } = {}
   ) {
     const seller = await prisma.seller.findUnique({
       where: { userId },
@@ -340,7 +345,18 @@ export class SellerService {
       throw new AppError('Seller not found', 404, 'SELLER_NOT_FOUND');
     }
 
-    const updateData: Record<string, unknown> = {};
+    // Customers send their money to these accounts: a number must be one, and a stolen session must not be able to
+    // re-point them alone, so a change asks for the password again (when the account has one).
+    const payout = changedPayoutDetails(seller, data);
+    if (payout.problems.length > 0) {
+      throw new AppError(`Validation failed: ${payout.problems[0].message}`, 400, 'VALIDATION_ERROR', payout.problems);
+    }
+    if (Object.keys(payout.changes).length > 0) {
+      const owner = await prisma.user.findUnique({ where: { id: userId }, select: { id: true, passwordHash: true } });
+      await confirmPasswordIfSet(owner, data.currentPassword, 'Enter your password to change your payout accounts', ctx);
+    }
+
+    const updateData: Record<string, unknown> = { ...payout.changes };
     if (data.businessName !== undefined) updateData.businessName = data.businessName;
     if (data.businessNameUrdu !== undefined) updateData.businessNameUrdu = data.businessNameUrdu;
     if (data.description !== undefined) updateData.description = data.description;
@@ -351,13 +367,6 @@ export class SellerService {
       updateData.coverImageUrl =
         data.coverImageUrl && data.coverImageUrl !== seller.coverImageUrl ? assertOwnPublicImage(data.coverImageUrl, userId, 'covers', 'cover photo') : data.coverImageUrl || null;
     }
-    if (data.jazzcashNumber !== undefined) updateData.jazzcashNumber = data.jazzcashNumber || null;
-    if (data.jazzcashAccountTitle !== undefined) updateData.jazzcashAccountTitle = data.jazzcashAccountTitle || null;
-    if (data.easypaisaNumber !== undefined) updateData.easypaisaNumber = data.easypaisaNumber || null;
-    if (data.easypaisaAccountTitle !== undefined) updateData.easypaisaAccountTitle = data.easypaisaAccountTitle || null;
-    if (data.bankAccountName !== undefined) updateData.bankAccountName = data.bankAccountName || null;
-    if (data.bankAccountNumber !== undefined) updateData.bankAccountNumber = data.bankAccountNumber || null;
-    if (data.bankName !== undefined) updateData.bankName = data.bankName || null;
     if (data.lowStockThreshold !== undefined) updateData.lowStockThreshold = data.lowStockThreshold;
     if (data.enableStockAlerts !== undefined) updateData.enableStockAlerts = data.enableStockAlerts;
     if (data.freeDeliveryAreas !== undefined) updateData.freeDeliveryAreas = data.freeDeliveryAreas;
@@ -896,7 +905,10 @@ export class SellerService {
       amount: number;
       payoutMethod: string;
       accountNumber: string;
-    }
+      /** Asked for on every request (see PASSWORD_REQUIRED). */
+      currentPassword?: string;
+    },
+    ctx: { ip?: string | null } = {}
   ) {
     const seller = await prisma.seller.findUnique({
       where: { id: sellerId },
@@ -922,6 +934,10 @@ export class SellerService {
         'MINIMUM_PAYOUT_NOT_MET'
       );
     }
+
+    // The earnings go to the account named here: a stolen session must not be able to send them anywhere alone.
+    const owner = await prisma.user.findUnique({ where: { id: seller.userId }, select: { id: true, passwordHash: true } });
+    await confirmPasswordIfSet(owner, data.currentPassword, 'Enter your password to request a payout', ctx);
 
     // Compute the balance and create the payout under a row lock on the seller:
     // two simultaneous requests used to both read the same balance and together

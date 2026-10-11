@@ -9,6 +9,7 @@ import { useToast } from '@/components/ui/toast';
 import { LoadError } from '@/components/ui/LoadError';
 import { useAuthStore } from '@/lib/store/auth-store';
 import { apiClient } from '@/lib/api-client';
+import { bankAccountIsWrong, walletNumberIsWrong } from '@/lib/payout-account';
 import LocationMap from '@/components/ui/LocationMap';
 import FileUploadField from '@/components/ui/FileUploadField';
 import { useT } from '@/lib/i18n';
@@ -215,6 +216,10 @@ export default function SellerRegisterPage() {
     if (!formData.agreeToTerms && (!sellerInfo || sellerInfo.verificationStatus === 'rejected' || needsCompleting)) {
       newErrors.agreeToTerms = t('reg.errTerms');
     }
+    // Customers pay into these: a wrong digit pays a stranger, so a number has to be one (the server checks the same).
+    if (walletNumberIsWrong(formData.jazzcashNumber)) newErrors.jazzcashNumber = t('ob.jazzInvalid');
+    if (walletNumberIsWrong(formData.easypaisaNumber)) newErrors.easypaisaNumber = t('ob.easyInvalid');
+    if (bankAccountIsWrong(formData.bankAccountNumber)) newErrors.bankAccountNumber = t('ob.bankInvalid');
 
     if (Object.keys(newErrors).length > 0) {
       setErrors(newErrors);
@@ -627,9 +632,11 @@ export default function SellerRegisterPage() {
                     name="bankAccountNumber"
                     value={formData.bankAccountNumber}
                     onChange={handleInputChange}
-                    placeholder="PK00MEZN0000000000000000"
-                    className="w-full px-4 py-3 rounded-xl border border-slate-200 bg-slate-50 text-slate-900 font-medium text-sm focus:outline-none focus:ring-2 focus:ring-orange-500 transition-all"
+                    placeholder="PK36SCBL0000001123456702"
+                    aria-invalid={Boolean(errors.bankAccountNumber)}
+                    className={`w-full px-4 py-3 rounded-xl border bg-slate-50 text-slate-900 font-medium text-sm focus:outline-none focus:ring-2 focus:ring-orange-500 transition-all ${errors.bankAccountNumber ? 'border-rose-400 bg-rose-50' : 'border-slate-200'}`}
                   />
+                  {errors.bankAccountNumber && <p role="alert" className="text-rose-500 text-xs mt-1 font-medium">{errors.bankAccountNumber}</p>}
                 </div>
               </div>
 
@@ -646,8 +653,10 @@ export default function SellerRegisterPage() {
                     value={formData.jazzcashNumber}
                     onChange={handleInputChange}
                     placeholder="03001234567"
-                    className="w-full px-4 py-3 rounded-xl border border-slate-200 bg-slate-50 text-slate-900 font-medium text-sm focus:outline-none focus:ring-2 focus:ring-orange-500 transition-all"
+                    aria-invalid={Boolean(errors.jazzcashNumber)}
+                    className={`w-full px-4 py-3 rounded-xl border bg-slate-50 text-slate-900 font-medium text-sm focus:outline-none focus:ring-2 focus:ring-orange-500 transition-all ${errors.jazzcashNumber ? 'border-rose-400 bg-rose-50' : 'border-slate-200'}`}
                   />
+                  {errors.jazzcashNumber && <p role="alert" className="text-rose-500 text-xs mt-1 font-medium">{errors.jazzcashNumber}</p>}
                 </div>
 
                 <div>
@@ -662,8 +671,10 @@ export default function SellerRegisterPage() {
                     value={formData.easypaisaNumber}
                     onChange={handleInputChange}
                     placeholder="03451234567"
-                    className="w-full px-4 py-3 rounded-xl border border-slate-200 bg-slate-50 text-slate-900 font-medium text-sm focus:outline-none focus:ring-2 focus:ring-orange-500 transition-all"
+                    aria-invalid={Boolean(errors.easypaisaNumber)}
+                    className={`w-full px-4 py-3 rounded-xl border bg-slate-50 text-slate-900 font-medium text-sm focus:outline-none focus:ring-2 focus:ring-orange-500 transition-all ${errors.easypaisaNumber ? 'border-rose-400 bg-rose-50' : 'border-slate-200'}`}
                   />
+                  {errors.easypaisaNumber && <p role="alert" className="text-rose-500 text-xs mt-1 font-medium">{errors.easypaisaNumber}</p>}
                 </div>
               </div>
             </div>

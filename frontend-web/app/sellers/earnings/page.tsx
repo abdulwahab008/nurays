@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import { DashboardLayout, SELLER_SIDEBAR_ITEMS } from '@/components/layout/DashboardShell';
 import { Button } from '@/components/ui/button';
 import { LoadError } from '@/components/ui/LoadError';
+import { useDialogs } from '@/components/ui/Dialogs';
 import { useToast } from '@/components/ui/toast';
 import { useAuthStore } from '@/lib/store/auth-store';
 import { apiClient } from '@/lib/api-client';
@@ -13,6 +14,8 @@ import { formatPrice, formatDate } from '@/lib/utils';
 import { useT } from '@/lib/i18n';
 import { commonMessages } from '@/lib/i18n/messages/common';
 import { kitchenEarningsMessages } from '@/lib/i18n/messages/kitchen-earnings';
+import { payoutDestinationIsWrong } from '@/lib/payout-account';
+import { sendAskingForPassword } from '@/lib/send-asking-for-password';
 
 const sidebarItems = SELLER_SIDEBAR_ITEMS;
 
@@ -85,6 +88,7 @@ export default function SellerEarningsPage() {
   const { showToast } = useToast();
   const t = useT(kitchenEarningsMessages);
   const tc = useT(commonMessages);
+  const { ask: askDialog } = useDialogs();
   const [loading, setLoading] = useState(true);
   // Why the earnings could not be read; shown instead of "no data", which would say there is nothing to see.
   const [loadError, setLoadError] = useState<unknown>(null);
@@ -153,15 +157,26 @@ export default function SellerEarningsPage() {
       showToast(t('enterAccount'), 'warning');
       return;
     }
+    // The money is sent to this account: a wrong digit pays a stranger, so it is checked here as the server checks it.
+    if (payoutDestinationIsWrong(payoutMethod, accountNumber)) {
+      showToast(t(payoutMethod === 'bank_transfer' ? 'accountInvalidBank' : 'accountInvalidWallet'), 'warning');
+      return;
+    }
 
     try {
       setRequestingPayout(true);
-      const response = await apiClient.post('/sellers/me/payouts', {
-        amount: earnings.availableBalance,
-        payoutMethod,
-        accountNumber: accountNumber.trim(),
-      });
-      if (response.data.success) {
+      // A stolen session must not be able to send the earnings anywhere: the server asks for the password, and we ask the person.
+      const response = await sendAskingForPassword(
+        (currentPassword) =>
+          apiClient.post('/sellers/me/payouts', {
+            amount: earnings.availableBalance,
+            payoutMethod,
+            accountNumber: accountNumber.trim(),
+            ...(currentPassword ? { currentPassword } : {}),
+          }),
+        () => askDialog({ title: t('passwordTitle'), message: t('payoutPasswordPrompt'), type: 'password' })
+      );
+      if (response?.data.success) {
         showToast(t('payoutSubmitted'), 'success');
         setShowPayoutForm(false);
         setAccountNumber('');
@@ -334,7 +349,7 @@ export default function SellerEarningsPage() {
                         type="text"
                         value={accountNumber}
                         onChange={(e) => setAccountNumber(e.target.value)}
-                        placeholder={t('example', { value: payoutMethod === 'bank_transfer' ? 'PK00HABB0000000000000000' : '03001234567' })}
+                        placeholder={t('example', { value: payoutMethod === 'bank_transfer' ? 'PK36SCBL0000001123456702' : '03001234567' })}
                         dir="ltr"
                         className="w-full md:w-80 px-4 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
                       />

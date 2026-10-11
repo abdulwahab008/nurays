@@ -23,7 +23,7 @@ export const updateCurrentSeller = async (req: Request, res: Response) => {
     throw new AppError('Authentication required', 401, 'AUTH_REQUIRED');
   }
 
-  const profile = await sellerService.updateSellerProfile(req.user.userId, req.body);
+  const profile = await sellerService.updateSellerProfile(req.user.userId, req.body, { ip: req.ip });
 
   res.status(200).json({
     success: true,
@@ -97,7 +97,7 @@ export const getSellerAnalytics = async (req: Request, res: Response) => {
 export const requestPayout = async (req: Request, res: Response) => {
   const sellerId = await currentSellerId(req);
 
-  const result = await sellerService.requestPayout(sellerId, req.body);
+  const result = await sellerService.requestPayout(sellerId, req.body, { ip: req.ip });
 
   res.status(201).json({
     success: true,

@@ -7,6 +7,7 @@ import { apiClient } from '@/lib/api-client';
 import { useAuthStore } from '@/lib/store/auth-store';
 import { useT } from '@/lib/i18n';
 import { joinMessages } from '@/lib/i18n/messages/join';
+import { bankAccountIsWrong } from '@/lib/payout-account';
 
 interface SellerOnboardingModalProps {
   isOpen: boolean;
@@ -170,6 +171,10 @@ export function SellerOnboardingModal({ isOpen, onClose, onComplete }: SellerOnb
         }
         if (formData.easypaisaNumber && !/^03\d{9}$/.test(formData.easypaisaNumber)) {
           newErrors.easypaisaNumber = t('ob.easyInvalid');
+        }
+        // Customers pay into this account: a wrong digit pays a stranger.
+        if (bankAccountIsWrong(formData.bankAccountNumber)) {
+          newErrors.bankAccountNumber = t('ob.bankInvalid');
         }
         break;
       case 4:
@@ -520,9 +525,13 @@ export function SellerOnboardingModal({ isOpen, onClose, onComplete }: SellerOnb
                 name="bankAccountNumber"
                 value={formData.bankAccountNumber}
                 onChange={handleInputChange}
-                className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-400 focus:border-blue-400 transition-all"
+                className={`w-full px-4 py-3 border rounded-xl focus:ring-2 focus:ring-blue-400 focus:border-blue-400 transition-all ${
+                  errors.bankAccountNumber ? 'border-red-500 bg-red-50' : 'border-gray-300'
+                }`}
                 placeholder={t('ob.accountNumber')}
+                aria-invalid={Boolean(errors.bankAccountNumber)}
               />
+              {errors.bankAccountNumber && <p className="text-gray-600 text-sm mt-1">{errors.bankAccountNumber}</p>}
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">{t('accountTitle')}</label>

@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { readableDate } from './primitives';
 import { PAKISTAN_BOUNDS, PIN_OUTSIDE } from '../utils/geo';
+import { BANK_ACCOUNT_HINT, WALLET_NUMBER_HINT, normalizeBankAccount, normalizePayoutDestination, normalizeWalletNumber } from '../utils/payoutAccount';
 
 /** What a kitchen can be: the sign-up form and the settings page offer exactly these. */
 export const BUSINESS_TYPES = ['restaurant', 'home_kitchen', 'bakery', 'cafe', 'cloud_kitchen'] as const;
@@ -8,6 +9,21 @@ export const BUSINESS_TYPES = ['restaurant', 'home_kitchen', 'bakery', 'cafe', '
 export const DELIVERY_MODES = ['delivery', 'pickup', 'dine_in'] as const;
 /** A kitchen's own override of its opening hours. Leaving it out, or null, follows the schedule. */
 export const AVAILABILITY_OVERRIDES = ['open', 'closed', 'busy', 'vacation', 'holiday', 'preorder_only'] as const;
+
+/**
+ * The numbers customers are told to pay into. Blank means none; anything else must be a real one (a wrong digit pays a
+ * stranger) and is kept in one form: 03001234567, PK36SCBL0000001123456702.
+ */
+const walletNumber = z
+  .string()
+  .max(20)
+  .refine((v) => !v.trim() || normalizeWalletNumber(v) !== null, WALLET_NUMBER_HINT)
+  .transform((v) => normalizeWalletNumber(v) ?? '');
+const bankAccountNumber = z
+  .string()
+  .max(60)
+  .refine((v) => !v.trim() || normalizeBankAccount(v) !== null, BANK_ACCOUNT_HINT)
+  .transform((v) => normalizeBankAccount(v) ?? '');
 
 export const registerSellerSchema = z.object({
   businessName: z.string().min(3, 'Business name must be at least 3 characters').max(120),
@@ -28,11 +44,11 @@ export const registerSellerSchema = z.object({
   mealCategories: z.array(z.string().max(50)).max(20).optional(),
   deliveryModes: z.array(z.enum(DELIVERY_MODES)).max(DELIVERY_MODES.length).optional(),
   bankAccountName: z.string().max(120).optional(),
-  bankAccountNumber: z.string().max(60).optional(),
+  bankAccountNumber: bankAccountNumber.optional(),
   bankName: z.string().max(120).optional(),
-  jazzcashNumber: z.string().max(20).optional(),
+  jazzcashNumber: walletNumber.optional(),
   jazzcashAccountTitle: z.string().max(120).optional(),
-  easypaisaNumber: z.string().max(20).optional(),
+  easypaisaNumber: walletNumber.optional(),
   easypaisaAccountTitle: z.string().max(120).optional(),
   agreeToTerms: z.boolean().optional(),
 });
@@ -66,6 +82,8 @@ export const operatingHoursSchema = z.object({
 });
 
 export const updateSellerSchema = z.object({
+  // Asked for when the payout accounts below change (PASSWORD_REQUIRED): a stolen session must not re-point them alone.
+  currentPassword: z.string().max(200).optional(),
   businessName: z.string().min(1, 'Business name is required').max(120).optional(),
   businessNameUrdu: z.string().max(120).optional().nullable(),
   description: z.string().max(1000).optional().nullable(),
@@ -139,9 +157,20 @@ export const setCommunityDeliverySchema = z.object({
     .max(200),
 });
 
-export const requestPayoutSchema = z.object({
-  amount: z.number().min(100, 'Minimum payout amount is 100 PKR').max(10_000_000),
-  payoutMethod: z.enum(['bank_transfer', 'jazzcash', 'easypaisa']),
-  accountNumber: z.string().min(1, 'Account number is required'),
-});
+export const requestPayoutSchema = z
+  .object({
+    amount: z.number().min(100, 'Minimum payout amount is 100 PKR').max(10_000_000),
+    payoutMethod: z.enum(['bank_transfer', 'jazzcash', 'easypaisa']),
+    accountNumber: z.string().min(1, 'Account number is required').max(60),
+    // Asked for on every request (PASSWORD_REQUIRED): a stolen session must not be able to send the earnings to another account.
+    currentPassword: z.string().max(200).optional(),
+  })
+  .transform((request, ctx) => {
+    const accountNumber = normalizePayoutDestination(request.payoutMethod, request.accountNumber);
+    if (!accountNumber) {
+      ctx.addIssue({ code: 'custom', path: ['accountNumber'], message: request.payoutMethod === 'bank_transfer' ? BANK_ACCOUNT_HINT : WALLET_NUMBER_HINT });
+      return z.NEVER;
+    }
+    return { ...request, accountNumber };
+  });
 

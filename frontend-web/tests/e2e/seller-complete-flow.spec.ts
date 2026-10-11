@@ -213,7 +213,7 @@ test.describe.serial('Complete Seller End-to-End Workflow (Sections 1-14)', () =
     // Fill Bank & Wallet Details
     await page.fill('#bank-name-input', 'Meezan Bank');
     await page.fill('#bank-account-name-input', 'Chef Tariq');
-    await page.fill('#bank-account-input', 'PK36MEZN0001234567890123');
+    await page.fill('#bank-account-input', 'PK56MEZN0001234567890123');
     await page.fill('#jazzcash-input', '03001234567');
 
     // Agree to Terms
