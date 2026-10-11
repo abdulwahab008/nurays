@@ -84,7 +84,9 @@ export default async function security() {
   const verified = await makeUser('customer');
   const control = await call(null, 'POST', '/auth/forgot-password', { email: verified.email });
   let controlRows = 0;
-  for (let i = 0; i < 40 && controlRows === 0; i++) {
+  // The link is made by a background job: normally in a few milliseconds, but a job that fails once is retried after a pause and a
+  // busy shared runner can hold it for seconds, so the wait is generous (it fails only if no link is ever made).
+  for (let i = 0; i < 120 && controlRows === 0; i++) {
     controlRows = await prisma.passwordReset.count({ where: { userId: verified.id } });
     if (controlRows === 0) await sleep(250);
   }
