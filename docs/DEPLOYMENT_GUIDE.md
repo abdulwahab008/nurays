@@ -244,9 +244,10 @@ mandatory in production):
 
 - Rate limits: counters live in Redis (`middleware/rateLimiter.ts`, and `utils/attemptBudget.ts` for "wrong
   password" and e-mail counts). If Redis is unreachable, or does not answer within `REDIS_COMMAND_TIMEOUT_MS`,
-  requests are let through rather than refused, and the counts fall back to each instance's memory. Keys for a phone number or an e-mail address hold a hash, never the
-  number or address. The per-address limits are deliberately loose (a Pakistani mobile network puts many customers
-  behind one address); the tight ones are per phone number and per e-mail address (see SECURITY_AND_COMPLIANCE.md).
+  requests are let through rather than refused, and the counts fall back to each instance's memory. Keys for a
+  phone number or an e-mail address hold a hash, never the number or address. The per-address limits are
+  deliberately loose (a Pakistani mobile network puts many customers behind one address); the tight ones are per
+  phone number and per e-mail address (see SECURITY_AND_COMPLIANCE.md).
 - Live updates: Socket.IO uses the Redis adapter so an event emitted on one instance reaches clients on any other
   (`config/socket.ts`). Clients may use WebSocket or long polling; if you rely on polling, enable sticky sessions on
   the load balancer.
@@ -270,8 +271,9 @@ mandatory in production):
   (`2 × cores + 1`), not from how many instances run. Set it explicitly on `DATABASE_URL`
   (`?connection_limit=10&pool_timeout=10`) and keep `instances × connection_limit + 10` below PostgreSQL's
   `max_connections` (100 by default). Beyond about five instances put PgBouncer (transaction mode) in front
-  and add `&pgbouncer=true` (the app then does not send `DB_STATEMENT_TIMEOUT_MS`: set it on the role). The load test in `docs/PRODUCTION_READINESS_AUDIT.md` showed that a larger pool
-  does not make the API faster on 4 cores: the limit there is CPU, so scale instances, not the pool.
+  and add `&pgbouncer=true` (the app then does not send `DB_STATEMENT_TIMEOUT_MS`: set it on the role). The load
+  test in `docs/PRODUCTION_READINESS_AUDIT.md` showed that a larger pool does not make the API faster on 4 cores:
+  the limit there is CPU, so scale instances, not the pool.
 
 ## Background jobs
 

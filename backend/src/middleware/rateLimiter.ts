@@ -94,7 +94,7 @@ const STORE_FAILURE_LOG_INTERVAL_MS = 60_000;
 let storeFailureLoggedAt = 0;
 let storeFailuresSinceLog = 0;
 
-const describe = (error: unknown, message?: string) => message ?? (error instanceof Error ? error.message : 'express-rate-limit');
+const logMessage = (error: unknown, message?: string) => message ?? (error instanceof Error ? error.message : 'express-rate-limit');
 
 const rateLimitLogger = {
   error(error: unknown, message?: string) {
@@ -110,10 +110,10 @@ const rateLimitLogger = {
       storeFailuresSinceLog = 0;
       return;
     }
-    logger.error({ err: error }, describe(error, message));
+    logger.error({ err: error }, logMessage(error, message));
   },
   warn(error: unknown, message?: string) {
-    logger.warn({ err: error }, describe(error, message));
+    logger.warn({ err: error }, logMessage(error, message));
   },
 };
 
