@@ -673,13 +673,23 @@ export class SellerService {
 
     const availability = computeSellerAvailability(seller);
 
+    // A kitchen that signs up with "Cook & Sell" is waiting with only a name: what it still has to add.
+    const applicationMissing =
+      seller.verificationStatus === 'pending'
+        ? kitchenApplicationGaps(seller, (await prisma.sellerDocument.findMany({ where: { sellerId }, select: { documentType: true } })).map((d) => d.documentType))
+        : [];
+
     return {
       // Seller profile information
       id: seller.id,
       businessName: seller.businessName,
       businessNameUrdu: seller.businessNameUrdu,
       businessType: seller.businessType,
+      communityId: seller.communityId,
       primaryCommunityName: seller.primaryCommunityName,
+      latitude: seller.latitude != null ? Number(seller.latitude) : null,
+      longitude: seller.longitude != null ? Number(seller.longitude) : null,
+      applicationMissing,
       description: seller.description,
       kitchenVideoUrl: seller.kitchenVideoUrl,
       coverImageUrl: seller.coverImageUrl,

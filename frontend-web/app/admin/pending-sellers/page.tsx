@@ -10,6 +10,7 @@ import { useAuthStore } from '@/lib/store/auth-store';
 import { apiClient } from '@/lib/api-client';
 import DocumentList from '@/components/admin/DocumentList';
 import { ExternalLink } from '@/components/ExternalLink';
+import { RejectReasonModal } from '@/components/admin/RejectReasonModal';
 
 interface PendingSeller {
   id: string;
@@ -21,6 +22,8 @@ interface PendingSeller {
   status: string;
   createdAt: string;
   primaryCommunityName?: string | null;
+  /** What the application still lacks (the server works it out); empty when it is complete. */
+  missing?: string[];
   latitude?: number | null;
   longitude?: number | null;
   documents: Array<{ id: string; type: string; url: string | null }>;
@@ -41,6 +44,7 @@ export default function AdminPendingSellersPage() {
   const [loading, setLoading] = useState(true);
   const [pendingSellers, setPendingSellers] = useState<PendingSeller[]>([]);
   const [processingId, setProcessingId] = useState<string | null>(null);
+  const [rejecting, setRejecting] = useState<PendingSeller | null>(null);
 
   useEffect(() => {
     if (!isAuthenticated) {
@@ -72,16 +76,17 @@ export default function AdminPendingSellersPage() {
     }
   };
 
-  const handleApproveReject = async (sellerId: string, action: 'approve' | 'reject') => {
+  const handleApproveReject = async (sellerId: string, action: 'approve' | 'reject', reason?: string) => {
     try {
       setProcessingId(sellerId);
       const response = await apiClient.post(`/admin/sellers/${sellerId}/${action}`, {
         approved: action === 'approve',
-        notes: action === 'reject' ? 'Rejected by admin' : undefined,
+        notes: action === 'reject' ? reason : undefined,
       });
       
       if (response.data.success) {
         showToast(`Seller ${action === 'approve' ? 'approved' : 'rejected'} successfully!`, 'success');
+        setRejecting(null);
         loadPendingSellers();
       }
     } catch (error: any) {
@@ -187,23 +192,30 @@ export default function AdminPendingSellersPage() {
                       </div>
                     </div>
                     <DocumentList documents={seller.documents ?? []} />
+                    {(seller.missing?.length ?? 0) > 0 && (
+                      <p className="mt-3 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900" data-testid="application-incomplete">
+                        Cannot be approved yet: this kitchen has not sent its {seller.missing!.join(', ')}. It can still add them to this
+                        application; or reject it and say what is missing.
+                      </p>
+                    )}
                   </div>
 
                   <div className="flex gap-2 ms-4">
                     <Button
                       onClick={() => handleApproveReject(seller.id, 'approve')}
-                      disabled={processingId === seller.id}
+                      disabled={processingId === seller.id || (seller.missing?.length ?? 0) > 0}
+                      title={(seller.missing?.length ?? 0) > 0 ? `Missing: ${seller.missing!.join(', ')}` : undefined}
                       className="bg-green-600 hover:bg-green-700 text-white"
                     >
                       {processingId === seller.id ? 'Processing...' : 'Approve'}
                     </Button>
                     <Button
-                      onClick={() => handleApproveReject(seller.id, 'reject')}
+                      onClick={() => setRejecting(seller)}
                       disabled={processingId === seller.id}
                       variant="outline"
                       className="border-red-300 text-red-600 hover:bg-red-50"
                     >
-                      {processingId === seller.id ? 'Processing...' : 'Reject'}
+                      Reject
                     </Button>
                   </div>
                 </div>
@@ -212,6 +224,16 @@ export default function AdminPendingSellersPage() {
           </div>
         )}
       </div>
+      <RejectReasonModal
+        isOpen={!!rejecting}
+        title={`Reject ${rejecting?.businessName ?? 'this kitchen'}?`}
+        description="The kitchen is told the reason. It can fix the application and send it again."
+        suggestions={['The photos of the CNIC are unclear', 'The kitchen photos are missing', 'The kitchen location does not match the address', 'The application is incomplete']}
+        confirmLabel="Reject application"
+        busy={!!rejecting && processingId === rejecting.id}
+        onConfirm={(reason) => rejecting && handleApproveReject(rejecting.id, 'reject', reason)}
+        onCancel={() => setRejecting(null)}
+      />
     </AdminShell>
   );
 }

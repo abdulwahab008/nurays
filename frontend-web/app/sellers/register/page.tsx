@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { loginUrlHere } from '@/lib/auth-redirect';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
@@ -97,7 +98,7 @@ export default function SellerRegisterPage() {
   useEffect(() => {
     const token = apiClient.getAccessToken();
     if (!token && !isAuthenticated) {
-      router.push('/login');
+      router.push(loginUrlHere());
       return;
     }
 
@@ -119,6 +120,8 @@ export default function SellerRegisterPage() {
           description: seller.description || '',
           primaryCommunityName: seller.primaryCommunityName || '',
           communityId: seller.communityId || '',
+          latitude: seller.latitude ?? prev.latitude,
+          longitude: seller.longitude ?? prev.longitude,
           coverImageUrl: seller.coverImageUrl || '',
           kitchenVideoUrl: seller.kitchenVideoUrl || '',
         }));
@@ -179,6 +182,10 @@ export default function SellerRegisterPage() {
   const isApproved = sellerInfo?.verificationStatus === 'approved' || sellerInfo?.verificationStatus === 'verified';
   const isPending = sellerInfo?.verificationStatus === 'pending';
   const isRejected = sellerInfo?.verificationStatus === 'rejected';
+  // A kitchen that signed up with "Cook & Sell" is waiting with only a name: it adds its community, location and CNIC here.
+  const missing: string[] = isPending && Array.isArray(sellerInfo?.applicationMissing) ? sellerInfo.applicationMissing : [];
+  const needsCompleting = missing.length > 0;
+  const gapLabel: Record<string, string> = { community: t('reg.gapCommunity'), 'kitchen location': t('reg.gapLocation'), 'CNIC photos (both sides)': t('reg.gapCnic') };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -193,10 +200,12 @@ export default function SellerRegisterPage() {
     if (formData.latitude == null || formData.longitude == null) {
       newErrors.location = t('reg.errLocation');
     }
-    if (!isRejected && (!formData.cnicFrontUrl || !formData.cnicBackUrl)) {
+    // The CNIC photos already on file are kept (a rejected application, or a waiting one that only lacks other things).
+    const cnicOnFile = isRejected || (needsCompleting && !missing.includes('CNIC photos (both sides)'));
+    if (!cnicOnFile && (!formData.cnicFrontUrl || !formData.cnicBackUrl)) {
       newErrors.cnic = t('reg.errCnic');
     }
-    if (!formData.agreeToTerms && (!sellerInfo || sellerInfo.verificationStatus === 'rejected')) {
+    if (!formData.agreeToTerms && (!sellerInfo || sellerInfo.verificationStatus === 'rejected' || needsCompleting)) {
       newErrors.agreeToTerms = t('reg.errTerms');
     }
 
@@ -248,7 +257,7 @@ export default function SellerRegisterPage() {
         </div>
 
         {/* Application Status Banners */}
-        {sellerInfo && !isEditing && (
+        {sellerInfo && (!isEditing || needsCompleting) && (
           <div className="mb-8">
             {isApproved && (
               <div className="bg-emerald-50 border border-emerald-200 rounded-2xl p-6 shadow-sm">
@@ -272,7 +281,7 @@ export default function SellerRegisterPage() {
               </div>
             )}
 
-            {isPending && (
+            {isPending && !needsCompleting && (
               <div id="pending-approval-banner" className="bg-amber-50 border border-amber-200 rounded-2xl p-6 shadow-sm">
                 <div className="flex items-start gap-4">
                   <div className="w-12 h-12 rounded-xl bg-amber-500 text-white flex items-center justify-center font-black text-xl">
@@ -285,6 +294,21 @@ export default function SellerRegisterPage() {
                     </div>
                     <p className="text-sm text-amber-700 mt-1">
                       {t('reg.pendingBody')}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {needsCompleting && (
+              <div id="incomplete-banner" className="bg-amber-50 border border-amber-200 rounded-2xl p-6 shadow-sm">
+                <div className="flex items-start gap-4">
+                  <div className="w-12 h-12 rounded-xl bg-amber-500 text-white flex items-center justify-center font-black text-xl">!</div>
+                  <div className="flex-1">
+                    <h2 className="text-lg font-bold text-amber-900">{t('reg.incompleteTitle')}</h2>
+                    <p className="text-sm text-amber-800 mt-1">{t('reg.incompleteBody')}</p>
+                    <p className="text-sm font-semibold text-amber-900 mt-2">
+                      {t('reg.incompleteStill')} {missing.map((m) => gapLabel[m] ?? m).join(', ')}
                     </p>
                   </div>
                 </div>
@@ -319,11 +343,11 @@ export default function SellerRegisterPage() {
         )}
 
         {/* Registration Form Card */}
-        {(!sellerInfo || isEditing || (!isApproved && !isPending)) && (
+        {(!sellerInfo || isEditing || (!isApproved && !isPending) || needsCompleting) && (
           <form onSubmit={handleSubmit} className="bg-white rounded-3xl shadow-xl border border-slate-100 p-8 sm:p-10 space-y-8">
             <div>
               <h1 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight">
-                {isRejected ? t('reg.titleResubmit') : t('reg.title')}
+                {isRejected ? t('reg.titleResubmit') : needsCompleting ? t('reg.titleComplete') : t('reg.title')}
               </h1>
               <p className="text-slate-500 text-sm mt-1">
                 {t('reg.intro')}
@@ -709,6 +733,8 @@ export default function SellerRegisterPage() {
                     ? t('reg.submitting')
                     : isRejected
                     ? t('reg.resubmit')
+                    : needsCompleting
+                    ? t('reg.complete')
                     : t('reg.submit')}
                 </Button>
               </div>

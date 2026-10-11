@@ -10,6 +10,7 @@ import { useAuthStore } from '@/lib/store/auth-store';
 import { apiClient } from '@/lib/api-client';
 import DocumentList from '@/components/admin/DocumentList';
 import { formatDate } from '@/lib/utils';
+import { RejectReasonModal } from '@/components/admin/RejectReasonModal';
 
 interface SellerDetail {
   id: string;
@@ -25,6 +26,8 @@ interface SellerDetail {
   createdAt: string;
   updatedAt: string;
   productCount: number;
+  /** What the application still lacks (the server works it out); empty when it is complete. */
+  missing?: string[];
   documents?: Array<{ id: string; type: string; url: string | null }>;
   user: {
     id: string;
@@ -47,6 +50,7 @@ export default function AdminSellerDetailPage() {
   const [loading, setLoading] = useState(true);
   const [seller, setSeller] = useState<SellerDetail | null>(null);
   const [actionLoading, setActionLoading] = useState(false);
+  const [rejecting, setRejecting] = useState(false);
 
   useEffect(() => {
     if (!isAuthenticated) {
@@ -96,13 +100,12 @@ export default function AdminSellerDetailPage() {
     }
   };
 
-  const handleReject = async () => {
-    const reason = window.prompt('Rejection reason (optional):');
-    if (reason === null) return; // user cancelled
+  const handleReject = async (reason: string) => {
     try {
       setActionLoading(true);
-      await apiClient.post(`/admin/sellers/${id}/reject`, { approved: false, notes: reason || undefined });
+      await apiClient.post(`/admin/sellers/${id}/reject`, { approved: false, notes: reason });
       showToast('Seller rejected', 'success');
+      setRejecting(false);
       loadSeller();
     } catch (error: any) {
       showToast(error.response?.data?.error?.message || 'Failed to reject', 'error');
@@ -190,14 +193,15 @@ export default function AdminSellerDetailPage() {
                   <div className="flex gap-2">
                     <Button
                       onClick={handleApprove}
-                      disabled={actionLoading}
+                      disabled={actionLoading || (seller.missing?.length ?? 0) > 0}
+                      title={(seller.missing?.length ?? 0) > 0 ? `Cannot be approved yet, missing: ${seller.missing!.join(', ')}` : undefined}
                       className="bg-green-600 hover:bg-green-700"
                     >
                       Approve
                     </Button>
                     <Button
                       variant="outline"
-                      onClick={handleReject}
+                      onClick={() => setRejecting(true)}
                       disabled={actionLoading}
                       className="border-red-300 text-red-700 hover:bg-red-50"
                     >
@@ -219,6 +223,13 @@ export default function AdminSellerDetailPage() {
                 )}
               </div>
             </div>
+
+            {seller.verificationStatus === 'pending' && (seller.missing?.length ?? 0) > 0 && (
+              <p className="mx-6 mt-4 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900" data-testid="application-incomplete">
+                Cannot be approved yet: this kitchen has not sent its {seller.missing!.join(', ')}. It can still add them to this
+                application; or reject it and say what is missing.
+              </p>
+            )}
 
             <div className="p-6 space-y-6">
               <div>
@@ -268,6 +279,16 @@ export default function AdminSellerDetailPage() {
           </div>
         )}
       </div>
+      <RejectReasonModal
+        isOpen={rejecting}
+        title={`Reject ${seller?.businessName ?? 'this kitchen'}?`}
+        description="The kitchen is told the reason. It can fix the application and send it again."
+        suggestions={['The photos of the CNIC are unclear', 'The kitchen photos are missing', 'The kitchen location does not match the address', 'The application is incomplete']}
+        confirmLabel="Reject application"
+        busy={actionLoading}
+        onConfirm={handleReject}
+        onCancel={() => setRejecting(false)}
+      />
     </AdminShell>
   );
 }

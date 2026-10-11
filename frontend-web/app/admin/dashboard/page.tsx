@@ -9,6 +9,7 @@ import { useToast } from '@/components/ui/toast';
 import { useAuthStore } from '@/lib/store/auth-store';
 import { apiClient } from '@/lib/api-client';
 import { formatPrice } from '@/lib/utils';
+import { RejectReasonModal } from '@/components/admin/RejectReasonModal';
 
 interface PendingSeller {
   id: string;
@@ -19,6 +20,8 @@ interface PendingSeller {
   verificationStatus: string;
   status: string;
   createdAt: string;
+  /** What the application still lacks (the server works it out); empty when it is complete. */
+  missing?: string[];
   user: {
     id: string;
     email: string;
@@ -48,6 +51,7 @@ export default function AdminDashboardPage() {
   const [pendingSellers, setPendingSellers] = useState<PendingSeller[]>([]);
   const [stats, setStats] = useState<PlatformStats | null>(null);
   const [processingId, setProcessingId] = useState<string | null>(null);
+  const [rejecting, setRejecting] = useState<PendingSeller | null>(null);
   const [pendingCategoryRequests, setPendingCategoryRequests] = useState(0);
 
 
@@ -110,16 +114,17 @@ export default function AdminDashboardPage() {
     }
   };
 
-  const handleApproveReject = async (sellerId: string, action: 'approve' | 'reject') => {
+  const handleApproveReject = async (sellerId: string, action: 'approve' | 'reject', reason?: string) => {
     try {
       setProcessingId(sellerId);
       const response = await apiClient.post(`/admin/sellers/${sellerId}/${action}`, {
         approved: action === 'approve',
-        notes: action === 'reject' ? 'Rejected by admin' : undefined,
+        notes: action === 'reject' ? reason : undefined,
       });
       
       if (response.data.success) {
         showToast(`Seller ${action === 'approve' ? 'approved' : 'rejected'} successfully!`, 'success');
+        setRejecting(null);
         loadDashboardData(); // Reload the list
       }
     } catch (error: any) {
@@ -308,20 +313,21 @@ export default function AdminDashboardPage() {
                     <div className="flex gap-2 ms-4">
                       <Button
                         onClick={() => handleApproveReject(seller.id, 'approve')}
-                        disabled={processingId === seller.id}
+                        disabled={processingId === seller.id || (seller.missing?.length ?? 0) > 0}
+                        title={(seller.missing?.length ?? 0) > 0 ? `Cannot be approved yet, missing: ${seller.missing!.join(', ')}` : undefined}
                         className="bg-gray-700 hover:bg-gray-800 text-white"
                         size="sm"
                       >
                         {processingId === seller.id ? 'Processing...' : 'Approve'}
                       </Button>
                       <Button
-                        onClick={() => handleApproveReject(seller.id, 'reject')}
+                        onClick={() => setRejecting(seller)}
                         disabled={processingId === seller.id}
                         variant="outline"
                         className="border-gray-300 text-gray-700 hover:bg-gray-50"
                         size="sm"
                       >
-                        {processingId === seller.id ? 'Processing...' : 'Reject'}
+                        Reject
                       </Button>
                     </div>
                   </div>
@@ -371,6 +377,16 @@ export default function AdminDashboardPage() {
           </Link>
         </div>
       </div>
+          <RejectReasonModal
+        isOpen={!!rejecting}
+        title={`Reject ${rejecting?.businessName ?? 'this kitchen'}?`}
+        description="The kitchen is told the reason. It can fix the application and send it again."
+        suggestions={['The photos of the CNIC are unclear', 'The kitchen photos are missing', 'The kitchen location does not match the address', 'The application is incomplete']}
+        confirmLabel="Reject application"
+        busy={!!rejecting && processingId === rejecting.id}
+        onConfirm={(reason) => rejecting && handleApproveReject(rejecting.id, 'reject', reason)}
+        onCancel={() => setRejecting(null)}
+      />
     </DashboardLayout>
   );
 }

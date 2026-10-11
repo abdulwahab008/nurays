@@ -1,6 +1,7 @@
 'use client';
 
 import { Suspense, useCallback, useEffect, useState } from 'react';
+import { RejectReasonModal } from '@/components/admin/RejectReasonModal';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { AdminShell } from '@/components/layout/AdminShell';
@@ -262,6 +263,7 @@ function Applications() {
   const [loading, setLoading] = useState(true);
   const [riders, setRiders] = useState<PendingRider[]>([]);
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [rejecting, setRejecting] = useState<PendingRider | null>(null);
 
   const loadRiders = useCallback(async () => {
     try {
@@ -294,20 +296,13 @@ function Applications() {
     }
   };
 
-  const handleReject = async (riderId: string) => {
-    let reason: string | undefined;
-    try {
-      reason = window.prompt('Reason for rejecting this rider application (optional):') || undefined;
-    } catch {
-      // Some embedded/automated browser contexts block native prompt() entirely —
-      // fall back to no reason rather than letting the whole action die silently.
-      reason = undefined;
-    }
+  const handleReject = async (riderId: string, reason: string) => {
     try {
       setBusyId(riderId);
       await apiClient.post(`/admin/riders/${riderId}/reject`, { approved: false, reason });
       showToast('Rider rejected', 'success');
       setRiders((prev) => prev.filter((r) => r.id !== riderId));
+      setRejecting(null);
     } catch (error) {
       showToast(apiErrorMessage(error, 'Failed to reject rider'), 'error');
     } finally {
@@ -383,7 +378,7 @@ function Applications() {
                   >
                     {busyId === rider.id ? 'Working...' : 'Approve'}
                   </Button>
-                  <Button variant="outline" onClick={() => handleReject(rider.id)} disabled={busyId === rider.id}>
+                  <Button variant="outline" onClick={() => setRejecting(rider)} disabled={busyId === rider.id}>
                     Reject
                   </Button>
                 </div>
@@ -392,6 +387,16 @@ function Applications() {
           ))}
         </div>
       )}
+      <RejectReasonModal
+        isOpen={!!rejecting}
+        title={`Reject ${rejecting?.user?.profile?.fullName ?? 'this rider'}?`}
+        description="The rider is told the reason. They can fix it and apply again."
+        suggestions={['The CNIC photos are unclear', 'The licence photo is missing or unreadable', 'The vehicle details do not match the documents']}
+        confirmLabel="Reject application"
+        busy={!!rejecting && busyId === rejecting.id}
+        onConfirm={(reason) => rejecting && handleReject(rejecting.id, reason)}
+        onCancel={() => setRejecting(null)}
+      />
     </div>
   );
 }
