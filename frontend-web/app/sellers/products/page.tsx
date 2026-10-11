@@ -502,9 +502,9 @@ function SellerProductsContent() {
         {/* ========================================================================= */}
         {/* Search, Filter Chips & Controls */}
         {/* ========================================================================= */}
-        <div className="bg-white rounded-3xl p-4 border border-slate-200 shadow-sm flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3">
-          {/* Search Input */}
-          <div className="relative flex-1">
+        <div className="bg-white rounded-3xl p-4 border border-slate-200 shadow-sm flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-3">
+          {/* Search Input: never squeezed below a usable width by the chips beside it */}
+          <div className="relative flex-1 lg:min-w-64">
             <svg
               className="w-4 h-4 text-slate-400 absolute start-3.5 top-1/2 -translate-y-1/2"
               fill="none"
@@ -532,7 +532,7 @@ function SellerProductsContent() {
           </div>
 
           {/* Filter Chips Bar */}
-          <div className="flex items-center gap-1.5 overflow-x-auto pb-1 md:pb-0">
+          <div className="flex flex-wrap items-center gap-1.5">
             {/* Stock Filters */}
             {[
               { key: 'all', label: 'All Stock', count: products.length },
