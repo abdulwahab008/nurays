@@ -8,6 +8,7 @@ import { computeSellerAvailability } from './availability.service';
 import { computeSellerBalance } from './seller-balance.service';
 import { assertOwnDocument, assertOwnPublicImage } from '../utils/documents';
 import { notifyApprovers } from './approvals.service';
+import { kitchenApplicationGaps } from '../utils/kitchenApplication';
 
 /** Shared shape for the business-operations fields — read by getSellerProfile, written by updateSellerProfile. */
 function formatBusinessOperationsFields(seller: {
@@ -107,8 +108,13 @@ export class SellerService {
       where: { userId },
     });
 
-    // Only a rejected application can be sent again.
-    if (existingSeller && existingSeller.verificationStatus !== 'rejected') {
+    // A rejected application can be sent again, and so can one still waiting that lacks what the administrator needs (a kitchen
+    // that signed up with "Cook & Sell" has only a name): it is completed, not refused. A complete one is already under review.
+    const documentsOnFile = existingSeller
+      ? (await prisma.sellerDocument.findMany({ where: { sellerId: existingSeller.id }, select: { documentType: true } })).map((d) => d.documentType)
+      : [];
+    const completing = existingSeller?.verificationStatus === 'pending' && kitchenApplicationGaps(existingSeller, documentsOnFile).length > 0;
+    if (existingSeller && existingSeller.verificationStatus !== 'rejected' && !completing) {
       throw new AppError('Seller account already exists', 400, 'SELLER_ALREADY_EXISTS');
     }
 
@@ -122,9 +128,7 @@ export class SellerService {
       data.coverImageUrl && data.coverImageUrl !== existingSeller?.coverImageUrl
         ? assertOwnPublicImage(data.coverImageUrl, userId, 'covers', 'cover photo')
         : data.coverImageUrl || existingSeller?.coverImageUrl || undefined;
-    const cnicOnFile = existingSeller
-      ? await prisma.sellerDocument.count({ where: { sellerId: existingSeller.id, documentType: { in: ['cnic_front', 'cnic_back'] } } })
-      : 0;
+    const cnicOnFile = documentsOnFile.filter((type) => type === 'cnic_front' || type === 'cnic_back').length;
     if ((!cnicFront || !cnicBack) && cnicOnFile < 2) {
       throw new AppError('Please upload photos of both sides of your CNIC.', 400, 'CNIC_REQUIRED');
     }
@@ -132,7 +136,7 @@ export class SellerService {
       replaceSellerDocuments(sellerId, { cnic_front: cnicFront ? [cnicFront] : null, cnic_back: cnicBack ? [cnicBack] : null, kitchen_photo: kitchenPhotos.length ? kitchenPhotos : null });
 
     if (existingSeller) {
-      // Previously rejected: the application is sent again with the details fixed.
+      // Previously rejected, or still waiting but incomplete: the application is sent again with the details fixed or added.
       const updated = await prisma.seller.update({
         where: { id: existingSeller.id },
         data: {
@@ -163,7 +167,7 @@ export class SellerService {
       return {
         sellerId: updated.id,
         verificationStatus: updated.verificationStatus,
-        message: 'Application resubmitted for review',
+        message: completing ? 'Application completed and sent for review' : 'Application resubmitted for review',
       };
     }
 

@@ -1,4 +1,5 @@
 import { Prisma } from '@prisma/client';
+import { kitchenApplicationGaps } from '../utils/kitchenApplication';
 import prisma from '../config/database';
 import { computeSellerBalance } from './seller-balance.service';
 import { pageArgs } from '../utils/pagination';
@@ -64,9 +65,12 @@ export class AdminService {
       description: seller.description,
       kitchenVideoUrl: seller.kitchenVideoUrl,
       coverImageUrl: seller.coverImageUrl,
+      communityId: seller.communityId,
       primaryCommunityName: seller.primaryCommunityName,
       latitude: seller.latitude != null ? Number(seller.latitude) : null,
       longitude: seller.longitude != null ? Number(seller.longitude) : null,
+      // What the application still lacks (nothing: complete); the screen disables Approve while this is not empty.
+      missing: kitchenApplicationGaps(seller, seller.documents.map((d) => d.documentType)),
       documents: await presentDocuments(seller.documents),
       user: {
         id: seller.user.id,
@@ -108,13 +112,25 @@ export class AdminService {
       );
     }
 
+    // The kitchen is told the reason, so there has to be one. And a kitchen with no community, no place on the map or no
+    // CNIC on file cannot be approved: it would be listed nowhere, with nobody known behind it.
+    if (!approved) {
+      if (!notes || notes.trim().length < 5) throw new AppError('Please tell the kitchen why it was not approved', 400, 'REASON_REQUIRED');
+    } else {
+      const documentTypes = (await prisma.sellerDocument.findMany({ where: { sellerId }, select: { documentType: true } })).map((d) => d.documentType);
+      const missing = kitchenApplicationGaps(seller, documentTypes);
+      if (missing.length > 0) {
+        throw new AppError(`This kitchen has not sent its ${missing.join(', ')} yet`, 409, 'APPLICATION_INCOMPLETE', { missing });
+      }
+    }
+
     const updatedSeller = await prisma.seller.update({
       where: { id: sellerId },
       data: {
         verificationStatus: approved ? 'approved' : 'rejected',
         isVerified: approved,
         status: approved ? 'active' : 'inactive',
-        rejectionReason: approved ? null : notes || 'Application rejected',
+        rejectionReason: approved ? null : notes!.trim(),
       },
     });
 
@@ -131,7 +147,7 @@ export class AdminService {
       category: 'orders',
       type: 'account',
       title: approved ? 'Your kitchen was approved' : 'Your kitchen application was not approved',
-      message: approved ? 'You can now list dishes and take orders.' : `Reason: ${notes || 'Application rejected'}`,
+      message: approved ? 'You can now list dishes and take orders.' : `Reason: ${notes!.trim()}`,
       actionUrl: '/sellers/dashboard',
       data: { sellerId },
       channels: ['push', 'email'],
@@ -191,6 +207,9 @@ export class AdminService {
       createdAt: seller.createdAt,
       updatedAt: seller.updatedAt,
       productCount,
+      communityId: seller.communityId,
+      primaryCommunityName: seller.primaryCommunityName,
+      missing: kitchenApplicationGaps(seller, seller.documents.map((d) => d.documentType)),
       documents: await presentDocuments(seller.documents),
       user: {
         id: seller.user.id,
@@ -375,6 +394,10 @@ export class AdminService {
     if (rider.verificationStatus !== 'pending') {
       throw new AppError(`Rider already ${rider.verificationStatus}`, 400, 'RIDER_ALREADY_PROCESSED');
     }
+    // The rider is told the reason, so there has to be one.
+    if (!approved && (!reason || reason.trim().length < 5)) {
+      throw new AppError('Please tell the rider why the application was not approved', 400, 'REASON_REQUIRED');
+    }
     // Approval needs the rider's vehicle and documents on file.
     if (approved) {
       const types = new Set((await prisma.riderDocument.findMany({ where: { riderId }, select: { documentType: true } })).map((d) => d.documentType));
@@ -388,7 +411,7 @@ export class AdminService {
       data: {
         verificationStatus: approved ? 'approved' : 'rejected',
         status: approved ? 'active' : 'suspended',
-        rejectionReason: approved ? null : reason || 'Application rejected',
+        rejectionReason: approved ? null : reason!.trim(),
       },
     });
     // A rider is on duty by default: once approved they hear about jobs in the pool, rejected they do not.
@@ -399,7 +422,7 @@ export class AdminService {
       category: 'deliveries',
       type: 'account',
       title: approved ? 'Your rider application was approved' : 'Your rider application was not approved',
-      message: approved ? 'You can go on duty and take deliveries.' : `Reason: ${reason || 'Application rejected'}. You can fix it and apply again.`,
+      message: approved ? 'You can go on duty and take deliveries.' : `Reason: ${reason!.trim()}. You can fix it and apply again.`,
       actionUrl: '/riders/dashboard',
       data: { riderId },
       channels: ['push', 'email'],
