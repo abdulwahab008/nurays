@@ -52,6 +52,8 @@ interface Category {
   description?: string;
   iconUrl?: string;
   parentId?: string;
+  /** Which kind of dish it holds: kitchens find a category through the kind of dish they are adding. */
+  productType?: string | null;
   sortOrder: number;
   isActive: boolean;
   productCount?: number;
@@ -73,6 +75,7 @@ const BLANK_CATEGORY_FORM = {
   description: '',
   iconUrl: '',
   parentId: '',
+  productType: '',
   sortOrder: 0,
   isActive: true,
 };
@@ -85,6 +88,7 @@ function categoryFormFor(category?: Category | null) {
     description: category.description || '',
     iconUrl: category.iconUrl || '',
     parentId: category.parentId || '',
+    productType: category.productType || '',
     sortOrder: category.sortOrder || 0,
     isActive: category.isActive ?? true,
   };
@@ -103,6 +107,7 @@ function CategoryForm({ onClose, onSubmit, category, parentCategories }: Categor
     onSubmit({
       ...formData,
       parentId: formData.parentId || undefined,
+      productType: formData.productType || undefined,
     });
   };
 
@@ -230,6 +235,27 @@ function CategoryForm({ onClose, onSubmit, category, parentCategories }: Categor
                   </option>
                 ))}
             </select>
+          </div>
+
+          {/* Kind of dish: without one, no kitchen can choose the category for a dish */}
+          <div>
+            <label htmlFor="category-product-type" className="block text-sm font-medium text-gray-700 mb-2">
+              Kind of dish {!formData.parentId && <span className="text-red-500">*</span>}
+            </label>
+            <select
+              id="category-product-type"
+              value={formData.productType}
+              onChange={(e) => setFormData({ ...formData, productType: e.target.value })}
+              required={!formData.parentId}
+              className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white"
+            >
+              <option value="">{formData.parentId ? 'Same as the parent category' : 'Choose…'}</option>
+              <option value="fresh">Fresh (cooked to order)</option>
+              <option value="ready_to_eat">Ready to eat</option>
+              <option value="ready_to_cook">Ready to cook</option>
+              <option value="frozen">Frozen</option>
+            </select>
+            <p className="text-xs text-gray-500 mt-1">Kitchens pick a category through the kind of dish they are adding.</p>
           </div>
 
           {/* Sort Order & Status */}

@@ -173,6 +173,20 @@ export class CategoryService {
       throw new AppError('Category with this name already exists', 409, 'CATEGORY_EXISTS');
     }
 
+    // Kitchens find a category through the kind of dish they are adding, so a category with no kind can never be chosen. A
+    // subcategory takes its parent's kind when none is given; a top-level one has to say.
+    let productType = data.productType || null;
+    if (!productType) {
+      if (data.parentId) {
+        const parent = await prisma.category.findUnique({ where: { id: data.parentId }, select: { productType: true } });
+        if (!parent) throw new AppError('The parent category was not found', 404, 'CATEGORY_NOT_FOUND');
+        productType = parent.productType;
+      }
+      if (!productType) {
+        throw new AppError('Choose the kind of dish this category is for (fresh, ready to eat, ready to cook or frozen)', 400, 'PRODUCT_TYPE_REQUIRED');
+      }
+    }
+
     const category = await prisma.category.create({
       data: {
         name: data.name,
@@ -181,7 +195,7 @@ export class CategoryService {
         description: data.description,
         iconUrl: data.iconUrl || null,
         parentId: data.parentId || null,
-        productType: data.productType || null,
+        productType,
         sortOrder: data.sortOrder || 0,
         isActive: data.isActive ?? true,
       },
