@@ -202,6 +202,8 @@ export default function AdminProductsPage() {
         description={`${rejecting?.seller.businessName ?? 'The kitchen'} is told the reason. It can change the dish and send it again.`}
         suggestions={['The photo does not show the dish', 'The description does not match the dish', 'The price or portion looks wrong', 'The dish is not allowed on Nuray']}
         confirmLabel="Reject dish"
+        audience="kitchen"
+        helpText="It can change the dish and send it again."
         busy={!!rejecting && busyId === rejecting.id}
         onConfirm={(reason) => rejecting && handleModerate(rejecting.id, 'reject', reason)}
         onCancel={() => setRejecting(null)}

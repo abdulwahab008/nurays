@@ -119,7 +119,7 @@ export default function AdminSellerDetailPage() {
   const handleToggleSuspend = async () => {
     if (!seller) return;
     const nextStatus = seller.status === 'suspended' ? 'active' : 'suspended';
-    if (nextStatus === 'suspended' && !(await confirmDialog({ title: 'Suspend this kitchen?', message: 'Suspend this seller? Their storefront will be hidden from customers.', confirmText: 'Suspend' }))) {
+    if (nextStatus === 'suspended' && !(await confirmDialog({ title: 'Suspend this kitchen?', message: 'Suspend this seller? Their storefront will be hidden from customers.', confirmText: 'Suspend', variant: 'warning' }))) {
       return;
     }
     try {

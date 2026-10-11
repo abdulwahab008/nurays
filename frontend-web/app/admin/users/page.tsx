@@ -81,7 +81,7 @@ export default function AdminUsersPage() {
 
   const changeStatus = async (u: AdminUser, next: 'active' | 'suspended') => {
     const extra = u.seller ? ' Their kitchen stops taking orders too.' : u.rider ? ' Their rider account is suspended too.' : '';
-    if (next === 'suspended' && !(await confirmDialog({ title: 'Suspend this account?', message: `Suspend ${u.name || u.phone}? They are signed out everywhere and can't sign in.${extra}`, confirmText: 'Suspend' }))) return;
+    if (next === 'suspended' && !(await confirmDialog({ title: 'Suspend this account?', message: `Suspend ${u.name || u.phone}? They are signed out everywhere and can't sign in.${extra}`, confirmText: 'Suspend', variant: 'warning' }))) return;
     try {
       setBusyId(u.id);
       await apiClient.post(`/admin/users/${u.id}/status`, { status: next });

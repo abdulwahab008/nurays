@@ -133,7 +133,7 @@ export default function AdminRiderMoneyPage() {
   const { rider } = data;
 
   const changeStanding = async (status: 'active' | 'suspended') => {
-    if (status === 'suspended' && !(await confirmDialog({ title: 'Suspend this rider?', message: 'Suspend this rider? Jobs they have not picked up go back to the pool, and they cannot take new ones.', confirmText: 'Suspend' }))) return;
+    if (status === 'suspended' && !(await confirmDialog({ title: 'Suspend this rider?', message: 'Suspend this rider? Jobs they have not picked up go back to the pool, and they cannot take new ones.', confirmText: 'Suspend', variant: 'warning' }))) return;
     try {
       setBusy('standing');
       const res = await apiClient.post(`/admin/riders/${riderId}/status`, { status });

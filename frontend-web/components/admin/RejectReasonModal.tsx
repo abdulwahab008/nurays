@@ -16,6 +16,10 @@ interface RejectReasonModalProps {
   /** Common reasons, one tap each. */
   suggestions?: string[];
   confirmLabel?: string;
+  /** Who reads the reason: "applicant" (default), "kitchen". */
+  audience?: string;
+  /** What the person can do next, under the box. */
+  helpText?: string;
   busy?: boolean;
   onConfirm: (reason: string) => void;
   onCancel: () => void;
@@ -27,7 +31,7 @@ export function RejectReasonModal(props: RejectReasonModalProps) {
   return props.isOpen ? <RejectReasonForm {...props} /> : null;
 }
 
-function RejectReasonForm({ title, description, suggestions = [], confirmLabel = 'Reject', busy = false, onConfirm, onCancel }: RejectReasonModalProps) {
+function RejectReasonForm({ title, description, suggestions = [], confirmLabel = 'Reject', audience = 'applicant', helpText = 'They can fix what you name and send the application again.', busy = false, onConfirm, onCancel }: RejectReasonModalProps) {
   const [reason, setReason] = useState('');
   const [touched, setTouched] = useState(false);
 
@@ -82,7 +86,7 @@ function RejectReasonForm({ title, description, suggestions = [], confirmLabel =
         )}
 
         <label htmlFor="reject-reason-text" className="mt-4 block text-xs font-bold uppercase tracking-wide text-slate-600">
-          Reason (the applicant will read this)
+          Reason (the {audience} will read this)
         </label>
         <textarea
           id="reject-reason-text"
@@ -97,7 +101,7 @@ function RejectReasonForm({ title, description, suggestions = [], confirmLabel =
           placeholder="For example: the photos of the CNIC are too blurry to read"
         />
         <p id="reject-reason-help" className={`mt-1 text-xs ${touched && !valid ? 'text-red-700' : 'text-slate-600'}`}>
-          {touched && !valid ? `Write at least ${MIN_REASON_LENGTH} characters, so they know what to fix.` : 'They can fix what you name and send the application again.'}
+          {touched && !valid ? `Write at least ${MIN_REASON_LENGTH} characters, so they know what to fix.` : helpText}
         </p>
 
         <div className="mt-5 flex justify-end gap-3">
