@@ -1,5 +1,5 @@
 import { Server as HTTPServer } from 'http';
-import { Server as SocketIOServer } from 'socket.io';
+import { Server as SocketIOServer, type Socket } from 'socket.io';
 import { createAdapter } from '@socket.io/redis-adapter';
 import { redisUrl, newRedisConnection } from './redis';
 import { verifyToken, isTokenRevoked } from '../utils/jwt';
@@ -12,6 +12,24 @@ import { logger } from '../utils/logger';
  * announcements go to this room and not to every rider, so a rider who cannot claim a job is not woken for it.
  */
 export const ON_DUTY_RIDERS_ROOM = 'riders:on-duty';
+
+/** An order id as a client sends it: a short string. The type of whatever else arrives is the client's choice. */
+const isOrderId = (value: unknown): value is string => typeof value === 'string' && value.length > 0 && value.length <= 64;
+
+/**
+ * Listen for an event a client sends. The client chooses the payload, and an exception thrown out of
+ * a handler reaches process.on('uncaughtException'), which shuts the whole server down for everyone:
+ * whatever goes wrong in a handler is logged here instead.
+ */
+function onClientEvent(socket: Socket, userId: string, event: string, handler: (...args: unknown[]) => unknown) {
+  socket.on(event, async (...args: unknown[]) => {
+    try {
+      await handler(...args);
+    } catch (err) {
+      logger.error({ err, userId }, `${event} failed`);
+    }
+  });
+}
 
 class SocketManager {
   private io: SocketIOServer | null = null;
@@ -97,9 +115,9 @@ class SocketManager {
       // Only participants of an order may listen to it: its room carries status
       // changes and the rider's live location. (Any authenticated user could
       // previously join any order id.)
-      socket.on('join:order', async (orderId: string) => {
+      onClientEvent(socket, user.userId, 'join:order', async (orderId) => {
         try {
-          if (typeof orderId !== 'string' || orderId.length === 0 || orderId.length > 64) return;
+          if (!isOrderId(orderId)) return;
           const allowed =
             user.userType === 'admin' ||
             (await prisma.order.count({
@@ -124,7 +142,8 @@ class SocketManager {
       });
 
       // Leave order room
-      socket.on('leave:order', (orderId: string) => {
+      onClientEvent(socket, user.userId, 'leave:order', (orderId) => {
+        if (!isOrderId(orderId)) return;
         socket.leave(`order:${orderId}`);
         logger.debug({ userId: user.userId, orderId }, 'Socket left an order room');
       });
@@ -141,9 +160,9 @@ class SocketManager {
         }
       });
 
-      // Error handler
-      socket.on('error', (error) => {
-        logger.error({ err: error, userId: user.userId }, 'Socket error');
+      // Error handler. A client can emit "error" too, with any payload: only a real Error (the server's own) is logged.
+      onClientEvent(socket, user.userId, 'error', (error) => {
+        logger.error({ ...(error instanceof Error ? { err: error } : { clientSent: typeof error }), userId: user.userId }, 'Socket error');
       });
     });
 
