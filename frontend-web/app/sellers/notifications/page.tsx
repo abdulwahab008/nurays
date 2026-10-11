@@ -9,7 +9,7 @@ import { DashboardLayout, SELLER_SIDEBAR_ITEMS } from '@/components/layout/Dashb
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/toast';
 import { useAuthStore } from '@/lib/store/auth-store';
-import { apiClient } from '@/lib/api-client';
+import { apiClient, apiErrorMessage } from '@/lib/api-client';
 import { formatDate } from '@/lib/utils';
 import { useT } from '@/lib/i18n';
 import { accountMessages } from '@/lib/i18n/messages/account';
@@ -118,29 +118,23 @@ export default function SellerNotificationsPage() {
     }
   };
 
+  // The page only changes after the server has agreed, so what it shows is what the next load will show.
   const handleMarkAsRead = async (notificationId: string) => {
     try {
       await apiClient.patch(`/notifications/${notificationId}/read`);
-      setNotifications(notifications.map(n => 
-        n.id === notificationId ? { ...n, isRead: true } : n
-      ));
-    } catch (error: any) {
-      // For demo, just update locally
-      setNotifications(notifications.map(n => 
-        n.id === notificationId ? { ...n, isRead: true } : n
-      ));
+      setNotifications(prev => prev.map(n => (n.id === notificationId ? { ...n, isRead: true } : n)));
+    } catch (error: unknown) {
+      showToast(apiErrorMessage(error, t('markReadFailed')), 'error');
     }
   };
 
   const handleMarkAllAsRead = async () => {
     try {
       await apiClient.patch('/notifications/read-all');
-      setNotifications(notifications.map(n => ({ ...n, isRead: true })));
+      setNotifications(prev => prev.map(n => ({ ...n, isRead: true })));
       showToast(t('allMarkedRead'), 'success');
-    } catch (error: any) {
-      // For demo, just update locally
-      setNotifications(notifications.map(n => ({ ...n, isRead: true })));
-      showToast(t('allMarkedRead'), 'success');
+    } catch (error: unknown) {
+      showToast(apiErrorMessage(error, t('markAllReadFailed')), 'error');
     }
   };
 

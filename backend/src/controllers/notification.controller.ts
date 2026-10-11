@@ -39,6 +39,19 @@ export const markAsRead = async (req: Request, res: Response) => {
   });
 };
 
+export const deleteNotification = async (req: Request, res: Response) => {
+  if (!req.user) {
+    throw new AppError('Authentication required', 401, 'AUTH_REQUIRED');
+  }
+
+  await notificationService.deleteNotification(req.params.id, req.user.userId);
+
+  res.status(200).json({
+    success: true,
+    message: 'Notification deleted',
+  });
+};
+
 export const markAllAsRead = async (req: Request, res: Response) => {
   if (!req.user) {
     throw new AppError('Authentication required', 401, 'AUTH_REQUIRED');

@@ -5,7 +5,8 @@ import { useRouter, usePathname } from 'next/navigation';
 import { useState, useEffect, useRef } from 'react';
 import { useAuthStore } from '@/lib/store/auth-store';
 import { useCartStore } from '@/lib/store/cart-store';
-import { apiClient } from '@/lib/api-client';
+import { apiClient, apiErrorMessage } from '@/lib/api-client';
+import { useToast } from '@/components/ui/toast';
 import { useSocket } from '@/lib/hooks/use-socket';
 import { Mark, Wordmark } from '@/components/ui/Mark';
 import { CommunitySelector } from '@/components/community/CommunitySelector';
@@ -49,6 +50,7 @@ interface DashboardNavbarProps {
 export function DashboardNavbar({ title, subtitle, userType = 'customer', onMenuToggle, drawerOpen }: DashboardNavbarProps) {
   const router = useRouter();
   const t = useT(shellMessages);
+  const { showToast } = useToast();
   const pathname = usePathname() || '';
   const { logout, user, isAuthenticated } = useAuthStore();
   const { items } = useCartStore();
@@ -204,6 +206,7 @@ export function DashboardNavbar({ title, subtitle, userType = 'customer', onMenu
       setNotificationUnreadCount(0);
     } catch (err) {
       console.error('Failed to mark all notifications read:', err);
+      showToast(apiErrorMessage(err, t('markAllReadFailed')), 'error');
     }
   };
 

@@ -3,6 +3,7 @@ import {
   getNotifications,
   markAsRead,
   markAllAsRead,
+  deleteNotification,
   getNotificationPreferences,
   updateNotificationPreferences,
   getPushPublicKey,
@@ -35,6 +36,9 @@ router.patch('/:id/read', markAsRead);
 
 // Mark all notifications as read
 router.patch('/read-all', markAllAsRead);
+
+// Remove one of my notifications (after the fixed paths above, so "push" is never read as an id)
+router.delete('/:id', deleteNotification);
 
 export default router;
 

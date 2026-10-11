@@ -8,7 +8,7 @@ import { DashboardLayout, CUSTOMER_SIDEBAR_ITEMS } from '@/components/layout/Das
 import { Button } from '@/components/ui/button';
 import { useAuthStore } from '@/lib/store/auth-store';
 import { formatDate } from '@/lib/utils';
-import { apiClient } from '@/lib/api-client';
+import { apiClient, apiErrorCode, apiErrorMessage } from '@/lib/api-client';
 import { useToast } from '@/components/ui/toast';
 import { useT } from '@/lib/i18n';
 import { commonMessages } from '@/lib/i18n/messages/common';
@@ -110,16 +110,15 @@ export default function NotificationsPage() {
     return colors[type] || 'bg-gray-50 border-gray-200';
   };
 
+  // The page only changes after the server has agreed, so what it shows is what the next load will show.
   const markAsRead = async (id: string) => {
     try {
       await apiClient.patch(`/notifications/${id}/read`);
       setNotifications(prev =>
         prev.map(n => (n.id === id ? { ...n, isRead: true } : n))
       );
-    } catch {
-      setNotifications(prev =>
-        prev.map(n => (n.id === id ? { ...n, isRead: true } : n))
-      );
+    } catch (error) {
+      showToast(apiErrorMessage(error, t('markReadFailed')), 'error');
     }
   };
 
@@ -128,13 +127,21 @@ export default function NotificationsPage() {
       await apiClient.patch('/notifications/read-all');
       setNotifications(prev => prev.map(n => ({ ...n, isRead: true })));
       showToast(t('allMarkedRead'), 'success');
-    } catch {
-      setNotifications(prev => prev.map(n => ({ ...n, isRead: true })));
-      showToast(t('allMarkedRead'), 'success');
+    } catch (error) {
+      showToast(apiErrorMessage(error, t('markAllReadFailed')), 'error');
     }
   };
 
-  const deleteNotificationLocal = (id: string) => {
+  const deleteNotification = async (id: string) => {
+    try {
+      await apiClient.delete(`/notifications/${id}`);
+    } catch (error) {
+      // Already gone (deleted in another tab): the list should drop it too.
+      if (apiErrorCode(error) !== 'NOTIFICATION_NOT_FOUND') {
+        showToast(apiErrorMessage(error, t('deleteFailed')), 'error');
+        return;
+      }
+    }
     setNotifications(prev => prev.filter(n => n.id !== id));
   };
 
@@ -253,7 +260,7 @@ export default function NotificationsPage() {
                         </button>
                       )}
                       <button
-                        onClick={() => deleteNotificationLocal(notification.id)}
+                        onClick={() => deleteNotification(notification.id)}
                         className="p-1 rounded-lg text-gray-400 hover:text-red-500 hover:bg-gray-50 transition-colors"
                         title={tc('delete')}
                         aria-label={tc('delete')}
@@ -277,37 +284,6 @@ export default function NotificationsPage() {
           ))}
         </div>
       )}
-
-      {/* Notification Settings */}
-      <div className="mt-8 bg-white rounded-2xl border border-gray-100 p-6">
-        <h3 className="font-semibold text-gray-900 mb-4">{t('notificationPreferences')}</h3>
-        <div className="space-y-4">
-          {[
-            { id: 'orders', label: t('prefOrders'), desc: t('prefOrdersDesc'), icon: Package, color: 'text-blue-600 bg-blue-50' },
-            { id: 'promos', label: t('prefPromos'), desc: t('prefPromosDesc'), icon: Tag, color: 'text-amber-600 bg-amber-50' },
-            { id: 'delivery', label: t('prefDelivery'), desc: t('prefDeliveryDesc'), icon: Truck, color: 'text-green-600 bg-green-50' },
-          ].map((pref) => {
-            const Icon = pref.icon;
-            return (
-              <div key={pref.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-xl">
-                <div className="flex items-center gap-3">
-                  <div className={`w-10 h-10 rounded-lg flex items-center justify-center shrink-0 ${pref.color}`}>
-                    <Icon className="w-5 h-5" />
-                  </div>
-                  <div>
-                    <p className="font-medium text-gray-900">{pref.label}</p>
-                    <p className="text-sm text-gray-500">{pref.desc}</p>
-                  </div>
-                </div>
-                <label className="relative inline-flex items-center cursor-pointer">
-                  <input type="checkbox" defaultChecked className="sr-only peer" />
-                  <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-green-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-green-600"></div>
-                </label>
-              </div>
-            );
-          })}
-        </div>
-      </div>
     </DashboardLayout>
   );
 }

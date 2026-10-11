@@ -473,6 +473,7 @@ function OrdersContent() {
               return (
                 <button
                   key={tab.id}
+                  aria-pressed={active}
                   onClick={() => setFilter(tab.id)}
                   className={`inline-flex items-center gap-2 px-3.5 sm:px-4 py-2 rounded-xl sm:rounded-2xl text-xs sm:text-sm font-bold whitespace-nowrap transition-all duration-150 cursor-pointer ${
                     active
@@ -510,6 +511,7 @@ function OrdersContent() {
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder={t('list.searchPlaceholder')}
+              aria-label={t('list.searchPlaceholder')}
               className="w-full ps-9 pe-3.5 py-2 rounded-xl text-xs sm:text-sm bg-slate-50 border border-slate-200/90 text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-[#FF5500]/20 focus:border-[#FF5500] transition-all"
             />
             {searchQuery && (
