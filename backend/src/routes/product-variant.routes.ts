@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { authenticate } from '../middleware/auth.middleware';
+import { authenticate, blockSuspendedSeller } from '../middleware/auth.middleware';
 import { validate } from '../middleware/validation.middleware';
 import * as productVariantController from '../controllers/product-variant.controller';
 import {
@@ -13,11 +13,14 @@ const router = Router();
 // All routes require authentication
 router.use(authenticate);
 
+// The writes change a kitchen's own menu (price, stock), so a suspended kitchen is turned away, as it is on the product routes.
+// Anyone who is not a kitchen passes this and meets the ownership check in the service.
+
 // Create single variant
-router.post('/', validate(createProductVariantSchema), productVariantController.createVariant);
+router.post('/', blockSuspendedSeller, validate(createProductVariantSchema), productVariantController.createVariant);
 
 // Bulk create variants
-router.post('/bulk', validate(bulkCreateVariantsSchema), productVariantController.bulkCreateVariants);
+router.post('/bulk', blockSuspendedSeller, validate(bulkCreateVariantsSchema), productVariantController.bulkCreateVariants);
 
 // Get all variants for a product
 router.get('/product/:productId', productVariantController.getProductVariants);
@@ -26,9 +29,9 @@ router.get('/product/:productId', productVariantController.getProductVariants);
 router.get('/:variantId', productVariantController.getVariant);
 
 // Update variant
-router.patch('/:variantId', validate(updateProductVariantSchema), productVariantController.updateVariant);
+router.patch('/:variantId', blockSuspendedSeller, validate(updateProductVariantSchema), productVariantController.updateVariant);
 
 // Delete variant
-router.delete('/:variantId', productVariantController.deleteVariant);
+router.delete('/:variantId', blockSuspendedSeller, productVariantController.deleteVariant);
 
 export default router;
