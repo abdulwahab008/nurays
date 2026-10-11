@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { loginUrlHere } from '@/lib/auth-redirect';
 import { apiClient, apiErrorMessage } from '@/lib/api-client';
 import { useRouter } from 'next/navigation';
@@ -43,6 +43,9 @@ export default function ProfilePage() {
   const router = useRouter();
   const { isAuthenticated, user, setUser, logout } = useAuthStore();
   const [deleting, setDeleting] = useState(false);
+  // Set when this page signs the person out itself (the button, or closing the account): the page is then already on its way to the
+  // home page, and the "sign in to see your profile" redirect below must not send it to the sign-in page instead.
+  const leaving = useRef(false);
 
   // Closing the account: typed confirmation, then the password if the server asks for one.
   const handleDeleteAccount = async () => {
@@ -50,6 +53,7 @@ export default function ProfilePage() {
     const attempt = async (password?: string) => {
       await userProfileService.deleteAccount(password);
       showToast(t('accountDeleted'), 'success');
+      leaving.current = true;
       logout();
       router.push('/');
     };
@@ -101,6 +105,7 @@ export default function ProfilePage() {
   const sidebarItems = CUSTOMER_SIDEBAR_ITEMS;
 
   useEffect(() => {
+    if (leaving.current) return;
     const token = apiClient.getAccessToken();
     if (!token && !isAuthenticated) {
       router.push(loginUrlHere());
@@ -640,6 +645,7 @@ export default function ProfilePage() {
                 size="sm" 
                 className="border-red-200 text-red-600 hover:bg-red-50"
                 onClick={() => {
+                  leaving.current = true;
                   logout();
                   router.push('/');
                 }}
