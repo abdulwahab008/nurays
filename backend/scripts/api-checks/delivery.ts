@@ -292,6 +292,8 @@ export default async function delivery() {
   ok('but a running job is in the list whatever the history', (await jobsOf(mapRider, '?history=0')).some((j) => j.id === mapJob && j.status === 'assigned'));
   for (const odd of ['abc', '-1', '1.5', '', '1e3', '99999999999999999999', '%00', '1&history=2']) {
     const r = await liveRider.as('GET', `/riders/deliveries/mine?history=${odd}`);
-    ok(`?history=${odd} is not a server error`, r.status === 200 && Array.isArray(r.body.data), said(r));
+    // A NUL byte is turned away for the whole API (400 INVALID_CHARACTERS, never a 500); every other odd value is read leniently.
+    const answered = odd === '%00' ? r.status === 400 && r.code === 'INVALID_CHARACTERS' : r.status === 200 && Array.isArray(r.body.data);
+    ok(`?history=${odd} is not a server error`, answered, said(r));
   }
 }
