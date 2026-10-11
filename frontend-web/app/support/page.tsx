@@ -167,7 +167,7 @@ export default function SupportPage() {
       {/* Quick Contact Cards: the in-app support channels */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
         <div className="bg-gradient-to-br from-green-50 to-white rounded-2xl p-6 border border-green-100">
-          <div className="w-12 h-12 bg-green-500 rounded-xl flex items-center justify-center mb-4 text-white shadow-xs">
+          <div className="w-12 h-12 bg-green-600 rounded-xl flex items-center justify-center mb-4 text-white shadow-xs">
             <Send className="w-6 h-6" />
           </div>
           <h3 className="font-semibold text-gray-900 mb-1">{t('messageSupport')}</h3>

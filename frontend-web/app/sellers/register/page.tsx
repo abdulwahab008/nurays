@@ -288,7 +288,7 @@ export default function SellerRegisterPage() {
               <div className="bg-emerald-50 border border-emerald-200 rounded-2xl p-6 shadow-sm">
                 <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
                   <div className="flex items-center gap-4">
-                    <div className="w-12 h-12 rounded-xl bg-emerald-500 text-white flex items-center justify-center font-black text-xl">
+                    <div className="w-12 h-12 rounded-xl bg-emerald-600 text-white flex items-center justify-center font-black text-xl">
                       ✓
                     </div>
                     <div>
@@ -309,7 +309,7 @@ export default function SellerRegisterPage() {
             {isPending && !needsCompleting && (
               <div id="pending-approval-banner" className="bg-amber-50 border border-amber-200 rounded-2xl p-6 shadow-sm">
                 <div className="flex items-start gap-4">
-                  <div className="w-12 h-12 rounded-xl bg-amber-500 text-white flex items-center justify-center font-black text-xl">
+                  <div className="w-12 h-12 rounded-xl bg-amber-600 text-white flex items-center justify-center font-black text-xl">
                     ⏳
                   </div>
                   <div className="flex-1">
@@ -328,7 +328,7 @@ export default function SellerRegisterPage() {
             {needsCompleting && (
               <div id="incomplete-banner" className="bg-amber-50 border border-amber-200 rounded-2xl p-6 shadow-sm">
                 <div className="flex items-start gap-4">
-                  <div className="w-12 h-12 rounded-xl bg-amber-500 text-white flex items-center justify-center font-black text-xl">!</div>
+                  <div className="w-12 h-12 rounded-xl bg-amber-600 text-white flex items-center justify-center font-black text-xl">!</div>
                   <div className="flex-1">
                     <h2 className="text-lg font-bold text-amber-900">{t('reg.incompleteTitle')}</h2>
                     <p className="text-sm text-amber-800 mt-1">{t('reg.incompleteBody')}</p>

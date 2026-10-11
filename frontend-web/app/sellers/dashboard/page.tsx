@@ -366,7 +366,7 @@ function SellerDashboardContent() {
           <div className="mb-6 bg-amber-50 border border-amber-200 rounded-2xl p-5 shadow-sm flex items-center justify-between">
             <div>
               <div className="flex items-center gap-2">
-                <span className="w-6 h-6 rounded-full bg-amber-500 text-white flex items-center justify-center text-xs font-bold">⏳</span>
+                <span className="w-6 h-6 rounded-full bg-amber-600 text-white flex items-center justify-center text-xs font-bold">⏳</span>
                 <h3 className="text-base font-bold text-amber-900">{t('dash.reviewTitle')}</h3>
               </div>
               <p className="text-sm text-amber-700 mt-1 font-medium">

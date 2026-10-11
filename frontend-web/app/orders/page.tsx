@@ -428,12 +428,12 @@ function OrdersContent() {
                 <Truck className="w-5 h-5" />
               </div>
               {onTheWayCount > 0 ? (
-                <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-orange-100 text-[#FF5500] text-[11px] font-bold">
+                <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-orange-100 text-orange-800 text-[11px] font-bold">
                   <span className="w-1.5 h-1.5 rounded-full bg-[#FF5500] animate-ping" />
                   {t('list.riderDispatched')}
                 </span>
               ) : (
-                <span className="text-[11px] font-bold text-orange-400 uppercase tracking-wider">
+                <span className="text-[11px] font-bold text-orange-700 uppercase tracking-wider">
                   {t('list.transit')}
                 </span>
               )}

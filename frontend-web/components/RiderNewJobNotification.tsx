@@ -143,7 +143,7 @@ export function RiderNewJobNotification() {
               dismiss(p.key);
               router.push(p.kind === 'assigned' ? '/riders/dashboard#active' : '/riders/dashboard#available');
             }}
-            className="mt-3 w-full rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white text-xs font-black py-2"
+            className="mt-3 w-full rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-black py-2"
           >
             {p.kind === 'assigned' ? t('popupViewRuns') : t('popupViewPool')}
           </button>

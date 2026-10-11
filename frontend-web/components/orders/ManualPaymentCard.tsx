@@ -222,7 +222,7 @@ export default function ManualPaymentCard({
   if (paymentStatus === 'paid') {
     return (
       <div className="bg-emerald-50 border border-emerald-200 rounded-3xl p-5 flex items-center gap-3.5">
-        <div className="w-10 h-10 rounded-2xl bg-emerald-500 text-white flex items-center justify-center font-black flex-shrink-0 shadow-xs">
+        <div className="w-10 h-10 rounded-2xl bg-emerald-600 text-white flex items-center justify-center font-black flex-shrink-0 shadow-xs">
           <CheckCircle2 className="w-5 h-5" />
         </div>
         <div>
@@ -244,7 +244,7 @@ export default function ManualPaymentCard({
     return (
       <div className="bg-amber-50/90 border border-amber-200 rounded-3xl p-6 space-y-4">
         <div className="flex items-start gap-3.5">
-          <div className="w-11 h-11 rounded-2xl bg-amber-500 text-white flex items-center justify-center font-black flex-shrink-0 shadow-md">
+          <div className="w-11 h-11 rounded-2xl bg-amber-600 text-white flex items-center justify-center font-black flex-shrink-0 shadow-md">
             <Clock className="w-6 h-6 animate-pulse" />
           </div>
           <div className="flex-1">

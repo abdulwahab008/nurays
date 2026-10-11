@@ -707,7 +707,7 @@ function SellerProductsContent() {
 
                         {/* Status / Moderation Badge */}
                         {product.approvalStatus === 'pending' ? (
-                          <span className="px-2.5 py-1 rounded-xl text-[11px] font-bold shadow-sm bg-amber-500 text-white backdrop-blur-md flex items-center gap-1">
+                          <span className="px-2.5 py-1 rounded-xl text-[11px] font-bold shadow-sm bg-amber-700 text-white backdrop-blur-md flex items-center gap-1">
                             {Icons.clock}
                             <span>Under Review</span>
                           </span>

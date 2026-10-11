@@ -541,7 +541,7 @@ export default function AdminOrderDetailPage() {
                     {!showRefundForm ? (
                       <button
                         onClick={() => setShowRefundForm(true)}
-                        className="px-4 py-2 rounded-lg text-sm font-medium text-white bg-amber-500 hover:bg-amber-600 transition-all"
+                        className="px-4 py-2 rounded-lg text-sm font-medium text-white bg-amber-700 hover:bg-amber-800 transition-all"
                       >
                         Process Refund
                       </button>

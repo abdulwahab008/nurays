@@ -556,7 +556,7 @@ export default function RiderDashboardPage() {
                 >
                   <span>{t('tabActive')}</span>
                   {activeDeliveries.length > 0 && (
-                    <span className="px-2 py-0.5 rounded-full text-[11px] font-black bg-emerald-500 text-white animate-pulse">
+                    <span className="px-2 py-0.5 rounded-full text-[11px] font-black bg-emerald-700 text-white animate-pulse">
                       {activeDeliveries.length}
                     </span>
                   )}
@@ -684,7 +684,7 @@ export default function RiderDashboardPage() {
                                         <div
                                           className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold transition-all ${
                                             isDone
-                                              ? 'bg-emerald-500 text-white'
+                                              ? 'bg-emerald-700 text-white'
                                               : isCurrent
                                               ? 'bg-slate-900 text-white ring-2 ring-emerald-400 ring-offset-1 scale-110'
                                               : 'bg-white border border-slate-300 text-slate-400'

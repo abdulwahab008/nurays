@@ -318,7 +318,7 @@ export default function SellerEarningsPage() {
                   {!showPayoutForm && (
                     <Button
                       onClick={() => setShowPayoutForm(true)}
-                      className="bg-emerald-500 hover:bg-emerald-600 text-white shadow-lg shadow-emerald-200 flex items-center gap-2 px-6"
+                      className="bg-emerald-700 hover:bg-emerald-800 text-white shadow-lg shadow-emerald-200 flex items-center gap-2 px-6"
                       size="lg"
                     >
                       {Icons.withdraw}
@@ -358,7 +358,7 @@ export default function SellerEarningsPage() {
                       <Button
                         onClick={handleRequestPayout}
                         disabled={requestingPayout || !accountNumber.trim()}
-                        className="bg-emerald-500 hover:bg-emerald-600 text-white flex items-center gap-2 px-6"
+                        className="bg-emerald-700 hover:bg-emerald-800 text-white flex items-center gap-2 px-6"
                       >
                         {requestingPayout ? (
                           <>

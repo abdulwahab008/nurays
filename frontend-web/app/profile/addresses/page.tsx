@@ -473,7 +473,7 @@ export default function AddressesPage() {
                   onClick={() => setShowMap(!showMap)}
                   className="flex items-center gap-3 p-4 bg-gradient-to-r from-green-50 to-green-100 border-2 border-green-200 rounded-xl hover:border-green-400 transition-all group"
                 >
-                  <div className="w-10 h-10 bg-green-500 rounded-xl flex items-center justify-center group-hover:scale-110 transition-transform text-white">
+                  <div className="w-10 h-10 bg-green-600 rounded-xl flex items-center justify-center group-hover:scale-110 transition-transform text-white">
                     <MapIcon className="w-5 h-5" />
                   </div>
                   <div className="text-start">

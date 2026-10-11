@@ -584,7 +584,7 @@ export default function AddProductPage() {
         <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-2xl p-5 mb-6 border border-blue-100">
           <div className="flex items-center justify-between max-w-3xl mx-auto">
             <div className="flex items-center gap-2">
-              <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold ${images.length > 0 ? 'bg-emerald-500 text-white' : 'bg-white text-gray-400 border-2 border-gray-300'}`}>
+              <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold ${images.length > 0 ? 'bg-emerald-600 text-white' : 'bg-white text-gray-400 border-2 border-gray-300'}`}>
                 {images.length > 0 ? '✓' : '1'}
               </div>
               <span className={`text-sm font-medium ${images.length > 0 ? 'text-emerald-700' : 'text-gray-500'}`}>Photos</span>
@@ -594,7 +594,7 @@ export default function AddProductPage() {
             </div>
             
             <div className="flex items-center gap-2">
-              <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold ${formData.name && formData.categoryId ? 'bg-emerald-500 text-white' : 'bg-white text-gray-400 border-2 border-gray-300'}`}>
+              <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold ${formData.name && formData.categoryId ? 'bg-emerald-600 text-white' : 'bg-white text-gray-400 border-2 border-gray-300'}`}>
                 {formData.name && formData.categoryId ? '✓' : '2'}
               </div>
               <span className={`text-sm font-medium ${formData.name && formData.categoryId ? 'text-emerald-700' : 'text-gray-500'}`}>Details</span>
@@ -604,7 +604,7 @@ export default function AddProductPage() {
             </div>
             
             <div className="flex items-center gap-2">
-              <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold ${formData.price ? 'bg-emerald-500 text-white' : 'bg-white text-gray-400 border-2 border-gray-300'}`}>
+              <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold ${formData.price ? 'bg-emerald-600 text-white' : 'bg-white text-gray-400 border-2 border-gray-300'}`}>
                 {formData.price ? '✓' : '3'}
               </div>
               <span className={`text-sm font-medium ${formData.price ? 'text-emerald-700' : 'text-gray-500'}`}>Pricing</span>
@@ -852,7 +852,7 @@ export default function AddProductPage() {
                             onClick={() => setFormData({ ...formData, categoryId: subCat.id })}
                             className={`px-3 py-2.5 rounded-lg text-sm font-medium transition-all flex items-center gap-2 ${
                               formData.categoryId === subCat.id
-                                ? 'bg-emerald-500 text-white shadow-md'
+                                ? 'bg-emerald-700 text-white shadow-md'
                                 : 'bg-white text-gray-600 hover:bg-gray-100 border border-gray-200'
                             }`}
                           >
@@ -1070,7 +1070,7 @@ export default function AddProductPage() {
                     className="w-full ps-14 pe-4 py-3 text-xl font-bold border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 transition-all group-hover:border-gray-300"
                   />
                   {formData.price && parseFloat(formData.price) > 0 && (
-                    <div className="absolute -top-2 end-2 bg-emerald-500 text-white text-xs px-2 py-0.5 rounded-full font-medium">
+                    <div className="absolute -top-2 end-2 bg-emerald-700 text-white text-xs px-2 py-0.5 rounded-full font-medium">
                       Customer pays this
                     </div>
                   )}
@@ -1487,7 +1487,7 @@ export default function AddProductPage() {
                   {formData.originalPrice && parseFloat(formData.originalPrice) > parseFloat(formData.price) && (
                     <>
                       <span className="text-lg text-gray-500 line-through">Rs. {formData.originalPrice}</span>
-                      <span className="bg-green-500 text-white px-2 py-0.5 rounded-full text-sm font-bold">
+                      <span className="bg-green-700 text-white px-2 py-0.5 rounded-full text-sm font-bold">
                         {discount}% OFF
                       </span>
                     </>

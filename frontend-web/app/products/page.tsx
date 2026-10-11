@@ -740,7 +740,7 @@ function ProductsContent() {
         <div>
           <div className="flex items-center justify-between mb-5 flex-wrap gap-3">
             <div>
-              <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-orange-100 text-[#FF5500] text-[11px] font-bold uppercase tracking-wider mb-1">
+              <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-orange-100 text-orange-800 text-[11px] font-bold uppercase tracking-wider mb-1">
                 <MapPin className="w-3 h-3 text-[#FF5500]" />
                 <span>{t('hyperlocal', { name: communityName })}</span>
               </div>
@@ -1329,7 +1329,7 @@ function ProductsContent() {
       {/* Main Multi-Vendor Marketplace Container */}
       <div className="max-w-[1440px] mx-auto px-4 sm:px-8 py-6 md:py-8">
         <div className="mb-6">
-          <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-orange-100 text-[#FF5500] text-[11px] font-bold uppercase tracking-wider mb-2">
+          <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-orange-100 text-orange-800 text-[11px] font-bold uppercase tracking-wider mb-2">
             <ChefHat className="w-3 h-3 text-[#FF5500]" />
             <span>{t('catalogBadge')}</span>
           </div>

@@ -717,7 +717,7 @@ export default function EditProductPage() {
                 <button
                   type="button"
                   onClick={() => fileInputRef.current?.click()}
-                  className="aspect-square rounded-xl border-2 border-dashed border-gray-300 hover:border-blue-400 hover:bg-blue-50 transition-all flex flex-col items-center justify-center gap-2 text-gray-400 hover:text-blue-500"
+                  className="aspect-square rounded-xl border-2 border-dashed border-gray-300 hover:border-blue-400 hover:bg-blue-50 transition-all flex flex-col items-center justify-center gap-2 text-gray-500 hover:text-blue-600"
                 >
                   <svg className="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
                     <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
@@ -868,7 +868,7 @@ export default function EditProductPage() {
                             onClick={() => setFormData({ ...formData, categoryId: subCat.id })}
                             className={`px-3 py-2.5 rounded-lg text-sm font-medium transition-all flex items-center gap-2 ${
                               formData.categoryId === subCat.id
-                                ? 'bg-emerald-500 text-white shadow-md'
+                                ? 'bg-emerald-700 text-white shadow-md'
                                 : 'bg-white text-gray-600 hover:bg-gray-100 border border-gray-200'
                             }`}
                           >
@@ -1367,7 +1367,7 @@ export default function EditProductPage() {
                   {formData.originalPrice && parseFloat(formData.originalPrice) > parseFloat(formData.price) && (
                     <>
                       <span className="text-lg text-gray-500 line-through">Rs. {formData.originalPrice}</span>
-                      <span className="bg-green-500 text-white px-2 py-0.5 rounded-full text-sm font-bold">
+                      <span className="bg-green-700 text-white px-2 py-0.5 rounded-full text-sm font-bold">
                         {discount}% OFF
                       </span>
                     </>

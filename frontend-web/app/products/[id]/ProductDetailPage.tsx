@@ -749,7 +749,7 @@ export default function ProductDetailPage() {
                   <span>🏡</span> {t('inYourCommunity')}
                 </span>
               ) : product.communityBadge ? (
-                <span className="px-2.5 py-1 rounded-lg bg-orange-100 text-[#FF5500] text-xs font-black flex items-center gap-1.5">
+                <span className="px-2.5 py-1 rounded-lg bg-orange-100 text-orange-800 text-xs font-black flex items-center gap-1.5">
                   <span>📍</span> {product.communityBadge}
                 </span>
               ) : (
