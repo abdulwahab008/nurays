@@ -91,3 +91,56 @@ describe('local driver', () => {
     expect(await presentFile(null)).toBeNull();
   });
 });
+
+describe('local driver, when a write fails', () => {
+  const key = `p/avatars/${owner}/a-lg.webp`;
+  const dir = () => path.join(root, 'media', 'p', 'avatars', owner);
+  const filesInDir = () => (fs.existsSync(dir()) ? fs.readdirSync(dir()).sort() : []);
+  const diskFull = () => Object.assign(new Error('ENOSPC: no space left on device, write'), { code: 'ENOSPC' });
+
+  beforeEach(() => {
+    resetStorage();
+    fs.rmSync(dir(), { recursive: true, force: true });
+  });
+  afterEach(() => jest.restoreAllMocks());
+
+  /** A writeFile that gets part of the data onto the disk, then runs out of room, as a full disk does. */
+  function fillUpDuringWrite() {
+    const realWrite = fs.promises.writeFile.bind(fs.promises);
+    return jest.spyOn(fs.promises, 'writeFile').mockImplementation(async (file, data) => {
+      await realWrite(file, (data as Buffer).subarray(0, 4));
+      throw diskFull();
+    });
+  }
+
+  it('leaves no partly written file behind, and says why it failed', async () => {
+    fillUpDuringWrite();
+    await expect(storage().put(key, Buffer.from('image bytes'), 'image/webp', 'public')).rejects.toMatchObject({ code: 'ENOSPC' });
+    expect(filesInDir()).toEqual([]);
+  });
+
+  it('leaves no temporary file behind when the last step, moving it into place, fails', async () => {
+    jest.spyOn(fs.promises, 'rename').mockRejectedValue(Object.assign(new Error('EACCES: permission denied, rename'), { code: 'EACCES' }));
+    await expect(storage().put(key, Buffer.from('image bytes'), 'image/webp', 'public')).rejects.toMatchObject({ code: 'EACCES' });
+    expect(filesInDir()).toEqual([]);
+  });
+
+  it('reports the write that failed, not a failure to clean up after it', async () => {
+    fillUpDuringWrite();
+    jest.spyOn(fs.promises, 'rm').mockRejectedValue(Object.assign(new Error('EROFS: read-only file system'), { code: 'EROFS' }));
+    await expect(storage().put(key, Buffer.from('image bytes'), 'image/webp', 'public')).rejects.toMatchObject({ code: 'ENOSPC' });
+  });
+
+  it('keeps the file that was there when a replacement fails', async () => {
+    await storage().put(key, Buffer.from('the old image'), 'image/webp', 'public');
+    fillUpDuringWrite();
+    await expect(storage().put(key, Buffer.from('the new image'), 'image/webp', 'public')).rejects.toMatchObject({ code: 'ENOSPC' });
+    expect(filesInDir()).toEqual(['a-lg.webp']);
+    expect(fs.readFileSync(path.join(dir(), 'a-lg.webp'), 'utf8')).toBe('the old image');
+  });
+
+  it('leaves just the file when the write succeeds', async () => {
+    await storage().put(key, Buffer.from('image bytes'), 'image/webp', 'public');
+    expect(filesInDir()).toEqual(['a-lg.webp']);
+  });
+});

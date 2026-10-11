@@ -33,8 +33,14 @@ export class LocalStorage implements StorageDriver {
     const target = this.pathFor(key, visibility);
     await fs.promises.mkdir(path.dirname(target), { recursive: true });
     const tmp = `${target}.${crypto.randomUUID()}.tmp`;
-    await fs.promises.writeFile(tmp, body);
-    await fs.promises.rename(tmp, target);
+    try {
+      await fs.promises.writeFile(tmp, body);
+      await fs.promises.rename(tmp, target);
+    } catch (err) {
+      // A write that dies part-way (a full disk) leaves what it wrote, under a name nothing refers to or would ever clean up.
+      await fs.promises.rm(tmp, { force: true }).catch(() => undefined);
+      throw err;
+    }
   }
 
   async delete(key: string, visibility: Visibility): Promise<void> {
