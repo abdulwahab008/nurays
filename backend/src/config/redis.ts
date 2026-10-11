@@ -34,14 +34,21 @@ function connect(name: string, options: RedisOptions): Redis {
   return client;
 }
 
+// A command on the shared connection that gets no reply in this long fails. Only a closed or refused
+// connection fails fast on its own: a Redis that stays connected but stops answering (frozen, or a
+// network path that drops packets without resetting) would otherwise hold every caller for as long as it lasts.
+const commandTimeoutMs = () => Number(process.env.REDIS_COMMAND_TIMEOUT_MS) || 2_000;
+
 /**
  * The shared connection for quick commands (rate limits, health checks), or null when Redis
- * isn't configured. Commands fail at once while it is unreachable instead of queueing, so an
- * outage can't stall requests: callers treat a failure as "Redis unavailable".
+ * isn't configured. Commands fail at once while it is unreachable instead of queueing, and
+ * after REDIS_COMMAND_TIMEOUT_MS when it is connected but silent, so an outage can't stall
+ * requests: callers treat a failure as "Redis unavailable". (The queue's connections have no
+ * such limit: a worker blocks on Redis for seconds on purpose.)
  */
 export function getRedis(): Redis | null {
   if (!redisUrl()) return null;
-  if (!main) main = connect('main', { enableOfflineQueue: false, maxRetriesPerRequest: 1 });
+  if (!main) main = connect('main', { enableOfflineQueue: false, maxRetriesPerRequest: 1, commandTimeout: commandTimeoutMs() });
   return main;
 }
 

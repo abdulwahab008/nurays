@@ -40,6 +40,7 @@ Required means the server will not start in production without it (see "Startup 
 | `API_VERSION` | no | Default `v1`. |
 | `DATABASE_URL` | yes | PostgreSQL connection string. |
 | `REDIS_URL` | yes (production) | |
+| `REDIS_COMMAND_TIMEOUT_MS` | no | How long a rate-limit or health-check command waits for Redis before it fails. Default 2000. A Redis that is up but not answering (frozen, or a network path that drops packets) then costs each request this long and the limits let it through, instead of every request hanging. The job queue and Socket.IO connections are not affected. |
 | `JWT_SECRET` | yes | 32+ characters, not a placeholder in production. `openssl rand -hex 32`. |
 | `JWT_EXPIRES_IN`, `JWT_REFRESH_EXPIRES_IN` | no | Defaults: `1h` (the app renews it with the refresh token) and `30d`. |
 | `GOOGLE_CLIENT_ID` | no | Google sign-in; see [GOOGLE_OAUTH_SETUP.md](GOOGLE_OAUTH_SETUP.md). |
@@ -238,8 +239,8 @@ Run as many backend instances as you need; they share state through PostgreSQL a
 mandatory in production):
 
 - Rate limits: counters live in Redis (`middleware/rateLimiter.ts`, and `utils/attemptBudget.ts` for "wrong
-  password" and e-mail counts). If Redis is unreachable requests are let through rather than refused, and the
-  counts fall back to each instance's memory. Keys for a phone number or an e-mail address hold a hash, never the
+  password" and e-mail counts). If Redis is unreachable, or does not answer within `REDIS_COMMAND_TIMEOUT_MS`,
+  requests are let through rather than refused, and the counts fall back to each instance's memory. Keys for a phone number or an e-mail address hold a hash, never the
   number or address. The per-address limits are deliberately loose (a Pakistani mobile network puts many customers
   behind one address); the tight ones are per phone number and per e-mail address (see SECURITY_AND_COMPLIANCE.md).
 - Live updates: Socket.IO uses the Redis adapter so an event emitted on one instance reaches clients on any other
