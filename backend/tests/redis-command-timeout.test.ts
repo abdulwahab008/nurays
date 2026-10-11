@@ -114,6 +114,11 @@ describe('the shared Redis connection', () => {
     expect((await connected()).options.commandTimeout).toBe(750);
   });
 
+  it.each(['0', '-5', 'soon'])('ignores %p, which would make every command time out at once', async (bad) => {
+    process.env.REDIS_COMMAND_TIMEOUT_MS = bad;
+    expect((await connected()).options.commandTimeout).toBe(2_000);
+  });
+
   it('does not cut the queue connections short: a worker blocks on Redis for seconds on purpose', () => {
     process.env.REDIS_COMMAND_TIMEOUT_MS = '200';
     const queue = config.newRedisConnection('queue', { maxRetriesPerRequest: null });
