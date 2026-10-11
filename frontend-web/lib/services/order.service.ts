@@ -95,6 +95,9 @@ export interface OrderDetails extends Order {
   paymentSubmittedAt?: string | null;
   paymentProofUrl?: string | null;
   paymentSenderAccount?: string | null;
+  /** Who cancelled the order (customer, seller, admin or system) and the reason they gave. */
+  cancelledBy?: string | null;
+  cancellationReason?: string | null;
   deliveryType?: string;
   deliverySlotDate?: string | null;
   deliverySlotTime?: string | null;

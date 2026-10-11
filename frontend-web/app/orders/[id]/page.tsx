@@ -6,6 +6,7 @@ import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { orderService, type OrderDetails } from '@/lib/services/order.service';
 import { formatPrice, formatDateTime, formatDate } from '@/lib/utils';
+import { cancellationNotice } from '@/lib/order-cancellation';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/toast';
 import { useAuthStore } from '@/lib/store/auth-store';
@@ -64,6 +65,8 @@ interface OrderDetail {
   paymentSubmittedAt?: string | null;
   paymentProofUrl?: string | null;
   paymentSenderAccount?: string | null;
+  cancelledBy?: string | null;
+  cancellationReason?: string | null;
   customerName?: string;
   customerPhone?: string;
   createdAt?: string;
@@ -187,6 +190,8 @@ function mapOrderToDetail(raw: OrderDetails): OrderDetail {
       : null,
     paymentProofUrl: raw.paymentProofUrl ?? null,
     paymentSenderAccount: raw.paymentSenderAccount ?? null,
+    cancelledBy: raw.cancelledBy ?? null,
+    cancellationReason: raw.cancellationReason ?? null,
     createdAt: raw.createdAt ? new Date(raw.createdAt).toISOString() : new Date().toISOString(),
     sellerName,
     items: (raw.items ?? []).map((i) => ({
@@ -477,6 +482,7 @@ function OrderDetailContent() {
     return raw;
   })();
   const orderStatus = effectiveStatus;
+  const notice = effectiveStatus === 'cancelled' ? cancellationNotice(order.cancelledBy, order.cancellationReason) : null;
 
   // The rider's position: the latest live update, else the last one the order came with.
   // Shown only while the food is on its way.
@@ -613,6 +619,12 @@ function OrderDetailContent() {
               {t('detail.paymentBadge', { status: payStatusText(order.paymentStatus ?? 'pending').toUpperCase() })}
             </span>
           </div>
+          {effectiveStatus === 'cancelled' && notice && (
+            <div className="mt-4 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-900" role="status">
+              <p className="font-semibold">{t(`detail.cancelledBy.${notice.who}`)}</p>
+              {notice.reason && <p className="mt-0.5">{t('detail.cancelReasonLine', { reason: notice.reason })}</p>}
+            </div>
+          )}
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">

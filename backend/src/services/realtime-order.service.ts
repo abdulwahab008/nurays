@@ -5,11 +5,12 @@ import { notify, notifyMany } from './notify.service';
 import type { DeliveryChannel } from '../jobs/notify.jobs';
 import { ONLINE_GATEWAY_METHODS } from '../utils/paymentCustody';
 import { logger } from '../utils/logger';
+import { cancelledNotice } from '../utils/cancellationText';
 
 // What each order status tells the customer, and which channels besides the app it is worth.
 const ORDER_STATUS_MESSAGES: Record<
   string,
-  { title: string; message: (orderNumber: string, pickup: boolean) => string; channels: (pickup: boolean) => DeliveryChannel[] }
+  { title: string; message: (orderNumber: string, pickup: boolean, cancelled?: { by: string | null; reason: string | null }) => string; channels: (pickup: boolean) => DeliveryChannel[] }
 > = {
   confirmed: { title: 'Order confirmed', message: (n) => `The kitchen accepted your order #${n}.`, channels: () => ['push'] },
   preparing: { title: 'Order being prepared', message: (n) => `Your order #${n} is being prepared.`, channels: () => [] },
@@ -27,7 +28,7 @@ const ORDER_STATUS_MESSAGES: Record<
     channels: () => ['push', 'email', 'sms'],
   },
   completed: { title: 'Order completed', message: (n) => `Your order #${n} is complete. Thanks for ordering!`, channels: () => [] },
-  cancelled: { title: 'Order cancelled', message: (n) => `Your order #${n} has been cancelled.`, channels: () => ['push', 'email', 'sms'] },
+  cancelled: { title: 'Order cancelled', message: (n, _pickup, why) => cancelledNotice(n, why?.by, why?.reason), channels: () => ['push', 'email', 'sms'] },
   refunded: { title: 'Order refunded', message: (n) => `Your order #${n} has been refunded.`, channels: () => ['push', 'email'] },
 };
 
@@ -38,13 +39,15 @@ const ORDER_STATUS_MESSAGES: Record<
  */
 async function orderAudience(
   orderId: string
-): Promise<{ rooms: string[]; customerId: string | null; orderNumber: string; deliveryType: string; sellerUserIds: string[] } | null> {
+): Promise<{ rooms: string[]; customerId: string | null; orderNumber: string; deliveryType: string; sellerUserIds: string[]; cancelledBy: string | null; cancellationReason: string | null } | null> {
   const order = await prisma.order.findUnique({
     where: { id: orderId },
     select: {
       customerId: true,
       orderNumber: true,
       deliveryType: true,
+      cancelledBy: true,
+      cancellationReason: true,
       items: { select: { seller: { select: { userId: true } } } },
       delivery: { select: { rider: { select: { userId: true } } } },
     },
@@ -55,7 +58,7 @@ async function orderAudience(
   for (const item of order.items) if (item.seller.userId) rooms.push(`user:${item.seller.userId}`);
   if (order.delivery?.rider?.userId) rooms.push(`user:${order.delivery.rider.userId}`);
   const sellerUserIds = [...new Set(order.items.map((i) => i.seller.userId).filter(Boolean))];
-  return { rooms, customerId: order.customerId, orderNumber: order.orderNumber, deliveryType: order.deliveryType, sellerUserIds };
+  return { rooms, customerId: order.customerId, orderNumber: order.orderNumber, deliveryType: order.deliveryType, sellerUserIds, cancelledBy: order.cancelledBy, cancellationReason: order.cancellationReason };
 }
 
 export class RealtimeOrderService {
@@ -89,7 +92,7 @@ export class RealtimeOrderService {
         category: 'orders',
         type: 'order',
         title: statusMessage.title,
-        message: statusMessage.message(audience.orderNumber, pickup),
+        message: statusMessage.message(audience.orderNumber, pickup, { by: audience.cancelledBy, reason: audience.cancellationReason }),
         actionUrl: `/orders/${orderId}`,
         data: { orderId, orderNumber: audience.orderNumber, status },
         // A change the customer made themselves (cancelling) needs no alert.
