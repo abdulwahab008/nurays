@@ -6,25 +6,21 @@ import { useRouter } from 'next/navigation';
 import { AdminShell } from '@/components/layout/AdminShell';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/toast';
+import { LoadError } from '@/components/ui/LoadError';
 import { useAuthStore } from '@/lib/store/auth-store';
 import { apiClient } from '@/lib/api-client';
+import { checkSettingsForm, type SettingsForm } from '@/lib/admin-settings';
 
 export default function AdminSettingsPage() {
   const router = useRouter();
   const { isAuthenticated, user } = useAuthStore();
   const { showToast } = useToast();
   const [loading, setLoading] = useState(false);
-  const [formData, setFormData] = useState({
-    platformName: 'Nuray',
-    supportEmail: 'support@nuray.pk',
-    supportPhone: '+92-300-1234567',
-    commissionRate: '15',
-    minPayoutAmount: '1000',
-    deliveryPerKm: '20',
-    deliveryIncludedKm: '3',
-    deliveryMaxKm: '20',
-    deliveryFallbackFee: '150',
-  });
+  // The settings as the server holds them. Nothing is shown (and so nothing can be saved) until they have been read: a form
+  // that showed made-up values while the read failed would put those values over the real commission and delivery prices.
+  const [formData, setFormData] = useState<SettingsForm | null>(null);
+  const [loadError, setLoadError] = useState<unknown>(null);
+  const [problem, setProblem] = useState<string | null>(null);
 
   useEffect(() => {
     if (!isAuthenticated) {
@@ -43,41 +39,38 @@ export default function AdminSettingsPage() {
 
   const loadSettings = async () => {
     try {
+      setLoadError(null);
       const response = await apiClient.get('/admin/settings');
-      if (response.data.success) {
-        const s = response.data.data;
-        setFormData({
-          platformName: s.platformName ?? 'Nuray',
-          supportEmail: s.supportEmail ?? '',
-          supportPhone: s.supportPhone ?? '',
-          commissionRate: String(s.commissionRate ?? 15),
-          minPayoutAmount: String(s.minPayoutAmount ?? 1000),
-          deliveryPerKm: String(s.deliveryPerKm ?? 20),
-          deliveryIncludedKm: String(s.deliveryIncludedKm ?? 3),
-          deliveryMaxKm: String(s.deliveryMaxKm ?? 20),
-          deliveryFallbackFee: String(s.deliveryFallbackFee ?? 150),
-        });
-      }
-    } catch (error: any) {
-      showToast(error.response?.data?.error?.message || 'Failed to load settings', 'error');
+      if (!response.data.success || !response.data.data) throw new Error('The settings came back empty');
+      const s = response.data.data;
+      setFormData({
+        platformName: s.platformName ?? 'Nuray',
+        supportEmail: s.supportEmail ?? '',
+        supportPhone: s.supportPhone ?? '',
+        commissionRate: String(s.commissionRate ?? 15),
+        minPayoutAmount: String(s.minPayoutAmount ?? 1000),
+        deliveryPerKm: String(s.deliveryPerKm ?? 20),
+        deliveryIncludedKm: String(s.deliveryIncludedKm ?? 3),
+        deliveryMaxKm: String(s.deliveryMaxKm ?? 20),
+        deliveryFallbackFee: String(s.deliveryFallbackFee ?? 150),
+      });
+    } catch (error) {
+      setLoadError(error);
     }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!formData) return;
+    // Every box is checked before anything is sent: an empty one used to be saved as 0 (a blank commission box meant 0%).
+    const checked = checkSettingsForm(formData);
+    if (!checked.ok) {
+      setProblem(checked.message);
+      return;
+    }
     try {
       setLoading(true);
-      await apiClient.patch('/admin/settings', {
-        platformName: formData.platformName,
-        supportEmail: formData.supportEmail,
-        supportPhone: formData.supportPhone,
-        commissionRate: parseFloat(formData.commissionRate) || 0,
-        minPayoutAmount: parseFloat(formData.minPayoutAmount) || 0,
-        deliveryPerKm: parseFloat(formData.deliveryPerKm) || 0,
-        deliveryIncludedKm: parseFloat(formData.deliveryIncludedKm) || 0,
-        deliveryMaxKm: parseFloat(formData.deliveryMaxKm) || 0,
-        deliveryFallbackFee: parseFloat(formData.deliveryFallbackFee) || 0,
-      });
+      await apiClient.patch('/admin/settings', checked.body);
       showToast('Settings updated successfully', 'success');
     } catch (error: any) {
       showToast(error.response?.data?.error?.message || 'Failed to update settings', 'error');
@@ -90,6 +83,24 @@ export default function AdminSettingsPage() {
     return null;
   }
 
+  if (!formData) {
+    return (
+      <AdminShell>
+        <div className="max-w-4xl mx-auto">
+          <div className="mb-6">
+            <h1 className="text-3xl font-bold text-gray-900">Admin Settings</h1>
+            <p className="text-gray-600 mt-1">Manage platform settings and configuration</p>
+          </div>
+          {loadError ? (
+            <LoadError error={loadError} onRetry={loadSettings} title="We couldn't load the settings" />
+          ) : (
+            <p className="text-gray-500">Loading…</p>
+          )}
+        </div>
+      </AdminShell>
+    );
+  }
+
   return (
     <AdminShell>
       <div className="max-w-4xl mx-auto">
@@ -98,7 +109,7 @@ export default function AdminSettingsPage() {
           <p className="text-gray-600 mt-1">Manage platform settings and configuration</p>
         </div>
 
-        <form onSubmit={handleSubmit} className="bg-white rounded-lg shadow-sm p-6 space-y-6">
+        <form onSubmit={handleSubmit} onChange={() => problem && setProblem(null)} noValidate className="bg-white rounded-lg shadow-sm p-6 space-y-6">
           {/* Platform Settings */}
           <div>
             <h2 className="text-xl font-bold text-gray-900 mb-4">Platform Settings</h2>
@@ -209,6 +220,11 @@ export default function AdminSettingsPage() {
             </p>
           </div>
 
+          {problem && (
+            <p role="alert" className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-800">
+              {problem}
+            </p>
+          )}
           <div className="flex justify-end gap-4 pt-4 border-t">
             <Button type="button" variant="outline" onClick={() => router.back()}>
               Cancel
