@@ -5,6 +5,7 @@ import { RedisStore, type RedisReply } from 'rate-limit-redis';
 import { isProduction } from '../config/env';
 import { getRedis } from '../config/redis';
 import { verifyToken } from '../utils/jwt';
+import { logger } from '../utils/logger';
 import { formatPhoneNumber } from '../utils/otp';
 
 /**
@@ -86,6 +87,36 @@ export const byEmailTarget = (req: Request) => {
 /** One address, whatever it asks for. */
 export const byAddress = (req: Request) => ipKeyGenerator(req.ip ?? '');
 
+// While Redis is down every request finds the counter store failing, and express-rate-limit logs that, with the
+// error's stack, once per request. Say it once a minute instead, with how many requests were let through since the
+// last time (Redis's own error is logged once by config/redis.ts). Anything else the library reports is logged as it comes.
+const STORE_FAILURE_LOG_INTERVAL_MS = 60_000;
+let storeFailureLoggedAt = 0;
+let storeFailuresSinceLog = 0;
+
+const describe = (error: unknown, message?: string) => message ?? (error instanceof Error ? error.message : 'express-rate-limit');
+
+const rateLimitLogger = {
+  error(error: unknown, message?: string) {
+    if (message?.includes('error from store')) {
+      storeFailuresSinceLog += 1;
+      const now = Date.now();
+      if (now - storeFailureLoggedAt < STORE_FAILURE_LOG_INTERVAL_MS) return;
+      storeFailureLoggedAt = now;
+      logger.warn(
+        { reason: error instanceof Error ? error.message : error, requestsSinceLastReport: storeFailuresSinceLog },
+        'Rate limits are not being counted: their store failed, so requests are let through'
+      );
+      storeFailuresSinceLog = 0;
+      return;
+    }
+    logger.error({ err: error }, describe(error, message));
+  },
+  warn(error: unknown, message?: string) {
+    logger.warn({ err: error }, describe(error, message));
+  },
+};
+
 function limiter(
   name: string,
   opts: { windowMs: number; limit: number | (() => number); message: string; perUser?: boolean; keyGenerator?: (req: Request) => string; skipSuccessfulRequests?: boolean }
@@ -96,6 +127,7 @@ function limiter(
     standardHeaders: true,
     legacyHeaders: false,
     passOnStoreError: true,
+    logger: rateLimitLogger,
     store: store(name),
     ...(opts.keyGenerator ? { keyGenerator: opts.keyGenerator } : opts.perUser ? { keyGenerator: byUserOrIp } : {}),
     ...(opts.skipSuccessfulRequests ? { skipSuccessfulRequests: true } : {}),

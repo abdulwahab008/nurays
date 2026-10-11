@@ -77,6 +77,7 @@ enforces this for the above; keep it that way in new code (log ids, not people).
 | Money backlog | `pendingRefunds`, `pendingPayouts` | above 24 h old | unhappy customers and kitchens |
 | Approvals backlog | `pendingApprovals` | above 24 h | kitchens waiting to sell |
 | Job failures | `Job <name> failed` | any | stuck sweeps (stale orders, dispatch, ranking) |
+| Rate limits not counted | warning `Rate limits are not being counted` (at most one a minute, with `requestsSinceLastReport`) | any | Redis is down or not answering: requests are let through unlimited |
 | Disk, CPU, memory, DB connections | host | 80 percent | capacity |
 | Backup missing | host | no success in 25 h | recovery |
 
