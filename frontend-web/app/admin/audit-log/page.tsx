@@ -171,7 +171,7 @@ export default function AdminAuditLogPage() {
                     <td className="px-4 py-3 text-xs text-gray-500 whitespace-nowrap">{formatDateTime(e.createdAt)}</td>
                     <td className="px-4 py-3">
                       <p className="text-gray-900">{e.admin?.name || e.admin?.email || 'Unknown'}</p>
-                      {e.ipAddress && <p className="text-xs text-gray-400">{e.ipAddress}</p>}
+                      {e.ipAddress && <p className="text-xs text-gray-500">{e.ipAddress}</p>}
                     </td>
                     <td className="px-4 py-3">
                       <p className="font-mono text-xs text-gray-800">{describe(e.action)}</p>

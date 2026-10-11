@@ -145,8 +145,8 @@ export function CommunityPairFees({ communities }: { communities: Place[] }) {
             {pairs.map((p) => (
               <tr key={p.id}>
                 <td className="py-2.5 text-gray-900">
-                  {p.communityA.name} <span className="text-gray-400">⇄</span> {p.communityB.name}
-                  <span className="text-xs text-gray-400 ms-1">{p.communityA.city === p.communityB.city ? p.communityA.city : `${p.communityA.city} / ${p.communityB.city}`}</span>
+                  {p.communityA.name} <span className="text-gray-500">⇄</span> {p.communityB.name}
+                  <span className="text-xs text-gray-500 ms-1">{p.communityA.city === p.communityB.city ? p.communityA.city : `${p.communityA.city} / ${p.communityB.city}`}</span>
                 </td>
                 <td className="py-2.5 font-semibold">{formatPrice(p.fee)}</td>
                 <td className="py-2.5 text-end">

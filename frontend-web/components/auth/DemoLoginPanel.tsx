@@ -161,7 +161,7 @@ export function DemoLoginPanel({ onAutofill, onError, busy }: { onAutofill: (ema
             Click any account below for 1-click authentication or autofill:
           </p>
         </div>
-        <span className="hidden sm:inline-block text-xs font-medium text-slate-400">
+        <span className="hidden sm:inline-block text-xs font-medium text-slate-500">
           Password: <code className="bg-white px-1.5 py-0.5 rounded border border-slate-200 font-mono text-slate-700">{DEMO_PASSWORD}</code>
         </span>
       </div>

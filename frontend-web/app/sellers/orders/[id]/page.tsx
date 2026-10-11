@@ -288,7 +288,7 @@ export default function SellerOrderDetailPage() {
               <ol className="space-y-2 text-sm">
                 {order.statusHistory.map((h, i) => (
                   <li key={i} className="flex gap-3">
-                    <span className="text-gray-400 shrink-0 w-40">{formatDateTime(h.createdAt)}</span>
+                    <span className="text-gray-500 shrink-0 w-40">{formatDateTime(h.createdAt)}</span>
                     <span>
                       <span className="font-semibold">{statusLabel(h.status)}</span>
                       {h.notes ? ` · ${h.notes}` : ''}

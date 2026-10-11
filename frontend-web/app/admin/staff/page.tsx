@@ -146,7 +146,7 @@ export default function AdminStaffPage() {
                         <p className="text-xs text-gray-500">{m.email} · {m.lastLoginAt ? `last sign-in ${formatDateTime(m.lastLoginAt)}` : 'never signed in'}</p>
                       </div>
                       {locked ? (
-                        <span className="text-xs text-gray-400">{m.role === 'super_admin' ? 'Cannot be changed' : 'This is you'}</span>
+                        <span className="text-xs text-gray-500">{m.role === 'super_admin' ? 'Cannot be changed' : 'This is you'}</span>
                       ) : (
                         <div className="flex flex-wrap gap-2">
                           <select

@@ -384,7 +384,7 @@ function OrdersContent() {
               <div className="w-10 h-10 rounded-xl sm:rounded-2xl bg-slate-100 flex items-center justify-center text-slate-700 shadow-inner">
                 <Receipt className="w-5 h-5" />
               </div>
-              <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">
+              <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
                 {t('list.lifetime')}
               </span>
             </div>
@@ -505,7 +505,7 @@ function OrdersContent() {
                   <span
                     className={`px-1.5 py-0.2 rounded-md text-[11px] font-extrabold ${
                       active
-                        ? 'bg-white/25 text-white'
+                        ? 'bg-black/20 text-white'
                         : 'bg-slate-100 text-slate-500'
                     }`}
                   >
@@ -531,7 +531,7 @@ function OrdersContent() {
               <button
                 onClick={() => setSearchQuery('')}
                 aria-label={t('list.clearSearch')}
-                className="absolute end-3 top-1/2 -translate-y-1/2 text-xs text-slate-400 hover:text-slate-600"
+                className="absolute end-3 top-1/2 -translate-y-1/2 text-xs text-slate-500 hover:text-slate-600"
               >
                 ✕
               </button>
@@ -546,7 +546,7 @@ function OrdersContent() {
           <div className="bg-white rounded-3xl p-12 text-center border border-slate-200/80 shadow-xs">
             <div className="w-10 h-10 border-3 border-[#FF5500] border-t-transparent rounded-full animate-spin mx-auto mb-3" />
             <p className="text-sm font-bold text-slate-800">{t('list.loadingTitle')}</p>
-            <p className="text-xs text-slate-400 mt-1">{t('list.loadingSub')}</p>
+            <p className="text-xs text-slate-500 mt-1">{t('list.loadingSub')}</p>
           </div>
         ) : filteredOrders.length === 0 ? (
           /* Empty State */
@@ -612,7 +612,7 @@ function OrdersContent() {
                           className="text-base sm:text-lg font-black text-slate-900 hover:text-[#FF5500] transition-colors flex items-center gap-1.5"
                         >
                           <span>{t('list.orderNumber', { number: order.orderNumber })}</span>
-                          <ExternalLink className="w-3.5 h-3.5 opacity-0 group-hover:opacity-100 transition-opacity text-slate-400" />
+                          <ExternalLink className="w-3.5 h-3.5 opacity-0 group-hover:opacity-100 transition-opacity text-slate-500" />
                         </Link>
 
                         {/* Status Badge */}
@@ -638,7 +638,7 @@ function OrdersContent() {
 
                       {/* Date & Time */}
                       <div className="flex items-center gap-1.5 text-xs font-semibold text-slate-500">
-                        <Calendar className="w-3.5 h-3.5 text-slate-400" />
+                        <Calendar className="w-3.5 h-3.5 text-slate-500" />
                         <span>{formatDate(order.createdAt)}</span>
                       </div>
                     </div>
@@ -720,7 +720,7 @@ function OrdersContent() {
                       {/* Amount and CTAs */}
                       <div className="flex items-center justify-between sm:justify-end gap-3 sm:gap-4 pt-2 sm:pt-0 border-t sm:border-t-0 border-slate-100">
                         <div className="text-start sm:text-end">
-                          <span className="block text-[11px] font-bold text-slate-400 uppercase tracking-wider">
+                          <span className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider">
                             {t('list.orderTotal')}
                           </span>
                           <span className="text-lg sm:text-2xl font-black text-slate-950 tracking-tight">
@@ -769,7 +769,7 @@ function OrdersContent() {
               {loadingMore ? tc('loading') : t('list.loadMore', { loaded: orders.length, total: totalOrdersCount })}
             </Button>
             {filter !== 'all' && (
-              <p className="text-xs text-slate-400 mt-2">
+              <p className="text-xs text-slate-500 mt-2">
                 {t('list.filterNote')}
               </p>
             )}

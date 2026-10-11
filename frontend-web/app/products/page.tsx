@@ -514,7 +514,7 @@ function ProductsContent() {
         <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-2.5">
           {/* Clean Search Input */}
           <form onSubmit={handleSearch} className="flex-1 relative flex items-center">
-            <Search className="w-4 h-4 text-slate-400 absolute start-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+            <Search className="w-4 h-4 text-slate-500 absolute start-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
             <input
               type="text"
               placeholder={t('searchPlaceholder')}
@@ -530,7 +530,7 @@ function ProductsContent() {
                   setSearchQuery('');
                   setPage(1);
                 }}
-                className="absolute end-12 top-1/2 -translate-y-1/2 p-1 text-slate-400 hover:text-slate-600 rounded-full cursor-pointer"
+                className="absolute end-12 top-1/2 -translate-y-1/2 p-1 text-slate-500 hover:text-slate-600 rounded-full cursor-pointer"
                 title={t('clearSearch')}
               >
                 <X className="w-3.5 h-3.5" />
@@ -1155,7 +1155,7 @@ function ProductsContent() {
                       <div className="flex items-center gap-1 text-[11px] text-slate-500 mt-1">
                         {feeLabel && (
                           <>
-                            <Bike className="w-3 h-3 text-slate-400 shrink-0" />
+                            <Bike className="w-3 h-3 text-slate-500 shrink-0" />
                             <span title={product.delivery?.reason || undefined}>{feeLabel}</span>
                           </>
                         )}
@@ -1171,7 +1171,7 @@ function ProductsContent() {
                           <span className="text-base font-black text-slate-950">
                             {formatPrice(getStackedDiscountedPrice(product.price, promotionsByProductId[product.id]))}
                           </span>
-                          <span className="text-xs text-slate-400 line-through">
+                          <span className="text-xs text-slate-500 line-through">
                             {formatPrice(product.price)}
                           </span>
                         </div>
@@ -1186,7 +1186,7 @@ function ProductsContent() {
                             <Star className="w-3 h-3 fill-amber-400 text-amber-400" />
                             <span>{rating}</span>
                             {product.totalReviews ? (
-                              <span className="text-slate-400 font-normal">({product.totalReviews})</span>
+                              <span className="text-slate-500 font-normal">({product.totalReviews})</span>
                             ) : null}
                           </>
                         ) : (

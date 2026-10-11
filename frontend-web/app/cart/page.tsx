@@ -461,7 +461,7 @@ export default function CartPage() {
 
             {/* Quick Cuisine Shortcut Pills */}
             <div className="mb-8">
-              <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block mb-2.5">
+              <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block mb-2.5">
                 {t('popularNearby')}
               </span>
               <div className="flex flex-wrap items-center justify-center gap-2 max-w-lg mx-auto">
@@ -618,7 +618,7 @@ export default function CartPage() {
                 </div>
                 <div>
                   <h2 className="text-sm font-bold text-slate-900 leading-tight">{t('selectedDishes')}</h2>
-                  <span className="text-[11px] text-slate-400">
+                  <span className="text-[11px] text-slate-500">
                     {t(cart.items.length > 1 ? 'itemsInTrayMany' : 'itemsInTrayOne', { count: cart.items.length })}
                   </span>
                 </div>
@@ -664,7 +664,7 @@ export default function CartPage() {
                             className="w-full h-full object-cover group-hover:scale-105 transition-transform"
                           />
                         ) : (
-                          <div className="w-full h-full flex items-center justify-center text-slate-400">
+                          <div className="w-full h-full flex items-center justify-center text-slate-500">
                             <ImageOff className="w-8 h-8" />
                           </div>
                         )}
@@ -697,7 +697,7 @@ export default function CartPage() {
                               </h3>
                             </Link>
                             <p className="text-xs text-slate-500 mt-0.5 flex items-center gap-1.5">
-                              <Store className="w-3 h-3 text-slate-400 shrink-0" />
+                              <Store className="w-3 h-3 text-slate-500 shrink-0" />
                               <span className="truncate">{item.seller.businessName}</span>
                             </p>
                           </div>
@@ -705,7 +705,7 @@ export default function CartPage() {
                           <button
                             type="button"
                             onClick={() => handleRemoveItem(item.id)}
-                            className="w-7 h-7 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 flex items-center justify-center transition-colors shrink-0"
+                            className="w-7 h-7 rounded-lg text-slate-500 hover:text-rose-600 hover:bg-rose-50 flex items-center justify-center transition-colors shrink-0"
                             title={t('removeDish')}
                           >
                             <X className="w-4 h-4" />
@@ -748,7 +748,7 @@ export default function CartPage() {
                               {formatPrice(lineTotal)}
                             </span>
                             {originalPrice > unitPrice && (
-                              <span className="text-[11px] text-slate-400 line-through">
+                              <span className="text-[11px] text-slate-500 line-through">
                                 {formatPrice(originalPrice * item.quantity)}
                               </span>
                             )}
@@ -767,7 +767,7 @@ export default function CartPage() {
             <div className="bg-white rounded-3xl border border-slate-200/90 shadow-sm p-5 sm:p-6 space-y-4">
               <h3 className="text-base font-extrabold text-slate-950 pb-3 border-b border-slate-100 flex items-center justify-between">
                 <span>{t('orderSummary')}</span>
-                <span className="text-xs font-semibold text-slate-400">
+                <span className="text-xs font-semibold text-slate-500">
                   {t(cart.items.length > 1 ? 'itemsMany' : 'itemsOne', { count: cart.items.length })}
                 </span>
               </h3>
@@ -799,7 +799,7 @@ export default function CartPage() {
 
                 <div className={`flex justify-between text-slate-600 font-medium transition-opacity ${estimatePending ? 'opacity-60' : ''}`}>
                   <span className="flex items-center gap-1.5">
-                    <Truck className="w-3.5 h-3.5 text-slate-400" />
+                    <Truck className="w-3.5 h-3.5 text-slate-500" />
                     <span>{t('estimatedDelivery')}</span>
                   </span>
                   {!deliveryEstimate ? (
@@ -875,7 +875,7 @@ export default function CartPage() {
                   <span className="text-sm font-bold text-slate-900">{deliveryKnown ? t('totalPayable') : t('totalBeforeDelivery')}</span>
                   <span className="text-2xl font-black text-slate-950">{formatPrice(displayTotal)}</span>
                 </div>
-                <span className="text-[11px] text-slate-400 block mt-0.5">
+                <span className="text-[11px] text-slate-500 block mt-0.5">
                   {deliveryKnown ? t('includesAll') : t('deliveryAddedAtCheckout')}
                 </span>
               </div>

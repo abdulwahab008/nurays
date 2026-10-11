@@ -260,7 +260,7 @@ export function CommunitySelector({ variant = 'navbar' }: CommunitySelectorProps
 
               {/* Minimal Search Bar */}
               <div className="relative mt-3">
-                <Search className="w-4 h-4 text-slate-400 absolute start-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                <Search className="w-4 h-4 text-slate-500 absolute start-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
                 <input
                   type="text"
                   value={searchQuery}
@@ -273,7 +273,7 @@ export function CommunitySelector({ variant = 'navbar' }: CommunitySelectorProps
                     type="button"
                     onClick={() => setSearchQuery('')}
                     aria-label={t('clearSearch')}
-                    className="absolute end-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                    className="absolute end-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-600"
                   >
                     <X className="w-3.5 h-3.5" />
                   </button>
@@ -307,7 +307,7 @@ export function CommunitySelector({ variant = 'navbar' }: CommunitySelectorProps
               <div className="mt-3.5 max-h-[260px] overflow-y-auto space-y-1.5 pe-0.5 custom-scrollbar">
                 {filteredList ? (
                   filteredList.length === 0 ? (
-                    <div className="py-6 text-center text-xs text-slate-400">
+                    <div className="py-6 text-center text-xs text-slate-500">
                       {t('noSocieties')}
                     </div>
                   ) : (
@@ -316,7 +316,7 @@ export function CommunitySelector({ variant = 'navbar' }: CommunitySelectorProps
                 ) : (
                   <>
                     <div className="px-1 py-1">
-                      <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">
+                      <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
                         {t('lahoreCommunities')}
                       </p>
                     </div>
@@ -373,7 +373,7 @@ export function CommunitySelector({ variant = 'navbar' }: CommunitySelectorProps
               {comm.city}
             </span>
           </div>
-          <p className="text-[11px] text-slate-400 truncate mt-0.5">
+          <p className="text-[11px] text-slate-500 truncate mt-0.5">
             {comm.areaDescription || t('defaultArea')}
           </p>
         </div>
@@ -384,7 +384,7 @@ export function CommunitySelector({ variant = 'navbar' }: CommunitySelectorProps
               <Check className="w-3 h-3 stroke-[3]" />
             </span>
           ) : (
-            <span className="text-xs font-bold text-slate-400 hover:text-slate-600">
+            <span className="text-xs font-bold text-slate-500 hover:text-slate-600">
               {t('select')}
             </span>
           )}

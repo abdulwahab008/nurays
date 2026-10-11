@@ -112,7 +112,7 @@ export default function MyTickets() {
             {statusLabel(selected.status)}
           </span>
         </div>
-        <p className="text-xs text-gray-400 mb-4" data-ltr>{selected.ticketNumber}</p>
+        <p className="text-xs text-gray-500 mb-4" data-ltr>{selected.ticketNumber}</p>
         <p className="text-gray-700 bg-gray-50 rounded-xl p-4 mb-4">{selected.description}</p>
 
         <div className="space-y-4 mb-4">
@@ -125,7 +125,7 @@ export default function MyTickets() {
             >
               <p className="text-xs font-medium text-gray-500 mb-1">{m.authorName}</p>
               <p className="text-sm text-gray-800">{m.message}</p>
-              <p className="text-xs text-gray-400 mt-1">{formatDateTime(m.createdAt)}</p>
+              <p className="text-xs text-gray-500 mt-1">{formatDateTime(m.createdAt)}</p>
             </div>
           ))}
         </div>
@@ -174,7 +174,7 @@ export default function MyTickets() {
         >
           <div>
             <p className="font-medium text-gray-900">{ticket.subject}</p>
-            <p className="text-xs text-gray-400"><span data-ltr>{ticket.ticketNumber}</span> · {formatDateTime(ticket.createdAt)}</p>
+            <p className="text-xs text-gray-500"><span data-ltr>{ticket.ticketNumber}</span> · {formatDateTime(ticket.createdAt)}</p>
           </div>
           <span className={`px-2 py-1 rounded text-xs font-medium ${statusColor(ticket.status)}`}>
             {statusLabel(ticket.status)}

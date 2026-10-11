@@ -45,7 +45,7 @@ export default function ReportReview({ reviewId }: { reviewId: string }) {
         type="button"
         data-testid="report-review"
         onClick={() => (isAuthenticated ? setOpen(true) : router.push(loginUrlHere()))}
-        className="text-xs text-gray-400 hover:text-gray-700 underline"
+        className="text-xs text-gray-500 hover:text-gray-700 underline"
       >
         {t('reportReview')}
       </button>

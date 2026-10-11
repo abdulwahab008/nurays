@@ -325,13 +325,13 @@ export function SellerNewOrderNotification() {
         <div className="p-4 space-y-3">
           <div className="flex items-center justify-between">
             <div>
-              <span className="text-gray-400 text-[11px] font-bold uppercase tracking-wider block">
+              <span className="text-gray-500 text-[11px] font-bold uppercase tracking-wider block">
                 {t('alert.ticket')}
               </span>
               <span className="text-gray-900 font-black text-base" data-ltr>#{activeOrder.orderNumber}</span>
             </div>
             <div className="text-end">
-              <span className="text-gray-400 text-[11px] font-bold uppercase tracking-wider block">
+              <span className="text-gray-500 text-[11px] font-bold uppercase tracking-wider block">
                 {t('alert.amount')}
               </span>
               <span className="text-emerald-600 font-black text-lg">
@@ -395,7 +395,7 @@ export function SellerNewOrderNotification() {
               </button>
               <button
                 onClick={handleDismiss}
-                className="text-gray-400 hover:text-gray-600 text-xs font-medium px-2 py-2"
+                className="text-gray-500 hover:text-gray-600 text-xs font-medium px-2 py-2"
               >
                 {t('alert.dismiss')}
               </button>

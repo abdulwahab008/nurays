@@ -307,7 +307,7 @@ export default function ProfilePage() {
                   <p className="font-medium text-gray-900">{t('addresses')}</p>
                   <p className="text-xs text-gray-500">{t('addressesDesc')}</p>
                 </div>
-                <ArrowRight className="rtl:-scale-x-100 w-4 h-4 text-gray-400 group-hover:translate-x-1 transition-transform" />
+                <ArrowRight className="rtl:-scale-x-100 w-4 h-4 text-gray-500 group-hover:translate-x-1 transition-transform" />
               </Link>
               <Link href="/orders" className="flex items-center gap-3 p-3 rounded-xl hover:bg-gray-50 transition-colors group">
                 <div className="w-10 h-10 bg-orange-100 rounded-lg flex items-center justify-center text-orange-600">
@@ -317,7 +317,7 @@ export default function ProfilePage() {
                   <p className="font-medium text-gray-900">{t('orderHistory')}</p>
                   <p className="text-xs text-gray-500">{t('orderHistoryDesc')}</p>
                 </div>
-                <ArrowRight className="rtl:-scale-x-100 w-4 h-4 text-gray-400 group-hover:translate-x-1 transition-transform" />
+                <ArrowRight className="rtl:-scale-x-100 w-4 h-4 text-gray-500 group-hover:translate-x-1 transition-transform" />
               </Link>
               {profile?.userType !== 'seller' && (
                 <Link href="/sellers/register" className="flex items-center gap-3 p-3 rounded-xl hover:bg-gray-50 transition-colors group">
@@ -328,7 +328,7 @@ export default function ProfilePage() {
                     <p className="font-medium text-gray-900">{t('becomeSeller')}</p>
                     <p className="text-xs text-gray-500">{t('becomeSellerDesc')}</p>
                   </div>
-                  <ArrowRight className="rtl:-scale-x-100 w-4 h-4 text-gray-400 group-hover:translate-x-1 transition-transform" />
+                  <ArrowRight className="rtl:-scale-x-100 w-4 h-4 text-gray-500 group-hover:translate-x-1 transition-transform" />
                 </Link>
               )}
               {profile?.userType === 'seller' && (
@@ -340,7 +340,7 @@ export default function ProfilePage() {
                     <p className="font-medium text-gray-900">{t('sellerDashboard')}</p>
                     <p className="text-xs text-gray-500">{t('sellerDashboardDesc')}</p>
                   </div>
-                  <ArrowRight className="rtl:-scale-x-100 w-4 h-4 text-gray-400 group-hover:translate-x-1 transition-transform" />
+                  <ArrowRight className="rtl:-scale-x-100 w-4 h-4 text-gray-500 group-hover:translate-x-1 transition-transform" />
                 </Link>
               )}
             </div>

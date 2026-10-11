@@ -436,7 +436,7 @@ function SellerProductsContent() {
           {/* Card 1 */}
           <div className="bg-white rounded-3xl p-4 sm:p-5 border border-slate-200 shadow-sm relative overflow-hidden group hover:border-slate-300 transition-all">
             <div className="flex items-center justify-between mb-2">
-              <span className="text-[11px] font-black uppercase tracking-wider text-slate-400">
+              <span className="text-[11px] font-black uppercase tracking-wider text-slate-500">
                 {isInventoryView ? 'Tracked Items' : 'Total Listings'}
               </span>
               <div className="w-8 h-8 rounded-xl bg-slate-100 text-slate-700 flex items-center justify-center font-bold text-sm">
@@ -513,7 +513,7 @@ function SellerProductsContent() {
           {/* Search Input: never squeezed below a usable width by the chips beside it */}
           <div className="relative flex-1 lg:min-w-64">
             <svg
-              className="w-4 h-4 text-slate-400 absolute start-3.5 top-1/2 -translate-y-1/2"
+              className="w-4 h-4 text-slate-500 absolute start-3.5 top-1/2 -translate-y-1/2"
               fill="none"
               viewBox="0 0 24 24"
               stroke="currentColor"
@@ -531,7 +531,7 @@ function SellerProductsContent() {
             {searchQuery && (
               <button
                 onClick={() => setSearchQuery('')}
-                className="absolute end-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 text-xs font-bold"
+                className="absolute end-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-600 text-xs font-bold"
               >
                 ✕
               </button>
@@ -688,7 +688,7 @@ function SellerProductsContent() {
                           <svg className="w-8 h-8 text-slate-300" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
                             <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 15.75l5.159-5.159a2.25 2.25 0 013.182 0l5.159 5.159m-1.5-1.5l1.409-1.409a2.25 2.25 0 013.182 0l2.909 2.909m-18 3.75h16.5a1.5 1.5 0 001.5-1.5V6a1.5 1.5 0 00-1.5-1.5H3.75A1.5 1.5 0 002.25 6v12a1.5 1.5 0 001.5 1.5zm10.5-11.25h.008v.008h-.008V8.25zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0z" />
                           </svg>
-                          <span className="text-[11px] font-semibold text-slate-400">No Image Uploaded</span>
+                          <span className="text-[11px] font-semibold text-slate-500">No Image Uploaded</span>
                         </div>
                       )}
 
@@ -733,7 +733,8 @@ function SellerProductsContent() {
                         )}
                       </div>
 
-                      {/* Shelf Life / Category bottom badge on image */}
+                      {/* Shelf Life / Category bottom badge on image: a dark fade under it keeps it readable on a pale photo */}
+                      <div className="absolute inset-x-0 bottom-0 h-14 bg-gradient-to-t from-black/60 to-transparent pointer-events-none" aria-hidden="true" />
                       <div className="absolute bottom-2.5 start-3 end-3 flex items-center justify-between pointer-events-none text-white text-[11px] font-bold drop-shadow-sm">
                         <span>{product.category?.name || 'General'}</span>
                         {product.shelfLifeHours ? (
@@ -760,7 +761,7 @@ function SellerProductsContent() {
                             {formatPrice(product.price)}
                           </span>
                           {product.unit && (
-                            <span className="text-xs font-semibold text-slate-400">
+                            <span className="text-xs font-semibold text-slate-500">
                               {formatUnit(product.unit)}
                             </span>
                           )}
@@ -787,7 +788,7 @@ function SellerProductsContent() {
 
                       {/* Visual Inventory Level Bar */}
                       <div className="mb-3.5">
-                        <div className="flex items-center justify-between text-[11px] font-bold text-slate-400 mb-1">
+                        <div className="flex items-center justify-between text-[11px] font-bold text-slate-500 mb-1">
                           <span>Stock Level</span>
                           <span className={isOut ? 'text-rose-600' : isLow ? 'text-amber-600' : 'text-slate-600'}>
                             {product.stockQuantity} units
@@ -828,7 +829,7 @@ function SellerProductsContent() {
                           </span>
                         </div>
                       ) : (
-                        <div className="mb-4 h-[38px] flex items-center text-[11px] text-slate-400 px-1">
+                        <div className="mb-4 h-[38px] flex items-center text-[11px] text-slate-500 px-1">
                           <span>No cost price recorded</span>
                         </div>
                       )}
@@ -838,7 +839,7 @@ function SellerProductsContent() {
                         <div className="mb-4 p-3 bg-slate-50 border border-slate-200 rounded-2xl space-y-2 animate-in fade-in zoom-in-95 duration-150">
                           <div className="flex items-center justify-between text-xs font-bold text-slate-700">
                             <span>Adjust Stock Level</span>
-                            <span className="text-slate-400">Current: {product.stockQuantity}</span>
+                            <span className="text-slate-500">Current: {product.stockQuantity}</span>
                           </div>
 
                           {/* Stepper shortcuts */}
@@ -898,7 +899,7 @@ function SellerProductsContent() {
                                 setEditingStock((prev) => ({ ...prev, [product.id]: false }));
                                 setStockValues((prev) => ({ ...prev, [product.id]: product.stockQuantity }));
                               }}
-                              className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-200 rounded-xl transition-colors"
+                              className="p-1.5 text-slate-500 hover:text-slate-600 hover:bg-slate-200 rounded-xl transition-colors"
                               title="Cancel"
                             >
                               ✕

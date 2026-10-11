@@ -317,7 +317,7 @@ export function SellerOnboardingModal({ isOpen, onClose, onComplete }: SellerOnb
 
       <div>
         <label className="block text-sm font-medium text-gray-700 mb-2">
-          {t('ob.nameUr')} <span className="text-gray-400 text-xs">{t('ob.optional')}</span>
+          {t('ob.nameUr')} <span className="text-gray-500 text-xs">{t('ob.optional')}</span>
         </label>
         <input
           type="text"
@@ -332,7 +332,7 @@ export function SellerOnboardingModal({ isOpen, onClose, onComplete }: SellerOnb
 
       <div>
         <label className="block text-sm font-medium text-gray-700 mb-2">
-          {t('ob.description')} <span className="text-gray-400 text-xs">{t('ob.optional')}</span>
+          {t('ob.description')} <span className="text-gray-500 text-xs">{t('ob.optional')}</span>
         </label>
         <textarea
           name="description"

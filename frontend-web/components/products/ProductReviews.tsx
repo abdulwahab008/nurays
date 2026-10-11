@@ -30,7 +30,7 @@ interface ReviewsResponse {
 function Stars({ rating }: { rating: number }) {
   const t = useT(browseMessages);
   return (
-    <span className="text-amber-500" aria-label={t('starsOutOf5', { rating })}>
+    <span className="text-amber-600" aria-label={t('starsOutOf5', { rating })}>
       {'★'.repeat(Math.round(rating))}
       <span className="text-gray-300">{'★'.repeat(5 - Math.round(rating))}</span>
     </span>
@@ -104,7 +104,7 @@ export default function ProductReviews({ productId }: { productId: string }) {
               </div>
             )}
             <div className="flex flex-wrap items-center gap-x-3 mt-1">
-              <p className="text-xs text-gray-400">{formatDate(review.createdAt)}</p>
+              <p className="text-xs text-gray-500">{formatDate(review.createdAt)}</p>
               <ReportReview reviewId={review.id} />
             </div>
           </div>

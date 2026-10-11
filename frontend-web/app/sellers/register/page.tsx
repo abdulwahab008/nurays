@@ -566,7 +566,7 @@ export default function SellerRegisterPage() {
                       onClick={() => toggleCategory(cat)}
                       className={`px-4 py-2 rounded-xl text-xs font-bold transition-all ${
                         selected
-                          ? 'bg-orange-500 text-white shadow-sm shadow-orange-200'
+                          ? 'bg-[#FF5500] text-white shadow-sm shadow-orange-200'
                           : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
                       }`}
                     >
@@ -747,7 +747,7 @@ export default function SellerRegisterPage() {
                   id="submit-registration-btn"
                   type="submit"
                   disabled={loading}
-                  className="w-full py-4 bg-orange-500 hover:bg-orange-600 text-white font-black text-base rounded-2xl shadow-lg shadow-orange-200 transition-all duration-200"
+                  className="w-full py-4 bg-[#FF5500] hover:bg-[#e04400] text-white font-black text-base rounded-2xl shadow-lg shadow-orange-200 transition-all duration-200"
                 >
                   {loading 
                     ? t('reg.submitting')

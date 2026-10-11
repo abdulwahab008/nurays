@@ -707,7 +707,7 @@ export default function CustomerDashboardPage() {
                             {(k.minPrepTimeMinutes ?? 0) > 0 && (
                               <>
                                 <span className="flex items-center gap-1 font-semibold text-slate-700">
-                                  <Clock className="w-3 h-3 text-slate-400" />
+                                  <Clock className="w-3 h-3 text-slate-500" />
                                   {t('minutes', { count: k.minPrepTimeMinutes ?? 0 })}
                                 </span>
                                 <span>•</span>
@@ -805,7 +805,7 @@ export default function CustomerDashboardPage() {
                             <p className="text-[11px] text-amber-700 font-semibold mt-0.5 font-urdu truncate">{dish.nameUrdu}</p>
                           )}
                           <div className="mt-1.5 text-xs text-slate-500 flex items-center gap-1.5 truncate">
-                            <ChefHat className="w-3 h-3 text-slate-400 shrink-0" />
+                            <ChefHat className="w-3 h-3 text-slate-500 shrink-0" />
                             <span className="font-semibold text-slate-700 truncate">{dish.kitchenName}</span>
                           </div>
                         </div>
@@ -899,6 +899,7 @@ export default function CustomerDashboardPage() {
                     >
                       {/* Giant Netflix Rank Numeral */}
                       <span
+                        aria-hidden="true"
                         className="text-8xl sm:text-9xl font-black italic tracking-tighter leading-none select-none text-slate-100 group-hover:text-orange-500/25 transition-all me-[-28px] sm:me-[-36px] z-0 drop-shadow-sm pointer-events-none"
                         style={{
                           WebkitTextStroke: '3px #cbd5e1',
@@ -954,7 +955,7 @@ export default function CustomerDashboardPage() {
                             )}
 
                             <div className="mt-1.5 text-xs text-slate-500 flex items-center gap-1.5 truncate">
-                              <ChefHat className="w-3 h-3 text-slate-400 shrink-0" />
+                              <ChefHat className="w-3 h-3 text-slate-500 shrink-0" />
                               <span className="font-semibold text-slate-700 truncate">{dish.kitchenName}</span>
                             </div>
                           </div>
@@ -963,7 +964,7 @@ export default function CustomerDashboardPage() {
                             <div>
                               <span className="text-base font-bold text-slate-900">{formatPrice(dish.price)}</span>
                               {dish.originalPrice && (
-                                <span className="text-xs text-slate-400 line-through ms-1 font-medium">
+                                <span className="text-xs text-slate-500 line-through ms-1 font-medium">
                                   {formatPrice(dish.originalPrice)}
                                 </span>
                               )}
@@ -1083,7 +1084,7 @@ export default function CustomerDashboardPage() {
                               {(k.minPrepTimeMinutes ?? 0) > 0 && (
                                 <>
                                   <span className="flex items-center gap-1 font-semibold text-slate-700">
-                                    <Clock className="w-3 h-3 text-slate-400" />
+                                    <Clock className="w-3 h-3 text-slate-500" />
                                     {t('minPrep', { count: k.minPrepTimeMinutes ?? 0 })}
                                   </span>
                                   <span>•</span>
@@ -1179,7 +1180,7 @@ export default function CustomerDashboardPage() {
                               <p className="text-[11px] text-amber-700 font-semibold mt-0.5 font-urdu truncate">{dish.nameUrdu}</p>
                             )}
                             <div className="mt-1.5 text-xs text-slate-500 flex items-center gap-1.5 truncate">
-                              <ChefHat className="w-3 h-3 text-slate-400 shrink-0" />
+                              <ChefHat className="w-3 h-3 text-slate-500 shrink-0" />
                               <span className="font-semibold text-slate-700 truncate">{dish.kitchenName}</span>
                             </div>
                           </div>
@@ -1272,7 +1273,7 @@ export default function CustomerDashboardPage() {
                               <p className="text-[11px] text-amber-700 font-semibold mt-0.5 font-urdu truncate">{dish.nameUrdu}</p>
                             )}
                             <div className="mt-1.5 text-xs text-slate-500 flex items-center gap-1.5 truncate">
-                              <ChefHat className="w-3 h-3 text-slate-400 shrink-0" />
+                              <ChefHat className="w-3 h-3 text-slate-500 shrink-0" />
                               <span className="font-semibold text-slate-700 truncate">{dish.kitchenName}</span>
                             </div>
                           </div>
@@ -1372,7 +1373,7 @@ export default function CustomerDashboardPage() {
                               <p className="text-[11px] text-amber-700 font-semibold mt-0.5 font-urdu truncate">{dish.nameUrdu}</p>
                             )}
                             <div className="mt-1.5 text-xs text-slate-500 flex items-center gap-1.5 truncate">
-                              <ChefHat className="w-3 h-3 text-slate-400 shrink-0" />
+                              <ChefHat className="w-3 h-3 text-slate-500 shrink-0" />
                               <span className="font-semibold text-slate-700 truncate">{dish.kitchenName}</span>
                             </div>
                           </div>

@@ -288,7 +288,7 @@ export default function SellerNotificationsPage() {
                           <span className="w-2.5 h-2.5 bg-blue-500 rounded-full flex-shrink-0 mt-2"></span>
                         )}
                       </div>
-                      <p className="text-xs text-gray-400 mt-2">{formatDate(notification.createdAt)}</p>
+                      <p className="text-xs text-gray-500 mt-2">{formatDate(notification.createdAt)}</p>
                     </div>
                   </div>
                 </div>

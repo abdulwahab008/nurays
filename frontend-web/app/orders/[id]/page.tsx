@@ -682,7 +682,7 @@ function OrderDetailContent() {
                           className="w-full h-full object-cover"
                         />
                       ) : (
-                        <div className="w-full h-full flex items-center justify-center text-gray-400 text-xs">
+                        <div className="w-full h-full flex items-center justify-center text-gray-500 text-xs">
                           {t('detail.noImage')}
                         </div>
                       )}
@@ -1001,7 +1001,7 @@ function OrderDetailContent() {
         {/* Kitchen & Customer Credentials */}
         <div className="grid grid-cols-2 gap-6 border-b border-slate-200 pb-4 mb-5 text-xs">
           <div>
-            <span className="text-[11px] font-black uppercase text-slate-400 tracking-wider block mb-1">
+            <span className="text-[11px] font-black uppercase text-slate-500 tracking-wider block mb-1">
               {t('receipt.preparedBy')}
             </span>
             <h4 className="font-extrabold text-sm text-slate-900">{sellerName}</h4>
@@ -1010,7 +1010,7 @@ function OrderDetailContent() {
           </div>
 
           <div>
-            <span className="text-[11px] font-black uppercase text-slate-400 tracking-wider block mb-1">
+            <span className="text-[11px] font-black uppercase text-slate-500 tracking-wider block mb-1">
               {t('receipt.billedTo')}
             </span>
             <h4 className="font-extrabold text-sm text-slate-900">{customerName}</h4>
@@ -1034,7 +1034,7 @@ function OrderDetailContent() {
             <tbody className="divide-y divide-slate-200">
               {order.items.map((item, idx) => (
                 <tr key={item.id} className="text-slate-800">
-                  <td className="py-2.5 pe-2 font-bold text-slate-400">{idx + 1}</td>
+                  <td className="py-2.5 pe-2 font-bold text-slate-500">{idx + 1}</td>
                   <td className="py-2.5 px-2 font-semibold">
                     <span className="font-bold text-slate-900 block">{item.productName}</span>
                     {item.variantName && (
@@ -1056,7 +1056,7 @@ function OrderDetailContent() {
         <div className="grid grid-cols-2 gap-6 border-t-2 border-slate-800 pt-4 mb-6 text-xs">
           {/* Payment Method Statement */}
           <div className="space-y-2">
-            <span className="text-[11px] font-black uppercase text-slate-400 tracking-wider block">
+            <span className="text-[11px] font-black uppercase text-slate-500 tracking-wider block">
               {t('receipt.paymentDetails')}
             </span>
             <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-200 space-y-1.5">
@@ -1122,7 +1122,7 @@ function OrderDetailContent() {
         <div className="border-t border-slate-200 pt-4 text-center text-[11px] text-slate-500 space-y-1">
           <p className="font-extrabold text-slate-700">{t('receipt.thanks')}</p>
           <p>{t('receipt.support')}</p>
-          <p className="text-[11px] text-slate-400">{t('receipt.computerGenerated')}</p>
+          <p className="text-[11px] text-slate-500">{t('receipt.computerGenerated')}</p>
         </div>
       </div>
 
@@ -1166,19 +1166,19 @@ function OrderDetailContent() {
                   </div>
                   <div className="text-end">
                     <span className="font-mono font-bold text-sm text-slate-900 block"><span data-ltr>#{order.orderNumber}</span></span>
-                    <span className="text-[11px] text-slate-400">{formatDate(order.createdAt || new Date().toISOString())}</span>
+                    <span className="text-[11px] text-slate-500">{formatDate(order.createdAt || new Date().toISOString())}</span>
                   </div>
                 </div>
 
                 {/* Details */}
                 <div className="grid grid-cols-2 gap-4 text-xs">
                   <div>
-                    <span className="text-[11px] uppercase font-bold text-slate-400 block">{t('receipt.soldBy')}</span>
+                    <span className="text-[11px] uppercase font-bold text-slate-500 block">{t('receipt.soldBy')}</span>
                     <span className="font-bold text-slate-900 block">{sellerName}</span>
                     <span className="text-slate-500 text-[11px]">{t('receipt.communityKitchen')}</span>
                   </div>
                   <div>
-                    <span className="text-[11px] uppercase font-bold text-slate-400 block">{t('receipt.deliveredTo')}</span>
+                    <span className="text-[11px] uppercase font-bold text-slate-500 block">{t('receipt.deliveredTo')}</span>
                     <span className="font-bold text-slate-900 block">{customerName}</span>
                     <span className="text-slate-500 text-[11px]">{order.delivery.address}</span>
                   </div>

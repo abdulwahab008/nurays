@@ -95,7 +95,7 @@ export function SlideOverCartDrawer({ isOpen, onClose }: SlideOverCartDrawerProp
 
             <button
               onClick={onClose}
-              className="w-8 h-8 rounded-lg flex items-center justify-center text-slate-400 hover:text-slate-700 hover:bg-slate-200/60 transition-colors"
+              className="w-8 h-8 rounded-lg flex items-center justify-center text-slate-500 hover:text-slate-700 hover:bg-slate-200/60 transition-colors"
               aria-label={t('closeCart')}
             >
               <X className="w-4 h-4" />
@@ -160,7 +160,7 @@ export function SlideOverCartDrawer({ isOpen, onClose }: SlideOverCartDrawerProp
                         className="w-full h-full object-cover"
                       />
                     ) : (
-                      <div className="w-full h-full flex items-center justify-center text-slate-400">
+                      <div className="w-full h-full flex items-center justify-center text-slate-500">
                         <ShoppingBag className="w-5 h-5" />
                       </div>
                     )}
@@ -174,7 +174,7 @@ export function SlideOverCartDrawer({ isOpen, onClose }: SlideOverCartDrawerProp
                       </h4>
                       <button
                         onClick={() => removeItem(item.id)}
-                        className="text-slate-400 hover:text-red-500 text-xs transition-colors p-0.5"
+                        className="text-slate-500 hover:text-red-500 text-xs transition-colors p-0.5"
                         title={t('removeItem')}
                         aria-label={t('removeItem')}
                       >
@@ -183,7 +183,7 @@ export function SlideOverCartDrawer({ isOpen, onClose }: SlideOverCartDrawerProp
                     </div>
 
                     <p className="text-[11px] text-slate-500 font-medium truncate mt-0.5 flex items-center gap-1">
-                      <ChefHat className="w-3 h-3 text-slate-400" />
+                      <ChefHat className="w-3 h-3 text-slate-500" />
                       <span>{item.sellerName || t('verifiedHomeKitchen')}</span>
                     </p>
 
@@ -230,7 +230,7 @@ export function SlideOverCartDrawer({ isOpen, onClose }: SlideOverCartDrawerProp
                 </div>
                 <div className="flex items-center justify-between text-slate-600 font-medium">
                   <span className="flex items-center gap-1">
-                    <Bike className="w-3.5 h-3.5 text-slate-400" />
+                    <Bike className="w-3.5 h-3.5 text-slate-500" />
                     <span>{tc('delivery')}</span>
                     {deliveryFee === 0 && (
                       <span className="text-[11px] font-bold uppercase text-emerald-700 bg-emerald-100 px-1.5 py-0.2 rounded">
@@ -267,7 +267,7 @@ export function SlideOverCartDrawer({ isOpen, onClose }: SlideOverCartDrawerProp
                 </Link>
               </div>
 
-              <p className="text-[11px] text-center text-slate-400 font-medium flex items-center justify-center gap-1">
+              <p className="text-[11px] text-center text-slate-500 font-medium flex items-center justify-center gap-1">
                 <ShieldCheck className="w-3 h-3 text-slate-400 inline" />
                 <span>{t('protected')}</span>
               </p>

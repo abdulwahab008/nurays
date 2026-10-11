@@ -266,7 +266,7 @@ export default function ManualPaymentCard({
         <div className="bg-white rounded-2xl border border-amber-200/80 p-4 space-y-3">
           <div className="flex items-center justify-between flex-wrap gap-2">
             <div>
-              <span className="text-[11px] uppercase font-bold text-slate-400 block tracking-wider">
+              <span className="text-[11px] uppercase font-bold text-slate-500 block tracking-wider">
                 {t('refMethod')}
               </span>
               <span className="font-semibold text-xs text-slate-800">
@@ -333,7 +333,7 @@ export default function ManualPaymentCard({
 
       {/* Account Info Cards */}
       {loading ? (
-        <div className="p-8 text-center text-slate-400">
+        <div className="p-8 text-center text-slate-500">
           <div className="w-6 h-6 border-2 border-[#FF5500] border-t-transparent rounded-full animate-spin mx-auto mb-2" />
           <span className="text-xs font-bold">{t('fetchingAccounts')}</span>
         </div>
@@ -503,7 +503,7 @@ export default function ManualPaymentCard({
                       <p className="text-xs font-black text-slate-800 group-hover:text-[#FF5500] transition-colors">
                         {t('tapToUpload')}
                       </p>
-                      <p className="text-[11px] text-slate-400 mt-0.5">
+                      <p className="text-[11px] text-slate-500 mt-0.5">
                         {t('supportsFormats')}
                       </p>
                     </div>
@@ -550,7 +550,7 @@ export default function ManualPaymentCard({
               {/* TID / Reference Number (Optional if screenshot is attached) */}
               <div>
                 <label className="block text-xs font-black text-slate-900 mb-1">
-                  {t('tidLabel')} <span className="text-slate-400 font-normal">{t('optionalIfScreenshot')}</span>
+                  {t('tidLabel')} <span className="text-slate-500 font-normal">{t('optionalIfScreenshot')}</span>
                 </label>
                 <input
                   type="text"
@@ -566,7 +566,7 @@ export default function ManualPaymentCard({
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block text-[11px] font-bold text-slate-700 mb-1">
-                    {t('senderName')} <span className="text-slate-400 font-normal">{t('optional')}</span>
+                    {t('senderName')} <span className="text-slate-500 font-normal">{t('optional')}</span>
                   </label>
                   <input
                     type="text"
@@ -578,7 +578,7 @@ export default function ManualPaymentCard({
                 </div>
                 <div>
                   <label className="block text-[11px] font-bold text-slate-700 mb-1">
-                    {t('senderMobile')} <span className="text-slate-400 font-normal">{t('optional')}</span>
+                    {t('senderMobile')} <span className="text-slate-500 font-normal">{t('optional')}</span>
                   </label>
                   <input
                     type="text"

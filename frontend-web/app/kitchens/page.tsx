@@ -266,7 +266,7 @@ export default function KitchensDirectoryPage() {
   const renderToolbar = () => (
     <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4">
       <div className="relative flex-1 max-w-md">
-        <Search className="w-4 h-4 text-slate-400 absolute start-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+        <Search className="w-4 h-4 text-slate-500 absolute start-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
         <input
           type="text"
           value={search}
@@ -277,7 +277,7 @@ export default function KitchensDirectoryPage() {
         {search && (
           <button
             onClick={() => setSearch('')}
-            className="absolute end-3 top-1/2 -translate-y-1/2 text-xs text-slate-400 hover:text-slate-600"
+            className="absolute end-3 top-1/2 -translate-y-1/2 text-xs text-slate-500 hover:text-slate-600"
           >
             ✕
           </button>
@@ -516,7 +516,7 @@ export default function KitchensDirectoryPage() {
                             {kitchen.area && (
                               <>
                                 <span>•</span>
-                                <MapPin className="w-3 h-3 text-slate-400 inline flex-shrink-0" />
+                                <MapPin className="w-3 h-3 text-slate-500 inline flex-shrink-0" />
                                 <span>{kitchen.area.split(',')[0]}</span>
                               </>
                             )}
@@ -550,11 +550,11 @@ export default function KitchensDirectoryPage() {
                     {/* Delivery Line */}
                     <div className="mt-2 text-xs text-slate-600 font-medium flex items-center gap-2">
                       <span className="flex items-center gap-1 text-slate-700">
-                        <Bike className="w-3.5 h-3.5 text-slate-400" />
+                        <Bike className="w-3.5 h-3.5 text-slate-500" />
                         {deliveryFee ?? tk('feeAtCheckout')}
                       </span>
                       <span className="text-slate-300">•</span>
-                      <span className="text-[11px] text-slate-400">
+                      <span className="text-[11px] text-slate-500">
                         {kitchen.minOrder != null ? tk('minAmount', { amount: formatPrice(kitchen.minOrder) }) : tk('noMin')}
                       </span>
                     </div>

@@ -300,7 +300,7 @@ function DashboardSidebarContent({ items: allItems, userType }: DashboardSidebar
                       type="button"
                       onClick={(e) => toggleExpand(item.name, e)}
                       aria-label={tNav(isExpanded ? 'collapse' : 'expand', { name: label(item.name) })}
-                      className="p-2 me-1 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-lg transition-colors cursor-pointer"
+                      className="p-2 me-1 text-slate-500 hover:text-slate-700 hover:bg-slate-100 rounded-lg transition-colors cursor-pointer"
                     >
                       <svg
                         className={`w-3.5 h-3.5 transition-transform duration-200 ${isExpanded ? 'rotate-180' : ''}`}
@@ -401,7 +401,7 @@ function SidebarSkeleton({ items }: { items: SidebarItem[] }) {
           </div>
         </div>
         <div className="px-3 mb-2">
-          <span className="text-[11px] font-bold tracking-wider uppercase text-slate-400">Menu</span>
+          <span className="text-[11px] font-bold tracking-wider uppercase text-slate-500">Menu</span>
         </div>
         <nav className="space-y-1">
           {items.map((item) => (

@@ -428,7 +428,7 @@ function SellerDashboardContent() {
               <div>
                 <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1">{t('dash.todaySales')}</p>
                 <p className="text-xl sm:text-2xl font-black text-slate-900">{formatPrice(dashboard.overview.todaySales ?? 0)}</p>
-                <p className="text-[11px] text-slate-400 mt-1">{t('dash.ordersToday', { count: dashboard.overview.todayOrders ?? 0 })}</p>
+                <p className="text-[11px] text-slate-500 mt-1">{t('dash.ordersToday', { count: dashboard.overview.todayOrders ?? 0 })}</p>
               </div>
               <div className="w-10 h-10 bg-orange-50 text-orange-600 rounded-xl flex items-center justify-center font-bold text-base">
                 ₨
@@ -456,7 +456,7 @@ function SellerDashboardContent() {
               <div>
                 <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1">{t('dash.menuDishes')}</p>
                 <p className="text-xl sm:text-2xl font-black text-slate-900">{dashboard.overview.totalProducts ?? 0}</p>
-                <p className="text-[11px] text-slate-400 mt-1">{t('dash.activeDishes')}</p>
+                <p className="text-[11px] text-slate-500 mt-1">{t('dash.activeDishes')}</p>
               </div>
               <div className="w-10 h-10 bg-blue-50 text-blue-600 rounded-xl flex items-center justify-center">
                 {Icons.products}
@@ -470,7 +470,7 @@ function SellerDashboardContent() {
               <div>
                 <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1">{t('dash.totalEarnings')}</p>
                 <p className="text-xl sm:text-2xl font-black text-emerald-700">{formatPrice(dashboard.overview.totalEarnings ?? 0)}</p>
-                <p className="text-[11px] text-slate-400 mt-1">{t('dash.pendingAmount', { amount: formatPrice(dashboard.overview.pendingPayout ?? 0) })}</p>
+                <p className="text-[11px] text-slate-500 mt-1">{t('dash.pendingAmount', { amount: formatPrice(dashboard.overview.pendingPayout ?? 0) })}</p>
               </div>
               <div className="w-10 h-10 bg-emerald-50 text-emerald-700 rounded-xl flex items-center justify-center">
                 {Icons.earnings}
@@ -505,7 +505,7 @@ function SellerDashboardContent() {
               <div className="text-center py-12">
                 <div className="text-gray-300 mb-4">{Icons.package}</div>
                 <p className="text-gray-500 font-medium">{t('dash.noOrders')}</p>
-                <p className="text-gray-400 text-sm mt-1">{t('dash.noOrdersHint')}</p>
+                <p className="text-gray-500 text-sm mt-1">{t('dash.noOrdersHint')}</p>
               </div>
             ) : (
               <div className="space-y-3">
@@ -526,7 +526,7 @@ function SellerDashboardContent() {
                         <p className="text-sm text-gray-600">{order.productName} × {order.quantity}</p>
                         <p className="text-sm font-bold text-gray-900 mt-1">{formatPrice(order.totalPrice)}</p>
                       </div>
-                      <svg className="w-5 h-5 text-gray-400 rtl:-scale-x-100" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <svg className="w-5 h-5 text-gray-500 rtl:-scale-x-100" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
                       </svg>
                     </div>
@@ -562,7 +562,7 @@ function SellerDashboardContent() {
                   {Icons.check}
                 </div>
                 <p className="text-gray-500 font-medium">{t('dash.allStocked')}</p>
-                <p className="text-gray-400 text-sm mt-1">{t('dash.allStockedHint')}</p>
+                <p className="text-gray-500 text-sm mt-1">{t('dash.allStockedHint')}</p>
               </div>
             ) : (
               <div className="space-y-3">
@@ -576,7 +576,7 @@ function SellerDashboardContent() {
                       {product.images && product.images[0] ? (
                         <img src={product.images[0].imageUrl} alt={product.name} className="w-full h-full object-cover" />
                       ) : (
-                        <div className="text-gray-400">{Icons.food}</div>
+                        <div className="text-gray-500">{Icons.food}</div>
                       )}
                     </div>
                     <div className="flex-1 min-w-0">

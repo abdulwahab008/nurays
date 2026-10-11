@@ -538,7 +538,7 @@ export default function CheckoutPage() {
                 <div className="text-center py-6 px-4 bg-slate-50 rounded-2xl border border-dashed border-slate-200">
                   <MapPin className="w-8 h-8 text-slate-300 mx-auto mb-2" />
                   <p className="text-xs font-semibold text-slate-700 mb-1">{t('noAddress')}</p>
-                  <p className="text-[11px] text-slate-400 mb-3">{t('noAddressHint')}</p>
+                  <p className="text-[11px] text-slate-500 mb-3">{t('noAddressHint')}</p>
                   <Link href="/profile/addresses">
                     <Button size="sm" className="bg-[#FF5500] hover:bg-[#e04400] text-xs font-bold text-white rounded-xl">
                       {t('addAddressPlus')}
@@ -1111,7 +1111,7 @@ export default function CheckoutPage() {
                         <div className="text-end shrink-0">
                           <span className="text-xs font-black text-slate-900">{formatPrice(lineTotal)}</span>
                           {promos.length > 0 && base > unitPrice && (
-                            <p className="text-[11px] text-slate-400 line-through">
+                            <p className="text-[11px] text-slate-500 line-through">
                               {formatPrice(base * item.quantity)}
                             </p>
                           )}
@@ -1277,7 +1277,7 @@ export default function CheckoutPage() {
                 <div className="pt-3 border-t border-slate-200/80 flex items-baseline justify-between">
                   <div>
                     <span className="text-sm font-black text-slate-900 block">{deliveryKnown ? t('totalPayable') : t('totalBeforeDelivery')}</span>
-                    <span className="text-[11px] text-slate-400">{deliveryKnown ? t('includesDeliveryTax') : t('deliveryAddedWhenPlaced')}</span>
+                    <span className="text-[11px] text-slate-500">{deliveryKnown ? t('includesDeliveryTax') : t('deliveryAddedWhenPlaced')}</span>
                   </div>
                   <span className="text-xl font-black text-[#FF5500]">{formatPrice(totalPayable)}</span>
                 </div>

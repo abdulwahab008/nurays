@@ -540,7 +540,7 @@ export default function ProductDetailPage() {
                 className="w-full h-full object-contain"
               />
             ) : (
-              <div className="text-gray-400 text-sm text-center px-4 py-8">
+              <div className="text-gray-500 text-sm text-center px-4 py-8">
                 {t('noImages')}
               </div>
             )}
@@ -730,7 +730,7 @@ export default function ProductDetailPage() {
               >
                 <Heart
                   className={`w-4 h-4 transition-colors ${
-                    isFavorite ? 'fill-red-500 text-red-500' : 'text-slate-400 hover:text-red-500'
+                    isFavorite ? 'fill-red-500 text-red-500' : 'text-slate-500 hover:text-red-500'
                   }`}
                 />
               </button>

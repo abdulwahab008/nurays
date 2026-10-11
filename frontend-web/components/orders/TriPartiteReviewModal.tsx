@@ -221,7 +221,7 @@ export default function TriPartiteReviewModal({
                   <Award className="w-4 h-4 text-purple-600" />
                   <span className="font-black text-xs text-slate-900">{t('review.kitchen')}</span>
                 </div>
-                <span className="text-[11px] text-slate-400 font-bold">{sellerName}</span>
+                <span className="text-[11px] text-slate-500 font-bold">{sellerName}</span>
               </div>
               {renderStars(sellerRating, setSellerRating)}
             </div>
@@ -234,7 +234,7 @@ export default function TriPartiteReviewModal({
                     <Bike className="w-4 h-4 text-blue-600" />
                     <span className="font-black text-xs text-slate-900">{t('review.rider')}</span>
                   </div>
-                  <span className="text-[11px] text-slate-400 font-bold">{riderName}</span>
+                  <span className="text-[11px] text-slate-500 font-bold">{riderName}</span>
                 </div>
                 {renderStars(riderRating, setRiderRating)}
               </div>

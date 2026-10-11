@@ -221,7 +221,7 @@ function CategoryForm({ onClose, onSubmit, category, parentCategories }: Categor
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
               Parent Category
-              <span className="text-gray-400 font-normal ms-2">(for subcategories)</span>
+              <span className="text-gray-500 font-normal ms-2">(for subcategories)</span>
             </label>
             <select
               value={formData.parentId}
@@ -273,7 +273,7 @@ function CategoryForm({ onClose, onSubmit, category, parentCategories }: Categor
                 min="0"
                 className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               />
-              <p className="text-xs text-gray-400 mt-1">Lower numbers appear first</p>
+              <p className="text-xs text-gray-500 mt-1">Lower numbers appear first</p>
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -363,7 +363,7 @@ function CategoryTreeItem({
           <div className="flex items-center gap-2">
             <h3 className="font-semibold text-gray-900">{category.name}</h3>
             {category.nameUrdu && (
-              <span className="text-sm text-gray-400">({category.nameUrdu})</span>
+              <span className="text-sm text-gray-500">({category.nameUrdu})</span>
             )}
             <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
               category.isActive ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'

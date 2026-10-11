@@ -37,7 +37,7 @@ const SHARING_BADGE: Record<LocationSharing, { labelKey: RiderMessageKey; tone: 
   waiting: { labelKey: 'loc.waiting', tone: 'text-slate-300', dot: 'bg-slate-400 animate-pulse' },
   denied: { labelKey: 'loc.denied', tone: 'text-amber-300', dot: 'bg-amber-400' },
   unavailable: { labelKey: 'loc.unavailable', tone: 'text-amber-300', dot: 'bg-amber-400' },
-  off: { labelKey: 'loc.off', tone: 'text-slate-400', dot: 'bg-slate-500' },
+  off: { labelKey: 'loc.off', tone: 'text-slate-500', dot: 'bg-slate-500' },
 };
 
 const TABS = ['active', 'available', 'history'] as const;
@@ -472,7 +472,7 @@ export default function RiderDashboardPage() {
                   ⭐ {riderRating ? t('fleetScore', { rating: riderRating }) : t('newRider')}
                 </span>
               </div>
-              <p className="text-xs text-slate-400 mt-0.5">
+              <p className="text-xs text-slate-500 mt-0.5">
                 {t('vehicleLabel')} <strong className="text-slate-200">{vehicleLabel}</strong> • {t('cityLabel')} <strong className="text-slate-200">{profile?.city || t('notSet')}</strong>
               </p>
             </div>
@@ -650,12 +650,12 @@ export default function RiderDashboardPage() {
                               </div>
 
                               <div className="flex items-center gap-3 flex-wrap">
-                                <span className="text-[11px] font-bold text-slate-400">
+                                <span className="text-[11px] font-bold text-slate-500">
                                   {delivery.paymentMethod === 'cod' ? t('collect') : t('prepaid')}{' '}
                                   <span className="text-sm font-black text-emerald-400">{formatPrice(delivery.totalAmount || 0)}</span>
                                 </span>
                                 {delivery.riderFee != null && (
-                                  <span className="text-[11px] font-bold text-slate-400">
+                                  <span className="text-[11px] font-bold text-slate-500">
                                     {t('youEarn')}{' '}
                                     <span className="text-sm font-black text-white">{formatPrice(delivery.riderFee + (delivery.riderBonus ?? 0))}</span>
                                   </span>
@@ -966,7 +966,7 @@ export default function RiderDashboardPage() {
                                 <p className="flex items-center gap-1.5">
                                   <span className="font-bold text-slate-800">{t('orderValue')}</span>
                                   <span className="font-black text-emerald-700">{formatPrice(d.totalAmount)}</span>
-                                  <span className="text-slate-400 text-[11px]">({d.paymentMethod?.toUpperCase() || 'COD'})</span>
+                                  <span className="text-slate-500 text-[11px]">({d.paymentMethod?.toUpperCase() || 'COD'})</span>
                                 </p>
                               )}
                             </div>
@@ -997,7 +997,7 @@ export default function RiderDashboardPage() {
                           {activeDeliveries.length >= 2 ? (
                             <Button
                               disabled
-                              className="w-full bg-slate-200 text-slate-400 font-bold text-xs py-2 rounded-xl"
+                              className="w-full bg-slate-200 text-slate-500 font-bold text-xs py-2 rounded-xl"
                             >
                               {t('atCapacity')}
                             </Button>
@@ -1115,7 +1115,7 @@ export default function RiderDashboardPage() {
 
                 <div className="my-3">
                   <span className="text-2xl font-black text-slate-900">{formatPrice(cashInHand)}</span>
-                  <span className="text-xs text-slate-400 ms-2">{t('limitSuffix', { limit: formatPrice(floatingLimit) })}</span>
+                  <span className="text-xs text-slate-500 ms-2">{t('limitSuffix', { limit: formatPrice(floatingLimit) })}</span>
                 </div>
 
                 <div className="w-full bg-slate-100 h-2.5 rounded-full overflow-hidden mb-2">
@@ -1147,12 +1147,12 @@ export default function RiderDashboardPage() {
 
                 <div className="grid grid-cols-2 gap-2 text-xs">
                   <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-100">
-                    <span className="text-slate-400 block text-[11px] font-bold uppercase">{t('runsDelivered')}</span>
+                    <span className="text-slate-500 block text-[11px] font-bold uppercase">{t('runsDelivered')}</span>
                     <span className="text-base font-black text-slate-800">{completedDeliveries.length}</span>
                   </div>
 
                   <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-100">
-                    <span className="text-slate-400 block text-[11px] font-bold uppercase">{t('activeNow')}</span>
+                    <span className="text-slate-500 block text-[11px] font-bold uppercase">{t('activeNow')}</span>
                     <span className="text-base font-black text-slate-800">{activeDeliveries.length}</span>
                   </div>
                 </div>

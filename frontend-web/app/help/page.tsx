@@ -14,7 +14,7 @@ function Faq({ question, children }: { question: string; children: ReactNode }) 
     <details className="group rounded-xl border border-slate-200 bg-white open:bg-slate-50/60">
       <summary className="cursor-pointer list-none px-4 py-3 font-medium text-slate-900 flex items-center justify-between gap-3 [&::-webkit-details-marker]:hidden">
         <span>{question}</span>
-        <span aria-hidden="true" className="text-slate-400 transition-transform group-open:rotate-45">+</span>
+        <span aria-hidden="true" className="text-slate-500 transition-transform group-open:rotate-45">+</span>
       </summary>
       <div className="px-4 pb-4 text-[15px] leading-7 text-slate-700 space-y-2">{children}</div>
     </details>

@@ -516,13 +516,13 @@ export default function AddProductPage() {
 
         {/* Keyboard Shortcuts Modal */}
         {showKeyboardHelp && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" onClick={() => setShowKeyboardHelp(false)}>
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={() => setShowKeyboardHelp(false)}>
             <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full mx-4 p-6" onClick={(e) => e.stopPropagation()}>
               <div className="flex items-center justify-between mb-4">
                 <h3 className="text-xl font-bold text-gray-900">⌨️ Keyboard Shortcuts</h3>
                 <button
                   onClick={() => setShowKeyboardHelp(false)}
-                  className="text-gray-400 hover:text-gray-600 text-2xl leading-none"
+                  className="text-gray-500 hover:text-gray-600 text-2xl leading-none"
                 >
                   ×
                 </button>
@@ -533,7 +533,7 @@ export default function AddProductPage() {
                   <span className="text-sm text-gray-700">Save / Submit Product</span>
                   <div className="flex gap-1">
                     <kbd className="px-2 py-1 text-xs font-semibold bg-white border border-gray-300 rounded shadow-sm">Ctrl</kbd>
-                    <span className="text-gray-400">+</span>
+                    <span className="text-gray-500">+</span>
                     <kbd className="px-2 py-1 text-xs font-semibold bg-white border border-gray-300 rounded shadow-sm">S</kbd>
                   </div>
                 </div>
@@ -542,7 +542,7 @@ export default function AddProductPage() {
                   <span className="text-sm text-gray-700">Quick Submit</span>
                   <div className="flex gap-1">
                     <kbd className="px-2 py-1 text-xs font-semibold bg-white border border-gray-300 rounded shadow-sm">Ctrl</kbd>
-                    <span className="text-gray-400">+</span>
+                    <span className="text-gray-500">+</span>
                     <kbd className="px-2 py-1 text-xs font-semibold bg-white border border-gray-300 rounded shadow-sm">Enter</kbd>
                   </div>
                 </div>
@@ -551,7 +551,7 @@ export default function AddProductPage() {
                   <span className="text-sm text-gray-700">Toggle Shortcuts Help</span>
                   <div className="flex gap-1">
                     <kbd className="px-2 py-1 text-xs font-semibold bg-white border border-gray-300 rounded shadow-sm">Ctrl</kbd>
-                    <span className="text-gray-400">+</span>
+                    <span className="text-gray-500">+</span>
                     <kbd className="px-2 py-1 text-xs font-semibold bg-white border border-gray-300 rounded shadow-sm">K</kbd>
                   </div>
                 </div>
@@ -565,7 +565,7 @@ export default function AddProductPage() {
                   <span className="text-sm text-gray-700">Navigate Between Fields</span>
                   <div className="flex gap-1 flex-wrap justify-end">
                     <kbd className="px-2 py-1 text-xs font-semibold bg-white border border-gray-300 rounded shadow-sm">Enter</kbd>
-                    <span className="text-gray-400">/</span>
+                    <span className="text-gray-500">/</span>
                     <kbd className="px-2 py-1 text-xs font-semibold bg-white border border-gray-300 rounded shadow-sm">Tab</kbd>
                   </div>
                 </div>
@@ -652,7 +652,7 @@ export default function AddProductPage() {
                 <button
                   type="button"
                   onClick={() => fileInputRef.current?.click()}
-                  className="aspect-square rounded-xl border-2 border-dashed border-purple-300 hover:border-purple-500 hover:bg-purple-50 transition-all flex flex-col items-center justify-center gap-2 text-purple-400 hover:text-purple-600 group"
+                  className="aspect-square rounded-xl border-2 border-dashed border-purple-300 hover:border-purple-500 hover:bg-purple-50 transition-all flex flex-col items-center justify-center gap-2 text-purple-600 hover:text-purple-700 group"
                 >
                   <div className="w-12 h-12 rounded-full bg-purple-100 group-hover:bg-purple-200 flex items-center justify-center transition-colors">
                     <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -719,8 +719,8 @@ export default function AddProductPage() {
                 className="w-full px-4 py-3 text-lg border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
               />
               <div className="flex justify-between items-center mt-1">
-                <p className="text-xs text-gray-400">💡 Be specific and include quantity/size</p>
-                <span className="text-xs text-gray-400">{formData.name.length}/100</span>
+                <p className="text-xs text-gray-500">💡 Be specific and include quantity/size</p>
+                <span className="text-xs text-gray-500">{formData.name.length}/100</span>
               </div>
             </div>
 
@@ -728,7 +728,7 @@ export default function AddProductPage() {
             <div className="mb-5">
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 <span>Name in Urdu</span>
-                <span className="text-gray-400 font-normal ms-2">(اختیاری - reaches more customers)</span>
+                <span className="text-gray-500 font-normal ms-2">(اختیاری - reaches more customers)</span>
               </label>
               <input
                 type="text"
@@ -933,7 +933,7 @@ export default function AddProductPage() {
                     onClick={() => setFormData(prev => ({ ...prev, preparationTime: preset.mins.toString() }))}
                     className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
                       formData.preparationTime === preset.mins.toString()
-                        ? 'bg-orange-500 text-white shadow-sm shadow-orange-200'
+                        ? 'bg-[#FF5500] text-white shadow-sm shadow-orange-200'
                         : 'bg-white border border-orange-200 text-slate-700 hover:bg-orange-100'
                     }`}
                   >
@@ -956,7 +956,7 @@ export default function AddProductPage() {
                     min="1"
                     className="w-full px-4 py-2.5 border border-orange-200 rounded-xl focus:ring-2 focus:ring-orange-500 bg-white text-slate-900 font-bold text-sm"
                   />
-                  <p className="text-xs text-slate-400 mt-1">Order ready estimate for riders</p>
+                  <p className="text-xs text-slate-500 mt-1">Order ready estimate for riders</p>
                 </div>
 
                 <div>
@@ -971,7 +971,7 @@ export default function AddProductPage() {
                     min="1"
                     className="w-full px-4 py-2.5 border border-orange-200 rounded-xl focus:ring-2 focus:ring-orange-500 bg-white text-slate-900 font-medium text-sm"
                   />
-                  <p className="text-xs text-slate-400 mt-1">Freshness window</p>
+                  <p className="text-xs text-slate-500 mt-1">Freshness window</p>
                 </div>
               </div>
             </div>
@@ -979,7 +979,7 @@ export default function AddProductPage() {
             {/* Description */}
             <div className="mb-5">
               <label className="block text-sm font-medium text-gray-700 mb-2">
-                Description <span className="text-gray-400 font-normal">(Optional but recommended)</span>
+                Description <span className="text-gray-500 font-normal">(Optional but recommended)</span>
               </label>
               <textarea
                 id="product-description-input"
@@ -992,14 +992,14 @@ export default function AddProductPage() {
               />
               <div className="flex justify-between items-center mt-1">
                 <p className="text-xs text-emerald-600">✨ Products with descriptions sell 3x more</p>
-                <span className="text-xs text-gray-400">{formData.description.length}/500</span>
+                <span className="text-xs text-gray-500">{formData.description.length}/500</span>
               </div>
             </div>
 
             {/* Ingredients */}
             <div className="mb-5">
               <label className="block text-sm font-medium text-gray-700 mb-2">
-                Ingredients <span className="text-gray-400 font-normal">(Optional but builds trust)</span>
+                Ingredients <span className="text-gray-500 font-normal">(Optional but builds trust)</span>
               </label>
               <textarea
                 value={formData.ingredients}
@@ -1011,7 +1011,7 @@ export default function AddProductPage() {
               />
               <div className="flex justify-between items-center mt-1">
                 <p className="text-xs text-blue-600">🛡️ Transparency increases customer confidence</p>
-                <span className="text-xs text-gray-400">{formData.ingredients.length}/300</span>
+                <span className="text-xs text-gray-500">{formData.ingredients.length}/300</span>
               </div>
             </div>
 
@@ -1081,10 +1081,10 @@ export default function AddProductPage() {
               {/* Original Price (for discount) */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Original Price <span className="text-gray-400 font-normal">(optional - for showing discount)</span>
+                  Original Price <span className="text-gray-500 font-normal">(optional - for showing discount)</span>
                 </label>
                 <div className="relative">
-                  <span className="absolute start-4 top-1/2 -translate-y-1/2 text-gray-400 text-lg">Rs.</span>
+                  <span className="absolute start-4 top-1/2 -translate-y-1/2 text-gray-500 text-lg">Rs.</span>
                   <input
                     type="number"
                     value={formData.originalPrice}
@@ -1103,7 +1103,7 @@ export default function AddProductPage() {
                     </p>
                   </div>
                 ) : formData.price && parseFloat(formData.price) > 0 && (
-                  <p className="text-xs text-gray-400 mt-1">💡 Add original price to show discount percentage</p>
+                  <p className="text-xs text-gray-500 mt-1">💡 Add original price to show discount percentage</p>
                 )}
               </div>
 
@@ -1113,11 +1113,11 @@ export default function AddProductPage() {
                   <div className="flex items-center gap-2">
                     <span>Your Cost Price</span>
                     <span className="text-xs bg-purple-100 text-purple-700 px-2 py-0.5 rounded-full font-medium">🔒 Private</span>
-                    <span className="text-gray-400 font-normal">(for profit tracking only)</span>
+                    <span className="text-gray-500 font-normal">(for profit tracking only)</span>
                   </div>
                 </label>
                 <div className="relative">
-                  <span className="absolute start-4 top-1/2 -translate-y-1/2 text-gray-400 text-lg">Rs.</span>
+                  <span className="absolute start-4 top-1/2 -translate-y-1/2 text-gray-500 text-lg">Rs.</span>
                   <input
                     type="number"
                     value={formData.costPrice}
@@ -1307,7 +1307,7 @@ export default function AddProductPage() {
                             Price *
                           </label>
                           <div className="relative">
-                            <span className="absolute start-2 top-1/2 -translate-y-1/2 text-gray-400 text-sm">
+                            <span className="absolute start-2 top-1/2 -translate-y-1/2 text-gray-500 text-sm">
                               Rs.
                             </span>
                             <input
@@ -1327,7 +1327,7 @@ export default function AddProductPage() {
                             Original Price
                           </label>
                           <div className="relative">
-                            <span className="absolute start-2 top-1/2 -translate-y-1/2 text-gray-400 text-sm">
+                            <span className="absolute start-2 top-1/2 -translate-y-1/2 text-gray-500 text-sm">
                               Rs.
                             </span>
                             <input
@@ -1347,7 +1347,7 @@ export default function AddProductPage() {
                             Your Cost
                           </label>
                           <div className="relative">
-                            <span className="absolute start-2 top-1/2 -translate-y-1/2 text-gray-400 text-sm">
+                            <span className="absolute start-2 top-1/2 -translate-y-1/2 text-gray-500 text-sm">
                               Rs.
                             </span>
                             <input
@@ -1486,7 +1486,7 @@ export default function AddProductPage() {
                   <span className="text-3xl font-bold text-gray-900">Rs. {formData.price}</span>
                   {formData.originalPrice && parseFloat(formData.originalPrice) > parseFloat(formData.price) && (
                     <>
-                      <span className="text-lg text-gray-400 line-through">Rs. {formData.originalPrice}</span>
+                      <span className="text-lg text-gray-500 line-through">Rs. {formData.originalPrice}</span>
                       <span className="bg-green-500 text-white px-2 py-0.5 rounded-full text-sm font-bold">
                         {discount}% OFF
                       </span>
@@ -1568,7 +1568,7 @@ export default function AddProductPage() {
                   <span className="flex items-center justify-center gap-2">
                     <span className="text-xl">✨</span>
                     <span>Create Product</span>
-                    <span className="text-xs opacity-75 ms-2 px-2 py-1 bg-white bg-opacity-20 rounded">Ctrl+S</span>
+                    <span className="text-xs opacity-75 ms-2 px-2 py-1 bg-white/20 rounded">Ctrl+S</span>
                   </span>
                 )}
               </Button>

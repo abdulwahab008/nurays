@@ -152,7 +152,7 @@ export default function AdminProductsPage() {
                       className="w-full h-full object-cover"
                     />
                   ) : (
-                    <div className="w-full h-full flex items-center justify-center text-gray-400">
+                    <div className="w-full h-full flex items-center justify-center text-gray-500">
                       <span className="text-4xl">🍽️</span>
                     </div>
                   )}

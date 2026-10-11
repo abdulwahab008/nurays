@@ -214,7 +214,7 @@ export default function NotificationsPage() {
         </div>
       ) : filteredNotifications.length === 0 ? (
         <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-12 text-center">
-          <div className="w-20 h-20 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-6 text-gray-400">
+          <div className="w-20 h-20 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-6 text-gray-500">
             <BellOff className="w-10 h-10" />
           </div>
           <h2 className="text-xl font-bold text-gray-900 mb-2">
@@ -246,7 +246,7 @@ export default function NotificationsPage() {
                         {notification.title}
                       </h3>
                       <p className="text-gray-600 text-sm mt-1">{notification.message}</p>
-                      <p className="text-xs text-gray-400 mt-2">
+                      <p className="text-xs text-gray-500 mt-2">
                         {formatDate(notification.createdAt)}
                       </p>
                     </div>
@@ -261,7 +261,7 @@ export default function NotificationsPage() {
                       )}
                       <button
                         onClick={() => deleteNotification(notification.id)}
-                        className="p-1 rounded-lg text-gray-400 hover:text-red-500 hover:bg-gray-50 transition-colors"
+                        className="p-1 rounded-lg text-gray-500 hover:text-red-500 hover:bg-gray-50 transition-colors"
                         title={tc('delete')}
                         aria-label={tc('delete')}
                       >

@@ -512,7 +512,7 @@ export default function HubOperationsConsole({ mode }: { mode: 'admin' | 'manage
                   [{hubStats?.code || hubs.find((h) => h.id === selectedHubId)?.code || '—'}]
                 </span>
               </div>
-              <p className="text-xs text-slate-400 mt-1 flex items-center gap-1.5">
+              <p className="text-xs text-slate-500 mt-1 flex items-center gap-1.5">
                 <span>📍 {hubStats?.address || '—'}</span>
                 <span>•</span>
                 <span>Capacity: {hubStats?.capacityCubicFeet != null ? hubStats.capacityCubicFeet.toLocaleString() : '—'} cu ft</span>
@@ -748,23 +748,23 @@ export default function HubOperationsConsole({ mode }: { mode: 'admin' | 'manage
               </div>
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mt-4 pt-4 border-t border-gray-100 text-xs text-gray-600">
                 <div>
-                  <span className="text-gray-400 block">Total Volume:</span>
+                  <span className="text-gray-500 block">Total Volume:</span>
                   <span className="font-semibold text-gray-800">
                     {hubStats?.capacityCubicFeet != null ? hubStats.capacityCubicFeet.toLocaleString() : '—'} cu ft
                   </span>
                 </div>
                 <div>
-                  <span className="text-gray-400 block">Freezer Units:</span>
+                  <span className="text-gray-500 block">Freezer Units:</span>
                   <span className="font-semibold text-gray-800">
                     {hubStats?.freezerUnits || 2} Freezers Active
                   </span>
                 </div>
                 <div>
-                  <span className="text-gray-400 block">Operating Hours:</span>
+                  <span className="text-gray-500 block">Operating Hours:</span>
                   <span className="font-semibold text-gray-800">24/7 Cold-Chain Active</span>
                 </div>
                 <div>
-                  <span className="text-gray-400 block">Intake Compliance:</span>
+                  <span className="text-gray-500 block">Intake Compliance:</span>
                   <span className="font-semibold text-emerald-600">
                     {tempStats?.complianceRate ?? 100}% Sub-Zero Pass
                   </span>
@@ -981,7 +981,7 @@ export default function HubOperationsConsole({ mode }: { mode: 'admin' | 'manage
 
                   {/* Expiry Presets */}
                   <div className="flex items-center gap-2 flex-wrap">
-                    <span className="text-xs text-gray-400 font-medium">Quick Presets:</span>
+                    <span className="text-xs text-gray-500 font-medium">Quick Presets:</span>
                     <button
                       type="button"
                       onClick={() => setExpiryPreset(30)}
@@ -1029,7 +1029,7 @@ export default function HubOperationsConsole({ mode }: { mode: 'admin' | 'manage
                         required
                         className="w-full border-2 border-cyan-500 rounded-xl px-4 py-3 text-xl font-mono font-black text-gray-900 focus:ring-4 focus:ring-cyan-500/20 outline-none"
                       />
-                      <span className="absolute end-4 top-3 text-sm font-bold text-gray-400">
+                      <span className="absolute end-4 top-3 text-sm font-bold text-gray-500">
                         °Celsius
                       </span>
                     </div>
@@ -1102,7 +1102,7 @@ export default function HubOperationsConsole({ mode }: { mode: 'admin' | 'manage
             {/* Search & Status Filters */}
             <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
               <div className="relative flex-1 w-full md:max-w-md">
-                <span className="absolute start-3.5 top-2.5 text-gray-400">🔍</span>
+                <span className="absolute start-3.5 top-2.5 text-gray-500">🔍</span>
                 <input
                   type="text"
                   placeholder="Filter by batch #, product, or barcode..."
@@ -1499,7 +1499,7 @@ export default function HubOperationsConsole({ mode }: { mode: 'admin' | 'manage
               </h3>
               <button
                 onClick={() => setStatusModalOpen(false)}
-                className="text-gray-400 hover:text-gray-600 text-lg leading-none"
+                className="text-gray-500 hover:text-gray-600 text-lg leading-none"
               >
                 ✕
               </button>

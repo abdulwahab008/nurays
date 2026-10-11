@@ -262,7 +262,7 @@ export default function SupportPage() {
                         >
                           <span className="font-medium text-gray-900">{faq.q}</span>
                           <ChevronDown
-                            className={`w-4 h-4 text-gray-400 transition-transform ${
+                            className={`w-4 h-4 text-gray-500 transition-transform ${
                               isExpanded ? 'rotate-180 text-[#FF5500]' : ''
                             }`}
                           />

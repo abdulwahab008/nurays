@@ -216,7 +216,7 @@ export default function AdminDashboardPage() {
               <div>
                 <p className="text-sm text-gray-600 mb-1">Category Requests</p>
                 <p className="text-3xl font-bold text-gray-900">{pendingCategoryRequests ?? '—'}</p>
-                <p className="text-xs text-gray-400 mt-1">{pendingCategoryRequests === null ? "couldn't be read" : 'pending review'}</p>
+                <p className="text-xs text-gray-500 mt-1">{pendingCategoryRequests === null ? "couldn't be read" : 'pending review'}</p>
               </div>
               <div className="w-12 h-12 bg-gray-100 rounded-lg flex items-center justify-center">
                 <span className="text-2xl">📝</span>

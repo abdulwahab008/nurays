@@ -277,7 +277,7 @@ export default function CategoryRequestsPage() {
                             {request.seller?.businessName || 'Unknown Seller'}
                           </span>
                           {request.seller?.user?.email && (
-                            <span className="text-gray-400"> ({request.seller.user.email})</span>
+                            <span className="text-gray-500"> ({request.seller.user.email})</span>
                           )}
                         </span>
                       </div>
@@ -340,7 +340,7 @@ export default function CategoryRequestsPage() {
                   rows={4}
                   className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-red-500 focus:border-transparent resize-none"
                 />
-                <p className="text-xs text-gray-400 mt-2">
+                <p className="text-xs text-gray-500 mt-2">
                   This message will be visible to the seller.
                 </p>
               </div>

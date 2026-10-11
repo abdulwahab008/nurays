@@ -591,7 +591,7 @@ export default function AdminOrderDetailPage() {
                               {r.method === 'wallet' ? 'to wallet' : 'manual transfer'}
                               {r.reference ? ` · ref ${r.reference}` : ''}
                             </span>
-                            {r.reason && <div className="text-xs text-gray-400 truncate">{r.reason}</div>}
+                            {r.reason && <div className="text-xs text-gray-500 truncate">{r.reason}</div>}
                           </div>
                           {r.status === 'pending' ? (
                             <button
@@ -669,7 +669,7 @@ export default function AdminOrderDetailPage() {
                           <span className="font-medium text-gray-700">{h.status}</span>
                           {h.notes && ` — ${h.notes}`}
                           {h.changedByName && <span className="text-gray-500"> · by {h.changedByName}</span>}
-                          <span className="text-gray-400 ms-2">{formatDate(h.createdAt)}</span>
+                          <span className="text-gray-500 ms-2">{formatDate(h.createdAt)}</span>
                         </li>
                       ))}
                     </ul>

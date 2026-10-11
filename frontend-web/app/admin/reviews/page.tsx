@@ -159,7 +159,7 @@ export default function AdminReviewsPage() {
                   </div>
                 </div>
 
-                <p className="mt-3 text-gray-800 whitespace-pre-wrap break-words">{r.comment || <span className="text-gray-400">No written comment</span>}</p>
+                <p className="mt-3 text-gray-800 whitespace-pre-wrap break-words">{r.comment || <span className="text-gray-500">No written comment</span>}</p>
                 {r.sellerResponse && <p className="mt-2 text-sm bg-gray-50 rounded-lg px-3 py-2 text-gray-600">The kitchen replied: {r.sellerResponse}</p>}
 
                 {(r.isReported || r.reason) && (

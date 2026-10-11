@@ -230,7 +230,7 @@ function WalletContent() {
                             {incoming ? '+' : '−'}
                             {formatPrice(tx.amount)}
                           </p>
-                          <p className="text-[11px] text-slate-400">{t('balanceAfter', { amount: formatPrice(tx.balanceAfter) })}</p>
+                          <p className="text-[11px] text-slate-500">{t('balanceAfter', { amount: formatPrice(tx.balanceAfter) })}</p>
                         </div>
                       </li>
                     );

@@ -184,7 +184,7 @@ export default function AdminUsersPage() {
                         {u.phoneVerified ? ' ✓' : ''}
                         {u.email ? ` · ${u.email}${u.emailVerified ? ' ✓' : ''}` : ''}
                       </p>
-                      {u.city && <p className="text-xs text-gray-400">{u.city}</p>}
+                      {u.city && <p className="text-xs text-gray-500">{u.city}</p>}
                     </td>
                     <td className="px-4 py-3">
                       <span className="inline-block px-2 py-0.5 rounded text-xs font-semibold bg-gray-100 text-gray-700">{TYPE_LABEL[u.userType] ?? u.userType}</span>{' '}

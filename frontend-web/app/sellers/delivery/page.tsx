@@ -436,7 +436,7 @@ export default function SellerDeliveryPage() {
                             className="w-4 h-4 text-[#FF5500] rounded border-slate-300 focus:ring-[#FF5500]"
                           />
                           <span className="text-xs font-bold text-slate-900">{c.name}</span>
-                          <span className="text-[11px] text-slate-400">{c.city}</span>
+                          <span className="text-[11px] text-slate-500">{c.city}</span>
                           {c.isHome && (
                             <span className="text-[11px] font-bold px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700">
                               Your community
@@ -596,7 +596,7 @@ export default function SellerDeliveryPage() {
                         }
                         className="w-full ps-3 pe-9 py-2 text-xs font-bold border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-[#FF5500]"
                       />
-                      <span className="absolute end-3 top-2 text-[11px] text-slate-400 font-medium">PKR</span>
+                      <span className="absolute end-3 top-2 text-[11px] text-slate-500 font-medium">PKR</span>
                     </div>
                   </div>
                 )}
@@ -620,7 +620,7 @@ export default function SellerDeliveryPage() {
                           }
                           className="w-full ps-3 pe-9 py-2 text-xs font-bold border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-[#FF5500]"
                         />
-                        <span className="absolute end-3 top-2 text-[11px] text-slate-400 font-medium">PKR</span>
+                        <span className="absolute end-3 top-2 text-[11px] text-slate-500 font-medium">PKR</span>
                       </div>
                     </div>
                     <div>
@@ -640,7 +640,7 @@ export default function SellerDeliveryPage() {
                           }
                           className="w-full ps-3 pe-11 py-2 text-xs font-bold border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-[#FF5500]"
                         />
-                        <span className="absolute end-3 top-2 text-[11px] text-slate-400 font-medium">Rs/km</span>
+                        <span className="absolute end-3 top-2 text-[11px] text-slate-500 font-medium">Rs/km</span>
                       </div>
                     </div>
                   </div>
@@ -655,7 +655,7 @@ export default function SellerDeliveryPage() {
 
                 {/* Suggestions */}
                 <div className="flex items-center gap-1.5 flex-wrap">
-                  <span className="text-[11px] text-slate-400">Presets:</span>
+                  <span className="text-[11px] text-slate-500">Presets:</span>
                   {['Askari 11', 'Askari 10', 'DHA Phase 6', 'Bedian Road', 'Gulshan-e-Iqbal', 'Clifton'].map((comm) => (
                     <button
                       key={comm}

@@ -224,19 +224,19 @@ function DevLoginContent() {
 
                   <div className="bg-slate-50 rounded-xl p-3 mb-5 border border-slate-100 space-y-1">
                     <div className="flex items-center justify-between text-xs">
-                      <span className="text-slate-400 font-medium">Email:</span>
+                      <span className="text-slate-500 font-medium">Email:</span>
                       <code className="text-slate-800 font-bold bg-white px-1.5 py-0.5 rounded border border-slate-200">
                         {role.email}
                       </code>
                     </div>
                     <div className="flex items-center justify-between text-xs">
-                      <span className="text-slate-400 font-medium">Password:</span>
+                      <span className="text-slate-500 font-medium">Password:</span>
                       <code className="text-slate-800 font-bold bg-white px-1.5 py-0.5 rounded border border-slate-200">
                         {role.pass}
                       </code>
                     </div>
                     <div className="flex items-center justify-between text-xs">
-                      <span className="text-slate-400 font-medium">Landing Page:</span>
+                      <span className="text-slate-500 font-medium">Landing Page:</span>
                       <code className="text-orange-700 font-bold">{role.targetUrl}</code>
                     </div>
                   </div>

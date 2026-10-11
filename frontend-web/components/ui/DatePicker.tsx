@@ -151,8 +151,8 @@ export function DatePicker({
         }`}
       >
         <div className="flex items-center gap-2.5 truncate">
-          <CalendarIcon className="w-4 h-4 text-slate-400 shrink-0" />
-          <span className={displayValue ? 'text-slate-900 font-semibold' : 'text-slate-400 font-normal'}>
+          <CalendarIcon className="w-4 h-4 text-slate-500 shrink-0" />
+          <span className={displayValue ? 'text-slate-900 font-semibold' : 'text-slate-500 font-normal'}>
             {displayValue || placeholder}
           </span>
         </div>
@@ -163,7 +163,7 @@ export function DatePicker({
               e.stopPropagation();
               onChange('');
             }}
-            className="p-1 hover:bg-slate-100 rounded-full text-slate-400 hover:text-slate-600 transition-colors"
+            className="p-1 hover:bg-slate-100 rounded-full text-slate-500 hover:text-slate-600 transition-colors"
             title="Clear date"
           >
             <X className="w-3.5 h-3.5" />
@@ -204,7 +204,7 @@ export function DatePicker({
           {/* Weekday Labels */}
           <div className="grid grid-cols-7 gap-1 text-center mb-1">
             {daysOfWeek.map((day) => (
-              <span key={day} className="text-[11px] font-bold text-slate-400 uppercase py-0.5">
+              <span key={day} className="text-[11px] font-bold text-slate-500 uppercase py-0.5">
                 {day}
               </span>
             ))}
@@ -269,7 +269,7 @@ export function DatePicker({
             <button
               type="button"
               onClick={() => setIsOpen(false)}
-              className="text-[11px] font-semibold text-slate-400 hover:text-slate-600 cursor-pointer"
+              className="text-[11px] font-semibold text-slate-500 hover:text-slate-600 cursor-pointer"
             >
               Close
             </button>

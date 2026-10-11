@@ -298,7 +298,7 @@ export default function SellerEarningsPage() {
                     <p className="text-gray-500">
                       {t('availableForWithdrawal')} <span className="font-bold text-emerald-600">{formatPrice(earnings.availableBalance)}</span>
                     </p>
-                    <p className="text-sm text-gray-400 mt-1">{t('processingTime')}</p>
+                    <p className="text-sm text-gray-500 mt-1">{t('processingTime')}</p>
                   </div>
                   {!showPayoutForm && (
                     <Button
@@ -379,7 +379,7 @@ export default function SellerEarningsPage() {
                       {Icons.history}
                     </div>
                     <p className="text-gray-500 font-medium">{t('noHistory')}</p>
-                    <p className="text-gray-400 text-sm mt-1">{t('noHistoryHint')}</p>
+                    <p className="text-gray-500 text-sm mt-1">{t('noHistoryHint')}</p>
                   </div>
                 ) : (
                   <div className="space-y-3">

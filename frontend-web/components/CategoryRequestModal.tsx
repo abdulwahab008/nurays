@@ -310,7 +310,7 @@ export function CategoryRequestModal({
           {productType && (
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
-                Name in Urdu <span className="text-gray-400 font-normal">(Optional)</span>
+                Name in Urdu <span className="text-gray-500 font-normal">(Optional)</span>
               </label>
               <input
                 type="text"
@@ -328,7 +328,7 @@ export function CategoryRequestModal({
           {productType && (
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
-                Description <span className="text-gray-400 font-normal">(Optional)</span>
+                Description <span className="text-gray-500 font-normal">(Optional)</span>
               </label>
               <textarea
                 value={formData.description}

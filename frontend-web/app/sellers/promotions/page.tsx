@@ -497,7 +497,7 @@ function PromotionForm({
                     <button
                       type="button"
                       onClick={loadProductsForPromotion}
-                      className="mt-2 px-3 py-1 bg-orange-500 text-white text-xs font-bold rounded-lg"
+                      className="mt-2 px-3 py-1 bg-[#FF5500] text-white text-xs font-bold rounded-lg"
                     >
                       Retry
                     </button>
@@ -563,7 +563,7 @@ function PromotionForm({
             <Button
               type="submit"
               disabled={selectedProductIds.length === 0}
-              className="flex-1 bg-orange-500 hover:bg-orange-600 text-white rounded-xl font-bold text-xs shadow-md shadow-orange-500/20 disabled:opacity-50"
+              className="flex-1 bg-[#FF5500] hover:bg-[#e04400] text-white rounded-xl font-bold text-xs shadow-md shadow-orange-500/20 disabled:opacity-50"
             >
               {isEditMode ? 'Update Campaign' : 'Launch Campaign'}
             </Button>
@@ -837,7 +837,7 @@ export default function SellerPromotionsPage() {
                 href={tab.href}
                 className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs sm:text-sm font-bold transition-all duration-200 whitespace-nowrap ${
                   tab.isActive
-                    ? 'bg-orange-500 text-white shadow-sm'
+                    ? 'bg-[#FF5500] text-white shadow-sm'
                     : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
                 }`}
               >
@@ -846,7 +846,7 @@ export default function SellerPromotionsPage() {
                 {tab.count !== undefined && (
                   <span
                     className={`text-xs px-2 py-0.5 rounded-full font-bold ${
-                      tab.isActive ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-700'
+                      tab.isActive ? 'bg-black/20 text-white' : 'bg-slate-100 text-slate-700'
                     }`}
                   >
                     {tab.count}
@@ -862,7 +862,7 @@ export default function SellerPromotionsPage() {
                 setEditingPromo(null);
                 setShowCreateModal(true);
               }}
-              className="bg-orange-500 hover:bg-orange-600 text-white font-bold text-xs sm:text-sm rounded-xl shadow-md shadow-orange-500/20 flex items-center gap-2 px-4 py-2"
+              className="bg-[#FF5500] hover:bg-[#e04400] text-white font-bold text-xs sm:text-sm rounded-xl shadow-md shadow-orange-500/20 flex items-center gap-2 px-4 py-2"
             >
               {Icons.plus}
               Create Deal
@@ -931,7 +931,7 @@ export default function SellerPromotionsPage() {
           {/* Expired */}
           <div className="bg-white rounded-3xl p-4 sm:p-5 border border-slate-200 shadow-sm relative overflow-hidden group hover:border-slate-300 transition-all">
             <div className="flex items-center justify-between mb-2">
-              <span className="text-[11px] font-black uppercase tracking-wider text-slate-400">
+              <span className="text-[11px] font-black uppercase tracking-wider text-slate-500">
                 Completed & Expired
               </span>
               <div className="w-8 h-8 rounded-xl bg-slate-100 text-slate-600 flex items-center justify-center font-bold text-sm">
@@ -954,7 +954,7 @@ export default function SellerPromotionsPage() {
           {/* Search Box */}
           <div className="relative flex-1">
             <svg
-              className="w-4 h-4 text-slate-400 absolute start-3.5 top-1/2 -translate-y-1/2"
+              className="w-4 h-4 text-slate-500 absolute start-3.5 top-1/2 -translate-y-1/2"
               fill="none"
               viewBox="0 0 24 24"
               stroke="currentColor"
@@ -1038,7 +1038,7 @@ export default function SellerPromotionsPage() {
                 setEditingPromo(null);
                 setShowCreateModal(true);
               }}
-              className="bg-orange-500 hover:bg-orange-600 text-white font-bold rounded-2xl shadow-lg shadow-orange-500/20 px-6 py-2.5"
+              className="bg-[#FF5500] hover:bg-[#e04400] text-white font-bold rounded-2xl shadow-lg shadow-orange-500/20 px-6 py-2.5"
             >
               Create Your First Deal
             </Button>
@@ -1160,7 +1160,7 @@ export default function SellerPromotionsPage() {
                         <div className="text-2xl font-black text-slate-900 tracking-tight">
                           {promo.usageCount}
                         </div>
-                        <div className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
+                        <div className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
                           Orders Placed
                         </div>
                       </div>
@@ -1210,7 +1210,7 @@ export default function SellerPromotionsPage() {
         {/* ========================================================================= */}
         <div className="bg-gradient-to-r from-orange-50 via-amber-50 to-orange-50 rounded-3xl p-6 border border-orange-200/80 shadow-xs">
           <div className="flex items-start gap-4">
-            <div className="w-10 h-10 rounded-2xl bg-orange-500 text-white flex items-center justify-center shadow-sm shrink-0">
+            <div className="w-10 h-10 rounded-2xl bg-[#FF5500] text-white flex items-center justify-center shadow-sm shrink-0">
               <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M12 18v-5.25m0 0a6.01 6.01 0 001.5-.189m-1.5.189a6.01 6.01 0 01-1.5-.189m3.75 7.5h-4.5a.75.75 0 01-.75-.75v-.75a.75.75 0 01.75-.75h4.5a.75.75 0 01.75.75v.75a.75.75 0 01-.75.75zm-6-8.25a6 6 0 1112 0c0 2.26-1.25 4.228-3.09 5.25H9.09A5.986 5.986 0 016 11.25z" />
               </svg>
@@ -1274,19 +1274,19 @@ export default function SellerPromotionsPage() {
             </div>
             <div className="p-6 space-y-4 text-xs sm:text-sm">
               <div>
-                <p className="text-xs font-bold uppercase tracking-wider text-slate-400">Campaign Name</p>
+                <p className="text-xs font-bold uppercase tracking-wider text-slate-500">Campaign Name</p>
                 <p className="font-bold text-slate-900 text-base">{detailPromo.name}</p>
               </div>
               {detailPromo.code && (
                 <div>
-                  <p className="text-xs font-bold uppercase tracking-wider text-slate-400">Promo Code</p>
+                  <p className="text-xs font-bold uppercase tracking-wider text-slate-500">Promo Code</p>
                   <span className="inline-block mt-1 font-mono font-black text-sm bg-slate-100 px-3 py-1 rounded-xl text-slate-900 border border-slate-200">
                     {detailPromo.code}
                   </span>
                 </div>
               )}
               <div>
-                <p className="text-xs font-bold uppercase tracking-wider text-slate-400">Discount Offered</p>
+                <p className="text-xs font-bold uppercase tracking-wider text-slate-500">Discount Offered</p>
                 <p className="font-black text-orange-600 text-base">
                   {detailPromo.type === 'percentage' && `${detailPromo.discountValue}% OFF`}
                   {detailPromo.type === 'fixed' && `${formatPrice(detailPromo.discountValue)} OFF`}
@@ -1295,7 +1295,7 @@ export default function SellerPromotionsPage() {
                 </p>
               </div>
               <div>
-                <p className="text-xs font-bold uppercase tracking-wider text-slate-400">Active Duration</p>
+                <p className="text-xs font-bold uppercase tracking-wider text-slate-500">Active Duration</p>
                 <p className="font-medium text-slate-700">
                   {new Date(detailPromo.startDate).toLocaleString()} —{' '}
                   {new Date(detailPromo.endDate).toLocaleString()}
@@ -1303,12 +1303,12 @@ export default function SellerPromotionsPage() {
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <p className="text-xs font-bold uppercase tracking-wider text-slate-400">Total Usage</p>
+                  <p className="text-xs font-bold uppercase tracking-wider text-slate-500">Total Usage</p>
                   <p className="font-bold text-slate-900">{detailPromo.usageCount} orders</p>
                 </div>
                 {detailPromo.minOrderAmount != null && detailPromo.minOrderAmount > 0 && (
                   <div>
-                    <p className="text-xs font-bold uppercase tracking-wider text-slate-400">Min. Basket</p>
+                    <p className="text-xs font-bold uppercase tracking-wider text-slate-500">Min. Basket</p>
                     <p className="font-bold text-slate-900">{formatPrice(detailPromo.minOrderAmount)}</p>
                   </div>
                 )}
@@ -1324,7 +1324,7 @@ export default function SellerPromotionsPage() {
                 </Button>
                 <Button
                   type="button"
-                  className="flex-1 bg-orange-500 hover:bg-orange-600 text-white rounded-xl font-bold text-xs"
+                  className="flex-1 bg-[#FF5500] hover:bg-[#e04400] text-white rounded-xl font-bold text-xs"
                   onClick={() => {
                     setEditingPromo(detailPromo);
                     setDetailPromo(null);

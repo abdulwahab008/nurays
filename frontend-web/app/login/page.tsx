@@ -354,7 +354,7 @@ export default function LoginPage() {
                     <div className="w-full border-t border-slate-200" />
                   </div>
                   <div className="relative flex justify-center">
-                    <span className="px-3 text-[11px] uppercase tracking-[0.18em] font-bold text-slate-400 bg-white">
+                    <span className="px-3 text-[11px] uppercase tracking-[0.18em] font-bold text-slate-500 bg-white">
                       {t('orContinueWith')}
                     </span>
                   </div>

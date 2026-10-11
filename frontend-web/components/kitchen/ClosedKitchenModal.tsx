@@ -74,7 +74,7 @@ export function ClosedKitchenModal({
         <button
           onClick={onClose}
           type="button"
-          className="absolute top-4 end-4 p-1.5 rounded-full text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors"
+          className="absolute top-4 end-4 p-1.5 rounded-full text-slate-500 hover:text-slate-700 hover:bg-slate-100 transition-colors"
           title={t('closeModal')}
         >
           <X className="w-4 h-4" />
@@ -163,8 +163,8 @@ export function ClosedKitchenModal({
         </div>
 
         {/* Small Notice */}
-        <div className="mt-3.5 flex items-center justify-center gap-1.5 text-[11px] text-slate-400 text-center">
-          <AlertCircle className="w-3.5 h-3.5 text-slate-400" />
+        <div className="mt-3.5 flex items-center justify-center gap-1.5 text-[11px] text-slate-500 text-center">
+          <AlertCircle className="w-3.5 h-3.5 text-slate-500" />
           <span>{t('instantDisabled')}</span>
         </div>
       </div>

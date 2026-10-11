@@ -85,7 +85,7 @@ export function UberLeftSidebar({
 
             <button
               onClick={onClose}
-              className="w-8 h-8 rounded-lg flex items-center justify-center text-slate-400 hover:text-slate-700 hover:bg-slate-200/60 transition-colors"
+              className="w-8 h-8 rounded-lg flex items-center justify-center text-slate-500 hover:text-slate-700 hover:bg-slate-200/60 transition-colors"
               aria-label={t('closeNav')}
             >
               <X className="w-4 h-4" />
@@ -113,7 +113,7 @@ export function UberLeftSidebar({
           <div className="flex-1 overflow-y-auto p-3 space-y-5">
             {/* Primary Platform Feeds */}
             <div className="space-y-0.5">
-              <p className="px-2.5 text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-1.5">
+              <p className="px-2.5 text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-1.5">
                 {t('discover')}
               </p>
               {mainNavItems.map((item) => {
@@ -139,7 +139,7 @@ export function UberLeftSidebar({
 
             {/* Quick Cuisines */}
             <div className="space-y-1">
-              <p className="px-2.5 text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-1.5">
+              <p className="px-2.5 text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-1.5">
                 {t('popularSearches')}
               </p>
               <div className="grid grid-cols-2 gap-1 px-0.5">
@@ -159,7 +159,7 @@ export function UberLeftSidebar({
 
             {/* Customer Account & Orders */}
             <div className="space-y-0.5 pt-3 border-t border-slate-100">
-              <p className="px-2.5 text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-1.5">
+              <p className="px-2.5 text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-1.5">
                 {t('account')}
               </p>
               {isAuthenticated ? (
@@ -216,7 +216,7 @@ export function UberLeftSidebar({
 
             {/* Portals */}
             <div className="pt-3 border-t border-slate-100 space-y-0.5">
-              <p className="px-2.5 text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-1.5">
+              <p className="px-2.5 text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-1.5">
                 {t('portals')}
               </p>
               <Link

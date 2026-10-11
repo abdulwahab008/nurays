@@ -158,7 +158,7 @@ export default function AdminSupportPage() {
                 {selected.status.replace('_', ' ')}
               </span>
             </div>
-            <p className="text-xs text-gray-400 mb-4">
+            <p className="text-xs text-gray-500 mb-4">
               {selected.ticketNumber} · {selected.customerName} · {selected.category} · {selected.priority}
               {selected.order && (
                 <> · <a href={`/admin/orders/${selected.order.id}`} className="text-green-700 underline" data-testid="ticket-order-link">Order #{selected.order.orderNumber}</a></>
@@ -174,7 +174,7 @@ export default function AdminSupportPage() {
                 >
                   <p className="text-xs font-medium text-gray-500 mb-1">{m.authorName}{m.isInternal ? ' · internal note (customer cannot see)' : ''}</p>
                   <p className="text-sm text-gray-800">{m.message}</p>
-                  <p className="text-xs text-gray-400 mt-1">{formatDateTime(m.createdAt)}</p>
+                  <p className="text-xs text-gray-500 mt-1">{formatDateTime(m.createdAt)}</p>
                 </div>
               ))}
             </div>
@@ -262,7 +262,7 @@ export default function AdminSupportPage() {
                   >
                     <div>
                       <p className="font-medium text-gray-900">{t.subject}</p>
-                      <p className="text-xs text-gray-400">
+                      <p className="text-xs text-gray-500">
                         {t.ticketNumber} · {t.customerName} · {t.priority}{t.orderNumber ? ` · Order #${t.orderNumber}` : ''} · {formatDateTime(t.createdAt)}
                       </p>
                     </div>

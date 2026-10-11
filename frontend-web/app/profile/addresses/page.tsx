@@ -604,7 +604,7 @@ export default function AddressesPage() {
                           onClick={() => selectArea(area)}
                           className="w-full px-4 py-3 text-start hover:bg-orange-50 transition-colors flex items-center gap-2"
                         >
-                          <MapPin className="w-4 h-4 text-gray-400 shrink-0" />
+                          <MapPin className="w-4 h-4 text-gray-500 shrink-0" />
                           <span className="text-gray-700">{area}</span>
                         </button>
                       ))}
@@ -799,7 +799,7 @@ export default function AddressesPage() {
                       {!address.isDefault && (
                         <button 
                           onClick={() => handleSetDefault(address.id)}
-                          className="p-2 text-gray-400 hover:text-orange-600 hover:bg-orange-50 rounded-lg transition-colors"
+                          className="p-2 text-gray-500 hover:text-orange-600 hover:bg-orange-50 rounded-lg transition-colors"
                           title={t('setAsDefault')}
                         >
                           <Star className="w-4 h-4 text-amber-500" />
@@ -807,14 +807,14 @@ export default function AddressesPage() {
                       )}
                       <button 
                         onClick={() => handleEditAddress(address)}
-                        className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                        className="p-2 text-gray-500 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
                         title={tc('edit')}
                       >
                         <Pencil className="w-4 h-4 text-slate-600" />
                       </button>
                       <button 
                         onClick={() => handleDeleteAddress(address.id)}
-                        className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                        className="p-2 text-gray-500 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
                         title={tc('delete')}
                       >
                         <Trash2 className="w-4 h-4 text-rose-500" />
@@ -834,12 +834,12 @@ export default function AddressesPage() {
                       <div className="mt-4 pt-4 border-t border-gray-100 flex flex-wrap gap-2">
                         {address.landmark && (
                           <span className="inline-flex items-center gap-1.5 text-xs bg-gray-100 text-gray-600 px-3 py-1.5 rounded-lg">
-                            <MapPin className="w-3.5 h-3.5 text-slate-400 shrink-0" /> {address.landmark}
+                            <MapPin className="w-3.5 h-3.5 text-slate-500 shrink-0" /> {address.landmark}
                           </span>
                         )}
                         {address.postalCode && (
                           <span className="inline-flex items-center gap-1.5 text-xs bg-gray-100 text-gray-600 px-3 py-1.5 rounded-lg">
-                            <Mail className="w-3.5 h-3.5 text-slate-400 shrink-0" /> {address.postalCode}
+                            <Mail className="w-3.5 h-3.5 text-slate-500 shrink-0" /> {address.postalCode}
                           </span>
                         )}
                       </div>

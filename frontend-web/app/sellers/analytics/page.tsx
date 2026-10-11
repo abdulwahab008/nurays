@@ -266,7 +266,7 @@ export default function SellerAnalyticsPage() {
           <div className="bg-white rounded-3xl p-16 border border-slate-200 text-center">
             <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-emerald-500 mx-auto mb-4"></div>
             <h3 className="text-base font-bold text-slate-900">Aggregating Kitchen Telemetry...</h3>
-            <p className="text-xs text-slate-400 mt-1">Calculating sales velocity, gross margins, and order fulfillment</p>
+            <p className="text-xs text-slate-500 mt-1">Calculating sales velocity, gross margins, and order fulfillment</p>
           </div>
         ) : (
           <>
@@ -302,7 +302,7 @@ export default function SellerAnalyticsPage() {
                   </div>
                 </div>
                 <div className="text-3xl font-black text-slate-900 tracking-tight">
-                  {totalUnits} <span className="text-sm font-semibold text-slate-400">units</span>
+                  {totalUnits} <span className="text-sm font-semibold text-slate-500">units</span>
                 </div>
                 <div className="mt-3 pt-3 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500 font-medium">
                   <span>Today: <strong className="text-slate-900">{analytics?.sales?.today ?? 0} sold</strong></span>
@@ -684,15 +684,15 @@ export default function SellerAnalyticsPage() {
                   {/* Metric Tiles */}
                   <div className="grid grid-cols-3 gap-3 p-4 bg-slate-50 rounded-2xl border border-slate-100">
                     <div className="text-center">
-                      <p className="text-[11px] font-bold text-slate-400 uppercase">Total Orders</p>
+                      <p className="text-[11px] font-bold text-slate-500 uppercase">Total Orders</p>
                       <p className="text-xl font-black text-slate-900 mt-0.5">{totalOrders}</p>
                     </div>
                     <div className="text-center border-x border-slate-200">
-                      <p className="text-[11px] font-bold text-slate-400 uppercase">Success Rate</p>
+                      <p className="text-[11px] font-bold text-slate-500 uppercase">Success Rate</p>
                       <p className="text-xl font-black text-emerald-600 mt-0.5">{fulfillmentRate}%</p>
                     </div>
                     <div className="text-center">
-                      <p className="text-[11px] font-bold text-slate-400 uppercase">Dispute Rate</p>
+                      <p className="text-[11px] font-bold text-slate-500 uppercase">Dispute Rate</p>
                       <p className="text-xl font-black text-slate-900 mt-0.5">
                         {totalOrders > 0 ? ((cancelledOrders / totalOrders) * 100).toFixed(1) : 0}%
                       </p>
@@ -735,7 +735,7 @@ export default function SellerAnalyticsPage() {
                         🍽️
                       </div>
                       <p className="text-sm font-bold text-slate-800">No Food Sales in this Range</p>
-                      <p className="text-xs text-slate-400 mt-0.5">Dishes ordered by buyers will rank here automatically</p>
+                      <p className="text-xs text-slate-500 mt-0.5">Dishes ordered by buyers will rank here automatically</p>
                     </div>
                   ) : (
                     <div className="space-y-3 mt-4">
@@ -805,7 +805,7 @@ export default function SellerAnalyticsPage() {
             <div className="bg-slate-900 text-white rounded-3xl p-6 sm:p-8 shadow-md">
               <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
                 <div>
-                  <span className="px-3 py-1 rounded-full bg-orange-500 text-white font-bold text-[11px] uppercase tracking-wider">
+                  <span className="px-3 py-1 rounded-full bg-[#FF5500] text-white font-bold text-[11px] uppercase tracking-wider">
                     Seller Studio Shortcuts
                   </span>
                   <h3 className="text-lg sm:text-xl font-black mt-2 tracking-tight">
@@ -818,7 +818,7 @@ export default function SellerAnalyticsPage() {
 
                 <div className="flex flex-wrap items-center gap-3 w-full md:w-auto">
                   <Link href="/sellers/products/new">
-                    <Button className="bg-orange-500 hover:bg-orange-600 text-white font-bold text-xs rounded-xl px-4 py-2.5">
+                    <Button className="bg-[#FF5500] hover:bg-[#e04400] text-white font-bold text-xs rounded-xl px-4 py-2.5">
                       + Add New Dish
                     </Button>
                   </Link>
