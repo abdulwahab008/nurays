@@ -1,3 +1,4 @@
+import crypto from 'crypto';
 import http from 'http';
 import type { AddressInfo } from 'net';
 import { io as connect, type Socket as ClientSocket } from 'socket.io-client';
@@ -12,11 +13,10 @@ jest.mock('../src/config/database', () => ({
 }));
 
 import prisma from '../src/config/database';
-import socketManager from '../src/config/socket';
+import socketManager, { withinEventLimit } from '../src/config/socket';
 import { generateToken } from '../src/utils/jwt';
 import { logger } from '../src/utils/logger';
 
-const userId = '11111111-2222-3333-4444-555555555555';
 const orderId = '99999999-8888-7777-6666-555555555555';
 const room = `order:${orderId}`;
 
@@ -26,24 +26,30 @@ const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 let server: http.Server;
 let url: string;
+let userId: string;
 const clients: ClientSocket[] = [];
 
 beforeAll(async () => {
   delete process.env.REDIS_URL;
   server = http.createServer();
   socketManager.initialize(server);
-  await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+  await new Promise<void>((resolve, reject) => {
+    server.once('error', reject);
+    server.listen(0, '127.0.0.1', resolve);
+  });
   url = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
 });
 afterAll(async () => {
   await socketManager.close();
 });
 beforeEach(() => {
+  userId = crypto.randomUUID(); // events are counted per user: every test is its own
   findUser.mockResolvedValue({ id: userId, status: 'active', userType: 'customer', tokensValidAfter: null });
   countOrders.mockResolvedValue(1);
 });
 afterEach(() => {
   for (const client of clients.splice(0)) client.close();
+  delete process.env.SOCKET_EVENTS_PER_MINUTE;
   jest.restoreAllMocks();
 });
 
@@ -52,8 +58,8 @@ async function waitFor(condition: () => boolean, ms = 3_000) {
   expect(condition()).toBe(true);
 }
 
-async function connected(): Promise<ClientSocket> {
-  const token = generateToken({ userId, userType: 'customer', phone: '+923001234567' });
+async function connected(as = userId): Promise<ClientSocket> {
+  const token = generateToken({ userId: as, userType: 'customer', phone: '+923001234567' });
   const client = connect(url, { auth: { token }, transports: ['websocket'], reconnection: false });
   clients.push(client);
   await new Promise<void>((resolve, reject) => {
@@ -63,7 +69,7 @@ async function connected(): Promise<ClientSocket> {
   return client;
 }
 
-const checkedOrders = () => countOrders.mock.calls.map(([query]) => query.where.id);
+const checkedOrders = () => countOrders.mock.calls.map(([query]) => query.where.id as string);
 const inRoom = () => socketManager.getIO().sockets.adapter.rooms.get(room)?.size ?? 0;
 
 /** A connection's events are handled in order: once the server has acted on this valid one, it has dealt with everything sent before it. */
@@ -141,5 +147,68 @@ describe('events a client sends with the wrong kind of argument', () => {
     }
     expect(logged).toHaveBeenCalledWith({ err: boom, userId }, 'leave:order failed');
     expect(client.connected).toBe(true);
+  });
+});
+
+describe('a user who sends events faster than any page does', () => {
+  it('has the events past the limit dropped before they reach the database, and says so once', async () => {
+    process.env.SOCKET_EVENTS_PER_MINUTE = '25';
+    const warned = jest.spyOn(logger, 'warn');
+    const client = await connected();
+    for (let i = 0; i < 2_000; i++) client.emit('join:order', `flood-${i}`);
+    await waitFor(() => countOrders.mock.calls.length >= 25);
+    await sleep(300); // long enough for the rest to have arrived
+    expect(checkedOrders()).toEqual(Array.from({ length: 25 }, (_, i) => `flood-${i}`));
+    expect(client.connected).toBe(true);
+    expect(warned.mock.calls.filter(([, message]) => message === 'Socket events dropped: too many in a minute')).toHaveLength(1);
+  });
+
+  it('shares the limit between all of their connections', async () => {
+    process.env.SOCKET_EVENTS_PER_MINUTE = '30';
+    const flooders = await Promise.all([connected(), connected(), connected()]);
+    for (const [n, client] of flooders.entries()) for (let i = 0; i < 100; i++) client.emit('join:order', `c${n}-${i}`);
+    await waitFor(() => countOrders.mock.calls.length >= 30);
+    await sleep(300);
+    expect(countOrders).toHaveBeenCalledTimes(30);
+  });
+
+  it('keeps a flood from one user from using up the events of another', async () => {
+    process.env.SOCKET_EVENTS_PER_MINUTE = '25';
+    const flooder = await connected();
+    const bystander = await connected(crypto.randomUUID());
+    for (let i = 0; i < 500; i++) flooder.emit('join:order', `flood-${i}`);
+    bystander.emit('join:order', orderId);
+    await waitFor(() => checkedOrders().includes(orderId));
+    await waitFor(() => inRoom() === 1);
+  });
+
+  it('is let through at 120 events a minute unless told otherwise', async () => {
+    const client = await connected();
+    for (let i = 0; i < 150; i++) client.emit('join:order', `busy-${i}`);
+    await waitFor(() => countOrders.mock.calls.length >= 120);
+    await sleep(300);
+    expect(countOrders).toHaveBeenCalledTimes(120);
+  });
+});
+
+describe('the count of events per user', () => {
+  it('starts afresh each minute and keeps users apart', () => {
+    process.env.SOCKET_EVENTS_PER_MINUTE = '3';
+    const now = jest.spyOn(Date, 'now').mockReturnValue(1_000_000);
+    const [busy, quiet] = [crypto.randomUUID(), crypto.randomUUID()];
+    expect([1, 2, 3, 4, 5].map(() => withinEventLimit(busy))).toEqual([true, true, true, false, false]);
+    expect(withinEventLimit(quiet)).toBe(true);
+    now.mockReturnValue(1_000_000 + 59_000);
+    expect(withinEventLimit(busy)).toBe(false);
+    now.mockReturnValue(1_000_000 + 61_000);
+    expect(withinEventLimit(busy)).toBe(true);
+  });
+
+  it('ignores a limit that is not a positive number', () => {
+    for (const bad of ['0', '-5', 'many', '']) {
+      process.env.SOCKET_EVENTS_PER_MINUTE = bad;
+      const id = crypto.randomUUID();
+      expect(Array.from({ length: 121 }, () => withinEventLimit(id)).filter(Boolean)).toHaveLength(120);
+    }
   });
 });

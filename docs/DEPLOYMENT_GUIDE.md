@@ -99,6 +99,7 @@ payment receipts, seller and rider documents, chat media) are never public; the 
 | `BANK_API_URL`, `BANK_MERCHANT_ID`, `BANK_API_KEY`, `BANK_RETURN_URL` | no | Placeholder for a bank gateway that is not implemented. Leave empty. See [PAYMENT_GATEWAY_INTEGRATION.md](PAYMENT_GATEWAY_INTEGRATION.md). |
 | `LOG_LEVEL`, `LOG_FORMAT` | no | Default `info`. |
 | `SLOW_REQUEST_MS` | no | A request slower than this is logged as a warning, so it can be alerted on. Default 2000. |
+| `SOCKET_EVENTS_PER_MINUTE` | no | Most events one user may send over the live-update socket in a minute, on all their connections together. Default 120; a page sends a couple (`join:order`, `leave:order`). The rest are dropped without an answer and logged once, so one client cannot starve the API of database connections. |
 | `AUTO_ASSIGN_ENABLED` | no | Automatic rider assignment (see "Background jobs"). Anything but `false` leaves it on; `false` keeps every job in the open pool for riders to claim by hand. |
 | `SENTRY_DSN`, `SENTRY_ENVIRONMENT`, `SENTRY_RELEASE`, `SENTRY_TRACES_SAMPLE_RATE` | no | Sentry is off when `SENTRY_DSN` is empty. The traces rate is the share of requests traced, 0 to 1; default 0. |
 | `SHUTDOWN_DRAIN_MS`, `SHUTDOWN_GRACE_MS` | no | See "Graceful shutdown". |

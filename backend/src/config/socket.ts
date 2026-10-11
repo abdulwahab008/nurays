@@ -16,6 +16,31 @@ export const ON_DUTY_RIDERS_ROOM = 'riders:on-duty';
 /** An order id as a client sends it: a short string. The type of whatever else arrives is the client's choice. */
 const isOrderId = (value: unknown): value is string => typeof value === 'string' && value.length > 0 && value.length <= 64;
 
+// A client event can cost a database query (join:order checks who is a party to the order), and
+// one connection sending them in a loop starves every other request of database connections.
+// A page sends a couple; past this many a minute a user's events are dropped, on whichever of
+// their connections they arrive.
+const eventLimit = () => {
+  const configured = Number(process.env.SOCKET_EVENTS_PER_MINUTE);
+  return configured > 0 ? configured : 120;
+};
+const eventCounts = new Map<string, { count: number; resetsAt: number }>();
+
+/** Count one more event from this user: false once they have sent more than the limit this minute. */
+export function withinEventLimit(userId: string): boolean {
+  const now = Date.now();
+  if (eventCounts.size >= 5_000) for (const [key, entry] of eventCounts) if (entry.resetsAt <= now) eventCounts.delete(key);
+  const entry = eventCounts.get(userId);
+  if (!entry || entry.resetsAt <= now) {
+    eventCounts.set(userId, { count: 1, resetsAt: now + 60_000 });
+    return true;
+  }
+  entry.count += 1;
+  const limit = eventLimit();
+  if (entry.count === limit + 1) logger.warn({ userId, limit }, 'Socket events dropped: too many in a minute');
+  return entry.count <= limit;
+}
+
 /**
  * Listen for an event a client sends. The client chooses the payload, and an exception thrown out of
  * a handler reaches process.on('uncaughtException'), which shuts the whole server down for everyone:
@@ -110,6 +135,11 @@ class SocketManager {
 
       // A rider on duty also hears about jobs in the open pool.
       if (user.userType === 'rider') void this.joinOnDutyRoomIfEligible(socket, user.userId);
+
+      // The excess is dropped without an answer: an error here would only be one more line to log per event.
+      socket.use((_packet, next) => {
+        if (withinEventLimit(user.userId)) next();
+      });
 
       // Join order tracking room if orderId provided
       // Only participants of an order may listen to it: its room carries status

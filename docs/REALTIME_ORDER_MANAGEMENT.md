@@ -48,7 +48,7 @@ When someone stops being a party to an order (a rider unassigned by an admin ret
 | `join:order` | `orderId` (string, up to 64 chars) | joins `order:<orderId>` if the user is a party to it; otherwise nothing happens (no ack, no error, a warning in the server log) |
 | `leave:order` | `orderId` (string, up to 64 chars) | leaves the room |
 
-An event whose argument is not such a string is ignored. An exception inside a handler is logged and never thrown, because one that escaped would shut the whole server down. There are no other client-to-server events. The rider's position is sent over HTTP (`POST /riders/deliveries/:id/location`), not over the socket.
+A user can send 120 events a minute (`SOCKET_EVENTS_PER_MINUTE`), counted over all their connections on an instance; the rest are dropped without an answer and logged once. An event whose argument is not such a string is ignored. An exception inside a handler is logged and never thrown, because one that escaped would shut the whole server down. There are no other client-to-server events. The rider's position is sent over HTTP (`POST /riders/deliveries/:id/location`), not over the socket.
 
 Room membership is lost when a connection drops, so clients must re-send `join:order` after every reconnect (the frontend does).
 
