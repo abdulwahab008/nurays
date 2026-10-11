@@ -46,8 +46,9 @@ export interface Product {
     fee: number;
     distanceKm: number | null;
     reason: string | null;
-    estimatedMinMinutes: number;
-    estimatedMaxMinutes: number;
+    /** Null when the kitchen does not deliver to this buyer (no time is given for a trip it will not make). */
+    estimatedMinMinutes: number | null;
+    estimatedMaxMinutes: number | null;
   } | null;
   estimatedDeliveryMinMinutes?: number | null;
   estimatedDeliveryMaxMinutes?: number | null;

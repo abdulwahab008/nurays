@@ -905,9 +905,11 @@ export default function ProductDetailPage() {
               >
                 <p className="font-semibold text-gray-900">{t('hubDelivery')}</p>
                 <p className="text-sm text-gray-500 mt-0.5">
-                  {product.estimatedDeliveryMinMinutes != null
-                    ? t('etaMin', { min: product.estimatedDeliveryMinMinutes, max: product.estimatedDeliveryMaxMinutes })
-                    : t('addAddressEta')}
+                  {product.delivery && !product.delivery.deliverable
+                    ? t('deliveryNotHere')
+                    : product.estimatedDeliveryMinMinutes != null
+                      ? t('etaMin', { min: product.estimatedDeliveryMinMinutes, max: product.estimatedDeliveryMaxMinutes })
+                      : t('addAddressEta')}
                 </p>
                 <p className="text-xs text-gray-600 mt-1">{t('available', { count: product.stock.hub })}</p>
               </button>

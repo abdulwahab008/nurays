@@ -180,7 +180,7 @@ async function sellersPassingComputedFilters(
  * cutoff time and daily cap), and — only when we know where the customer is —
  * delivery fee, distance, eligibility, and an ETA.
  */
-async function computeCustomerFacingSellerInfo(
+export async function computeCustomerFacingSellerInfo(
   seller: Record<string, unknown> & {
     id: string;
     latitude: unknown;
@@ -212,8 +212,9 @@ async function computeCustomerFacingSellerInfo(
       fee: feeResult.fee,
       distanceKm: feeResult.distanceKm != null ? Math.round(feeResult.distanceKm * 10) / 10 : null,
       reason: feeResult.reason,
-      estimatedMinMinutes: eta.minMinutes,
-      estimatedMaxMinutes: eta.maxMinutes,
+      // A time for a trip the kitchen will not make is worse than none: a buyer in another city was told "3,094 min".
+      estimatedMinMinutes: feeResult.deliverable ? eta.minMinutes : null,
+      estimatedMaxMinutes: feeResult.deliverable ? eta.maxMinutes : null,
     },
   };
 }
