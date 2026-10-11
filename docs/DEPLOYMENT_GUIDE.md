@@ -74,6 +74,7 @@ Required means the server will not start in production without it (see "Startup 
 | `S3_BUCKET`, `ASSET_BASE_URL`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY` | yes for `s3` | `ASSET_BASE_URL` is the CDN or bucket public URL. |
 | `S3_PRIVATE_BUCKET` | no | Defaults to `S3_BUCKET`. Must not be publicly readable. With one shared bucket, allow public reads only for keys starting `p/`. |
 | `S3_REGION` (default `auto`), `S3_ENDPOINT`, `S3_FORCE_PATH_STYLE` | no | R2, MinIO and B2 need `S3_ENDPOINT`; MinIO usually needs path style. |
+| `S3_REQUEST_TIMEOUT_MS` | no | How long one request to the store may take before it is aborted. Default 30000. A store that accepts a request and never answers then fails the upload; the SDK tries a timed-out request three times in all, so that takes three times this. |
 | `FILE_URL_SECRET` | no | Signs private-file links for the local driver. Defaults to a value derived from `JWT_SECRET`. |
 
 Public files (key prefix `p/`: product images, avatars) are served from the CDN. Private files (key prefix `x/`:
