@@ -204,24 +204,43 @@ export default async function delivery() {
   const abandoned = await mine();
   const called = await diner.as('POST', `/orders/${abandoned.orderId}/cancel`, { reason: 'Changed my mind' });
   if (handedOver.status !== 200 || called.status !== 200) throw new Error(`could not finish the dashboard orders: ${said(handedOver)}, ${said(called)}`);
-  // Orders are counted once each, whatever the number of dishes in them (one of these has two). Today's figures count only
-  // what was delivered and is still paid (the ledger's rule), and today's earnings are the kitchen's payout on those lines:
-  // a cancelled order, or one still being cooked, is neither an order of today nor money earned. Worked out here from the
+  // Orders are counted once each, whatever the number of dishes in them (one of these has two). "Orders today" are the orders
+  // placed today that are still alive (all but the cancelled and refunded ones, so one still being cooked counts), and today's
+  // earnings are what the ledger credits for the day's orders that were delivered and are still paid: the kitchen's payout on
+  // those lines plus the delivery fee it kept (this kitchen delivers itself), once per order. Worked out here from the
   // database, line by line.
-  const lines = await prisma.orderItem.findMany({ where: { sellerId: kitchenD.sellerId }, include: { order: { select: { orderStatus: true, paymentStatus: true, createdAt: true } } } });
+  const lines = await prisma.orderItem.findMany({ where: { sellerId: kitchenD.sellerId }, include: { order: { select: { orderStatus: true, paymentStatus: true, createdAt: true, deliveryFeeBreakdown: true } } } });
   const inProgress = lines.filter((l) => l.status !== 'cancelled' && !['delivered', 'completed', 'cancelled', 'refunded', 'refund_pending'].includes(l.order.orderStatus));
   const earned = lines.filter((l) => l.status !== 'cancelled' && ['delivered', 'completed'].includes(l.order.orderStatus) && l.order.paymentStatus === 'paid');
+  const withdrawn = (l: (typeof lines)[number]) => ['cancelled', 'refunded', 'refund_pending'].includes(l.order.orderStatus) || ['refund_pending', 'refunded'].includes(l.order.paymentStatus);
   const midnight = new Date();
   midnight.setHours(0, 0, 0, 0);
   const today = lines.filter((l) => l.order.createdAt >= midnight);
   const todayEarned = earned.filter((l) => l.order.createdAt >= midnight);
+  const todayAlive = today.filter((l) => l.status !== 'cancelled' && !withdrawn(l));
   const distinct = (rows: typeof lines) => new Set(rows.map((l) => l.orderId)).size;
+  /** The delivery fee this kitchen keeps minus the one it pays Nuray, once per order. */
+  const deliveryNet = (rows: typeof lines) => {
+    const seen = new Set<string>();
+    let net = 0;
+    for (const l of rows) {
+      if (seen.has(l.orderId)) continue;
+      seen.add(l.orderId);
+      for (const r of (l.order.deliveryFeeBreakdown as Array<{ sellerId: string; fee: number; provider: string; paidBy?: string }> | null) ?? []) {
+        if (r.sellerId !== kitchenD.sellerId) continue;
+        if (r.provider === 'self') net += Number(r.fee);
+        if (r.paidBy === 'seller') net -= Number(r.fee);
+      }
+    }
+    return net;
+  };
+  const todayDishes = todayEarned.reduce((sum, l) => sum + Number(l.sellerPayout), 0);
   const expected: Record<string, number> = {
     activeOrders: distinct(inProgress),
     pendingOrders: distinct(inProgress.filter((l) => ['pending', 'preparing'].includes(l.order.orderStatus))),
     grossSales: earned.reduce((sum, l) => sum + Number(l.totalPrice), 0),
-    todayOrders: distinct(todayEarned),
-    todayEarnings: todayEarned.reduce((sum, l) => sum + Number(l.sellerPayout), 0),
+    todayOrders: distinct(todayAlive),
+    todayEarnings: todayDishes + deliveryNet(todayEarned),
     todayUnitsSold: todayEarned.reduce((sum, l) => sum + l.quantity, 0),
   };
   const dashboard = await kitchenD.owner.as('GET', '/sellers/me/dashboard');
@@ -230,13 +249,24 @@ export default async function delivery() {
   ok('the kitchen has orders in different states, so none of the numbers below is zero', Object.values(expected).every((n) => n > 0), JSON.stringify(expected));
   for (const [key, want] of Object.entries(expected)) ok(`the kitchen dashboard's ${key} equals the database`, Math.abs(Number(overview[key]) - want) < 0.01, `${overview[key]} vs ${want}`);
   ok('a two-dish order is one active order, not two', inProgress.length > distinct(inProgress) && overview.activeOrders === distinct(inProgress), `${overview.activeOrders} orders for ${inProgress.length} dishes`);
-  ok("and neither the cancelled order's dish nor the unfinished orders are in today's earnings or today's order count",
-    today.some((l) => l.order.orderStatus === 'cancelled') && Number(overview.todayEarnings) < today.reduce((sum, l) => sum + Number(l.sellerPayout), 0) && overview.todayOrders < distinct(today),
-    `${overview.todayEarnings} earned from ${overview.todayOrders} orders, of ${distinct(today)} placed`);
+  ok('an order still being cooked is an order of today and a cancelled one is not, so a kitchen does not see 0 while it cooks',
+    today.some((l) => l.order.orderStatus === 'cancelled') && overview.todayOrders === distinct(todayAlive) && overview.todayOrders > distinct(todayEarned) && overview.todayOrders < distinct(today),
+    `${overview.todayOrders} orders today: ${distinct(todayEarned)} delivered and paid, ${distinct(todayAlive) - distinct(todayEarned)} still going, ${distinct(today) - distinct(todayAlive)} cancelled`);
+  ok("today's earnings are the delivered order's dishes plus the delivery fee the kitchen kept, and nothing of the cancelled order or the ones still cooking",
+    deliveryNet(todayEarned) > 0 && Math.abs(Number(overview.todayEarnings) - (todayDishes + deliveryNet(todayEarned))) < 0.01 && Number(overview.todayEarnings) < today.reduce((sum, l) => sum + Number(l.sellerPayout), 0),
+    `${overview.todayEarnings} = ${todayDishes} in dishes + ${deliveryNet(todayEarned)} delivery kept, of ${today.reduce((sum, l) => sum + Number(l.sellerPayout), 0)} in dishes placed today`);
   // The analytics screen reads the same day the same way, sorts every order into one of four buckets, and the breakdown adds up to the net earnings.
   const analytics = await kitchenD.owner.as('GET', '/sellers/me/analytics?period=30d');
   const an = analytics.body.data ?? {};
   ok("the kitchen's analytics agree with its dashboard about today", analytics.status === 200 && Math.abs(Number(an.revenue?.today) - Number(overview.todayEarnings)) < 0.01 && an.ordersByPeriod?.today === overview.todayOrders && an.unitsSold?.today === overview.todayUnitsSold, `${said(analytics)} ${JSON.stringify({ revenue: an.revenue?.today, orders: an.ordersByPeriod?.today, units: an.unitsSold?.today })}`);
+  // This kitchen is new, so the whole period is its whole history: the revenue is the ledger's net earnings, its dishes are what is left of
+  // the gross after the platform's fee and the discounts, and the daily graph adds up to the revenue.
+  const graphTotal = ((an.revenue?.graph ?? []) as Array<{ revenue: number }>).reduce((sum, d) => sum + d.revenue, 0);
+  ok("and over the whole period the analytics' revenue is the ledger's net earnings, its dishes are the gross less fees and discounts, and the daily graph adds up",
+    Math.abs(Number(an.revenue?.total) - Number(overview.netEarnings)) < 0.01 &&
+      Math.abs(Number(an.revenue?.dishes) - (overview.grossSales - overview.platformFees - overview.sellerDiscounts)) < 0.01 &&
+      Math.abs(graphTotal - Number(an.revenue?.total)) < 0.02,
+    JSON.stringify({ revenue: an.revenue?.total, net: overview.netEarnings, dishes: an.revenue?.dishes, graph: graphTotal }));
   const buckets = an.orders ?? {};
   ok('and its orders are in four buckets that add up to the total (completed, cancelled or refunded, in progress, awaiting payment)',
     buckets.completed + buckets.cancelled + buckets.inProgress + buckets.awaitingPayment === buckets.total && buckets.total === distinct(lines) && buckets.completed === distinct(earned) && buckets.inProgress === distinct(inProgress) && buckets.cancelled === 1,
