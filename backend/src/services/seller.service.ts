@@ -6,6 +6,7 @@ import { AppError } from '../middleware/errorHandler';
 import adminService from './admin.service';
 import { computeSellerAvailability } from './availability.service';
 import { computeSellerBalance } from './seller-balance.service';
+import { isEarned, periodTotals } from './seller-reporting';
 import { assertOwnDocument, assertOwnPublicImage } from '../utils/documents';
 import { notifyApprovers } from './approvals.service';
 
@@ -591,19 +592,31 @@ export class SellerService {
     // Cancelled items (a seller's rejected lines, refunded to the customer) never count: an
     // order can still be delivered by the other sellers in it.
     const [stats] = await prisma.$queryRaw<
-      Array<{ active_orders: number; pending_orders: number; gross_sales: number; platform_fees: number; today_orders: number; today_sales: number }>
+      Array<{ active_orders: number; pending_orders: number; gross_sales: number; platform_fees: number; item_payouts: number }>
     >`
       SELECT
         COUNT(*) FILTER (WHERE o.order_status NOT IN ('delivered', 'completed', 'cancelled', 'refunded', 'refund_pending'))::int AS active_orders,
         COUNT(*) FILTER (WHERE o.order_status IN ('pending', 'preparing'))::int AS pending_orders,
         COALESCE(SUM(oi.total_price) FILTER (WHERE oi.status <> 'cancelled' AND o.order_status IN ('delivered', 'completed') AND o.payment_status = 'paid'), 0)::float8 AS gross_sales,
         COALESCE(SUM(oi.commission_amount) FILTER (WHERE oi.status <> 'cancelled' AND o.order_status IN ('delivered', 'completed') AND o.payment_status = 'paid'), 0)::float8 AS platform_fees,
-        COUNT(DISTINCT o.id) FILTER (WHERE o.created_at >= ${startOfToday})::int AS today_orders,
-        COALESCE(SUM(oi.total_price) FILTER (WHERE o.created_at >= ${startOfToday}), 0)::float8 AS today_sales
+        COALESCE(SUM(oi.seller_payout) FILTER (WHERE oi.status <> 'cancelled' AND o.order_status IN ('delivered', 'completed') AND o.payment_status = 'paid'), 0)::float8 AS item_payouts
       FROM order_items oi
       JOIN orders o ON o.id = oi.order_id
       WHERE oi.seller_id = ${sellerId}
     `;
+
+    // Today's figures use the same definitions as the analytics screen (seller-reporting.ts),
+    // so the two screens can't disagree about the same day. One day of lines, not the history.
+    const todayLines = await prisma.orderItem.findMany({
+      where: { sellerId, order: { createdAt: { gte: startOfToday } } },
+      select: {
+        status: true,
+        quantity: true,
+        sellerPayout: true,
+        order: { select: { id: true, orderStatus: true, paymentStatus: true, createdAt: true } },
+      },
+    });
+    const today = periodTotals(todayLines, startOfToday);
     const activeOrders = Number(stats?.active_orders ?? 0);
     const pendingOrders = Number(stats?.pending_orders ?? 0);
 
@@ -682,12 +695,12 @@ export class SellerService {
       take: 5,
     });
 
-    const todayOrders = Number(stats?.today_orders ?? 0);
-    const todaySales = Number(stats?.today_sales ?? 0);
-
-    // Lifetime Gross & Commission
+    // Lifetime gross, commission, and the two delivery lines, so the overview adds up:
+    // grossSales - platformFees - sellerDiscounts + deliveryEarned - deliveryPaid = netEarnings.
     const grossSales = Number(stats?.gross_sales ?? 0);
     const platformFees = Number(stats?.platform_fees ?? 0);
+    const itemPayouts = Number(stats?.item_payouts ?? 0);
+    const sellerDiscounts = Math.round((grossSales - platformFees - itemPayouts) * 100) / 100;
 
     const paidSettlement = balance.paidOut;
 
@@ -725,10 +738,17 @@ export class SellerService {
         awaitingRiderCash: balance.awaitingRiderCash,
         rating: Number(seller.ratingAverage),
         totalReviews: seller.totalReviews,
-        todaySales,
-        todayOrders,
+        // Money the kitchen earned today, same definition as analytics revenue.today.
+        todayEarnings: today.revenue,
+        todayOrders: today.orders,
+        todayUnitsSold: today.unitsSold,
         grossSales,
         platformFees,
+        // Discounts the kitchen funded itself (its own promo codes).
+        sellerDiscounts,
+        // Delivery fees it kept (self-delivery) and paid Nuray (rider delivery).
+        deliveryEarned: balance.deliveryEarned,
+        deliveryPaid: balance.deliveryPaid,
         netEarnings: totalEarnings,
         pendingSettlement: pendingPayout,
         paidSettlement,
@@ -802,7 +822,9 @@ export class SellerService {
       include: {
         order: {
           select: {
+            id: true,
             orderStatus: true,
+            paymentStatus: true,
             createdAt: true,
           },
         },
@@ -815,32 +837,23 @@ export class SellerService {
       },
     });
 
-    // Calculate revenue
-    const completedItems = orderItems.filter(
-      (item) =>
-        item.status !== 'cancelled' &&
-        (item.order?.orderStatus === 'delivered' || item.order?.orderStatus === 'completed')
-    );
+    // Earned lines only — same definition the dashboard and the ledger use (seller-reporting.ts):
+    // a cancelled line, a cancelled order or one refunded to the customer earns nothing.
+    const completedItems = orderItems.filter(isEarned);
 
     const totalRevenue = completedItems.reduce((sum, item) => {
       return sum + Number(item.sellerPayout);
     }, 0);
 
-    // Period breakdowns for the dashboard's Today / This Week / This Month cards
+    // Period breakdowns for the Today / This Week / This Month cards
     const dayStart = new Date(now);
     dayStart.setHours(0, 0, 0, 0);
     const weekStart = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
     const monthStart = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
 
-    const sumSince = (since: Date) =>
-      completedItems
-        .filter((item) => item.order?.createdAt && item.order.createdAt >= since)
-        .reduce((sum, item) => sum + Number(item.sellerPayout), 0);
-
-    const countSince = (since: Date) =>
-      completedItems
-        .filter((item) => item.order?.createdAt && item.order.createdAt >= since)
-        .reduce((sum, item) => sum + item.quantity, 0);
+    const day = periodTotals(orderItems, dayStart);
+    const week = periodTotals(orderItems, weekStart);
+    const month = periodTotals(orderItems, monthStart);
 
     // Calculate daily revenue
     const dailyRevenue: Record<string, number> = {};
@@ -855,14 +868,16 @@ export class SellerService {
       .map(([date, revenue]) => ({ date, revenue }))
       .sort((a, b) => a.date.localeCompare(b.date));
 
-    // Calculate order statistics
-    const totalOrders = orderItems.length;
-    const completedOrders = orderItems.filter(
-      (item) => item.order?.orderStatus === 'delivered' || item.order?.orderStatus === 'completed'
-    ).length;
-    const cancelledOrders = orderItems.filter(
-      (item) => item.order?.orderStatus === 'cancelled'
-    ).length;
+    // Order statistics — distinct orders, not lines.
+    const distinctOrders = (lines: typeof orderItems) =>
+      new Set(lines.map((item) => item.order?.id).filter(Boolean)).size;
+    const totalOrders = distinctOrders(orderItems);
+    const completedOrders = distinctOrders(
+      orderItems.filter((item) => item.order?.orderStatus === 'delivered' || item.order?.orderStatus === 'completed')
+    );
+    const cancelledOrders = distinctOrders(
+      orderItems.filter((item) => item.order?.orderStatus === 'cancelled')
+    );
 
     // Get top products
     const productSales: Record<string, { name: string; quantity: number; revenue: number }> = {};
@@ -883,18 +898,24 @@ export class SellerService {
       .slice(0, 10);
 
     return {
-      sales: {
-        today: countSince(dayStart),
-        thisWeek: countSince(weekStart),
-        thisMonth: countSince(monthStart),
+      // Units of food, never called "sales": the dashboard's order counts are orders.
+      unitsSold: {
+        today: day.unitsSold,
+        thisWeek: week.unitsSold,
+        thisMonth: month.unitsSold,
         total: completedItems.reduce((sum, item) => sum + item.quantity, 0),
       },
       revenue: {
-        today: sumSince(dayStart),
-        thisWeek: sumSince(weekStart),
-        thisMonth: sumSince(monthStart),
+        today: day.revenue,
+        thisWeek: week.revenue,
+        thisMonth: month.revenue,
         total: totalRevenue,
         graph: revenueGraph,
+      },
+      ordersByPeriod: {
+        today: day.orders,
+        thisWeek: week.orders,
+        thisMonth: month.orders,
       },
       orders: {
         total: totalOrders,

@@ -13,7 +13,7 @@ import { formatPrice } from '@/lib/utils';
 type PeriodType = '7d' | '30d' | '90d' | '1y';
 
 interface AnalyticsData {
-  sales: {
+  unitsSold: {
     today: number;
     thisWeek: number;
     thisMonth: number;
@@ -95,7 +95,7 @@ export default function SellerAnalyticsPage() {
 
   // Compute calculated metrics
   const totalRevenue = analytics?.revenue?.total ?? 0;
-  const totalUnits = analytics?.sales?.total ?? 0;
+  const totalUnits = analytics?.unitsSold?.total ?? 0;
   const totalOrders = analytics?.orders?.total ?? 0;
   const completedOrders = analytics?.orders?.completed ?? 0;
   const cancelledOrders = analytics?.orders?.cancelled ?? 0;
@@ -307,8 +307,8 @@ export default function SellerAnalyticsPage() {
                   {totalUnits} <span className="text-sm font-semibold text-slate-400">units</span>
                 </div>
                 <div className="mt-3 pt-3 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500 font-medium">
-                  <span>Today: <strong className="text-slate-900">{analytics?.sales?.today ?? 0} sold</strong></span>
-                  <span>Week: <strong className="text-slate-900">{analytics?.sales?.thisWeek ?? 0} sold</strong></span>
+                  <span>Today: <strong className="text-slate-900">{analytics?.unitsSold?.today ?? 0} sold</strong></span>
+                  <span>Week: <strong className="text-slate-900">{analytics?.unitsSold?.thisWeek ?? 0} sold</strong></span>
                 </div>
               </div>
 
