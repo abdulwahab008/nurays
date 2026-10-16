@@ -102,10 +102,13 @@ interface SellerDashboard {
     pendingOrders: number;
     totalEarnings: number;
     pendingPayout: number;
-    todaySales?: number;
+    todayEarnings?: number;
     todayOrders?: number;
     grossSales?: number;
     platformFees?: number;
+    sellerDiscounts?: number;
+    deliveryEarned?: number;
+    deliveryPaid?: number;
     netEarnings?: number;
     pendingSettlement?: number;
     paidSettlement?: number;
@@ -426,8 +429,8 @@ function SellerDashboardContent() {
           <div className="bg-white rounded-2xl p-4 sm:p-5 border border-slate-200/90 shadow-xs hover:border-slate-300 transition-colors">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1">{t('dash.todaySales')}</p>
-                <p className="text-xl sm:text-2xl font-black text-slate-900">{formatPrice(dashboard.overview.todaySales ?? 0)}</p>
+                <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1">{t('dash.todayEarnings')}</p>
+                <p className="text-xl sm:text-2xl font-black text-slate-900">{formatPrice(dashboard.overview.todayEarnings ?? 0)}</p>
                 <p className="text-[11px] text-slate-500 mt-1">{t('dash.ordersToday', { count: dashboard.overview.todayOrders ?? 0 })}</p>
               </div>
               <div className="w-10 h-10 bg-orange-50 text-orange-600 rounded-xl flex items-center justify-center font-bold text-base">

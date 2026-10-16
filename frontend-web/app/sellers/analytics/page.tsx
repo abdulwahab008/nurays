@@ -15,7 +15,7 @@ import { formatPrice } from '@/lib/utils';
 type PeriodType = '7d' | '30d' | '90d' | '1y';
 
 interface AnalyticsData {
-  sales: {
+  unitsSold: {
     today: number;
     thisWeek: number;
     thisMonth: number;
@@ -30,8 +30,14 @@ interface AnalyticsData {
   };
   orders: {
     total: number;
+    /** Delivered and still paid: the orders the revenue comes from. */
     completed: number;
+    /** Cancelled, or refunded to the customer. */
     cancelled: number;
+    /** Not delivered yet. */
+    inProgress?: number;
+    /** Delivered, but the money has not arrived yet. */
+    awaitingPayment?: number;
   };
   topProducts: Array<{
     name: string;
@@ -93,11 +99,13 @@ export default function SellerAnalyticsPage() {
 
   // Compute calculated metrics
   const totalRevenue = analytics?.revenue?.total ?? 0;
-  const totalUnits = analytics?.sales?.total ?? 0;
+  const totalUnits = analytics?.unitsSold?.total ?? 0;
   const totalOrders = analytics?.orders?.total ?? 0;
   const completedOrders = analytics?.orders?.completed ?? 0;
   const cancelledOrders = analytics?.orders?.cancelled ?? 0;
-  const inProgressOrders = Math.max(0, totalOrders - completedOrders - cancelledOrders);
+  // The API puts each order in exactly one of four buckets (completed, in progress, awaiting payment, cancelled or refunded).
+  const inProgressOrders = analytics?.orders?.inProgress ?? Math.max(0, totalOrders - completedOrders - cancelledOrders);
+  const awaitingPaymentOrders = analytics?.orders?.awaitingPayment ?? 0;
 
   const fulfillmentRate = totalOrders > 0
     ? Math.round((completedOrders / totalOrders) * 100)
@@ -306,8 +314,8 @@ export default function SellerAnalyticsPage() {
                   {totalUnits} <span className="text-sm font-semibold text-slate-500">units</span>
                 </div>
                 <div className="mt-3 pt-3 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500 font-medium">
-                  <span>Today: <strong className="text-slate-900">{analytics?.sales?.today ?? 0} sold</strong></span>
-                  <span>Week: <strong className="text-slate-900">{analytics?.sales?.thisWeek ?? 0} sold</strong></span>
+                  <span>Today: <strong className="text-slate-900">{analytics?.unitsSold?.today ?? 0} sold</strong></span>
+                  <span>Week: <strong className="text-slate-900">{analytics?.unitsSold?.thisWeek ?? 0} sold</strong></span>
                 </div>
               </div>
 
@@ -659,14 +667,21 @@ export default function SellerAnalyticsPage() {
                         className="bg-purple-500 transition-all duration-500"
                         title={`In Kitchen: ${inProgressOrders}`}
                       />
+                      {awaitingPaymentOrders > 0 && (
+                        <div
+                          style={{ width: `${totalOrders > 0 ? (awaitingPaymentOrders / totalOrders) * 100 : 0}%` }}
+                          className="bg-amber-500 transition-all duration-500"
+                          title={`Delivered, payment not received: ${awaitingPaymentOrders}`}
+                        />
+                      )}
                       <div
                         style={{ width: `${totalOrders > 0 ? (cancelledOrders / totalOrders) * 100 : 0}%` }}
                         className="bg-rose-500 transition-all duration-500"
-                        title={`Cancelled: ${cancelledOrders}`}
+                        title={`Cancelled or refunded: ${cancelledOrders}`}
                       />
                     </div>
 
-                    <div className="flex items-center justify-between text-xs font-bold mt-2.5">
+                    <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 text-xs font-bold mt-2.5">
                       <div className="flex items-center gap-1.5 text-emerald-700">
                         <span className="w-2.5 h-2.5 rounded-full bg-emerald-500" />
                         <span>Completed ({completedOrders})</span>
@@ -675,9 +690,15 @@ export default function SellerAnalyticsPage() {
                         <span className="w-2.5 h-2.5 rounded-full bg-purple-500" />
                         <span>In Kitchen ({inProgressOrders})</span>
                       </div>
+                      {awaitingPaymentOrders > 0 && (
+                        <div className="flex items-center gap-1.5 text-amber-700">
+                          <span className="w-2.5 h-2.5 rounded-full bg-amber-500" />
+                          <span>Payment pending ({awaitingPaymentOrders})</span>
+                        </div>
+                      )}
                       <div className="flex items-center gap-1.5 text-rose-700">
                         <span className="w-2.5 h-2.5 rounded-full bg-rose-500" />
-                        <span>Cancelled ({cancelledOrders})</span>
+                        <span>Cancelled or refunded ({cancelledOrders})</span>
                       </div>
                     </div>
                   </div>

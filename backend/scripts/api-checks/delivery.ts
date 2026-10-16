@@ -204,21 +204,25 @@ export default async function delivery() {
   const abandoned = await mine();
   const called = await diner.as('POST', `/orders/${abandoned.orderId}/cancel`, { reason: 'Changed my mind' });
   if (handedOver.status !== 200 || called.status !== 200) throw new Error(`could not finish the dashboard orders: ${said(handedOver)}, ${said(called)}`);
-  // Orders are counted once each, whatever the number of dishes in them (one of these has two), and a cancelled order
-  // is no sale. Worked out here from the database, line by line.
+  // Orders are counted once each, whatever the number of dishes in them (one of these has two). Today's figures count only
+  // what was delivered and is still paid (the ledger's rule), and today's earnings are the kitchen's payout on those lines:
+  // a cancelled order, or one still being cooked, is neither an order of today nor money earned. Worked out here from the
+  // database, line by line.
   const lines = await prisma.orderItem.findMany({ where: { sellerId: kitchenD.sellerId }, include: { order: { select: { orderStatus: true, paymentStatus: true, createdAt: true } } } });
   const inProgress = lines.filter((l) => l.status !== 'cancelled' && !['delivered', 'completed', 'cancelled', 'refunded', 'refund_pending'].includes(l.order.orderStatus));
   const earned = lines.filter((l) => l.status !== 'cancelled' && ['delivered', 'completed'].includes(l.order.orderStatus) && l.order.paymentStatus === 'paid');
   const midnight = new Date();
   midnight.setHours(0, 0, 0, 0);
   const today = lines.filter((l) => l.order.createdAt >= midnight);
+  const todayEarned = earned.filter((l) => l.order.createdAt >= midnight);
   const distinct = (rows: typeof lines) => new Set(rows.map((l) => l.orderId)).size;
   const expected: Record<string, number> = {
     activeOrders: distinct(inProgress),
     pendingOrders: distinct(inProgress.filter((l) => ['pending', 'preparing'].includes(l.order.orderStatus))),
     grossSales: earned.reduce((sum, l) => sum + Number(l.totalPrice), 0),
-    todayOrders: distinct(today),
-    todaySales: today.filter((l) => l.status !== 'cancelled' && !['cancelled', 'refunded'].includes(l.order.orderStatus)).reduce((sum, l) => sum + Number(l.totalPrice), 0),
+    todayOrders: distinct(todayEarned),
+    todayEarnings: todayEarned.reduce((sum, l) => sum + Number(l.sellerPayout), 0),
+    todayUnitsSold: todayEarned.reduce((sum, l) => sum + l.quantity, 0),
   };
   const dashboard = await kitchenD.owner.as('GET', '/sellers/me/dashboard');
   const overview = dashboard.body.data?.overview ?? {};
@@ -226,7 +230,20 @@ export default async function delivery() {
   ok('the kitchen has orders in different states, so none of the numbers below is zero', Object.values(expected).every((n) => n > 0), JSON.stringify(expected));
   for (const [key, want] of Object.entries(expected)) ok(`the kitchen dashboard's ${key} equals the database`, Math.abs(Number(overview[key]) - want) < 0.01, `${overview[key]} vs ${want}`);
   ok('a two-dish order is one active order, not two', inProgress.length > distinct(inProgress) && overview.activeOrders === distinct(inProgress), `${overview.activeOrders} orders for ${inProgress.length} dishes`);
-  ok("and the cancelled order's dish is not in today's sales", today.some((l) => l.order.orderStatus === 'cancelled') && Number(overview.todaySales) < today.reduce((sum, l) => sum + Number(l.totalPrice), 0), `${overview.todaySales}`);
+  ok("and neither the cancelled order's dish nor the unfinished orders are in today's earnings or today's order count",
+    today.some((l) => l.order.orderStatus === 'cancelled') && Number(overview.todayEarnings) < today.reduce((sum, l) => sum + Number(l.sellerPayout), 0) && overview.todayOrders < distinct(today),
+    `${overview.todayEarnings} earned from ${overview.todayOrders} orders, of ${distinct(today)} placed`);
+  // The analytics screen reads the same day the same way, sorts every order into one of four buckets, and the breakdown adds up to the net earnings.
+  const analytics = await kitchenD.owner.as('GET', '/sellers/me/analytics?period=30d');
+  const an = analytics.body.data ?? {};
+  ok("the kitchen's analytics agree with its dashboard about today", analytics.status === 200 && Math.abs(Number(an.revenue?.today) - Number(overview.todayEarnings)) < 0.01 && an.ordersByPeriod?.today === overview.todayOrders && an.unitsSold?.today === overview.todayUnitsSold, `${said(analytics)} ${JSON.stringify({ revenue: an.revenue?.today, orders: an.ordersByPeriod?.today, units: an.unitsSold?.today })}`);
+  const buckets = an.orders ?? {};
+  ok('and its orders are in four buckets that add up to the total (completed, cancelled or refunded, in progress, awaiting payment)',
+    buckets.completed + buckets.cancelled + buckets.inProgress + buckets.awaitingPayment === buckets.total && buckets.total === distinct(lines) && buckets.completed === distinct(earned) && buckets.inProgress === distinct(inProgress) && buckets.cancelled === 1,
+    JSON.stringify(buckets));
+  ok('gross - platform fees - discounts + delivery kept - delivery paid is the net earnings, and the net earnings are the ledger\'s',
+    Math.abs(overview.grossSales - overview.platformFees - overview.sellerDiscounts + overview.deliveryEarned - overview.deliveryPaid - overview.netEarnings) < 0.01 && Math.abs(overview.netEarnings - overview.totalEarnings) < 0.01 && overview.deliveryEarned > 0,
+    JSON.stringify({ gross: overview.grossSales, fees: overview.platformFees, discounts: overview.sellerDiscounts, kept: overview.deliveryEarned, paid: overview.deliveryPaid, net: overview.netEarnings }));
   const promoCode = `CHK${unique()}`.toUpperCase();
   const promo = await kitchenD.owner.as('POST', '/promotions', {
     name: `Check ${promoCode}`,

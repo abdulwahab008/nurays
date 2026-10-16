@@ -59,10 +59,13 @@ function withNodes(text: string, nodes: Record<string, ReactNode>) {
 }
 
 interface EarningsData {
-  todaySales: number;
+  todayEarnings: number;
   todayOrders: number;
   grossSales: number;
   platformFees: number;
+  sellerDiscounts: number;
+  deliveryEarned: number;
+  deliveryPaid: number;
   netEarnings: number;
   pendingSettlement: number;
   paidSettlement: number;
@@ -125,10 +128,13 @@ export default function SellerEarningsPage() {
         const dashboard = dashboardRes.data.data;
         const ov = dashboard.overview || {};
         setEarnings({
-          todaySales: ov.todaySales ?? 0,
+          todayEarnings: ov.todayEarnings ?? 0,
           todayOrders: ov.todayOrders ?? 0,
           grossSales: ov.grossSales ?? (ov.totalEarnings ?? 0),
           platformFees: ov.platformFees ?? 0,
+          sellerDiscounts: ov.sellerDiscounts ?? 0,
+          deliveryEarned: ov.deliveryEarned ?? 0,
+          deliveryPaid: ov.deliveryPaid ?? 0,
           netEarnings: ov.netEarnings ?? (ov.totalEarnings ?? 0),
           pendingSettlement: ov.pendingSettlement ?? (ov.pendingPayout ?? 0),
           paidSettlement: ov.paidSettlement ?? 0,
@@ -270,8 +276,8 @@ export default function SellerEarningsPage() {
               </h2>
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                 <div className="bg-white p-4 rounded-xl border border-gray-100 shadow-xs">
-                  <span className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider block">{t('todaySales')}</span>
-                  <span className="text-lg font-bold text-gray-900 mt-1 block">{formatPrice(earnings.todaySales)}</span>
+                  <span className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider block">{t('todayEarnings')}</span>
+                  <span className="text-lg font-bold text-gray-900 mt-1 block">{formatPrice(earnings.todayEarnings)}</span>
                 </div>
 
                 <div className="bg-white p-4 rounded-xl border border-gray-100 shadow-xs">
@@ -279,15 +285,29 @@ export default function SellerEarningsPage() {
                   <span className="text-lg font-bold text-gray-900 mt-1 block">{earnings.todayOrders}</span>
                 </div>
 
-                <div className="bg-white p-4 rounded-xl border border-gray-100 shadow-xs">
-                  <span className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider block">{t('grossVolume')}</span>
-                  <span className="text-lg font-bold text-gray-900 mt-1 block">{formatPrice(earnings.grossSales)}</span>
-                </div>
-
-                <div className="bg-white p-4 rounded-xl border border-red-100 bg-red-50/20 shadow-xs">
-                  <span className="text-[11px] font-semibold text-red-600 uppercase tracking-wider block">{t('platformFees')}</span>
-                  <span className="text-lg font-bold text-red-600 mt-1 block" data-ltr>-{formatPrice(earnings.platformFees)}</span>
-                </div>
+                {/* Gross minus every deduction equals net, on one screen. */}
+                {([
+                  ['grossVolume', earnings.grossSales, 0],
+                  ['platformFees', earnings.platformFees, -1],
+                  ['sellerDiscounts', earnings.sellerDiscounts, -1],
+                  ['deliveryEarned', earnings.deliveryEarned, 1],
+                  ['deliveryPaid', earnings.deliveryPaid, -1],
+                  ['netEarnings', earnings.netEarnings, 0],
+                ] as const)
+                  .filter(([, amount, sign]) => sign === 0 || amount !== 0)
+                  .map(([key, amount, sign]) => (
+                    <div
+                      key={key}
+                      className={`p-4 rounded-xl shadow-xs border ${sign < 0 ? 'border-red-100 bg-red-50/20' : 'border-gray-100 bg-white'}`}
+                    >
+                      <span className={`text-[11px] font-semibold uppercase tracking-wider block ${sign < 0 ? 'text-red-600' : 'text-gray-500'}`}>
+                        {t(key)}
+                      </span>
+                      <span className={`text-lg font-bold mt-1 block ${sign < 0 ? 'text-red-600' : 'text-gray-900'}`} data-ltr>
+                        {sign < 0 ? '-' : ''}{formatPrice(amount)}
+                      </span>
+                    </div>
+                  ))}
               </div>
             </div>
 
