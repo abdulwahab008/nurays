@@ -6,7 +6,7 @@ import { AppError } from '../middleware/errorHandler';
 import adminService from './admin.service';
 import { computeSellerAvailability } from './availability.service';
 import { computeSellerBalance } from './seller-balance.service';
-import { isEarned, periodTotals } from './seller-reporting';
+import { isEarned, orderCounts, periodTotals } from './seller-reporting';
 import { assertOwnDocument, assertOwnPublicImage } from '../utils/documents';
 import { notifyApprovers } from './approvals.service';
 
@@ -868,16 +868,10 @@ export class SellerService {
       .map(([date, revenue]) => ({ date, revenue }))
       .sort((a, b) => a.date.localeCompare(b.date));
 
-    // Order statistics — distinct orders, not lines.
-    const distinctOrders = (lines: typeof orderItems) =>
-      new Set(lines.map((item) => item.order?.id).filter(Boolean)).size;
-    const totalOrders = distinctOrders(orderItems);
-    const completedOrders = distinctOrders(
-      orderItems.filter((item) => item.order?.orderStatus === 'delivered' || item.order?.orderStatus === 'completed')
-    );
-    const cancelledOrders = distinctOrders(
-      orderItems.filter((item) => item.order?.orderStatus === 'cancelled')
-    );
+    // Order statistics: distinct orders, not lines, each in exactly one bucket (seller-reporting.ts), so the
+    // parts add up to the total. "Completed" is the orders the revenue above comes from (delivered and still
+    // paid); an order refunded after delivery is cancelled, one whose money has not arrived is awaitingPayment.
+    const counts = orderCounts(orderItems);
 
     // Get top products
     const productSales: Record<string, { name: string; quantity: number; revenue: number }> = {};
@@ -918,9 +912,11 @@ export class SellerService {
         thisMonth: month.orders,
       },
       orders: {
-        total: totalOrders,
-        completed: completedOrders,
-        cancelled: cancelledOrders,
+        total: counts.total,
+        completed: counts.completed,
+        cancelled: counts.cancelled,
+        inProgress: counts.inProgress,
+        awaitingPayment: counts.awaitingPayment,
       },
       topProducts,
     };

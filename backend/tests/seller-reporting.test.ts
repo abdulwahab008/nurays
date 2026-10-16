@@ -93,6 +93,12 @@ it('counts only the delivered, still-paid order, and reconciles', async () => {
   expect(ov.todayUnitsSold).toBe(2);
   expect(analytics.revenue.total).toBe(900);
 
+  // The order counts split the three orders into buckets that add up: one earned, two that earned nothing (cancelled; refunded
+  // after delivery). "Completed" is the order the revenue comes from, so the average order value the page shows
+  // (revenue / completed) is that order's Rs 900, not Rs 300 (what counting the refunded delivery as completed gave).
+  expect(analytics.orders).toEqual({ total: 3, completed: 1, cancelled: 2, inProgress: 0, awaitingPayment: 0 });
+  expect(analytics.revenue.total / analytics.orders.completed).toBe(900);
+
   // Both screens, same day, same numbers.
   expect(analytics.revenue.today).toBe(ov.todayEarnings);
   expect(analytics.ordersByPeriod.today).toBe(ov.todayOrders);
