@@ -57,7 +57,7 @@
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1145.0",
     "@aws-sdk/s3-request-presigner": "^3.1145.0",
-    "@prisma/client": "^6.19.0",
+    "@prisma/client": "^7.10.0",
     "@sentry/node": "^11.2.0",
     "@smithy/node-http-handler": "^4.12.1",
     "@socket.io/redis-adapter": "^8.3.0",
@@ -76,7 +76,7 @@
     "nodemailer": "^10.0.13",
     "pino": "^10.3.1",
     "pino-http": "^11.0.0",
-    "prisma": "^6.19.0",
+    "prisma": "^7.10.0",
     "rate-limit-redis": "^6.0.1",
     "sharp": "^0.35.5",
     "socket.io": "^4.8.1",
