@@ -2,11 +2,12 @@ import { recordAudit } from '../middleware/audit';
 import prisma from '../config/database';
 import { getPlatformDeliveryPricing } from './delivery-pricing.service';
 import { platformDeliveryFee } from '../utils/deliveryFee';
+import { roundMoney } from '../utils/pricing';
 import { AppError } from '../middleware/errorHandler';
 import adminService from './admin.service';
 import { computeSellerAvailability } from './availability.service';
 import { computeSellerBalance } from './seller-balance.service';
-import { isEarned, orderCounts, periodTotals } from './seller-reporting';
+import { earnedOrders, earningsOf, isEarned, orderCounts, periodTotals } from './seller-reporting';
 import { assertOwnDocument, assertOwnPublicImage } from '../utils/documents';
 import { notifyApprovers } from './approvals.service';
 
@@ -613,10 +614,10 @@ export class SellerService {
         status: true,
         quantity: true,
         sellerPayout: true,
-        order: { select: { id: true, orderStatus: true, paymentStatus: true, createdAt: true } },
+        order: { select: { id: true, orderStatus: true, paymentStatus: true, createdAt: true, deliveryFeeBreakdown: true } },
       },
     });
-    const today = periodTotals(todayLines, startOfToday);
+    const today = periodTotals(todayLines, startOfToday, sellerId);
     const activeOrders = Number(stats?.active_orders ?? 0);
     const pendingOrders = Number(stats?.pending_orders ?? 0);
 
@@ -738,8 +739,11 @@ export class SellerService {
         awaitingRiderCash: balance.awaitingRiderCash,
         rating: Number(seller.ratingAverage),
         totalReviews: seller.totalReviews,
-        // Money the kitchen earned today, same definition as analytics revenue.today.
+        // What the kitchen earned on today's orders that have been delivered and paid: its dishes' payout plus the
+        // delivery fee it kept minus the one it paid Nuray, so it is what the ledger credits for today (and the same
+        // as analytics revenue.today).
         todayEarnings: today.revenue,
+        // Orders placed today that are still alive: all but the cancelled and refunded ones, so an order being cooked counts.
         todayOrders: today.orders,
         todayUnitsSold: today.unitsSold,
         grossSales,
@@ -826,6 +830,7 @@ export class SellerService {
             orderStatus: true,
             paymentStatus: true,
             createdAt: true,
+            deliveryFeeBreakdown: true,
           },
         },
         product: {
@@ -837,13 +842,16 @@ export class SellerService {
       },
     });
 
-    // Earned lines only — same definition the dashboard and the ledger use (seller-reporting.ts):
-    // a cancelled line, a cancelled order or one refunded to the customer earns nothing.
+    // The orders that have earned, one entry each — same definitions the dashboard and the ledger use (seller-reporting.ts):
+    // a cancelled line, a cancelled order or one refunded to the customer earns nothing, and an order is worth its
+    // dishes' payout plus the delivery fee the kitchen kept minus the one it paid Nuray (what the ledger credits).
+    const earned = earnedOrders(orderItems, sellerId);
+    // The dish lines that earned, for the best-selling list.
     const completedItems = orderItems.filter(isEarned);
 
-    const totalRevenue = completedItems.reduce((sum, item) => {
-      return sum + Number(item.sellerPayout);
-    }, 0);
+    const totalRevenue = roundMoney(earned.reduce((sum, e) => sum + earningsOf(e), 0));
+    // Of which the dishes alone: what a dish's share, and the average order, are measured against.
+    const dishRevenue = roundMoney(earned.reduce((sum, e) => sum + e.dishes, 0));
 
     // Period breakdowns for the Today / This Week / This Month cards
     const dayStart = new Date(now);
@@ -851,21 +859,19 @@ export class SellerService {
     const weekStart = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
     const monthStart = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
 
-    const day = periodTotals(orderItems, dayStart);
-    const week = periodTotals(orderItems, weekStart);
-    const month = periodTotals(orderItems, monthStart);
+    const day = periodTotals(orderItems, dayStart, sellerId);
+    const week = periodTotals(orderItems, weekStart, sellerId);
+    const month = periodTotals(orderItems, monthStart, sellerId);
 
-    // Calculate daily revenue
+    // Calculate daily revenue: the same earnings, by the day the order was placed
     const dailyRevenue: Record<string, number> = {};
-    completedItems.forEach((item) => {
-      if (item.order?.createdAt) {
-        const date = item.order.createdAt.toISOString().split('T')[0];
-        dailyRevenue[date] = (dailyRevenue[date] || 0) + Number(item.sellerPayout);
-      }
+    earned.forEach((e) => {
+      const date = e.createdAt.toISOString().split('T')[0];
+      dailyRevenue[date] = (dailyRevenue[date] || 0) + earningsOf(e);
     });
 
     const revenueGraph = Object.entries(dailyRevenue)
-      .map(([date, revenue]) => ({ date, revenue }))
+      .map(([date, revenue]) => ({ date, revenue: roundMoney(revenue) }))
       .sort((a, b) => a.date.localeCompare(b.date));
 
     // Order statistics: distinct orders, not lines, each in exactly one bucket (seller-reporting.ts), so the
@@ -897,13 +903,14 @@ export class SellerService {
         today: day.unitsSold,
         thisWeek: week.unitsSold,
         thisMonth: month.unitsSold,
-        total: completedItems.reduce((sum, item) => sum + item.quantity, 0),
+        total: earned.reduce((sum, e) => sum + e.unitsSold, 0),
       },
       revenue: {
         today: day.revenue,
         thisWeek: week.revenue,
         thisMonth: month.revenue,
         total: totalRevenue,
+        dishes: dishRevenue,
         graph: revenueGraph,
       },
       ordersByPeriod: {

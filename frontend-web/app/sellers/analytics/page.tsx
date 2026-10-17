@@ -23,7 +23,10 @@ interface AnalyticsData {
     today: number;
     thisWeek: number;
     thisMonth: number;
+    /** What the kitchen earned on delivered and paid orders: its dishes' payout plus the delivery fee it kept, minus the one it paid Nuray. */
     total: number;
+    /** Of which the dishes alone. */
+    dishes?: number;
     graph?: Array<{ date: string; revenue: number }>;
   };
   orders: {
@@ -101,6 +104,8 @@ export default function SellerAnalyticsPage() {
 
   // Compute calculated metrics
   const totalRevenue = analytics?.revenue?.total ?? 0;
+  // The dishes' part of it. A dish's share and the average order are measured against this: a delivery fee is not a dish's.
+  const dishRevenue = analytics?.revenue?.dishes ?? totalRevenue;
   const totalUnits = analytics?.unitsSold?.total ?? 0;
   const totalOrders = analytics?.orders?.total ?? 0;
   const completedOrders = analytics?.orders?.completed ?? 0;
@@ -114,7 +119,7 @@ export default function SellerAnalyticsPage() {
     : 100;
 
   const averageOrderValue = completedOrders > 0
-    ? Math.round(totalRevenue / completedOrders)
+    ? Math.round(dishRevenue / completedOrders)
     : 0;
 
   // Normalize graph data points across the selected time period
@@ -180,6 +185,9 @@ export default function SellerAnalyticsPage() {
     if (chartData.length === 0) return null;
     return chartData.reduce((prev, curr) => (curr.revenue > prev.revenue ? curr : prev), chartData[0]);
   }, [chartData]);
+
+  // A day can earn less than nothing (a small order whose Nuray rider cost more than its dishes): the tooltip says so, the drawing stays on its axis.
+  const plotHeight = (revenue: number) => (Math.max(0, revenue) / maxRevenueInChart) * 220;
 
   if (!isAuthenticated) {
     return null;
@@ -501,7 +509,7 @@ export default function SellerAnalyticsPage() {
                           const barWidth = Math.max(6, Math.min(28, (usableWidth / totalBars) * 0.65));
                           const stepX = usableWidth / totalBars;
                           const cx = 55 + i * stepX + stepX / 2;
-                          const barHeight = Math.max(4, (d.revenue / maxRevenueInChart) * 220);
+                          const barHeight = Math.max(4, plotHeight(d.revenue));
                           const y = 260 - barHeight;
 
                           return (
@@ -542,7 +550,7 @@ export default function SellerAnalyticsPage() {
                                 .map((d, i) => {
                                   const stepX = 920 / chartData.length;
                                   const cx = 55 + i * stepX + stepX / 2;
-                                  const y = 260 - (d.revenue / maxRevenueInChart) * 220;
+                                  const y = 260 - plotHeight(d.revenue);
                                   return `L ${cx} ${y}`;
                                 })
                                 .join(' ')}
@@ -558,7 +566,7 @@ export default function SellerAnalyticsPage() {
                                 .map((d, i) => {
                                   const stepX = 920 / chartData.length;
                                   const cx = 55 + i * stepX + stepX / 2;
-                                  const y = 260 - (d.revenue / maxRevenueInChart) * 220;
+                                  const y = 260 - plotHeight(d.revenue);
                                   return `${i === 0 ? 'M' : 'L'} ${cx} ${y}`;
                                 })
                                 .join(' ')}
@@ -574,7 +582,7 @@ export default function SellerAnalyticsPage() {
                           {chartData.map((d, i) => {
                             const stepX = 920 / chartData.length;
                             const cx = 55 + i * stepX + stepX / 2;
-                            const y = 260 - (d.revenue / maxRevenueInChart) * 220;
+                            const y = 260 - plotHeight(d.revenue);
 
                             return (
                               <circle
@@ -764,8 +772,8 @@ export default function SellerAnalyticsPage() {
                     <div className="space-y-3 mt-4">
                       {analytics.topProducts.map((product, idx) => {
                         const productRevenue = Number(product.revenue);
-                        const revenueShare = totalRevenue > 0
-                          ? Math.round((productRevenue / totalRevenue) * 100)
+                        const revenueShare = dishRevenue > 0
+                          ? Math.round((productRevenue / dishRevenue) * 100)
                           : 0;
                         const avgPrice = product.quantity > 0
                           ? Math.round(productRevenue / product.quantity)

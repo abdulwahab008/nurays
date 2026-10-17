@@ -293,6 +293,33 @@ async function main() {
 
   const dash: any = await sellerService.getSellerDashboard(selfS.id);
   ok('dashboard earnings include the self-delivery fee', Math.abs(dash.overview.totalEarnings - (selfGoods + 100)) < 0.01, `total=${dash.overview.totalEarnings} expected=${selfGoods + 100}`);
+  // Today's earnings and the analytics' revenue are the same money, as the ledger credits it: the goods plus the delivery fee a kitchen
+  // keeps, minus the one it pays Nuray for a rider (once per order). All of these kitchens' orders were placed today.
+  const selfAn: any = await sellerService.getSellerAnalytics(selfS.id, '30d');
+  ok("today's earnings include the delivery fee a self-delivering kitchen keeps, and are the net earnings the ledger gives",
+    Math.abs(dash.overview.todayEarnings - (selfGoods + 100)) < 0.01 && Math.abs(dash.overview.todayEarnings - dash.overview.totalEarnings) < 0.01 && dash.overview.todayOrders === 1,
+    `today=${dash.overview.todayEarnings} expected=${selfGoods + 100} orders=${dash.overview.todayOrders}`);
+  const platDash: any = await sellerService.getSellerDashboard(platS.id);
+  const platAn: any = await sellerService.getSellerAnalytics(platS.id, '30d');
+  ok("and take off the delivery fee a kitchen pays Nuray's riders; the analytics' revenue is the same figure, its dishes are the goods",
+    Math.abs(platDash.overview.todayEarnings - (platGoods - 150)) < 0.01 && Math.abs(platDash.overview.todayEarnings - platDash.overview.totalEarnings) < 0.01 &&
+      Math.abs(platAn.revenue.today - platDash.overview.todayEarnings) < 0.01 && Math.abs(platAn.revenue.total - platDash.overview.totalEarnings) < 0.01 && Math.abs(platAn.revenue.dishes - platGoods) < 0.01,
+    `today=${platDash.overview.todayEarnings} analytics=${platAn.revenue.total} expected=${platGoods - 150}`);
+  ok("the self-delivering kitchen's analytics say the same as its dashboard, delivery fee kept included",
+    Math.abs(selfAn.revenue.today - dash.overview.todayEarnings) < 0.01 && Math.abs(selfAn.revenue.total - dash.overview.totalEarnings) < 0.01 && Math.abs(selfAn.revenue.dishes - selfGoods) < 0.01 && selfAn.ordersByPeriod.today === dash.overview.todayOrders,
+    `${selfAn.revenue.total} vs ${dash.overview.totalEarnings}`);
+  // "Orders today" are the orders placed today that are still alive: one still in the pot counts (a kitchen is not told 0 while it cooks),
+  // a cancelled one does not, and only the delivered one is money.
+  const todayS = await mkSeller({ deliveryProvider: 'self', deliveryFeeType: 'fixed', deliveryFeeFixed: 100 });
+  const tp = await mkProduct(todayS.id, 20, 300);
+  const tOrders = [await homeOrder([{ productId: tp.id, quantity: 1 }], 'wallet'), await homeOrder([{ productId: tp.id, quantity: 1 }], 'wallet'), await homeOrder([{ productId: tp.id, quantity: 1 }], 'wallet')];
+  await prisma.order.update({ where: { id: tOrders[0].id }, data: { orderStatus: 'delivered', paymentStatus: 'paid', paidAt: new Date() } });
+  await prisma.order.update({ where: { id: tOrders[2].id }, data: { orderStatus: 'cancelled' } });
+  const tGoods = Number((await prisma.orderItem.findFirst({ where: { orderId: tOrders[0].id } }))!.sellerPayout);
+  const tDash: any = await sellerService.getSellerDashboard(todayS.id);
+  ok('an order still being cooked is an order of today and a cancelled one is not; only the delivered one is money',
+    tDash.overview.todayOrders === 2 && tDash.overview.activeOrders === 1 && Math.abs(tDash.overview.todayEarnings - (tGoods + 100)) < 0.01,
+    `orders=${tDash.overview.todayOrders} active=${tDash.overview.activeOrders} earnings=${tDash.overview.todayEarnings} expected=${tGoods + 100}`);
 
   await ledgerService.recordOrderCompletion(sdo.id);
   await ledgerService.recordOrderCompletion(pdo.id);
