@@ -2,9 +2,9 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
-import { UserLayout } from '@/components/layout/UserLayout';
-import { useToast } from '@/components/ui/toast';
-import { apiClient, apiErrorMessage } from '@/lib/api-client';
+import { AdminShell } from '@/components/layout/AdminShell';
+import { LoadError } from '@/components/ui/LoadError';
+import { apiClient } from '@/lib/api-client';
 import { useAuthStore } from '@/lib/store/auth-store';
 import { useLiveRefresh } from '@/lib/hooks/use-live-refresh';
 
@@ -28,23 +28,25 @@ function waiting(since: string | null) {
 
 /** Everything that needs a staff decision, in one place: what this role can act on, with how long the oldest has waited. */
 export default function AdminApprovalsPage() {
-  const { showToast } = useToast();
   const { user } = useAuthStore();
   const [queues, setQueues] = useState<Queue[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
+  // Why the queues could not be read; shown instead of "Nothing is waiting. All caught up.", which would be untrue.
+  const [loadError, setLoadError] = useState<unknown>(null);
 
   const load = useCallback(async () => {
     try {
       const res = await apiClient.get('/admin/approvals');
       setQueues(res.data.data.items);
       setTotal(res.data.data.total);
+      setLoadError(null);
     } catch (error) {
-      showToast(apiErrorMessage(error, 'Failed to load approvals'), 'error');
+      setLoadError(error);
     } finally {
       setLoading(false);
     }
-  }, [showToast]);
+  }, []);
 
   useEffect(() => {
     load();
@@ -53,7 +55,7 @@ export default function AdminApprovalsPage() {
   useLiveRefresh(load, { events: ['order:new', 'order:status:update', 'notification:new', 'delivery:new'], intervalMs: 60_000 });
 
   return (
-    <UserLayout showSidebar showNavbar>
+    <AdminShell>
       <div className="max-w-4xl mx-auto p-4 sm:p-6">
         <div className="mb-6">
           <h1 className="text-2xl font-bold text-gray-900">Approvals</h1>
@@ -65,8 +67,11 @@ export default function AdminApprovalsPage() {
 
         {loading ? (
           <p className="text-gray-500">Loading…</p>
+        ) : loadError && queues.length === 0 ? (
+          <LoadError error={loadError} onRetry={load} title="We couldn't load the approvals" />
         ) : (
           <>
+            {loadError && <LoadError compact error={loadError} onRetry={load} title="We couldn't refresh the approvals: these numbers may be out of date" className="mb-4" />}
             <p className="mb-4 text-sm font-semibold text-gray-700" data-testid="approvals-total">
               {total === 0 ? 'Nothing is waiting. All caught up.' : `${total} waiting for you`}
             </p>
@@ -94,6 +99,6 @@ export default function AdminApprovalsPage() {
           </>
         )}
       </div>
-    </UserLayout>
+    </AdminShell>
   );
 }

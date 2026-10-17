@@ -1,5 +1,6 @@
 import prisma from '../config/database';
 import { logger } from '../utils/logger';
+import { ACTIVE_DELIVERY_STATUSES } from '../utils/deliveryStatus';
 
 /**
  * A health reading of the business, written to the log every few minutes as one structured line
@@ -12,7 +13,7 @@ export async function logOpsSnapshot() {
   const [openDeliveries, oldestOpen, activeDeliveries, ridersOnDuty, ordersLastHour, cancelledLastHour, paymentsFailedLastHour, pendingApprovals, pendingRefunds, pendingPayouts, openTickets] = await Promise.all([
     prisma.delivery.count({ where: { riderId: null, status: 'pending', order: { orderStatus: { notIn: ['cancelled', 'refunded', 'delivered', 'completed'] } } } }),
     prisma.delivery.findFirst({ where: { riderId: null, status: 'pending', order: { orderStatus: { notIn: ['cancelled', 'refunded', 'delivered', 'completed'] } } }, orderBy: { createdAt: 'asc' }, select: { createdAt: true } }),
-    prisma.delivery.count({ where: { status: { in: ['assigned', 'arrived_at_pickup', 'picked_up', 'in_transit', 'arrived_at_customer'] } } }),
+    prisma.delivery.count({ where: { status: { in: ACTIVE_DELIVERY_STATUSES } } }),
     prisma.rider.count({ where: { isAvailable: true, status: 'active', verificationStatus: 'approved' } }),
     prisma.order.count({ where: { createdAt: { gte: hourAgo } } }),
     prisma.order.count({ where: { createdAt: { gte: hourAgo }, orderStatus: 'cancelled' } }),

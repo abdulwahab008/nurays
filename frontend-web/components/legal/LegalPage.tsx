@@ -12,14 +12,21 @@ export const LEGAL = {
   reviewed: process.env.NEXT_PUBLIC_LEGAL_REVIEWED === 'true',
 };
 
-export function LegalPage({ title, updated, children }: { title: string; updated: string; children: ReactNode }) {
+/** Whether a support e-mail address has been configured (until then the pages show a bracketed placeholder). */
+export const supportEmailIsSet = !LEGAL.email.startsWith('[');
+
+/**
+ * The page frame for the public text pages. `legalText` is true for the terms, the privacy and refund policies and
+ * the like, which carry the draft notice until a lawyer has reviewed them; the help page is not a legal text.
+ */
+export function LegalPage({ title, updated, children, legalText = true }: { title: string; updated: string; children: ReactNode; legalText?: boolean }) {
   return (
     <div className="min-h-screen bg-slate-50 py-10 px-4">
       <article className="max-w-3xl mx-auto bg-white rounded-2xl border border-slate-200 shadow-sm p-6 sm:p-10">
         <Link href="/" className="text-sm text-slate-500 hover:underline">← Nuray</Link>
         <h1 className="mt-4 text-2xl sm:text-3xl font-bold text-slate-900">{title}</h1>
         <p className="mt-1 text-sm text-slate-500">Last updated: {updated}</p>
-        {!LEGAL.reviewed && (
+        {legalText && !LEGAL.reviewed && (
           <p className="mt-4 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
             Draft: this text describes how Nuray works today and must be reviewed by a qualified lawyer (and the
             placeholders in brackets filled in) before launch.
@@ -32,7 +39,7 @@ export function LegalPage({ title, updated, children }: { title: string; updated
           <Link href="/terms" className="hover:underline">Terms of Service</Link>
           <Link href="/privacy" className="hover:underline">Privacy Policy</Link>
           <Link href="/refund-policy" className="hover:underline">Refund &amp; Cancellation Policy</Link>
-          <Link href="/support" className="hover:underline">Contact support</Link>
+          <Link href="/help" className="hover:underline">Help &amp; contact</Link>
         </nav>
       </article>
     </div>

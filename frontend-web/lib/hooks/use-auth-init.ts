@@ -1,8 +1,8 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useAuthStore } from '@/lib/store/auth-store';
-import { apiClient } from '@/lib/api-client';
+import { useAuthStore, type User } from '@/lib/store/auth-store';
+import { apiClient, type ApiResponse } from '@/lib/api-client';
 
 /**
  * Hook to initialize auth state on app load
@@ -25,9 +25,9 @@ export function useAuthInit() {
           if (token && !user) {
             // Try to verify token and get user info
             try {
-              const response = await apiClient.get('/auth/me', { timeout: 3000 });
+              const response = await apiClient.get<ApiResponse<User>>('/auth/me', { timeout: 3000 });
               if (mounted && response.data?.success && response.data?.data) {
-                setUser(response.data.data as any);
+                setUser(response.data.data);
               } else if (mounted) {
                 // Invalid token, clear it
                 apiClient.clearTokens();

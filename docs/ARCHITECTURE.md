@@ -45,9 +45,9 @@ Layers, from the outside in:
 |---|---|
 | Accounts and auth | `auth.service`, `otp.service`, `google-auth.service`, `user-profile.service`, `admin-people.service` |
 | Kitchens | `seller.service`, `availability.service` (open/closed from schedule, in Pakistan time), `category-request.service`, `promotion.service`, `stock-alert.service`, `profit-loss.service` |
-| Catalog | `product.service`, `product-variant.service`, `category.service`, `ranking.service` (search, trending, recommendations), `favorite.service`, `review.service`, `media.service` |
+| Catalog | `product.service`, `product-variant.service`, `category.service`, `ranking.service` (search, trending, recommendations), `favorite.service`, `review.service`, `review-moderation.service` (reports and hiding), `media.service` |
 | Communities | `community.service`, `admin-places.service`, `delivery-pricing.service` |
-| Cart and orders | `cart.service`, `order.service`, `seller-order.service`, `admin-order.service`, `order-maintenance.service`, `handover.service` |
+| Cart and orders | `cart.service`, `order.service` (the door over `order-placement`, `order-queries`, `order-cancel`, `order-payment` and `order-chat`), `seller-order.service`, `admin-order.service`, `order-maintenance.service`, `handover.service` |
 | Payments and money | `payment.service`, `online-payment.service` (Safepay), `wallet.service`, `refund.service`, `ledger.service`, `seller-balance.service`, `rider-ledger.service` |
 | Delivery | `rider.service`, `delivery-lifecycle.service` |
 | Hubs | `hub.service`, `hub-allocation.service` |
@@ -93,6 +93,7 @@ Timeouts are configurable: `ORDER_ACCEPT_TIMEOUT_MINUTES` (30), `ORDER_PAYMENT_T
 |---|---|
 | `user:<id>` | Every connection of that user. |
 | `role:<type>` | Everyone of that role (`rider`, `admin`, ...). |
+| `riders:on-duty` | A rider's connections while the rider is approved, active and on duty: the only ones told about jobs in the open pool. Joined on connect and kept in step when the rider goes on or off duty, is suspended or is approved. |
 | `order:<id>` | Joined on request (`join:order`), only for the order's customer, a kitchen on it, its rider, or an admin. |
 
 Events emitted by services: `notification:new`, `order:new`, `order:status:update`, `order:item:status:update`, `order:message`, `order:messages:read`, `order:delivery:tracking` (rider position), `delivery:new`, `delivery:assigned`, `delivery:removed`, `delivery:cancelled`. Payloads are small signals; clients reload the data they show (`frontend-web/lib/hooks/use-live-refresh.ts`), so payloads never carry anything a viewer may not see.
@@ -101,7 +102,7 @@ Events emitted by services: `notification:new`, `order:new`, `order:status:updat
 
 `storage/index.ts` picks the driver from `STORAGE_DRIVER` (`local` or `s3`).
 
-- Public objects (key prefix `p/`: product images, avatars, covers) are served from `ASSET_BASE_URL` (or `/media` with the local driver) with immutable cache headers. Images are decoded and re-encoded to WebP in three sizes by sharp (`services/media.service.ts`).
+- Public objects (key prefix `p/`: product images, avatars, covers) are served from `ASSET_BASE_URL` (or `/media` with the local driver) with immutable cache headers. Images are decoded and re-encoded to WebP in three sizes by sharp (`services/media.service.ts`). An upload is all or nothing: when a size cannot be written the sizes already stored are removed, deleting an image tries every size, and an upload request with several photos removes the ones it stored if a later one fails.
 - Private objects (prefix `x/`: payment receipts, CNIC and licence photos, chat media) are never public. The database stores `private:<key>`; an API that has checked the viewer turns it into a signed link valid for 10 minutes (`presentFile`). With the local driver the link is served by `/files/...` (HMAC-signed).
 - Files uploaded before the storage layer are still served from `/uploads/products`.
 
@@ -222,7 +223,7 @@ Next.js 16 App Router, React 19, Tailwind 4. Root `app/layout.tsx` wraps everyth
 
 | Path | Contents |
 |---|---|
-| `app/` | Pages. Customer: `/`, `kitchens`, `products`, `cart`, `checkout`, `orders`, `payment/return`, `wallet`, `favorites`, `notifications`, `profile`, `support`. Auth: `login`, `register`, `forgot-password`, `reset-password`, `verify-email*`. Role areas: `sellers/*` (studio), `riders/*`, `hub`, `admin/*`. Legal pages. `app/api/geocode/*` are small server routes for address lookup. |
+| `app/` | Pages. Customer: `/`, `kitchens`, `products`, `cart`, `checkout`, `orders`, `payment/return`, `wallet`, `favorites`, `notifications`, `profile`, `support`. Auth: `login`, `register`, `forgot-password`, `reset-password`, `verify-email*`. Role areas: `sellers/*` (studio), `riders/*`, `hub`, `admin/*`. Legal pages. `app/api/geocode/*` are small server routes for address lookup (cached, paced, with a per-address guard), and `app/api/csp-report` collects Content-Security-Policy violation reports. |
 | `components/` | UI by area (`admin`, `cart`, `kitchen`, `marketplace`, `orders`, `products`, `riders`, `hubs`, `layout`, `ui`, ...). `RoleGuard` protects role areas client-side; the backend is what actually enforces access. |
 | `lib/api-client.ts` | Axios instance with bearer token and one-shot refresh on 401. |
 | `lib/services/` | Typed wrappers per backend area (`order.service.ts`, `payment.service.ts`, ...). |
@@ -239,7 +240,7 @@ Next.js 16 App Router, React 19, Tailwind 4. Root `app/layout.tsx` wraps everyth
 | I want to... | Look at |
 |---|---|
 | Add an endpoint | `routes/<area>.routes.ts` -> controller -> service; schema in `validators/`; mount in `index.ts` if it is a new router. |
-| Change how an order is priced | `utils/pricing.ts` (`priceOrder`), `order.service.ts` `createOrder`, delivery fee in `utils/deliveryFee.ts` and `delivery-pricing.service.ts`. |
+| Change how an order is priced | `utils/pricing.ts` (`priceOrder`), `utils/orderPricing.ts` (line prices, a code's discount, the delivery-fee split), `order-placement.service.ts` `createOrder`, delivery fee in `utils/deliveryFee.ts` and `delivery-pricing.service.ts`. |
 | Change who holds money / who owes whom | `utils/paymentCustody.ts`, `ledger.service.ts`, `seller-balance.service.ts`, `rider-ledger.service.ts`. |
 | Change order status rules | `seller-order.service.ts`, `rider.service.ts` (`VALID_TRANSITIONS`), `admin-order.service.ts` (`ORDER_FORWARD_SEQUENCE`). |
 | Change an auto-cancel timeout or add a sweep | `order-maintenance.service.ts`; register in `index.ts` with `scheduleJob`. |

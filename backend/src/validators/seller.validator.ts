@@ -1,10 +1,34 @@
 import { z } from 'zod';
+import { readableDate } from './primitives';
 import { PAKISTAN_BOUNDS, PIN_OUTSIDE } from '../utils/geo';
+import { BANK_ACCOUNT_HINT, WALLET_NUMBER_HINT, normalizeBankAccount, normalizePayoutDestination, normalizeWalletNumber } from '../utils/payoutAccount';
+
+/** What a kitchen can be: the sign-up form and the settings page offer exactly these. */
+export const BUSINESS_TYPES = ['restaurant', 'home_kitchen', 'bakery', 'cafe', 'cloud_kitchen'] as const;
+/** How a customer can get an order from a kitchen. */
+export const DELIVERY_MODES = ['delivery', 'pickup', 'dine_in'] as const;
+/** A kitchen's own override of its opening hours. Leaving it out, or null, follows the schedule. */
+export const AVAILABILITY_OVERRIDES = ['open', 'closed', 'busy', 'vacation', 'holiday', 'preorder_only'] as const;
+
+/**
+ * The numbers customers are told to pay into. Blank means none; anything else must be a real one (a wrong digit pays a
+ * stranger) and is kept in one form: 03001234567, PK36SCBL0000001123456702.
+ */
+const walletNumber = z
+  .string()
+  .max(20)
+  .refine((v) => !v.trim() || normalizeWalletNumber(v) !== null, WALLET_NUMBER_HINT)
+  .transform((v) => normalizeWalletNumber(v) ?? '');
+const bankAccountNumber = z
+  .string()
+  .max(60)
+  .refine((v) => !v.trim() || normalizeBankAccount(v) !== null, BANK_ACCOUNT_HINT)
+  .transform((v) => normalizeBankAccount(v) ?? '');
 
 export const registerSellerSchema = z.object({
   businessName: z.string().min(3, 'Business name must be at least 3 characters').max(120),
   businessNameUrdu: z.string().max(120).optional(),
-  businessType: z.enum(['restaurant', 'home_kitchen', 'bakery', 'cafe', 'cloud_kitchen']).optional().default('home_kitchen'),
+  businessType: z.enum(BUSINESS_TYPES).optional().default('home_kitchen'),
   description: z.string().max(1000).optional(),
   kitchenVideoUrl: z.string().max(400).optional(),
   coverImageUrl: z.string().max(400).optional(),
@@ -18,13 +42,13 @@ export const registerSellerSchema = z.object({
   address: z.string().max(300).optional(),
   houseOrUnitNumber: z.string().max(50).optional(),
   mealCategories: z.array(z.string().max(50)).max(20).optional(),
-  deliveryModes: z.array(z.string().max(30)).max(10).optional(),
+  deliveryModes: z.array(z.enum(DELIVERY_MODES)).max(DELIVERY_MODES.length).optional(),
   bankAccountName: z.string().max(120).optional(),
-  bankAccountNumber: z.string().max(60).optional(),
+  bankAccountNumber: bankAccountNumber.optional(),
   bankName: z.string().max(120).optional(),
-  jazzcashNumber: z.string().max(20).optional(),
+  jazzcashNumber: walletNumber.optional(),
   jazzcashAccountTitle: z.string().max(120).optional(),
-  easypaisaNumber: z.string().max(20).optional(),
+  easypaisaNumber: walletNumber.optional(),
   easypaisaAccountTitle: z.string().max(120).optional(),
   agreeToTerms: z.boolean().optional(),
 });
@@ -57,12 +81,9 @@ export const operatingHoursSchema = z.object({
     .optional(),
 });
 
-export const MEAL_CATEGORIES = ['breakfast', 'brunch', 'lunch', 'evening_snacks', 'dinner', 'late_night', 'desserts', 'beverages'] as const;
-export const BUSINESS_TYPES = ['restaurant', 'home_kitchen', 'bakery', 'cafe', 'cloud_kitchen'] as const;
-export const DELIVERY_MODES = ['delivery', 'pickup', 'dine_in'] as const;
-export const AVAILABILITY_OVERRIDES = ['open', 'closed', 'busy', 'vacation', 'holiday', 'preorder_only'] as const;
-
 export const updateSellerSchema = z.object({
+  // Asked for when the payout accounts below change (PASSWORD_REQUIRED): a stolen session must not re-point them alone.
+  currentPassword: z.string().max(200).optional(),
   businessName: z.string().min(1, 'Business name is required').max(120).optional(),
   businessNameUrdu: z.string().max(120).optional().nullable(),
   description: z.string().max(1000).optional().nullable(),
@@ -75,47 +96,50 @@ export const updateSellerSchema = z.object({
   bankAccountName: z.string().max(120).optional().nullable(),
   bankAccountNumber: z.string().max(60).optional().nullable(),
   bankName: z.string().max(120).optional().nullable(),
-  lowStockThreshold: z.number().int().min(0).optional().nullable(),
+  lowStockThreshold: z.number().int().min(0).max(100_000).optional().nullable(),
   enableStockAlerts: z.boolean().optional(),
   freeDeliveryAreas: z.array(z.string()).optional().nullable(),
-  freeDeliveryRadiusKm: z.number().min(0).optional().nullable(),
+  freeDeliveryRadiusKm: z.number().min(0).max(1000).optional().nullable(),
   latitude: z.number().min(PAKISTAN_BOUNDS.minLat, PIN_OUTSIDE).max(PAKISTAN_BOUNDS.maxLat, PIN_OUTSIDE).optional().nullable(),
   longitude: z.number().min(PAKISTAN_BOUNDS.minLng, PIN_OUTSIDE).max(PAKISTAN_BOUNDS.maxLng, PIN_OUTSIDE).optional().nullable(),
   deliveryFeeType: z.enum(['fixed', 'distance']).or(z.literal('')).optional().nullable(),
-  deliveryFeeFixed: z.number().int().min(0).optional().nullable(),
-  deliveryFeeBase: z.number().int().min(0).optional().nullable(),
-  deliveryFeePerKm: z.number().min(0).optional().nullable(),
+  deliveryFeeFixed: z.number().int().min(0).max(100_000).optional().nullable(),
+  deliveryFeeBase: z.number().int().min(0).max(100_000).optional().nullable(),
+  deliveryFeePerKm: z.number().min(0).max(10_000).optional().nullable(),
 
-  distancePricingTiers: z.array(z.object({ maxKm: z.number().min(0), fee: z.number().min(0) })).optional().nullable(),
-  maxDeliveryDistanceKm: z.number().min(0).optional().nullable(),
-  minOrderAmountForDelivery: z.number().min(0).optional().nullable(),
-  freeDeliveryThreshold: z.number().min(0).optional().nullable(),
+  distancePricingTiers: z.array(z.object({ maxKm: z.number().min(0).max(1000), fee: z.number().min(0).max(100_000) })).max(50).optional().nullable(),
+  maxDeliveryDistanceKm: z.number().min(0).max(1000).optional().nullable(),
+  minOrderAmountForDelivery: z.number().min(0).max(10_000_000).optional().nullable(),
+  freeDeliveryThreshold: z.number().min(0).max(10_000_000).optional().nullable(),
   allowedPostalCodes: z.array(z.string().min(1)).optional().nullable(),
   deliveryZones: z
-    .array(z.object({ name: z.string().min(1), cities: z.array(z.string()), areas: z.array(z.string()), fee: z.number().min(0) }))
+    .array(z.object({ name: z.string().min(1), cities: z.array(z.string()), areas: z.array(z.string()), fee: z.number().min(0).max(100_000) }))
     .optional()
     .nullable(),
-  deliveryModes: z.array(z.string()).optional().nullable(),
+  // Not nullable: the column cannot hold null, and null used to reach it as a 500.
+  deliveryModes: z.array(z.enum(DELIVERY_MODES)).max(DELIVERY_MODES.length).optional(),
   deliveryProvider: z.enum(['platform', 'self']).optional(),
   allowCrossCommunity: z.boolean().optional(),
 
-  businessType: z.string().optional().nullable(),
+  businessType: z.enum(BUSINESS_TYPES).optional(),
+  // Free text for now: sign-up stores dish styles (Biryani, Burgers...), the settings page meal times (lunch, dinner...).
   mealCategories: z.array(z.string()).optional().nullable(),
   storeNotice: z.string().max(500).optional().nullable(),
 
   scheduleMode: z.enum(['24_7', 'fixed_daily', 'per_day']).optional().nullable(),
   operatingHours: operatingHoursSchema.optional().nullable(),
 
-  availabilityOverride: z.string().optional().nullable(),
-  availabilityOverrideUntil: z.string().optional().nullable(),
+  availabilityOverride: z.enum(AVAILABILITY_OVERRIDES).optional().nullable(),
+  availabilityOverrideUntil: readableDate('availabilityOverrideUntil').optional().nullable(),
   availabilityNote: z.string().max(300).optional().nullable(),
 
-  orderCutoffTime: z.string().optional().nullable(),
-  maxDailyOrders: z.number().int().nonnegative().optional().nullable(),
-  minPrepTimeMinutes: z.number().int().min(0).optional().nullable(),
+  // HH:MM. Anything else used to be stored and then ignored, so the cut-off the kitchen set never applied.
+  orderCutoffTime: timeString.optional().nullable(),
+  maxDailyOrders: z.number().int().nonnegative().max(100_000).optional().nullable(),
+  minPrepTimeMinutes: z.number().int().min(0).max(10_080).optional().nullable(),
   preOrderOnly: z.boolean().optional(),
-  advanceBookingMinDays: z.number().int().min(0).optional().nullable(),
-  advanceBookingMaxDays: z.number().int().min(0).optional().nullable(),
+  advanceBookingMinDays: z.number().int().min(0).max(365).optional().nullable(),
+  advanceBookingMaxDays: z.number().int().min(0).max(365).optional().nullable(),
 });
 
 export const setCommunityDeliverySchema = z.object({
@@ -125,17 +149,28 @@ export const setCommunityDeliverySchema = z.object({
         communityId: z.string().min(1),
         // Only used when the kitchen delivers itself; with Nuray riders the fee is Nuray's.
         fee: z.number().min(0).max(100000).optional().default(0),
-        freeAbove: z.number().min(0).optional().nullable(),
-        minOrderAmount: z.number().min(0).optional().nullable(),
+        freeAbove: z.number().min(0).max(10_000_000).optional().nullable(),
+        minOrderAmount: z.number().min(0).max(10_000_000).optional().nullable(),
         isEnabled: z.boolean().optional(),
       })
     )
     .max(200),
 });
 
-export const requestPayoutSchema = z.object({
-  amount: z.number().min(100, 'Minimum payout amount is 100 PKR'),
-  payoutMethod: z.enum(['bank_transfer', 'jazzcash', 'easypaisa']),
-  accountNumber: z.string().min(1, 'Account number is required'),
-});
+export const requestPayoutSchema = z
+  .object({
+    amount: z.number().min(100, 'Minimum payout amount is 100 PKR').max(10_000_000),
+    payoutMethod: z.enum(['bank_transfer', 'jazzcash', 'easypaisa']),
+    accountNumber: z.string().min(1, 'Account number is required').max(60),
+    // Asked for on every request (PASSWORD_REQUIRED): a stolen session must not be able to send the earnings to another account.
+    currentPassword: z.string().max(200).optional(),
+  })
+  .transform((request, ctx) => {
+    const accountNumber = normalizePayoutDestination(request.payoutMethod, request.accountNumber);
+    if (!accountNumber) {
+      ctx.addIssue({ code: 'custom', path: ['accountNumber'], message: request.payoutMethod === 'bank_transfer' ? BANK_ACCOUNT_HINT : WALLET_NUMBER_HINT });
+      return z.NEVER;
+    }
+    return { ...request, accountNumber };
+  });
 

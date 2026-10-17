@@ -4,7 +4,7 @@ import { listUsers, setUserStatus, setRiderStatus, makeHubManager, removeHubMana
 import { listCommunitiesForAdmin, createCommunity, updateCommunity, listHubsForAdmin, createHub, updateHub, listPairFees, setPairFee, deletePairFee } from '../services/admin-places.service';
 import hubService from '../services/hub.service';
 import promotionService from '../services/promotion.service';
-import realtimeOrderService from '../services/realtime-order.service';
+import { postDeliverySoon } from '../services/dispatch.service';
 
 /** Admin tools: people, places and platform promo codes. */
 
@@ -35,7 +35,7 @@ export const updateUserStatus = async (req: Request, res: Response) => {
 export const updateRiderStatus = async (req: Request, res: Response) => {
   const data = await setRiderStatus(req.params.id, req.body.status);
   // Jobs the rider hadn't picked up yet are back in the pool for other riders.
-  for (const job of data.releasedJobs) realtimeOrderService.emitDeliveryPosted(job.deliveryId, job.orderId);
+  for (const job of data.releasedJobs) postDeliverySoon(job.deliveryId, job.orderId);
   res.status(200).json({ success: true, data, message: data.status === 'suspended' ? 'Rider suspended' : 'Rider reactivated' });
 };
 

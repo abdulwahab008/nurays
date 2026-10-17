@@ -1,12 +1,15 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { loginUrlHere } from '@/lib/auth-redirect';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/toast';
+import { LoadError } from '@/components/ui/LoadError';
 import { useAuthStore } from '@/lib/store/auth-store';
 import { apiClient } from '@/lib/api-client';
+import { bankAccountIsWrong, walletNumberIsWrong } from '@/lib/payout-account';
 import LocationMap from '@/components/ui/LocationMap';
 import FileUploadField from '@/components/ui/FileUploadField';
 import { useT } from '@/lib/i18n';
@@ -52,6 +55,9 @@ export default function SellerRegisterPage() {
   const [loading, setLoading] = useState(false);
   const [sellerInfo, setSellerInfo] = useState<any>(null);
   const [loadingSellerInfo, setLoadingSellerInfo] = useState(true);
+  // Why the kitchen's saved details could not be read when it was not a 404 (that one means "not registered yet"). Sending the
+  // form with the details missing would write the blanks over a kitchen that already has them.
+  const [loadError, setLoadError] = useState<unknown>(null);
   const [isEditing, setIsEditing] = useState(false);
   const [detectingGps, setDetectingGps] = useState(false);
 
@@ -97,7 +103,7 @@ export default function SellerRegisterPage() {
   useEffect(() => {
     const token = apiClient.getAccessToken();
     if (!token && !isAuthenticated) {
-      router.push('/login');
+      router.push(loginUrlHere());
       return;
     }
 
@@ -107,6 +113,7 @@ export default function SellerRegisterPage() {
   const loadSellerInfo = async () => {
     try {
       setLoadingSellerInfo(true);
+      setLoadError(null);
       const response = await apiClient.get('/sellers/me/dashboard');
       if (response.data.success && response.data.data) {
         const seller = response.data.data;
@@ -119,12 +126,16 @@ export default function SellerRegisterPage() {
           description: seller.description || '',
           primaryCommunityName: seller.primaryCommunityName || '',
           communityId: seller.communityId || '',
+          latitude: seller.latitude ?? prev.latitude,
+          longitude: seller.longitude ?? prev.longitude,
           coverImageUrl: seller.coverImageUrl || '',
           kitchenVideoUrl: seller.kitchenVideoUrl || '',
         }));
       }
-    } catch {
-      // User is not yet a registered seller, standard registration form applies
+    } catch (error) {
+      // A 404 means the user is not a registered seller yet, and the registration form is the right page. Anything else is a read
+      // that failed.
+      if ((error as { response?: { status?: number } })?.response?.status !== 404) setLoadError(error);
     } finally {
       setLoadingSellerInfo(false);
     }
@@ -179,6 +190,10 @@ export default function SellerRegisterPage() {
   const isApproved = sellerInfo?.verificationStatus === 'approved' || sellerInfo?.verificationStatus === 'verified';
   const isPending = sellerInfo?.verificationStatus === 'pending';
   const isRejected = sellerInfo?.verificationStatus === 'rejected';
+  // A kitchen that signed up with "Cook & Sell" is waiting with only a name: it adds its community, location and CNIC here.
+  const missing: string[] = isPending && Array.isArray(sellerInfo?.applicationMissing) ? sellerInfo.applicationMissing : [];
+  const needsCompleting = missing.length > 0;
+  const gapLabel: Record<string, string> = { community: t('reg.gapCommunity'), 'kitchen location': t('reg.gapLocation'), 'CNIC photos (both sides)': t('reg.gapCnic') };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -193,12 +208,18 @@ export default function SellerRegisterPage() {
     if (formData.latitude == null || formData.longitude == null) {
       newErrors.location = t('reg.errLocation');
     }
-    if (!isRejected && (!formData.cnicFrontUrl || !formData.cnicBackUrl)) {
+    // The CNIC photos already on file are kept (a rejected application, or a waiting one that only lacks other things).
+    const cnicOnFile = isRejected || (needsCompleting && !missing.includes('CNIC photos (both sides)'));
+    if (!cnicOnFile && (!formData.cnicFrontUrl || !formData.cnicBackUrl)) {
       newErrors.cnic = t('reg.errCnic');
     }
-    if (!formData.agreeToTerms && (!sellerInfo || sellerInfo.verificationStatus === 'rejected')) {
+    if (!formData.agreeToTerms && (!sellerInfo || sellerInfo.verificationStatus === 'rejected' || needsCompleting)) {
       newErrors.agreeToTerms = t('reg.errTerms');
     }
+    // Customers pay into these: a wrong digit pays a stranger, so a number has to be one (the server checks the same).
+    if (walletNumberIsWrong(formData.jazzcashNumber)) newErrors.jazzcashNumber = t('ob.jazzInvalid');
+    if (walletNumberIsWrong(formData.easypaisaNumber)) newErrors.easypaisaNumber = t('ob.easyInvalid');
+    if (bankAccountIsWrong(formData.bankAccountNumber)) newErrors.bankAccountNumber = t('ob.bankInvalid');
 
     if (Object.keys(newErrors).length > 0) {
       setErrors(newErrors);
@@ -234,6 +255,19 @@ export default function SellerRegisterPage() {
   };
 
 
+  if (loadError && !sellerInfo) {
+    return (
+      <div className="min-h-screen bg-slate-50 py-10 px-4 sm:px-6 lg:px-8">
+        <div className="max-w-xl mx-auto space-y-6">
+          <Link href="/dashboard" className="text-sm font-semibold text-orange-600 hover:text-orange-700 flex items-center gap-1">
+            {t('reg.back')}
+          </Link>
+          <LoadError error={loadError} onRetry={loadSellerInfo} />
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-slate-50 py-10 px-4 sm:px-6 lg:px-8">
       <div className="max-w-4xl mx-auto">
@@ -248,13 +282,13 @@ export default function SellerRegisterPage() {
         </div>
 
         {/* Application Status Banners */}
-        {sellerInfo && !isEditing && (
+        {sellerInfo && (!isEditing || needsCompleting) && (
           <div className="mb-8">
             {isApproved && (
               <div className="bg-emerald-50 border border-emerald-200 rounded-2xl p-6 shadow-sm">
                 <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
                   <div className="flex items-center gap-4">
-                    <div className="w-12 h-12 rounded-xl bg-emerald-500 text-white flex items-center justify-center font-black text-xl">
+                    <div className="w-12 h-12 rounded-xl bg-emerald-600 text-white flex items-center justify-center font-black text-xl">
                       ✓
                     </div>
                     <div>
@@ -272,10 +306,10 @@ export default function SellerRegisterPage() {
               </div>
             )}
 
-            {isPending && (
+            {isPending && !needsCompleting && (
               <div id="pending-approval-banner" className="bg-amber-50 border border-amber-200 rounded-2xl p-6 shadow-sm">
                 <div className="flex items-start gap-4">
-                  <div className="w-12 h-12 rounded-xl bg-amber-500 text-white flex items-center justify-center font-black text-xl">
+                  <div className="w-12 h-12 rounded-xl bg-amber-600 text-white flex items-center justify-center font-black text-xl">
                     ⏳
                   </div>
                   <div className="flex-1">
@@ -285,6 +319,21 @@ export default function SellerRegisterPage() {
                     </div>
                     <p className="text-sm text-amber-700 mt-1">
                       {t('reg.pendingBody')}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {needsCompleting && (
+              <div id="incomplete-banner" className="bg-amber-50 border border-amber-200 rounded-2xl p-6 shadow-sm">
+                <div className="flex items-start gap-4">
+                  <div className="w-12 h-12 rounded-xl bg-amber-600 text-white flex items-center justify-center font-black text-xl">!</div>
+                  <div className="flex-1">
+                    <h2 className="text-lg font-bold text-amber-900">{t('reg.incompleteTitle')}</h2>
+                    <p className="text-sm text-amber-800 mt-1">{t('reg.incompleteBody')}</p>
+                    <p className="text-sm font-semibold text-amber-900 mt-2">
+                      {t('reg.incompleteStill')} {missing.map((m) => gapLabel[m] ?? m).join(', ')}
                     </p>
                   </div>
                 </div>
@@ -319,11 +368,11 @@ export default function SellerRegisterPage() {
         )}
 
         {/* Registration Form Card */}
-        {(!sellerInfo || isEditing || (!isApproved && !isPending)) && (
+        {(!sellerInfo || isEditing || (!isApproved && !isPending) || needsCompleting) && (
           <form onSubmit={handleSubmit} className="bg-white rounded-3xl shadow-xl border border-slate-100 p-8 sm:p-10 space-y-8">
             <div>
               <h1 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight">
-                {isRejected ? t('reg.titleResubmit') : t('reg.title')}
+                {isRejected ? t('reg.titleResubmit') : needsCompleting ? t('reg.titleComplete') : t('reg.title')}
               </h1>
               <p className="text-slate-500 text-sm mt-1">
                 {t('reg.intro')}
@@ -522,7 +571,7 @@ export default function SellerRegisterPage() {
                       onClick={() => toggleCategory(cat)}
                       className={`px-4 py-2 rounded-xl text-xs font-bold transition-all ${
                         selected
-                          ? 'bg-orange-500 text-white shadow-sm shadow-orange-200'
+                          ? 'bg-[#FF5500] text-white shadow-sm shadow-orange-200'
                           : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
                       }`}
                     >
@@ -583,9 +632,11 @@ export default function SellerRegisterPage() {
                     name="bankAccountNumber"
                     value={formData.bankAccountNumber}
                     onChange={handleInputChange}
-                    placeholder="PK00MEZN0000000000000000"
-                    className="w-full px-4 py-3 rounded-xl border border-slate-200 bg-slate-50 text-slate-900 font-medium text-sm focus:outline-none focus:ring-2 focus:ring-orange-500 transition-all"
+                    placeholder="PK36SCBL0000001123456702"
+                    aria-invalid={Boolean(errors.bankAccountNumber)}
+                    className={`w-full px-4 py-3 rounded-xl border bg-slate-50 text-slate-900 font-medium text-sm focus:outline-none focus:ring-2 focus:ring-orange-500 transition-all ${errors.bankAccountNumber ? 'border-rose-400 bg-rose-50' : 'border-slate-200'}`}
                   />
+                  {errors.bankAccountNumber && <p role="alert" className="text-rose-500 text-xs mt-1 font-medium">{errors.bankAccountNumber}</p>}
                 </div>
               </div>
 
@@ -602,8 +653,10 @@ export default function SellerRegisterPage() {
                     value={formData.jazzcashNumber}
                     onChange={handleInputChange}
                     placeholder="03001234567"
-                    className="w-full px-4 py-3 rounded-xl border border-slate-200 bg-slate-50 text-slate-900 font-medium text-sm focus:outline-none focus:ring-2 focus:ring-orange-500 transition-all"
+                    aria-invalid={Boolean(errors.jazzcashNumber)}
+                    className={`w-full px-4 py-3 rounded-xl border bg-slate-50 text-slate-900 font-medium text-sm focus:outline-none focus:ring-2 focus:ring-orange-500 transition-all ${errors.jazzcashNumber ? 'border-rose-400 bg-rose-50' : 'border-slate-200'}`}
                   />
+                  {errors.jazzcashNumber && <p role="alert" className="text-rose-500 text-xs mt-1 font-medium">{errors.jazzcashNumber}</p>}
                 </div>
 
                 <div>
@@ -618,8 +671,10 @@ export default function SellerRegisterPage() {
                     value={formData.easypaisaNumber}
                     onChange={handleInputChange}
                     placeholder="03451234567"
-                    className="w-full px-4 py-3 rounded-xl border border-slate-200 bg-slate-50 text-slate-900 font-medium text-sm focus:outline-none focus:ring-2 focus:ring-orange-500 transition-all"
+                    aria-invalid={Boolean(errors.easypaisaNumber)}
+                    className={`w-full px-4 py-3 rounded-xl border bg-slate-50 text-slate-900 font-medium text-sm focus:outline-none focus:ring-2 focus:ring-orange-500 transition-all ${errors.easypaisaNumber ? 'border-rose-400 bg-rose-50' : 'border-slate-200'}`}
                   />
+                  {errors.easypaisaNumber && <p role="alert" className="text-rose-500 text-xs mt-1 font-medium">{errors.easypaisaNumber}</p>}
                 </div>
               </div>
             </div>
@@ -703,12 +758,14 @@ export default function SellerRegisterPage() {
                   id="submit-registration-btn"
                   type="submit"
                   disabled={loading}
-                  className="w-full py-4 bg-orange-500 hover:bg-orange-600 text-white font-black text-base rounded-2xl shadow-lg shadow-orange-200 transition-all duration-200"
+                  className="w-full py-4 bg-[#FF5500] hover:bg-[#e04400] text-white font-black text-base rounded-2xl shadow-lg shadow-orange-200 transition-all duration-200"
                 >
                   {loading 
                     ? t('reg.submitting')
                     : isRejected
                     ? t('reg.resubmit')
+                    : needsCompleting
+                    ? t('reg.complete')
                     : t('reg.submit')}
                 </Button>
               </div>

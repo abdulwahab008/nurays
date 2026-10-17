@@ -1,10 +1,12 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
+import { loginUrlHere } from '@/lib/auth-redirect';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { DashboardLayout, SELLER_SIDEBAR_ITEMS } from '@/components/layout/DashboardShell';
 import { useToast } from '@/components/ui/toast';
+import { LoadError } from '@/components/ui/LoadError';
 import { useAuthStore } from '@/lib/store/auth-store';
 import { apiClient } from '@/lib/api-client';
 import { formatPrice, formatDateTime, imageVariant } from '@/lib/utils';
@@ -14,6 +16,7 @@ import { useLiveRefresh } from '@/lib/hooks/use-live-refresh';
 import { useT } from '@/lib/i18n';
 import { commonMessages } from '@/lib/i18n/messages/common';
 import { kitchenOrderMessages, kitchenStatusLabel, paymentMethodLabel, paymentStatusLabel } from '@/lib/i18n/messages/kitchen-orders';
+import { ExternalLink } from '@/components/ExternalLink';
 
 interface SellerOrderDetail {
   id: string;
@@ -62,17 +65,21 @@ export default function SellerOrderDetailPage() {
   const [order, setOrder] = useState<SellerOrderDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
+  // Why the order could not be read (anything but "it is not there"); shown with a retry instead of a blank page.
+  const [loadError, setLoadError] = useState<unknown>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [chatOpen, setChatOpen] = useState(false);
 
   const load = useCallback(async () => {
     try {
+      setLoadError(null);
       const res = await apiClient.get(`/seller/orders/${orderId}`);
       setOrder(res.data?.data ?? null);
       setNotFound(!res.data?.data);
     } catch (err: any) {
-      if (err.response?.status === 404 || err.response?.status === 403) setNotFound(true);
-      else showToast(t('detail.loadFailed'), 'error');
+      // 400 is an address that is not an order id at all (the server refuses it before looking).
+      if (err.response?.status === 404 || err.response?.status === 403 || err.response?.status === 400) setNotFound(true);
+      else setLoadError(err);
     } finally {
       setLoading(false);
     }
@@ -80,10 +87,10 @@ export default function SellerOrderDetailPage() {
 
   useEffect(() => {
     if (!isAuthenticated) {
-      router.push('/login');
+      router.push(loginUrlHere());
       return;
     }
-    const role = user?.userType || (user as any)?.user_type;
+    const role = user?.userType || user?.user_type;
     if (role !== 'seller' && role !== 'admin') {
       router.push('/dashboard');
       return;
@@ -123,6 +130,10 @@ export default function SellerOrderDetailPage() {
         </Link>
 
         {loading && <div className="bg-white rounded-2xl p-8 text-center text-gray-500">{tc('loading')}</div>}
+
+        {!loading && Boolean(loadError) && !order && !notFound && (
+          <LoadError error={loadError} onRetry={load} title={t('detail.loadFailed')} />
+        )}
 
         {!loading && notFound && (
           <div className="bg-white rounded-2xl p-8 text-center">
@@ -229,9 +240,9 @@ export default function SellerOrderDetailPage() {
                 {order.paymentReferenceNumber && <p>{t('detail.reference')} <span className="font-mono" data-ltr>{order.paymentReferenceNumber}</span></p>}
                 {order.paymentSenderName && <p>{t('detail.sentBy', { name: order.paymentSenderName })}</p>}
                 {order.paymentProofUrl && (
-                  <a href={order.paymentProofUrl} target="_blank" rel="noopener noreferrer" className="text-indigo-700 underline">
+                  <ExternalLink href={order.paymentProofUrl} className="text-indigo-700 underline">
                     {t('detail.viewReceipt')}
-                  </a>
+                  </ExternalLink>
                 )}
                 {order.sellerTotals && (
                   <div className="pt-2 border-t border-gray-100 space-y-1">
@@ -277,7 +288,7 @@ export default function SellerOrderDetailPage() {
               <ol className="space-y-2 text-sm">
                 {order.statusHistory.map((h, i) => (
                   <li key={i} className="flex gap-3">
-                    <span className="text-gray-400 shrink-0 w-40">{formatDateTime(h.createdAt)}</span>
+                    <span className="text-gray-500 shrink-0 w-40">{formatDateTime(h.createdAt)}</span>
                     <span>
                       <span className="font-semibold">{statusLabel(h.status)}</span>
                       {h.notes ? ` · ${h.notes}` : ''}

@@ -21,7 +21,7 @@ export const updateProfile = async (req: Request, res: Response) => {
     throw new AppError('Authentication required', 401, 'AUTH_REQUIRED');
   }
 
-  const updatedProfile = await userProfileService.updateProfile(req.user.userId, req.body);
+  const updatedProfile = await userProfileService.updateProfile(req.user.userId, req.body, { ip: req.ip });
 
   res.status(200).json({
     success: true,
@@ -93,6 +93,6 @@ export const deleteOwnAccountHandler = async (req: Request, res: Response) => {
   if (!req.user) {
     throw new AppError('Authentication required', 401, 'AUTH_REQUIRED');
   }
-  const result = await deleteOwnAccount(req.user.userId, req.body?.password);
+  const result = await deleteOwnAccount(req.user.userId, req.body?.password, { ip: req.ip });
   res.status(200).json({ success: true, data: result, message: 'Your account has been closed' });
 };

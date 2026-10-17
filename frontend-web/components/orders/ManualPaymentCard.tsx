@@ -6,10 +6,13 @@ import { orderService, SellerPaymentDetails, SellerPaymentAccount } from '@/lib/
 import { apiClient } from '@/lib/api-client';
 import { formatPrice } from '@/lib/utils';
 import { useToast } from '@/components/ui/toast';
+import { LoadError } from '@/components/ui/LoadError';
 import { useT } from '@/lib/i18n';
 import { commonMessages } from '@/lib/i18n/messages/common';
 import { paymentsMessages } from '@/lib/i18n/messages/payments';
 import { richText } from '@/lib/i18n/messages/checkout';
+import { ExternalLink } from '@/components/ExternalLink';
+import { openExternal } from '@/lib/open-external';
 
 interface ManualPaymentCardProps {
   orderId: string;
@@ -36,6 +39,9 @@ export default function ManualPaymentCard({
   const tc = useT(commonMessages);
   const [details, setDetails] = useState<SellerPaymentDetails | null>(null);
   const [loading, setLoading] = useState(true);
+  // Why the kitchen's account details could not be read: without them the customer would be told only "please transfer Rs X",
+  // with nobody to send it to.
+  const [loadError, setLoadError] = useState<unknown>(null);
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
 
   // Modal & Form State
@@ -69,6 +75,7 @@ export default function ManualPaymentCard({
 
   const loadDetails = async () => {
     setLoading(true);
+    setLoadError(null);
     try {
       const res = await orderService.getSellerPaymentDetails(orderId);
       if (res.data) {
@@ -80,6 +87,7 @@ export default function ManualPaymentCard({
       }
     } catch (err) {
       console.error('Failed to load seller payment details:', err);
+      setLoadError(err);
     } finally {
       setLoading(false);
     }
@@ -214,7 +222,7 @@ export default function ManualPaymentCard({
   if (paymentStatus === 'paid') {
     return (
       <div className="bg-emerald-50 border border-emerald-200 rounded-3xl p-5 flex items-center gap-3.5">
-        <div className="w-10 h-10 rounded-2xl bg-emerald-500 text-white flex items-center justify-center font-black flex-shrink-0 shadow-xs">
+        <div className="w-10 h-10 rounded-2xl bg-emerald-600 text-white flex items-center justify-center font-black flex-shrink-0 shadow-xs">
           <CheckCircle2 className="w-5 h-5" />
         </div>
         <div>
@@ -236,7 +244,7 @@ export default function ManualPaymentCard({
     return (
       <div className="bg-amber-50/90 border border-amber-200 rounded-3xl p-6 space-y-4">
         <div className="flex items-start gap-3.5">
-          <div className="w-11 h-11 rounded-2xl bg-amber-500 text-white flex items-center justify-center font-black flex-shrink-0 shadow-md">
+          <div className="w-11 h-11 rounded-2xl bg-amber-600 text-white flex items-center justify-center font-black flex-shrink-0 shadow-md">
             <Clock className="w-6 h-6 animate-pulse" />
           </div>
           <div className="flex-1">
@@ -258,7 +266,7 @@ export default function ManualPaymentCard({
         <div className="bg-white rounded-2xl border border-amber-200/80 p-4 space-y-3">
           <div className="flex items-center justify-between flex-wrap gap-2">
             <div>
-              <span className="text-[11px] uppercase font-bold text-slate-400 block tracking-wider">
+              <span className="text-[11px] uppercase font-bold text-slate-500 block tracking-wider">
                 {t('refMethod')}
               </span>
               <span className="font-semibold text-xs text-slate-800">
@@ -285,19 +293,14 @@ export default function ManualPaymentCard({
                   src={proofToDisplay}
                   alt={t('receiptAlt')}
                   className="w-full h-full object-cover cursor-pointer hover:opacity-90"
-                  onClick={() => window.open(proofToDisplay, '_blank')}
+                  onClick={() => openExternal(proofToDisplay)}
                 />
               </div>
               <div className="text-xs">
                 <span className="font-bold text-slate-800 block">{t('screenshotAttached')}</span>
-                <a
-                  href={proofToDisplay}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="text-[#FF5500] hover:underline font-bold text-[11px]"
-                >
+                <ExternalLink href={proofToDisplay} className="text-[#FF5500] hover:underline font-bold text-[11px]">
                   {t('viewReceipt')}
-                </a>
+                </ExternalLink>
               </div>
             </div>
           )}
@@ -330,10 +333,12 @@ export default function ManualPaymentCard({
 
       {/* Account Info Cards */}
       {loading ? (
-        <div className="p-8 text-center text-slate-400">
+        <div className="p-8 text-center text-slate-500">
           <div className="w-6 h-6 border-2 border-[#FF5500] border-t-transparent rounded-full animate-spin mx-auto mb-2" />
           <span className="text-xs font-bold">{t('fetchingAccounts')}</span>
         </div>
+      ) : loadError && !details ? (
+        <LoadError compact error={loadError} onRetry={loadDetails} title={t('accountsLoadFailed')} />
       ) : details?.accounts && details.accounts.length > 0 ? (
         <div className="space-y-3">
           {details.accounts.map((acc: SellerPaymentAccount, idx: number) => {
@@ -498,7 +503,7 @@ export default function ManualPaymentCard({
                       <p className="text-xs font-black text-slate-800 group-hover:text-[#FF5500] transition-colors">
                         {t('tapToUpload')}
                       </p>
-                      <p className="text-[11px] text-slate-400 mt-0.5">
+                      <p className="text-[11px] text-slate-500 mt-0.5">
                         {t('supportsFormats')}
                       </p>
                     </div>
@@ -545,7 +550,7 @@ export default function ManualPaymentCard({
               {/* TID / Reference Number (Optional if screenshot is attached) */}
               <div>
                 <label className="block text-xs font-black text-slate-900 mb-1">
-                  {t('tidLabel')} <span className="text-slate-400 font-normal">{t('optionalIfScreenshot')}</span>
+                  {t('tidLabel')} <span className="text-slate-500 font-normal">{t('optionalIfScreenshot')}</span>
                 </label>
                 <input
                   type="text"
@@ -561,7 +566,7 @@ export default function ManualPaymentCard({
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block text-[11px] font-bold text-slate-700 mb-1">
-                    {t('senderName')} <span className="text-slate-400 font-normal">{t('optional')}</span>
+                    {t('senderName')} <span className="text-slate-500 font-normal">{t('optional')}</span>
                   </label>
                   <input
                     type="text"
@@ -573,7 +578,7 @@ export default function ManualPaymentCard({
                 </div>
                 <div>
                   <label className="block text-[11px] font-bold text-slate-700 mb-1">
-                    {t('senderMobile')} <span className="text-slate-400 font-normal">{t('optional')}</span>
+                    {t('senderMobile')} <span className="text-slate-500 font-normal">{t('optional')}</span>
                   </label>
                   <input
                     type="text"

@@ -2,40 +2,55 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { DashboardLayout, CUSTOMER_SIDEBAR_ITEMS } from '@/components/layout/DashboardShell';
 import { favoriteService, FavoriteSellerItem } from '@/lib/services/favorite.service';
 import { useCommunityStore } from '@/lib/store/community-store';
 import { useToast } from '@/components/ui/toast';
 import { Button } from '@/components/ui/button';
+import { LoadError } from '@/components/ui/LoadError';
 import { formatPrice } from '@/lib/utils';
 import { useT } from '@/lib/i18n';
+import { useAuthStore } from '@/lib/store/auth-store';
+import { apiClient } from '@/lib/api-client';
+import { loginUrlHere } from '@/lib/auth-redirect';
 import { browseMessages, businessTypeKey } from '@/lib/i18n/messages/browse';
 
 export default function FavoritesPage() {
+  const router = useRouter();
+  const { isAuthenticated } = useAuthStore();
   const [favorites, setFavorites] = useState<FavoriteSellerItem[]>([]);
   const [loading, setLoading] = useState(true);
+  // Why the list could not be read; shown instead of "no favourites yet", which would be untrue.
+  const [loadError, setLoadError] = useState<unknown>(null);
   const { selectedCommunity } = useCommunityStore();
   const { showToast } = useToast();
   const t = useT(browseMessages);
 
   const fetchFavorites = async () => {
     setLoading(true);
+    setLoadError(null);
     try {
       const lat = selectedCommunity?.centerLatitude;
       const lng = selectedCommunity?.centerLongitude;
       const items = await favoriteService.getFavorites(lat, lng);
       setFavorites(items);
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error(err);
-      showToast(t('favLoadFailed'), 'error');
+      setLoadError(err);
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
+    // Signed out: go and sign in, without first asking the server for a list it will refuse.
+    if (!isAuthenticated && !apiClient.getAccessToken()) {
+      router.push(loginUrlHere());
+      return;
+    }
     fetchFavorites();
-  }, [selectedCommunity]);
+  }, [selectedCommunity, isAuthenticated]);
 
   const handleRemove = async (sellerId: string, name: string) => {
     try {
@@ -80,6 +95,8 @@ export default function FavoritesPage() {
               <div key={i} className="h-64 rounded-2xl bg-neutral-100 animate-pulse" />
             ))}
           </div>
+        ) : loadError ? (
+          <LoadError error={loadError} onRetry={fetchFavorites} title={t('favLoadFailed')} />
         ) : favorites.length === 0 ? (
           <div className="text-center py-16 px-4 rounded-2xl border border-dashed border-neutral-300 bg-white shadow-sm">
             <div className="w-16 h-16 rounded-full bg-rose-50 text-rose-500 flex items-center justify-center text-3xl mx-auto mb-4">

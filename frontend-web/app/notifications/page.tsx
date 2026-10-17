@@ -1,13 +1,15 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { loginUrlHere } from '@/lib/auth-redirect';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { DashboardLayout, CUSTOMER_SIDEBAR_ITEMS } from '@/components/layout/DashboardShell';
 import { Button } from '@/components/ui/button';
+import { LoadError } from '@/components/ui/LoadError';
 import { useAuthStore } from '@/lib/store/auth-store';
 import { formatDate } from '@/lib/utils';
-import { apiClient } from '@/lib/api-client';
+import { apiClient, apiErrorCode, apiErrorMessage } from '@/lib/api-client';
 import { useToast } from '@/components/ui/toast';
 import { useT } from '@/lib/i18n';
 import { commonMessages } from '@/lib/i18n/messages/common';
@@ -42,14 +44,15 @@ export default function NotificationsPage() {
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [filter, setFilter] = useState<'all' | 'unread'>('all');
   const [loading, setLoading] = useState(true);
-  const [loadError, setLoadError] = useState<string | null>(null);
+  // Why the notifications could not be read; shown instead of "No notifications yet", which would be untrue.
+  const [loadError, setLoadError] = useState<unknown>(null);
 
   const sidebarItems = CUSTOMER_SIDEBAR_ITEMS;
 
   useEffect(() => {
     const token = apiClient.getAccessToken();
     if (!token && !isAuthenticated) {
-      router.push('/login');
+      router.push(loginUrlHere());
       return;
     }
     loadNotifications();
@@ -71,15 +74,10 @@ export default function NotificationsPage() {
       } else {
         setNotifications([]);
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Failed to load notifications:', error);
-      setNotifications([]);
-      const isNetwork = error?.message === 'Network Error' || error?.code === 'ERR_NETWORK';
-      setLoadError(
-        isNetwork
-          ? t('networkError')
-          : error?.response?.data?.error?.message || t('loadNotificationsFailed')
-      );
+      // What is already on the screen stays (a refresh that fails must not wipe the list).
+      setLoadError(error);
     } finally {
       setLoading(false);
     }
@@ -109,16 +107,15 @@ export default function NotificationsPage() {
     return colors[type] || 'bg-gray-50 border-gray-200';
   };
 
+  // The page only changes after the server has agreed, so what it shows is what the next load will show.
   const markAsRead = async (id: string) => {
     try {
       await apiClient.patch(`/notifications/${id}/read`);
       setNotifications(prev =>
         prev.map(n => (n.id === id ? { ...n, isRead: true } : n))
       );
-    } catch {
-      setNotifications(prev =>
-        prev.map(n => (n.id === id ? { ...n, isRead: true } : n))
-      );
+    } catch (error) {
+      showToast(apiErrorMessage(error, t('markReadFailed')), 'error');
     }
   };
 
@@ -127,13 +124,21 @@ export default function NotificationsPage() {
       await apiClient.patch('/notifications/read-all');
       setNotifications(prev => prev.map(n => ({ ...n, isRead: true })));
       showToast(t('allMarkedRead'), 'success');
-    } catch {
-      setNotifications(prev => prev.map(n => ({ ...n, isRead: true })));
-      showToast(t('allMarkedRead'), 'success');
+    } catch (error) {
+      showToast(apiErrorMessage(error, t('markAllReadFailed')), 'error');
     }
   };
 
-  const deleteNotificationLocal = (id: string) => {
+  const deleteNotification = async (id: string) => {
+    try {
+      await apiClient.delete(`/notifications/${id}`);
+    } catch (error) {
+      // Already gone (deleted in another tab): the list should drop it too.
+      if (apiErrorCode(error) !== 'NOTIFICATION_NOT_FOUND') {
+        showToast(apiErrorMessage(error, t('deleteFailed')), 'error');
+        return;
+      }
+    }
     setNotifications(prev => prev.filter(n => n.id !== id));
   };
 
@@ -142,6 +147,8 @@ export default function NotificationsPage() {
   );
 
   const unreadCount = notifications.filter(n => !n.isRead).length;
+  // Nothing could be read and nothing older is on the screen: no counters and no "No notifications yet", which would say what the page does not know.
+  const couldNotRead = !loading && Boolean(loadError) && notifications.length === 0;
 
   if (!isAuthenticated) {
     return null;
@@ -150,52 +157,51 @@ export default function NotificationsPage() {
   return (
     <DashboardLayout
       title={t('notifications')}
-      subtitle={t(unreadCount !== 1 ? 'unreadMany' : 'unreadOne', { count: unreadCount })}
+      subtitle={couldNotRead ? undefined : t(unreadCount !== 1 ? 'unreadMany' : 'unreadOne', { count: unreadCount })}
       sidebarItems={sidebarItems}
       userType="customer"
     >
       {/* Header Actions */}
-      <div className="flex items-center justify-between mb-6">
-        <div className="flex gap-2">
-          <button
-            onClick={() => setFilter('all')}
-            className={`px-4 py-2 rounded-xl text-sm font-medium transition-all ${
-              filter === 'all'
-                ? 'bg-green-600 text-white'
-                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-            }`}
-          >
-            {t('filterAll', { count: notifications.length })}
-          </button>
-          <button
-            onClick={() => setFilter('unread')}
-            className={`px-4 py-2 rounded-xl text-sm font-medium transition-all ${
-              filter === 'unread'
-                ? 'bg-green-600 text-white'
-                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-            }`}
-          >
-            {t('filterUnread', { count: unreadCount })}
-          </button>
+      {!couldNotRead && (
+        <div className="flex items-center justify-between mb-6">
+          <div className="flex gap-2">
+            <button
+              onClick={() => setFilter('all')}
+              className={`px-4 py-2 rounded-xl text-sm font-medium transition-all ${
+                filter === 'all'
+                  ? 'bg-green-600 text-white'
+                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+              }`}
+            >
+              {t('filterAll', { count: notifications.length })}
+            </button>
+            <button
+              onClick={() => setFilter('unread')}
+              className={`px-4 py-2 rounded-xl text-sm font-medium transition-all ${
+                filter === 'unread'
+                  ? 'bg-green-600 text-white'
+                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+              }`}
+            >
+              {t('filterUnread', { count: unreadCount })}
+            </button>
+          </div>
+          <div className="flex items-center gap-2">
+            <Link href="/notifications/settings" className="text-sm font-medium text-slate-600 hover:text-slate-900 underline">
+              {t('settings')}
+            </Link>
+            {unreadCount > 0 && (
+              <Button variant="outline" onClick={markAllAsRead} className="text-sm">
+                <CheckCheck className="w-4 h-4 me-2" /> {t('markAllRead')}
+              </Button>
+            )}
+          </div>
         </div>
-        <div className="flex items-center gap-2">
-          <Link href="/notifications/settings" className="text-sm font-medium text-slate-600 hover:text-slate-900 underline">
-            {t('settings')}
-          </Link>
-          {unreadCount > 0 && (
-            <Button variant="outline" onClick={markAllAsRead} className="text-sm">
-              <CheckCheck className="w-4 h-4 me-2" /> {t('markAllRead')}
-            </Button>
-          )}
-        </div>
-      </div>
+      )}
 
       {/* Notifications List */}
-      {loadError && (
-        <div className="mb-4 p-4 bg-red-50 border border-red-100 rounded-xl text-red-800 text-sm flex items-center justify-between gap-4">
-          <span>{loadError}</span>
-          <Button variant="outline" size="sm" onClick={loadNotifications}>{t('retry')}</Button>
-        </div>
+      {Boolean(loadError) && !loading && (
+        <LoadError compact={!couldNotRead} error={loadError} onRetry={loadNotifications} title={t('loadNotificationsFailed')} className="mb-4" />
       )}
       {loading ? (
         <div className="flex items-center justify-center h-64">
@@ -204,9 +210,9 @@ export default function NotificationsPage() {
             <p className="text-gray-600">{t('loadingNotifications')}</p>
           </div>
         </div>
-      ) : filteredNotifications.length === 0 ? (
+      ) : couldNotRead ? null : filteredNotifications.length === 0 ? (
         <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-12 text-center">
-          <div className="w-20 h-20 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-6 text-gray-400">
+          <div className="w-20 h-20 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-6 text-gray-500">
             <BellOff className="w-10 h-10" />
           </div>
           <h2 className="text-xl font-bold text-gray-900 mb-2">
@@ -238,7 +244,7 @@ export default function NotificationsPage() {
                         {notification.title}
                       </h3>
                       <p className="text-gray-600 text-sm mt-1">{notification.message}</p>
-                      <p className="text-xs text-gray-400 mt-2">
+                      <p className="text-xs text-gray-500 mt-2">
                         {formatDate(notification.createdAt)}
                       </p>
                     </div>
@@ -252,8 +258,8 @@ export default function NotificationsPage() {
                         </button>
                       )}
                       <button
-                        onClick={() => deleteNotificationLocal(notification.id)}
-                        className="p-1 rounded-lg text-gray-400 hover:text-red-500 hover:bg-gray-50 transition-colors"
+                        onClick={() => deleteNotification(notification.id)}
+                        className="p-1 rounded-lg text-gray-500 hover:text-red-500 hover:bg-gray-50 transition-colors"
                         title={tc('delete')}
                         aria-label={tc('delete')}
                       >
@@ -276,37 +282,6 @@ export default function NotificationsPage() {
           ))}
         </div>
       )}
-
-      {/* Notification Settings */}
-      <div className="mt-8 bg-white rounded-2xl border border-gray-100 p-6">
-        <h3 className="font-semibold text-gray-900 mb-4">{t('notificationPreferences')}</h3>
-        <div className="space-y-4">
-          {[
-            { id: 'orders', label: t('prefOrders'), desc: t('prefOrdersDesc'), icon: Package, color: 'text-blue-600 bg-blue-50' },
-            { id: 'promos', label: t('prefPromos'), desc: t('prefPromosDesc'), icon: Tag, color: 'text-amber-600 bg-amber-50' },
-            { id: 'delivery', label: t('prefDelivery'), desc: t('prefDeliveryDesc'), icon: Truck, color: 'text-green-600 bg-green-50' },
-          ].map((pref) => {
-            const Icon = pref.icon;
-            return (
-              <div key={pref.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-xl">
-                <div className="flex items-center gap-3">
-                  <div className={`w-10 h-10 rounded-lg flex items-center justify-center shrink-0 ${pref.color}`}>
-                    <Icon className="w-5 h-5" />
-                  </div>
-                  <div>
-                    <p className="font-medium text-gray-900">{pref.label}</p>
-                    <p className="text-sm text-gray-500">{pref.desc}</p>
-                  </div>
-                </div>
-                <label className="relative inline-flex items-center cursor-pointer">
-                  <input type="checkbox" defaultChecked className="sr-only peer" />
-                  <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-green-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-green-600"></div>
-                </label>
-              </div>
-            );
-          })}
-        </div>
-      </div>
     </DashboardLayout>
   );
 }

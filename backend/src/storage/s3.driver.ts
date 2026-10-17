@@ -12,6 +12,8 @@ export interface S3Config {
   accessKeyId?: string;
   secretAccessKey?: string;
   assetBaseUrl: string;
+  /** How long one request may take before it is aborted (default 30 s). */
+  requestTimeoutMs?: number;
 }
 
 /**
@@ -31,8 +33,9 @@ export class S3Storage implements StorageDriver {
       region: cfg.region,
       endpoint: cfg.endpoint,
       forcePathStyle: cfg.forcePathStyle,
-      // An upload that hangs must fail, not hold the request (and the worker) open for good.
-      requestHandler: new NodeHttpHandler({ connectionTimeout: 5_000, requestTimeout: 30_000 }),
+      // An upload that hangs must fail, not hold the request (and the worker) open for good. Without
+      // throwOnRequestTimeout the handler only logs a warning when requestTimeout passes and waits on.
+      requestHandler: new NodeHttpHandler({ connectionTimeout: 5_000, requestTimeout: cfg.requestTimeoutMs ?? 30_000, throwOnRequestTimeout: true }),
       credentials:
         cfg.accessKeyId && cfg.secretAccessKey
           ? { accessKeyId: cfg.accessKeyId, secretAccessKey: cfg.secretAccessKey }

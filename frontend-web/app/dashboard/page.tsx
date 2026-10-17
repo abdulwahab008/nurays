@@ -17,6 +17,7 @@ import { communityService, CommunityDetail } from '@/lib/services/community.serv
 import { cartService } from '@/lib/services/cart.service';
 import { ConfirmModal } from '@/components/ui/ConfirmModal';
 import { CoverImage } from '@/components/ui/CoverImage';
+import { LoadError } from '@/components/ui/LoadError';
 import { CuisineCarousel, PLATFORM_CUISINES } from '@/components/marketplace/CuisineCarousel';
 import {
   Sparkles,
@@ -212,6 +213,9 @@ export default function CustomerDashboardPage() {
   // community are listed first by the API).
   const [trendingDishes, setTrendingDishes] = useState<DashboardDish[]>([]);
   const [dishesLoading, setDishesLoading] = useState(true);
+  // Why the dishes could not be read (shown with a retry, instead of rows that look as if there were no dishes at all).
+  const [dishesError, setDishesError] = useState<unknown>(null);
+  const [reloadNonce, setReloadNonce] = useState(0);
 
   // Label for selected cuisine
   const selectedCuisineLabel = useMemo(() => {
@@ -331,6 +335,7 @@ export default function CustomerDashboardPage() {
       .catch((err) => console.error('Failed to load sellers on dashboard:', err));
 
     setDishesLoading(true);
+    setDishesError(null);
     productService
       .getProducts({ sort: 'popular', limit: 40, communityId: selectedCommunity?.id })
       .then((res) => {
@@ -340,7 +345,10 @@ export default function CustomerDashboardPage() {
       })
       .catch((err) => {
         console.error('Failed to load dishes on dashboard:', err);
-        if (!cancelled) setTrendingDishes([]);
+        if (!cancelled) {
+          setTrendingDishes([]);
+          setDishesError(err);
+        }
       })
       .finally(() => {
         if (!cancelled) setDishesLoading(false);
@@ -380,7 +388,7 @@ export default function CustomerDashboardPage() {
     }
 
     return () => { cancelled = true; };
-  }, [isAuthenticated, selectedCommunity?.id, selectedCommunity?.slug]);
+  }, [isAuthenticated, selectedCommunity?.id, selectedCommunity?.slug, reloadNonce]);
 
   const handleAddToCart = async (dish: DashboardDish) => {
     // Server cart first: only show the dish in the tray once the API has accepted it.
@@ -456,6 +464,8 @@ export default function CustomerDashboardPage() {
   };
 
   const currentCommunityName = selectedCommunity?.name || null;
+  // The dishes could not be read (and none from an earlier read are on the screen): the alert says so, and the rows must not add "no dishes".
+  const dishesUnreadable = Boolean(dishesError) && !dishesLoading && trendingDishes.length === 0;
 
   return (
     <DashboardLayout
@@ -469,6 +479,10 @@ export default function CustomerDashboardPage() {
       userType="customer"
     >
       <div className="space-y-6 pb-12">
+
+        {dishesUnreadable && (
+          <LoadError compact error={dishesError} onRetry={() => setReloadNonce((n) => n + 1)} title={t('dishesLoadFailed')} />
+        )}
 
         {/* ── ACTIVE ORDER LIVE TRACKER ── */}
         {activeOrder && (
@@ -695,7 +709,7 @@ export default function CustomerDashboardPage() {
                             {(k.minPrepTimeMinutes ?? 0) > 0 && (
                               <>
                                 <span className="flex items-center gap-1 font-semibold text-slate-700">
-                                  <Clock className="w-3 h-3 text-slate-400" />
+                                  <Clock className="w-3 h-3 text-slate-500" />
                                   {t('minutes', { count: k.minPrepTimeMinutes ?? 0 })}
                                 </span>
                                 <span>•</span>
@@ -760,7 +774,7 @@ export default function CustomerDashboardPage() {
                 ref={top10RowRef}
                 className="flex gap-4 overflow-x-auto scrollbar-none pb-2 scroll-smooth"
               >
-                {displayDishes.length === 0 && (
+                {displayDishes.length === 0 && !dishesUnreadable && (
                   <p className="text-xs text-slate-500 font-medium py-6">
                     {dishesLoading ? t('loadingDishes') : t('noCuisineDishes', { cuisine: selectedCuisineLabel })}
                   </p>
@@ -793,7 +807,7 @@ export default function CustomerDashboardPage() {
                             <p className="text-[11px] text-amber-700 font-semibold mt-0.5 font-urdu truncate">{dish.nameUrdu}</p>
                           )}
                           <div className="mt-1.5 text-xs text-slate-500 flex items-center gap-1.5 truncate">
-                            <ChefHat className="w-3 h-3 text-slate-400 shrink-0" />
+                            <ChefHat className="w-3 h-3 text-slate-500 shrink-0" />
                             <span className="font-semibold text-slate-700 truncate">{dish.kitchenName}</span>
                           </div>
                         </div>
@@ -873,7 +887,7 @@ export default function CustomerDashboardPage() {
                   ref={top10RowRef}
                   className="flex gap-2 sm:gap-4 overflow-x-auto scrollbar-none pb-4 pt-1 px-1 scroll-smooth"
                 >
-                  {top10Dishes.length === 0 && (
+                  {top10Dishes.length === 0 && !dishesUnreadable && (
                     <p className="text-xs text-slate-500 font-medium py-6">
                       {dishesLoading
                         ? t('loadingDishes')
@@ -887,6 +901,7 @@ export default function CustomerDashboardPage() {
                     >
                       {/* Giant Netflix Rank Numeral */}
                       <span
+                        aria-hidden="true"
                         className="text-8xl sm:text-9xl font-black italic tracking-tighter leading-none select-none text-slate-100 group-hover:text-orange-500/25 transition-all me-[-28px] sm:me-[-36px] z-0 drop-shadow-sm pointer-events-none"
                         style={{
                           WebkitTextStroke: '3px #cbd5e1',
@@ -942,7 +957,7 @@ export default function CustomerDashboardPage() {
                             )}
 
                             <div className="mt-1.5 text-xs text-slate-500 flex items-center gap-1.5 truncate">
-                              <ChefHat className="w-3 h-3 text-slate-400 shrink-0" />
+                              <ChefHat className="w-3 h-3 text-slate-500 shrink-0" />
                               <span className="font-semibold text-slate-700 truncate">{dish.kitchenName}</span>
                             </div>
                           </div>
@@ -951,7 +966,7 @@ export default function CustomerDashboardPage() {
                             <div>
                               <span className="text-base font-bold text-slate-900">{formatPrice(dish.price)}</span>
                               {dish.originalPrice && (
-                                <span className="text-xs text-slate-400 line-through ms-1 font-medium">
+                                <span className="text-xs text-slate-500 line-through ms-1 font-medium">
                                   {formatPrice(dish.originalPrice)}
                                 </span>
                               )}
@@ -1071,7 +1086,7 @@ export default function CustomerDashboardPage() {
                               {(k.minPrepTimeMinutes ?? 0) > 0 && (
                                 <>
                                   <span className="flex items-center gap-1 font-semibold text-slate-700">
-                                    <Clock className="w-3 h-3 text-slate-400" />
+                                    <Clock className="w-3 h-3 text-slate-500" />
                                     {t('minPrep', { count: k.minPrepTimeMinutes ?? 0 })}
                                   </span>
                                   <span>•</span>
@@ -1167,7 +1182,7 @@ export default function CustomerDashboardPage() {
                               <p className="text-[11px] text-amber-700 font-semibold mt-0.5 font-urdu truncate">{dish.nameUrdu}</p>
                             )}
                             <div className="mt-1.5 text-xs text-slate-500 flex items-center gap-1.5 truncate">
-                              <ChefHat className="w-3 h-3 text-slate-400 shrink-0" />
+                              <ChefHat className="w-3 h-3 text-slate-500 shrink-0" />
                               <span className="font-semibold text-slate-700 truncate">{dish.kitchenName}</span>
                             </div>
                           </div>
@@ -1260,7 +1275,7 @@ export default function CustomerDashboardPage() {
                               <p className="text-[11px] text-amber-700 font-semibold mt-0.5 font-urdu truncate">{dish.nameUrdu}</p>
                             )}
                             <div className="mt-1.5 text-xs text-slate-500 flex items-center gap-1.5 truncate">
-                              <ChefHat className="w-3 h-3 text-slate-400 shrink-0" />
+                              <ChefHat className="w-3 h-3 text-slate-500 shrink-0" />
                               <span className="font-semibold text-slate-700 truncate">{dish.kitchenName}</span>
                             </div>
                           </div>
@@ -1360,7 +1375,7 @@ export default function CustomerDashboardPage() {
                               <p className="text-[11px] text-amber-700 font-semibold mt-0.5 font-urdu truncate">{dish.nameUrdu}</p>
                             )}
                             <div className="mt-1.5 text-xs text-slate-500 flex items-center gap-1.5 truncate">
-                              <ChefHat className="w-3 h-3 text-slate-400 shrink-0" />
+                              <ChefHat className="w-3 h-3 text-slate-500 shrink-0" />
                               <span className="font-semibold text-slate-700 truncate">{dish.kitchenName}</span>
                             </div>
                           </div>

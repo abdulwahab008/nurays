@@ -17,6 +17,11 @@ interface LiveRefreshOptions {
   offlineMs?: number;
   /** Off: no reloading at all (nothing on screen yet, or nothing left that can change). */
   enabled?: boolean;
+  /**
+   * Reload only when one of `events` arrives: not after a reconnection, not when the tab comes back, not on
+   * a timer. For a second, narrower refresh next to a full one that already does all of those.
+   */
+  eventsOnly?: boolean;
 }
 
 /**
@@ -26,13 +31,16 @@ interface LiveRefreshOptions {
  * never run while the tab is hidden.
  */
 export function useLiveRefresh(refresh: () => void, options: LiveRefreshOptions) {
-  const { events, match, intervalMs = 60_000, offlineMs = 15_000, enabled = true } = options;
+  const { events, match, intervalMs = 60_000, offlineMs = 15_000, enabled = true, eventsOnly = false } = options;
   const { socket, connected } = useSocket();
 
   const refreshRef = useRef(refresh);
   const matchRef = useRef(match);
-  refreshRef.current = refresh;
-  matchRef.current = match;
+  // The latest callbacks, kept for the listeners below (updated once the render has committed, not during it).
+  useEffect(() => {
+    refreshRef.current = refresh;
+    matchRef.current = match;
+  });
 
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const triggerRef = useRef(() => {
@@ -62,30 +70,30 @@ export function useLiveRefresh(refresh: () => void, options: LiveRefreshOptions)
     const names = eventKey.split('|').filter(Boolean);
     names.forEach((name) => socket.on(name, onEvent));
     const onReconnect = () => triggerRef.current();
-    socket.io.on('reconnect', onReconnect);
+    if (!eventsOnly) socket.io.on('reconnect', onReconnect);
     return () => {
       names.forEach((name) => socket.off(name, onEvent));
       socket.io.off('reconnect', onReconnect);
     };
-  }, [socket, enabled, eventKey]);
+  }, [socket, enabled, eventKey, eventsOnly]);
 
   // Coming back to the tab.
   useEffect(() => {
-    if (!enabled) return;
+    if (!enabled || eventsOnly) return;
     const onVisible = () => {
       if (document.visibilityState === 'visible') triggerRef.current();
     };
     document.addEventListener('visibilitychange', onVisible);
     return () => document.removeEventListener('visibilitychange', onVisible);
-  }, [enabled]);
+  }, [enabled, eventsOnly]);
 
   // Safety net: slow while live updates flow, faster while they can't.
   useEffect(() => {
-    if (!enabled) return;
+    if (!enabled || eventsOnly) return;
     const every = connected ? intervalMs : Math.min(intervalMs, offlineMs);
     const timer = setInterval(() => {
       if (document.visibilityState === 'visible') refreshRef.current();
     }, every);
     return () => clearInterval(timer);
-  }, [enabled, connected, intervalMs, offlineMs]);
+  }, [enabled, eventsOnly, connected, intervalMs, offlineMs]);
 }

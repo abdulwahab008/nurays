@@ -1,4 +1,4 @@
-import { getDeliveryFeeForSeller, haversineKm } from '../src/utils/deliveryFee';
+import { getDeliveryFeeForSeller, haversineKm, PlatformDeliveryPricing } from '../src/utils/deliveryFee';
 
 // Karachi Saddar (seller) ~24.85,67.02 vs a nearby address ~5km away vs a very far address (Lahore, ~1180km) and Dubai (~1250km, different country).
 const SELLER_LAT = 24.85;
@@ -258,5 +258,59 @@ describe('getDeliveryFeeForSeller — community rules', () => {
     const decimalLike = { toString: () => '55.00', valueOf: () => 55 };
     const seller = communitySeller({ communityDeliveries: [rule(HOME, 0, { fee: decimalLike })] });
     expect(getDeliveryFeeForSeller(seller, addr(HOME)).fee).toBe(55);
+  });
+});
+
+describe('getDeliveryFeeForSeller — the order amount that waives a fee that is being charged', () => {
+  const HOME = 'comm-askari-11';
+  const rule = (communityId: string, fee: number, freeAbove: number | null) => ({ communityId, fee, freeAbove, minOrderAmount: null, isEnabled: true });
+  const seller = (overrides: Partial<Record<string, unknown>> = {}) =>
+    baseSeller({ communityId: HOME, allowCrossCommunity: true, community: { crossCommunityEnabled: true }, communityDeliveries: [], deliveryFeeType: 'fixed', deliveryFeeFixed: 90, ...overrides });
+  const addr = (communityId: string | null) => ({ area: 'Askari 11', city: 'Lahore', communityId });
+
+  it('is the kitchen\'s own threshold while the fee is charged, and the same amount once it has waived the fee', () => {
+    const own = seller({ freeDeliveryThreshold: 1200 });
+    expect(getDeliveryFeeForSeller(own, addr(null), null, null, 700)).toMatchObject({ fee: 90, freeAbove: 1200 });
+    expect(getDeliveryFeeForSeller(own, addr(null), null, null, 1199)).toMatchObject({ fee: 90, freeAbove: 1200 });
+    expect(getDeliveryFeeForSeller(own, addr(null), null, null, 1200)).toMatchObject({ fee: 0, freeAbove: 1200 });
+    expect(getDeliveryFeeForSeller(own, addr(null), null, null, 5000)).toMatchObject({ fee: 0, freeAbove: 1200 });
+  });
+
+  it('is the buyer\'s community amount once that has waived the fee', () => {
+    const withTerms = seller({ freeDeliveryThreshold: 900, communityDeliveries: [rule(HOME, 40, 1500)] });
+    expect(getDeliveryFeeForSeller(withTerms, addr(HOME), null, null, 1499)).toMatchObject({ fee: 40, freeAbove: 1500 });
+    expect(getDeliveryFeeForSeller(withTerms, addr(HOME), null, null, 1500)).toMatchObject({ fee: 0, freeAbove: 1500 });
+  });
+
+  it('is absent when the kitchen has no such rule, or the fee is zero for another reason', () => {
+    expect(getDeliveryFeeForSeller(seller(), addr(null), null, null, 700)).not.toHaveProperty('freeAbove');
+    expect(getDeliveryFeeForSeller(seller({ deliveryFeeFixed: 0, freeDeliveryThreshold: 1200 }), addr(null), null, null, 100)).not.toHaveProperty('freeAbove');
+    // delivery is free to this area whatever the order comes to: the amount is not what makes it free
+    const freeArea = seller({ freeDeliveryThreshold: 1200, freeDeliveryAreas: ['Askari 11'] });
+    const result = getDeliveryFeeForSeller(freeArea, addr(null), null, null, 300);
+    expect(result.fee).toBe(0);
+    expect(result).not.toHaveProperty('freeAbove');
+  });
+
+  it('is the buyer\'s community rule when the kitchen has terms for the community, not the kitchen-wide threshold', () => {
+    const withTerms = seller({ freeDeliveryThreshold: 1200, communityDeliveries: [rule(HOME, 40, 1500)] });
+    expect(getDeliveryFeeForSeller(withTerms, addr(HOME), null, null, 500)).toMatchObject({ fee: 40, freeAbove: 1500 });
+    const termsWithoutOne = seller({ freeDeliveryThreshold: 1200, communityDeliveries: [rule(HOME, 40, null)] });
+    expect(getDeliveryFeeForSeller(termsWithoutOne, addr(HOME), null, null, 500)).not.toHaveProperty('freeAbove');
+    // a buyer with no community falls through to the kitchen-wide policy
+    expect(getDeliveryFeeForSeller(withTerms, addr(null), null, null, 500)).toMatchObject({ fee: 90, freeAbove: 1200 });
+  });
+
+  it('is never offered for a fee a Nuray rider charges (the kitchen pays it, the customer\'s is zero)', () => {
+    const pricing: PlatformDeliveryPricing = { perKm: 20, includedKm: 3, maxKm: 20, fallbackBaseFee: 150, communities: new Map([[HOME, { centerLat: 31.5, centerLng: 74.35, sameCommunityFee: 100, crossCommunityBaseFee: 150 }]]) };
+    const result = getDeliveryFeeForSeller(seller({ freeDeliveryThreshold: 1200 }), addr(HOME), null, null, 300, { pricing });
+    expect(result.pricing).toBeDefined();
+    expect(result).not.toHaveProperty('freeAbove');
+  });
+
+  it('is not offered when the kitchen will not deliver at all', () => {
+    const result = getDeliveryFeeForSeller(seller({ freeDeliveryThreshold: 1200, maxDeliveryDistanceKm: 1 }), { ...addr(null), latitude: 31.5, longitude: 74.3 }, 24.8, 67.0, 300);
+    expect(result.deliverable).toBe(false);
+    expect(result).not.toHaveProperty('freeAbove');
   });
 });

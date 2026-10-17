@@ -5,13 +5,13 @@ import { AppError } from '../middleware/errorHandler';
 import { placeholderPhone } from './auth.service';
 import { realPhoneOrNull } from '../utils/otp';
 import { permissionsFor, StaffRole } from '../utils/permissions';
+import { assertPasswordStrength, MIN_STAFF_PASSWORD_LENGTH } from '../utils/password-policy';
 
 /**
  * The staff: the one super admin, admins, and customer support people. Only the super admin manages
  * them (route permission staff.manage). The super admin is the only one who can't be changed here.
  */
 const ASSIGNABLE: StaffRole[] = ['admin', 'support'];
-const MIN_PASSWORD = 12;
 
 const present = (u: {
   id: string;
@@ -36,15 +36,14 @@ const present = (u: {
 
 const SELECT = { id: true, email: true, phone: true, staffRole: true, status: true, lastLoginAt: true, createdAt: true, profile: { select: { fullName: true } } } as const;
 
-function assertPassword(password: string) {
-  if (typeof password !== 'string' || password.length < MIN_PASSWORD) {
-    throw new AppError(`Use a password of at least ${MIN_PASSWORD} characters`, 400, 'WEAK_PASSWORD');
-  }
+/** A staff password: long (twelve characters), not a common one, not made of the person's own name or e-mail. */
+function assertPassword(password: string, who: { email?: string | null; name?: string | null } = {}) {
+  assertPasswordStrength(password, { minLength: MIN_STAFF_PASSWORD_LENGTH, email: who.email, name: who.name });
 }
 
 async function loadTarget(actorId: string, staffId: string) {
   if (staffId === actorId) throw new AppError("You can't change your own account here", 400, 'CANNOT_CHANGE_SELF');
-  const target = await prisma.user.findUnique({ where: { id: staffId }, select: { id: true, userType: true, staffRole: true, status: true } });
+  const target = await prisma.user.findUnique({ where: { id: staffId }, select: { id: true, userType: true, staffRole: true, status: true, email: true, profile: { select: { fullName: true } } } });
   if (!target || target.userType !== 'admin') throw new AppError('Staff member not found', 404, 'STAFF_NOT_FOUND');
   if (target.staffRole === 'super_admin') throw new AppError('The super admin account cannot be changed here', 403, 'CANNOT_CHANGE_SUPER_ADMIN');
   return target;
@@ -59,7 +58,7 @@ export async function listStaff() {
 /** The super admin creates an admin or a support person with a first password they hand over. */
 export async function createStaff(input: { email: string; fullName: string; role: string; password: string }) {
   if (!ASSIGNABLE.includes(input.role as StaffRole)) throw new AppError('Role must be admin or support', 400, 'INVALID_ROLE');
-  assertPassword(input.password);
+  assertPassword(input.password, { email: input.email, name: input.fullName });
   const email = input.email.toLowerCase().trim();
   if (await prisma.user.findFirst({ where: { email }, select: { id: true } })) {
     throw new AppError('An account with this email already exists', 409, 'EMAIL_EXISTS');
@@ -103,8 +102,8 @@ export async function setStaffStatus(actorId: string, staffId: string, status: s
 }
 
 export async function resetStaffPassword(actorId: string, staffId: string, password: string) {
-  assertPassword(password);
-  await loadTarget(actorId, staffId);
+  const target = await loadTarget(actorId, staffId);
+  assertPassword(password, { email: target.email, name: target.profile?.fullName });
   await prisma.user.update({ where: { id: staffId }, data: { passwordHash: await bcrypt.hash(password, 10), tokensValidAfter: new Date() } });
   socketManager.disconnectUser(staffId);
   return { id: staffId };

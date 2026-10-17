@@ -25,6 +25,10 @@ never the same thing as the application log.
 - The same `requestId` is returned to the client in `X-Request-Id` and in error responses, so a customer's
   screenshot leads straight to the log lines.
 - Passwords, tokens, OTPs and handover codes are redacted; email addresses and phone numbers in messages are masked.
+- Everything the server says goes through the logger (the source has no `console` calls, and ESLint warns on one), so
+  every line has a level, a time and the request id, and carries the error (`err`) and the ids (`orderId`, `job`,
+  `redis`...) as fields. Live-socket traffic (connect, join or leave an order room, disconnect) is `debug`, so it does
+  not fill the log: set `LOG_LEVEL=debug` to see it. A denied order-room join is a `warn`.
 - Scheduled jobs: failures are logged as `Job <name> failed` with the error. Dispatch logs every automatic
   assignment (delivery, order, rider, reason, number of candidates).
 - **Operations snapshot** every 5 minutes (`metric: "ops_snapshot"`): open deliveries nobody has taken and how long
@@ -73,6 +77,7 @@ enforces this for the above; keep it that way in new code (log ids, not people).
 | Money backlog | `pendingRefunds`, `pendingPayouts` | above 24 h old | unhappy customers and kitchens |
 | Approvals backlog | `pendingApprovals` | above 24 h | kitchens waiting to sell |
 | Job failures | `Job <name> failed` | any | stuck sweeps (stale orders, dispatch, ranking) |
+| Rate limits not counted | warning `Rate limits are not being counted` (at most one a minute, with `requestsSinceLastReport`) | any | Redis is down or not answering: requests are let through unlimited |
 | Disk, CPU, memory, DB connections | host | 80 percent | capacity |
 | Backup missing | host | no success in 25 h | recovery |
 

@@ -612,7 +612,7 @@ export default function Home() {
               {formatPrice(dish.price)}
             </span>
             {dish.originalPrice != null && (
-              <span className="text-[11px] text-slate-400 line-through">
+              <span className="text-[11px] text-slate-500 line-through">
                 {formatPrice(dish.originalPrice)}
               </span>
             )}
@@ -831,8 +831,9 @@ export default function Home() {
         }}
       />
 
-      {/* Top Notification / Platform Status Bar */}
-      <div className="bg-[#0C1016] text-white px-4 py-1.5 text-xs font-medium border-b border-white/5">
+      {/* Top Notification / Platform Status Bar. It starts below the status bar, and it covers the header's own status-bar
+          padding (the header keeps that padding for when it sticks), so the two do not leave a gap between them. */}
+      <div className="relative z-[41] -mb-(--safe-top) bg-[#0C1016] text-white px-4 pt-[calc(0.375rem+var(--safe-top))] pb-1.5 text-xs font-medium border-b border-white/5">
         <div className="max-w-[1440px] mx-auto flex items-center justify-between">
           <div className="flex items-center gap-2">
             <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
@@ -861,7 +862,7 @@ export default function Home() {
       {/* ============================================================
           MAIN TOP NAVIGATION BAR (Streamlined Nordic/US Standards)
           ============================================================ */}
-      <header className="sticky top-0 z-40 bg-white/95 backdrop-blur-md border-b border-slate-200/80 shadow-xs">
+      <header className="sticky top-0 z-40 pt-(--safe-top) bg-white/95 backdrop-blur-md border-b border-slate-200/80 shadow-xs">
         <div className="max-w-[1440px] mx-auto px-4 sm:px-8 h-16 flex items-center justify-between gap-3 sm:gap-6">
           {/* Left section: Hamburger & Logo */}
           <div className="flex items-center gap-3 sm:gap-4 flex-shrink-0">
@@ -930,7 +931,7 @@ export default function Home() {
           {/* Search Bar */}
           <div className="flex-1 max-w-md relative hidden sm:block">
             <div className="relative flex items-center">
-              <Search className="w-4 h-4 text-slate-400 absolute start-3.5 pointer-events-none" />
+              <Search className="w-4 h-4 text-slate-500 absolute start-3.5 pointer-events-none" />
               <input
                 type="text"
                 value={searchQuery}
@@ -942,7 +943,7 @@ export default function Home() {
                 <button
                   onClick={() => setSearchQuery('')}
                   aria-label={t('clearSearch')}
-                  className="absolute end-3 text-xs text-slate-400 hover:text-slate-700"
+                  className="absolute end-3 text-xs text-slate-500 hover:text-slate-700"
                 >
                   ✕
                 </button>
@@ -1065,7 +1066,7 @@ export default function Home() {
       {/* ============================================================
           QUICK FILTER CHIPS BAR
           ============================================================ */}
-      <section className="bg-white/90 backdrop-blur-md border-b border-slate-200/70 py-2.5 sticky top-16 z-30">
+      <section className="bg-white/90 backdrop-blur-md border-b border-slate-200/70 py-2.5 sticky top-(--header-offset) z-30">
         <div className="max-w-[1440px] mx-auto px-4 sm:px-8 flex items-center justify-between gap-3">
           <div className="flex items-center gap-2 overflow-x-auto scrollbar-none pb-0.5">
             {filterChips.map((chip) => {
@@ -1431,7 +1432,7 @@ export default function Home() {
                                 {kitchen.chef && kitchen.area && <span>•</span>}
                                 {kitchen.area && (
                                   <>
-                                    <MapPin className="w-3 h-3 text-slate-400 inline flex-shrink-0" />
+                                    <MapPin className="w-3 h-3 text-slate-500 inline flex-shrink-0" />
                                     <span>{kitchen.area}</span>
                                   </>
                                 )}
@@ -1469,10 +1470,10 @@ export default function Home() {
                             {kitchen.statusLabel}
                           </span>
                           {kitchen.isOpen && kitchen.closesAt && (
-                            <span className="font-medium text-slate-400">{t('closesAt', { time: kitchen.closesAt })}</span>
+                            <span className="font-medium text-slate-500">{t('closesAt', { time: kitchen.closesAt })}</span>
                           )}
                           {!kitchen.isOpen && kitchen.opensAt && (
-                            <span className="font-medium text-slate-400">{t('opensAt', { time: kitchen.opensAt })}</span>
+                            <span className="font-medium text-slate-500">{t('opensAt', { time: kitchen.opensAt })}</span>
                           )}
                         </div>
                       )}
@@ -1482,13 +1483,13 @@ export default function Home() {
                         <div className="mt-2 text-xs text-slate-600 font-medium flex items-center gap-2">
                           {kitchen.deliveryFee && (
                             <span className="flex items-center gap-1 text-slate-700">
-                              <Bike className="w-3.5 h-3.5 text-slate-400" />
+                              <Bike className="w-3.5 h-3.5 text-slate-500" />
                               <span>{kitchen.deliveryFee}</span>
                             </span>
                           )}
                           {kitchen.deliveryFee && kitchen.minOrder && <span className="text-slate-300">•</span>}
                           {kitchen.minOrder && (
-                            <span className="text-[11px] text-slate-400">{t('minOrder', { amount: kitchen.minOrder })}</span>
+                            <span className="text-[11px] text-slate-500">{t('minOrder', { amount: kitchen.minOrder })}</span>
                           )}
                         </div>
                       )}
@@ -1612,7 +1613,7 @@ export default function Home() {
                   <div key={card.key} className="p-4 rounded-xl bg-white/5 border border-white/10">
                     <Icon className={`w-5 h-5 mx-auto ${card.iconClass}`} />
                     <div className={`text-xl font-bold mt-2 ${card.valueClass}`}>{card.value}</div>
-                    <div className="text-[11px] font-medium text-slate-400 uppercase tracking-wider mt-0.5">{card.label}</div>
+                    <div className="text-[11px] font-medium text-slate-500 uppercase tracking-wider mt-0.5">{card.label}</div>
                   </div>
                 );
               })}
@@ -1641,11 +1642,11 @@ export default function Home() {
               <Link href="/products?productType=frozen" className="hover:text-[#FF5500]">{t('frozenPantry')}</Link>
               <Link href="/sellers/register" className="hover:text-[#FF5500]">{t('openKitchen')}</Link>
               <Link href="/riders/dashboard" className="hover:text-[#FF5500]">{t('riderPortal')}</Link>
-              <Link href="/support" className="hover:text-[#FF5500]">{t('help')}</Link>
+              <Link href="/help" className="hover:text-[#FF5500]">{t('help')}</Link>
             </div>
           </div>
 
-          <div className="mt-6 pt-6 border-t border-slate-100 flex flex-col sm:flex-row items-center justify-between text-[11px] text-slate-400 font-normal gap-2">
+          <div className="mt-6 pt-6 border-t border-slate-100 flex flex-col sm:flex-row items-center justify-between text-[11px] text-slate-500 font-normal gap-2">
             <p>{t('rights', { year: new Date().getFullYear() })}</p>
             <nav aria-label={t('legal')} className="flex flex-wrap items-center justify-center gap-x-4 gap-y-1">
               <Link href="/terms" className="hover:text-[#FF5500]">{t('terms')}</Link>

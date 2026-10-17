@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import { qstr } from '../utils/query';
 import { communityService } from '../services/community.service';
+import { currentUserId } from '../middleware/auth.middleware';
 
 export async function getCommunities(_req: Request, res: Response): Promise<void> {
   const data = await communityService.getAllCommunities();
@@ -32,7 +33,7 @@ export async function detectCommunity(req: Request, res: Response): Promise<void
 }
 
 export async function setBuyerCommunity(req: Request, res: Response): Promise<void> {
-  const userId = (req as any).user?.userId || (req as any).user?.id;
+  const userId = currentUserId(req);
   const { communityId } = req.body;
 
   if (!communityId) {

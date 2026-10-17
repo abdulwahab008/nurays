@@ -3,12 +3,15 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { UserLayout } from '@/components/layout/UserLayout';
+import { AdminShell } from '@/components/layout/AdminShell';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/toast';
+import { LoadError } from '@/components/ui/LoadError';
 import { useAuthStore } from '@/lib/store/auth-store';
 import { apiClient } from '@/lib/api-client';
 import DocumentList from '@/components/admin/DocumentList';
+import { ExternalLink } from '@/components/ExternalLink';
+import { RejectReasonModal } from '@/components/admin/RejectReasonModal';
 
 interface PendingSeller {
   id: string;
@@ -20,6 +23,8 @@ interface PendingSeller {
   status: string;
   createdAt: string;
   primaryCommunityName?: string | null;
+  /** What the application still lacks (the server works it out); empty when it is complete. */
+  missing?: string[];
   latitude?: number | null;
   longitude?: number | null;
   documents: Array<{ id: string; type: string; url: string | null }>;
@@ -39,7 +44,10 @@ export default function AdminPendingSellersPage() {
   const { showToast } = useToast();
   const [loading, setLoading] = useState(true);
   const [pendingSellers, setPendingSellers] = useState<PendingSeller[]>([]);
+  // Why the applications could not be read; shown instead of "No Pending Applications", which would be untrue.
+  const [loadError, setLoadError] = useState<unknown>(null);
   const [processingId, setProcessingId] = useState<string | null>(null);
+  const [rejecting, setRejecting] = useState<PendingSeller | null>(null);
 
   useEffect(() => {
     if (!isAuthenticated) {
@@ -63,24 +71,25 @@ export default function AdminPendingSellersPage() {
       if (response.data.success) {
         setPendingSellers(response.data.data || []);
       }
+      setLoadError(null);
     } catch (error: any) {
-      const errorMessage = error.response?.data?.error?.message || error.response?.data?.message || 'Failed to load pending sellers';
-      showToast(errorMessage, 'error');
+      setLoadError(error);
     } finally {
       setLoading(false);
     }
   };
 
-  const handleApproveReject = async (sellerId: string, action: 'approve' | 'reject') => {
+  const handleApproveReject = async (sellerId: string, action: 'approve' | 'reject', reason?: string) => {
     try {
       setProcessingId(sellerId);
       const response = await apiClient.post(`/admin/sellers/${sellerId}/${action}`, {
         approved: action === 'approve',
-        notes: action === 'reject' ? 'Rejected by admin' : undefined,
+        notes: action === 'reject' ? reason : undefined,
       });
       
       if (response.data.success) {
         showToast(`Seller ${action === 'approve' ? 'approved' : 'rejected'} successfully!`, 'success');
+        setRejecting(null);
         loadPendingSellers();
       }
     } catch (error: any) {
@@ -96,7 +105,7 @@ export default function AdminPendingSellersPage() {
   }
 
   return (
-    <UserLayout showSidebar={true} showNavbar={true}>
+    <AdminShell>
       <div className="max-w-7xl mx-auto">
         <div className="mb-6 flex items-center justify-between">
           <div>
@@ -113,6 +122,8 @@ export default function AdminPendingSellersPage() {
             <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-green-600 mx-auto mb-4"></div>
             <p className="text-gray-600">Loading pending applications...</p>
           </div>
+        ) : loadError && pendingSellers.length === 0 ? (
+          <LoadError error={loadError} onRetry={loadPendingSellers} title="We couldn't load the applications" />
         ) : pendingSellers.length === 0 ? (
           <div className="bg-white rounded-lg shadow-sm p-12 text-center">
             <div className="text-6xl mb-4">✅</div>
@@ -174,37 +185,42 @@ export default function AdminPendingSellersPage() {
                       <div>
                         <span className="text-gray-500">Kitchen location:</span>{' '}
                         {seller.latitude != null && seller.longitude != null ? (
-                          <a
+                          <ExternalLink
                             href={`https://www.google.com/maps?q=${seller.latitude},${seller.longitude}`}
-                            target="_blank"
-                            rel="noopener noreferrer"
                             className="font-medium underline"
                           >
                             Open in Maps
-                          </a>
+                          </ExternalLink>
                         ) : (
                           <span className="font-medium">Not set</span>
                         )}
                       </div>
                     </div>
                     <DocumentList documents={seller.documents ?? []} />
+                    {(seller.missing?.length ?? 0) > 0 && (
+                      <p className="mt-3 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900" data-testid="application-incomplete">
+                        Cannot be approved yet: this kitchen has not sent its {seller.missing!.join(', ')}. It can still add them to this
+                        application; or reject it and say what is missing.
+                      </p>
+                    )}
                   </div>
 
                   <div className="flex gap-2 ms-4">
                     <Button
                       onClick={() => handleApproveReject(seller.id, 'approve')}
-                      disabled={processingId === seller.id}
+                      disabled={processingId === seller.id || (seller.missing?.length ?? 0) > 0}
+                      title={(seller.missing?.length ?? 0) > 0 ? `Missing: ${seller.missing!.join(', ')}` : undefined}
                       className="bg-green-600 hover:bg-green-700 text-white"
                     >
                       {processingId === seller.id ? 'Processing...' : 'Approve'}
                     </Button>
                     <Button
-                      onClick={() => handleApproveReject(seller.id, 'reject')}
+                      onClick={() => setRejecting(seller)}
                       disabled={processingId === seller.id}
                       variant="outline"
                       className="border-red-300 text-red-600 hover:bg-red-50"
                     >
-                      {processingId === seller.id ? 'Processing...' : 'Reject'}
+                      Reject
                     </Button>
                   </div>
                 </div>
@@ -213,7 +229,17 @@ export default function AdminPendingSellersPage() {
           </div>
         )}
       </div>
-    </UserLayout>
+      <RejectReasonModal
+        isOpen={!!rejecting}
+        title={`Reject ${rejecting?.businessName ?? 'this kitchen'}?`}
+        description="The kitchen is told the reason. It can fix the application and send it again."
+        suggestions={['The photos of the CNIC are unclear', 'The kitchen photos are missing', 'The kitchen location does not match the address', 'The application is incomplete']}
+        confirmLabel="Reject application"
+        busy={!!rejecting && processingId === rejecting.id}
+        onConfirm={(reason) => rejecting && handleApproveReject(rejecting.id, 'reject', reason)}
+        onCancel={() => setRejecting(null)}
+      />
+    </AdminShell>
   );
 }
 

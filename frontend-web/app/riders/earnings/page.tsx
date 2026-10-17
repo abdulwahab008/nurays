@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
+import { loginUrlHere } from '@/lib/auth-redirect';
 import { useRouter } from 'next/navigation';
 import { Wallet, Banknote, TrendingUp, ArrowDownLeft, ArrowUpRight } from 'lucide-react';
 import { DashboardLayout, RIDER_SIDEBAR_ITEMS } from '@/components/layout/DashboardShell';
@@ -47,7 +48,7 @@ export default function RiderEarningsPage() {
 
   useEffect(() => {
     if (!isAuthenticated && !apiClient.getAccessToken()) {
-      router.push('/login');
+      router.push(loginUrlHere());
       return;
     }
     if (!user) return;
@@ -124,15 +125,15 @@ export default function RiderEarningsPage() {
                   <div>
                     <p className="text-[11px] text-slate-500">{t('earn.today')}</p>
                     <p className="text-lg font-black text-slate-900" data-testid="rider-earned-today">{formatPrice(data.earnedToday)}</p>
-                    <p className="text-[11px] text-slate-400">{t(data.deliveriesToday === 1 ? 'earn.delivery' : 'earn.deliveries', { count: data.deliveriesToday })}</p>
+                    <p className="text-[11px] text-slate-500">{t(data.deliveriesToday === 1 ? 'earn.delivery' : 'earn.deliveries', { count: data.deliveriesToday })}</p>
                   </div>
                   <div>
                     <p className="text-[11px] text-slate-500">{t('earn.thisWeek')}</p>
                     <p className="text-lg font-black text-slate-900">{formatPrice(data.earnedThisWeek)}</p>
-                    <p className="text-[11px] text-slate-400">{t(data.deliveriesThisWeek === 1 ? 'earn.delivery' : 'earn.deliveries', { count: data.deliveriesThisWeek })}</p>
+                    <p className="text-[11px] text-slate-500">{t(data.deliveriesThisWeek === 1 ? 'earn.delivery' : 'earn.deliveries', { count: data.deliveriesThisWeek })}</p>
                   </div>
                 </div>
-                <p className="mt-2 text-[11px] text-slate-400">{t('earn.allTime', { earned: formatPrice(data.earned), paid: formatPrice(data.paidOut) })}</p>
+                <p className="mt-2 text-[11px] text-slate-500">{t('earn.allTime', { earned: formatPrice(data.earned), paid: formatPrice(data.paidOut) })}</p>
               </div>
             </div>
 

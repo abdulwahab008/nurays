@@ -1,9 +1,11 @@
 'use client';
 
 import { FormEvent, useCallback, useEffect, useState } from 'react';
-import { UserLayout } from '@/components/layout/UserLayout';
+import { AdminShell } from '@/components/layout/AdminShell';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/toast';
+import { LoadError } from '@/components/ui/LoadError';
+import { useDialogs } from '@/components/ui/Dialogs';
 import { apiClient, apiErrorMessage } from '@/lib/api-client';
 import { useAuthStore } from '@/lib/store/auth-store';
 import { formatDateTime } from '@/lib/utils';
@@ -26,10 +28,13 @@ const ROLE_HELP = {
 /** Super admin only: add, change, suspend and remove the people who work in the admin area. */
 export default function AdminStaffPage() {
   const { showToast } = useToast();
+  const { confirm: confirmDialog, ask: askDialog } = useDialogs();
   const { user } = useAuthStore();
   const allowed = !!user?.permissions?.includes('staff.manage');
   const [members, setMembers] = useState<Member[]>([]);
   const [loading, setLoading] = useState(true);
+  // Why the staff could not be read; shown instead of an empty list.
+  const [loadError, setLoadError] = useState<unknown>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [form, setForm] = useState({ fullName: '', email: '', role: 'support' as 'admin' | 'support', password: '' });
 
@@ -37,12 +42,13 @@ export default function AdminStaffPage() {
     try {
       const res = await apiClient.get('/admin/staff');
       setMembers(res.data.data);
+      setLoadError(null);
     } catch (error) {
-      showToast(apiErrorMessage(error, 'Failed to load staff'), 'error');
+      setLoadError(error);
     } finally {
       setLoading(false);
     }
-  }, [showToast]);
+  }, []);
 
   useEffect(() => {
     if (allowed) load();
@@ -68,19 +74,19 @@ export default function AdminStaffPage() {
     setForm({ fullName: '', email: '', role: form.role, password: '' });
   };
 
-  const resetPassword = (m: Member) => {
-    const password = window.prompt(`New password for ${m.email} (at least 12 characters). Give it to them yourself; they are signed out now.`);
+  const resetPassword = async (m: Member) => {
+    const password = (await askDialog({ title: 'New password', message: `New password for ${m.email} (at least 12 characters). Give it to them yourself; they are signed out now.`, label: 'New password', type: 'password', minLength: 12, confirmText: 'Set password' }));
     if (!password) return;
     run(m.id, () => apiClient.post(`/admin/staff/${m.id}/password`, { password }), 'Password changed');
   };
 
-  const remove = (m: Member) => {
-    if (!window.confirm(`Remove ${m.email} from the staff? Their account becomes an ordinary customer account and they are signed out.`)) return;
+  const remove = async (m: Member) => {
+    if (!(await confirmDialog({ title: 'Remove from the staff?', message: `Remove ${m.email} from the staff? Their account becomes an ordinary customer account and they are signed out.`, confirmText: 'Remove' }))) return;
     run(m.id, () => apiClient.delete(`/admin/staff/${m.id}`), 'Staff access removed');
   };
 
   return (
-    <UserLayout showSidebar showNavbar>
+    <AdminShell>
       <div className="max-w-5xl mx-auto p-4 sm:p-6">
         <div className="mb-6">
           <h1 className="text-2xl font-bold text-gray-900">Staff</h1>
@@ -123,6 +129,8 @@ export default function AdminStaffPage() {
             <h2 className="mb-3 text-lg font-semibold text-gray-900">Everyone with admin access</h2>
             {loading ? (
               <p className="text-gray-500">Loading…</p>
+            ) : loadError && members.length === 0 ? (
+              <LoadError error={loadError} onRetry={load} title="We couldn't load the staff" />
             ) : (
               <ul className="grid gap-3" data-testid="staff-list">
                 {members.map((m) => {
@@ -138,7 +146,7 @@ export default function AdminStaffPage() {
                         <p className="text-xs text-gray-500">{m.email} · {m.lastLoginAt ? `last sign-in ${formatDateTime(m.lastLoginAt)}` : 'never signed in'}</p>
                       </div>
                       {locked ? (
-                        <span className="text-xs text-gray-400">{m.role === 'super_admin' ? 'Cannot be changed' : 'This is you'}</span>
+                        <span className="text-xs text-gray-500">{m.role === 'super_admin' ? 'Cannot be changed' : 'This is you'}</span>
                       ) : (
                         <div className="flex flex-wrap gap-2">
                           <select
@@ -166,6 +174,6 @@ export default function AdminStaffPage() {
           </>
         )}
       </div>
-    </UserLayout>
+    </AdminShell>
   );
 }

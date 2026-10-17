@@ -1,17 +1,22 @@
 'use client';
 
 import { useEffect, useState, useCallback } from 'react';
+import { loginUrlHere } from '@/lib/auth-redirect';
 import { useRouter } from 'next/navigation';
 import dynamic from 'next/dynamic';
 import { userProfileService, Address } from '@/lib/services/user-profile.service';
 import { Button } from '@/components/ui/button';
+import { LoadError } from '@/components/ui/LoadError';
 import { useToast } from '@/components/ui/toast';
+import { useDialogs } from '@/components/ui/Dialogs';
 import { apiClient } from '@/lib/api-client';
 import { useAuthStore } from '@/lib/store/auth-store';
 import { DashboardLayout, CUSTOMER_SIDEBAR_ITEMS } from '@/components/layout/DashboardShell';
 import { useT } from '@/lib/i18n';
 import { commonMessages } from '@/lib/i18n/messages/common';
 import { accountMessages } from '@/lib/i18n/messages/account';
+import { CITIES } from '@/lib/cities';
+import { reverseGeocode, GeocodedPlace } from '@/lib/geocode';
 
 function MapLoading() {
   const t = useT(accountMessages);
@@ -82,16 +87,35 @@ const popularAreasByCity: Record<string, string[]> = {
 
 // Get areas based on selected city
 const getAreasForCity = (city: string): string[] => {
-  return popularAreasByCity[city] || popularAreasByCity['Karachi'];
+  return popularAreasByCity[city] || [];
 };
 
 // Cities for dropdown
-const cities = ['Karachi', 'Lahore', 'Islamabad', 'Rawalpindi', 'Faisalabad', 'Multan', 'Peshawar', 'Quetta', 'Hyderabad', 'Sialkot'];
+
+/** The address form with what the map said about a pin filled in; whatever it did not say stays as the person had it. */
+function withPlace<T extends { city: string; area: string; addressLine1: string; houseNumber: string; postalCode: string; latitude: string; longitude: string }>(
+  form: T,
+  place: GeocodedPlace,
+  lat: number,
+  lng: number
+): T {
+  return {
+    ...form,
+    latitude: lat.toString(),
+    longitude: lng.toString(),
+    city: place.city || form.city,
+    area: place.area || form.area,
+    addressLine1: place.street || form.addressLine1,
+    houseNumber: place.houseNumber || form.houseNumber,
+    postalCode: place.postalCode || form.postalCode,
+  };
+}
 
 export default function AddressesPage() {
   const router = useRouter();
   const { isAuthenticated } = useAuthStore();
   const { showToast } = useToast();
+  const { confirm: confirmDialog } = useDialogs();
   const t = useT(accountMessages);
   const tc = useT(commonMessages);
   // A saved label we know (Home/Work/Other) is shown in the current language; anything else as typed.
@@ -101,6 +125,8 @@ export default function AddressesPage() {
   };
   const [addresses, setAddresses] = useState<Address[]>([]);
   const [loading, setLoading] = useState(true);
+  // Why the list could not be read; shown instead of "No addresses saved yet", which would be untrue.
+  const [loadError, setLoadError] = useState<unknown>(null);
   const [showAddForm, setShowAddForm] = useState(false);
   const [editingAddress, setEditingAddress] = useState<Address | null>(null);
   const [showMap, setShowMap] = useState(false);
@@ -113,8 +139,9 @@ export default function AddressesPage() {
     label: 'home',
     addressLine1: '',
     addressLine2: '',
+    houseNumber: '',
     area: '',
-    city: 'Karachi',
+    city: '',
     postalCode: '',
     landmark: '',
     isDefault: false,
@@ -128,7 +155,7 @@ export default function AddressesPage() {
   useEffect(() => {
     // The saved session loads a moment after the page; a stored token means "signed in".
     if (!isAuthenticated && !apiClient.getAccessToken()) {
-      router.push('/login');
+      router.push(loginUrlHere());
       return;
     }
     loadAddresses();
@@ -136,92 +163,16 @@ export default function AddressesPage() {
 
   const loadAddresses = async () => {
     setLoading(true);
+    setLoadError(null);
     try {
       const response = await userProfileService.getAddresses();
       setAddresses(response.data);
     } catch (error) {
       console.error('Failed to load addresses:', error);
+      setLoadError(error);
     } finally {
       setLoading(false);
     }
-  };
-
-  // City name mappings (Urdu to English) for Pakistan
-  const cityMappings: Record<string, string> = {
-    'لاہور': 'Lahore',
-    'ضلع لاہور': 'Lahore',
-    'کراچی': 'Karachi',
-    'اسلام آباد': 'Islamabad',
-    'راولپنڈی': 'Rawalpindi',
-    'فیصل آباد': 'Faisalabad',
-    'ملتان': 'Multan',
-    'پشاور': 'Peshawar',
-    'کوئٹہ': 'Quetta',
-    'حیدرآباد': 'Hyderabad',
-    'سیالکوٹ': 'Sialkot',
-  };
-
-  // Detect city from coordinates (approximate bounding boxes for major cities)
-  const detectCityFromCoords = (lat: number, lng: number): string | null => {
-    // Lahore: ~31.3-31.7 lat, ~74.1-74.5 lng
-    if (lat >= 31.3 && lat <= 31.7 && lng >= 74.1 && lng <= 74.5) return 'Lahore';
-    // Karachi: ~24.7-25.1 lat, ~66.8-67.3 lng
-    if (lat >= 24.7 && lat <= 25.1 && lng >= 66.8 && lng <= 67.3) return 'Karachi';
-    // Islamabad: ~33.5-33.8 lat, ~72.8-73.3 lng
-    if (lat >= 33.5 && lat <= 33.8 && lng >= 72.8 && lng <= 73.3) return 'Islamabad';
-    // Rawalpindi: ~33.4-33.7 lat, ~73.0-73.2 lng
-    if (lat >= 33.4 && lat <= 33.7 && lng >= 73.0 && lng <= 73.2) return 'Rawalpindi';
-    // Faisalabad: ~31.3-31.6 lat, ~72.9-73.2 lng
-    if (lat >= 31.3 && lat <= 31.6 && lng >= 72.9 && lng <= 73.2) return 'Faisalabad';
-    // Multan: ~29.9-30.3 lat, ~71.3-71.6 lng
-    if (lat >= 29.9 && lat <= 30.3 && lng >= 71.3 && lng <= 71.6) return 'Multan';
-    // Peshawar: ~33.9-34.1 lat, ~71.4-71.7 lng
-    if (lat >= 33.9 && lat <= 34.1 && lng >= 71.4 && lng <= 71.7) return 'Peshawar';
-    // Quetta: ~30.1-30.3 lat, ~66.9-67.1 lng
-    if (lat >= 30.1 && lat <= 30.3 && lng >= 66.9 && lng <= 67.1) return 'Quetta';
-    // Hyderabad: ~25.3-25.5 lat, ~68.3-68.5 lng
-    if (lat >= 25.3 && lat <= 25.5 && lng >= 68.3 && lng <= 68.5) return 'Hyderabad';
-    // Sialkot: ~32.4-32.6 lat, ~74.4-74.6 lng
-    if (lat >= 32.4 && lat <= 32.6 && lng >= 74.4 && lng <= 74.6) return 'Sialkot';
-    return null;
-  };
-
-  // Match city name (handles English, Urdu, and partial matches)
-  const matchCityName = (addressData: Record<string, string>, lat: number, lng: number): string => {
-    // Collect all possible city fields
-    const possibleCityFields = [
-      addressData.city,
-      addressData.town,
-      addressData.village,
-      addressData.county,
-      addressData.district,
-      addressData.state_district,
-      addressData.municipality,
-    ].filter(Boolean);
-
-    // First, try to match from Urdu mappings
-    for (const field of possibleCityFields) {
-      if (cityMappings[field]) {
-        return cityMappings[field];
-      }
-    }
-
-    // Then, try to match English names (case-insensitive, partial match)
-    for (const field of possibleCityFields) {
-      const fieldLower = field.toLowerCase();
-      const match = cities.find(city => 
-        fieldLower.includes(city.toLowerCase()) ||
-        city.toLowerCase().includes(fieldLower)
-      );
-      if (match) return match;
-    }
-
-    // Finally, fallback to coordinate-based detection
-    const coordCity = detectCityFromCoords(lat, lng);
-    if (coordCity) return coordCity;
-
-    // Default fallback
-    return 'Karachi';
   };
 
   // Detect current location using GPS
@@ -241,59 +192,15 @@ export default function AddressesPage() {
         // Update map coordinates to user's ACTUAL location
         setMapCoords({ lat: latitude, lng: longitude });
         
-        // Use our API proxy for reverse geocoding (avoids CORS with Nominatim)
-        try {
-          const response = await fetch(
-            `/api/geocode/reverse?lat=${encodeURIComponent(latitude)}&lon=${encodeURIComponent(longitude)}`
-          );
-          if (!response.ok) throw new Error('Geocode failed');
-          const data = await response.json();
-          
-          if (data && data.address) {
-            const addr = data.address;
-            
-            // Use our smart city matching (handles Urdu names + coordinate fallback)
-            const matchedCity = matchCityName(addr, latitude, longitude);
-            
-            // Auto-fill form fields from reverse geocoding
-            setFormData(prev => ({
-              ...prev,
-              latitude: latitude.toString(),
-              longitude: longitude.toString(),
-              // Set matched city from our dropdown list
-              city: matchedCity,
-              // Try to get area/suburb (handle Urdu suburb names)
-              area: addr.suburb || addr.neighbourhood || addr.quarter || addr.residential || prev.area,
-              // Try to get street address
-              addressLine1: addr.road ? `${addr.house_number || ''} ${addr.road}`.trim() : prev.addressLine1,
-              postalCode: addr.postcode || prev.postalCode,
-            }));
-            
-            showToast(t('locationDetectedCity', { city: matchedCity }), 'success');
-          } else {
-            // No address data, use coordinate-based city detection
-            const coordCity = detectCityFromCoords(latitude, longitude);
-            setFormData(prev => ({
-              ...prev,
-              latitude: latitude.toString(),
-              longitude: longitude.toString(),
-              city: coordCity || prev.city,
-            }));
-            showToast(coordCity ? t('locationDetectedCityFill', { city: coordCity }) : t('locationDetectedFill'), 'success');
-          }
-        } catch (error) {
-          console.error('Reverse geocoding error:', error);
-          // Use coordinate-based detection as fallback
-          const coordCity = detectCityFromCoords(latitude, longitude);
-          setFormData(prev => ({
-            ...prev,
-            latitude: latitude.toString(),
-            longitude: longitude.toString(),
-            city: coordCity || prev.city,
-          }));
-          showToast(coordCity ? t('locationDetectedCityFill', { city: coordCity }) : t('locationDetectedFill'), 'success');
+        // What the map says is at the pin; with no answer, the city the pin itself is in (or nothing)
+        const place = await reverseGeocode(latitude, longitude);
+        setFormData((prev) => withPlace(prev, place, latitude, longitude));
+        if (place.fromService) {
+          showToast(place.city ? t('locationDetectedCity', { city: place.city }) : t('locationDetectedFill'), 'success');
+        } else {
+          showToast(place.city ? t('locationDetectedCityFill', { city: place.city }) : t('locationDetectedFill'), 'success');
         }
-        
+
         setDetectingLocation(false);
         setShowMap(true); // Auto-open map centered on user's location
       },
@@ -350,6 +257,7 @@ export default function AddressesPage() {
         label: addressTypes.find(a => a.id === formData.label)?.label || formData.label,
         addressLine1: formData.addressLine1,
         addressLine2: formData.addressLine2,
+        houseNumber: formData.houseNumber,
         area: formData.area,
         city: formData.city,
         postalCode: formData.postalCode,
@@ -378,7 +286,7 @@ export default function AddressesPage() {
   };
 
   const handleDeleteAddress = async (addressId: string) => {
-    if (!confirm(t('confirmDeleteAddress'))) return;
+    if (!(await confirmDialog({ message: t('confirmDeleteAddress') }))) return;
     try {
       await userProfileService.deleteAddress(addressId);
       showToast(t('addressDeleted'), 'success');
@@ -404,8 +312,9 @@ export default function AddressesPage() {
       label: typeId,
       addressLine1: address.addressLine1 || '',
       addressLine2: address.addressLine2 || '',
+      houseNumber: address.houseNumber || '',
       area: address.area || '',
-      city: address.city || 'Karachi',
+      city: address.city || '',
       postalCode: address.postalCode || '',
       landmark: address.landmark || '',
       isDefault: address.isDefault || false,
@@ -425,8 +334,9 @@ export default function AddressesPage() {
       label: 'home',
       addressLine1: '',
       addressLine2: '',
+      houseNumber: '',
       area: '',
-      city: 'Karachi',
+      city: '',
       postalCode: '',
       landmark: '',
       isDefault: false,
@@ -454,6 +364,9 @@ export default function AddressesPage() {
     );
   }
 
+  // The addresses could not be read: the two counters would say "0" and "None" about a list nobody has seen.
+  const couldNotRead = !loading && Boolean(loadError) && addresses.length === 0;
+
   return (
     <DashboardLayout
       title={t('myAddresses')}
@@ -469,7 +382,7 @@ export default function AddressesPage() {
               <MapPin className="w-6 h-6" />
             </div>
             <div>
-              <p className="text-2xl font-bold text-gray-900">{addresses.length}</p>
+              <p className="text-2xl font-bold text-gray-900">{couldNotRead ? '–' : addresses.length}</p>
               <p className="text-sm text-gray-500">{t('savedAddresses')}</p>
             </div>
           </div>
@@ -482,7 +395,7 @@ export default function AddressesPage() {
             </div>
             <div>
               <p className="text-2xl font-bold text-gray-900">
-                {addressLabel(addresses.find(a => a.isDefault)?.label) || t('none')}
+                {couldNotRead ? '–' : addressLabel(addresses.find(a => a.isDefault)?.label) || t('none')}
               </p>
               <p className="text-sm text-gray-500">{t('defaultAddress')}</p>
             </div>
@@ -563,7 +476,7 @@ export default function AddressesPage() {
                   onClick={() => setShowMap(!showMap)}
                   className="flex items-center gap-3 p-4 bg-gradient-to-r from-green-50 to-green-100 border-2 border-green-200 rounded-xl hover:border-green-400 transition-all group"
                 >
-                  <div className="w-10 h-10 bg-green-500 rounded-xl flex items-center justify-center group-hover:scale-110 transition-transform text-white">
+                  <div className="w-10 h-10 bg-green-600 rounded-xl flex items-center justify-center group-hover:scale-110 transition-transform text-white">
                     <MapIcon className="w-5 h-5" />
                   </div>
                   <div className="text-start">
@@ -588,48 +501,9 @@ export default function AddressesPage() {
                     }));
                     setMapCoords({ lat: coords.lat, lng: coords.lng });
                     
-                    // Reverse geocode the clicked location via our API proxy
-                    try {
-                      const response = await fetch(
-                        `/api/geocode/reverse?lat=${encodeURIComponent(coords.lat)}&lon=${encodeURIComponent(coords.lng)}`
-                      );
-                      if (!response.ok) throw new Error('Geocode failed');
-                      const data = await response.json();
-                      
-                      if (data && data.address) {
-                        const addr = data.address;
-                        
-                        // Use smart city matching (handles Urdu + coordinate fallback)
-                        const matchedCity = matchCityName(addr, coords.lat, coords.lng);
-                        
-                        setFormData(prev => ({
-                          ...prev,
-                          latitude: coords.lat.toString(),
-                          longitude: coords.lng.toString(),
-                          city: matchedCity,
-                          area: addr.suburb || addr.neighbourhood || addr.quarter || addr.residential || prev.area,
-                          addressLine1: addr.road ? `${addr.house_number || ''} ${addr.road}`.trim() : prev.addressLine1,
-                          postalCode: addr.postcode || prev.postalCode,
-                        }));
-                        
-                        showToast(t('citySelected', { city: matchedCity }), 'success');
-                      } else {
-                        // No address data, use coordinate-based detection
-                        const coordCity = detectCityFromCoords(coords.lat, coords.lng);
-                        if (coordCity) {
-                          setFormData(prev => ({ ...prev, city: coordCity }));
-                          showToast(t('citySelected', { city: coordCity }), 'success');
-                        }
-                      }
-                    } catch (error) {
-                      console.error('Reverse geocoding error:', error);
-                      // Fallback to coordinate-based detection
-                      const coordCity = detectCityFromCoords(coords.lat, coords.lng);
-                      if (coordCity) {
-                        setFormData(prev => ({ ...prev, city: coordCity }));
-                        showToast(t('citySelected', { city: coordCity }), 'success');
-                      }
-                    }
+                    const place = await reverseGeocode(coords.lat, coords.lng);
+                    setFormData((prev) => withPlace(prev, place, coords.lat, coords.lng));
+                    if (place.city) showToast(t('citySelected', { city: place.city }), 'success');
                   }}
                   height="300px"
                   draggable={true}
@@ -692,15 +566,21 @@ export default function AddressesPage() {
                   <label className="block text-sm font-semibold text-gray-700 mb-2">
                     {t('city')} <span className="text-red-500">*</span>
                   </label>
-                  <select
+                  <input
+                    type="text"
+                    list="address-cities"
+                    required
+                    maxLength={100}
                     value={formData.city}
                     onChange={(e) => setFormData({ ...formData, city: e.target.value })}
+                    placeholder={t('cityPlaceholder')}
                     className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all bg-white"
-                  >
-                    {cities.map(city => (
-                      <option key={city} value={city}>{city}</option>
+                  />
+                  <datalist id="address-cities">
+                    {CITIES.map(city => (
+                      <option key={city} value={city} />
                     ))}
-                  </select>
+                  </datalist>
                 </div>
                 
                 <div className="relative">
@@ -727,7 +607,7 @@ export default function AddressesPage() {
                           onClick={() => selectArea(area)}
                           className="w-full px-4 py-3 text-start hover:bg-orange-50 transition-colors flex items-center gap-2"
                         >
-                          <MapPin className="w-4 h-4 text-gray-400 shrink-0" />
+                          <MapPin className="w-4 h-4 text-gray-500 shrink-0" />
                           <span className="text-gray-700">{area}</span>
                         </button>
                       ))}
@@ -751,18 +631,33 @@ export default function AddressesPage() {
                 />
               </div>
 
-              {/* Flat/Floor */}
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">
-                  {t('flatFloor')}
-                </label>
-                <input
-                  type="text"
-                  value={formData.addressLine2}
-                  onChange={(e) => setFormData({ ...formData, addressLine2: e.target.value })}
-                  placeholder={t('flatFloorPlaceholder')}
-                  className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all"
-                />
+              {/* House number & Flat/Floor */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">
+                    {t('houseNumber')}
+                  </label>
+                  <input
+                    type="text"
+                    value={formData.houseNumber}
+                    onChange={(e) => setFormData({ ...formData, houseNumber: e.target.value })}
+                    placeholder={t('houseNumberPlaceholder')}
+                    maxLength={50}
+                    className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">
+                    {t('flatFloor')}
+                  </label>
+                  <input
+                    type="text"
+                    value={formData.addressLine2}
+                    onChange={(e) => setFormData({ ...formData, addressLine2: e.target.value })}
+                    placeholder={t('flatFloorPlaceholder')}
+                    className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all"
+                  />
+                </div>
               </div>
 
               {/* Landmark & Postal Code */}
@@ -846,7 +741,9 @@ export default function AddressesPage() {
       )}
 
       {/* Addresses List */}
-      {addresses.length === 0 ? (
+      {loadError && addresses.length === 0 ? (
+        <LoadError error={loadError} onRetry={loadAddresses} title={t('addressesLoadFailed')} />
+      ) : addresses.length === 0 ? (
         <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-12 text-center">
           <div className="w-24 h-24 bg-gradient-to-br from-orange-100 to-red-100 rounded-full flex items-center justify-center mx-auto mb-6 text-[#FF5500]">
             <MapPin className="w-12 h-12" />
@@ -905,7 +802,7 @@ export default function AddressesPage() {
                       {!address.isDefault && (
                         <button 
                           onClick={() => handleSetDefault(address.id)}
-                          className="p-2 text-gray-400 hover:text-orange-600 hover:bg-orange-50 rounded-lg transition-colors"
+                          className="p-2 text-gray-500 hover:text-orange-600 hover:bg-orange-50 rounded-lg transition-colors"
                           title={t('setAsDefault')}
                         >
                           <Star className="w-4 h-4 text-amber-500" />
@@ -913,14 +810,14 @@ export default function AddressesPage() {
                       )}
                       <button 
                         onClick={() => handleEditAddress(address)}
-                        className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                        className="p-2 text-gray-500 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
                         title={tc('edit')}
                       >
                         <Pencil className="w-4 h-4 text-slate-600" />
                       </button>
                       <button 
                         onClick={() => handleDeleteAddress(address.id)}
-                        className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                        className="p-2 text-gray-500 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
                         title={tc('delete')}
                       >
                         <Trash2 className="w-4 h-4 text-rose-500" />
@@ -931,7 +828,7 @@ export default function AddressesPage() {
                   {/* Card Body */}
                   <div className="p-5">
                     <div className="space-y-1 text-gray-700">
-                      <p className="font-medium">{address.addressLine1}</p>
+                      <p className="font-medium">{[address.houseNumber, address.addressLine1].filter(Boolean).join(', ')}</p>
                       {address.addressLine2 && <p className="text-gray-500">{address.addressLine2}</p>}
                       <p className="text-gray-500">{address.area}, {address.city}</p>
                     </div>
@@ -940,12 +837,12 @@ export default function AddressesPage() {
                       <div className="mt-4 pt-4 border-t border-gray-100 flex flex-wrap gap-2">
                         {address.landmark && (
                           <span className="inline-flex items-center gap-1.5 text-xs bg-gray-100 text-gray-600 px-3 py-1.5 rounded-lg">
-                            <MapPin className="w-3.5 h-3.5 text-slate-400 shrink-0" /> {address.landmark}
+                            <MapPin className="w-3.5 h-3.5 text-slate-500 shrink-0" /> {address.landmark}
                           </span>
                         )}
                         {address.postalCode && (
                           <span className="inline-flex items-center gap-1.5 text-xs bg-gray-100 text-gray-600 px-3 py-1.5 rounded-lg">
-                            <Mail className="w-3.5 h-3.5 text-slate-400 shrink-0" /> {address.postalCode}
+                            <Mail className="w-3.5 h-3.5 text-slate-500 shrink-0" /> {address.postalCode}
                           </span>
                         )}
                       </div>

@@ -34,7 +34,7 @@ async function createVerifiedCustomerWithData() {
   const ctx = await api();
   const suffix = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
   const email = `customer-e2e-${suffix}@example.com`;
-  const password = 'Password123!';
+  const password = 'Lantern-Quartz-71!';
 
   // Register
   await postJson(ctx, '/auth/register', {

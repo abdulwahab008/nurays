@@ -69,7 +69,7 @@ function LocationMapInner({
         if (!isMounted || !mapRef.current) return;
 
         // Marker images come from our own build, not a CDN (works offline, no third party).
-        delete (L.Icon.Default.prototype as any)._getIconUrl;
+        delete (L.Icon.Default.prototype as unknown as { _getIconUrl?: unknown })._getIconUrl;
         L.Icon.Default.mergeOptions({
           iconRetinaUrl: markerIcon2x.src,
           iconUrl: markerIcon.src,
@@ -316,7 +316,7 @@ L.tileLayer(MAP_TILE_URL, { attribution: MAP_ATTRIBUTION, maxZoom: MAP_MAX_ZOOM 
             placeholder={t('mapSearchPlaceholder')}
             className="w-full ps-8 pe-16 py-1.5 text-xs rounded-xl border border-slate-200 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-[#FF5500] outline-none transition-all"
           />
-          <Search className="w-3.5 h-3.5 text-slate-400 absolute start-2.5 top-2.5 pointer-events-none" />
+          <Search className="w-3.5 h-3.5 text-slate-500 absolute start-2.5 top-2.5 pointer-events-none" />
           <button
             type="button"
             onClick={() => handleSearch()}
@@ -394,7 +394,7 @@ const LocationMap = dynamic(() => Promise.resolve(LocationMapInner), {
   ssr: false,
   loading: () => (
     <div className="bg-slate-100 rounded-2xl flex items-center justify-center border border-slate-200" style={{ height: '300px' }}>
-      <div className="flex items-center gap-2 text-xs font-semibold text-slate-400">
+      <div className="flex items-center gap-2 text-xs font-semibold text-slate-500">
         <Loader2 className="w-4 h-4 animate-spin" />
         <MapLoadingText />
       </div>

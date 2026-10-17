@@ -76,7 +76,8 @@ export const safepayReturn = async (req: Request, res: Response) => {
 
   if (!tracker || !verifySafepayReturn(tracker, sig)) {
     logger.warn({ tracker }, 'Safepay return with a missing or invalid signature');
-    const attempt = tracker ? await attemptByTracker(tracker) : null;
+    // The customer is mid-redirect here too: a tracker the database refuses must not turn the landing page into a JSON error.
+    const attempt = tracker ? await attemptByTracker(tracker).catch(() => null) : null;
     return res.redirect(
       303,
       landingUrlFor({ outcome: 'unknown', purpose: attempt?.purpose as 'order' | 'wallet_topup' | undefined, orderId: attempt?.orderId }, false)
@@ -108,7 +109,7 @@ export const safepayWebhook = async (req: Request, res: Response) => {
   const signature = req.get('x-sfpy-signature') ?? undefined;
   if (!verifySafepayWebhook(req.body, signature)) {
     logger.warn('Safepay webhook with an invalid signature: rejected');
-    return res.status(401).json({ error: 'Invalid signature' });
+    throw new AppError('Invalid webhook signature', 401, 'INVALID_WEBHOOK_SIGNATURE');
   }
   const tracker = successfulTrackerFromWebhook(req.body);
   if (!tracker) {
@@ -120,6 +121,6 @@ export const safepayWebhook = async (req: Request, res: Response) => {
     return res.status(200).json({ received: true, outcome: result.outcome });
   } catch (err) {
     logger.error({ err, tracker }, 'Safepay webhook could not be applied');
-    return res.status(500).json({ error: 'Internal error' });
+    throw err; // the error handler answers 500 in the usual shape, and Safepay retries
   }
 };

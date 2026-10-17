@@ -2,9 +2,11 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
-import { UserLayout } from '@/components/layout/UserLayout';
+import { AdminShell } from '@/components/layout/AdminShell';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/toast';
+import { LoadError } from '@/components/ui/LoadError';
+import { useDialogs } from '@/components/ui/Dialogs';
 import { apiClient, apiErrorMessage } from '@/lib/api-client';
 import { formatDate, formatDateTime } from '@/lib/utils';
 
@@ -46,6 +48,7 @@ const TYPE_LABEL: Record<string, string> = {
 /** Every account: find someone, see what they are, suspend or reactivate them. */
 export default function AdminUsersPage() {
   const { showToast } = useToast();
+  const { confirm: confirmDialog } = useDialogs();
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [total, setTotal] = useState(0);
   const [totalPages, setTotalPages] = useState(1);
@@ -55,6 +58,8 @@ export default function AdminUsersPage() {
   const [search, setSearch] = useState('');
   const [query, setQuery] = useState('');
   const [loading, setLoading] = useState(true);
+  // Why the accounts could not be read; shown instead of "No accounts match", which would be untrue.
+  const [loadError, setLoadError] = useState<unknown>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
@@ -66,12 +71,15 @@ export default function AdminUsersPage() {
       setUsers(res.data.data.users);
       setTotal(res.data.data.pagination.total);
       setTotalPages(res.data.data.pagination.totalPages || 1);
+      setLoadError(null);
     } catch (error) {
-      showToast(apiErrorMessage(error, 'Failed to load accounts'), 'error');
+      // The accounts on the screen belong to the search before this change, so they go with the failure.
+      setUsers([]);
+      setLoadError(error);
     } finally {
       setLoading(false);
     }
-  }, [query, type, status, page, showToast]);
+  }, [query, type, status, page]);
 
   useEffect(() => {
     load();
@@ -79,7 +87,7 @@ export default function AdminUsersPage() {
 
   const changeStatus = async (u: AdminUser, next: 'active' | 'suspended') => {
     const extra = u.seller ? ' Their kitchen stops taking orders too.' : u.rider ? ' Their rider account is suspended too.' : '';
-    if (next === 'suspended' && !window.confirm(`Suspend ${u.name || u.phone}? They are signed out everywhere and can't sign in.${extra}`)) return;
+    if (next === 'suspended' && !(await confirmDialog({ title: 'Suspend this account?', message: `Suspend ${u.name || u.phone}? They are signed out everywhere and can't sign in.${extra}`, confirmText: 'Suspend', variant: 'warning' }))) return;
     try {
       setBusyId(u.id);
       await apiClient.post(`/admin/users/${u.id}/status`, { status: next });
@@ -93,7 +101,7 @@ export default function AdminUsersPage() {
   };
 
   return (
-    <UserLayout showSidebar={true} showNavbar={true}>
+    <AdminShell>
       <div className="max-w-6xl mx-auto space-y-5">
         <div>
           <h1 className="text-3xl font-bold text-gray-900">People</h1>
@@ -151,6 +159,8 @@ export default function AdminUsersPage() {
         <div className="bg-white rounded-lg border border-gray-200 overflow-x-auto">
           {loading && users.length === 0 ? (
             <p className="p-10 text-center text-gray-500">Loading…</p>
+          ) : loadError ? (
+            <LoadError error={loadError} onRetry={load} title="We couldn't load the accounts" className="m-4" />
           ) : users.length === 0 ? (
             <p className="p-10 text-center text-gray-500">No accounts match.</p>
           ) : (
@@ -174,7 +184,7 @@ export default function AdminUsersPage() {
                         {u.phoneVerified ? ' ✓' : ''}
                         {u.email ? ` · ${u.email}${u.emailVerified ? ' ✓' : ''}` : ''}
                       </p>
-                      {u.city && <p className="text-xs text-gray-400">{u.city}</p>}
+                      {u.city && <p className="text-xs text-gray-500">{u.city}</p>}
                     </td>
                     <td className="px-4 py-3">
                       <span className="inline-block px-2 py-0.5 rounded text-xs font-semibold bg-gray-100 text-gray-700">{TYPE_LABEL[u.userType] ?? u.userType}</span>{' '}
@@ -237,6 +247,6 @@ export default function AdminUsersPage() {
           )}
         </div>
       </div>
-    </UserLayout>
+    </AdminShell>
   );
 }

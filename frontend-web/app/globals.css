@@ -1,4 +1,3 @@
-@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800;900&family=Geist:wght@300;400;500;600;700&family=Geist+Mono:wght@400;500;600&family=Noto+Nastaliq+Urdu:wght@400;500;600;700&display=swap');
 @import "tailwindcss";
 @import "leaflet/dist/leaflet.css";
 
@@ -122,6 +121,32 @@
 }
 
 /* ============================================================
+   SAFE AREAS
+   The page reaches under a notch, the status bar and the home indicator (viewport-fit=cover; an edge-to-edge app
+   always does). These are 0 on a screen that has none, so nothing changes there. Fixed and sticky bars use them so
+   that no button sits where the screen cannot be seen or touched; --safe-start/--safe-end follow the direction.
+   ============================================================ */
+:root {
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-right: env(safe-area-inset-right, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-left: env(safe-area-inset-left, 0px);
+  --safe-start: var(--safe-left);
+  --safe-end: var(--safe-right);
+  /* Where a page starts under the fixed top bar: the bar's 4rem and the status bar above it */
+  --header-offset: calc(4rem + var(--safe-top));
+}
+html[dir="rtl"] {
+  --safe-start: var(--safe-right);
+  --safe-end: var(--safe-left);
+}
+/* Turned sideways, the notch is at a side: the page keeps clear of it (fixed bars do the same for themselves). */
+body {
+  padding-left: var(--safe-left);
+  padding-right: var(--safe-right);
+}
+
+/* ============================================================
    BASE RESETS & DEFAULTS
    ============================================================ */
 html, body {
@@ -134,8 +159,11 @@ html, body {
   scroll-behavior: smooth;
 }
 
-* {
-  border-color: var(--border-hair);
+/* In the base layer, so a class such as border-red-500 still wins: outside any layer this rule beat every Tailwind utility. */
+@layer base {
+  * {
+    border-color: var(--border-hair);
+  }
 }
 
 /* ============================================================
@@ -166,11 +194,12 @@ html[dir="rtl"] [data-ltr] {
   unicode-bidi: isolate;
 }
 
+/* No colour here: a heading takes the colour of what it sits in (the page's ink, or white in a dark panel), and a class
+   such as text-white on the heading itself wins. A colour set on h1-h6 outside any layer beat every Tailwind utility. */
 h1, h2, h3, h4, h5, h6 {
   font-family: var(--font-display);
   font-weight: 800;
   letter-spacing: -0.03em;
-  color: var(--fg-default);
 }
 
 ::selection {
@@ -461,6 +490,8 @@ h1, h2, h3, h4, h5, h6 {
 /* Dashboard menu: a slide-in drawer below lg (from the start side, so the right in Urdu). */
 @media (max-width: 1023.98px) {
   .nuray-drawer {
+    padding-inline-start: var(--safe-start);
+    padding-bottom: var(--safe-bottom);
     transform: translateX(-100%);
     transition: transform 200ms ease;
   }
@@ -534,11 +565,4 @@ h1, h2, h3, h4, h5, h6 {
 /* A frame whose photo did not load */
 .img-failed {
   background: linear-gradient(135deg, #f1f5f9, #e2e8f0);
-}
-
-/* Headings take the colour of a dark panel they sit in (the global heading colour was making them dark on dark) */
-.text-white :is(h1, h2, h3, h4, h5, h6):not([class*="text-"]),
-[class*="bg-slate-9"] :is(h1, h2, h3, h4, h5, h6):not([class*="text-"]),
-[class*="bg-gray-9"] :is(h1, h2, h3, h4, h5, h6):not([class*="text-"]) {
-  color: inherit;
 }

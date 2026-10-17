@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { cachedNominatim, NOMINATIM } from '@/lib/geocode-proxy';
+import { cachedNominatim, clientAddress, NOMINATIM } from '@/lib/geocode-proxy';
 
 /**
  * Proxy for Nominatim search to avoid CORS and comply with
@@ -13,5 +13,5 @@ export async function GET(request: NextRequest) {
   }
 
   const url = `${NOMINATIM}/search?format=json&q=${encodeURIComponent(query.trim().toLowerCase())}&countrycodes=pk&limit=5&addressdetails=1`;
-  return cachedNominatim(url, 'Geocoding search failed');
+  return cachedNominatim(url, 'Geocoding search failed', clientAddress(request));
 }

@@ -7,7 +7,7 @@ export class OTPService {
   /**
    * Generate and store OTP for phone verification
    */
-  async generateOTP(phone: string, purpose: 'registration' | 'login' | 'reset_password'): Promise<string> {
+  async generateOTP(phone: string, purpose: 'registration' | 'login'): Promise<string> {
     const formattedPhone = formatPhoneNumber(phone);
     
     // Check for existing unverified OTP
@@ -82,7 +82,7 @@ export class OTPService {
   async verifyOTP(
     phone: string,
     otpCode: string,
-    purpose: 'registration' | 'login' | 'reset_password'
+    purpose: 'registration' | 'login'
   ): Promise<boolean> {
     const formattedPhone = formatPhoneNumber(phone);
 

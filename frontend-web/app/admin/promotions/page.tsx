@@ -1,9 +1,11 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { UserLayout } from '@/components/layout/UserLayout';
+import { AdminShell } from '@/components/layout/AdminShell';
 import { Button } from '@/components/ui/button';
+import { LoadError } from '@/components/ui/LoadError';
 import { useToast } from '@/components/ui/toast';
+import { useDialogs } from '@/components/ui/Dialogs';
 import { apiClient, apiErrorMessage } from '@/lib/api-client';
 import { formatPrice, formatDate } from '@/lib/utils';
 
@@ -53,8 +55,11 @@ const EMPTY = {
 /** Promo codes Nuray pays for, valid on any kitchen's order (kitchens run their own deals). */
 export default function AdminPromotionsPage() {
   const { showToast } = useToast();
+  const { confirm: confirmDialog } = useDialogs();
   const [codes, setCodes] = useState<PlatformCode[]>([]);
   const [loading, setLoading] = useState(true);
+  // Why the codes could not be read; shown instead of "No platform codes yet", which would be untrue.
+  const [loadError, setLoadError] = useState<unknown>(null);
   const [form, setForm] = useState(EMPTY);
   const [showForm, setShowForm] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -63,14 +68,15 @@ export default function AdminPromotionsPage() {
   const load = useCallback(async () => {
     try {
       setLoading(true);
+      setLoadError(null);
       const res = await apiClient.get('/admin/promotions');
       setCodes(res.data.data);
     } catch (error) {
-      showToast(apiErrorMessage(error, 'Failed to load promo codes'), 'error');
+      setLoadError(error);
     } finally {
       setLoading(false);
     }
-  }, [showToast]);
+  }, []);
 
   useEffect(() => {
     load();
@@ -119,7 +125,7 @@ export default function AdminPromotionsPage() {
   };
 
   const remove = async (c: PlatformCode) => {
-    if (!window.confirm(`Delete ${c.code}?`)) return;
+    if (!(await confirmDialog({ title: 'Delete this promo code?', message: `Delete ${c.code}?`, confirmText: 'Delete' }))) return;
     try {
       setBusyId(c.id);
       await apiClient.delete(`/admin/promotions/${c.id}`);
@@ -136,7 +142,7 @@ export default function AdminPromotionsPage() {
   const label = 'block text-xs font-semibold text-gray-700 mb-1';
 
   return (
-    <UserLayout showSidebar={true} showNavbar={true}>
+    <AdminShell>
       <div className="max-w-5xl mx-auto space-y-5">
         <div className="flex flex-wrap items-end justify-between gap-3">
           <div>
@@ -209,6 +215,8 @@ export default function AdminPromotionsPage() {
         <div className="bg-white border border-gray-200 rounded-lg overflow-x-auto">
           {loading && codes.length === 0 ? (
             <p className="p-10 text-center text-gray-500">Loading…</p>
+          ) : loadError && codes.length === 0 ? (
+            <LoadError error={loadError} onRetry={load} title="We couldn't load the promo codes" className="m-4" />
           ) : codes.length === 0 ? (
             <p className="p-10 text-center text-gray-500">No platform codes yet.</p>
           ) : (
@@ -261,6 +269,6 @@ export default function AdminPromotionsPage() {
           )}
         </div>
       </div>
-    </UserLayout>
+    </AdminShell>
   );
 }

@@ -1,22 +1,10 @@
 import { Request, Response } from 'express';
 import { qstr } from '../utils/query';
 import * as stockAlertService from '../services/stock-alert.service';
-import { AppError } from '../middleware/errorHandler';
-import prisma from '../config/database';
+import { currentSellerId } from '../middleware/auth.middleware';
 
 export const getStockAlerts = async (req: Request, res: Response) => {
-  if (!req.user) {
-    throw new AppError('Authentication required', 401, 'AUTH_REQUIRED');
-  }
-
-  // Get seller ID from user
-  const seller = await prisma.seller.findUnique({
-    where: { userId: req.user.userId },
-  });
-
-  if (!seller) {
-    throw new AppError('Seller profile not found', 404, 'SELLER_NOT_FOUND');
-  }
+  const sellerId = await currentSellerId(req);
 
   const filters = {
     isRead: req.query.isRead === 'true' ? true : req.query.isRead === 'false' ? false : undefined,
@@ -24,7 +12,7 @@ export const getStockAlerts = async (req: Request, res: Response) => {
     alertType: (['low_stock', 'out_of_stock'].includes(qstr(req.query.alertType) ?? '') ? qstr(req.query.alertType) : undefined) as 'low_stock' | 'out_of_stock' | undefined,
   };
 
-  const alerts = await stockAlertService.getSellerStockAlerts(seller.id, filters);
+  const alerts = await stockAlertService.getSellerStockAlerts(sellerId, filters);
 
   res.status(200).json({
     success: true,
@@ -33,20 +21,10 @@ export const getStockAlerts = async (req: Request, res: Response) => {
 };
 
 export const markAsRead = async (req: Request, res: Response) => {
-  if (!req.user) {
-    throw new AppError('Authentication required', 401, 'AUTH_REQUIRED');
-  }
-
-  const seller = await prisma.seller.findUnique({
-    where: { userId: req.user.userId },
-  });
-
-  if (!seller) {
-    throw new AppError('Seller profile not found', 404, 'SELLER_NOT_FOUND');
-  }
+  const sellerId = await currentSellerId(req);
 
   const { alertId } = req.params;
-  const alert = await stockAlertService.markAlertAsRead(alertId, seller.id);
+  const alert = await stockAlertService.markAlertAsRead(alertId, sellerId);
 
   res.status(200).json({
     success: true,
@@ -56,20 +34,10 @@ export const markAsRead = async (req: Request, res: Response) => {
 };
 
 export const dismissAlert = async (req: Request, res: Response) => {
-  if (!req.user) {
-    throw new AppError('Authentication required', 401, 'AUTH_REQUIRED');
-  }
-
-  const seller = await prisma.seller.findUnique({
-    where: { userId: req.user.userId },
-  });
-
-  if (!seller) {
-    throw new AppError('Seller profile not found', 404, 'SELLER_NOT_FOUND');
-  }
+  const sellerId = await currentSellerId(req);
 
   const { alertId } = req.params;
-  const alert = await stockAlertService.dismissAlert(alertId, seller.id);
+  const alert = await stockAlertService.dismissAlert(alertId, sellerId);
 
   res.status(200).json({
     success: true,

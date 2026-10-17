@@ -82,7 +82,7 @@ export function ConfirmModal({
             type="button"
             disabled={loading}
             onClick={onCancel}
-            className="w-8 h-8 rounded-full text-slate-400 hover:text-slate-600 hover:bg-slate-100 flex items-center justify-center transition-colors disabled:opacity-50 cursor-pointer"
+            className="w-8 h-8 rounded-full text-slate-500 hover:text-slate-600 hover:bg-slate-100 flex items-center justify-center transition-colors disabled:opacity-50 cursor-pointer"
             aria-label={t('close')}
           >
             <X className="w-4 h-4" />

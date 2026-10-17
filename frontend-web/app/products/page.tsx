@@ -1,10 +1,11 @@
 'use client';
 
 import { Suspense, useEffect, useRef, useState } from 'react';
+import { loginUrlHere } from '@/lib/auth-redirect';
 import { getStackedDiscountedPrice } from '@/lib/pricing';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
-import { productService, Product } from '@/lib/services/product.service';
+import { productService, Product, ProductFilters } from '@/lib/services/product.service';
 import { addressService } from '@/lib/services/address.service';
 import { displayRating, formatPrice, imageVariant } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
@@ -16,6 +17,7 @@ import { apiClient } from '@/lib/api-client';
 import { DashboardLayout, CUSTOMER_SIDEBAR_ITEMS } from '@/components/layout/DashboardShell';
 import { BrandLockup } from '@/components/ui/Mark';
 import { useCommunityStore } from '@/lib/store/community-store';
+import { useHydrated } from '@/lib/hooks/use-hydrated';
 import { CommunitySelector } from '@/components/community/CommunitySelector';
 import { communityService, CommunityDetail, CommunityKitchen } from '@/lib/services/community.service';
 import { favoriteService } from '@/lib/services/favorite.service';
@@ -50,17 +52,13 @@ import { useT } from '@/lib/i18n';
 import { commonMessages } from '@/lib/i18n/messages/common';
 import { browseMessages, productTypeKey, type BrowseT } from '@/lib/i18n/messages/browse';
 
+type SortOption = NonNullable<ProductFilters['sort']>;
+
 interface CatalogPromotion {
   id: string;
   name: string;
   type: string;
   discountValue: number;
-}
-
-function getPromotionLabel(p: CatalogPromotion): string {
-  if (p.type === 'percentage' && p.discountValue > 0) return `${p.discountValue}% off`;
-  if (p.type === 'fixed' && p.discountValue > 0) return `${formatPrice(p.discountValue)} off`;
-  return p.name || 'Deal';
 }
 
 interface Category {
@@ -113,6 +111,9 @@ function deliveryEtaLabel(p: Product, t: BrowseT): string | null {
 }
 
 /** The API's delivery fee. Nothing when the API didn't compute one (no area or address known). */
+/** How long a signed-in buyer's first dish list waits for their saved address before it goes without a distance. */
+const ADDRESS_WAIT_MS = 2000;
+
 function deliveryFeeLabel(p: Product, t: BrowseT): string | null {
   if (!p.delivery) return null;
   if (!p.delivery.deliverable) return t('deliveryNotHere');
@@ -143,7 +144,7 @@ function ProductsContent() {
   const [searchInput, setSearchInput] = useState(searchParams.get('search') || '');
   const [selectedCategory, setSelectedCategory] = useState('all');
   const [selectedProductType, setSelectedProductType] = useState(searchParams.get('productType') || 'all');
-  const [sortBy, setSortBy] = useState('newest');
+  const [sortBy, setSortBy] = useState<SortOption>('newest');
   const [openNow, setOpenNow] = useState(false);
   const [deliveryAvailable, setDeliveryAvailable] = useState(false);
   const [pickupAvailable, setPickupAvailable] = useState(false);
@@ -248,9 +249,15 @@ function ProductsContent() {
     }).catch(() => {});
   }, [isAuthenticated]);
 
-  // Customer coordinates for accurate delivery distance
+  // Customer coordinates for accurate delivery distance. A signed-in buyer's first list waits for them (for at most
+  // ADDRESS_WAIT_MS), so the dishes are asked for once with the distance in, not again when the address arrives.
+  const [addressSettled, setAddressSettled] = useState(false);
   useEffect(() => {
     if (!isAuthenticated) return;
+    let live = true;
+    const giveUp = setTimeout(() => {
+      if (live) setAddressSettled(true);
+    }, ADDRESS_WAIT_MS);
     addressService
       .getAddresses()
       .then((res) => {
@@ -260,15 +267,28 @@ function ProductsContent() {
           setCustomerLocation({ lat: withCoords.coordinates.latitude, lng: withCoords.coordinates.longitude });
         }
       })
-      .catch(() => setCustomerLocation(null));
+      .catch(() => setCustomerLocation(null))
+      .finally(() => {
+        clearTimeout(giveUp);
+        if (live) setAddressSettled(true);
+      });
+    return () => {
+      live = false;
+      clearTimeout(giveUp);
+    };
   }, [isAuthenticated]);
+  // The first render still sees the signed-out state the server drew, so nothing is asked for until the browser has
+  // read the session.
+  const hydrated = useHydrated();
+  const waitingForAddress = !hydrated || (isAuthenticated && !addressSettled);
 
   useEffect(() => {
+    if (waitingForAddress) return;
     loadProducts();
   }, [
     page, selectedCategory, selectedProductType, sortBy, searchQuery, openNow,
     deliveryAvailable, pickupAvailable, freeDelivery, offersAvailable,
-    businessType, maxDistanceKm, fastDeliveryOnly, customerLocation, selectedCommunity?.id,
+    businessType, maxDistanceKm, fastDeliveryOnly, customerLocation, selectedCommunity?.id, waitingForAddress,
   ]);
 
   useEffect(() => {
@@ -287,13 +307,13 @@ function ProductsContent() {
     setLoading(true);
     setError('');
     try {
-      const productTypeValue = selectedProductType !== 'all' ? (selectedProductType as any) : undefined;
+      const productTypeValue = selectedProductType !== 'all' ? (selectedProductType as ProductFilters['productType']) : undefined;
       const response = await productService.getProducts({
         page,
         limit: 24,
         categoryId: selectedCategory !== 'all' ? selectedCategory : undefined,
         productType: productTypeValue,
-        sort: sortBy as any,
+        sort: sortBy,
         search: searchQuery || undefined,
         communityId: selectedCommunity?.id,
         openNow: openNow || undefined,
@@ -355,7 +375,7 @@ function ProductsContent() {
     e.preventDefault();
     e.stopPropagation();
     if (!isAuthenticated) {
-      router.push('/login');
+      router.push(loginUrlHere());
       return;
     }
     setAddingProductId(product.id);
@@ -401,7 +421,7 @@ function ProductsContent() {
     e.preventDefault();
     e.stopPropagation();
     if (!isAuthenticated) {
-      router.push('/login');
+      router.push(loginUrlHere());
       return;
     }
     try {
@@ -494,7 +514,7 @@ function ProductsContent() {
         <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-2.5">
           {/* Clean Search Input */}
           <form onSubmit={handleSearch} className="flex-1 relative flex items-center">
-            <Search className="w-4 h-4 text-slate-400 absolute start-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+            <Search className="w-4 h-4 text-slate-500 absolute start-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
             <input
               type="text"
               placeholder={t('searchPlaceholder')}
@@ -510,7 +530,7 @@ function ProductsContent() {
                   setSearchQuery('');
                   setPage(1);
                 }}
-                className="absolute end-12 top-1/2 -translate-y-1/2 p-1 text-slate-400 hover:text-slate-600 rounded-full cursor-pointer"
+                className="absolute end-12 top-1/2 -translate-y-1/2 p-1 text-slate-500 hover:text-slate-600 rounded-full cursor-pointer"
                 title={t('clearSearch')}
               >
                 <X className="w-3.5 h-3.5" />
@@ -575,7 +595,7 @@ function ProductsContent() {
             <select
               value={sortBy}
               onChange={(e) => {
-                setSortBy(e.target.value);
+                setSortBy(e.target.value as SortOption);
                 setPage(1);
               }}
               className="border border-slate-200 rounded-xl px-3 py-1 text-xs font-semibold text-slate-700 bg-white hover:border-slate-300 focus:ring-2 focus:ring-slate-900 h-10 cursor-pointer"
@@ -720,7 +740,7 @@ function ProductsContent() {
         <div>
           <div className="flex items-center justify-between mb-5 flex-wrap gap-3">
             <div>
-              <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-orange-100 text-[#FF5500] text-[11px] font-bold uppercase tracking-wider mb-1">
+              <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-orange-100 text-orange-800 text-[11px] font-bold uppercase tracking-wider mb-1">
                 <MapPin className="w-3 h-3 text-[#FF5500]" />
                 <span>{t('hyperlocal', { name: communityName })}</span>
               </div>
@@ -1135,7 +1155,7 @@ function ProductsContent() {
                       <div className="flex items-center gap-1 text-[11px] text-slate-500 mt-1">
                         {feeLabel && (
                           <>
-                            <Bike className="w-3 h-3 text-slate-400 shrink-0" />
+                            <Bike className="w-3 h-3 text-slate-500 shrink-0" />
                             <span title={product.delivery?.reason || undefined}>{feeLabel}</span>
                           </>
                         )}
@@ -1151,7 +1171,7 @@ function ProductsContent() {
                           <span className="text-base font-black text-slate-950">
                             {formatPrice(getStackedDiscountedPrice(product.price, promotionsByProductId[product.id]))}
                           </span>
-                          <span className="text-xs text-slate-400 line-through">
+                          <span className="text-xs text-slate-500 line-through">
                             {formatPrice(product.price)}
                           </span>
                         </div>
@@ -1166,7 +1186,7 @@ function ProductsContent() {
                             <Star className="w-3 h-3 fill-amber-400 text-amber-400" />
                             <span>{rating}</span>
                             {product.totalReviews ? (
-                              <span className="text-slate-400 font-normal">({product.totalReviews})</span>
+                              <span className="text-slate-500 font-normal">({product.totalReviews})</span>
                             ) : null}
                           </>
                         ) : (
@@ -1270,7 +1290,7 @@ function ProductsContent() {
   return (
     <div className="min-h-screen bg-[#F8FAFC] text-[#0F172A] pb-24">
       {/* Dedicated Public Catalog Header */}
-      <header className="sticky top-0 z-40 bg-white/95 backdrop-blur-md border-b border-slate-200/80 shadow-2xs">
+      <header className="sticky top-0 z-40 pt-(--safe-top) bg-white/95 backdrop-blur-md border-b border-slate-200/80 shadow-2xs">
         <div className="max-w-[1440px] mx-auto px-3 sm:px-8 h-16 flex items-center justify-between gap-2 sm:gap-4">
           <div className="flex items-center gap-6 min-w-0">
             <Link href="/" className="hover:opacity-95 transition-opacity shrink-0">
@@ -1309,7 +1329,7 @@ function ProductsContent() {
       {/* Main Multi-Vendor Marketplace Container */}
       <div className="max-w-[1440px] mx-auto px-4 sm:px-8 py-6 md:py-8">
         <div className="mb-6">
-          <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-orange-100 text-[#FF5500] text-[11px] font-bold uppercase tracking-wider mb-2">
+          <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-orange-100 text-orange-800 text-[11px] font-bold uppercase tracking-wider mb-2">
             <ChefHat className="w-3 h-3 text-[#FF5500]" />
             <span>{t('catalogBadge')}</span>
           </div>

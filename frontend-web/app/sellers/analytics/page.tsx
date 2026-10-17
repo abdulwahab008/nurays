@@ -1,10 +1,12 @@
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
+import { loginUrlHere } from '@/lib/auth-redirect';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { DashboardLayout, SELLER_SIDEBAR_ITEMS } from '@/components/layout/DashboardShell';
 import { Button } from '@/components/ui/button';
+import { useLoadFailureMessage } from '@/components/ui/LoadError';
 import { useToast } from '@/components/ui/toast';
 import { useAuthStore } from '@/lib/store/auth-store';
 import { apiClient } from '@/lib/api-client';
@@ -13,7 +15,7 @@ import { formatPrice } from '@/lib/utils';
 type PeriodType = '7d' | '30d' | '90d' | '1y';
 
 interface AnalyticsData {
-  sales: {
+  unitsSold: {
     today: number;
     thisWeek: number;
     thisMonth: number;
@@ -23,13 +25,22 @@ interface AnalyticsData {
     today: number;
     thisWeek: number;
     thisMonth: number;
+    /** What the kitchen earned on delivered and paid orders: its dishes' payout plus the delivery fee it kept, minus the one it paid Nuray. */
     total: number;
+    /** Of which the dishes alone. */
+    dishes?: number;
     graph?: Array<{ date: string; revenue: number }>;
   };
   orders: {
     total: number;
+    /** Delivered and still paid: the orders the revenue comes from. */
     completed: number;
+    /** Cancelled, or refunded to the customer. */
     cancelled: number;
+    /** Not delivered yet. */
+    inProgress?: number;
+    /** Delivered, but the money has not arrived yet. */
+    awaitingPayment?: number;
   };
   topProducts: Array<{
     name: string;
@@ -45,6 +56,7 @@ export default function SellerAnalyticsPage() {
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const failureMessage = useLoadFailureMessage();
   const [analytics, setAnalytics] = useState<AnalyticsData | null>(null);
   const [selectedPeriod, setSelectedPeriod] = useState<PeriodType>('30d');
   const [chartView, setChartView] = useState<'bar' | 'line'>('bar');
@@ -57,7 +69,7 @@ export default function SellerAnalyticsPage() {
 
   useEffect(() => {
     if (!isAuthenticated) {
-      router.push('/login');
+      router.push(loginUrlHere());
       return;
     }
 
@@ -82,12 +94,7 @@ export default function SellerAnalyticsPage() {
       }
     } catch (err: any) {
       console.error('Failed to load analytics:', err);
-      const message =
-        err.response?.data?.error?.message ||
-        err.response?.data?.message ||
-        err.message ||
-        'Failed to fetch seller analytics';
-      setError(message);
+      setError(failureMessage(err));
     } finally {
       setLoading(false);
     }
@@ -95,18 +102,22 @@ export default function SellerAnalyticsPage() {
 
   // Compute calculated metrics
   const totalRevenue = analytics?.revenue?.total ?? 0;
-  const totalUnits = analytics?.sales?.total ?? 0;
+  // The dishes' part of it. A dish's share and the average order are measured against this: a delivery fee is not a dish's.
+  const dishRevenue = analytics?.revenue?.dishes ?? totalRevenue;
+  const totalUnits = analytics?.unitsSold?.total ?? 0;
   const totalOrders = analytics?.orders?.total ?? 0;
   const completedOrders = analytics?.orders?.completed ?? 0;
   const cancelledOrders = analytics?.orders?.cancelled ?? 0;
-  const inProgressOrders = Math.max(0, totalOrders - completedOrders - cancelledOrders);
+  // The API puts each order in exactly one of four buckets (completed, in progress, awaiting payment, cancelled or refunded).
+  const inProgressOrders = analytics?.orders?.inProgress ?? Math.max(0, totalOrders - completedOrders - cancelledOrders);
+  const awaitingPaymentOrders = analytics?.orders?.awaitingPayment ?? 0;
 
   const fulfillmentRate = totalOrders > 0
     ? Math.round((completedOrders / totalOrders) * 100)
     : 100;
 
   const averageOrderValue = completedOrders > 0
-    ? Math.round(totalRevenue / completedOrders)
+    ? Math.round(dishRevenue / completedOrders)
     : 0;
 
   // Normalize graph data points across the selected time period
@@ -172,6 +183,9 @@ export default function SellerAnalyticsPage() {
     if (chartData.length === 0) return null;
     return chartData.reduce((prev, curr) => (curr.revenue > prev.revenue ? curr : prev), chartData[0]);
   }, [chartData]);
+
+  // A day can earn less than nothing (a small order whose Nuray rider cost more than its dishes): the tooltip says so, the drawing stays on its axis.
+  const plotHeight = (revenue: number) => (Math.max(0, revenue) / maxRevenueInChart) * 220;
 
   if (!isAuthenticated) {
     return null;
@@ -268,9 +282,10 @@ export default function SellerAnalyticsPage() {
           <div className="bg-white rounded-3xl p-16 border border-slate-200 text-center">
             <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-emerald-500 mx-auto mb-4"></div>
             <h3 className="text-base font-bold text-slate-900">Aggregating Kitchen Telemetry...</h3>
-            <p className="text-xs text-slate-400 mt-1">Calculating sales velocity, gross margins, and order fulfillment</p>
+            <p className="text-xs text-slate-500 mt-1">Calculating sales velocity, gross margins, and order fulfillment</p>
           </div>
-        ) : (
+        ) : !analytics ? null : (
+          // Nothing could be read (the alert above says so): no figures, which would read "Rs 0" and "100% Excellent".
           <>
             {/* 4 Core KPI Cards */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -304,11 +319,11 @@ export default function SellerAnalyticsPage() {
                   </div>
                 </div>
                 <div className="text-3xl font-black text-slate-900 tracking-tight">
-                  {totalUnits} <span className="text-sm font-semibold text-slate-400">units</span>
+                  {totalUnits} <span className="text-sm font-semibold text-slate-500">units</span>
                 </div>
                 <div className="mt-3 pt-3 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500 font-medium">
-                  <span>Today: <strong className="text-slate-900">{analytics?.sales?.today ?? 0} sold</strong></span>
-                  <span>Week: <strong className="text-slate-900">{analytics?.sales?.thisWeek ?? 0} sold</strong></span>
+                  <span>Today: <strong className="text-slate-900">{analytics?.unitsSold?.today ?? 0} sold</strong></span>
+                  <span>Week: <strong className="text-slate-900">{analytics?.unitsSold?.thisWeek ?? 0} sold</strong></span>
                 </div>
               </div>
 
@@ -493,7 +508,7 @@ export default function SellerAnalyticsPage() {
                           const barWidth = Math.max(6, Math.min(28, (usableWidth / totalBars) * 0.65));
                           const stepX = usableWidth / totalBars;
                           const cx = 55 + i * stepX + stepX / 2;
-                          const barHeight = Math.max(4, (d.revenue / maxRevenueInChart) * 220);
+                          const barHeight = Math.max(4, plotHeight(d.revenue));
                           const y = 260 - barHeight;
 
                           return (
@@ -534,7 +549,7 @@ export default function SellerAnalyticsPage() {
                                 .map((d, i) => {
                                   const stepX = 920 / chartData.length;
                                   const cx = 55 + i * stepX + stepX / 2;
-                                  const y = 260 - (d.revenue / maxRevenueInChart) * 220;
+                                  const y = 260 - plotHeight(d.revenue);
                                   return `L ${cx} ${y}`;
                                 })
                                 .join(' ')}
@@ -550,7 +565,7 @@ export default function SellerAnalyticsPage() {
                                 .map((d, i) => {
                                   const stepX = 920 / chartData.length;
                                   const cx = 55 + i * stepX + stepX / 2;
-                                  const y = 260 - (d.revenue / maxRevenueInChart) * 220;
+                                  const y = 260 - plotHeight(d.revenue);
                                   return `${i === 0 ? 'M' : 'L'} ${cx} ${y}`;
                                 })
                                 .join(' ')}
@@ -566,7 +581,7 @@ export default function SellerAnalyticsPage() {
                           {chartData.map((d, i) => {
                             const stepX = 920 / chartData.length;
                             const cx = 55 + i * stepX + stepX / 2;
-                            const y = 260 - (d.revenue / maxRevenueInChart) * 220;
+                            const y = 260 - plotHeight(d.revenue);
 
                             return (
                               <circle
@@ -660,14 +675,21 @@ export default function SellerAnalyticsPage() {
                         className="bg-purple-500 transition-all duration-500"
                         title={`In Kitchen: ${inProgressOrders}`}
                       />
+                      {awaitingPaymentOrders > 0 && (
+                        <div
+                          style={{ width: `${totalOrders > 0 ? (awaitingPaymentOrders / totalOrders) * 100 : 0}%` }}
+                          className="bg-amber-500 transition-all duration-500"
+                          title={`Delivered, payment not received: ${awaitingPaymentOrders}`}
+                        />
+                      )}
                       <div
                         style={{ width: `${totalOrders > 0 ? (cancelledOrders / totalOrders) * 100 : 0}%` }}
                         className="bg-rose-500 transition-all duration-500"
-                        title={`Cancelled: ${cancelledOrders}`}
+                        title={`Cancelled or refunded: ${cancelledOrders}`}
                       />
                     </div>
 
-                    <div className="flex items-center justify-between text-xs font-bold mt-2.5">
+                    <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 text-xs font-bold mt-2.5">
                       <div className="flex items-center gap-1.5 text-emerald-700">
                         <span className="w-2.5 h-2.5 rounded-full bg-emerald-500" />
                         <span>Completed ({completedOrders})</span>
@@ -676,9 +698,15 @@ export default function SellerAnalyticsPage() {
                         <span className="w-2.5 h-2.5 rounded-full bg-purple-500" />
                         <span>In Kitchen ({inProgressOrders})</span>
                       </div>
+                      {awaitingPaymentOrders > 0 && (
+                        <div className="flex items-center gap-1.5 text-amber-700">
+                          <span className="w-2.5 h-2.5 rounded-full bg-amber-500" />
+                          <span>Payment pending ({awaitingPaymentOrders})</span>
+                        </div>
+                      )}
                       <div className="flex items-center gap-1.5 text-rose-700">
                         <span className="w-2.5 h-2.5 rounded-full bg-rose-500" />
-                        <span>Cancelled ({cancelledOrders})</span>
+                        <span>Cancelled or refunded ({cancelledOrders})</span>
                       </div>
                     </div>
                   </div>
@@ -686,15 +714,15 @@ export default function SellerAnalyticsPage() {
                   {/* Metric Tiles */}
                   <div className="grid grid-cols-3 gap-3 p-4 bg-slate-50 rounded-2xl border border-slate-100">
                     <div className="text-center">
-                      <p className="text-[11px] font-bold text-slate-400 uppercase">Total Orders</p>
+                      <p className="text-[11px] font-bold text-slate-500 uppercase">Total Orders</p>
                       <p className="text-xl font-black text-slate-900 mt-0.5">{totalOrders}</p>
                     </div>
                     <div className="text-center border-x border-slate-200">
-                      <p className="text-[11px] font-bold text-slate-400 uppercase">Success Rate</p>
+                      <p className="text-[11px] font-bold text-slate-500 uppercase">Success Rate</p>
                       <p className="text-xl font-black text-emerald-600 mt-0.5">{fulfillmentRate}%</p>
                     </div>
                     <div className="text-center">
-                      <p className="text-[11px] font-bold text-slate-400 uppercase">Dispute Rate</p>
+                      <p className="text-[11px] font-bold text-slate-500 uppercase">Dispute Rate</p>
                       <p className="text-xl font-black text-slate-900 mt-0.5">
                         {totalOrders > 0 ? ((cancelledOrders / totalOrders) * 100).toFixed(1) : 0}%
                       </p>
@@ -737,14 +765,14 @@ export default function SellerAnalyticsPage() {
                         🍽️
                       </div>
                       <p className="text-sm font-bold text-slate-800">No Food Sales in this Range</p>
-                      <p className="text-xs text-slate-400 mt-0.5">Dishes ordered by buyers will rank here automatically</p>
+                      <p className="text-xs text-slate-500 mt-0.5">Dishes ordered by buyers will rank here automatically</p>
                     </div>
                   ) : (
                     <div className="space-y-3 mt-4">
                       {analytics.topProducts.map((product, idx) => {
                         const productRevenue = Number(product.revenue);
-                        const revenueShare = totalRevenue > 0
-                          ? Math.round((productRevenue / totalRevenue) * 100)
+                        const revenueShare = dishRevenue > 0
+                          ? Math.round((productRevenue / dishRevenue) * 100)
                           : 0;
                         const avgPrice = product.quantity > 0
                           ? Math.round(productRevenue / product.quantity)
@@ -807,7 +835,7 @@ export default function SellerAnalyticsPage() {
             <div className="bg-slate-900 text-white rounded-3xl p-6 sm:p-8 shadow-md">
               <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
                 <div>
-                  <span className="px-3 py-1 rounded-full bg-orange-500 text-white font-bold text-[11px] uppercase tracking-wider">
+                  <span className="px-3 py-1 rounded-full bg-[#FF5500] text-white font-bold text-[11px] uppercase tracking-wider">
                     Seller Studio Shortcuts
                   </span>
                   <h3 className="text-lg sm:text-xl font-black mt-2 tracking-tight">
@@ -820,7 +848,7 @@ export default function SellerAnalyticsPage() {
 
                 <div className="flex flex-wrap items-center gap-3 w-full md:w-auto">
                   <Link href="/sellers/products/new">
-                    <Button className="bg-orange-500 hover:bg-orange-600 text-white font-bold text-xs rounded-xl px-4 py-2.5">
+                    <Button className="bg-[#FF5500] hover:bg-[#e04400] text-white font-bold text-xs rounded-xl px-4 py-2.5">
                       + Add New Dish
                     </Button>
                   </Link>

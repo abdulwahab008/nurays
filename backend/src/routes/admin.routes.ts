@@ -53,7 +53,7 @@ import { auditDenied, auditWrites } from '../middleware/audit';
 import { enforceStaffPermissions } from '../middleware/staff';
 import { adminGetTickets, adminGetTicketDetail, adminReplyToTicket } from '../controllers/support.controller';
 import { authenticate, authorize } from '../middleware/auth.middleware';
-import { validate } from '../middleware/validation.middleware';
+import { validate, validateQuery } from '../middleware/validation.middleware';
 import {
   approveRejectSellerSchema,
   moderateProductSchema,
@@ -81,6 +81,8 @@ import {
 } from '../validators/admin.validator';
 import { adminReplySchema } from '../validators/support.validator';
 import { getStaff, postStaff, patchStaffRole, postStaffStatus, postStaffPassword, deleteStaff, getApprovalQueues } from '../controllers/admin-staff.controller';
+import { getReviews, postHideReview, postKeepReview, postRestoreReview } from '../controllers/admin-reviews.controller';
+import { staffReviewsQuerySchema } from '../validators/review.validator';
 
 const router = Router();
 
@@ -98,6 +100,12 @@ router.patch('/staff/:id', validate(staffRoleSchema), patchStaffRole);
 router.post('/staff/:id/status', validate(accountStatusSchema), postStaffStatus);
 router.post('/staff/:id/password', validate(staffPasswordSchema), postStaffPassword);
 router.delete('/staff/:id', deleteStaff);
+
+// Reviews that were reported, and the ones staff hid. Support staff decide these too (support.handle).
+router.get('/reviews', validateQuery(staffReviewsQuerySchema), getReviews);
+router.post('/reviews/:id/hide', postHideReview);
+router.post('/reviews/:id/keep', postKeepReview);
+router.post('/reviews/:id/restore', postRestoreReview);
 
 router.get('/audit-logs', getAuditLogs);
 router.get('/audit-logs/export', exportAuditLogs);

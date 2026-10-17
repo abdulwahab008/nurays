@@ -1,24 +1,53 @@
 version: 2
+
+# Updates are grouped so related packages move together, and a few big jumps are left for a
+# planned upgrade (Node version, TypeScript major, Prisma major), not an automatic pull request.
 updates:
   - package-ecosystem: npm
     directory: /backend
     schedule:
       interval: weekly
     open-pull-requests-limit: 5
+    groups:
+      # The CLI and the client must always be on the same version.
+      prisma:
+        patterns: ['prisma', '@prisma/*']
+      aws-sdk:
+        patterns: ['@aws-sdk/*']
+    ignore:
+      # A planned upgrade: the compiler, the lint setup and the build all change with it.
+      - dependency-name: typescript
+        update-types: ['version-update:semver-major']
   - package-ecosystem: npm
     directory: /frontend-web
     schedule:
       interval: weekly
     open-pull-requests-limit: 5
+    groups:
+      next:
+        patterns: ['next', 'eslint-config-next']
+    ignore:
+      - dependency-name: typescript
+        update-types: ['version-update:semver-major']
   - package-ecosystem: github-actions
     directory: /
     schedule:
       interval: monthly
+    groups:
+      actions:
+        patterns: ['*']
   - package-ecosystem: docker
     directory: /backend
     schedule:
       interval: weekly
+    ignore:
+      # The Node version is chosen on purpose (an LTS release, the same one CI uses), not by the bot.
+      - dependency-name: node
+        update-types: ['version-update:semver-major']
   - package-ecosystem: docker
     directory: /frontend-web
     schedule:
       interval: weekly
+    ignore:
+      - dependency-name: node
+        update-types: ['version-update:semver-major']

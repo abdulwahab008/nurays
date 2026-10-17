@@ -1,11 +1,13 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
+import { loginUrlHere } from '@/lib/auth-redirect';
 import { useRouter, useParams } from 'next/navigation';
 import Link from 'next/link';
 import { DashboardLayout, SELLER_SIDEBAR_ITEMS } from '@/components/layout/DashboardShell';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/toast';
+import { useDialogs } from '@/components/ui/Dialogs';
 import { useAuthStore } from '@/lib/store/auth-store';
 import { apiClient } from '@/lib/api-client';
 import MenuTypeField, { DEFAULT_MENU, MenuType, MenuValue, menuError, menuPayload } from '@/components/sellers/MenuTypeField';
@@ -69,6 +71,7 @@ export default function EditProductPage() {
   const productId = params.id as string;
   const { isAuthenticated, user } = useAuthStore();
   const { showToast } = useToast();
+  const { confirm: confirmDialog } = useDialogs();
   const fileInputRef = useRef<HTMLInputElement>(null);
   
   const [loading, setLoading] = useState(true);
@@ -147,7 +150,7 @@ export default function EditProductPage() {
 
   useEffect(() => {
     if (!isAuthenticated) {
-      router.push('/login');
+      router.push(loginUrlHere());
       return;
     }
 
@@ -593,7 +596,7 @@ export default function EditProductPage() {
   };
 
   const handleDelete = async () => {
-    if (!confirm('Are you sure you want to delete this product? This action cannot be undone.')) {
+    if (!(await confirmDialog({ title: 'Delete this dish?', message: 'Are you sure you want to delete this product? This action cannot be undone.', confirmText: 'Delete' }))) {
       return;
     }
 
@@ -714,7 +717,7 @@ export default function EditProductPage() {
                 <button
                   type="button"
                   onClick={() => fileInputRef.current?.click()}
-                  className="aspect-square rounded-xl border-2 border-dashed border-gray-300 hover:border-blue-400 hover:bg-blue-50 transition-all flex flex-col items-center justify-center gap-2 text-gray-400 hover:text-blue-500"
+                  className="aspect-square rounded-xl border-2 border-dashed border-gray-300 hover:border-blue-400 hover:bg-blue-50 transition-all flex flex-col items-center justify-center gap-2 text-gray-500 hover:text-blue-600"
                 >
                   <svg className="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
                     <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
@@ -754,7 +757,7 @@ export default function EditProductPage() {
             {/* Urdu Name (Optional) */}
             <div className="mb-5">
               <label className="block text-sm font-medium text-gray-700 mb-2">
-                Name in Urdu <span className="text-gray-400 font-normal">(اختیاری)</span>
+                Name in Urdu <span className="text-gray-500 font-normal">(اختیاری)</span>
               </label>
               <input
                 type="text"
@@ -841,7 +844,7 @@ export default function EditProductPage() {
                       </button>
                     ))}
                     {getCategoriesForSelectedType().length === 0 && (
-                      <p className="text-sm text-gray-400 italic">No categories available for this product type</p>
+                      <p className="text-sm text-gray-500 italic">No categories available for this product type</p>
                     )}
                   </div>
                 </div>
@@ -865,7 +868,7 @@ export default function EditProductPage() {
                             onClick={() => setFormData({ ...formData, categoryId: subCat.id })}
                             className={`px-3 py-2.5 rounded-lg text-sm font-medium transition-all flex items-center gap-2 ${
                               formData.categoryId === subCat.id
-                                ? 'bg-emerald-500 text-white shadow-md'
+                                ? 'bg-emerald-700 text-white shadow-md'
                                 : 'bg-white text-gray-600 hover:bg-gray-100 border border-gray-200'
                             }`}
                           >
@@ -915,7 +918,7 @@ export default function EditProductPage() {
                       min="1"
                       className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent text-sm"
                     />
-                    <p className="text-xs text-gray-400 mt-1">How long stays fresh</p>
+                    <p className="text-xs text-gray-500 mt-1">How long stays fresh</p>
                   </div>
                   <div>
                     <label className="block text-xs font-medium text-gray-700 mb-1">
@@ -929,7 +932,7 @@ export default function EditProductPage() {
                       min="1"
                       className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent text-sm"
                     />
-                    <p className="text-xs text-gray-400 mt-1">Time to prepare order</p>
+                    <p className="text-xs text-gray-500 mt-1">Time to prepare order</p>
                   </div>
                 </div>
               </div>
@@ -938,7 +941,7 @@ export default function EditProductPage() {
             {/* Description */}
             <div className="mb-5">
               <label className="block text-sm font-medium text-gray-700 mb-2">
-                Description <span className="text-gray-400 font-normal">(Optional)</span>
+                Description <span className="text-gray-500 font-normal">(Optional)</span>
               </label>
               <textarea
                 value={formData.description}
@@ -952,7 +955,7 @@ export default function EditProductPage() {
             {/* Ingredients */}
             <div className="mb-5">
               <label className="block text-sm font-medium text-gray-700 mb-2">
-                Ingredients <span className="text-gray-400 font-normal">(Optional)</span>
+                Ingredients <span className="text-gray-500 font-normal">(Optional)</span>
               </label>
               <input
                 type="text"
@@ -1013,10 +1016,10 @@ export default function EditProductPage() {
               {/* Original Price (for discount) */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Original Price <span className="text-gray-400 font-normal">(if discounted)</span>
+                  Original Price <span className="text-gray-500 font-normal">(if discounted)</span>
                 </label>
                 <div className="relative">
-                  <span className="absolute start-4 top-1/2 -translate-y-1/2 text-gray-400">Rs.</span>
+                  <span className="absolute start-4 top-1/2 -translate-y-1/2 text-gray-500">Rs.</span>
                   <input
                     type="number"
                     value={formData.originalPrice}
@@ -1036,10 +1039,10 @@ export default function EditProductPage() {
               {/* Cost Price - For seller's profit tracking */}
               <div className="sm:col-span-2">
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Your Cost Price <span className="text-gray-400 font-normal">(for profit tracking - not shown to customers)</span>
+                  Your Cost Price <span className="text-gray-500 font-normal">(for profit tracking - not shown to customers)</span>
                 </label>
                 <div className="relative">
-                  <span className="absolute start-4 top-1/2 -translate-y-1/2 text-gray-400">Rs.</span>
+                  <span className="absolute start-4 top-1/2 -translate-y-1/2 text-gray-500">Rs.</span>
                   <input
                     type="number"
                     value={formData.costPrice}
@@ -1049,7 +1052,7 @@ export default function EditProductPage() {
                     className="w-full ps-14 pe-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   />
                 </div>
-                <p className="text-xs text-gray-400 mt-1">Include ingredients, packaging, labor costs</p>
+                <p className="text-xs text-gray-500 mt-1">Include ingredients, packaging, labor costs</p>
               </div>
 
               {/* Unit Type */}
@@ -1193,7 +1196,7 @@ export default function EditProductPage() {
                             Price *
                           </label>
                           <div className="relative">
-                            <span className="absolute start-2 top-1/2 -translate-y-1/2 text-gray-400 text-sm">
+                            <span className="absolute start-2 top-1/2 -translate-y-1/2 text-gray-500 text-sm">
                               Rs.
                             </span>
                             <input
@@ -1212,7 +1215,7 @@ export default function EditProductPage() {
                             Original Price
                           </label>
                           <div className="relative">
-                            <span className="absolute start-2 top-1/2 -translate-y-1/2 text-gray-400 text-sm">
+                            <span className="absolute start-2 top-1/2 -translate-y-1/2 text-gray-500 text-sm">
                               Rs.
                             </span>
                             <input
@@ -1231,7 +1234,7 @@ export default function EditProductPage() {
                             Your Cost
                           </label>
                           <div className="relative">
-                            <span className="absolute start-2 top-1/2 -translate-y-1/2 text-gray-400 text-sm">
+                            <span className="absolute start-2 top-1/2 -translate-y-1/2 text-gray-500 text-sm">
                               Rs.
                             </span>
                             <input
@@ -1315,7 +1318,7 @@ export default function EditProductPage() {
                   <div className="bg-blue-50 rounded-lg p-3 border border-blue-100">
                     <p className="text-xs font-medium text-blue-800 mb-1">💡 Pro Tips:</p>
                     <ul className="text-xs text-blue-700 space-y-0.5">
-                      <li>• Changes are saved when you click "Update Product"</li>
+                      <li>• Changes are saved when you click &quot;Update Product&quot;</li>
                       <li>• Deleted variants will be permanently removed</li>
                       <li>• Set low stock alerts to avoid running out</li>
                     </ul>
@@ -1363,8 +1366,8 @@ export default function EditProductPage() {
                   <span className="text-3xl font-bold text-gray-900">Rs. {formData.price}</span>
                   {formData.originalPrice && parseFloat(formData.originalPrice) > parseFloat(formData.price) && (
                     <>
-                      <span className="text-lg text-gray-400 line-through">Rs. {formData.originalPrice}</span>
-                      <span className="bg-green-500 text-white px-2 py-0.5 rounded-full text-sm font-bold">
+                      <span className="text-lg text-gray-500 line-through">Rs. {formData.originalPrice}</span>
+                      <span className="bg-green-700 text-white px-2 py-0.5 rounded-full text-sm font-bold">
                         {discount}% OFF
                       </span>
                     </>

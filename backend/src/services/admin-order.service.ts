@@ -1,8 +1,9 @@
+import type { Prisma } from '@prisma/client';
 import { realPhoneOrNull } from '../utils/otp';
-import { codCollectorOf } from '../utils/paymentCustody';
+import { codCollectorOf, isCashAtDoor } from '../utils/paymentCustody';
 import { presentFile } from '../storage';
 import { cancelOpenDelivery, notifyDeliveryCancelled, reopenDeliveryData, CancelledDelivery } from './delivery-lifecycle.service';
-import { dispatchSoon } from './dispatch.service';
+import { postDeliverySoon } from './dispatch.service';
 import prisma from '../config/database';
 import { pageArgs } from '../utils/pagination';
 import { AppError } from '../middleware/errorHandler';
@@ -14,6 +15,7 @@ import { issueRefund, IssuedRefund } from './refund.service';
 import ledgerService from './ledger.service';
 import { postDeliveryEntries } from './rider-ledger.service';
 import { releaseHubAllocations } from './hub-allocation.service';
+import { logger } from '../utils/logger';
 
 // The main happy-path order pipeline — admin can only move an order exactly
 // one step forward at a time (no skipping straight to 'dispatched'/'delivered',
@@ -59,7 +61,7 @@ export class AdminOrderService {
   }) {
     const { page, limit, skip } = pageArgs(filters.page, filters.limit);
 
-    const where: any = {};
+    const where: Prisma.OrderWhereInput = {};
 
     if (filters.orderStatus) {
       where.orderStatus = filters.orderStatus;
@@ -83,10 +85,11 @@ export class AdminOrderService {
       if (filters.dateTo) where.createdAt.lte = new Date(filters.dateTo);
     }
 
-    // If sellerId filter, need to filter by order items
+    // A kitchen is named by its own id, the one every row of this list carries; the id of the account that owns
+    // it is accepted too, as before. Either way the orders are those with a dish from that kitchen.
     if (filters.sellerId) {
-      const seller = await prisma.seller.findUnique({
-        where: { userId: filters.sellerId },
+      const seller = await prisma.seller.findFirst({
+        where: { OR: [{ id: filters.sellerId }, { userId: filters.sellerId }] },
       });
 
       // An unknown seller filters to nothing (it used to be ignored, listing every order).
@@ -361,7 +364,7 @@ export class AdminOrderService {
     // side effects as the seller/rider paths: delivery time, and COD is paid
     // at the door.
     const isDelivered = status === 'delivered';
-    const isCodDelivery = isDelivered && order.paymentMethod === 'cod' && order.paymentStatus !== 'paid';
+    const isCodDelivery = isDelivered && isCashAtDoor(order);
     const applied = await prisma.order.updateMany({
       where: { id: orderId, orderStatus: order.orderStatus },
       data: {
@@ -406,12 +409,12 @@ export class AdminOrderService {
           });
         });
       } catch (jobErr) {
-        console.error('Failed to close the rider job for order:', orderId, jobErr);
+        logger.error({ err: jobErr, orderId }, 'Failed to close the rider job');
       }
       try {
         await ledgerService.recordOrderCompletion(orderId);
       } catch (ledgerErr) {
-        console.error('Failed to record ledger entries for order:', orderId, ledgerErr);
+        logger.error({ err: ledgerErr, orderId }, 'Failed to record ledger entries');
       }
     }
 
@@ -609,10 +612,7 @@ export class AdminOrderService {
     if (previousRider?.rider?.userId) socketManager.removeUserFromOrder(previousRider.rider.userId, orderId);
     await realtimeOrderService.emitOrderStatusUpdate(orderId, 'ready', adminId);
     // Offer it to a rider now rather than on the next sweep (never the one it failed with).
-    if (reopened?.id) {
-      realtimeOrderService.emitDeliveryPosted(reopened.id, orderId);
-      dispatchSoon(reopened.id);
-    }
+    if (reopened?.id) postDeliverySoon(reopened.id, orderId);
     return { orderId, status: 'ready' };
   }
 
@@ -681,10 +681,7 @@ export class AdminOrderService {
     );
 
     if (!isWallet) {
-      console.warn(
-        `[Refund] Order ${orderId} (${order.paymentMethod}) — DB marked refund_pending; ` +
-          `process the actual refund in the gateway dashboard.`,
-      );
+      logger.warn({ orderId, paymentMethod: order.paymentMethod }, 'Refund marked refund_pending in the database; process the actual refund in the gateway dashboard');
     }
 
     return {

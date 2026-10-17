@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/toast';
+import { LoadError } from '@/components/ui/LoadError';
 import { apiClient } from '@/lib/api-client';
 
 interface Category {
@@ -41,6 +42,9 @@ export function CategoryRequestModal({
   const { showToast } = useToast();
   const [loading, setLoading] = useState(false);
   const [loadingCategories, setLoadingCategories] = useState(false);
+  // Why the existing categories could not be read; shown instead of "No categories available", which would send the kitchen
+  // to ask for a new main category that already exists.
+  const [categoriesError, setCategoriesError] = useState<unknown>(null);
   const [groupedCategories, setGroupedCategories] = useState<GroupedCategories>({
     frozen: [],
     fresh: [],
@@ -68,6 +72,7 @@ export function CategoryRequestModal({
 
   const loadCategories = async () => {
     setLoadingCategories(true);
+    setCategoriesError(null);
     try {
       const response = await apiClient.get('/categories/grouped');
       if (response.data.success && response.data.data) {
@@ -75,6 +80,7 @@ export function CategoryRequestModal({
       }
     } catch (error) {
       console.error('Failed to load categories:', error);
+      setCategoriesError(error);
     } finally {
       setLoadingCategories(false);
     }
@@ -153,7 +159,7 @@ export function CategoryRequestModal({
             <div>
               <h2 className="text-xl font-bold text-gray-900">Request New Category</h2>
               <p className="text-sm text-gray-500 mt-1">
-                Suggest a category that's missing from our list
+                Suggest a category that&apos;s missing from our list
               </p>
             </div>
             <button
@@ -260,6 +266,8 @@ export function CategoryRequestModal({
                 <div className="px-4 py-3 bg-gray-50 rounded-xl text-gray-500 text-sm">
                   Loading categories...
                 </div>
+              ) : categoriesError && parentCategories.length === 0 ? (
+                <LoadError compact error={categoriesError} onRetry={loadCategories} title="We couldn't load the existing categories" />
               ) : parentCategories.length > 0 ? (
                 <select
                   value={formData.parentCategoryId}
@@ -302,7 +310,7 @@ export function CategoryRequestModal({
           {productType && (
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
-                Name in Urdu <span className="text-gray-400 font-normal">(Optional)</span>
+                Name in Urdu <span className="text-gray-500 font-normal">(Optional)</span>
               </label>
               <input
                 type="text"
@@ -320,7 +328,7 @@ export function CategoryRequestModal({
           {productType && (
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
-                Description <span className="text-gray-400 font-normal">(Optional)</span>
+                Description <span className="text-gray-500 font-normal">(Optional)</span>
               </label>
               <textarea
                 value={formData.description}
@@ -341,7 +349,7 @@ export function CategoryRequestModal({
                 <p className="font-medium mb-1">What happens next?</p>
                 <ul className="space-y-1 text-blue-600">
                   <li>• Admin will review your request</li>
-                  <li>• You'll be notified when approved</li>
+                  <li>• You&apos;ll be notified when approved</li>
                   <li>• Category will appear in your product form</li>
                 </ul>
               </div>

@@ -32,6 +32,7 @@ function build(): StorageDriver {
     const bucket = process.env.S3_BUCKET;
     if (!bucket) throw new Error('STORAGE_DRIVER=s3 needs S3_BUCKET');
     if (!assetBase) throw new Error('STORAGE_DRIVER=s3 needs ASSET_BASE_URL (the CDN / public URL of the bucket)');
+    const requestTimeoutMs = Number(process.env.S3_REQUEST_TIMEOUT_MS);
     return new S3Storage({
       bucket,
       privateBucket: process.env.S3_PRIVATE_BUCKET || bucket,
@@ -41,6 +42,7 @@ function build(): StorageDriver {
       accessKeyId: process.env.S3_ACCESS_KEY_ID,
       secretAccessKey: process.env.S3_SECRET_ACCESS_KEY,
       assetBaseUrl: assetBase,
+      requestTimeoutMs: requestTimeoutMs > 0 ? requestTimeoutMs : undefined,
     });
   }
   const root = path.resolve(process.env.UPLOADS_DIR || path.join(__dirname, '../../uploads'));

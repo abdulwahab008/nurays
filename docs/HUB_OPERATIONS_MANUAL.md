@@ -45,7 +45,7 @@ Hubs are never deleted (orders and stock point at them). To stop using one, set 
   which loads that list. Its assigned manager still sees it in `/hub`.
 
 The hub's location matters for pricing: when an order line names a hub, the delivery fee is calculated from the hub's
-position, not the kitchen's (`backend/src/services/order.service.ts`, delivery fee section).
+position, not the kitchen's (`backend/src/services/order-placement.service.ts`, delivery fee section).
 
 ### Make someone a hub manager
 
@@ -195,7 +195,7 @@ per variant (`backend/src/services/cart.service.ts`).
 
 ### What happens when an order includes hub stock
 
-For each order line with `fulfillmentType = 'hub'` **and** a `hubId` (`backend/src/services/order.service.ts`):
+For each order line with `fulfillmentType = 'hub'` **and** a `hubId` (`backend/src/services/order-placement.service.ts`):
 
 1. Units are taken from that hub's sellable batches, earliest expiry first, with the batch rows locked so two orders
    cannot take the same units. If the hub is short, the whole order fails with `INSUFFICIENT_STOCK`.

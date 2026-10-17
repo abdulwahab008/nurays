@@ -6,7 +6,7 @@ Sign in at `/admin/login`. The menu on the left is the list of screens below, in
 
 ## Roles
 
-There is one **super admin** (full access). The super admin adds the other staff at `/admin/staff`: an **admin** (runs operations and money) or a **customer support** person (resolves complaints and looks things up; no money, no approvals, no settings, no audit log). Support staff start at Approvals and see only complaints and failed deliveries there. Details and the exact permissions: `SECURITY_AND_COMPLIANCE.md`, "Staff roles".
+There is one **super admin** (full access). The super admin adds the other staff at `/admin/staff`: an **admin** (runs operations and money) or a **customer support** person (resolves complaints, decides on reported reviews and looks things up; no money, no approvals, no settings, no audit log). Support staff start at Approvals and see only complaints, failed deliveries and reported reviews there. Details and the exact permissions: `SECURITY_AND_COMPLIANCE.md`, "Staff roles".
 
 ### Staff: `/admin/staff` (super admin only)
 
@@ -14,7 +14,7 @@ Add a person (name, email, role, first password of at least 12 characters that y
 
 ### Approvals: `/admin/approvals`
 
-One page for everything waiting on a decision, with how long the oldest has waited: kitchen applications, rider applications, new or changed dishes, category requests, payout requests, refunds, transfers to check, failed deliveries and complaints. A role sees only the queues it can act on. Admins and the super admin also get an in-app notification when a kitchen applies, a rider applies, a dish is added or changed, or a category is requested.
+One page for everything waiting on a decision, with how long the oldest has waited: kitchen applications, rider applications, new or changed dishes, category requests, payout requests, refunds, transfers to check, failed deliveries, complaints and reported reviews. A role sees only the queues it can act on. Admins and the super admin also get an in-app notification when a kitchen applies, a rider applies, a dish is added or changed, or a category is requested.
 
 ## Dashboard
 
@@ -166,6 +166,16 @@ Create a code: code (upper-case, no spaces), name for your records, % off or Rs 
 ## Support
 
 `/admin/support`. Customer support tickets; filter open, in progress, resolved, closed, all. Search by subject, ticket number, order number or customer, and filter by priority. Open a ticket to read the conversation (it links to the order). Reply and choose the status to set with the reply: the customer is notified of every reply. Tick **Internal note** to write a note only admins see (shown in amber); status changes are kept in the history as internal lines. Replying assigns the ticket to you; setting "resolved" records the time. The order page shows the complaints raised on that order.
+
+## Reviews
+
+`/admin/reviews` (support staff, admins, the super admin). Under every review on a dish page a signed-in customer can press **Report** and say why (abusive or offensive, spam or advertising, false or about something else, shares private information, or something else, with an optional note). A report does not hide anything: the review stays where it is and waits here, and the Approvals page counts it. The tabs are **Reported** (the ones that have waited longest first), **Hidden** and **All reviews**. Each row shows the review, the dish and kitchen, who wrote it (with a link to find them under People), and why and how often it was reported.
+
+- **Hide review.** The review leaves every public page (the dish, the kitchen's page) and stops counting towards the dish's, the kitchen's and the Nuray rider's rating. The kitchen no longer sees it either.
+- **Keep it (close the report).** You looked and the review stays.
+- **Show again** (Hidden tab). Puts a hidden review back, and back into the ratings.
+
+The person who wrote the review is not told, and there is no appeal yet. Who reported what, and every decision, is in the audit log (`review:REPORT`, `admin:POST /reviews/:id/hide`).
 
 ## Analytics
 

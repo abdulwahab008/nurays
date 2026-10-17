@@ -2,9 +2,11 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
-import { UserLayout } from '@/components/layout/UserLayout';
+import { AdminShell } from '@/components/layout/AdminShell';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/toast';
+import { LoadError } from '@/components/ui/LoadError';
+import { useDialogs } from '@/components/ui/Dialogs';
 import LocationMap from '@/components/ui/LocationMap';
 import { apiClient, apiErrorMessage } from '@/lib/api-client';
 
@@ -73,9 +75,12 @@ const STATUS_STYLE: Record<AdminHub['status'], string> = {
 /** Hubs (frozen-stock centres): set them up, switch them off, and give each its manager. */
 export default function AdminHubSetupPage() {
   const { showToast } = useToast();
+  const { confirm: confirmDialog } = useDialogs();
   const [hubs, setHubs] = useState<AdminHub[]>([]);
   const [managers, setManagers] = useState<HubManager[]>([]);
   const [loading, setLoading] = useState(true);
+  // Why the hubs could not be read; shown instead of "No hubs yet", which would be untrue.
+  const [loadError, setLoadError] = useState<unknown>(null);
   const [form, setForm] = useState<HubForm | null>(null);
   const [saving, setSaving] = useState(false);
   const [newManager, setNewManager] = useState('');
@@ -87,12 +92,13 @@ export default function AdminHubSetupPage() {
       const [h, m] = await Promise.all([apiClient.get('/admin/hubs'), apiClient.get('/admin/hub-managers')]);
       setHubs(h.data.data);
       setManagers(m.data.data);
+      setLoadError(null);
     } catch (error) {
-      showToast(apiErrorMessage(error, 'Failed to load hubs'), 'error');
+      setLoadError(error);
     } finally {
       setLoading(false);
     }
-  }, [showToast]);
+  }, []);
 
   useEffect(() => {
     load();
@@ -161,7 +167,7 @@ export default function AdminHubSetupPage() {
   };
 
   const removeManager = async (m: HubManager) => {
-    if (!window.confirm(`Remove ${m.name || m.phone} as a hub manager? They go back to a customer account${m.hubs.length ? ' and stop running their hubs' : ''}.`)) return;
+    if (!(await confirmDialog({ title: 'Remove hub manager?', message: `Remove ${m.name || m.phone} as a hub manager? They go back to a customer account${m.hubs.length ? ' and stop running their hubs' : ''}.`, confirmText: 'Remove' }))) return;
     try {
       setBusy(m.id);
       await apiClient.delete(`/admin/hub-managers/${m.id}`);
@@ -178,7 +184,7 @@ export default function AdminHubSetupPage() {
   const label = 'block text-xs font-semibold text-gray-700 mb-1';
 
   return (
-    <UserLayout showSidebar={true} showNavbar={true}>
+    <AdminShell>
       <div className="max-w-6xl mx-auto space-y-6">
         <div className="flex flex-wrap items-end justify-between gap-3">
           <div>
@@ -270,6 +276,8 @@ export default function AdminHubSetupPage() {
           <h2 className="px-5 pt-5 font-bold text-gray-900">Hubs</h2>
           {loading && hubs.length === 0 ? (
             <p className="p-8 text-center text-gray-500">Loading…</p>
+          ) : loadError && hubs.length === 0 ? (
+            <LoadError error={loadError} onRetry={load} title="We couldn't load the hubs" className="m-4" />
           ) : hubs.length === 0 ? (
             <p className="p-8 text-center text-gray-500">No hubs yet.</p>
           ) : (
@@ -366,7 +374,9 @@ export default function AdminHubSetupPage() {
               {busy === 'add-manager' ? 'Adding…' : 'Make hub manager'}
             </Button>
           </form>
-          {managers.length === 0 ? (
+          {loadError && managers.length === 0 ? (
+            <LoadError compact error={loadError} onRetry={load} title="We couldn't load the hub managers" />
+          ) : managers.length === 0 ? (
             <p className="text-sm text-gray-500">No hub managers yet.</p>
           ) : (
             <ul className="divide-y divide-gray-100" data-testid="hub-managers">
@@ -390,6 +400,6 @@ export default function AdminHubSetupPage() {
           )}
         </section>
       </div>
-    </UserLayout>
+    </AdminShell>
   );
 }

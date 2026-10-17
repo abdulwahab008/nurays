@@ -41,3 +41,6 @@ coverage/
 tmp/
 temp/
 
+
+# Load-test output: ids, tokens and results of a run (never commit)
+scripts/load/.generated/

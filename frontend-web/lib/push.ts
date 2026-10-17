@@ -55,6 +55,42 @@ export async function enablePush(): Promise<PushState> {
   return 'on';
 }
 
+/** This browser's own push subscription, if push was turned on here. */
+async function currentSubscription(): Promise<PushSubscription | null> {
+  const reg = await navigator.serviceWorker.getRegistration('/');
+  return reg ? await reg.pushManager.getSubscription() : null;
+}
+
+/**
+ * On sign-out: this browser stops holding a subscription for the account that is leaving, so whoever uses it next
+ * starts clean. (The server forgets the account's subscriptions when it ends the account's sessions.) Never throws.
+ */
+export async function dropPushSubscription(): Promise<void> {
+  if (!pushSupported()) return;
+  try {
+    await (await currentSubscription())?.unsubscribe();
+  } catch {
+    // Nothing to do: the server no longer sends to it.
+  }
+}
+
+/**
+ * Whoever is signed in on this browser now owns its push subscription, if push was ever turned on here: tell the
+ * server (it moves a device to its newest owner, and a device it forgot at someone's sign-out comes back when that
+ * person signs in again). Does nothing where push was never turned on or the permission was withdrawn. Never throws.
+ */
+export async function claimPushSubscription(): Promise<void> {
+  if (!pushSupported() || Notification.permission !== 'granted') return;
+  try {
+    const sub = await currentSubscription();
+    if (!sub) return;
+    const json = sub.toJSON();
+    await apiClient.post('/notifications/push/subscriptions', { endpoint: json.endpoint, keys: json.keys });
+  } catch {
+    // Offline or signed out meanwhile: it is tried again at the next sign-in or page load.
+  }
+}
+
 /** Turn push off for this device. */
 export async function disablePush(): Promise<PushState> {
   if (!pushSupported()) return 'unsupported';

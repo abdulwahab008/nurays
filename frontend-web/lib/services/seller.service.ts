@@ -35,7 +35,6 @@ export interface PublicSellerAvailability {
 
 export interface PublicSeller {
   id: string;
-  userId: string;
   businessName: string;
   businessNameUrdu?: string | null;
   description?: string | null;

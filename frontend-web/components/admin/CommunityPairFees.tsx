@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/toast';
+import { LoadError } from '@/components/ui/LoadError';
 import { apiClient, apiErrorMessage } from '@/lib/api-client';
 import { formatPrice } from '@/lib/utils';
 
@@ -28,6 +29,8 @@ const field = 'w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:
 export function CommunityPairFees({ communities }: { communities: Place[] }) {
   const { showToast } = useToast();
   const [pairs, setPairs] = useState<PairFee[]>([]);
+  // Why the prices could not be read; shown instead of "No pair prices yet", which would be untrue.
+  const [loadError, setLoadError] = useState<unknown>(null);
   const [first, setFirst] = useState('');
   const [second, setSecond] = useState('');
   const [fee, setFee] = useState('');
@@ -37,10 +40,11 @@ export function CommunityPairFees({ communities }: { communities: Place[] }) {
     try {
       const res = await apiClient.get('/admin/community-pair-fees');
       setPairs(res.data.data);
+      setLoadError(null);
     } catch (error) {
-      showToast(apiErrorMessage(error, 'Could not load pair prices'), 'error');
+      setLoadError(error);
     }
-  }, [showToast]);
+  }, []);
 
   useEffect(() => {
     load();
@@ -124,7 +128,9 @@ export function CommunityPairFees({ communities }: { communities: Place[] }) {
         </Button>
       </form>
 
-      {pairs.length === 0 ? (
+      {loadError && pairs.length === 0 ? (
+        <LoadError compact error={loadError} onRetry={load} title="We couldn't load the pair prices" />
+      ) : pairs.length === 0 ? (
         <p className="text-sm text-gray-500">No pair prices yet: every trip between communities is priced by distance.</p>
       ) : (
         <table className="w-full text-sm">
@@ -139,8 +145,8 @@ export function CommunityPairFees({ communities }: { communities: Place[] }) {
             {pairs.map((p) => (
               <tr key={p.id}>
                 <td className="py-2.5 text-gray-900">
-                  {p.communityA.name} <span className="text-gray-400">⇄</span> {p.communityB.name}
-                  <span className="text-xs text-gray-400 ms-1">{p.communityA.city === p.communityB.city ? p.communityA.city : `${p.communityA.city} / ${p.communityB.city}`}</span>
+                  {p.communityA.name} <span className="text-gray-500">⇄</span> {p.communityB.name}
+                  <span className="text-xs text-gray-500 ms-1">{p.communityA.city === p.communityB.city ? p.communityA.city : `${p.communityA.city} / ${p.communityB.city}`}</span>
                 </td>
                 <td className="py-2.5 font-semibold">{formatPrice(p.fee)}</td>
                 <td className="py-2.5 text-end">

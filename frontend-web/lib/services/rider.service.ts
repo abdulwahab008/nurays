@@ -163,8 +163,11 @@ export const riderService = {
     return response.data;
   },
 
-  getMyDeliveries: async () => {
-    const response = await apiClient.get<ApiResponse<Delivery[]>>('/riders/deliveries/mine');
+  /** The rider's jobs: every one still running, and `history` finished ones (the server sends 30 unless told, 0 for none, at most 200). */
+  getMyDeliveries: async (options: { history?: number } = {}) => {
+    const response = await apiClient.get<ApiResponse<Delivery[]>>('/riders/deliveries/mine', {
+      params: options.history === undefined ? undefined : { history: options.history },
+    });
     return response.data;
   },
 

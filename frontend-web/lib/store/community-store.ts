@@ -85,7 +85,8 @@ export const useCommunityStore = create<CommunityState>()(
                   const result = await communityService.detectCommunity(latitude, longitude);
                   if (result?.community) {
                     const full = list.find((c) => c.id === result.community.id || c.slug === result.community.slug);
-                    backendMatch = (full || (result.community as any)) as Community;
+                    // The answer carries fewer fields than a listed community; it is used as it is when the list lacks it.
+                    backendMatch = (full ?? result.community) as Community;
                   }
                 } catch {
                   // Fallback to local

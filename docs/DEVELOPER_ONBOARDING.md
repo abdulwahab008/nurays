@@ -85,7 +85,7 @@ backend/src/
   services/         business logic and all database work (order, payment, refund, ledger, rider-ledger, hub, ...)
   validators/       zod schemas, one file per area
   middleware/       auth (authenticate, authorize, requireSeller, ...), validate, errorHandler, rate limits, audit
-  utils/            pure helpers: pricing.ts, deliveryFee.ts, ranking.ts, paymentCustody.ts, jwt.ts, logger.ts
+  utils/            pure helpers: pricing.ts, orderPricing.ts, deliveryFee.ts, ranking.ts, paymentCustody.ts, jwt.ts, logger.ts
   config/           env.ts (validation), database.ts (Prisma), redis.ts, socket.ts, sentry.ts
   gateways/         payment gateways (safepay, jazzcash, easypaisa, bank)
   jobs/             queue.ts (BullMQ or in-process), scheduler.ts, email and notification jobs
@@ -106,9 +106,10 @@ frontend-web/
 
 Backend:
 
-- Controllers are thin; services own the logic. A controller pulls `userId` from `req.user`, calls a service, and
-  answers `res.json({ success: true, data })`. Express 5 forwards rejected promises to the error handler, so most
-  controllers have no try/catch.
+- Controllers are thin; services own the logic. A controller reads the signed-in user with `currentUserId(req)` (or, for a
+  kitchen, `currentSellerId(req)`), calls a service, and answers `res.json({ success: true, data })`. A controller never
+  imports `prisma`: a query, and the shaping of what it returns, belong in a service. Express 5 forwards rejected promises
+  to the error handler, so most controllers have no try/catch.
 - Validate input with zod in `validators/` and attach it in the route: `validate(schema)` for the body (also
   `validateQuery`). Failures become a 400 `VALIDATION_ERROR` listing the fields.
 - Throw `AppError(message, statusCode, code)` from `middleware/errorHandler.ts` for expected failures
@@ -132,6 +133,21 @@ Frontend:
 - Layout classes must be direction-neutral so Urdu mirrors: `ms-`/`me-`/`ps-`/`pe-`/`start-`/`end-`,
   `text-start`/`text-end`; avoid `ml-`/`mr-`/`pl-`/`pr-`/`left-`/`right-`/`text-left` in translated screens. Keep
   numbers, phone numbers and emails in `dir="ltr"` spans.
+- Fixed and sticky bars keep clear of a notch, the status bar and the home indicator with the variables in
+  `globals.css`: `pt-(--safe-top)` on a bar at the top, `top-(--header-offset)` for what sticks under the 4rem top bar,
+  `pb-(--safe-bottom)` or `bottom-[calc(1.5rem+var(--safe-bottom))]` at the bottom, `--safe-start`/`--safe-end` for a
+  corner pop-up or a drawer (they swap in Urdu), `--safe-left`/`--safe-right` for a bar that spans the screen (a notch
+  does not mirror). Every value is 0 on a screen without insets. To see a new bar with a notch, give Chromium
+  `Emulation.setSafeAreaInsetsOverride` over the DevTools protocol.
+- A form never invents a city: `lib/cities.ts` has the list, the Urdu names and the matching (a map's answer to a city,
+  or `''` when nothing says), and the city fields start empty. To ask the map service what is at a pin, use
+  `reverseGeocode` in `lib/geocode.ts` (it never throws; it returns the area, street, house number, postcode and city,
+  and the pin's own city when the service is down) instead of calling `/api/geocode/reverse` yourself.
+- A page that people share (a dish, a kitchen) is a small server `page.tsx` that exports `generateMetadata` and renders the
+  client page beside it (`ProductDetailPage.tsx`, `KitchenStorefrontPage.tsx`): the title and link preview are built by
+  `lib/seo.ts` from what `lib/server/public-api.ts` reads. Copy that shape for another public page; never put `metadata` in a
+  `'use client'` file. With `NEXT_PUBLIC_SITE_URL` empty every page is `noindex`, which is what you want in development.
+- Sign-in tokens are read and written only through `tokenStore()` in `lib/token-store.ts` (or the API client's `getAccessToken`, `setTokens` and `clearTokens`, which use it), never with `localStorage` directly: a native shell swaps the store.
 - State: Zustand stores in `lib/store/` (auth, cart, community); live updates through `lib/hooks/use-socket.ts` and
   `use-live-refresh.ts`.
 
@@ -185,6 +201,10 @@ advisory lock so only one instance runs it at a time; make the function safe to 
 | backend | `npm run dev` | server with reload |
 | backend | `npm run build` / `npm start` | compile to `dist/`, run it |
 | backend | `npm test` | Jest unit tests |
+| backend | `npm run lint` | ESLint (CI fails on errors and on more warnings than the cap in `package.json`) |
+| backend | `npm run api-checks` | checks over HTTP against a running API on a throwaway database, see [TESTING_STRATEGY.md](TESTING_STRATEGY.md) |
+| backend | `npm run typecheck:scripts` | typecheck of the API checks and the load tooling, which the API's own `tsc` does not cover (CI does this) |
+| backend | `npm run load:seed` / `load:tokens` / `load:run` | the launch load test, see [LOAD_TESTING.md](LOAD_TESTING.md) |
 | backend | `npm run db:migrate` | apply migrations |
 | backend | `npm run db:check` | database vs `schema.prisma` (exit code 2 on drift) |
 | backend | `npm run prisma:migrate` | `prisma migrate dev` (create a migration) |
@@ -192,11 +212,12 @@ advisory lock so only one instance runs it at a time; make the function safe to 
 | backend | `npm run seed:e2e` | sample data |
 | backend | `npx ts-node scripts/verify-money-flows.ts` | money flows on a scratch database |
 | frontend-web | `npm run dev` / `build` / `start` | Next.js |
-| frontend-web | `npm run lint` | ESLint |
+| frontend-web | `npm run lint` | ESLint (CI fails on errors and on more warnings than the cap in `package.json`) |
 | frontend-web | `npx tsc --noEmit` | typecheck (CI does this) |
+| frontend-web | `npm test` | unit tests of the pure helpers in `lib/` (Node's test runner, see [TESTING_STRATEGY.md](TESTING_STRATEGY.md)) |
 | frontend-web | `npm run test:e2e` | Playwright |
 
-Before pushing, run `npx tsc --noEmit` in both folders and `npm test` in `backend`. Details of each test layer are in
+Before pushing, run `npx tsc --noEmit` and `npm run lint` in both folders and `npm test` in both. Details of each test layer are in
 [TESTING_STRATEGY.md](TESTING_STRATEGY.md).
 
 ## Troubleshooting

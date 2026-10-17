@@ -1,5 +1,6 @@
 import * as React from 'react';
 import { cn } from '@/lib/utils';
+import { asksForBorderColour, asksForTextColour } from '@/lib/class-colours';
 
 export interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: 'default' | 'dark' | 'outline' | 'ghost' | 'destructive';
@@ -20,7 +21,9 @@ const variantStyles: Record<NonNullable<ButtonProps['variant']>, React.CSSProper
   outline: {
     background: 'transparent',
     color: '#0C1016',
-    border: '1px solid #E2E8F0',
+    borderWidth: '1px',
+    borderStyle: 'solid',
+    borderColor: '#E2E8F0',
   },
   ghost: {
     background: 'transparent',
@@ -40,6 +43,9 @@ const sizeClass: Record<NonNullable<ButtonProps['size']>, string> = {
   lg: 'h-13 px-7 text-[15px]',
 };
 
+// The variant's colours are inline styles, which beat every class. A colour the caller asks for in className (a red
+// "Delete" button: text-red-700 border-red-200; a pale "Sync" button on a dark bar: text-slate-200) has to win, or it is
+// silently ignored and the button comes out dark on dark.
 const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
   ({ className, variant = 'default', size = 'default', style, ...props }, ref) => {
     const hasCustomBg = className?.includes('bg-') || className?.includes('flame-btn');
@@ -47,6 +53,8 @@ const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
     const finalStyle: React.CSSProperties = {
       ...baseStyle,
       ...(hasCustomBg ? { background: undefined, backgroundColor: undefined } : {}),
+      ...(asksForTextColour(className) ? { color: undefined } : {}),
+      ...(asksForBorderColour(className) ? { borderColor: undefined } : {}),
       ...style,
     };
 

@@ -5,9 +5,11 @@ import { reopenDeliveryData } from './delivery-lifecycle.service';
 import { AppError } from '../middleware/errorHandler';
 import realtimeOrderService from './realtime-order.service';
 import ledgerService from './ledger.service';
-import { dispatchSoon } from './dispatch.service';
+import { dispatchSoon, postDeliverySoon } from './dispatch.service';
 import { haversineKm, calculateDeliveryFeeCorridor } from '../utils/deliveryFee';
-import { num, endsOf, cashToCollect, PAYMENT_INCLUDE, routeMatch } from '../utils/riderJobs';
+import { endsOf, cashToCollect, PAYMENT_INCLUDE, routeMatch } from '../utils/riderJobs';
+import { finiteOrNull } from '../utils/numbers';
+import { isCashAtDoor } from '../utils/paymentCustody';
 import { jobScore } from '../utils/ranking';
 import { newHandoverCode, verifyHandoverCode } from './handover.service';
 import { realPhoneOrNull } from '../utils/otp';
@@ -15,29 +17,11 @@ import { cashLimitOf, listRiderEntries, postDeliveryEntries, riderEarningsSummar
 import { assertOwnDocument } from '../utils/documents';
 import { presentFile } from '../storage';
 import { notifyApprovers } from './approvals.service';
+import { ACTIVE_DELIVERY_STATUSES, BEFORE_PICKUP_STATUSES, ON_THE_WAY_STATUSES, canMoveDelivery, ORDER_STATUS_FOR_DELIVERY_STATUS, refuseDeliveryMove } from '../utils/deliveryStatus';
+import { doorField } from '../utils/addressSnapshot';
+import { logger } from '../utils/logger';
 
-// Delivery.status lifecycle:
-// pending (unclaimed) -> assigned (claimed) -> arrived_at_pickup -> picked_up -> in_transit -> arrived_at_customer -> delivered (with OTP).
-// A rider holding the goods can also report delivery_failed instead of completing
-// (customer unreachable, wrong address, refused delivery, etc.) — admin resolves it from there.
-const VALID_TRANSITIONS: Record<string, string[]> = {
-  assigned: ['arrived_at_pickup', 'picked_up'],
-  arrived_at_pickup: ['picked_up', 'in_transit', 'delivery_failed'],
-  picked_up: ['in_transit', 'delivery_failed'],
-  in_transit: ['arrived_at_customer', 'delivered', 'delivery_failed'],
-  arrived_at_customer: ['delivered', 'delivery_failed'],
-};
-
-// Delivery status -> order-level status it should push the order to. Only forward:
-// a rider arriving at the kitchen says nothing about the food, so it no longer moves
-// a ready order back to "preparing".
-const ORDER_STATUS_FOR_DELIVERY_STATUS: Record<string, string> = {
-  picked_up: 'dispatched',
-  in_transit: 'in_transit',
-  arrived_at_customer: 'in_transit',
-  delivered: 'delivered',
-  delivery_failed: 'delivery_failed',
-};
+// The delivery status machine (which status follows which, and what the order must look like) is in utils/deliveryStatus.ts.
 
 // What a job reads from its order. The customer's contact and address details are only handed to
 // the rider who has the job (see formatDelivery); the handover code is never part of it.
@@ -47,6 +31,7 @@ const DELIVERY_INCLUDE = {
       orderNumber: true,
       totalAmount: true,
       paymentMethod: true,
+      paymentStatus: true,
       orderStatus: true,
       deliveryInstructions: true,
       deliveryAddressSnapshot: true,
@@ -56,12 +41,21 @@ const DELIVERY_INCLUDE = {
   },
 } as const;
 
-type DeliveryWithOrder = Omit<Prisma.DeliveryGetPayload<{ include: typeof DELIVERY_INCLUDE }>, 'deliveryOtp'>;
+// An open job is listed without its customer: who they are and how to reach them only go to the rider who holds the job.
+const POOL_INCLUDE = { order: { select: { ...DELIVERY_INCLUDE.order.select, customer: false } } } as const;
+
+type FullDelivery = Prisma.DeliveryGetPayload<{ include: typeof DELIVERY_INCLUDE }>;
+type DeliveryWithOrder = Omit<FullDelivery, 'deliveryOtp' | 'order'> & {
+  order: Omit<FullDelivery['order'], 'customer'> & { customer?: FullDelivery['order']['customer'] };
+};
 
 // Jobs a rider is working on. They share their location while on one of these.
-const ACTIVE_STATUSES = ['assigned', 'arrived_at_pickup', 'picked_up', 'in_transit', 'arrived_at_customer'];
+// Jobs that are over: they leave the rider's running list and only show in the history.
+const FINISHED_STATUSES = ['delivered', 'delivery_failed', 'cancelled'];
+// How many finished jobs the rider's job list carries unless asked for more, and the most it will carry.
+export const DEFAULT_JOB_HISTORY = 30;
+export const MAX_JOB_HISTORY = 200;
 // Once the food has left the kitchen, the customer can see where it is.
-const ON_THE_WAY_STATUSES = ['picked_up', 'in_transit', 'arrived_at_customer'];
 const GEOFENCE_KM = 0.15; // 150 m
 // A phone reporting every second is stored (and passed on to the customer) at most this often.
 const LOCATION_MIN_INTERVAL_MS = 3_000;
@@ -79,12 +73,12 @@ function formatDelivery(delivery: DeliveryWithOrder & {
   arrivedAtCustomer?: Date | null;
   estimatedReadyAt?: Date | null;
   otpVerifiedAt?: Date | null;
-  pickupLatitude?: any;
-  pickupLongitude?: any;
-  deliveryLatitude?: any;
-  deliveryLongitude?: any;
-  riderFee?: any;
-  riderBonus?: any;
+  pickupLatitude?: unknown;
+  pickupLongitude?: unknown;
+  deliveryLatitude?: unknown;
+  deliveryLongitude?: unknown;
+  riderFee?: unknown;
+  riderBonus?: unknown;
   isRouteMatch?: boolean;
   batchBonus?: number;
   corridorDistanceKm?: number;
@@ -97,13 +91,15 @@ function formatDelivery(delivery: DeliveryWithOrder & {
   // Who to call and where exactly: only for the rider who holds a job that is still running.
   const o = delivery.order;
   // The address as it was when the order was placed (older orders have no snapshot: the live one then).
-  const snap = (o?.deliveryAddressSnapshot ?? null) as { houseNumber?: string | null; addressLine2?: string | null; landmark?: string | null } | null;
-  const reveal = Boolean(delivery.riderId) && ACTIVE_STATUSES.includes(delivery.status);
+  const door = (key: 'houseNumber' | 'addressLine2' | 'landmark' | 'area' | 'city') => {
+    const value = doorField(o?.deliveryAddressSnapshot, o?.deliveryAddress, key);
+    return typeof value === 'string' && value.trim() !== '' ? value : null;
+  };
+  const reveal = Boolean(delivery.riderId) && ACTIVE_DELIVERY_STATUSES.includes(delivery.status);
   const customerPhone = reveal ? realPhoneOrNull(o?.customer?.phone) : null;
   // Before a claim (and after the job) the neighbourhood is enough to judge a job: distance and
   // pay are computed above from the exact point, which itself stays with the running job.
-  const areaSnap = (o?.deliveryAddressSnapshot ?? null) as { area?: string | null; city?: string | null } | null;
-  const areaOnly = [areaSnap?.area ?? o?.deliveryAddress?.area, areaSnap?.city ?? o?.deliveryAddress?.city].filter(Boolean).join(', ') || null;
+  const areaOnly = [door('area'), door('city')].filter(Boolean).join(', ') || null;
   const shownAddress = reveal ? delivery.deliveryAddress : areaOnly;
   const shownLat = reveal ? deliveryLat : null;
   const shownLng = reveal ? deliveryLng : null;
@@ -141,17 +137,17 @@ function formatDelivery(delivery: DeliveryWithOrder & {
     corridorDistanceKm: delivery.corridorDistanceKm ?? corridor.distanceKm,
     riderAskFee: delivery.riderAskFee ?? null,
     // Fixed when the job is claimed: what this rider is paid for it.
-    riderFee: num(delivery.riderFee),
-    riderBonus: num(delivery.riderBonus),
+    riderFee: finiteOrNull(delivery.riderFee),
+    riderBonus: finiteOrNull(delivery.riderBonus),
     // A cash order that would take the rider past their cash limit.
     exceedsCashLimit: Boolean(delivery.exceedsCashLimit),
     // Handed over once the job is theirs: the customer, how to reach them, and the exact spot.
     customer: reveal ? { name: o?.customer?.profile?.fullName ?? null, phone: customerPhone } : null,
     dropoffDetails: reveal
       ? {
-          houseNumber: snap?.houseNumber ?? o?.deliveryAddress?.houseNumber ?? null,
-          addressLine2: snap?.addressLine2 ?? o?.deliveryAddress?.addressLine2 ?? null,
-          landmark: snap?.landmark ?? o?.deliveryAddress?.landmark ?? null,
+          houseNumber: door('houseNumber'),
+          addressLine2: door('addressLine2'),
+          landmark: door('landmark'),
           instructions: o?.deliveryInstructions ?? null,
         }
       : null,
@@ -192,12 +188,12 @@ export class RiderService {
     const existing = await prisma.delivery.findUnique({ where: { orderId } });
     if (existing) return;
 
-    const snapshot = order.deliveryAddressSnapshot as Record<string, string> | null;
-    const deliveryAddress = order.deliveryAddress
-      ? [order.deliveryAddress.addressLine1, order.deliveryAddress.area, order.deliveryAddress.city].filter(Boolean).join(', ')
-      : snapshot
-        ? [snapshot.addressLine1, snapshot.area, snapshot.city].filter(Boolean).join(', ')
-        : 'Address unavailable';
+    // The address the order was placed to, not the saved address as edited since (see utils/addressSnapshot).
+    const deliveryAddress =
+      (['addressLine1', 'area', 'city'] as const)
+        .map((key) => doorField(order.deliveryAddressSnapshot, order.deliveryAddress, key))
+        .filter((part): part is string => typeof part === 'string' && part.trim() !== '')
+        .join(', ') || 'Address unavailable';
 
     // The customer's handover code lives on the order. Older orders created without
     // one get it now, before a rider can be assigned.
@@ -206,11 +202,10 @@ export class RiderService {
 
     const pickupSeller = (order.items.find((i) => i.status !== 'cancelled' && (i.fulfillmentType === 'hub' || i.seller?.deliveryProvider !== 'self')) ?? order.items[0])?.seller;
     // Unknown locations stay unknown (null): a guessed point would misprice the job.
-    const pickupLat = num(pickupSeller?.latitude);
-    const pickupLng = num(pickupSeller?.longitude);
-    const snapCoords = order.deliveryAddressSnapshot as { latitude?: number | null; longitude?: number | null } | null;
-    const deliveryLat = num(snapCoords?.latitude) ?? num(order.deliveryAddress?.latitude);
-    const deliveryLng = num(snapCoords?.longitude) ?? num(order.deliveryAddress?.longitude);
+    const pickupLat = finiteOrNull(pickupSeller?.latitude);
+    const pickupLng = finiteOrNull(pickupSeller?.longitude);
+    const deliveryLat = finiteOrNull(doorField(order.deliveryAddressSnapshot, order.deliveryAddress, 'latitude') as number | null | undefined);
+    const deliveryLng = finiteOrNull(doorField(order.deliveryAddressSnapshot, order.deliveryAddress, 'longitude') as number | null | undefined);
 
     try {
       const created = await prisma.delivery.create({
@@ -226,9 +221,8 @@ export class RiderService {
           estimatedReadyAt,
         },
       });
-      realtimeOrderService.emitDeliveryPosted(created.id, orderId);
-      // Give it to a rider straight away; if nobody can take it, it stays in the pool.
-      dispatchSoon(created.id);
+      // Offered to the best rider first; the pool hears of it only if nobody can take it.
+      postDeliverySoon(created.id, orderId);
     } catch (err) {
       const isDuplicate = err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002';
       if (!isDuplicate) throw err;
@@ -265,7 +259,7 @@ export class RiderService {
     const activeDeliveries = await prisma.delivery.findMany({
       where: {
         riderId: rider.id,
-        status: { in: ACTIVE_STATUSES },
+        status: { in: ACTIVE_DELIVERY_STATUSES },
       },
       include: PAYMENT_INCLUDE,
     });
@@ -273,7 +267,7 @@ export class RiderService {
     const deliveries = await prisma.delivery.findMany({
       // Only jobs for orders still going somewhere.
       where: { riderId: null, status: 'pending', order: { orderStatus: { notIn: ['cancelled', 'refunded', 'delivered', 'completed'] } } },
-      include: DELIVERY_INCLUDE,
+      include: POOL_INCLUDE,
       orderBy: { createdAt: 'asc' },
       // The oldest open jobs; a pool deeper than this is an operations problem, not a list.
       take: 100,
@@ -296,7 +290,7 @@ export class RiderService {
     const now = Date.now();
     const ranked = deliveries.map((d) => {
       const match = routeMatch(activeOne, d);
-      const cashOrder = d.order.paymentMethod === 'cod';
+      const cashOrder = isCashAtDoor(d.order);
       const job = formatDelivery({
         ...d,
         isRouteMatch: !!match,
@@ -321,20 +315,35 @@ export class RiderService {
     return ranked.sort((a, b) => b.score - a.score).map((r) => r.job);
   }
 
-  async getMyDeliveries(userId: string) {
+  /**
+   * The rider's jobs, newest first: every job still going, and the `history` most recent finished ones (30 unless
+   * asked, 0 for none, at most 200). The dashboard reloads this every 30 seconds for every rider on duty, so it
+   * carries what the screen shows and not a rider's whole career; earnings has the full ledger.
+   */
+  async getMyDeliveries(userId: string, history: number = DEFAULT_JOB_HISTORY) {
     const rider = await this.requireRider(userId);
-    const deliveries = await prisma.delivery.findMany({
-      // Jobs cancelled more than a day ago are noise; a fresh cancellation stays visible.
-      where: {
-        riderId: rider.id,
-        NOT: { status: 'cancelled', updatedAt: { lt: new Date(Date.now() - 24 * 3600 * 1000) } },
-      },
-      include: DELIVERY_INCLUDE,
-      orderBy: { createdAt: 'desc' },
-      // Every running job plus recent history; earnings has the full ledger.
-      take: 200,
-    });
-    return deliveries.map(formatDelivery);
+    const finishedCount = Math.min(MAX_JOB_HISTORY, Math.max(0, Math.floor(history)));
+    const [running, finished] = await Promise.all([
+      prisma.delivery.findMany({
+        where: { riderId: rider.id, status: { notIn: FINISHED_STATUSES } },
+        include: DELIVERY_INCLUDE,
+        orderBy: { createdAt: 'desc' },
+      }),
+      finishedCount === 0
+        ? []
+        : prisma.delivery.findMany({
+            // Jobs cancelled more than a day ago are noise; a fresh cancellation stays visible.
+            where: {
+              riderId: rider.id,
+              status: { in: FINISHED_STATUSES },
+              NOT: { status: 'cancelled', updatedAt: { lt: new Date(Date.now() - 24 * 3600 * 1000) } },
+            },
+            include: DELIVERY_INCLUDE,
+            orderBy: { createdAt: 'desc' },
+            take: finishedCount,
+          }),
+    ]);
+    return [...running, ...finished].sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime()).map(formatDelivery);
   }
 
   async claimDelivery(userId: string, deliveryId: string, askFee?: number) {
@@ -371,7 +380,7 @@ export class RiderService {
       await tx.$queryRaw`SELECT id FROM riders WHERE id = ${rider.id} FOR UPDATE`;
 
       // At most two jobs at once.
-      const active = await tx.delivery.findMany({ where: { riderId: rider.id, status: { in: ACTIVE_STATUSES } }, include: PAYMENT_INCLUDE });
+      const active = await tx.delivery.findMany({ where: { riderId: rider.id, status: { in: ACTIVE_DELIVERY_STATUSES } }, include: PAYMENT_INCLUDE });
       if (active.length >= 2) {
         throw new AppError(
           'Rider capacity limit reached (maximum 2 active orders). Deliver an ongoing run before claiming new orders.',
@@ -390,7 +399,7 @@ export class RiderService {
 
       // No more customer cash than the rider's limit, counting what they hold and what they'll
       // collect on the jobs they already have. Prepaid jobs are always fine.
-      if (liveOrder.paymentMethod === 'cod' && liveOrder.paymentStatus !== 'paid') {
+      if (isCashAtDoor(liveOrder)) {
         const { cashHeld } = await riderMoney(tx, rider.id);
         const toCollect = cashToCollect(active);
         const limit = cashLimitOf(rider);
@@ -448,7 +457,7 @@ export class RiderService {
     if (first.riderId !== rider.id) {
       throw new AppError('This delivery is not assigned to you', 403, 'ACCESS_DENIED');
     }
-    if (!VALID_TRANSITIONS[first.status]?.includes(status)) {
+    if (!canMoveDelivery(first.status, status)) {
       throw new AppError(`Cannot move from ${first.status} to ${status}`, 400, 'INVALID_TRANSITION');
     }
     // The customer's code, checked (and wrong guesses counted) before anything changes.
@@ -468,7 +477,7 @@ export class RiderService {
       if (delivery.status === 'cancelled') {
         throw new AppError('This delivery was cancelled', 409, 'DELIVERY_CANCELLED');
       }
-      if (!VALID_TRANSITIONS[delivery.status]?.includes(status)) {
+      if (!canMoveDelivery(delivery.status, status)) {
         throw new AppError(`Cannot move from ${delivery.status} to ${status}`, 400, 'INVALID_TRANSITION');
       }
 
@@ -476,46 +485,8 @@ export class RiderService {
         where: { id: delivery.orderId },
         select: { orderStatus: true, paymentStatus: true, paymentMethod: true, totalAmount: true, orderNumber: true },
       });
-      if (['cancelled', 'refunded', 'completed'].includes(order.orderStatus)) {
-        throw new AppError(
-          `Order is already ${order.orderStatus}; delivery status can no longer be updated`,
-          409,
-          'ORDER_ALREADY_TERMINAL'
-        );
-      }
-      if (['refund_pending', 'refunded'].includes(order.paymentStatus)) {
-        throw new AppError(
-          `Order payment is ${order.paymentStatus}; delivery status can no longer be updated`,
-          409,
-          'ORDER_ALREADY_TERMINAL'
-        );
-      }
-      // The food leaves the kitchen only once the kitchen has marked it ready.
-      const kitchenReady = ['ready', 'dispatched', 'in_transit'].includes(order.orderStatus);
-      if ((status === 'picked_up' || status === 'in_transit') && delivery.status !== 'picked_up' && !kitchenReady) {
-        throw new AppError(
-          "The kitchen hasn't marked this order ready yet. Wait for it before picking it up.",
-          409,
-          'FOOD_NOT_READY'
-        );
-      }
-      // A delivery can only fail once there is food to deliver: before that, a rider who cannot
-      // wait hands the job back (release) and the kitchen keeps cooking for the next rider.
-      if (status === 'delivery_failed' && delivery.status === 'arrived_at_pickup' && !kitchenReady) {
-        throw new AppError(
-          "The kitchen hasn't marked this order ready yet. Hand the job back instead of failing it.",
-          409,
-          'FOOD_NOT_READY'
-        );
-      }
-      // Food paid online or by transfer leaves the kitchen only once the payment is confirmed.
-      if (status === 'picked_up' && order.paymentMethod !== 'cod' && order.paymentStatus !== 'paid') {
-        throw new AppError(
-          "The customer's payment hasn't been confirmed yet; wait for the kitchen to confirm it before pickup",
-          409,
-          'PAYMENT_NOT_CONFIRMED'
-        );
-      }
+      const refusal = refuseDeliveryMove(delivery.status, status, order);
+      if (refusal) throw new AppError(refusal.message, refusal.statusCode, refusal.code);
 
       const now = new Date();
       const updateData: Record<string, unknown> = { status };
@@ -537,7 +508,7 @@ export class RiderService {
       }
 
       // Cash the rider takes at the door: an unpaid cash order being delivered.
-      const isCodPayment = order.paymentMethod === 'cod' && order.paymentStatus !== 'paid';
+      const isCodPayment = isCashAtDoor(order);
       const newOrderStatus = ORDER_STATUS_FOR_DELIVERY_STATUS[status] ?? null;
       if (newOrderStatus && newOrderStatus !== order.orderStatus) {
         await tx.order.update({
@@ -601,7 +572,7 @@ export class RiderService {
       try {
         await ledgerService.recordOrderCompletion(result.orderId);
       } catch (ledgerErr) {
-        console.error('Failed to record financial ledger entries for order:', result.orderId, ledgerErr);
+        logger.error({ err: ledgerErr, orderId: result.orderId }, 'Failed to record financial ledger entries');
       }
     }
 
@@ -618,7 +589,7 @@ export class RiderService {
     if (!delivery) throw new AppError('Delivery not found', 404, 'DELIVERY_NOT_FOUND');
     if (delivery.riderId !== rider.id) throw new AppError('This delivery is not assigned to you', 403, 'ACCESS_DENIED');
     const released = await prisma.delivery.updateMany({
-      where: { id: deliveryId, riderId: rider.id, status: { in: ['assigned', 'arrived_at_pickup'] } },
+      where: { id: deliveryId, riderId: rider.id, status: { in: BEFORE_PICKUP_STATUSES } },
       data: reopenDeliveryData(rider.id),
     });
     if (released.count === 0) {
@@ -626,9 +597,8 @@ export class RiderService {
     }
     // No longer a party to this order: out of its live room (status and the next rider's position).
     socketManager.removeUserFromOrder(userId, delivery.orderId);
-    realtimeOrderService.emitDeliveryPosted(deliveryId, delivery.orderId);
-    // Offer it to another rider (never the one who handed it back).
-    dispatchSoon(deliveryId);
+    // Offer it to another rider (never the one who handed it back); the pool hears of it only if nobody takes it.
+    postDeliverySoon(deliveryId, delivery.orderId);
     return { released: true };
   }
 
@@ -739,6 +709,8 @@ export class RiderService {
       where: { id: rider.id },
       data: { isAvailable: newStatus },
     });
+    // Pool announcements reach the riders who are on duty: this rider's open connections follow the switch.
+    void socketManager.syncRiderDuty(userId);
     if (updated.isAvailable) dispatchSoon();
     return { isAvailable: updated.isAvailable };
   }
@@ -761,7 +733,7 @@ export class RiderService {
     if (delivery.riderId !== rider.id) {
       throw new AppError('This delivery is not assigned to you', 403, 'ACCESS_DENIED');
     }
-    if (!ACTIVE_STATUSES.includes(delivery.status)) {
+    if (!ACTIVE_DELIVERY_STATUSES.includes(delivery.status)) {
       throw new AppError('This job is finished, so its location is no longer shared', 409, 'DELIVERY_NOT_ACTIVE');
     }
 
@@ -800,7 +772,7 @@ export class RiderService {
       const distanceKm = toDropoffKm != null ? Math.round(toDropoffKm * 10) / 10 : undefined;
       realtimeOrderService
         .emitDeliveryTrackingUpdate(current.orderId, { latitude, longitude }, distanceKm)
-        .catch((err) => console.error('Delivery tracking update failed:', err));
+        .catch((err) => logger.error({ err, orderId: current.orderId }, 'Delivery tracking update failed'));
     }
 
     return {

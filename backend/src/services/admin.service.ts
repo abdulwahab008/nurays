@@ -1,4 +1,5 @@
 import { Prisma } from '@prisma/client';
+import { kitchenApplicationGaps } from '../utils/kitchenApplication';
 import prisma from '../config/database';
 import { computeSellerBalance } from './seller-balance.service';
 import { pageArgs } from '../utils/pagination';
@@ -6,6 +7,7 @@ import { AppError } from '../middleware/errorHandler';
 import { presentFile } from '../storage';
 import { notify, notifySeller } from './notify.service';
 import { DELIVERY_SETTING_DEFAULTS, invalidateDeliveryPricing } from './delivery-pricing.service';
+import socketManager from '../config/socket';
 
 /** Verification documents with short-lived links an admin can open. */
 async function presentDocuments(docs: Array<{ id: string; documentType: string; documentUrl: string; createdAt?: Date; uploadedAt?: Date }>) {
@@ -63,9 +65,12 @@ export class AdminService {
       description: seller.description,
       kitchenVideoUrl: seller.kitchenVideoUrl,
       coverImageUrl: seller.coverImageUrl,
+      communityId: seller.communityId,
       primaryCommunityName: seller.primaryCommunityName,
       latitude: seller.latitude != null ? Number(seller.latitude) : null,
       longitude: seller.longitude != null ? Number(seller.longitude) : null,
+      // What the application still lacks (nothing: complete); the screen disables Approve while this is not empty.
+      missing: kitchenApplicationGaps(seller, seller.documents.map((d) => d.documentType)),
       documents: await presentDocuments(seller.documents),
       user: {
         id: seller.user.id,
@@ -107,13 +112,25 @@ export class AdminService {
       );
     }
 
+    // The kitchen is told the reason, so there has to be one. And a kitchen with no community, no place on the map or no
+    // CNIC on file cannot be approved: it would be listed nowhere, with nobody known behind it.
+    if (!approved) {
+      if (!notes || notes.trim().length < 5) throw new AppError('Please tell the kitchen why it was not approved', 400, 'REASON_REQUIRED');
+    } else {
+      const documentTypes = (await prisma.sellerDocument.findMany({ where: { sellerId }, select: { documentType: true } })).map((d) => d.documentType);
+      const missing = kitchenApplicationGaps(seller, documentTypes);
+      if (missing.length > 0) {
+        throw new AppError(`This kitchen has not sent its ${missing.join(', ')} yet`, 409, 'APPLICATION_INCOMPLETE', { missing });
+      }
+    }
+
     const updatedSeller = await prisma.seller.update({
       where: { id: sellerId },
       data: {
         verificationStatus: approved ? 'approved' : 'rejected',
         isVerified: approved,
         status: approved ? 'active' : 'inactive',
-        rejectionReason: approved ? null : notes || 'Application rejected',
+        rejectionReason: approved ? null : notes!.trim(),
       },
     });
 
@@ -130,7 +147,7 @@ export class AdminService {
       category: 'orders',
       type: 'account',
       title: approved ? 'Your kitchen was approved' : 'Your kitchen application was not approved',
-      message: approved ? 'You can now list dishes and take orders.' : `Reason: ${notes || 'Application rejected'}`,
+      message: approved ? 'You can now list dishes and take orders.' : `Reason: ${notes!.trim()}`,
       actionUrl: '/sellers/dashboard',
       data: { sellerId },
       channels: ['push', 'email'],
@@ -190,6 +207,9 @@ export class AdminService {
       createdAt: seller.createdAt,
       updatedAt: seller.updatedAt,
       productCount,
+      communityId: seller.communityId,
+      primaryCommunityName: seller.primaryCommunityName,
+      missing: kitchenApplicationGaps(seller, seller.documents.map((d) => d.documentType)),
       documents: await presentDocuments(seller.documents),
       user: {
         id: seller.user.id,
@@ -287,6 +307,12 @@ export class AdminService {
     approved: boolean,
     reason?: string
   ) {
+    // The kitchen is told the reason, so there has to be one (as for a kitchen or a rider that is turned down).
+    if (!approved && (!reason || reason.trim().length < 5)) {
+      throw new AppError('Say why the dish is not approved (at least 5 characters), so the kitchen knows what to fix.', 400, 'REASON_REQUIRED');
+    }
+    const why = reason?.trim();
+
     const product = await prisma.product.findUnique({
       where: { id: productId },
     });
@@ -300,13 +326,13 @@ export class AdminService {
       data: {
         approvalStatus: approved ? 'approved' : 'rejected',
         isActive: approved,
-        rejectionReason: approved ? null : reason || 'Product rejected',
+        rejectionReason: approved ? null : why,
       },
     });
 
     await notifySeller(product.sellerId, approved
       ? { title: 'Dish approved', message: `"${product.name}" is live. Customers can order it now.`, actionUrl: `/products/${product.id}`, dedupeKey: `product:${product.id}:approved:${Date.now()}` }
-      : { title: 'Dish not approved', message: `"${product.name}" wasn't approved: ${reason || 'Product rejected'}`, actionUrl: `/sellers/products/${product.id}/edit`, dedupeKey: `product:${product.id}:rejected:${Date.now()}` });
+      : { title: 'Dish not approved', message: `"${product.name}" wasn't approved: ${why}`, actionUrl: `/sellers/products/${product.id}/edit`, dedupeKey: `product:${product.id}:rejected:${Date.now()}` });
 
     return {
       productId: updatedProduct.id,
@@ -374,6 +400,10 @@ export class AdminService {
     if (rider.verificationStatus !== 'pending') {
       throw new AppError(`Rider already ${rider.verificationStatus}`, 400, 'RIDER_ALREADY_PROCESSED');
     }
+    // The rider is told the reason, so there has to be one.
+    if (!approved && (!reason || reason.trim().length < 5)) {
+      throw new AppError('Please tell the rider why the application was not approved', 400, 'REASON_REQUIRED');
+    }
     // Approval needs the rider's vehicle and documents on file.
     if (approved) {
       const types = new Set((await prisma.riderDocument.findMany({ where: { riderId }, select: { documentType: true } })).map((d) => d.documentType));
@@ -387,16 +417,18 @@ export class AdminService {
       data: {
         verificationStatus: approved ? 'approved' : 'rejected',
         status: approved ? 'active' : 'suspended',
-        rejectionReason: approved ? null : reason || 'Application rejected',
+        rejectionReason: approved ? null : reason!.trim(),
       },
     });
+    // A rider is on duty by default: once approved they hear about jobs in the pool, rejected they do not.
+    void socketManager.syncRiderDuty(rider.userId);
 
     void notify({
       userId: rider.userId,
       category: 'deliveries',
       type: 'account',
       title: approved ? 'Your rider application was approved' : 'Your rider application was not approved',
-      message: approved ? 'You can go on duty and take deliveries.' : `Reason: ${reason || 'Application rejected'}. You can fix it and apply again.`,
+      message: approved ? 'You can go on duty and take deliveries.' : `Reason: ${reason!.trim()}. You can fix it and apply again.`,
       actionUrl: '/riders/dashboard',
       data: { riderId },
       channels: ['push', 'email'],
@@ -661,7 +693,9 @@ export class AdminService {
       if (!Number.isFinite(v) || v < lo || v > hi) throw new AppError(`${key} must be between ${lo} and ${hi}`, 400, 'INVALID_SETTING');
       data[key] = v;
     }
-    await Promise.all(
+    // All of them or none: the settings belong together (the delivery prices, the commission), and a save that stopped half way
+    // must not leave some of the boxes the admin filled in applied and others not.
+    await prisma.$transaction(
       keys.map((key) =>
         prisma.systemSetting.upsert({
           where: { key },

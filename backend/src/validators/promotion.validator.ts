@@ -2,7 +2,7 @@ import { z } from 'zod';
 
 export const validatePromotionCodeSchema = z.object({
   code: z.string().min(1, 'Promotion code is required'),
-  cartTotal: z.number().min(0, 'Cart total must be positive'),
+  cartTotal: z.number().min(0, 'Cart total must be positive').max(10_000_000),
 });
 
 export const createPromotionSchema = z.object({
@@ -10,11 +10,11 @@ export const createPromotionSchema = z.object({
   code: z.string().min(1, 'Promo code is required').max(50).transform((s) => s.toUpperCase().replace(/\s/g, '')),
   description: z.string().max(500).optional(),
   discountType: z.enum(['percentage', 'fixed']),
-  discountValue: z.number().min(0, 'Discount value must be 0 or more'),
-  maxDiscountAmount: z.number().min(0).optional().nullable(),
-  minOrderAmount: z.number().min(0).default(0),
-  usageLimitTotal: z.number().int().min(1).optional().nullable(),
-  usageLimitPerUser: z.number().int().min(1).default(1),
+  discountValue: z.number().min(0, 'Discount value must be 0 or more').max(10_000_000),
+  maxDiscountAmount: z.number().min(0).max(10_000_000).optional().nullable(),
+  minOrderAmount: z.number().min(0).max(10_000_000).default(0),
+  usageLimitTotal: z.number().int().min(1).max(10_000_000).optional().nullable(),
+  usageLimitPerUser: z.number().int().min(1).max(10_000).default(1),
   validFrom: z.coerce.date(),
   validUntil: z.coerce.date(),
   applyTo: z.enum(['all', 'selected']).optional().default('all'),
@@ -35,11 +35,11 @@ export const updatePromotionSchema = z.object({
   code: z.string().min(1).max(50).optional().transform((s) => s == null ? undefined : s.toUpperCase().replace(/\s/g, '')),
   description: z.string().max(500).optional().nullable(),
   discountType: z.enum(['percentage', 'fixed']).optional(),
-  discountValue: z.number().min(0).optional(),
-  maxDiscountAmount: z.number().min(0).optional().nullable(),
-  minOrderAmount: z.number().min(0).optional(),
-  usageLimitTotal: z.number().int().min(1).optional().nullable(),
-  usageLimitPerUser: z.number().int().min(1).optional(),
+  discountValue: z.number().min(0).max(10_000_000).optional(),
+  maxDiscountAmount: z.number().min(0).max(10_000_000).optional().nullable(),
+  minOrderAmount: z.number().min(0).max(10_000_000).optional(),
+  usageLimitTotal: z.number().int().min(1).max(10_000_000).optional().nullable(),
+  usageLimitPerUser: z.number().int().min(1).max(10_000).optional(),
   validFrom: z.coerce.date().optional(),
   validUntil: z.coerce.date().optional(),
   applyTo: z.enum(['all', 'selected']).optional(),

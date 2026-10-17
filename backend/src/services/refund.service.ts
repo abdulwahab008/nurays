@@ -1,9 +1,10 @@
+import type { Order, Prisma } from '@prisma/client';
 import prisma from '../config/database';
 import { pageArgs } from '../utils/pagination';
 import { notify } from './notify.service';
 import { AppError } from '../middleware/errorHandler';
 import { parseBreakdown } from '../utils/deliveryEarnings';
-import { GST_RATE, priceOrder } from '../utils/pricing';
+import { GST_RATE, priceOrder, roundMoney } from '../utils/pricing';
 
 type Tx = Parameters<Parameters<typeof prisma.$transaction>[0]>[0];
 
@@ -16,7 +17,6 @@ export interface IssuedRefund {
   fullyRefunded: boolean;
 }
 
-const money = (n: number) => Math.round(n * 100) / 100;
 
 /**
  * Create the refund owed on a paid order, inside the caller's transaction.
@@ -55,12 +55,12 @@ export async function issueRefund(
     _sum: { amount: true },
   });
   const alreadyRefunded = Number(agg._sum.amount ?? 0);
-  const remaining = money(total - alreadyRefunded);
-  const amount = money(Math.min(opts.amount ?? remaining, remaining));
+  const remaining = roundMoney(total - alreadyRefunded);
+  const amount = roundMoney(Math.min(opts.amount ?? remaining, remaining));
   if (amount <= 0) return null;
 
   const isWallet = order.paymentMethod === 'wallet';
-  const fullyRefunded = money(alreadyRefunded + amount) >= total;
+  const fullyRefunded = roundMoney(alreadyRefunded + amount) >= total;
 
   if (isWallet) {
     if (!order.customerId) {
@@ -84,7 +84,7 @@ export async function issueRefund(
         orderId,
         transactionType: 'credit',
         amount,
-        balanceBefore: money(balanceAfter - amount),
+        balanceBefore: roundMoney(balanceAfter - amount),
         balanceAfter,
         description: `Refund for order ${order.orderNumber}`,
         status: 'completed',
@@ -159,28 +159,28 @@ function itemNetPaid(
  * Re-prices from the items still live: subtotal, discount shares, that sellers' delivery
  * fees, GST and total.
  */
-async function shrinkUnpaidOrder(tx: Tx, order: any) {
+async function shrinkUnpaidOrder(tx: Tx, order: Order) {
   const items = await tx.orderItem.findMany({ where: { orderId: order.id } });
-  const live = items.filter((i: any) => i.status !== 'cancelled');
+  const live = items.filter((i) => i.status !== 'cancelled');
   if (live.length === 0) return;
-  const hasShares = items.some((i: any) => Number(i.promoDiscount) > 0);
+  const hasShares = items.some((i) => Number(i.promoDiscount) > 0);
 
-  const subtotal = money(live.reduce((sum: number, i: any) => sum + Number(i.totalPrice), 0));
+  const subtotal = roundMoney(live.reduce((sum: number, i) => sum + Number(i.totalPrice), 0));
   const oldSubtotal = Number(order.subtotal);
   const discount = hasShares
-    ? money(live.reduce((sum: number, i: any) => sum + Number(i.promoDiscount), 0))
-    : money(oldSubtotal > 0 ? Number(order.discountAmount) * (subtotal / oldSubtotal) : 0);
+    ? roundMoney(live.reduce((sum: number, i) => sum + Number(i.promoDiscount), 0))
+    : roundMoney(oldSubtotal > 0 ? Number(order.discountAmount) * (subtotal / oldSubtotal) : 0);
 
-  const liveSellers = new Set(live.map((i: any) => i.sellerId));
+  const liveSellers = new Set(live.map((i) => i.sellerId));
   const breakdown = parseBreakdown(order.deliveryFeeBreakdown);
   const liveBreakdown = breakdown.filter((r) => liveSellers.has(r.sellerId));
   // Legacy orders have no per-seller split, so their delivery fee stays as it was.
   // The customer's delivery fee is only the shares they pay; a kitchen-paid fee is not on their bill.
   const deliveryFee = breakdown.length
-    ? money(liveBreakdown.filter((r) => r.paidBy !== 'seller').reduce((sum, r) => sum + r.fee, 0))
+    ? roundMoney(liveBreakdown.filter((r) => r.paidBy !== 'seller').reduce((sum, r) => sum + r.fee, 0))
     : Number(order.deliveryFee);
   const sellerDeliveryCharge = breakdown.length
-    ? money(liveBreakdown.filter((r) => r.paidBy === 'seller').reduce((sum, r) => sum + r.fee, 0))
+    ? roundMoney(liveBreakdown.filter((r) => r.paidBy === 'seller').reduce((sum, r) => sum + r.fee, 0))
     : Number(order.sellerDeliveryCharge ?? 0);
 
   const { taxAmount, totalAmount } = priceOrder(subtotal - discount, deliveryFee);
@@ -191,7 +191,7 @@ async function shrinkUnpaidOrder(tx: Tx, order: any) {
       discountAmount: discount,
       deliveryFee,
       sellerDeliveryCharge,
-      deliveryFeeBreakdown: breakdown.length ? (liveBreakdown as any) : undefined,
+      deliveryFeeBreakdown: breakdown.length ? (liveBreakdown as unknown as Prisma.InputJsonValue) : undefined,
       taxAmount,
       totalAmount,
     },
@@ -225,16 +225,16 @@ export async function refundForCancelledItems(
 
   if (Number(order.subtotal) <= 0 || cancelledItemIds.length === 0) return null;
   const allItems = await tx.orderItem.findMany({ where: { orderId } });
-  const hasShares = allItems.some((i: any) => Number(i.promoDiscount) > 0);
-  const cancelled = allItems.filter((i: any) => cancelledItemIds.includes(i.id));
-  const itemsPaid = cancelled.reduce((sum: number, i: any) => sum + itemNetPaid(i, order, hasShares), 0);
+  const hasShares = allItems.some((i) => Number(i.promoDiscount) > 0);
+  const cancelled = allItems.filter((i) => cancelledItemIds.includes(i.id));
+  const itemsPaid = cancelled.reduce((sum: number, i) => sum + itemNetPaid(i, order, hasShares), 0);
 
   // A seller with no live items left will not be delivering anything, so the
   // delivery fee the customer paid them comes back too. (Needs the per-seller
   // snapshot; orders from before it existed only get the goods refunded.)
   let deliveryBack = 0;
-  for (const sellerId of new Set(cancelled.map((i: any) => i.sellerId))) {
-    const live = allItems.filter((i: any) => i.sellerId === sellerId && i.status !== 'cancelled').length;
+  for (const sellerId of new Set(cancelled.map((i) => i.sellerId))) {
+    const live = allItems.filter((i) => i.sellerId === sellerId && i.status !== 'cancelled').length;
     if (live === 0) {
       deliveryBack += parseBreakdown(order.deliveryFeeBreakdown)
         .filter((r) => r.sellerId === sellerId && r.paidBy !== 'seller')
@@ -243,7 +243,7 @@ export async function refundForCancelledItems(
   }
 
   return issueRefund(tx, orderId, {
-    amount: money(itemsPaid + deliveryBack),
+    amount: roundMoney(itemsPaid + deliveryBack),
     reason: opts.reason,
     createdBy: opts.createdBy,
   });
@@ -304,7 +304,8 @@ async function completeRefundRecord(refundId: string, adminId: string, reference
       data: {
         orderId: order.id,
         status: order.orderStatus,
-        notes: `Refund of ${Number(refund.amount)} sent to the customer${reference ? ` (ref ${reference})` : ''}`,
+        // The transfer reference is kept on the refund record; kitchens read this history.
+        notes: `Refund of ${Number(refund.amount)} sent to the customer`,
         changedBy: adminId,
       },
     });

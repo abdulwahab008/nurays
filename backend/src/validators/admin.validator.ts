@@ -5,10 +5,16 @@ export const approveRejectSellerSchema = z.object({
   notes: z.string().max(1000).optional(),
 });
 
-export const moderateProductSchema = z.object({
-  approved: z.boolean(),
-  reason: z.string().max(1000).optional(),
-});
+export const moderateProductSchema = z
+  .object({
+    approved: z.boolean(),
+    reason: z.string().max(1000).optional(),
+  })
+  // The kitchen is told why a dish was turned down, so a rejection must say (as for a kitchen or a rider).
+  .refine((data) => data.approved || (data.reason?.trim().length ?? 0) >= 5, {
+    message: 'Say why the dish is not approved (at least 5 characters), so the kitchen knows what to fix',
+    path: ['reason'],
+  });
 
 export const updateSellerStatusSchema = z.object({
   status: z.enum(['active', 'suspended']),
@@ -32,7 +38,7 @@ export const updateSettingsSchema = z.object({
   supportEmail: z.string().email().optional(),
   supportPhone: z.string().min(1).optional(),
   commissionRate: z.number().min(0).max(100).optional(),
-  minPayoutAmount: z.number().min(0).optional(),
+  minPayoutAmount: z.number().min(0).max(10_000_000).optional(),
   // Nuray rider delivery to other communities (delivery-pricing.service.ts).
   deliveryPerKm: z.number().min(0).max(1000).optional(),
   deliveryIncludedKm: z.number().min(0).max(100).optional(),

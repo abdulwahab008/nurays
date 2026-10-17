@@ -17,7 +17,7 @@ export default function RouteError({ error, reset }: { error: Error & { digest?:
         <p className="mt-2 text-sm text-slate-600">
           It has been reported. You can try again, or go back to the home page.
         </p>
-        {error.digest && <p className="mt-3 text-xs text-slate-400">Reference: {error.digest}</p>}
+        {error.digest && <p className="mt-3 text-xs text-slate-500">Reference: {error.digest}</p>}
         <div className="mt-6 flex justify-center gap-3">
           <button
             type="button"

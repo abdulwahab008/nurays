@@ -180,7 +180,7 @@ async function sellersPassingComputedFilters(
  * cutoff time and daily cap), and — only when we know where the customer is —
  * delivery fee, distance, eligibility, and an ETA.
  */
-async function computeCustomerFacingSellerInfo(
+export async function computeCustomerFacingSellerInfo(
   seller: Record<string, unknown> & {
     id: string;
     latitude: unknown;
@@ -212,8 +212,9 @@ async function computeCustomerFacingSellerInfo(
       fee: feeResult.fee,
       distanceKm: feeResult.distanceKm != null ? Math.round(feeResult.distanceKm * 10) / 10 : null,
       reason: feeResult.reason,
-      estimatedMinMinutes: eta.minMinutes,
-      estimatedMaxMinutes: eta.maxMinutes,
+      // A time for a trip the kitchen will not make is worse than none: a buyer in another city was told "3,094 min".
+      estimatedMinMinutes: feeResult.deliverable ? eta.minMinutes : null,
+      estimatedMaxMinutes: feeResult.deliverable ? eta.maxMinutes : null,
     },
   };
 }
@@ -326,7 +327,7 @@ export class ProductService {
     const skip = (page - 1) * limit;
 
     // Build where clause
-    const where: any = {};
+    const where: Prisma.ProductWhereInput = {};
 
     if (filters.categoryId) {
       where.categoryId = filters.categoryId;
@@ -672,11 +673,6 @@ export class ProductService {
         category: true,
         seller: {
           include: {
-            user: {
-              select: {
-                phone: true,
-              },
-            },
             community: { select: { id: true, name: true, slug: true, crossCommunityEnabled: true } },
             communityDeliveries: SELLER_COMMUNITY_DELIVERY_SELECT.communityDeliveries,
           },
@@ -693,7 +689,7 @@ export class ProductService {
         },
         _count: {
           select: {
-            reviews: true,
+            reviews: { where: { isApproved: true } },
             orderItems: true,
           },
         },
@@ -927,6 +923,13 @@ export class ProductService {
       throw new AppError('Product not found or access denied', 404, 'PRODUCT_NOT_FOUND');
     }
 
+    // A kitchen may hide a dish at any time, but only the administrator's approval makes one visible: turning on a dish that is not
+    // approved is refused (it would otherwise be a way around the review). Sending "on" for a dish that is already on, as the edit
+    // form does with every save, changes nothing.
+    if (data.isActive === true && !product.isActive && product.approvalStatus !== 'approved') {
+      throw new AppError('This dish has to be approved before it can be shown to customers', 409, 'PRODUCT_NOT_APPROVED');
+    }
+
     // An approved (or rejected) dish whose content changed goes back to review; the kitchen's price, stock
     // and menu changes do not need one.
     const existingImages = data.images !== undefined ? await prisma.productImage.findMany({ where: { productId }, select: { imageUrl: true } }) : [];
@@ -1037,7 +1040,7 @@ export class ProductService {
       throw new AppError('Seller not found', 404, 'SELLER_NOT_FOUND');
     }
 
-    const where: any = {
+    const where: Prisma.ProductWhereInput = {
       sellerId: seller.id,
     };
 
@@ -1060,7 +1063,7 @@ export class ProductService {
           images: true,
           _count: {
             select: {
-              reviews: true,
+              reviews: { where: { isApproved: true } },
               orderItems: true,
             },
           },

@@ -6,6 +6,8 @@ export class AppError extends Error {
   statusCode: number;
   code: string;
   details?: any;
+  /** A 5xx the system gives on purpose, in a state it knows about (see `AppError.expected`). */
+  isExpected = false;
 
   constructor(message: string, statusCode: number = 500, code: string = 'INTERNAL_ERROR', details?: any) {
     super(message);
@@ -14,13 +16,24 @@ export class AppError extends Error {
     this.details = details;
     Error.captureStackTrace(this, this.constructor);
   }
+
+  /**
+   * An answer of 5xx that is the system working as set up, not a fault (a feature that is switched off, such as
+   * online payment with no gateway configured): it is logged as a warning and not reported to error tracking.
+   */
+  static expected(message: string, statusCode: number, code: string, details?: unknown): AppError {
+    const err = new AppError(message, statusCode, code, details);
+    err.isExpected = true;
+    return err;
+  }
 }
 
 /**
  * Known library errors a client caused, translated to the right 4xx instead of a
  * blanket 500: a unique-constraint hit (now common — reviews, promo usage, SKUs),
  * a missing record, a malformed or oversized body, an upload over the size limit.
- * Anything unrecognised is returned unchanged and handled as a real 500.
+ * A database that was too busy to answer in time becomes a 503. Anything
+ * unrecognised is returned unchanged and handled as a real 500.
  */
 export const toAppError = (err: any): Error | AppError => {
   if (err instanceof AppError) return err;
@@ -36,6 +49,36 @@ export const toAppError = (err: any): Error | AppError => {
     if (err.code === 'P2025') {
       return new AppError('Record not found', 404, 'NOT_FOUND');
     }
+    // No database connection free in time, or a transaction that ran out of time: an overload. The work was rolled
+    // back, so "busy, try again" is true, and a 503 is what a client or a load balancer knows how to retry.
+    if (err.code === 'P2024' || err.code === 'P2028') {
+      return new AppError('The service is busy. Please try again in a moment.', 503, 'SERVICE_BUSY');
+    }
+    // Two transactions in each other's way (a write conflict, a deadlock): PostgreSQL ended one and rolled it back, so trying again
+    // is safe and usually works.
+    if (err.code === 'P2034') {
+      return new AppError('The service is busy. Please try again in a moment.', 503, 'SERVICE_BUSY');
+    }
+    // The database could not be reached or closed the connection (P1001, P1002, P1008, P1017).
+    if (['P1001', 'P1002', 'P1008', 'P1017'].includes(err.code)) {
+      return new AppError('The service is temporarily unavailable. Please try again in a moment.', 503, 'SERVICE_UNAVAILABLE');
+    }
+  }
+  // A database that cannot be reached at all (stopped, restarting, the network cut): Prisma throws an initialization error with no
+  // code. A 503 is what a client or a load balancer can act on (try again); it is still logged and reported as the outage it is.
+  if (err?.name === 'PrismaClientInitializationError') {
+    return new AppError('The service is temporarily unavailable. Please try again in a moment.', 503, 'SERVICE_UNAVAILABLE');
+  }
+  // PostgreSQL cancelled a statement that ran past DB_STATEMENT_TIMEOUT_MS (SQLSTATE 57014): the same answer. Prisma reports
+  // a raw query as P2010 with the SQLSTATE in meta, and any other query as an error without a code that names it in its message.
+  if (err?.clientVersion && (err.meta?.code === '57014' || /code: "57014"/.test(String(err.message)))) {
+    return new AppError('The service is busy. Please try again in a moment.', 503, 'SERVICE_BUSY');
+  }
+
+  // Text the database cannot store (a NUL byte, an unpaired surrogate). rejectUnsafeText stops these at the door; this is
+  // the net under it for a path that reaches a query some other way.
+  if (/invalid byte sequence for encoding|\b22021\b|unexpected end of hex escape/i.test(String(err?.message ?? ''))) {
+    return new AppError('The request contains characters that are not allowed', 400, 'INVALID_CHARACTERS');
   }
 
   // Express decodes path parameters before the route runs: malformed percent-encoding is a bad request.
@@ -70,10 +113,10 @@ export const errorHandler = (
   const err = toAppError(rawErr);
   const requestId = (req as Request & { id?: string }).id;
   const isDev = process.env.NODE_ENV === 'development';
-  const expected = err instanceof AppError && err.statusCode < 500;
+  const expected = err instanceof AppError && (err.statusCode < 500 || err.isExpected);
 
   if (expected) {
-    // A client mistake (validation, not found, forbidden...): worth a line, not an alert.
+    // A client mistake (validation, not found, forbidden...) or a known state such as a switched-off feature: worth a line, not an alert.
     logger.warn({ code: (err as AppError).code, status: (err as AppError).statusCode, path: req.path, method: req.method }, err.message);
   } else {
     // A bug or an outage: the full stack goes to the logs and to error tracking, never to the client.
@@ -82,6 +125,7 @@ export const errorHandler = (
   }
 
   if (err instanceof AppError) {
+    if (err.statusCode === 503) res.setHeader('Retry-After', '2');
     res.status(err.statusCode || 500).json({
       success: false,
       error: {

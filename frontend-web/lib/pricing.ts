@@ -2,6 +2,17 @@
 export interface CatalogPromotionLike {
   type: 'percentage' | 'fixed' | string;
   discountValue: number;
+  name?: string;
+}
+
+/** A page's translator, narrowed to the three words a deal's label needs (every page that shows deals has them). */
+export type PromotionText = (key: 'percentOff' | 'amountOff' | 'deal', vars?: Record<string, string | number>) => string;
+
+/** What a deal is worth, in words: "10% off", "Rs 200 off", or the deal's own name (a bundle, buy-x-get-y) when it has no size to show. */
+export function getPromotionLabel(p: CatalogPromotionLike, t: PromotionText, formatAmount: (amount: number) => string): string {
+  if (p.type === 'percentage' && p.discountValue > 0) return t('percentOff', { value: p.discountValue });
+  if (p.type === 'fixed' && p.discountValue > 0) return t('amountOff', { amount: formatAmount(p.discountValue) });
+  return p.name || t('deal');
 }
 
 /**

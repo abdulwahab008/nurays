@@ -1,3 +1,4 @@
+import type { Prisma } from '@prisma/client';
 import prisma from '../config/database';
 import { pageArgs } from '../utils/pagination';
 import { refreshRatingScores } from './ranking.service';
@@ -124,7 +125,7 @@ export class ReviewService {
   ) {
     const { page, limit, skip } = pageArgs(filters.page, filters.limit, 10, 50);
 
-    const where: any = {
+    const where: Prisma.ReviewWhereInput = {
       productId,
       isApproved: true,
     };
@@ -204,6 +205,19 @@ export class ReviewService {
         totalPages: Math.ceil(total / limit),
       },
     };
+  }
+
+  /**
+   * Work out again everything one review feeds into (the dish's, the kitchen's and the Nuray rider's ratings): after
+   * staff hide a review, or show one again, it counts or stops counting.
+   */
+  async refreshRatingsFor(review: { productId: string | null; sellerId: string; orderId: string; deliveryRating: number | null }) {
+    if (review.productId) await this.updateProductRating(review.productId);
+    await this.updateSellerRating(review.sellerId);
+    if (review.deliveryRating != null) {
+      const delivery = await prisma.delivery.findUnique({ where: { orderId: review.orderId }, select: { riderId: true, status: true } });
+      if (delivery?.riderId && delivery.status === 'delivered') await this.updateRiderRating(delivery.riderId);
+    }
   }
 
   /**

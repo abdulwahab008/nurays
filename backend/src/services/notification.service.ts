@@ -43,7 +43,7 @@ export class NotificationService {
   ) {
     const { page, limit, skip } = pageArgs(filters.page, filters.limit);
 
-    const where: any = {
+    const where: Prisma.NotificationWhereInput = {
       userId,
     };
 
@@ -101,8 +101,19 @@ export class NotificationService {
 
     await prisma.notification.update({
       where: { id: notificationId },
-      data: { isRead: true },
+      data: { isRead: true, readAt: notification.readAt ?? new Date() },
     });
+  }
+
+  /**
+   * Delete one of the user's own notifications. Someone else's, or one that is already gone, is the same 404, so the
+   * answer never says whether an id exists.
+   */
+  async deleteNotification(notificationId: string, userId: string) {
+    const { count } = await prisma.notification.deleteMany({ where: { id: notificationId, userId } });
+    if (count === 0) {
+      throw new AppError('Notification not found', 404, 'NOTIFICATION_NOT_FOUND');
+    }
   }
 
   /**
@@ -116,6 +127,7 @@ export class NotificationService {
       },
       data: {
         isRead: true,
+        readAt: new Date(),
       },
     });
   }

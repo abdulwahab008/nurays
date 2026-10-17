@@ -5,7 +5,7 @@ export const createOrderSchema = z.object({
     z.object({
       productId: z.string().uuid(),
       variantId: z.string().uuid().optional(),
-      quantity: z.number().int().positive(),
+      quantity: z.number().int().positive().max(10_000),
       stockType: z.enum(['direct', 'hub', 'both']).optional(),
       hubId: z.string().uuid().optional(),
     })

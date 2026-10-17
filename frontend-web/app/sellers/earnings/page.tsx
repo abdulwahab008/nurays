@@ -1,9 +1,12 @@
 'use client';
 
 import { useState, useEffect, type ReactNode } from 'react';
+import { loginUrlHere } from '@/lib/auth-redirect';
 import { useRouter } from 'next/navigation';
 import { DashboardLayout, SELLER_SIDEBAR_ITEMS } from '@/components/layout/DashboardShell';
 import { Button } from '@/components/ui/button';
+import { LoadError } from '@/components/ui/LoadError';
+import { useDialogs } from '@/components/ui/Dialogs';
 import { useToast } from '@/components/ui/toast';
 import { useAuthStore } from '@/lib/store/auth-store';
 import { apiClient } from '@/lib/api-client';
@@ -11,6 +14,8 @@ import { formatPrice, formatDate } from '@/lib/utils';
 import { useT } from '@/lib/i18n';
 import { commonMessages } from '@/lib/i18n/messages/common';
 import { kitchenEarningsMessages } from '@/lib/i18n/messages/kitchen-earnings';
+import { payoutDestinationIsWrong } from '@/lib/payout-account';
+import { sendAskingForPassword } from '@/lib/send-asking-for-password';
 
 const sidebarItems = SELLER_SIDEBAR_ITEMS;
 
@@ -54,10 +59,13 @@ function withNodes(text: string, nodes: Record<string, ReactNode>) {
 }
 
 interface EarningsData {
-  todaySales: number;
+  todayEarnings: number;
   todayOrders: number;
   grossSales: number;
   platformFees: number;
+  sellerDiscounts: number;
+  deliveryEarned: number;
+  deliveryPaid: number;
   netEarnings: number;
   pendingSettlement: number;
   paidSettlement: number;
@@ -83,7 +91,10 @@ export default function SellerEarningsPage() {
   const { showToast } = useToast();
   const t = useT(kitchenEarningsMessages);
   const tc = useT(commonMessages);
+  const { ask: askDialog } = useDialogs();
   const [loading, setLoading] = useState(true);
+  // Why the earnings could not be read; shown instead of "no data", which would say there is nothing to see.
+  const [loadError, setLoadError] = useState<unknown>(null);
   const [earnings, setEarnings] = useState<EarningsData | null>(null);
   const [requestingPayout, setRequestingPayout] = useState(false);
   const [showPayoutForm, setShowPayoutForm] = useState(false);
@@ -92,7 +103,7 @@ export default function SellerEarningsPage() {
 
   useEffect(() => {
     if (!isAuthenticated) {
-      router.push('/login');
+      router.push(loginUrlHere());
       return;
     }
 
@@ -108,6 +119,7 @@ export default function SellerEarningsPage() {
   const loadEarnings = async () => {
     try {
       setLoading(true);
+      setLoadError(null);
       const [dashboardRes, payoutsRes] = await Promise.all([
         apiClient.get('/sellers/me/dashboard'),
         apiClient.get('/sellers/me/payouts'),
@@ -116,10 +128,13 @@ export default function SellerEarningsPage() {
         const dashboard = dashboardRes.data.data;
         const ov = dashboard.overview || {};
         setEarnings({
-          todaySales: ov.todaySales ?? 0,
+          todayEarnings: ov.todayEarnings ?? 0,
           todayOrders: ov.todayOrders ?? 0,
           grossSales: ov.grossSales ?? (ov.totalEarnings ?? 0),
           platformFees: ov.platformFees ?? 0,
+          sellerDiscounts: ov.sellerDiscounts ?? 0,
+          deliveryEarned: ov.deliveryEarned ?? 0,
+          deliveryPaid: ov.deliveryPaid ?? 0,
           netEarnings: ov.netEarnings ?? (ov.totalEarnings ?? 0),
           pendingSettlement: ov.pendingSettlement ?? (ov.pendingPayout ?? 0),
           paidSettlement: ov.paidSettlement ?? 0,
@@ -131,9 +146,9 @@ export default function SellerEarningsPage() {
           payouts: payoutsRes.data.success ? payoutsRes.data.data : [],
         });
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Failed to load earnings:', error);
-      showToast(t('loadFailed'), 'error');
+      setLoadError(error);
     } finally {
       setLoading(false);
     }
@@ -148,15 +163,26 @@ export default function SellerEarningsPage() {
       showToast(t('enterAccount'), 'warning');
       return;
     }
+    // The money is sent to this account: a wrong digit pays a stranger, so it is checked here as the server checks it.
+    if (payoutDestinationIsWrong(payoutMethod, accountNumber)) {
+      showToast(t(payoutMethod === 'bank_transfer' ? 'accountInvalidBank' : 'accountInvalidWallet'), 'warning');
+      return;
+    }
 
     try {
       setRequestingPayout(true);
-      const response = await apiClient.post('/sellers/me/payouts', {
-        amount: earnings.availableBalance,
-        payoutMethod,
-        accountNumber: accountNumber.trim(),
-      });
-      if (response.data.success) {
+      // A stolen session must not be able to send the earnings anywhere: the server asks for the password, and we ask the person.
+      const response = await sendAskingForPassword(
+        (currentPassword) =>
+          apiClient.post('/sellers/me/payouts', {
+            amount: earnings.availableBalance,
+            payoutMethod,
+            accountNumber: accountNumber.trim(),
+            ...(currentPassword ? { currentPassword } : {}),
+          }),
+        () => askDialog({ title: t('passwordTitle'), message: t('payoutPasswordPrompt'), type: 'password' })
+      );
+      if (response?.data.success) {
         showToast(t('payoutSubmitted'), 'success');
         setShowPayoutForm(false);
         setAccountNumber('');
@@ -250,8 +276,8 @@ export default function SellerEarningsPage() {
               </h2>
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                 <div className="bg-white p-4 rounded-xl border border-gray-100 shadow-xs">
-                  <span className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider block">{t('todaySales')}</span>
-                  <span className="text-lg font-bold text-gray-900 mt-1 block">{formatPrice(earnings.todaySales)}</span>
+                  <span className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider block">{t('todayEarnings')}</span>
+                  <span className="text-lg font-bold text-gray-900 mt-1 block">{formatPrice(earnings.todayEarnings)}</span>
                 </div>
 
                 <div className="bg-white p-4 rounded-xl border border-gray-100 shadow-xs">
@@ -259,15 +285,29 @@ export default function SellerEarningsPage() {
                   <span className="text-lg font-bold text-gray-900 mt-1 block">{earnings.todayOrders}</span>
                 </div>
 
-                <div className="bg-white p-4 rounded-xl border border-gray-100 shadow-xs">
-                  <span className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider block">{t('grossVolume')}</span>
-                  <span className="text-lg font-bold text-gray-900 mt-1 block">{formatPrice(earnings.grossSales)}</span>
-                </div>
-
-                <div className="bg-white p-4 rounded-xl border border-red-100 bg-red-50/20 shadow-xs">
-                  <span className="text-[11px] font-semibold text-red-600 uppercase tracking-wider block">{t('platformFees')}</span>
-                  <span className="text-lg font-bold text-red-600 mt-1 block" data-ltr>-{formatPrice(earnings.platformFees)}</span>
-                </div>
+                {/* Gross minus every deduction equals net, on one screen. */}
+                {([
+                  ['grossVolume', earnings.grossSales, 0],
+                  ['platformFees', earnings.platformFees, -1],
+                  ['sellerDiscounts', earnings.sellerDiscounts, -1],
+                  ['deliveryEarned', earnings.deliveryEarned, 1],
+                  ['deliveryPaid', earnings.deliveryPaid, -1],
+                  ['netEarnings', earnings.netEarnings, 0],
+                ] as const)
+                  .filter(([, amount, sign]) => sign === 0 || amount !== 0)
+                  .map(([key, amount, sign]) => (
+                    <div
+                      key={key}
+                      className={`p-4 rounded-xl shadow-xs border ${sign < 0 ? 'border-red-100 bg-red-50/20' : 'border-gray-100 bg-white'}`}
+                    >
+                      <span className={`text-[11px] font-semibold uppercase tracking-wider block ${sign < 0 ? 'text-red-600' : 'text-gray-500'}`}>
+                        {t(key)}
+                      </span>
+                      <span className={`text-lg font-bold mt-1 block ${sign < 0 ? 'text-red-600' : 'text-gray-900'}`} data-ltr>
+                        {sign < 0 ? '-' : ''}{formatPrice(amount)}
+                      </span>
+                    </div>
+                  ))}
               </div>
             </div>
 
@@ -293,12 +333,12 @@ export default function SellerEarningsPage() {
                     <p className="text-gray-500">
                       {t('availableForWithdrawal')} <span className="font-bold text-emerald-600">{formatPrice(earnings.availableBalance)}</span>
                     </p>
-                    <p className="text-sm text-gray-400 mt-1">{t('processingTime')}</p>
+                    <p className="text-sm text-gray-500 mt-1">{t('processingTime')}</p>
                   </div>
                   {!showPayoutForm && (
                     <Button
                       onClick={() => setShowPayoutForm(true)}
-                      className="bg-emerald-500 hover:bg-emerald-600 text-white shadow-lg shadow-emerald-200 flex items-center gap-2 px-6"
+                      className="bg-emerald-700 hover:bg-emerald-800 text-white shadow-lg shadow-emerald-200 flex items-center gap-2 px-6"
                       size="lg"
                     >
                       {Icons.withdraw}
@@ -329,7 +369,7 @@ export default function SellerEarningsPage() {
                         type="text"
                         value={accountNumber}
                         onChange={(e) => setAccountNumber(e.target.value)}
-                        placeholder={t('example', { value: payoutMethod === 'bank_transfer' ? 'PK00HABB0000000000000000' : '03001234567' })}
+                        placeholder={t('example', { value: payoutMethod === 'bank_transfer' ? 'PK36SCBL0000001123456702' : '03001234567' })}
                         dir="ltr"
                         className="w-full md:w-80 px-4 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
                       />
@@ -338,7 +378,7 @@ export default function SellerEarningsPage() {
                       <Button
                         onClick={handleRequestPayout}
                         disabled={requestingPayout || !accountNumber.trim()}
-                        className="bg-emerald-500 hover:bg-emerald-600 text-white flex items-center gap-2 px-6"
+                        className="bg-emerald-700 hover:bg-emerald-800 text-white flex items-center gap-2 px-6"
                       >
                         {requestingPayout ? (
                           <>
@@ -374,7 +414,7 @@ export default function SellerEarningsPage() {
                       {Icons.history}
                     </div>
                     <p className="text-gray-500 font-medium">{t('noHistory')}</p>
-                    <p className="text-gray-400 text-sm mt-1">{t('noHistoryHint')}</p>
+                    <p className="text-gray-500 text-sm mt-1">{t('noHistoryHint')}</p>
                   </div>
                 ) : (
                   <div className="space-y-3">
@@ -409,6 +449,8 @@ export default function SellerEarningsPage() {
               </div>
             </div>
           </>
+        ) : loadError ? (
+          <LoadError error={loadError} onRetry={loadEarnings} title={t('loadFailed')} />
         ) : (
           <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-16 text-center">
             <div className="w-24 h-24 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-6">

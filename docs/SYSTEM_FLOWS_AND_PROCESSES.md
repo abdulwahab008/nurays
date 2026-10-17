@@ -46,11 +46,11 @@ The link in the email carries the token; `POST /auth/verify-email` marks the tok
 
 ### Google (`POST /auth/google`)
 
-The client sends a Google access token. The server checks it with Google's `tokeninfo` endpoint (the token must have been issued to `GOOGLE_CLIENT_ID`) and requires `verified_email`. An existing account with that email is signed in and marked email-verified; if its email had never been verified, any password already set on it is cleared and old sessions are revoked (so nobody can pre-register a victim's email). Otherwise a new `customer` account is created with a placeholder phone. Without `GOOGLE_CLIENT_ID` it answers 503.
+The client sends a Google access token. The server checks it with Google's `tokeninfo` endpoint (the token must have been issued to `GOOGLE_CLIENT_ID`) and requires `verified_email`. An existing account with that email is signed in and marked email-verified; if its email had never been verified, any password already set on it is cleared and old sessions are revoked (so nobody can pre-register a victim's email). Otherwise a new `customer` account is created with a placeholder phone. Without `GOOGLE_CLIENT_ID` it answers 503. A native app sends `idToken` (a Google ID token) instead of `accessToken`; the server verifies its signature and claims itself against Google's published keys (audience `GOOGLE_CLIENT_ID` or one of `GOOGLE_NATIVE_CLIENT_IDS`) and then signs in the same way.
 
 ### Sessions
 
-Access tokens last 24 h, refresh tokens 30 d. `POST /auth/refresh` checks the user is still active and the token not revoked. Password reset (`POST /auth/forgot-password` queues an email with a one-hour single-use link; `POST /auth/reset-password` consumes it) and admin suspension set `tokens_valid_after`, which invalidates every earlier token. Adding a phone to an existing account is `POST /auth/phone/request` then `/phone/verify`.
+Access tokens last 1 h (`JWT_EXPIRES_IN`), refresh tokens 30 d. `POST /auth/refresh` checks the user is still active and the token not revoked. A signed-in person changes the password with `POST /auth/change-password` (the current password again; every other session ends, this one gets fresh tokens, and the verified address is e-mailed a notice), and logout ends every session of the account. Password reset (`POST /auth/forgot-password` queues an email with a one-hour single-use link; `POST /auth/reset-password` consumes it) and admin suspension set `tokens_valid_after`, which invalidates every earlier token. Adding a phone to an existing account is `POST /auth/phone/request` then `/phone/verify`.
 
 ## 2. Kitchen application and approval
 
@@ -103,7 +103,7 @@ For a home delivery the address needs a community (taken from the address or res
 3. If the **kitchen delivers itself**: its own rules apply (per-community fee and free-above, free threshold, free radius, zones, fixed or distance fee), and the kitchen keeps the fee.
 4. Pickups have no fee.
 
-### Placing the order (`POST /orders`, `services/order.service.ts` `createOrder`)
+### Placing the order (`POST /orders`, `services/order-placement.service.ts` `createOrder`)
 
 Rate limited to 20 per 10 minutes per user.
 
@@ -198,7 +198,7 @@ Each active job card has a green **Start** button for the current leg: to the ki
 
 ### The rider job pool (`services/rider.service.ts`)
 
-1. **Posting.** `ensureDeliveryForOrder` runs when the kitchen accepts (and again on ready, idempotently): for a live home-delivery order that needs a platform rider and has no job yet, it creates a `Delivery` with `status: pending` (pickup at the kitchen, drop-off at the address, coordinates where known) and emits `delivery:new` to riders. Riders can therefore see a job while the food is still being prepared, so they can travel to the kitchen in parallel.
+1. **Posting.** `ensureDeliveryForOrder` runs when the kitchen accepts (and again on ready, idempotently): for a live home-delivery order that needs a platform rider and has no job yet, it creates a `Delivery` with `status: pending` (pickup at the kitchen, drop-off at the address, coordinates where known) and, unless a rider is given it at once (below), emits `delivery:new` to the riders on duty. Riders can therefore see a job while the food is still being prepared, so they can travel to the kitchen in parallel.
 2. **Listing** (`GET /riders/deliveries/available`). Only approved, active riders. Jobs are ranked by `jobScore` (`utils/ranking.ts`): jobs along the route of the one job the rider already carries, pickup closeness, waiting time, and pay per km. A cash job that would push the rider over their cash limit is flagged and ranked lower.
 3. **Automatic assignment.** As soon as the job is created, `dispatch.service.ts` tries to give it to a rider (batching with a rider already going the same way, then the community's own riders, then anyone with room; rules in BUSINESS_RULES.md section 4). The rider is told by push and a live event. If nobody can take it, it stays in the pool and is retried every minute and whenever a rider frees up.
    **Claiming** from the open pool (`POST /riders/deliveries/:id/claim`) is the fallback, with the rider row locked:
@@ -208,7 +208,7 @@ Each active job card has a green **Start** button for the current leg: to the ki
    - for an unpaid COD order, cash held plus cash still to collect plus this order must not exceed the rider's cash limit (default Rs 10,000, `RIDER_CASH_LIMIT`, adjustable per rider) or the claim fails with `CASH_LIMIT_REACHED`; prepaid jobs are always allowed;
    - the rider's pay is fixed now: the standard fee (city base rate plus Rs 20 per km, at least Rs 120) or the rider's own ask inside a corridor (about 85% of the standard fee up to +Rs 120 or 140%), otherwise `BID_OUT_OF_BOUNDS`. A route bonus is added when this job lies along the rider's one active job;
    - the claim is a conditional update, so two riders cannot both win (`ALREADY_CLAIMED`).
-   Other riders get `delivery:removed`; the order's parties get `delivery:assigned`.
+   The other riders on duty get `delivery:removed`; the order's parties get `delivery:assigned`.
    The rider sees the customer's name, phone and exact spot (house, landmark, delivery note) only once the job is theirs and still running.
    Before picking the food up, a rider can hand the job back (`POST /riders/deliveries/:id/release`): it returns to the pool with the fee and bonus cleared. Pickup and transit are refused until the kitchen has marked the order ready (`FOOD_NOT_READY`). If an admin marks an order delivered, the rider's job is closed with it and their fee, bonus and cash entries are posted.
 4. **Steps** (`PATCH /riders/deliveries/:id/status`), only the assigned rider, only these transitions:
@@ -293,9 +293,11 @@ Derived: `cashHeld = collected - deposited` (what the rider carries), `unpaid = 
 ## 13. Reviews (`services/review.service.ts`)
 
 1. Allowed once the order is `delivered` (or `completed`), only by its customer, once per order item.
-2. A review carries a product rating, a kitchen rating, an optional delivery rating, a comment and photos; it is marked verified purchase and approved immediately (no moderation).
+2. A review carries a product rating, a kitchen rating, an optional delivery rating, a comment and photos; it is marked verified purchase and shown immediately (nothing is held back for approval).
 3. After saving, the dish's and kitchen's rating averages are recalculated, and the rider's rating too when a delivery rating was given and a Nuray rider delivered. Pickup orders have no delivery rating.
 4. Reviews feed the Bayesian rating used for ranking at the next `ranking-scores` run (or the rating refresh on submit).
+5. **Reporting** (`services/review-moderation.service.ts`). Anyone signed in except the review's author can report a review (`POST /reviews/:id/report`: abusive, spam, false, privacy or other, and an optional note of up to 300 characters). The first report flags the review with its reason and puts it in the staff queue (`/admin/reviews`, and a queue on the Approvals page); the review stays shown until a person decides. Every report is written to the audit log with who made it.
+6. **Deciding** (support staff, admins, the super admin). *Hide* takes the review off every public page and out of the dish's, the kitchen's and the Nuray rider's rating, which are worked out again without it; *Keep* closes the report and the review stays; *Show again* undoes a hide. A hidden review cannot be reported (it is not there for anyone), and the kitchen no longer sees it. No new table or column is involved: hiding is `is_approved = false`, the report is `is_flagged` with `flag_reason`. The author is not told, and there is no appeal yet.
 
 ## 14. Notifications at each step
 
@@ -318,7 +320,7 @@ Channels in brackets: P push, E email, S SMS. Whether P, E or S is actually sent
 | Cancelled | Customer / Kitchen | Order cancelled | P E S / P E |
 | Refunded | Customer | Order refunded | P E |
 | Wallet top-up, extra payment credited | Customer | Wallet topped up / credited | P E |
-| Job posted | All riders | live `delivery:new` event | in-app only |
+| Job posted (nobody could be given it automatically) | Riders on duty | live `delivery:new` event | in-app only |
 | Job cancelled | Assigned rider | Job cancelled | P |
 | Settlement / payout recorded | Rider | Settlement recorded / Payment sent | P |
 | Payout completed / failed | Kitchen | Payout sent / didn't go through | P E |

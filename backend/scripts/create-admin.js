@@ -1,7 +1,11 @@
 /**
  * Script to create the SUPER ADMIN (the one account that can add every other staff member).
  * Usage: node scripts/create-admin.js <email> <password> <fullName> [--role=admin|support]
- * Example: node scripts/create-admin.js owner@nuray.pk 'a-long-password' "Owner"
+ * Example: node scripts/create-admin.js owner@nuray.pk '<twelve or more characters>' "Owner"
+ *
+ * A staff password has at least 12 characters and must not be a common one. For an email that already
+ * has an account, the account becomes staff and its password is replaced (every session it had ends).
+ * The password is never printed.
  *
  * There is exactly one super admin. If none exists yet, this creates it. If one exists, add
  * staff from the app (/admin/staff, signed in as the super admin); --role=admin|support here
@@ -13,12 +17,31 @@ const bcrypt = require('bcrypt');
 
 const prisma = new PrismaClient();
 
+const MIN_STAFF_PASSWORD_LENGTH = 12;
+
+/** The shared password rules (common passwords, the person's own details). Plain length check if they cannot be loaded. */
+function passwordProblem(password, who) {
+  try {
+    require('ts-node/register/transpile-only');
+    return require('../src/utils/password-rules').checkPassword(password, { minLength: MIN_STAFF_PASSWORD_LENGTH, ...who });
+  } catch {
+    return [...password].length < MIN_STAFF_PASSWORD_LENGTH ? 'TOO_SHORT' : null;
+  }
+}
+
+const PROBLEMS = {
+  TOO_SHORT: `The password must have at least ${MIN_STAFF_PASSWORD_LENGTH} characters.`,
+  TOO_LONG: 'The password must have at most 200 characters.',
+  COMMON: 'That password is too common. Choose something harder to guess.',
+  PERSONAL: 'The password must not contain the name or email address.',
+};
+
 async function createAdmin() {
   const args = process.argv.slice(2);
   
   if (args.length < 3) {
     console.error('Usage: node scripts/create-admin.js <email> <password> <fullName>');
-    console.error('Example: node scripts/create-admin.js admin@frozennuray.com password123 "Admin User"');
+    console.error('Example: node scripts/create-admin.js owner@nuray.pk \'<twelve or more characters>\' "Owner"');
     process.exit(1);
   }
 
@@ -29,6 +52,11 @@ async function createAdmin() {
     process.exit(1);
   }
   const normalizedEmail = email.toLowerCase().trim();
+  const problem = passwordProblem(password, { email: normalizedEmail, name: fullName });
+  if (problem) {
+    console.error(PROBLEMS[problem]);
+    process.exit(1);
+  }
 
   try {
     const superExists = (await prisma.user.count({ where: { staffRole: 'super_admin' } })) > 0;
@@ -58,13 +86,16 @@ async function createAdmin() {
         console.log(`✅ User is already an admin: ${normalizedEmail}`);
       }
       
-      // Update password
+      // Update password, and end every session the account had
       const hashedPassword = await bcrypt.hash(password, 10);
       await prisma.user.update({
         where: { id: existingUser.id },
-        data: { passwordHash: hashedPassword },
+        data: { passwordHash: hashedPassword, tokensValidAfter: new Date() },
       });
-      console.log(`✅ Password updated for: ${normalizedEmail}`);
+      await prisma.auditLog.create({
+        data: { userId: existingUser.id, action: 'auth:PASSWORD_RESET', entityType: 'user', entityId: existingUser.id, requestData: { via: 'create-admin script' }, responseStatus: 200 },
+      });
+      console.log(`✅ Password updated for: ${normalizedEmail} (their sessions were signed out)`);
       
       await prisma.$disconnect();
       return;
@@ -104,7 +135,6 @@ async function createAdmin() {
     console.log(`✅ ${staffRole === 'super_admin' ? 'Super admin' : 'Staff member (' + staffRole + ')'} created successfully!`);
     console.log('📧 Email:', admin.email);
     console.log('👤 Name:', admin.profile?.fullName);
-    console.log('🔑 Password:', password);
     console.log('📱 Phone:', admin.phone);
     console.log('');
     console.log('You can now login at: http://localhost:3000/admin/login');

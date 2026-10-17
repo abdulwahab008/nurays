@@ -1,6 +1,9 @@
 import axios, { AxiosInstance, AxiosError, AxiosRequestConfig, InternalAxiosRequestConfig } from 'axios';
+import { isHtmlPage } from '@/lib/load-error';
+import { loginUrlHere } from '@/lib/auth-redirect';
 
 import { API_BASE_URL } from './config';
+import { tokenStore } from './token-store';
 
 // Endpoints that must never trigger a refresh-token retry. /auth/refresh
 // itself is the obvious one; logging in/out shouldn't retry either.
@@ -37,7 +40,14 @@ class ApiClient {
 
     // Response interceptor - Handle 401 with one refresh attempt
     this.client.interceptors.response.use(
-      (response) => response,
+      (response) => {
+        // A web page where the API's JSON should be (a proxy's error page, a Wi-Fi sign-in page, even with status 200)
+        // is not an answer: it fails like a 5xx, instead of being read as "no data" and shown as an empty list.
+        if ((response.config.responseType ?? 'json') === 'json' && isHtmlPage(response.data)) {
+          throw new AxiosError('The server sent a web page instead of data', AxiosError.ERR_BAD_RESPONSE, response.config, response.request, response);
+        }
+        return response;
+      },
       async (error: AxiosError) => {
         const original = error.config as RetryableConfig | undefined;
         const status = error.response?.status;
@@ -135,53 +145,39 @@ class ApiClient {
       path.startsWith('/sellers/register') ||
       path.startsWith('/admin/login');
     if (!onPublic) {
-      window.location.href = '/login';
+      window.location.href = loginUrlHere();
     }
   }
 
   getAccessToken(): string | null {
-    if (typeof window === 'undefined') return null;
-    return sessionStorage.getItem('access_token') || localStorage.getItem('access_token');
+    return tokenStore().access();
   }
 
   getRefreshToken(): string | null {
-    if (typeof window === 'undefined') return null;
-    return sessionStorage.getItem('refresh_token') || localStorage.getItem('refresh_token');
+    return tokenStore().refresh();
   }
 
   clearTokens(): void {
-    if (typeof window === 'undefined') return;
-    sessionStorage.removeItem('access_token');
-    sessionStorage.removeItem('refresh_token');
-    sessionStorage.removeItem('tab_isolated');
-    localStorage.removeItem('access_token');
-    localStorage.removeItem('refresh_token');
-    window.dispatchEvent(new CustomEvent('auth:tokens-changed'));
+    tokenStore().clear();
+    this.announceTokens();
   }
 
   setToken(token: string, isolated = false): void {
-    if (typeof window === 'undefined') return;
-    if (isolated || sessionStorage.getItem('tab_isolated') === 'true') {
-      sessionStorage.setItem('tab_isolated', 'true');
-      sessionStorage.setItem('access_token', token);
-    } else {
-      localStorage.setItem('access_token', token);
-    }
-    window.dispatchEvent(new CustomEvent('auth:tokens-changed'));
+    tokenStore().saveAccess(token, isolated);
+    this.announceTokens();
   }
 
   setTokens(accessToken: string, refreshToken: string, isolated = false): void {
+    tokenStore().savePair(accessToken, refreshToken, isolated);
+    this.announceTokens();
+  }
+
+  /**
+   * Tell long-lived consumers (sockets) that the tokens changed: they reconnect with the new access token, or close
+   * when there is none.
+   */
+  private announceTokens(): void {
     if (typeof window === 'undefined') return;
-    if (isolated || sessionStorage.getItem('tab_isolated') === 'true') {
-      sessionStorage.setItem('tab_isolated', 'true');
-      sessionStorage.setItem('access_token', accessToken);
-      sessionStorage.setItem('refresh_token', refreshToken);
-    } else {
-      localStorage.setItem('access_token', accessToken);
-      localStorage.setItem('refresh_token', refreshToken);
-    }
-    // Signal to long-lived consumers (sockets) that the access token has
-    // changed — they should reconnect with the new token.
     window.dispatchEvent(new CustomEvent('auth:tokens-changed'));
   }
 
@@ -236,4 +232,10 @@ export interface ApiError {
 export function apiErrorMessage(err: unknown, fallback: string): string {
   if (axios.isAxiosError<ApiError>(err)) return err.response?.data?.error?.message || fallback;
   return fallback;
+}
+
+/** The server's error code for a failed request (e.g. `OWN_REVIEW`), for showing a message in the person's language. */
+export function apiErrorCode(err: unknown): string | undefined {
+  if (axios.isAxiosError<ApiError>(err)) return err.response?.data?.error?.code;
+  return undefined;
 }

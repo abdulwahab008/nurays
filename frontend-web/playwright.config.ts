@@ -15,7 +15,9 @@ export default defineConfig({
     screenshot: 'only-on-failure',
   },
   projects: [
-    { name: 'chromium', use: { ...devices['Desktop Chrome'] } },
+    { name: 'chromium', use: { ...devices['Desktop Chrome'] }, testIgnore: /mobile\.spec\.ts/ },
+    // A phone: Chromium with a Pixel 7's screen, touch and user agent, for the specs written for a phone.
+    { name: 'mobile', use: { ...devices['Pixel 7'] }, testMatch: /mobile\.spec\.ts/ },
   ],
   // Auto-start the frontend for the tests. Locally this reuses a server you
   // already have running; in CI it boots a fresh one. The backend (plus its

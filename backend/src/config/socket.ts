@@ -1,14 +1,59 @@
 import { Server as HTTPServer } from 'http';
-import { Server as SocketIOServer } from 'socket.io';
+import { Server as SocketIOServer, type Socket } from 'socket.io';
 import { createAdapter } from '@socket.io/redis-adapter';
 import { redisUrl, newRedisConnection } from './redis';
 import { verifyToken, isTokenRevoked } from '../utils/jwt';
 import prisma from './database';
+import { canTakePoolJobs } from '../utils/riderDuty';
+import { logger } from '../utils/logger';
 
-export interface SocketUser {
-  userId: string;
-  userType: string;
-  socketId: string;
+/**
+ * The connections of riders who can take a job from the open pool (approved, active, on duty). Pool
+ * announcements go to this room and not to every rider, so a rider who cannot claim a job is not woken for it.
+ */
+export const ON_DUTY_RIDERS_ROOM = 'riders:on-duty';
+
+/** An order id as a client sends it: a short string. The type of whatever else arrives is the client's choice. */
+const isOrderId = (value: unknown): value is string => typeof value === 'string' && value.length > 0 && value.length <= 64;
+
+// A client event can cost a database query (join:order checks who is a party to the order), and
+// one connection sending them in a loop starves every other request of database connections.
+// A page sends a couple; past this many a minute a user's events are dropped, on whichever of
+// their connections they arrive.
+const eventLimit = () => {
+  const configured = Number(process.env.SOCKET_EVENTS_PER_MINUTE);
+  return configured > 0 ? configured : 120;
+};
+const eventCounts = new Map<string, { count: number; resetsAt: number }>();
+
+/** Count one more event from this user: false once they have sent more than the limit this minute. */
+export function withinEventLimit(userId: string): boolean {
+  const now = Date.now();
+  if (eventCounts.size >= 5_000) for (const [key, entry] of eventCounts) if (entry.resetsAt <= now) eventCounts.delete(key);
+  const entry = eventCounts.get(userId);
+  if (!entry || entry.resetsAt <= now) {
+    eventCounts.set(userId, { count: 1, resetsAt: now + 60_000 });
+    return true;
+  }
+  entry.count += 1;
+  const limit = eventLimit();
+  if (entry.count === limit + 1) logger.warn({ userId, limit }, 'Socket events dropped: too many in a minute');
+  return entry.count <= limit;
+}
+
+/**
+ * Listen for an event a client sends. The client chooses the payload, and an exception thrown out of
+ * a handler reaches process.on('uncaughtException'), which shuts the whole server down for everyone:
+ * whatever goes wrong in a handler is logged here instead.
+ */
+function onClientEvent(socket: Socket, userId: string, event: string, handler: (...args: unknown[]) => unknown) {
+  socket.on(event, async (...args: unknown[]) => {
+    try {
+      await handler(...args);
+    } catch (err) {
+      logger.error({ err, userId }, `${event} failed`);
+    }
+  });
 }
 
 class SocketManager {
@@ -59,7 +104,7 @@ class SocketManager {
         // the JWT payload's stale snapshot (mirrors the HTTP authenticate()
         // fix; otherwise a role change doesn't take effect for socket room
         // membership until the client reconnects with a new token).
-        (socket as any).user = {
+        socket.data.user = {
           userId: payload.userId,
           userType: user.userType,
         };
@@ -72,9 +117,9 @@ class SocketManager {
 
     // Connection handler
     this.io.on('connection', (socket) => {
-      const user = (socket as any).user as { userId: string; userType: string };
+      const user = socket.data.user as { userId: string; userType: string };
 
-      console.log(`🔌 User ${user.userId} (${user.userType}) connected: ${socket.id}`);
+      logger.debug({ userId: user.userId, userType: user.userType, socketId: socket.id }, 'Socket connected');
 
       // Track user socket
       if (!this.userSockets.has(user.userId)) {
@@ -88,13 +133,21 @@ class SocketManager {
       // Join role-specific rooms
       socket.join(`role:${user.userType}`);
 
+      // A rider on duty also hears about jobs in the open pool.
+      if (user.userType === 'rider') void this.joinOnDutyRoomIfEligible(socket, user.userId);
+
+      // The excess is dropped without an answer: an error here would only be one more line to log per event.
+      socket.use((_packet, next) => {
+        if (withinEventLimit(user.userId)) next();
+      });
+
       // Join order tracking room if orderId provided
       // Only participants of an order may listen to it: its room carries status
       // changes and the rider's live location. (Any authenticated user could
       // previously join any order id.)
-      socket.on('join:order', async (orderId: string) => {
+      onClientEvent(socket, user.userId, 'join:order', async (orderId) => {
         try {
-          if (typeof orderId !== 'string' || orderId.length === 0 || orderId.length > 64) return;
+          if (!isOrderId(orderId)) return;
           const allowed =
             user.userType === 'admin' ||
             (await prisma.order.count({
@@ -108,25 +161,26 @@ class SocketManager {
               },
             })) > 0;
           if (!allowed) {
-            console.warn(`⛔ User ${user.userId} denied order room: ${orderId}`);
+            logger.warn({ userId: user.userId, orderId }, 'Socket denied an order room');
             return;
           }
           socket.join(`order:${orderId}`);
-          console.log(`📦 User ${user.userId} joined order room: ${orderId}`);
+          logger.debug({ userId: user.userId, orderId }, 'Socket joined an order room');
         } catch (err) {
-          console.error('join:order failed:', err);
+          logger.error({ err, userId: user.userId, orderId }, 'join:order failed');
         }
       });
 
       // Leave order room
-      socket.on('leave:order', (orderId: string) => {
+      onClientEvent(socket, user.userId, 'leave:order', (orderId) => {
+        if (!isOrderId(orderId)) return;
         socket.leave(`order:${orderId}`);
-        console.log(`📦 User ${user.userId} left order room: ${orderId}`);
+        logger.debug({ userId: user.userId, orderId }, 'Socket left an order room');
       });
 
       // Handle disconnection
       socket.on('disconnect', () => {
-        console.log(`🔌 User ${user.userId} disconnected: ${socket.id}`);
+        logger.debug({ userId: user.userId, socketId: socket.id }, 'Socket disconnected');
         const userSockets = this.userSockets.get(user.userId);
         if (userSockets) {
           userSockets.delete(socket.id);
@@ -136,9 +190,9 @@ class SocketManager {
         }
       });
 
-      // Error handler
-      socket.on('error', (error) => {
-        console.error(`Socket error for user ${user.userId}:`, error);
+      // Error handler. A client can emit "error" too, with any payload: only a real Error (the server's own) is logged.
+      onClientEvent(socket, user.userId, 'error', (error) => {
+        logger.error({ ...(error instanceof Error ? { err: error } : { clientSent: typeof error }), userId: user.userId }, 'Socket error');
       });
     });
 
@@ -158,6 +212,44 @@ class SocketManager {
       throw new Error('Socket.io not initialized. Call initialize() first.');
     }
     return this.io;
+  }
+
+  /** Whether this rider can take a job from the open pool right now (approved, active, on duty). */
+  private async riderCanTakeJobs(userId: string): Promise<boolean> {
+    const rider = await prisma.rider.findUnique({ where: { userId }, select: { verificationStatus: true, status: true, isAvailable: true } });
+    return canTakePoolJobs(rider);
+  }
+
+  /** A rider's connection that opens while they are on duty joins the room pool announcements go to. */
+  private async joinOnDutyRoomIfEligible(socket: { join: (room: string) => unknown; leave: (room: string) => unknown }, userId: string): Promise<void> {
+    try {
+      if (!(await this.riderCanTakeJobs(userId))) return;
+      socket.join(ON_DUTY_RIDERS_ROOM);
+      // A duty change that landed between the read and the join already ran its own leave for the
+      // connections that were in the room, not for this one: look again, so the room never keeps an off-duty rider.
+      if (!(await this.riderCanTakeJobs(userId))) socket.leave(ON_DUTY_RIDERS_ROOM);
+    } catch (err) {
+      logger.error({ err, userId }, 'Could not place a rider in the on-duty room');
+    }
+  }
+
+  /**
+   * Put every connection a rider has into the on-duty room, or take them out (on all instances, via the
+   * Redis adapter). Called wherever it can change: going on or off duty, being suspended, approved or rejected.
+   */
+  setRiderOnDuty(userId: string, onDuty: boolean) {
+    const connections = this.io?.in(`user:${userId}`);
+    if (onDuty) connections?.socketsJoin(ON_DUTY_RIDERS_ROOM);
+    else connections?.socketsLeave(ON_DUTY_RIDERS_ROOM);
+  }
+
+  /** Read the rider's standing and put their connections in or out of the on-duty room accordingly. Best effort. */
+  async syncRiderDuty(userId: string): Promise<void> {
+    try {
+      this.setRiderOnDuty(userId, await this.riderCanTakeJobs(userId));
+    } catch (err) {
+      logger.error({ err, userId }, "Could not update a rider's on-duty room");
+    }
   }
 
   /**
@@ -185,13 +277,13 @@ class SocketManager {
    * One event to everyone in any of these rooms. A connection in several of them (a customer
    * who is in the order's room and their own user room) receives it once, not once per room.
    */
-  emitToRooms(rooms: string[], event: string, data: any) {
+  emitToRooms(rooms: string[], event: string, data: unknown) {
     if (this.io && rooms.length > 0) {
       this.io.to(Array.from(new Set(rooms))).emit(event, data);
     }
   }
 
-  emitToUser(userId: string, event: string, data: any) {
+  emitToUser(userId: string, event: string, data: unknown) {
     if (this.io) {
       this.io.to(`user:${userId}`).emit(event, data);
     }
@@ -200,16 +292,23 @@ class SocketManager {
   /**
    * Emit event to all users of specific role
    */
-  emitToRole(role: string, event: string, data: any) {
+  emitToRole(role: string, event: string, data: unknown) {
     if (this.io) {
       this.io.to(`role:${role}`).emit(event, data);
+    }
+  }
+
+  /** An event for the riders who can take a job from the open pool (see ON_DUTY_RIDERS_ROOM). */
+  emitToOnDutyRiders(event: string, data: unknown) {
+    if (this.io) {
+      this.io.to(ON_DUTY_RIDERS_ROOM).emit(event, data);
     }
   }
 
   /**
    * Emit event to order room
    */
-  emitToOrder(orderId: string, event: string, data: any) {
+  emitToOrder(orderId: string, event: string, data: unknown) {
     if (this.io) {
       this.io.to(`order:${orderId}`).emit(event, data);
     }
@@ -218,7 +317,7 @@ class SocketManager {
   /**
    * Broadcast to all connected clients
    */
-  broadcast(event: string, data: any) {
+  broadcast(event: string, data: unknown) {
     if (this.io) {
       this.io.emit(event, data);
     }

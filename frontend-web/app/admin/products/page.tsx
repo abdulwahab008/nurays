@@ -3,8 +3,10 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { UserLayout } from '@/components/layout/UserLayout';
+import { AdminShell } from '@/components/layout/AdminShell';
 import { Button } from '@/components/ui/button';
+import { LoadError } from '@/components/ui/LoadError';
+import { RejectReasonModal } from '@/components/admin/RejectReasonModal';
 import { useToast } from '@/components/ui/toast';
 import { useAuthStore } from '@/lib/store/auth-store';
 import { apiClient } from '@/lib/api-client';
@@ -28,6 +30,11 @@ export default function AdminProductsPage() {
   const { showToast } = useToast();
   const [loading, setLoading] = useState(true);
   const [products, setProducts] = useState<Product[]>([]);
+  // Why the list could not be read; shown instead of "No products found", which would be untrue.
+  const [loadError, setLoadError] = useState<unknown>(null);
+  // The dish being turned down (its reason is asked for), and the one a request is in flight for.
+  const [rejecting, setRejecting] = useState<Product | null>(null);
+  const [busyId, setBusyId] = useState<string | null>(null);
   const [filter, setFilter] = useState<string>('all');
 
   useEffect(() => {
@@ -48,30 +55,35 @@ export default function AdminProductsPage() {
   const loadProducts = async () => {
     try {
       setLoading(true);
+      setLoadError(null);
       const response = await apiClient.get(`/admin/products${filter !== 'all' ? `?moderationStatus=${filter}` : ''}`);
       if (response.data.success) {
         setProducts(response.data.data.products || []);
       } else {
         setProducts([]);
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Failed to load products:', error);
-      setProducts([]);
+      setLoadError(error);
     } finally {
       setLoading(false);
     }
   };
 
-  const handleModerate = async (productId: string, action: 'approve' | 'reject') => {
+  const handleModerate = async (productId: string, action: 'approve' | 'reject', reason?: string) => {
     try {
+      setBusyId(productId);
       await apiClient.post(`/admin/products/${productId}/moderate`, {
         approved: action === 'approve',
-        reason: action === 'reject' ? 'Rejected by admin' : undefined,
+        reason: action === 'reject' ? reason : undefined,
       });
       showToast(`Product ${action === 'approve' ? 'approved' : 'rejected'} successfully`, 'success');
+      setRejecting(null);
       loadProducts();
     } catch (error: any) {
       showToast(error.response?.data?.error?.message || 'Failed to moderate product', 'error');
+    } finally {
+      setBusyId(null);
     }
   };
 
@@ -89,7 +101,7 @@ export default function AdminProductsPage() {
   }
 
   return (
-    <UserLayout showSidebar={true} showNavbar={true}>
+    <AdminShell>
       <div className="max-w-7xl mx-auto">
         <div className="mb-6">
           <h1 className="text-3xl font-bold text-gray-900">Product Moderation</h1>
@@ -120,6 +132,8 @@ export default function AdminProductsPage() {
             <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-green-600 mx-auto mb-4"></div>
             <p className="text-gray-600">Loading products...</p>
           </div>
+        ) : loadError && products.length === 0 ? (
+          <LoadError error={loadError} onRetry={loadProducts} title="We couldn't load the dishes" />
         ) : products.length === 0 ? (
           <div className="bg-white rounded-lg shadow-sm p-12 text-center">
             <div className="text-6xl mb-4">🍽️</div>
@@ -138,7 +152,7 @@ export default function AdminProductsPage() {
                       className="w-full h-full object-cover"
                     />
                   ) : (
-                    <div className="w-full h-full flex items-center justify-center text-gray-400">
+                    <div className="w-full h-full flex items-center justify-center text-gray-500">
                       <span className="text-4xl">🍽️</span>
                     </div>
                   )}
@@ -159,6 +173,7 @@ export default function AdminProductsPage() {
                     <div className="flex gap-2">
                       <Button
                         size="sm"
+                        disabled={busyId === product.id}
                         onClick={() => handleModerate(product.id, 'approve')}
                         className="bg-green-600 hover:bg-green-700 flex-1"
                       >
@@ -167,7 +182,8 @@ export default function AdminProductsPage() {
                       <Button
                         size="sm"
                         variant="outline"
-                        onClick={() => handleModerate(product.id, 'reject')}
+                        disabled={busyId === product.id}
+                        onClick={() => setRejecting(product)}
                         className="border-red-300 text-red-600 hover:bg-red-50 flex-1"
                       >
                         Reject
@@ -180,7 +196,19 @@ export default function AdminProductsPage() {
           </div>
         )}
       </div>
-    </UserLayout>
+      <RejectReasonModal
+        isOpen={!!rejecting}
+        title={`Reject ${rejecting?.name ?? 'this dish'}?`}
+        description={`${rejecting?.seller.businessName ?? 'The kitchen'} is told the reason. It can change the dish and send it again.`}
+        suggestions={['The photo does not show the dish', 'The description does not match the dish', 'The price or portion looks wrong', 'The dish is not allowed on Nuray']}
+        confirmLabel="Reject dish"
+        audience="kitchen"
+        helpText="It can change the dish and send it again."
+        busy={!!rejecting && busyId === rejecting.id}
+        onConfirm={(reason) => rejecting && handleModerate(rejecting.id, 'reject', reason)}
+        onCancel={() => setRejecting(null)}
+      />
+    </AdminShell>
   );
 }
 

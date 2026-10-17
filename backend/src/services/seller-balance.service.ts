@@ -1,11 +1,11 @@
 import prisma from '../config/database';
 import { selfDeliveryFeeFor, sellerPaidDeliveryFor } from '../utils/deliveryEarnings';
 import { collectorOf } from '../utils/paymentCustody';
+import { roundMoney } from '../utils/pricing';
 
 type Tx = Parameters<Parameters<typeof prisma.$transaction>[0]>[0];
 type Client = typeof prisma | Tx;
 
-const money = (n: number) => Math.round(n * 100) / 100;
 
 export interface SellerBalance {
   /** Seller's share of delivered, paid orders, whoever collected the money. */
@@ -23,6 +23,10 @@ export interface SellerBalance {
    * withdrawable (moves into platformOwesSeller) as the rider hands the cash in.
    */
   awaitingRiderCash: number;
+  /** Self-delivery fees kept on earned orders (part of totalEarnings). */
+  deliveryEarned: number;
+  /** Platform delivery fees the kitchen paid out of earned orders (subtracted from totalEarnings). */
+  deliveryPaid: number;
   /** Payouts completed. */
   paidOut: number;
   /** Payouts requested and not yet completed. */
@@ -119,6 +123,8 @@ export async function computeSellerBalance(client: Client, sellerId: string): Pr
   const cashHandedIn = await ordersWithCashHandedIn(client, cashByRider);
 
   let totalEarnings = 0;
+  let deliveryEarned = 0;
+  let deliveryPaid = 0;
   let awaitingRiderCash = 0;
   let platformOwesSeller = 0;
   let sellerOwesPlatform = 0;
@@ -126,12 +132,18 @@ export async function computeSellerBalance(client: Client, sellerId: string): Pr
   for (const o of orders) {
     const delivered = o.orderStatus === 'delivered' || o.orderStatus === 'completed';
     const earned = delivered && o.paymentStatus === 'paid';
+    const kept = earned ? selfDeliveryFeeFor(o.deliveryFeeBreakdown, sellerId) : 0;
+    const paid = earned ? sellerPaidDeliveryFor(o.deliveryFeeBreakdown, sellerId) : 0;
     const entitlement = earned
       ? o.items
           .filter((i) => i.sellerId === sellerId && i.status !== 'cancelled')
-          .reduce((sum, i) => sum + Number(i.sellerPayout), 0) + selfDeliveryFeeFor(o.deliveryFeeBreakdown, sellerId) - sellerPaidDeliveryFor(o.deliveryFeeBreakdown, sellerId)
+          .reduce((sum, i) => sum + Number(i.sellerPayout), 0) + kept - paid
       : 0;
-    if (earned) totalEarnings += entitlement;
+    if (earned) {
+      totalEarnings += entitlement;
+      deliveryEarned += kept;
+      deliveryPaid += paid;
+    }
 
     if (collectorOf(o) !== 'seller') {
       // A rider's cash order is paid out once the rider has handed that cash in.
@@ -164,12 +176,14 @@ export async function computeSellerBalance(client: Client, sellerId: string): Pr
   const pendingPayout = payouts.filter((p) => p.status !== 'completed').reduce((s, p) => s + Number(p.netAmount), 0);
 
   return {
-    totalEarnings: money(totalEarnings),
-    platformOwesSeller: money(platformOwesSeller),
-    sellerOwesPlatform: money(sellerOwesPlatform),
-    awaitingRiderCash: money(awaitingRiderCash),
-    paidOut: money(paidOut),
-    pendingPayout: money(pendingPayout),
-    available: money(platformOwesSeller - sellerOwesPlatform - paidOut - pendingPayout),
+    totalEarnings: roundMoney(totalEarnings),
+    platformOwesSeller: roundMoney(platformOwesSeller),
+    sellerOwesPlatform: roundMoney(sellerOwesPlatform),
+    awaitingRiderCash: roundMoney(awaitingRiderCash),
+    deliveryEarned: roundMoney(deliveryEarned),
+    deliveryPaid: roundMoney(deliveryPaid),
+    paidOut: roundMoney(paidOut),
+    pendingPayout: roundMoney(pendingPayout),
+    available: roundMoney(platformOwesSeller - sellerOwesPlatform - paidOut - pendingPayout),
   };
 }

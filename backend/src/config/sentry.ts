@@ -41,10 +41,6 @@ export function initSentry(): boolean {
   return true;
 }
 
-export function sentryEnabled(): boolean {
-  return enabled;
-}
-
 /** Report an unexpected error, tagged with the current request's id and user. */
 export function reportError(err: unknown, extra: Record<string, unknown> = {}) {
   if (!enabled) return;

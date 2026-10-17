@@ -1,11 +1,14 @@
 'use client';
 
-import { useState, useEffect, useCallback, ReactNode } from 'react';
+import { useState, useEffect, useCallback, useRef, ReactNode } from 'react';
+import { loginUrlHere } from '@/lib/auth-redirect';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { DashboardLayout, SELLER_SIDEBAR_ITEMS } from '@/components/layout/DashboardShell';
 import { Button } from '@/components/ui/button';
+import { LoadError } from '@/components/ui/LoadError';
 import { useToast } from '@/components/ui/toast';
+import { useDialogs } from '@/components/ui/Dialogs';
 import { useAuthStore } from '@/lib/store/auth-store';
 import { apiClient } from '@/lib/api-client';
 import { formatPrice } from '@/lib/utils';
@@ -138,8 +141,49 @@ interface SellerProduct {
   approvalStatus?: string;
 }
 
-function CreatePromotionModal({
-  isOpen,
+interface PromotionFormValues {
+  name: string;
+  type: string;
+  discountValue: string;
+  startDate: string;
+  endDate: string;
+  code: string;
+  minOrderValue: string;
+  maxUsage: string;
+}
+
+/** The form's starting values: the promotion being edited, or a week-long 15% deal starting now. */
+function promotionFormFor(initialData?: Promotion | null): PromotionFormValues {
+  if (initialData) {
+    return {
+      name: initialData.name,
+      type: initialData.type === 'fixed' ? 'fixed' : 'percentage',
+      discountValue: String(initialData.discountValue),
+      startDate: initialData.startDate.slice(0, 16),
+      endDate: initialData.endDate.slice(0, 16),
+      code: initialData.code || '',
+      minOrderValue: initialData.minOrderAmount != null ? String(initialData.minOrderAmount) : '',
+      maxUsage: initialData.usageLimitTotal != null ? String(initialData.usageLimitTotal) : '',
+    };
+  }
+  return {
+    name: '',
+    type: 'percentage',
+    discountValue: '15',
+    startDate: new Date().toISOString().slice(0, 16),
+    endDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().slice(0, 16),
+    code: '',
+    minOrderValue: '',
+    maxUsage: '',
+  };
+}
+
+/** Mounted only while open, so every opening starts from the promotion being edited (or a new deal) and loads the products once. */
+function CreatePromotionModal(props: CreatePromotionModalProps) {
+  return props.isOpen ? <PromotionForm key={props.promotionId ?? 'new'} {...props} /> : null;
+}
+
+function PromotionForm({
   onClose,
   onSubmit,
   onUpdate,
@@ -148,25 +192,22 @@ function CreatePromotionModal({
   promotionId,
 }: CreatePromotionModalProps) {
   const isEditMode = Boolean(promotionId && initialData);
-  const [formData, setFormData] = useState({
-    name: '',
-    type: 'percentage',
-    discountValue: '',
-    startDate: '',
-    endDate: '',
-    code: '',
-    minOrderValue: '',
-    maxUsage: '',
-  });
-  const [selectedProductIds, setSelectedProductIds] = useState<string[]>([]);
+  const [formData, setFormData] = useState(() => promotionFormFor(initialData));
+  const [selectedProductIds, setSelectedProductIds] = useState<string[]>(
+    () => initialData?.products ?? initialData?.applicableProductIds ?? []
+  );
   const [products, setProducts] = useState<SellerProduct[]>([]);
-  const [productsLoading, setProductsLoading] = useState(false);
+  const [productsLoading, setProductsLoading] = useState(true);
   const [productsLoadError, setProductsLoadError] = useState<string | null>(null);
   const [productSearch, setProductSearch] = useState('');
 
-  const loadProductsForPromotion = useCallback(() => {
-    setProductsLoadError(null);
-    setProductsLoading(true);
+  // The latest error callback, without making the product request depend on it (it is a new function on every render of the page).
+  const onErrorRef = useRef(onError);
+  useEffect(() => {
+    onErrorRef.current = onError;
+  });
+
+  const fetchProducts = useCallback(() => {
     apiClient
       .get<{ success: boolean; data: { products?: SellerProduct[]; pagination?: { total: number } } }>(
         '/products/seller/my-products',
@@ -202,45 +243,20 @@ function CreatePromotionModal({
             ? 'Connection refused — the backend is not running.'
             : err.response?.data?.error?.message ?? err.response?.data?.message ?? err.message ?? 'Failed to load products'
         );
-        if (!isNetwork) onError?.(err.response?.data?.error?.message ?? err.message ?? 'Failed to load products');
+        if (!isNetwork) onErrorRef.current?.(err.response?.data?.error?.message ?? err.message ?? 'Failed to load products');
       })
       .finally(() => setProductsLoading(false));
-  }, [onError]);
+  }, []);
 
-  // Prefill form when editing
   useEffect(() => {
-    if (isOpen && initialData) {
-      const start = initialData.startDate.slice(0, 16);
-      const end = initialData.endDate.slice(0, 16);
-      setFormData({
-        name: initialData.name,
-        type: initialData.type === 'fixed' ? 'fixed' : 'percentage',
-        discountValue: String(initialData.discountValue),
-        startDate: start,
-        endDate: end,
-        code: initialData.code || '',
-        minOrderValue: initialData.minOrderAmount != null ? String(initialData.minOrderAmount) : '',
-        maxUsage: initialData.usageLimitTotal != null ? String(initialData.usageLimitTotal) : '',
-      });
-      setSelectedProductIds(initialData.products ?? initialData.applicableProductIds ?? []);
-      loadProductsForPromotion();
-    } else if (isOpen) {
-      const now = new Date();
-      const end = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
-      setFormData({
-        name: '',
-        type: 'percentage',
-        discountValue: '15',
-        startDate: now.toISOString().slice(0, 16),
-        endDate: end.toISOString().slice(0, 16),
-        code: '',
-        minOrderValue: '',
-        maxUsage: '',
-      });
-      setSelectedProductIds([]);
-      loadProductsForPromotion();
-    }
-  }, [isOpen, initialData, loadProductsForPromotion]);
+    fetchProducts();
+  }, [fetchProducts]);
+
+  const loadProductsForPromotion = () => {
+    setProductsLoadError(null);
+    setProductsLoading(true);
+    fetchProducts();
+  };
 
   const toggleProduct = (productId: string) => {
     setSelectedProductIds((prev) =>
@@ -266,8 +282,6 @@ function CreatePromotionModal({
       onSubmit(data);
     }
   };
-
-  if (!isOpen) return null;
 
   return (
     <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in duration-200">
@@ -483,7 +497,7 @@ function CreatePromotionModal({
                     <button
                       type="button"
                       onClick={loadProductsForPromotion}
-                      className="mt-2 px-3 py-1 bg-orange-500 text-white text-xs font-bold rounded-lg"
+                      className="mt-2 px-3 py-1 bg-[#FF5500] text-white text-xs font-bold rounded-lg"
                     >
                       Retry
                     </button>
@@ -549,7 +563,7 @@ function CreatePromotionModal({
             <Button
               type="submit"
               disabled={selectedProductIds.length === 0}
-              className="flex-1 bg-orange-500 hover:bg-orange-600 text-white rounded-xl font-bold text-xs shadow-md shadow-orange-500/20 disabled:opacity-50"
+              className="flex-1 bg-[#FF5500] hover:bg-[#e04400] text-white rounded-xl font-bold text-xs shadow-md shadow-orange-500/20 disabled:opacity-50"
             >
               {isEditMode ? 'Update Campaign' : 'Launch Campaign'}
             </Button>
@@ -564,8 +578,11 @@ export default function SellerPromotionsPage() {
   const router = useRouter();
   const { isAuthenticated, user } = useAuthStore();
   const { showToast } = useToast();
+  const { confirm: confirmDialog } = useDialogs();
 
   const [loading, setLoading] = useState(true);
+  // Why the promotions could not be read; shown instead of "No Active Promotions", which would be untrue.
+  const [loadError, setLoadError] = useState<unknown>(null);
   const [promotions, setPromotions] = useState<Promotion[]>([]);
   const [activeTab, setActiveTab] = useState<'all' | 'active' | 'scheduled' | 'expired'>('all');
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -575,7 +592,7 @@ export default function SellerPromotionsPage() {
 
   useEffect(() => {
     if (!isAuthenticated) {
-      router.push('/login');
+      router.push(loginUrlHere());
       return;
     }
 
@@ -591,6 +608,7 @@ export default function SellerPromotionsPage() {
   const loadPromotions = async () => {
     try {
       setLoading(true);
+      setLoadError(null);
       const response = await apiClient.get('/promotions');
       if (response.data.success && Array.isArray(response.data.data)) {
         const list = response.data.data as Array<{
@@ -626,9 +644,10 @@ export default function SellerPromotionsPage() {
           }))
         );
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Failed to load promotions:', error);
-      setPromotions([]);
+      // The promotions already on the screen stay (a refresh after an action must not wipe the list).
+      setLoadError(error);
     } finally {
       setLoading(false);
     }
@@ -730,7 +749,7 @@ export default function SellerPromotionsPage() {
   };
 
   const handleDeletePromotion = async (id: string) => {
-    if (!confirm('Are you sure you want to delete this promotion?')) return;
+    if (!(await confirmDialog({ title: 'Delete this promotion?', message: 'Are you sure you want to delete this promotion?', confirmText: 'Delete' }))) return;
     try {
       await apiClient.delete(`/promotions/${id}`);
       showToast('Promotion deleted', 'success');
@@ -789,6 +808,9 @@ export default function SellerPromotionsPage() {
     return null;
   }
 
+  // The promotions could not be read (and none from an earlier read are on the screen).
+  const couldNotRead = !loading && Boolean(loadError) && promotions.length === 0;
+
   return (
     <DashboardLayout
       title="Promotions"
@@ -810,7 +832,7 @@ export default function SellerPromotionsPage() {
                 icon: Icons.discounts,
                 href: '/sellers/promotions',
                 isActive: true,
-                count: promotions.length,
+                count: couldNotRead ? undefined : promotions.length,
               },
             ].map((tab) => (
               <Link
@@ -818,7 +840,7 @@ export default function SellerPromotionsPage() {
                 href={tab.href}
                 className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs sm:text-sm font-bold transition-all duration-200 whitespace-nowrap ${
                   tab.isActive
-                    ? 'bg-orange-500 text-white shadow-sm'
+                    ? 'bg-[#FF5500] text-white shadow-sm'
                     : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
                 }`}
               >
@@ -827,7 +849,7 @@ export default function SellerPromotionsPage() {
                 {tab.count !== undefined && (
                   <span
                     className={`text-xs px-2 py-0.5 rounded-full font-bold ${
-                      tab.isActive ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-700'
+                      tab.isActive ? 'bg-black/20 text-white' : 'bg-slate-100 text-slate-700'
                     }`}
                   >
                     {tab.count}
@@ -843,7 +865,7 @@ export default function SellerPromotionsPage() {
                 setEditingPromo(null);
                 setShowCreateModal(true);
               }}
-              className="bg-orange-500 hover:bg-orange-600 text-white font-bold text-xs sm:text-sm rounded-xl shadow-md shadow-orange-500/20 flex items-center gap-2 px-4 py-2"
+              className="bg-[#FF5500] hover:bg-[#e04400] text-white font-bold text-xs sm:text-sm rounded-xl shadow-md shadow-orange-500/20 flex items-center gap-2 px-4 py-2"
             >
               {Icons.plus}
               Create Deal
@@ -851,136 +873,141 @@ export default function SellerPromotionsPage() {
           </div>
         </div>
 
-        {/* ========================================================================= */}
-        {/* KPI Summary Cards with Clean Icons */}
-        {/* ========================================================================= */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
-          {/* Active Deals */}
-          <div className="bg-white rounded-3xl p-4 sm:p-5 border border-slate-200 shadow-sm relative overflow-hidden group hover:border-orange-200 transition-all">
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-[11px] font-black uppercase tracking-wider text-orange-600">
-                Active Campaigns
-              </span>
-              <div className="w-8 h-8 rounded-xl bg-orange-50 text-orange-600 flex items-center justify-center font-bold text-sm">
-                {Icons.fire}
+        {/* Counters and filters describe a list; with no list to describe (it could not be read) they would all say "0". */}
+        {!couldNotRead && (
+          <>
+            {/* ========================================================================= */}
+            {/* KPI Summary Cards with Clean Icons */}
+            {/* ========================================================================= */}
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+              {/* Active Deals */}
+              <div className="bg-white rounded-3xl p-4 sm:p-5 border border-slate-200 shadow-sm relative overflow-hidden group hover:border-orange-200 transition-all">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-[11px] font-black uppercase tracking-wider text-orange-600">
+                    Active Campaigns
+                  </span>
+                  <div className="w-8 h-8 rounded-xl bg-orange-50 text-orange-600 flex items-center justify-center font-bold text-sm">
+                    {Icons.fire}
+                  </div>
+                </div>
+                <div className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight">
+                  {activeDeals.length}
+                </div>
+                <div className="mt-2 text-xs font-medium text-orange-600 flex items-center gap-1">
+                  <span>Currently live on storefront</span>
+                </div>
+              </div>
+
+              {/* Scheduled */}
+              <div className="bg-white rounded-3xl p-4 sm:p-5 border border-slate-200 shadow-sm relative overflow-hidden group hover:border-sky-200 transition-all">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-[11px] font-black uppercase tracking-wider text-sky-600">
+                    Scheduled Deals
+                  </span>
+                  <div className="w-8 h-8 rounded-xl bg-sky-50 text-sky-600 flex items-center justify-center font-bold text-sm">
+                    {Icons.calendar}
+                  </div>
+                </div>
+                <div className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight">
+                  {scheduledDeals.length}
+                </div>
+                <div className="mt-2 text-xs font-medium text-sky-600">
+                  Starts automatically
+                </div>
+              </div>
+
+              {/* Total Usage */}
+              <div className="bg-white rounded-3xl p-4 sm:p-5 border border-slate-200 shadow-sm relative overflow-hidden group hover:border-purple-200 transition-all">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-[11px] font-black uppercase tracking-wider text-purple-600">
+                    Total Redemptions
+                  </span>
+                  <div className="w-8 h-8 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center font-bold text-sm">
+                    {Icons.chart}
+                  </div>
+                </div>
+                <div className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight">
+                  {totalRedemptions}
+                </div>
+                <div className="mt-2 text-xs font-medium text-purple-600">
+                  Orders placed with vouchers
+                </div>
+              </div>
+
+              {/* Expired */}
+              <div className="bg-white rounded-3xl p-4 sm:p-5 border border-slate-200 shadow-sm relative overflow-hidden group hover:border-slate-300 transition-all">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-[11px] font-black uppercase tracking-wider text-slate-500">
+                    Completed & Expired
+                  </span>
+                  <div className="w-8 h-8 rounded-xl bg-slate-100 text-slate-600 flex items-center justify-center font-bold text-sm">
+                    {Icons.clock}
+                  </div>
+                </div>
+                <div className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight">
+                  {expiredDeals.length}
+                </div>
+                <div className="mt-2 text-xs font-medium text-slate-500">
+                  Archived campaigns
+                </div>
               </div>
             </div>
-            <div className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight">
-              {activeDeals.length}
-            </div>
-            <div className="mt-2 text-xs font-medium text-orange-600 flex items-center gap-1">
-              <span>Currently live on storefront</span>
-            </div>
-          </div>
 
-          {/* Scheduled */}
-          <div className="bg-white rounded-3xl p-4 sm:p-5 border border-slate-200 shadow-sm relative overflow-hidden group hover:border-sky-200 transition-all">
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-[11px] font-black uppercase tracking-wider text-sky-600">
-                Scheduled Deals
-              </span>
-              <div className="w-8 h-8 rounded-xl bg-sky-50 text-sky-600 flex items-center justify-center font-bold text-sm">
-                {Icons.calendar}
-              </div>
-            </div>
-            <div className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight">
-              {scheduledDeals.length}
-            </div>
-            <div className="mt-2 text-xs font-medium text-sky-600">
-              Starts automatically
-            </div>
-          </div>
-
-          {/* Total Usage */}
-          <div className="bg-white rounded-3xl p-4 sm:p-5 border border-slate-200 shadow-sm relative overflow-hidden group hover:border-purple-200 transition-all">
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-[11px] font-black uppercase tracking-wider text-purple-600">
-                Total Redemptions
-              </span>
-              <div className="w-8 h-8 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center font-bold text-sm">
-                {Icons.chart}
-              </div>
-            </div>
-            <div className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight">
-              {totalRedemptions}
-            </div>
-            <div className="mt-2 text-xs font-medium text-purple-600">
-              Orders placed with vouchers
-            </div>
-          </div>
-
-          {/* Expired */}
-          <div className="bg-white rounded-3xl p-4 sm:p-5 border border-slate-200 shadow-sm relative overflow-hidden group hover:border-slate-300 transition-all">
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-[11px] font-black uppercase tracking-wider text-slate-400">
-                Completed & Expired
-              </span>
-              <div className="w-8 h-8 rounded-xl bg-slate-100 text-slate-600 flex items-center justify-center font-bold text-sm">
-                {Icons.clock}
-              </div>
-            </div>
-            <div className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight">
-              {expiredDeals.length}
-            </div>
-            <div className="mt-2 text-xs font-medium text-slate-500">
-              Archived campaigns
-            </div>
-          </div>
-        </div>
-
-        {/* ========================================================================= */}
-        {/* Controls & Tab Filter Bar */}
-        {/* ========================================================================= */}
-        <div className="bg-white rounded-3xl p-4 border border-slate-200 shadow-sm flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3">
-          {/* Search Box */}
-          <div className="relative flex-1">
-            <svg
-              className="w-4 h-4 text-slate-400 absolute start-3.5 top-1/2 -translate-y-1/2"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-              strokeWidth={2}
-            >
-              <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" />
-            </svg>
-            <input
-              type="text"
-              value={searchFilter}
-              onChange={(e) => setSearchFilter(e.target.value)}
-              placeholder="Search promotions by campaign title or promo code..."
-              className="w-full ps-10 pe-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:bg-white transition-all placeholder:text-slate-400"
-            />
-          </div>
-
-          {/* Status Tabs */}
-          <div className="flex items-center gap-1.5 overflow-x-auto pb-1 md:pb-0">
-            {[
-              { id: 'all', label: 'All Deals', count: promotions.length },
-              { id: 'active', label: 'Active', count: activeDeals.length },
-              { id: 'scheduled', label: 'Scheduled', count: scheduledDeals.length },
-              { id: 'expired', label: 'Expired', count: expiredDeals.length },
-            ].map((tab) => (
-              <button
-                key={tab.id}
-                onClick={() => setActiveTab(tab.id as any)}
-                className={`px-3.5 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all flex items-center gap-1.5 ${
-                  activeTab === tab.id
-                    ? 'bg-slate-900 text-white shadow-sm'
-                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200/70'
-                }`}
-              >
-                <span>{tab.label}</span>
-                <span
-                  className={`text-[11px] px-1.5 py-0.2 rounded-full font-bold ${
-                    activeTab === tab.id ? 'bg-white/20 text-white' : 'bg-white text-slate-700 shadow-xs'
-                  }`}
+            {/* ========================================================================= */}
+            {/* Controls & Tab Filter Bar */}
+            {/* ========================================================================= */}
+            <div className="bg-white rounded-3xl p-4 border border-slate-200 shadow-sm flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3">
+              {/* Search Box */}
+              <div className="relative flex-1">
+                <svg
+                  className="w-4 h-4 text-slate-500 absolute start-3.5 top-1/2 -translate-y-1/2"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                  strokeWidth={2}
                 >
-                  {tab.count}
-                </span>
-              </button>
-            ))}
-          </div>
-        </div>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" />
+                </svg>
+                <input
+                  type="text"
+                  value={searchFilter}
+                  onChange={(e) => setSearchFilter(e.target.value)}
+                  placeholder="Search promotions by campaign title or promo code..."
+                  className="w-full ps-10 pe-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:bg-white transition-all placeholder:text-slate-400"
+                />
+              </div>
+
+              {/* Status Tabs */}
+              <div className="flex items-center gap-1.5 overflow-x-auto pb-1 md:pb-0">
+                {[
+                  { id: 'all', label: 'All Deals', count: promotions.length },
+                  { id: 'active', label: 'Active', count: activeDeals.length },
+                  { id: 'scheduled', label: 'Scheduled', count: scheduledDeals.length },
+                  { id: 'expired', label: 'Expired', count: expiredDeals.length },
+                ].map((tab) => (
+                  <button
+                    key={tab.id}
+                    onClick={() => setActiveTab(tab.id as typeof activeTab)}
+                    className={`px-3.5 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all flex items-center gap-1.5 ${
+                      activeTab === tab.id
+                        ? 'bg-slate-900 text-white shadow-sm'
+                        : 'bg-slate-100 text-slate-600 hover:bg-slate-200/70'
+                    }`}
+                  >
+                    <span>{tab.label}</span>
+                    <span
+                      className={`text-[11px] px-1.5 py-0.2 rounded-full font-bold ${
+                        activeTab === tab.id ? 'bg-white/20 text-white' : 'bg-white text-slate-700 shadow-xs'
+                      }`}
+                    >
+                      {tab.count}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          </>
+        )}
 
         {/* ========================================================================= */}
         {/* Promotions List */}
@@ -998,6 +1025,8 @@ export default function SellerPromotionsPage() {
               </div>
             ))}
           </div>
+        ) : loadError && promotions.length === 0 ? (
+          <LoadError error={loadError} onRetry={loadPromotions} title="We couldn't load your promotions" className="max-w-2xl mx-auto" />
         ) : filteredPromotions.length === 0 ? (
           <div className="bg-white rounded-3xl shadow-sm border border-slate-200 p-12 sm:p-16 text-center max-w-2xl mx-auto">
             <div className="w-16 h-16 bg-orange-50 rounded-2xl flex items-center justify-center mx-auto mb-5 text-orange-500 shadow-inner">
@@ -1017,7 +1046,7 @@ export default function SellerPromotionsPage() {
                 setEditingPromo(null);
                 setShowCreateModal(true);
               }}
-              className="bg-orange-500 hover:bg-orange-600 text-white font-bold rounded-2xl shadow-lg shadow-orange-500/20 px-6 py-2.5"
+              className="bg-[#FF5500] hover:bg-[#e04400] text-white font-bold rounded-2xl shadow-lg shadow-orange-500/20 px-6 py-2.5"
             >
               Create Your First Deal
             </Button>
@@ -1139,7 +1168,7 @@ export default function SellerPromotionsPage() {
                         <div className="text-2xl font-black text-slate-900 tracking-tight">
                           {promo.usageCount}
                         </div>
-                        <div className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
+                        <div className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
                           Orders Placed
                         </div>
                       </div>
@@ -1189,7 +1218,7 @@ export default function SellerPromotionsPage() {
         {/* ========================================================================= */}
         <div className="bg-gradient-to-r from-orange-50 via-amber-50 to-orange-50 rounded-3xl p-6 border border-orange-200/80 shadow-xs">
           <div className="flex items-start gap-4">
-            <div className="w-10 h-10 rounded-2xl bg-orange-500 text-white flex items-center justify-center shadow-sm shrink-0">
+            <div className="w-10 h-10 rounded-2xl bg-[#FF5500] text-white flex items-center justify-center shadow-sm shrink-0">
               <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M12 18v-5.25m0 0a6.01 6.01 0 001.5-.189m-1.5.189a6.01 6.01 0 01-1.5-.189m3.75 7.5h-4.5a.75.75 0 01-.75-.75v-.75a.75.75 0 01.75-.75h4.5a.75.75 0 01.75.75v.75a.75.75 0 01-.75.75zm-6-8.25a6 6 0 1112 0c0 2.26-1.25 4.228-3.09 5.25H9.09A5.986 5.986 0 016 11.25z" />
               </svg>
@@ -1253,19 +1282,19 @@ export default function SellerPromotionsPage() {
             </div>
             <div className="p-6 space-y-4 text-xs sm:text-sm">
               <div>
-                <p className="text-xs font-bold uppercase tracking-wider text-slate-400">Campaign Name</p>
+                <p className="text-xs font-bold uppercase tracking-wider text-slate-500">Campaign Name</p>
                 <p className="font-bold text-slate-900 text-base">{detailPromo.name}</p>
               </div>
               {detailPromo.code && (
                 <div>
-                  <p className="text-xs font-bold uppercase tracking-wider text-slate-400">Promo Code</p>
+                  <p className="text-xs font-bold uppercase tracking-wider text-slate-500">Promo Code</p>
                   <span className="inline-block mt-1 font-mono font-black text-sm bg-slate-100 px-3 py-1 rounded-xl text-slate-900 border border-slate-200">
                     {detailPromo.code}
                   </span>
                 </div>
               )}
               <div>
-                <p className="text-xs font-bold uppercase tracking-wider text-slate-400">Discount Offered</p>
+                <p className="text-xs font-bold uppercase tracking-wider text-slate-500">Discount Offered</p>
                 <p className="font-black text-orange-600 text-base">
                   {detailPromo.type === 'percentage' && `${detailPromo.discountValue}% OFF`}
                   {detailPromo.type === 'fixed' && `${formatPrice(detailPromo.discountValue)} OFF`}
@@ -1274,7 +1303,7 @@ export default function SellerPromotionsPage() {
                 </p>
               </div>
               <div>
-                <p className="text-xs font-bold uppercase tracking-wider text-slate-400">Active Duration</p>
+                <p className="text-xs font-bold uppercase tracking-wider text-slate-500">Active Duration</p>
                 <p className="font-medium text-slate-700">
                   {new Date(detailPromo.startDate).toLocaleString()} —{' '}
                   {new Date(detailPromo.endDate).toLocaleString()}
@@ -1282,12 +1311,12 @@ export default function SellerPromotionsPage() {
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <p className="text-xs font-bold uppercase tracking-wider text-slate-400">Total Usage</p>
+                  <p className="text-xs font-bold uppercase tracking-wider text-slate-500">Total Usage</p>
                   <p className="font-bold text-slate-900">{detailPromo.usageCount} orders</p>
                 </div>
                 {detailPromo.minOrderAmount != null && detailPromo.minOrderAmount > 0 && (
                   <div>
-                    <p className="text-xs font-bold uppercase tracking-wider text-slate-400">Min. Basket</p>
+                    <p className="text-xs font-bold uppercase tracking-wider text-slate-500">Min. Basket</p>
                     <p className="font-bold text-slate-900">{formatPrice(detailPromo.minOrderAmount)}</p>
                   </div>
                 )}
@@ -1303,7 +1332,7 @@ export default function SellerPromotionsPage() {
                 </Button>
                 <Button
                   type="button"
-                  className="flex-1 bg-orange-500 hover:bg-orange-600 text-white rounded-xl font-bold text-xs"
+                  className="flex-1 bg-[#FF5500] hover:bg-[#e04400] text-white rounded-xl font-bold text-xs"
                   onClick={() => {
                     setEditingPromo(detailPromo);
                     setDetailPromo(null);

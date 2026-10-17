@@ -2,12 +2,17 @@ import { recordAudit } from '../middleware/audit';
 import prisma from '../config/database';
 import { getPlatformDeliveryPricing } from './delivery-pricing.service';
 import { platformDeliveryFee } from '../utils/deliveryFee';
+import { roundMoney } from '../utils/pricing';
 import { AppError } from '../middleware/errorHandler';
 import adminService from './admin.service';
 import { computeSellerAvailability } from './availability.service';
 import { computeSellerBalance } from './seller-balance.service';
+import { earnedOrders, earningsOf, isEarned, orderCounts, periodTotals } from './seller-reporting';
 import { assertOwnDocument, assertOwnPublicImage } from '../utils/documents';
 import { notifyApprovers } from './approvals.service';
+import { kitchenApplicationGaps } from '../utils/kitchenApplication';
+import { changedPayoutDetails } from '../utils/payoutAccount';
+import { confirmPasswordIfSet } from './reauth.service';
 
 /** Shared shape for the business-operations fields — read by getSellerProfile, written by updateSellerProfile. */
 function formatBusinessOperationsFields(seller: {
@@ -107,8 +112,13 @@ export class SellerService {
       where: { userId },
     });
 
-    // Only a rejected application can be sent again.
-    if (existingSeller && existingSeller.verificationStatus !== 'rejected') {
+    // A rejected application can be sent again, and so can one still waiting that lacks what the administrator needs (a kitchen
+    // that signed up with "Cook & Sell" has only a name): it is completed, not refused. A complete one is already under review.
+    const documentsOnFile = existingSeller
+      ? (await prisma.sellerDocument.findMany({ where: { sellerId: existingSeller.id }, select: { documentType: true } })).map((d) => d.documentType)
+      : [];
+    const completing = existingSeller?.verificationStatus === 'pending' && kitchenApplicationGaps(existingSeller, documentsOnFile).length > 0;
+    if (existingSeller && existingSeller.verificationStatus !== 'rejected' && !completing) {
       throw new AppError('Seller account already exists', 400, 'SELLER_ALREADY_EXISTS');
     }
 
@@ -122,9 +132,7 @@ export class SellerService {
       data.coverImageUrl && data.coverImageUrl !== existingSeller?.coverImageUrl
         ? assertOwnPublicImage(data.coverImageUrl, userId, 'covers', 'cover photo')
         : data.coverImageUrl || existingSeller?.coverImageUrl || undefined;
-    const cnicOnFile = existingSeller
-      ? await prisma.sellerDocument.count({ where: { sellerId: existingSeller.id, documentType: { in: ['cnic_front', 'cnic_back'] } } })
-      : 0;
+    const cnicOnFile = documentsOnFile.filter((type) => type === 'cnic_front' || type === 'cnic_back').length;
     if ((!cnicFront || !cnicBack) && cnicOnFile < 2) {
       throw new AppError('Please upload photos of both sides of your CNIC.', 400, 'CNIC_REQUIRED');
     }
@@ -132,7 +140,7 @@ export class SellerService {
       replaceSellerDocuments(sellerId, { cnic_front: cnicFront ? [cnicFront] : null, cnic_back: cnicBack ? [cnicBack] : null, kitchen_photo: kitchenPhotos.length ? kitchenPhotos : null });
 
     if (existingSeller) {
-      // Previously rejected: the application is sent again with the details fixed.
+      // Previously rejected, or still waiting but incomplete: the application is sent again with the details fixed or added.
       const updated = await prisma.seller.update({
         where: { id: existingSeller.id },
         data: {
@@ -163,7 +171,7 @@ export class SellerService {
       return {
         sellerId: updated.id,
         verificationStatus: updated.verificationStatus,
-        message: 'Application resubmitted for review',
+        message: completing ? 'Application completed and sent for review' : 'Application resubmitted for review',
       };
     }
 
@@ -281,18 +289,20 @@ export class SellerService {
   async updateSellerProfile(
     userId: string,
     data: {
+      /** Asked for when the payout accounts change (see PASSWORD_REQUIRED). */
+      currentPassword?: string;
       businessName?: string;
       businessNameUrdu?: string;
       description?: string;
       kitchenVideoUrl?: string;
       coverImageUrl?: string;
-      jazzcashNumber?: string;
-      jazzcashAccountTitle?: string;
-      easypaisaNumber?: string;
-      easypaisaAccountTitle?: string;
-      bankAccountName?: string;
-      bankAccountNumber?: string;
-      bankName?: string;
+      jazzcashNumber?: string | null;
+      jazzcashAccountTitle?: string | null;
+      easypaisaNumber?: string | null;
+      easypaisaAccountTitle?: string | null;
+      bankAccountName?: string | null;
+      bankAccountNumber?: string | null;
+      bankName?: string | null;
       lowStockThreshold?: number;
       enableStockAlerts?: boolean;
       freeDeliveryAreas?: string[];
@@ -326,7 +336,8 @@ export class SellerService {
       preOrderOnly?: boolean;
       advanceBookingMinDays?: number | null;
       advanceBookingMaxDays?: number | null;
-    }
+    },
+    ctx: { ip?: string | null } = {}
   ) {
     const seller = await prisma.seller.findUnique({
       where: { userId },
@@ -336,7 +347,18 @@ export class SellerService {
       throw new AppError('Seller not found', 404, 'SELLER_NOT_FOUND');
     }
 
-    const updateData: Record<string, unknown> = {};
+    // Customers send their money to these accounts: a number must be one, and a stolen session must not be able to
+    // re-point them alone, so a change asks for the password again (when the account has one).
+    const payout = changedPayoutDetails(seller, data);
+    if (payout.problems.length > 0) {
+      throw new AppError(`Validation failed: ${payout.problems[0].message}`, 400, 'VALIDATION_ERROR', payout.problems);
+    }
+    if (Object.keys(payout.changes).length > 0) {
+      const owner = await prisma.user.findUnique({ where: { id: userId }, select: { id: true, passwordHash: true } });
+      await confirmPasswordIfSet(owner, data.currentPassword, 'Enter your password to change your payout accounts', ctx);
+    }
+
+    const updateData: Record<string, unknown> = { ...payout.changes };
     if (data.businessName !== undefined) updateData.businessName = data.businessName;
     if (data.businessNameUrdu !== undefined) updateData.businessNameUrdu = data.businessNameUrdu;
     if (data.description !== undefined) updateData.description = data.description;
@@ -347,13 +369,6 @@ export class SellerService {
       updateData.coverImageUrl =
         data.coverImageUrl && data.coverImageUrl !== seller.coverImageUrl ? assertOwnPublicImage(data.coverImageUrl, userId, 'covers', 'cover photo') : data.coverImageUrl || null;
     }
-    if (data.jazzcashNumber !== undefined) updateData.jazzcashNumber = data.jazzcashNumber || null;
-    if (data.jazzcashAccountTitle !== undefined) updateData.jazzcashAccountTitle = data.jazzcashAccountTitle || null;
-    if (data.easypaisaNumber !== undefined) updateData.easypaisaNumber = data.easypaisaNumber || null;
-    if (data.easypaisaAccountTitle !== undefined) updateData.easypaisaAccountTitle = data.easypaisaAccountTitle || null;
-    if (data.bankAccountName !== undefined) updateData.bankAccountName = data.bankAccountName || null;
-    if (data.bankAccountNumber !== undefined) updateData.bankAccountNumber = data.bankAccountNumber || null;
-    if (data.bankName !== undefined) updateData.bankName = data.bankName || null;
     if (data.lowStockThreshold !== undefined) updateData.lowStockThreshold = data.lowStockThreshold;
     if (data.enableStockAlerts !== undefined) updateData.enableStockAlerts = data.enableStockAlerts;
     if (data.freeDeliveryAreas !== undefined) updateData.freeDeliveryAreas = data.freeDeliveryAreas;
@@ -583,27 +598,41 @@ export class SellerService {
     startOfToday.setHours(0, 0, 0, 0);
 
     // Order statistics in one aggregate over the kitchen's lines (not the whole history in memory).
+    // Orders are counted once each, however many of the kitchen's dishes they hold.
     // "Active" means still in progress toward delivery — a cancelled or refunded/refund_pending
-    // order isn't going anywhere, so it's excluded from both active and pending.
+    // order isn't going anywhere, and neither is one whose lines for this kitchen were all
+    // cancelled, so they are excluded from both active and pending.
     // Earnings require BOTH the order having actually arrived (delivered/completed) AND the
     // payment having actually been collected — a delivered order whose online payment never
     // completed (or was refunded after delivery) hasn't earned the seller anything yet.
     // Cancelled items (a seller's rejected lines, refunded to the customer) never count: an
     // order can still be delivered by the other sellers in it.
     const [stats] = await prisma.$queryRaw<
-      Array<{ active_orders: number; pending_orders: number; gross_sales: number; platform_fees: number; today_orders: number; today_sales: number }>
+      Array<{ active_orders: number; pending_orders: number; gross_sales: number; platform_fees: number; item_payouts: number }>
     >`
       SELECT
-        COUNT(*) FILTER (WHERE o.order_status NOT IN ('delivered', 'completed', 'cancelled', 'refunded', 'refund_pending'))::int AS active_orders,
-        COUNT(*) FILTER (WHERE o.order_status IN ('pending', 'preparing'))::int AS pending_orders,
+        COUNT(DISTINCT o.id) FILTER (WHERE oi.status <> 'cancelled' AND o.order_status NOT IN ('delivered', 'completed', 'cancelled', 'refunded', 'refund_pending'))::int AS active_orders,
+        COUNT(DISTINCT o.id) FILTER (WHERE oi.status <> 'cancelled' AND o.order_status IN ('pending', 'preparing'))::int AS pending_orders,
         COALESCE(SUM(oi.total_price) FILTER (WHERE oi.status <> 'cancelled' AND o.order_status IN ('delivered', 'completed') AND o.payment_status = 'paid'), 0)::float8 AS gross_sales,
         COALESCE(SUM(oi.commission_amount) FILTER (WHERE oi.status <> 'cancelled' AND o.order_status IN ('delivered', 'completed') AND o.payment_status = 'paid'), 0)::float8 AS platform_fees,
-        COUNT(DISTINCT o.id) FILTER (WHERE o.created_at >= ${startOfToday})::int AS today_orders,
-        COALESCE(SUM(oi.total_price) FILTER (WHERE o.created_at >= ${startOfToday}), 0)::float8 AS today_sales
+        COALESCE(SUM(oi.seller_payout) FILTER (WHERE oi.status <> 'cancelled' AND o.order_status IN ('delivered', 'completed') AND o.payment_status = 'paid'), 0)::float8 AS item_payouts
       FROM order_items oi
       JOIN orders o ON o.id = oi.order_id
       WHERE oi.seller_id = ${sellerId}
     `;
+
+    // Today's figures use the same definitions as the analytics screen (seller-reporting.ts),
+    // so the two screens can't disagree about the same day. One day of lines, not the history.
+    const todayLines = await prisma.orderItem.findMany({
+      where: { sellerId, order: { createdAt: { gte: startOfToday } } },
+      select: {
+        status: true,
+        quantity: true,
+        sellerPayout: true,
+        order: { select: { id: true, orderStatus: true, paymentStatus: true, createdAt: true, deliveryFeeBreakdown: true } },
+      },
+    });
+    const today = periodTotals(todayLines, startOfToday, sellerId);
     const activeOrders = Number(stats?.active_orders ?? 0);
     const pendingOrders = Number(stats?.pending_orders ?? 0);
 
@@ -656,42 +685,22 @@ export class SellerService {
       take: 5,
     });
 
-    // Get pending reviews
-    const pendingReviews = await prisma.review.findMany({
-      where: {
-        sellerId,
-        isApproved: false,
-      },
-      include: {
-        product: {
-          select: {
-            name: true,
-          },
-        },
-        customer: {
-          include: {
-            profile: {
-              select: {
-                fullName: true,
-              },
-            },
-          },
-        },
-      },
-      orderBy: { createdAt: 'desc' },
-      take: 5,
-    });
-
-    const todayOrders = Number(stats?.today_orders ?? 0);
-    const todaySales = Number(stats?.today_sales ?? 0);
-
-    // Lifetime Gross & Commission
+    // Lifetime gross, commission, and the two delivery lines, so the overview adds up:
+    // grossSales - platformFees - sellerDiscounts + deliveryEarned - deliveryPaid = netEarnings.
     const grossSales = Number(stats?.gross_sales ?? 0);
     const platformFees = Number(stats?.platform_fees ?? 0);
+    const itemPayouts = Number(stats?.item_payouts ?? 0);
+    const sellerDiscounts = Math.round((grossSales - platformFees - itemPayouts) * 100) / 100;
 
     const paidSettlement = balance.paidOut;
 
     const availability = computeSellerAvailability(seller);
+
+    // A kitchen that signs up with "Cook & Sell" is waiting with only a name: what it still has to add.
+    const applicationMissing =
+      seller.verificationStatus === 'pending'
+        ? kitchenApplicationGaps(seller, (await prisma.sellerDocument.findMany({ where: { sellerId }, select: { documentType: true } })).map((d) => d.documentType))
+        : [];
 
     return {
       // Seller profile information
@@ -699,7 +708,11 @@ export class SellerService {
       businessName: seller.businessName,
       businessNameUrdu: seller.businessNameUrdu,
       businessType: seller.businessType,
+      communityId: seller.communityId,
       primaryCommunityName: seller.primaryCommunityName,
+      latitude: seller.latitude != null ? Number(seller.latitude) : null,
+      longitude: seller.longitude != null ? Number(seller.longitude) : null,
+      applicationMissing,
       description: seller.description,
       kitchenVideoUrl: seller.kitchenVideoUrl,
       coverImageUrl: seller.coverImageUrl,
@@ -725,10 +738,20 @@ export class SellerService {
         awaitingRiderCash: balance.awaitingRiderCash,
         rating: Number(seller.ratingAverage),
         totalReviews: seller.totalReviews,
-        todaySales,
-        todayOrders,
+        // What the kitchen earned on today's orders that have been delivered and paid: its dishes' payout plus the
+        // delivery fee it kept minus the one it paid Nuray, so it is what the ledger credits for today (and the same
+        // as analytics revenue.today).
+        todayEarnings: today.revenue,
+        // Orders placed today that are still alive: all but the cancelled and refunded ones, so an order being cooked counts.
+        todayOrders: today.orders,
+        todayUnitsSold: today.unitsSold,
         grossSales,
         platformFees,
+        // Discounts the kitchen funded itself (its own promo codes).
+        sellerDiscounts,
+        // Delivery fees it kept (self-delivery) and paid Nuray (rider delivery).
+        deliveryEarned: balance.deliveryEarned,
+        deliveryPaid: balance.deliveryPaid,
         netEarnings: totalEarnings,
         pendingSettlement: pendingPayout,
         paidSettlement,
@@ -748,14 +771,6 @@ export class SellerService {
         name: product.name,
         stockQuantity: product.stockQuantity,
         image: product.images[0]?.imageUrl || null,
-      })),
-      pendingReviews: pendingReviews.map((review) => ({
-        id: review.id,
-        productName: review.product?.name,
-        customerName: review.customer.profile?.fullName || 'Anonymous',
-        rating: review.productRating,
-        comment: review.comment,
-        createdAt: review.createdAt,
       })),
     };
   }
@@ -802,8 +817,11 @@ export class SellerService {
       include: {
         order: {
           select: {
+            id: true,
             orderStatus: true,
+            paymentStatus: true,
             createdAt: true,
+            deliveryFeeBreakdown: true,
           },
         },
         product: {
@@ -815,54 +833,42 @@ export class SellerService {
       },
     });
 
-    // Calculate revenue
-    const completedItems = orderItems.filter(
-      (item) =>
-        item.status !== 'cancelled' &&
-        (item.order?.orderStatus === 'delivered' || item.order?.orderStatus === 'completed')
-    );
+    // The orders that have earned, one entry each — same definitions the dashboard and the ledger use (seller-reporting.ts):
+    // a cancelled line, a cancelled order or one refunded to the customer earns nothing, and an order is worth its
+    // dishes' payout plus the delivery fee the kitchen kept minus the one it paid Nuray (what the ledger credits).
+    const earned = earnedOrders(orderItems, sellerId);
+    // The dish lines that earned, for the best-selling list.
+    const completedItems = orderItems.filter(isEarned);
 
-    const totalRevenue = completedItems.reduce((sum, item) => {
-      return sum + Number(item.sellerPayout);
-    }, 0);
+    const totalRevenue = roundMoney(earned.reduce((sum, e) => sum + earningsOf(e), 0));
+    // Of which the dishes alone: what a dish's share, and the average order, are measured against.
+    const dishRevenue = roundMoney(earned.reduce((sum, e) => sum + e.dishes, 0));
 
-    // Period breakdowns for the dashboard's Today / This Week / This Month cards
+    // Period breakdowns for the Today / This Week / This Month cards
     const dayStart = new Date(now);
     dayStart.setHours(0, 0, 0, 0);
     const weekStart = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
     const monthStart = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
 
-    const sumSince = (since: Date) =>
-      completedItems
-        .filter((item) => item.order?.createdAt && item.order.createdAt >= since)
-        .reduce((sum, item) => sum + Number(item.sellerPayout), 0);
+    const day = periodTotals(orderItems, dayStart, sellerId);
+    const week = periodTotals(orderItems, weekStart, sellerId);
+    const month = periodTotals(orderItems, monthStart, sellerId);
 
-    const countSince = (since: Date) =>
-      completedItems
-        .filter((item) => item.order?.createdAt && item.order.createdAt >= since)
-        .reduce((sum, item) => sum + item.quantity, 0);
-
-    // Calculate daily revenue
+    // Calculate daily revenue: the same earnings, by the day the order was placed
     const dailyRevenue: Record<string, number> = {};
-    completedItems.forEach((item) => {
-      if (item.order?.createdAt) {
-        const date = item.order.createdAt.toISOString().split('T')[0];
-        dailyRevenue[date] = (dailyRevenue[date] || 0) + Number(item.sellerPayout);
-      }
+    earned.forEach((e) => {
+      const date = e.createdAt.toISOString().split('T')[0];
+      dailyRevenue[date] = (dailyRevenue[date] || 0) + earningsOf(e);
     });
 
     const revenueGraph = Object.entries(dailyRevenue)
-      .map(([date, revenue]) => ({ date, revenue }))
+      .map(([date, revenue]) => ({ date, revenue: roundMoney(revenue) }))
       .sort((a, b) => a.date.localeCompare(b.date));
 
-    // Calculate order statistics
-    const totalOrders = orderItems.length;
-    const completedOrders = orderItems.filter(
-      (item) => item.order?.orderStatus === 'delivered' || item.order?.orderStatus === 'completed'
-    ).length;
-    const cancelledOrders = orderItems.filter(
-      (item) => item.order?.orderStatus === 'cancelled'
-    ).length;
+    // Order statistics: distinct orders, not lines, each in exactly one bucket (seller-reporting.ts), so the
+    // parts add up to the total. "Completed" is the orders the revenue above comes from (delivered and still
+    // paid); an order refunded after delivery is cancelled, one whose money has not arrived is awaitingPayment.
+    const counts = orderCounts(orderItems);
 
     // Get top products
     const productSales: Record<string, { name: string; quantity: number; revenue: number }> = {};
@@ -883,23 +889,32 @@ export class SellerService {
       .slice(0, 10);
 
     return {
-      sales: {
-        today: countSince(dayStart),
-        thisWeek: countSince(weekStart),
-        thisMonth: countSince(monthStart),
-        total: completedItems.reduce((sum, item) => sum + item.quantity, 0),
+      // Units of food, never called "sales": the dashboard's order counts are orders.
+      unitsSold: {
+        today: day.unitsSold,
+        thisWeek: week.unitsSold,
+        thisMonth: month.unitsSold,
+        total: earned.reduce((sum, e) => sum + e.unitsSold, 0),
       },
       revenue: {
-        today: sumSince(dayStart),
-        thisWeek: sumSince(weekStart),
-        thisMonth: sumSince(monthStart),
+        today: day.revenue,
+        thisWeek: week.revenue,
+        thisMonth: month.revenue,
         total: totalRevenue,
+        dishes: dishRevenue,
         graph: revenueGraph,
       },
+      ordersByPeriod: {
+        today: day.orders,
+        thisWeek: week.orders,
+        thisMonth: month.orders,
+      },
       orders: {
-        total: totalOrders,
-        completed: completedOrders,
-        cancelled: cancelledOrders,
+        total: counts.total,
+        completed: counts.completed,
+        cancelled: counts.cancelled,
+        inProgress: counts.inProgress,
+        awaitingPayment: counts.awaitingPayment,
       },
       topProducts,
     };
@@ -914,7 +929,10 @@ export class SellerService {
       amount: number;
       payoutMethod: string;
       accountNumber: string;
-    }
+      /** Asked for on every request (see PASSWORD_REQUIRED). */
+      currentPassword?: string;
+    },
+    ctx: { ip?: string | null } = {}
   ) {
     const seller = await prisma.seller.findUnique({
       where: { id: sellerId },
@@ -940,6 +958,10 @@ export class SellerService {
         'MINIMUM_PAYOUT_NOT_MET'
       );
     }
+
+    // The earnings go to the account named here: a stolen session must not be able to send them anywhere alone.
+    const owner = await prisma.user.findUnique({ where: { id: seller.userId }, select: { id: true, passwordHash: true } });
+    await confirmPasswordIfSet(owner, data.currentPassword, 'Enter your password to request a payout', ctx);
 
     // Compute the balance and create the payout under a row lock on the seller:
     // two simultaneous requests used to both read the same balance and together

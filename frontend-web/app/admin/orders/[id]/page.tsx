@@ -3,12 +3,15 @@
 import { useState, useEffect } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import Link from 'next/link';
-import { UserLayout } from '@/components/layout/UserLayout';
+import { AdminShell } from '@/components/layout/AdminShell';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/toast';
+import { LoadError } from '@/components/ui/LoadError';
+import { useDialogs } from '@/components/ui/Dialogs';
 import { useAuthStore } from '@/lib/store/auth-store';
 import { apiClient } from '@/lib/api-client';
 import { formatPrice, formatDate } from '@/lib/utils';
+import { ExternalLink } from '@/components/ExternalLink';
 
 interface OrderDetail {
   id: string;
@@ -67,7 +70,10 @@ export default function AdminOrderDetailPage() {
   const id = params?.id as string;
   const { isAuthenticated, user } = useAuthStore();
   const { showToast } = useToast();
+  const { confirm: confirmDialog, ask: askDialog } = useDialogs();
   const [loading, setLoading] = useState(true);
+  // An order that could not be read is not an order that does not exist: only a 404 says "not found".
+  const [loadError, setLoadError] = useState<unknown>(null);
   const [order, setOrder] = useState<OrderDetail | null>(null);
   const [updating, setUpdating] = useState(false);
   const [selectedStatus, setSelectedStatus] = useState<string>('');
@@ -129,7 +135,7 @@ export default function AdminOrderDetailPage() {
   // A transfer the kitchen disputed (or hasn't confirmed): support checked it and it arrived.
   const handleConfirmPayment = async () => {
     if (!order) return;
-    if (!window.confirm('Confirm that this transfer reached the kitchen? The order is then marked paid.')) return;
+    if (!(await confirmDialog({ title: 'Confirm the payment?', message: 'Confirm that this transfer reached the kitchen? The order is then marked paid.', confirmText: 'Confirm payment', variant: 'warning' }))) return;
     try {
       setConfirmingPayment(true);
       await apiClient.post(`/admin/orders/${order.id}/confirm-payment`, { note: confirmNote.trim() || undefined });
@@ -145,7 +151,7 @@ export default function AdminOrderDetailPage() {
 
   // A manual (bank / gateway) refund is owed until the admin has actually sent the money.
   const handleCompleteRefund = async (refundId: string) => {
-    const entered = window.prompt('Transfer reference for this refund (optional):');
+    const entered = (await askDialog({ title: 'Mark the refund as sent', message: 'Transfer reference for this refund (optional).', label: 'Transfer reference', optional: true, confirmText: 'Mark as sent' }));
     if (entered === null) return; // cancelled the prompt: don't mark the refund as sent
     const reference = entered.trim() || undefined;
     try {
@@ -161,7 +167,7 @@ export default function AdminOrderDetailPage() {
   };
 
   const handleDismissRefund = async (refundId: string) => {
-    const reason = window.prompt('Why is this refund not owed? (min 5 characters)');
+    const reason = (await askDialog({ title: 'Dismiss this refund', message: 'Why is this refund not owed?', label: 'Reason', minLength: 5, confirmText: 'Dismiss refund' }));
     if (reason === null) return;
     if (reason.trim().length < 5) {
       showToast('Please give a reason (at least 5 characters)', 'warning');
@@ -222,13 +228,11 @@ export default function AdminOrderDetailPage() {
       } else {
         setOrder(null);
       }
+      setLoadError(null);
     } catch (error: any) {
-      if (error.response?.status === 404) {
-        showToast('Order not found', 'error');
-      } else {
-        showToast('Failed to load order', 'error');
-      }
       setOrder(null);
+      // Only a 404 says the order does not exist; anything else is a read that failed, and says so.
+      setLoadError(error.response?.status === 404 ? null : error);
     } finally {
       setLoading(false);
     }
@@ -273,7 +277,7 @@ export default function AdminOrderDetailPage() {
     : [];
 
   return (
-    <UserLayout showSidebar={true} showNavbar={true}>
+    <AdminShell>
       <div className="max-w-4xl mx-auto">
         <div className="mb-6">
           <Link
@@ -289,6 +293,8 @@ export default function AdminOrderDetailPage() {
             <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-green-600 mx-auto mb-4"></div>
             <p className="text-gray-600">Loading order...</p>
           </div>
+        ) : loadError ? (
+          <LoadError error={loadError} onRetry={loadOrder} title="We couldn't load this order" />
         ) : !order ? (
           <div className="bg-white rounded-lg shadow-sm p-12 text-center">
             <h3 className="text-lg font-semibold text-gray-900 mb-2">Order not found</h3>
@@ -340,9 +346,9 @@ export default function AdminOrderDetailPage() {
                       </p>
                       {order.paymentDisputeReason && <p>Kitchen: &ldquo;{order.paymentDisputeReason}&rdquo;</p>}
                       {order.paymentProofUrl && (
-                        <a href={order.paymentProofUrl} target="_blank" rel="noopener noreferrer" className="underline font-medium">
+                        <ExternalLink href={order.paymentProofUrl} className="underline font-medium">
                           Open the customer&apos;s receipt
-                        </a>
+                        </ExternalLink>
                       )}
                     </div>
                     <p className="mt-3 text-xs text-gray-600">
@@ -433,7 +439,7 @@ export default function AdminOrderDetailPage() {
                   <div className="rounded-lg border border-amber-200 bg-amber-50 p-4">
                     <h2 className="text-sm font-semibold text-amber-900 mb-1">Delivery failed</h2>
                     <p className="text-sm text-amber-800 mb-3">
-                      The rider or seller couldn't complete this delivery. Send it back out for another attempt, or cancel and refund below.
+                      The rider or seller couldn&apos;t complete this delivery. Send it back out for another attempt, or cancel and refund below.
                     </p>
                     <button
                       onClick={handleRetryDelivery}
@@ -535,7 +541,7 @@ export default function AdminOrderDetailPage() {
                     {!showRefundForm ? (
                       <button
                         onClick={() => setShowRefundForm(true)}
-                        className="px-4 py-2 rounded-lg text-sm font-medium text-white bg-amber-500 hover:bg-amber-600 transition-all"
+                        className="px-4 py-2 rounded-lg text-sm font-medium text-white bg-amber-700 hover:bg-amber-800 transition-all"
                       >
                         Process Refund
                       </button>
@@ -585,7 +591,7 @@ export default function AdminOrderDetailPage() {
                               {r.method === 'wallet' ? 'to wallet' : 'manual transfer'}
                               {r.reference ? ` · ref ${r.reference}` : ''}
                             </span>
-                            {r.reason && <div className="text-xs text-gray-400 truncate">{r.reason}</div>}
+                            {r.reason && <div className="text-xs text-gray-500 truncate">{r.reason}</div>}
                           </div>
                           {r.status === 'pending' ? (
                             <button
@@ -663,7 +669,7 @@ export default function AdminOrderDetailPage() {
                           <span className="font-medium text-gray-700">{h.status}</span>
                           {h.notes && ` — ${h.notes}`}
                           {h.changedByName && <span className="text-gray-500"> · by {h.changedByName}</span>}
-                          <span className="text-gray-400 ms-2">{formatDate(h.createdAt)}</span>
+                          <span className="text-gray-500 ms-2">{formatDate(h.createdAt)}</span>
                         </li>
                       ))}
                     </ul>
@@ -674,6 +680,6 @@ export default function AdminOrderDetailPage() {
           </div>
         )}
       </div>
-    </UserLayout>
+    </AdminShell>
   );
 }

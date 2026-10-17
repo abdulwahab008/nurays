@@ -24,6 +24,7 @@
  */
 
 import crypto from 'crypto';
+import { roundMoney } from '../utils/pricing';
 import type {
   IPaymentGateway,
   CreatePaymentRequest,
@@ -45,8 +46,12 @@ const webhookSecret = () => process.env.SAFEPAY_WEBHOOK_SECRET?.trim() || '';
 const REQUEST_TIMEOUT_MS = 15_000;
 
 function safeEqualHex(expected: string, received: string): boolean {
+  // Buffer.from(text, 'hex') stops at the first character that is not a hex digit instead of failing, so a good signature
+  // with anything after it would decode to the same bytes: check the text itself first.
+  const got = String(received).trim().toLowerCase();
+  if (got.length !== expected.length || !/^[0-9a-f]+$/.test(got)) return false;
   const a = Buffer.from(expected, 'hex');
-  const b = Buffer.from(String(received).trim().toLowerCase(), 'hex');
+  const b = Buffer.from(got, 'hex');
   return a.length > 0 && a.length === b.length && crypto.timingSafeEqual(a, b);
 }
 
@@ -67,7 +72,7 @@ export async function createSafepayCheckout(opts: {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       client: publicKey(),
-      amount: Math.round(opts.amount * 100) / 100,
+      amount: roundMoney(opts.amount),
       currency: 'PKR',
       environment: env(),
     }),

@@ -6,7 +6,9 @@ export interface UserProfile {
   phoneVerified?: boolean;
   email?: string;
   userType: string;
-  isEmailVerified?: boolean;
+  emailVerified?: boolean;
+  /** Whether there is a password to change: an account that only signs in with Google has none. */
+  hasPassword?: boolean;
   profile?: {
     fullName: string;
     avatarUrl?: string;
@@ -21,6 +23,8 @@ export interface Address {
   label?: string;
   addressLine1: string;
   addressLine2?: string;
+  /** The house, flat or shop number a rider looks for on the door. */
+  houseNumber?: string | null;
   area: string;
   city: string;
   postalCode?: string;
@@ -68,6 +72,7 @@ export const userProfileService = {
     label?: string;
     addressLine1: string;
     addressLine2?: string;
+    houseNumber?: string;
     area: string;
     city: string;
     postalCode?: string;
@@ -84,6 +89,7 @@ export const userProfileService = {
     label?: string;
     addressLine1?: string;
     addressLine2?: string;
+    houseNumber?: string;
     area?: string;
     city?: string;
     postalCode?: string;

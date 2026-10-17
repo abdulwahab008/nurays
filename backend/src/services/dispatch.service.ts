@@ -6,8 +6,11 @@ import realtimeOrderService from './realtime-order.service';
 import { notify } from './notify.service';
 import { cashLimitOf, riderMoney, riderMoneyMany } from './rider-ledger.service';
 import { calculateDeliveryFeeCorridor } from '../utils/deliveryFee';
-import { cashToCollect, endsOf, routeMatch } from '../utils/riderJobs';
+import { assignmentMessage, cashToCollect, dropoffAreaOf, endsOf, routeMatch } from '../utils/riderJobs';
+import { cashAtDoor, isCashAtDoor } from '../utils/paymentCustody';
+import { ACTIVE_DELIVERY_STATUSES } from '../utils/deliveryStatus';
 import { chooseRider, DispatchCandidate, JobEnds, MAX_ACTIVE_JOBS } from '../utils/dispatch';
+import { ON_DUTY_RIDER } from '../utils/riderDuty';
 
 /**
  * Automatic assignment of delivery jobs to Nuray's own riders (see utils/dispatch.ts for the rules).
@@ -16,7 +19,6 @@ import { chooseRider, DispatchCandidate, JobEnds, MAX_ACTIVE_JOBS } from '../uti
  */
 export const autoAssignEnabled = () => process.env.AUTO_ASSIGN_ENABLED !== 'false';
 
-const ACTIVE = ['assigned', 'arrived_at_pickup', 'picked_up', 'in_transit', 'arrived_at_customer'];
 const LIVE_ORDER_NOT = ['cancelled', 'refunded', 'delivered', 'completed'];
 
 const JOB_INCLUDE = {
@@ -27,13 +29,14 @@ const JOB_INCLUDE = {
       paymentMethod: true,
       paymentStatus: true,
       totalAmount: true,
-      deliveryAddress: { select: { communityId: true } },
+      deliveryAddress: { select: { communityId: true, area: true, city: true } },
+      deliveryAddressSnapshot: true,
       items: { select: { status: true, seller: { select: { communityId: true } } }, take: 5 },
     },
   },
 } as const;
 
-type JobRow = NonNullable<Awaited<ReturnType<typeof loadJob>>>;
+export type JobRow = NonNullable<Awaited<ReturnType<typeof loadJob>>>;
 
 function loadJob(deliveryId: string) {
   return prisma.delivery.findUnique({ where: { id: deliveryId }, include: JOB_INCLUDE });
@@ -62,15 +65,19 @@ export interface DispatchResult {
   reason?: string;
 }
 
-/** Try to give one open job to the best rider. Safe to call repeatedly and concurrently. */
-export async function dispatchDelivery(deliveryId: string): Promise<DispatchResult> {
+/**
+ * Try to give one open job to the best rider. Safe to call repeatedly and concurrently.
+ * `announced` says whether the riders were already told the job is in the pool (the default); when it is
+ * not, taking it needs no "gone from the pool" message to them.
+ */
+export async function dispatchDelivery(deliveryId: string, opts: { announced?: boolean } = {}): Promise<DispatchResult> {
   if (!autoAssignEnabled()) return { assigned: false, reason: 'disabled' };
   const job = await loadJob(deliveryId);
   if (!job || job.riderId || job.status !== 'pending') return { assigned: false, reason: 'not_open' };
   if (LIVE_ORDER_NOT.includes(job.order.orderStatus)) return { assigned: false, reason: 'order_finished' };
 
   const riders = await prisma.rider.findMany({
-    where: { verificationStatus: 'approved', status: 'active', isAvailable: true, id: { notIn: job.releasedRiderIds } },
+    where: { ...ON_DUTY_RIDER, id: { notIn: job.releasedRiderIds } },
     select: { id: true, userId: true, communityId: true, cashLimit: true },
   });
   if (riders.length === 0) return { assigned: false, reason: 'no_riders' };
@@ -79,7 +86,7 @@ export async function dispatchDelivery(deliveryId: string): Promise<DispatchResu
   const startOfDay = new Date();
   startOfDay.setHours(0, 0, 0, 0);
   const [activeJobs, doneToday, moneyByRider] = await Promise.all([
-    prisma.delivery.findMany({ where: { riderId: { in: riderIds }, status: { in: ACTIVE } }, include: JOB_INCLUDE }),
+    prisma.delivery.findMany({ where: { riderId: { in: riderIds }, status: { in: ACTIVE_DELIVERY_STATUSES } }, include: JOB_INCLUDE }),
     prisma.delivery.groupBy({ by: ['riderId'], where: { riderId: { in: riderIds }, status: 'delivered', deliveryTime: { gte: startOfDay } }, _count: { _all: true } }),
     riderMoneyMany(prisma, riderIds),
   ]);
@@ -99,9 +106,9 @@ export async function dispatchDelivery(deliveryId: string): Promise<DispatchResu
     });
   }
 
-  const cod = job.order.paymentMethod === 'cod' && job.order.paymentStatus !== 'paid';
+  const cod = isCashAtDoor(job.order);
   const choice = chooseRider(
-    { ...endsWithCommunities(job), cashToTake: cod ? Number(job.order.totalAmount) : 0 },
+    { ...endsWithCommunities(job), cashToTake: cashAtDoor(job.order) },
     candidates
   );
   if (!choice) {
@@ -118,7 +125,7 @@ export async function dispatchDelivery(deliveryId: string): Promise<DispatchResu
     await tx.$queryRaw`SELECT id FROM riders WHERE id = ${rider.id} FOR UPDATE`;
     const fresh = await tx.rider.findUnique({ where: { id: rider.id }, select: { isAvailable: true, status: true, cashLimit: true } });
     if (!fresh || !fresh.isAvailable || fresh.status !== 'active') return false;
-    const active = await tx.delivery.findMany({ where: { riderId: rider.id, status: { in: ACTIVE } }, include: { order: { select: { paymentMethod: true, paymentStatus: true, totalAmount: true } } } });
+    const active = await tx.delivery.findMany({ where: { riderId: rider.id, status: { in: ACTIVE_DELIVERY_STATUSES } }, include: { order: { select: { paymentMethod: true, paymentStatus: true, totalAmount: true } } } });
     if (active.length >= MAX_ACTIVE_JOBS) return false;
     if (cod) {
       const { cashHeld } = await riderMoney(tx, rider.id);
@@ -134,14 +141,14 @@ export async function dispatchDelivery(deliveryId: string): Promise<DispatchResu
   if (!done) return { assigned: false, reason: 'lost_race' };
 
   logger.info({ deliveryId, orderId: job.orderId, riderId: rider.id, reason: choice.reason, candidates: riders.length, bonus: done.bonus }, 'Delivery auto-assigned');
-  await announceAssignment(job, rider.userId, corridor.standardFee + done.bonus);
+  await announceAssignment(job, rider.userId, corridor.standardFee + done.bonus, opts.announced !== false);
   return { assigned: true, riderId: rider.id, reason: choice.reason };
 }
 
-async function announceAssignment(job: JobRow, riderUserId: string, riderPay: number) {
-  void realtimeOrderService.emitDeliveryClaimed(job.id, job.orderId);
-  const cod = job.order.paymentMethod === 'cod' && job.order.paymentStatus !== 'paid';
-  const activeNow = await prisma.delivery.count({ where: { rider: { userId: riderUserId }, status: { in: ACTIVE } } });
+export async function announceAssignment(job: JobRow, riderUserId: string, riderPay: number, announced = true) {
+  void realtimeOrderService.emitDeliveryClaimed(job.id, job.orderId, { toRiders: announced });
+  const cash = cashAtDoor(job.order);
+  const activeNow = await prisma.delivery.count({ where: { rider: { userId: riderUserId }, status: { in: ACTIVE_DELIVERY_STATUSES } } });
   socketManager.emitToUser(riderUserId, 'delivery:assigned', { deliveryId: job.id, orderId: job.orderId });
   // The rider's screen pops this up, even while they are already carrying another job.
   socketManager.emitToUser(riderUserId, 'delivery:offered', {
@@ -150,7 +157,7 @@ async function announceAssignment(job: JobRow, riderUserId: string, riderPay: nu
     orderNumber: job.order.orderNumber,
     pickupAddress: job.pickupAddress,
     deliveryAddress: job.deliveryAddress,
-    cashToCollect: cod ? Math.round(Number(job.order.totalAmount)) : 0,
+    cashToCollect: Math.round(cash), // the pop-up shows whole rupees
     riderFee: riderPay,
     activeJobs: activeNow,
     mode: 'auto',
@@ -160,7 +167,13 @@ async function announceAssignment(job: JobRow, riderUserId: string, riderPay: nu
     category: 'deliveries',
     type: 'delivery',
     title: 'New delivery assigned to you',
-    message: `Order #${job.order.orderNumber}: pick up from ${job.pickupAddress}, deliver to ${job.deliveryAddress}.${cod ? ` Collect Rs ${Math.round(Number(job.order.totalAmount))} in cash.` : ''}`,
+    // Stored and pushed: the area only. The street is in the job, which the rider can open while it is theirs.
+    message: assignmentMessage({
+      orderNumber: job.order.orderNumber,
+      pickupAddress: job.pickupAddress,
+      dropoffArea: dropoffAreaOf(job.order),
+      cashToCollect: cash,
+    }),
     actionUrl: '/riders/dashboard#active',
     data: { deliveryId: job.id, orderId: job.orderId },
     channels: ['push'],
@@ -204,4 +217,30 @@ export async function dispatchWaiting(limit = 50): Promise<number> {
 export function dispatchSoon(deliveryId?: string) {
   const run = deliveryId ? dispatchDelivery(deliveryId) : dispatchWaiting();
   void run.catch((err) => logger.error({ err }, 'Dispatch failed'));
+}
+
+/**
+ * A job has just joined the open pool (a new one, one handed back, one reopened by an admin). It is
+ * offered to the best rider first: when a rider takes it, no other rider ever hears of it, so a busy
+ * hour does not make every connected rider reload their lists twice per order. Only a job nobody
+ * could take is announced to every rider, who can then claim it by hand. The dispatcher is a
+ * parameter so the choice can be tested without a database.
+ */
+export async function postDelivery(
+  deliveryId: string,
+  orderId: string,
+  dispatch: (id: string, opts: { announced: boolean }) => Promise<DispatchResult> = dispatchDelivery
+): Promise<void> {
+  let taken = false;
+  try {
+    taken = (await dispatch(deliveryId, { announced: false })).assigned;
+  } catch (err) {
+    logger.error({ err, deliveryId }, 'Dispatch failed');
+  }
+  if (!taken) realtimeOrderService.emitDeliveryPosted(deliveryId, orderId);
+}
+
+/** Fire and forget: posting a job must never fail what triggered it. */
+export function postDeliverySoon(deliveryId: string, orderId: string) {
+  void postDelivery(deliveryId, orderId).catch((err) => logger.error({ err, deliveryId }, 'Posting a delivery failed'));
 }

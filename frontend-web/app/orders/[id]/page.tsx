@@ -1,18 +1,22 @@
 'use client';
 
 import { Suspense, useEffect, useRef, useState } from 'react';
+import { loginUrlHere } from '@/lib/auth-redirect';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
-import { orderService } from '@/lib/services/order.service';
+import { orderService, type OrderDetails } from '@/lib/services/order.service';
 import { formatPrice, formatDateTime, formatDate } from '@/lib/utils';
+import { cancellationNotice } from '@/lib/order-cancellation';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/toast';
+import { LoadError } from '@/components/ui/LoadError';
 import { useAuthStore } from '@/lib/store/auth-store';
-import { useSocket } from '@/lib/hooks/use-socket';
+import { useSocket, type DeliveryTrackingEvent } from '@/lib/hooks/use-socket';
 import { useLiveRefresh } from '@/lib/hooks/use-live-refresh';
 import { DashboardLayout, CUSTOMER_SIDEBAR_ITEMS } from '@/components/layout/DashboardShell';
 import WriteReviewForm from '@/components/products/WriteReviewForm';
-import { apiClient } from '@/lib/api-client';
+import { apiClient, apiErrorMessage } from '@/lib/api-client';
+import { newAudioContext } from '@/lib/audio';
 import ManualPaymentCard from '@/components/orders/ManualPaymentCard';
 import OnlinePaymentCard from '@/components/orders/OnlinePaymentCard';
 import OrderChatModal from '@/components/orders/OrderChatModal';
@@ -30,9 +34,8 @@ const RiderLiveMap = dynamic(() => import('@/components/orders/RiderLiveMap'), {
 function playCancelSound() {
   if (typeof window === 'undefined') return;
   try {
-    const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
-    if (!AudioCtx) return;
-    const ctx = new AudioCtx();
+    const ctx = newAudioContext();
+    if (!ctx) return;
     const go = () => {
       // Low descending two-tone — signals something went wrong
       const playNote = (freq: number, start: number, dur: number, vol = 0.25) => {
@@ -63,6 +66,8 @@ interface OrderDetail {
   paymentSubmittedAt?: string | null;
   paymentProofUrl?: string | null;
   paymentSenderAccount?: string | null;
+  cancelledBy?: string | null;
+  cancellationReason?: string | null;
   customerName?: string;
   customerPhone?: string;
   createdAt?: string;
@@ -163,19 +168,16 @@ function paymentStatusLabel(t: OrdersT, method?: string, status?: string): strin
   }
 }
 
-function mapOrderToDetail(raw: any): OrderDetail {
+function mapOrderToDetail(raw: OrderDetails): OrderDetail {
+  // The server sends the address as the order was placed (even when the saved address has since been deleted).
   const addr = raw.deliveryAddress;
   const addressStr = addr
     ? [addr.addressLine1, addr.addressLine2, addr.area, addr.city].filter(Boolean).join(', ')
-    : (raw.deliveryAddressSnapshot as any)?.address || '—';
+    : '—';
   const slotDate = raw.deliverySlotDate
     ? new Date(raw.deliverySlotDate).toISOString().slice(0, 10)
     : undefined;
-  const sellerName =
-    raw.items?.[0]?.seller?.businessName ||
-    raw.items?.[0]?.sellerName ||
-    raw.seller?.businessName ||
-    '';
+  const sellerName = raw.items?.[0]?.seller?.businessName || '';
   return {
     id: raw.id,
     orderNumber: raw.orderNumber ?? '',
@@ -189,16 +191,16 @@ function mapOrderToDetail(raw: any): OrderDetail {
       : null,
     paymentProofUrl: raw.paymentProofUrl ?? null,
     paymentSenderAccount: raw.paymentSenderAccount ?? null,
-    customerName: raw.customer?.profile?.fullName || raw.deliveryAddress?.contactName || '',
-    customerPhone: raw.customer?.phone || raw.deliveryAddress?.contactPhone || '',
+    cancelledBy: raw.cancelledBy ?? null,
+    cancellationReason: raw.cancellationReason ?? null,
     createdAt: raw.createdAt ? new Date(raw.createdAt).toISOString() : new Date().toISOString(),
     sellerName,
-    items: (raw.items ?? []).map((i: any) => ({
+    items: (raw.items ?? []).map((i) => ({
       id: i.id,
       productId: i.productId ?? i.product?.id,
       productName: i.productName ?? i.product?.name ?? '—',
       variantName: i.variantName ?? undefined,
-      productImage: i.productImage ?? i.product?.images?.[0]?.url,
+      productImage: i.productImage ?? i.product?.images?.[0]?.imageUrl,
       sellerName: i.seller?.businessName ?? i.seller?.businessNameUrdu ?? '—',
       quantity: i.quantity ?? 0,
       unitPrice: Number(i.unitPrice ?? 0),
@@ -231,15 +233,15 @@ function mapOrderToDetail(raw: any): OrderDetail {
       rider:
         raw.delivery?.rider ?
           {
-            name: (raw.delivery.rider as any).name ?? '',
+            name: raw.delivery.rider.name ?? '',
             phone: '',
-            vehicle: [(raw.delivery.rider as any).vehicleType, (raw.delivery.rider as any).vehicleNumber].filter(Boolean).join(' - '),
+            vehicle: [raw.delivery.rider.vehicleType, raw.delivery.rider.vehicleNumber].filter(Boolean).join(' - '),
           }
         : undefined,
     },
-    timeline: (raw.statusHistory ?? []).map((h: any) => ({
+    timeline: (raw.statusHistory ?? []).map((h) => ({
       status: h.status ?? 'pending',
-      timestamp: typeof h.createdAt === 'string' ? h.createdAt : new Date(h.createdAt).toISOString(),
+      timestamp: h.createdAt,
     })),
   };
 }
@@ -268,7 +270,9 @@ function OrderDetailContent() {
   const { joinOrderRoom, onOrderStatusUpdate, onDeliveryTracking } = useSocket();
   const [order, setOrder] = useState<OrderDetail | null>(null);
   const [loading, setLoading] = useState(true);
-  const [trackingData, setTrackingData] = useState<any>(null);
+  // Why the order could not be read when it was not a 404: an order that could not be read is not an order that does not exist.
+  const [loadError, setLoadError] = useState<unknown>(null);
+  const [trackingData, setTrackingData] = useState<DeliveryTrackingEvent | null>(null);
   const [showPlacedBanner, setShowPlacedBanner] = useState(false);
   const [showCancelModal, setShowCancelModal] = useState(false);
   const [cancelReason, setCancelReason] = useState('');
@@ -292,7 +296,7 @@ function OrderDetailContent() {
   useEffect(() => {
     const token = apiClient.getAccessToken();
     if (!token && !isAuthenticated) {
-      router.push('/login');
+      router.push(loginUrlHere());
       return;
     }
     if (params.id) {
@@ -309,7 +313,7 @@ function OrderDetailContent() {
 
     const leaveRoom = joinOrderRoom(orderId);
 
-    const unsubscribeStatus = onOrderStatusUpdate((data: any) => {
+    const unsubscribeStatus = onOrderStatusUpdate((data) => {
       // The server also pushes every one of this customer's other orders to their
       // personal room; only this order's updates belong on this page.
       if (data?.orderId !== orderId) return;
@@ -325,7 +329,7 @@ function OrderDetailContent() {
       }
     });
 
-    const unsubscribeTracking = onDeliveryTracking((data: any) => {
+    const unsubscribeTracking = onDeliveryTracking((data) => {
       if (data?.orderId && data.orderId !== orderId) return;
       setTrackingData(data);
     });
@@ -353,10 +357,12 @@ function OrderDetailContent() {
     try {
       const response = await orderService.getOrderDetails(params.id as string);
       if (seq !== loadSeqRef.current) return; // a newer load superseded this one
-      const raw = (response as any)?.data ?? response;
-      setOrder(mapOrderToDetail(raw));
+      setOrder(mapOrderToDetail(response.data));
+      setLoadError(null);
     } catch (error) {
       console.error('Failed to load order:', error);
+      // An order already on the screen stays (a refresh that fails changes nothing); with none, only a 404 says it does not exist.
+      if (seq === loadSeqRef.current) setLoadError((error as { response?: { status?: number } })?.response?.status === 404 ? null : error);
     } finally {
       if (seq === loadSeqRef.current) inFlightRef.current = false;
       if (!silent) setLoading(false);
@@ -400,8 +406,8 @@ function OrderDetailContent() {
       } else {
         showToast(t('detail.toastCancelled'), 'success');
       }
-    } catch (error: any) {
-      showToast(error.response?.data?.error?.message || t('detail.cancelFailed'), 'error');
+    } catch (error) {
+      showToast(apiErrorMessage(error, t('detail.cancelFailed')), 'error');
     } finally {
       setCancelling(false);
     }
@@ -422,8 +428,8 @@ function OrderDetailContent() {
       setReportDetails('');
       setReported(true);
       showToast(t('detail.toastReported'), 'success');
-    } catch (error: any) {
-      showToast(error.response?.data?.error?.message || t('detail.reportFailed'), 'error');
+    } catch (error) {
+      showToast(apiErrorMessage(error, t('detail.reportFailed')), 'error');
     } finally {
       setReporting(false);
     }
@@ -441,6 +447,16 @@ function OrderDetailContent() {
       >
         <div className="flex items-center justify-center py-16">
           <p className="text-gray-600">{t('detail.loadingOrder')}</p>
+        </div>
+      </DashboardLayout>
+    );
+  }
+
+  if (!order && loadError) {
+    return (
+      <DashboardLayout title={tc('loadFailedTitle')} subtitle="" sidebarItems={customerSidebarItems} userType="customer">
+        <div className="max-w-xl mx-auto py-10 px-4">
+          <LoadError error={loadError} onRetry={() => void loadOrder()} />
         </div>
       </DashboardLayout>
     );
@@ -482,6 +498,7 @@ function OrderDetailContent() {
     return raw;
   })();
   const orderStatus = effectiveStatus;
+  const notice = effectiveStatus === 'cancelled' ? cancellationNotice(order.cancelledBy, order.cancellationReason) : null;
 
   // The rider's position: the latest live update, else the last one the order came with.
   // Shown only while the food is on its way.
@@ -618,6 +635,12 @@ function OrderDetailContent() {
               {t('detail.paymentBadge', { status: payStatusText(order.paymentStatus ?? 'pending').toUpperCase() })}
             </span>
           </div>
+          {effectiveStatus === 'cancelled' && notice && (
+            <div className="mt-4 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-900" role="status">
+              <p className="font-semibold">{t(`detail.cancelledBy.${notice.who}`)}</p>
+              {notice.reason && <p className="mt-0.5">{t('detail.cancelReasonLine', { reason: notice.reason })}</p>}
+            </div>
+          )}
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
@@ -659,7 +682,7 @@ function OrderDetailContent() {
                           className="w-full h-full object-cover"
                         />
                       ) : (
-                        <div className="w-full h-full flex items-center justify-center text-gray-400 text-xs">
+                        <div className="w-full h-full flex items-center justify-center text-gray-500 text-xs">
                           {t('detail.noImage')}
                         </div>
                       )}
@@ -978,7 +1001,7 @@ function OrderDetailContent() {
         {/* Kitchen & Customer Credentials */}
         <div className="grid grid-cols-2 gap-6 border-b border-slate-200 pb-4 mb-5 text-xs">
           <div>
-            <span className="text-[11px] font-black uppercase text-slate-400 tracking-wider block mb-1">
+            <span className="text-[11px] font-black uppercase text-slate-500 tracking-wider block mb-1">
               {t('receipt.preparedBy')}
             </span>
             <h4 className="font-extrabold text-sm text-slate-900">{sellerName}</h4>
@@ -987,7 +1010,7 @@ function OrderDetailContent() {
           </div>
 
           <div>
-            <span className="text-[11px] font-black uppercase text-slate-400 tracking-wider block mb-1">
+            <span className="text-[11px] font-black uppercase text-slate-500 tracking-wider block mb-1">
               {t('receipt.billedTo')}
             </span>
             <h4 className="font-extrabold text-sm text-slate-900">{customerName}</h4>
@@ -1011,7 +1034,7 @@ function OrderDetailContent() {
             <tbody className="divide-y divide-slate-200">
               {order.items.map((item, idx) => (
                 <tr key={item.id} className="text-slate-800">
-                  <td className="py-2.5 pe-2 font-bold text-slate-400">{idx + 1}</td>
+                  <td className="py-2.5 pe-2 font-bold text-slate-500">{idx + 1}</td>
                   <td className="py-2.5 px-2 font-semibold">
                     <span className="font-bold text-slate-900 block">{item.productName}</span>
                     {item.variantName && (
@@ -1033,7 +1056,7 @@ function OrderDetailContent() {
         <div className="grid grid-cols-2 gap-6 border-t-2 border-slate-800 pt-4 mb-6 text-xs">
           {/* Payment Method Statement */}
           <div className="space-y-2">
-            <span className="text-[11px] font-black uppercase text-slate-400 tracking-wider block">
+            <span className="text-[11px] font-black uppercase text-slate-500 tracking-wider block">
               {t('receipt.paymentDetails')}
             </span>
             <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-200 space-y-1.5">
@@ -1099,7 +1122,7 @@ function OrderDetailContent() {
         <div className="border-t border-slate-200 pt-4 text-center text-[11px] text-slate-500 space-y-1">
           <p className="font-extrabold text-slate-700">{t('receipt.thanks')}</p>
           <p>{t('receipt.support')}</p>
-          <p className="text-[11px] text-slate-400">{t('receipt.computerGenerated')}</p>
+          <p className="text-[11px] text-slate-500">{t('receipt.computerGenerated')}</p>
         </div>
       </div>
 
@@ -1143,19 +1166,19 @@ function OrderDetailContent() {
                   </div>
                   <div className="text-end">
                     <span className="font-mono font-bold text-sm text-slate-900 block"><span data-ltr>#{order.orderNumber}</span></span>
-                    <span className="text-[11px] text-slate-400">{formatDate(order.createdAt || new Date().toISOString())}</span>
+                    <span className="text-[11px] text-slate-500">{formatDate(order.createdAt || new Date().toISOString())}</span>
                   </div>
                 </div>
 
                 {/* Details */}
                 <div className="grid grid-cols-2 gap-4 text-xs">
                   <div>
-                    <span className="text-[11px] uppercase font-bold text-slate-400 block">{t('receipt.soldBy')}</span>
+                    <span className="text-[11px] uppercase font-bold text-slate-500 block">{t('receipt.soldBy')}</span>
                     <span className="font-bold text-slate-900 block">{sellerName}</span>
                     <span className="text-slate-500 text-[11px]">{t('receipt.communityKitchen')}</span>
                   </div>
                   <div>
-                    <span className="text-[11px] uppercase font-bold text-slate-400 block">{t('receipt.deliveredTo')}</span>
+                    <span className="text-[11px] uppercase font-bold text-slate-500 block">{t('receipt.deliveredTo')}</span>
                     <span className="font-bold text-slate-900 block">{customerName}</span>
                     <span className="text-slate-500 text-[11px]">{order.delivery.address}</span>
                   </div>

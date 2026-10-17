@@ -1,6 +1,7 @@
 'use client';
 
 import { Suspense, useCallback, useEffect, useState } from 'react';
+import { loginUrlHere } from '@/lib/auth-redirect';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Wallet, ArrowDownLeft, ArrowUpRight, Plus, Lock } from 'lucide-react';
@@ -62,7 +63,7 @@ function WalletContent() {
 
   useEffect(() => {
     if (!isAuthenticated && !apiClient.getAccessToken()) {
-      router.push('/login');
+      router.push(loginUrlHere());
       return;
     }
     load();
@@ -229,7 +230,7 @@ function WalletContent() {
                             {incoming ? '+' : '−'}
                             {formatPrice(tx.amount)}
                           </p>
-                          <p className="text-[11px] text-slate-400">{t('balanceAfter', { amount: formatPrice(tx.balanceAfter) })}</p>
+                          <p className="text-[11px] text-slate-500">{t('balanceAfter', { amount: formatPrice(tx.balanceAfter) })}</p>
                         </div>
                       </li>
                     );

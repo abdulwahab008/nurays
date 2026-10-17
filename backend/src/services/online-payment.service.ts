@@ -6,9 +6,10 @@ import { issueRefund } from './refund.service';
 import { creditWallet } from './wallet.service';
 import realtimeOrderService from './realtime-order.service';
 import { notify, notifyMany } from './notify.service';
-import { PAYABLE_STATUSES } from '../utils/paymentCustody';
+import { ONLINE_GATEWAY_METHODS, PAYABLE_STATUSES } from '../utils/paymentCustody';
 import { logger } from '../utils/logger';
 import { reportError } from '../config/sentry';
+import { roundMoney } from '../utils/pricing';
 
 /**
  * Online payments through Safepay's hosted checkout, for orders and wallet top-ups.
@@ -20,7 +21,6 @@ import { reportError } from '../config/sentry';
  * record, a confirmation can never be applied to a different order or amount.
  */
 
-const money = (n: number) => Math.round(n * 100) / 100;
 const apiUrl = () => (process.env.BASE_URL || `http://localhost:${process.env.PORT || 3001}`).replace(/\/+$/, '');
 const webUrl = () => (process.env.FRONTEND_URL || 'http://localhost:3000').replace(/\/+$/, '');
 const returnUrl = () => `${apiUrl()}/api/${process.env.API_VERSION || 'v1'}/payments/safepay/return`;
@@ -35,7 +35,7 @@ export function onlinePaymentsAvailable(): boolean {
 }
 
 function requireGateway() {
-  if (!onlinePaymentsAvailable()) throw new AppError('Online payment is not available right now', 503, 'GATEWAY_UNAVAILABLE');
+  if (!onlinePaymentsAvailable()) throw AppError.expected('Online payment is not available right now', 503, 'GATEWAY_UNAVAILABLE');
 }
 
 /** Start paying an order online. The order must have been placed for online payment. */
@@ -47,11 +47,11 @@ export async function startOrderCheckout(orderId: string, userId: string) {
   if (['refund_pending', 'refunded'].includes(order.paymentStatus)) throw new AppError('This order has been refunded', 400, 'ORDER_REFUNDED');
   if (['cancelled', 'refunded'].includes(order.orderStatus)) throw new AppError('Cannot pay for cancelled order', 400, 'ORDER_CANCELLED');
   requireGateway();
-  if (!['safepay', 'card'].includes(order.paymentMethod)) {
+  if (!ONLINE_GATEWAY_METHODS.includes(order.paymentMethod)) {
     throw new AppError('This order was not placed for online payment', 400, 'NOT_AN_ONLINE_ORDER');
   }
 
-  const amount = money(Number(order.totalAmount));
+  const amount = roundMoney(Number(order.totalAmount));
   const checkout = await createSafepayCheckout({
     amount,
     reference: order.id,
@@ -73,7 +73,7 @@ export async function startOrderCheckout(orderId: string, userId: string) {
 
 /** Start a wallet top-up of `amount` rupees. */
 export async function startWalletTopup(userId: string, amountInput: number) {
-  const amount = money(Number(amountInput));
+  const amount = roundMoney(Number(amountInput));
   if (!Number.isFinite(amount) || amount < TOPUP_MIN || amount > TOPUP_MAX) {
     throw new AppError(`Top up between Rs ${TOPUP_MIN} and Rs ${TOPUP_MAX.toLocaleString()}.`, 400, 'INVALID_TOPUP_AMOUNT');
   }
@@ -146,7 +146,7 @@ export async function settleAttempt(tracker: string, via: 'return' | 'webhook', 
 
     await tx.$queryRaw`SELECT id FROM orders WHERE id = ${attempt.orderId} FOR UPDATE`;
     const order = await tx.order.findUniqueOrThrow({ where: { id: attempt.orderId } });
-    const total = money(Number(order.totalAmount));
+    const total = roundMoney(Number(order.totalAmount));
 
     if (!PAYABLE_STATUSES.includes(order.paymentStatus) || amount < total) {
       // Paid already (or being refunded), or somehow short of the total: the order is left as
@@ -164,7 +164,8 @@ export async function settleAttempt(tracker: string, via: 'return' | 'webhook', 
         data: {
           orderId: order.id,
           status: order.orderStatus,
-          notes: `An extra online payment of Rs ${amount} (Safepay ${tracker}) was credited to the customer's wallet`,
+          // Kitchens read this history: the gateway's tracker stays in payment_attempts and the wallet entry.
+          notes: `An extra online payment of Rs ${amount} was credited back to the customer`,
           changedBy: null,
         },
       });
@@ -186,14 +187,15 @@ export async function settleAttempt(tracker: string, via: 'return' | 'webhook', 
       data: {
         orderId: order.id,
         status: order.orderStatus,
-        notes: `Paid online: Rs ${amount} through Safepay${reference ? ` (ref ${reference.slice(0, 60)})` : ''}`,
+        // No tracker or gateway reference here: kitchens read this history (they are kept in payment_attempts).
+        notes: `Paid online: Rs ${amount}`,
         changedBy: null,
       },
     });
     if (amount > total) {
       await creditWallet(tx, {
         userId: attempt.userId,
-        amount: money(amount - total),
+        amount: roundMoney(amount - total),
         type: 'credit',
         orderId: order.id,
         description: `Order ${order.orderNumber} costs less than you paid (items were cancelled): the difference is in your wallet`,
@@ -339,7 +341,7 @@ export async function orderPaymentStatus(orderId: string, userId: string) {
     paymentMethod: order.paymentMethod,
     orderStatus: order.orderStatus,
     paidAt: order.paidAt,
-    canPayOnline: onlinePaymentsAvailable() && ['safepay', 'card'].includes(order.paymentMethod) && PAYABLE_STATUSES.includes(order.paymentStatus) && !['cancelled', 'refunded'].includes(order.orderStatus),
+    canPayOnline: onlinePaymentsAvailable() && ONLINE_GATEWAY_METHODS.includes(order.paymentMethod) && PAYABLE_STATUSES.includes(order.paymentStatus) && !['cancelled', 'refunded'].includes(order.orderStatus),
     lastAttempt: latest ? { status: latest.status, createdAt: latest.createdAt, amount: Number(latest.amount) } : null,
   };
 }

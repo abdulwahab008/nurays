@@ -57,7 +57,7 @@ export function notifyDeliveryCancelled(cancelled: CancelledDelivery | null): vo
   try {
     const payload = { deliveryId: cancelled.deliveryId, orderId: cancelled.orderId };
     if (cancelled.riderUserId) socketManager.emitToUser(cancelled.riderUserId, 'delivery:cancelled', payload);
-    socketManager.emitToRole('rider', 'delivery:removed', payload);
+    socketManager.emitToOnDutyRiders('delivery:removed', payload);
   } catch {
     // Realtime is best-effort; the rider's next refresh shows it anyway.
   }

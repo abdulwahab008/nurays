@@ -5,7 +5,9 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { DashboardLayout, ADMIN_SIDEBAR_ITEMS } from '@/components/layout/DashboardShell';
 import { Button } from '@/components/ui/button';
+import { LoadError } from '@/components/ui/LoadError';
 import { useToast } from '@/components/ui/toast';
+import { useDialogs } from '@/components/ui/Dialogs';
 import { useAuthStore } from '@/lib/store/auth-store';
 import { apiClient } from '@/lib/api-client';
 
@@ -52,6 +54,8 @@ interface Category {
   description?: string;
   iconUrl?: string;
   parentId?: string;
+  /** Which kind of dish it holds: kitchens find a category through the kind of dish they are adding. */
+  productType?: string | null;
   sortOrder: number;
   isActive: boolean;
   productCount?: number;
@@ -67,48 +71,45 @@ interface CategoryModalProps {
   parentCategories: Category[];
 }
 
-function CategoryModal({ isOpen, onClose, onSubmit, category, parentCategories }: CategoryModalProps) {
-  const [formData, setFormData] = useState({
-    name: '',
-    nameUrdu: '',
-    description: '',
-    iconUrl: '',
-    parentId: '',
-    sortOrder: 0,
-    isActive: true,
-  });
+const BLANK_CATEGORY_FORM = {
+  name: '',
+  nameUrdu: '',
+  description: '',
+  iconUrl: '',
+  parentId: '',
+  productType: '',
+  sortOrder: 0,
+  isActive: true,
+};
 
-  useEffect(() => {
-    if (category) {
-      setFormData({
-        name: category.name || '',
-        nameUrdu: category.nameUrdu || '',
-        description: category.description || '',
-        iconUrl: category.iconUrl || '',
-        parentId: category.parentId || '',
-        sortOrder: category.sortOrder || 0,
-        isActive: category.isActive ?? true,
-      });
-    } else {
-      setFormData({
-        name: '',
-        nameUrdu: '',
-        description: '',
-        iconUrl: '',
-        parentId: '',
-        sortOrder: 0,
-        isActive: true,
-      });
-    }
-  }, [category, isOpen]);
+function categoryFormFor(category?: Category | null) {
+  if (!category) return BLANK_CATEGORY_FORM;
+  return {
+    name: category.name || '',
+    nameUrdu: category.nameUrdu || '',
+    description: category.description || '',
+    iconUrl: category.iconUrl || '',
+    parentId: category.parentId || '',
+    productType: category.productType || '',
+    sortOrder: category.sortOrder || 0,
+    isActive: category.isActive ?? true,
+  };
+}
 
-  if (!isOpen) return null;
+/** Mounted only while open, so every opening starts from the category being edited (or a blank form). */
+function CategoryModal(props: CategoryModalProps) {
+  return props.isOpen ? <CategoryForm key={props.category?.id ?? 'new'} {...props} /> : null;
+}
+
+function CategoryForm({ onClose, onSubmit, category, parentCategories }: CategoryModalProps) {
+  const [formData, setFormData] = useState(() => categoryFormFor(category));
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     onSubmit({
       ...formData,
       parentId: formData.parentId || undefined,
+      productType: formData.productType || undefined,
     });
   };
 
@@ -220,7 +221,7 @@ function CategoryModal({ isOpen, onClose, onSubmit, category, parentCategories }
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
               Parent Category
-              <span className="text-gray-400 font-normal ms-2">(for subcategories)</span>
+              <span className="text-gray-500 font-normal ms-2">(for subcategories)</span>
             </label>
             <select
               value={formData.parentId}
@@ -238,6 +239,27 @@ function CategoryModal({ isOpen, onClose, onSubmit, category, parentCategories }
             </select>
           </div>
 
+          {/* Kind of dish: without one, no kitchen can choose the category for a dish */}
+          <div>
+            <label htmlFor="category-product-type" className="block text-sm font-medium text-gray-700 mb-2">
+              Kind of dish {!formData.parentId && <span className="text-red-500">*</span>}
+            </label>
+            <select
+              id="category-product-type"
+              value={formData.productType}
+              onChange={(e) => setFormData({ ...formData, productType: e.target.value })}
+              required={!formData.parentId}
+              className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white"
+            >
+              <option value="">{formData.parentId ? 'Same as the parent category' : 'Choose…'}</option>
+              <option value="fresh">Fresh (cooked to order)</option>
+              <option value="ready_to_eat">Ready to eat</option>
+              <option value="ready_to_cook">Ready to cook</option>
+              <option value="frozen">Frozen</option>
+            </select>
+            <p className="text-xs text-gray-500 mt-1">Kitchens pick a category through the kind of dish they are adding.</p>
+          </div>
+
           {/* Sort Order & Status */}
           <div className="grid grid-cols-2 gap-4">
             <div>
@@ -251,7 +273,7 @@ function CategoryModal({ isOpen, onClose, onSubmit, category, parentCategories }
                 min="0"
                 className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               />
-              <p className="text-xs text-gray-400 mt-1">Lower numbers appear first</p>
+              <p className="text-xs text-gray-500 mt-1">Lower numbers appear first</p>
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -341,7 +363,7 @@ function CategoryTreeItem({
           <div className="flex items-center gap-2">
             <h3 className="font-semibold text-gray-900">{category.name}</h3>
             {category.nameUrdu && (
-              <span className="text-sm text-gray-400">({category.nameUrdu})</span>
+              <span className="text-sm text-gray-500">({category.nameUrdu})</span>
             )}
             <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
               category.isActive ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'
@@ -404,6 +426,9 @@ export default function AdminCategoriesPage() {
   const router = useRouter();
   const { isAuthenticated, user } = useAuthStore();
   const { showToast } = useToast();
+  // Why the categories could not be read; shown with a retry instead of an empty list.
+  const [loadError, setLoadError] = useState<unknown>(null);
+  const { confirm: confirmDialog } = useDialogs();
   const [loading, setLoading] = useState(true);
   const [categories, setCategories] = useState<Category[]>([]);
   const [showModal, setShowModal] = useState(false);
@@ -427,102 +452,15 @@ export default function AdminCategoriesPage() {
   const loadCategories = async () => {
     try {
       setLoading(true);
+      setLoadError(null);
       const response = await apiClient.get('/categories?includeInactive=true');
       if (response.data.success) {
         setCategories(response.data.data || []);
       }
     } catch (error) {
       console.error('Failed to load categories:', error);
-      // Fallback to default categories for demo
-      setCategories([
-        {
-          id: '1',
-          name: 'Frozen Parathas',
-          nameUrdu: 'منجمد پراٹھے',
-          slug: 'frozen-parathas',
-          iconUrl: '🫓',
-          sortOrder: 1,
-          isActive: true,
-          productCount: 24,
-          children: [
-            {
-              id: '1-1',
-              name: 'Plain Parathas',
-              nameUrdu: 'سادہ پراٹھے',
-              slug: 'plain-parathas',
-              parentId: '1',
-              sortOrder: 1,
-              isActive: true,
-              productCount: 8,
-            },
-            {
-              id: '1-2',
-              name: 'Stuffed Parathas',
-              nameUrdu: 'بھرے ہوئے پراٹھے',
-              slug: 'stuffed-parathas',
-              parentId: '1',
-              sortOrder: 2,
-              isActive: true,
-              productCount: 16,
-            },
-          ],
-        },
-        {
-          id: '2',
-          name: 'Frozen Samosas',
-          nameUrdu: 'منجمد سموسے',
-          slug: 'frozen-samosas',
-          iconUrl: '🥟',
-          sortOrder: 2,
-          isActive: true,
-          productCount: 15,
-          children: [],
-        },
-        {
-          id: '3',
-          name: 'Frozen Rolls',
-          nameUrdu: 'منجمد رولز',
-          slug: 'frozen-rolls',
-          iconUrl: '🌯',
-          sortOrder: 3,
-          isActive: true,
-          productCount: 12,
-          children: [],
-        },
-        {
-          id: '4',
-          name: 'Kebabs & Tikkas',
-          nameUrdu: 'کباب اور ٹکے',
-          slug: 'kebabs-tikkas',
-          iconUrl: '🍢',
-          sortOrder: 4,
-          isActive: true,
-          productCount: 20,
-          children: [],
-        },
-        {
-          id: '5',
-          name: 'Ready Meals',
-          nameUrdu: 'تیار کھانے',
-          slug: 'ready-meals',
-          iconUrl: '🍱',
-          sortOrder: 5,
-          isActive: true,
-          productCount: 30,
-          children: [],
-        },
-        {
-          id: '6',
-          name: 'Frozen Desserts',
-          nameUrdu: 'منجمد میٹھے',
-          slug: 'frozen-desserts',
-          iconUrl: '🍨',
-          sortOrder: 6,
-          isActive: false,
-          productCount: 5,
-          children: [],
-        },
-      ]);
+      // Never made-up categories: an administrator who edits or deletes one of them would be changing nothing real.
+      setLoadError(error);
     } finally {
       setLoading(false);
     }
@@ -569,7 +507,7 @@ export default function AdminCategoriesPage() {
   };
 
   const handleDeleteCategory = async (id: string) => {
-    if (!confirm('Are you sure you want to delete this category? Products in this category will be moved to "Uncategorized".')) {
+    if (!(await confirmDialog({ title: 'Delete this category?', message: 'Are you sure you want to delete this category? Products in this category will be moved to "Uncategorized".', confirmText: 'Delete' }))) {
       return;
     }
     
@@ -602,6 +540,9 @@ export default function AdminCategoriesPage() {
   const totalCategories = getFlatCategories(categories).length;
   const activeCategories = getFlatCategories(categories).filter(c => c.isActive).length;
   const totalProducts = getFlatCategories(categories).reduce((acc, c) => acc + (c.productCount || 0), 0);
+  // The categories could not be read: a dash, not "0" (a count of what nobody has seen).
+  const couldNotRead = !loading && Boolean(loadError) && categories.length === 0;
+  const figure = (n: number) => (couldNotRead ? '–' : n);
 
   return (
     <DashboardLayout
@@ -618,7 +559,7 @@ export default function AdminCategoriesPage() {
               <div className="text-3xl">📁</div>
               <div>
                 <p className="text-sm text-gray-500">Total Categories</p>
-                <p className="text-2xl font-bold text-gray-900">{totalCategories}</p>
+                <p className="text-2xl font-bold text-gray-900">{figure(totalCategories)}</p>
               </div>
             </div>
           </div>
@@ -627,7 +568,7 @@ export default function AdminCategoriesPage() {
               <div className="text-3xl">✅</div>
               <div>
                 <p className="text-sm text-gray-500">Active Categories</p>
-                <p className="text-2xl font-bold text-green-600">{activeCategories}</p>
+                <p className="text-2xl font-bold text-green-600">{figure(activeCategories)}</p>
               </div>
             </div>
           </div>
@@ -636,7 +577,7 @@ export default function AdminCategoriesPage() {
               <div className="text-3xl">🍽️</div>
               <div>
                 <p className="text-sm text-gray-500">Total Products</p>
-                <p className="text-2xl font-bold text-blue-600">{totalProducts}</p>
+                <p className="text-2xl font-bold text-blue-600">{figure(totalProducts)}</p>
               </div>
             </div>
           </div>
@@ -663,6 +604,8 @@ export default function AdminCategoriesPage() {
             <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mx-auto mb-4"></div>
             <p className="text-gray-500">Loading categories...</p>
           </div>
+        ) : loadError && categories.length === 0 ? (
+          <LoadError error={loadError} onRetry={loadCategories} title="We couldn't load the categories" />
         ) : categories.length === 0 ? (
           <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-16 text-center">
             <div className="w-24 h-24 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-6">
@@ -670,7 +613,7 @@ export default function AdminCategoriesPage() {
             </div>
             <h2 className="text-2xl font-bold text-gray-900 mb-2">No categories yet</h2>
             <p className="text-gray-500 mb-8 max-w-md mx-auto">
-              Create categories to organize your products and help customers find what they're looking for.
+              Create categories to organize your products and help customers find what they&apos;re looking for.
             </p>
             <Button 
               onClick={openCreateModal}
@@ -696,10 +639,10 @@ export default function AdminCategoriesPage() {
         <div className="mt-8 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-2xl p-6 border border-blue-100">
           <h3 className="font-semibold text-gray-900 mb-3">📖 How Categories Work</h3>
           <ul className="text-sm text-gray-600 space-y-2">
-            <li>• <strong>Parent Categories</strong> are top-level groupings (e.g., "Frozen Parathas")</li>
-            <li>• <strong>Subcategories</strong> are nested under parent categories (e.g., "Stuffed Parathas" under "Frozen Parathas")</li>
+            <li>• <strong>Parent Categories</strong> are top-level groupings (e.g., &quot;Frozen Parathas&quot;)</li>
+            <li>• <strong>Subcategories</strong> are nested under parent categories (e.g., &quot;Stuffed Parathas&quot; under &quot;Frozen Parathas&quot;)</li>
             <li>• <strong>Sort Order</strong> determines display sequence (lower numbers appear first)</li>
-            <li>• <strong>Inactive categories</strong> won't show to customers but products remain linked</li>
+            <li>• <strong>Inactive categories</strong> won&apos;t show to customers but products remain linked</li>
             <li>• <strong>Slugs</strong> are auto-generated from names for SEO-friendly URLs</li>
           </ul>
         </div>

@@ -30,22 +30,23 @@ export function useToast() {
 export function ToastProvider({ children }: { children: ReactNode }) {
   const [toasts, setToasts] = useState<Toast[]>([]);
 
+  const removeToast = useCallback((id: string) => {
+    setToasts((prev) => prev.filter((toast) => toast.id !== id));
+  }, []);
+
   const showToast = useCallback((message: string, type: ToastType = 'info', duration: number = 5000) => {
     const id = Math.random().toString(36).substring(2, 9);
     const toast: Toast = { id, message, type, duration };
-    
-    setToasts((prev) => [...prev, toast]);
+
+    // The same words shown again while they are still up (two loads of one page failing together) are one message.
+    setToasts((prev) => (prev.some((t) => t.message === message && t.type === type) ? prev : [...prev, toast]));
 
     if (duration > 0) {
       setTimeout(() => {
         removeToast(id);
       }, duration);
     }
-  }, []);
-
-  const removeToast = useCallback((id: string) => {
-    setToasts((prev) => prev.filter((toast) => toast.id !== id));
-  }, []);
+  }, [removeToast]);
 
   return (
     <ToastContext.Provider value={{ toasts, showToast, removeToast }}>
@@ -57,7 +58,9 @@ export function ToastProvider({ children }: { children: ReactNode }) {
 
 function ToastContainer({ toasts, removeToast }: { toasts: Toast[]; removeToast: (id: string) => void }) {
   return (
-    <div className="fixed top-4 end-4 z-50 flex flex-col gap-2 max-w-md w-[calc(100%-2rem)]">
+    // Above every other layer (the new-order and job alerts, the dialogs, the community picker): a message about what just
+    // failed must never sit hidden behind one. Only the messages themselves take clicks.
+    <div className="fixed top-[calc(1rem+var(--safe-top))] end-[calc(1rem+var(--safe-end))] z-[100000] flex flex-col gap-2 max-w-md w-[calc(100%-2rem)] pointer-events-none">
       {toasts.map((toast) => (
         <ToastItem key={toast.id} toast={toast} onRemove={removeToast} />
       ))}
@@ -98,7 +101,7 @@ function ToastItem({ toast, onRemove }: { toast: Toast; onRemove: (id: string) =
 
   return (
     <div
-      className={`${bgColors[toast.type]} border-s-4 rounded-lg shadow-lg p-4 flex items-start gap-3 animate-in slide-in-from-end-full duration-300`}
+      className={`${bgColors[toast.type]} pointer-events-auto border-s-4 rounded-lg shadow-lg p-4 flex items-start gap-3 animate-in slide-in-from-end-full duration-300`}
       role="alert"
     >
       <div className="flex-shrink-0 mt-0.5">{icons[toast.type]}</div>
@@ -107,7 +110,7 @@ function ToastItem({ toast, onRemove }: { toast: Toast; onRemove: (id: string) =
       </div>
       <button
         onClick={() => onRemove(toast.id)}
-        className="flex-shrink-0 text-gray-400 hover:text-gray-600 transition-colors"
+        className="flex-shrink-0 text-gray-500 hover:text-gray-600 transition-colors"
         aria-label="Close"
       >
         <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">

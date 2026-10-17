@@ -1,11 +1,18 @@
 import { maskEmail } from '../utils/mask';
 import prisma from '../config/database';
-import bcrypt from 'bcrypt';
 import { isStoredFile, storedFileOwner } from '../storage';
 import { AppError } from '../middleware/errorHandler';
 import { communityService } from './community.service';
 import { queueVerificationEmail } from '../jobs/email.jobs';
 import { generateVerificationToken } from '../utils/email-verification';
+import { assertCurrentPassword } from './reauth.service';
+import { budgetAdd } from '../utils/attemptBudget';
+import { assertVerifyMailAllowed } from '../utils/mailBudget';
+import { notifyEmailChanged } from './account-notice.service';
+import { logger } from '../utils/logger';
+
+/** How many times an account may point itself at a new e-mail address in an hour. */
+const MAX_EMAIL_CHANGES_PER_HOUR = 3;
 
 export class UserProfileService {
   /**
@@ -28,6 +35,9 @@ export class UserProfileService {
       phone: user.phone,
       phoneVerified: user.phoneVerified,
       email: user.email,
+      emailVerified: user.emailVerified,
+      // Whether there is a password to change (a Google account has none); the password itself never leaves the server.
+      hasPassword: !!user.passwordHash,
       userType: user.userType,
       status: user.status,
       profile: user.profile
@@ -46,16 +56,21 @@ export class UserProfileService {
   /**
    * Update user profile
    */
-  async updateProfile(userId: string, data: {
-    currentPassword?: string;
-    fullName?: string;
-    email?: string;
-    city?: string;
-    area?: string;
-    languagePreference?: string;
-  }) {
+  async updateProfile(
+    userId: string,
+    data: {
+      currentPassword?: string;
+      fullName?: string;
+      email?: string;
+      city?: string;
+      area?: string;
+      languagePreference?: string;
+    },
+    ctx: { ip?: string | null } = {}
+  ) {
     const user = await prisma.user.findUnique({
       where: { id: userId },
+      include: { profile: { select: { fullName: true } } },
     });
 
     if (!user) {
@@ -72,7 +87,7 @@ export class UserProfileService {
       // links) at another address: the password is asked for again, when there is one.
       if (user.passwordHash) {
         if (!data.currentPassword) throw new AppError('Enter your password to change the email address', 400, 'PASSWORD_REQUIRED');
-        if (!(await bcrypt.compare(data.currentPassword, user.passwordHash))) throw new AppError('Wrong password', 401, 'INVALID_PASSWORD');
+        await assertCurrentPassword({ id: user.id, passwordHash: user.passwordHash }, data.currentPassword, ctx);
       }
       // Check if email is already taken
       const existingUser = await prisma.user.findUnique({
@@ -82,6 +97,12 @@ export class UserProfileService {
       if (existingUser && existingUser.id !== userId) {
         throw new AppError('Email already registered', 400, 'EMAIL_ALREADY_EXISTS');
       }
+      // Pointing the account at a new address mails that address: cap how often one account does it and
+      // how many such e-mails one inbox gets, so this cannot be used to fill someone else's inbox.
+      if ((await budgetAdd(`emailchange:${userId}`, 60 * 60 * 1000)) > MAX_EMAIL_CHANGES_PER_HOUR) {
+        throw new AppError('You have changed your e-mail address too many times. Please try again in an hour.', 429, 'RATE_LIMITED');
+      }
+      await assertVerifyMailAllowed(newEmail);
 
       const token = generateVerificationToken();
       await prisma.$transaction([
@@ -97,17 +118,19 @@ export class UserProfileService {
       try {
         await queueVerificationEmail(userId);
       } catch (err) {
-        console.error(`[updateProfile] Could not queue the verification email for ${maskEmail(newEmail)}`, err);
+        logger.error({ err, email: maskEmail(newEmail) }, 'Could not queue the verification e-mail after an address change');
       }
+      // The address the account leaves hears of it (when its owner had proven it), so that a change they did not make is noticed.
+      void notifyEmailChanged({ email: user.email, emailVerified: user.emailVerified, fullName: user.profile?.fullName }, newEmail);
     }
 
     // Get or create profile
-    let profile = await prisma.userProfile.findUnique({
+    const profile = await prisma.userProfile.findUnique({
       where: { userId },
     });
 
     if (!profile) {
-      profile = await prisma.userProfile.create({
+      await prisma.userProfile.create({
         data: {
           userId,
           fullName: data.fullName || 'User',
@@ -117,7 +140,7 @@ export class UserProfileService {
         },
       });
     } else {
-      profile = await prisma.userProfile.update({
+      await prisma.userProfile.update({
         where: { userId },
         data: {
           fullName: data.fullName ?? profile.fullName,
@@ -206,25 +229,7 @@ export class UserProfileService {
       ],
     });
 
-    return addresses.map((addr) => ({
-      id: addr.id,
-      label: addr.label,
-      addressLine1: addr.addressLine1,
-      addressLine2: addr.addressLine2,
-      area: addr.area,
-      city: addr.city,
-      postalCode: addr.postalCode,
-      landmark: addr.landmark,
-      isDefault: addr.isDefault,
-      communityId: addr.communityId,
-      coordinates: addr.latitude && addr.longitude
-        ? {
-            latitude: Number(addr.latitude),
-            longitude: Number(addr.longitude),
-          }
-        : null,
-      createdAt: addr.createdAt,
-    }));
+    return addresses.map((addr) => this.formatAddress(addr));
   }
 
   /**
@@ -234,6 +239,7 @@ export class UserProfileService {
     label?: string;
     addressLine1: string;
     addressLine2?: string;
+    houseNumber?: string;
     area: string;
     city: string;
     postalCode?: string;
@@ -258,6 +264,7 @@ export class UserProfileService {
         label: data.label,
         addressLine1: data.addressLine1,
         addressLine2: data.addressLine2,
+        houseNumber: data.houseNumber,
         area: data.area,
         city: data.city,
         postalCode: data.postalCode,
@@ -312,6 +319,7 @@ export class UserProfileService {
       label: string;
       addressLine1: string;
       addressLine2: string;
+      houseNumber: string;
       area: string;
       city: string;
       postalCode: string;
@@ -325,7 +333,7 @@ export class UserProfileService {
     const existing = await prisma.userAddress.findFirst({ where: { id: addressId, userId } });
     if (!existing) throw new AppError('Address not found', 404, 'ADDRESS_NOT_FOUND');
 
-    const locationChanged = ['communityId', 'latitude', 'longitude', 'area', 'city'].some((k) => (data as any)[k] !== undefined);
+    const locationChanged = ['communityId', 'latitude', 'longitude', 'area', 'city'].some((k) => (data as Record<string, unknown>)[k] !== undefined);
     const merged = {
       communityId: data.communityId !== undefined ? data.communityId : null,
       latitude: data.latitude !== undefined ? data.latitude : existing.latitude != null ? Number(existing.latitude) : null,
@@ -345,6 +353,7 @@ export class UserProfileService {
           label: data.label,
           addressLine1: data.addressLine1,
           addressLine2: data.addressLine2,
+          houseNumber: data.houseNumber,
           area: data.area,
           city: data.city,
           postalCode: data.postalCode,
@@ -383,6 +392,7 @@ export class UserProfileService {
     label: string | null;
     addressLine1: string;
     addressLine2: string | null;
+    houseNumber: string | null;
     area: string;
     city: string;
     postalCode: string | null;
@@ -398,6 +408,7 @@ export class UserProfileService {
       label: address.label,
       addressLine1: address.addressLine1,
       addressLine2: address.addressLine2,
+      houseNumber: address.houseNumber,
       area: address.area,
       city: address.city,
       postalCode: address.postalCode,

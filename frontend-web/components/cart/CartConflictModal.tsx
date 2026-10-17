@@ -60,7 +60,7 @@ export default function CartConflictModal({
         {/* Transition Comparison Box */}
         <div className="mx-6 p-4 rounded-2xl bg-slate-50 border border-slate-200/80 space-y-3">
           <div className="flex items-center justify-between text-xs">
-            <span className="font-bold text-slate-400 uppercase tracking-wider text-[11px]">
+            <span className="font-bold text-slate-500 uppercase tracking-wider text-[11px]">
               {t('currentCart')}
             </span>
             <span className="px-2 py-0.5 rounded bg-slate-200 text-slate-700 font-black text-[11px]">
@@ -74,7 +74,7 @@ export default function CartConflictModal({
             </span>
           </div>
 
-          <div className="flex items-center justify-center my-1 text-slate-400">
+          <div className="flex items-center justify-center my-1 text-slate-500">
             <ArrowRight className="rtl:-scale-x-100 w-4 h-4 rotate-90 text-[#FF5500]" />
           </div>
 

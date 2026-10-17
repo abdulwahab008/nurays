@@ -27,6 +27,9 @@ const BANK_API_URL = process.env.BANK_API_URL;
 const BANK_MERCHANT_ID = process.env.BANK_MERCHANT_ID;
 const BANK_API_KEY = process.env.BANK_API_KEY;
 const BANK_RETURN_URL = process.env.BANK_RETURN_URL;
+// A bank API that accepts a request and never answers must not hold the customer's request (and a worker) open for good.
+const configuredTimeout = Number(process.env.BANK_REQUEST_TIMEOUT_MS);
+const BANK_REQUEST_TIMEOUT_MS = configuredTimeout > 0 ? configuredTimeout : 15_000;
 
 const PAID_STATES = new Set(['paid', 'completed', 'success', 'successful']);
 const CANCELLED_STATES = new Set(['cancelled', 'canceled', 'void']);
@@ -65,6 +68,7 @@ export const bankGateway: IPaymentGateway = {
           return_url: BANK_RETURN_URL || req.returnUrl,
           cancel_url: req.cancelUrl,
         }),
+        signal: AbortSignal.timeout(BANK_REQUEST_TIMEOUT_MS),
       });
 
       const json = (await res.json().catch(() => null)) as any;
@@ -109,7 +113,7 @@ export const bankGateway: IPaymentGateway = {
       // "it's paid" claim. This is the check that was previously faked.
       const res = await fetch(
         `${BANK_API_URL}/payments/${encodeURIComponent(req.paymentId)}/status`,
-        { headers: { Authorization: `Bearer ${BANK_API_KEY}` } }
+        { headers: { Authorization: `Bearer ${BANK_API_KEY}` }, signal: AbortSignal.timeout(BANK_REQUEST_TIMEOUT_MS) }
       );
       const json = (await res.json().catch(() => null)) as any;
       if (!res.ok || !json) {

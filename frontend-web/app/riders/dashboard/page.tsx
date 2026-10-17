@@ -1,10 +1,13 @@
 'use client';
 
 import { useState, useEffect, useRef, useCallback } from 'react';
+import { loginUrlHere } from '@/lib/auth-redirect';
 import { useRouter } from 'next/navigation';
 import { DashboardLayout, RIDER_SIDEBAR_ITEMS } from '@/components/layout/DashboardShell';
 import { Button } from '@/components/ui/button';
+import { LoadError } from '@/components/ui/LoadError';
 import { useToast } from '@/components/ui/toast';
+import { useDialogs } from '@/components/ui/Dialogs';
 import { useAuthStore } from '@/lib/store/auth-store';
 import { riderService, Delivery, RiderProfile } from '@/lib/services/rider.service';
 import { formatPrice, displayRating } from '@/lib/utils';
@@ -17,6 +20,8 @@ import RiderApplicationForm from '@/components/riders/RiderApplicationForm';
 import { useT } from '@/lib/i18n';
 import { commonMessages } from '@/lib/i18n/messages/common';
 import { riderMessages, riderKeyFor, type RiderMessageKey } from '@/lib/i18n/messages/rider';
+import { ExternalLink } from '@/components/ExternalLink';
+import { reserveExternal } from '@/lib/open-external';
 
 const ROAD_STEPS: { id: string; labelKey: RiderMessageKey; icon: string }[] = [
   { id: 'assigned', labelKey: 'step.assigned', icon: '📋' },
@@ -32,7 +37,7 @@ const SHARING_BADGE: Record<LocationSharing, { labelKey: RiderMessageKey; tone: 
   waiting: { labelKey: 'loc.waiting', tone: 'text-slate-300', dot: 'bg-slate-400 animate-pulse' },
   denied: { labelKey: 'loc.denied', tone: 'text-amber-300', dot: 'bg-amber-400' },
   unavailable: { labelKey: 'loc.unavailable', tone: 'text-amber-300', dot: 'bg-amber-400' },
-  off: { labelKey: 'loc.off', tone: 'text-slate-400', dot: 'bg-slate-500' },
+  off: { labelKey: 'loc.off', tone: 'text-slate-500', dot: 'bg-slate-500' },
 };
 
 const TABS = ['active', 'available', 'history'] as const;
@@ -53,6 +58,7 @@ export default function RiderDashboardPage() {
   const router = useRouter();
   const { isAuthenticated, user } = useAuthStore();
   const { showToast } = useToast();
+  const { confirm: confirmDialog } = useDialogs();
   const t = useT(riderMessages);
   const tc = useT(commonMessages);
 
@@ -63,6 +69,9 @@ export default function RiderDashboardPage() {
   const [mine, setMine] = useState<Delivery[]>([]);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [togglingDuty, setTogglingDuty] = useState(false);
+  // The job list carries the latest finished jobs only; "show older" asks for the most the server will send.
+  const [olderShown, setOlderShown] = useState(false);
+  const historyRef = useRef<number | undefined>(undefined);
 
   // Doorstep PIN Handshake Modal state
   const [pinModalDelivery, setPinModalDelivery] = useState<Delivery | null>(null);
@@ -84,6 +93,9 @@ export default function RiderDashboardPage() {
 
   // title is a message key; message is the server's words (or null for our default text).
   const [blockedReason, setBlockedReason] = useState<{ title: RiderMessageKey; message: string | null; code: string } | null>(null);
+  // Why the jobs could not be read. A rider whose jobs could not be read must not be told "no active runs" (the food they
+  // are carrying is one) or "no jobs in the pool".
+  const [loadError, setLoadError] = useState<unknown>(null);
 
   const loadAll = useCallback(async (silent = false) => {
     try {
@@ -92,7 +104,7 @@ export default function RiderDashboardPage() {
 
       const [availableRes, mineRes, profileRes] = await Promise.all([
         riderService.getAvailableDeliveries(),
-        riderService.getMyDeliveries(),
+        riderService.getMyDeliveries({ history: historyRef.current }),
         riderService.getRiderProfile().catch(() => null),
       ]);
 
@@ -110,6 +122,7 @@ export default function RiderDashboardPage() {
       if (activeRuns.length > 0 && activeTab === 'available' && availableList.length === 0) {
         setActiveTab('active');
       }
+      setLoadError(null);
     } catch (error: any) {
       const code = error.response?.data?.error?.code;
       if (code && (code === 'RIDER_NOT_APPROVED' || code === 'RIDER_REJECTED' || code === 'RIDER_SUSPENDED')) {
@@ -118,13 +131,23 @@ export default function RiderDashboardPage() {
           message: error.response?.data?.error?.message || null,
           code,
         });
-      } else if (!silent) {
-        showToast(error.response?.data?.error?.message || t('loadFailed'), 'error');
+      } else {
+        setLoadError(error);
       }
     } finally {
       if (!silent) setLoading(false);
     }
-  }, [showToast, activeTab, t]);
+  }, [activeTab]);
+
+  // The open pool alone: a job was posted or taken, so nothing but the list of available jobs can have changed.
+  const loadAvailable = useCallback(async () => {
+    try {
+      const res = await riderService.getAvailableDeliveries();
+      setAvailable(res.data || []);
+    } catch {
+      // The next full reload reports what is wrong (an account that cannot take jobs, a lost connection).
+    }
+  }, []);
 
   const isRider = user?.user_type === 'rider' || user?.userType === 'rider';
 
@@ -143,7 +166,7 @@ export default function RiderDashboardPage() {
   // render, so a stored token means "wait for it", not "send to login".
   useEffect(() => {
     if (!isAuthenticated && !apiClient.getAccessToken()) {
-      router.push('/login');
+      router.push(loginUrlHere());
       return;
     }
     if (!user) return;
@@ -157,18 +180,33 @@ export default function RiderDashboardPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isAuthenticated, user, isRider, router, showToast]);
 
-  // New jobs, jobs taken by other riders or cancelled, and status changes on this rider's
-  // orders (e.g. the kitchen marking food ready) arrive as live events.
+  // Jobs given to this rider or cancelled, and status changes on this rider's orders (e.g. the kitchen
+  // marking food ready), arrive as live events and reload everything.
   useLiveRefresh(() => loadAll(true), {
-    events: ['delivery:new', 'delivery:removed', 'delivery:cancelled', 'delivery:assigned', 'order:status:update'],
+    events: ['delivery:cancelled', 'delivery:assigned', 'order:status:update'],
     enabled: isAuthenticated && isRider && !blockedReason,
     intervalMs: 30_000,
+  });
+
+  // Jobs posted to the pool or taken from it (sent only to riders on duty) change nothing but the pool list.
+  useLiveRefresh(loadAvailable, {
+    events: ['delivery:new', 'delivery:removed'],
+    enabled: isAuthenticated && isRider && !blockedReason,
+    eventsOnly: true,
   });
 
   const activeDeliveries = mine.filter(
     (d) => !FINISHED_STATUSES.includes(d.status)
   );
   const completedDeliveries = mine.filter((d) => d.status === 'delivered');
+  // Every delivery the rider has made, from their profile: the list below only holds the latest ones.
+  const deliveredTotal = profile?.totalDeliveries ?? completedDeliveries.length;
+
+  const showOlderDeliveries = () => {
+    historyRef.current = 200;
+    setOlderShown(true);
+    void loadAll(true);
+  };
 
   // The phone's position goes to each job in progress (and nowhere when there is none).
   const locationSharing = useRiderLocation(
@@ -188,6 +226,8 @@ export default function RiderDashboardPage() {
         res.data.isAvailable ? t('nowOnDuty') : t('nowOffDuty'),
         'success'
       );
+      // Pool events reach only riders on duty, so the list may have moved on while they were off.
+      if (res.data.isAvailable) void loadAvailable();
     } catch (error: any) {
       showToast(error.response?.data?.error?.message || t('toggleDutyFailed'), 'error');
     } finally {
@@ -199,11 +239,11 @@ export default function RiderDashboardPage() {
   const handleClaim = async (deliveryId: string, askFee?: number) => {
     // Accepting a job starts the trip to the kitchen: open Google Maps (window opened inside the tap, see handleAdvanceStatus).
     const job = available.find((a) => a.id === deliveryId);
-    const nav = job ? window.open('', '_blank') : null;
+    const nav = job ? reserveExternal() : null;
     try {
       setBusyId(deliveryId);
       await riderService.claimDelivery(deliveryId, askFee);
-      if (nav && job) nav.location.href = navUrlFor({ ...job, status: 'assigned' } as Delivery);
+      if (nav && job) nav.open(navUrlFor({ ...job, status: 'assigned' } as Delivery));
       showToast(
         askFee
           ? t('claimedCustom', { fee: askFee })
@@ -213,7 +253,7 @@ export default function RiderDashboardPage() {
       setActiveTab('active');
       loadAll(true);
     } catch (error: any) {
-      nav?.close();
+      nav?.cancel();
       showToast(error.response?.data?.error?.message || t('claimFailed'), 'error');
     } finally {
       setBusyId(null);
@@ -222,7 +262,7 @@ export default function RiderDashboardPage() {
 
   // Hand a job back to the pool before the food is picked up
   const handleRelease = async (delivery: Delivery) => {
-    if (!window.confirm(t('handBackConfirm'))) return;
+    if (!(await confirmDialog({ message: t('handBackConfirm'), variant: 'warning' }))) return;
     try {
       setBusyId(delivery.id);
       await riderService.releaseDelivery(delivery.id);
@@ -260,27 +300,24 @@ export default function RiderDashboardPage() {
     event.preventDefault();
     if (navBusyId) return; // a second tap while the first is still checking
     setNavBusyId(delivery.id);
-    const nav = window.open('', '_blank');
+    const nav = reserveExternal();
     try {
-      const fresh = (await riderService.getMyDeliveries()).data?.find((d: Delivery) => d.id === delivery.id);
+      const fresh = (await riderService.getMyDeliveries({ history: 0 })).data?.find((d: Delivery) => d.id === delivery.id);
       if (!fresh || !NAVIGABLE_STATUSES.includes(fresh.status)) {
-        nav?.close();
+        nav.cancel();
         showToast(t('navNotAvailable'), 'error');
         loadAll(true);
         return;
       }
       if (!canNavigateTo(navDestinationFor(fresh))) {
-        nav?.close();
+        nav.cancel();
         showToast(t('navNoDestination'), 'error');
         return;
       }
-      const url = navUrlFor(fresh);
-      if (nav) nav.location.href = url;
-      else window.location.assign(url); // pop-up blocked: leave for the maps app, the rider comes back with the back button
+      nav.open(navUrlFor(fresh)); // a blocked pop-up leaves for the maps app itself: the rider comes back with the back button
     } catch {
-      // Offline or the server did not answer: the link's own href still opens the last known destination.
-      nav?.close();
-      window.location.assign(navUrlFor(delivery));
+      // Offline or the server did not answer: the last known destination is still better than none.
+      nav.open(navUrlFor(delivery));
     } finally {
       setNavBusyId(null);
     }
@@ -290,7 +327,7 @@ export default function RiderDashboardPage() {
   const handleAdvanceStatus = async (delivery: Delivery) => {
     // Leaving the kitchen with the food: open directions to the customer. The window is opened now,
     // inside the tap, because browsers block pop-ups opened after a network call.
-    const nav = delivery.status === 'picked_up' ? window.open('', '_blank') : null;
+    const nav = delivery.status === 'picked_up' ? reserveExternal() : null;
     try {
       setBusyId(delivery.id);
       if (delivery.status === 'assigned') {
@@ -302,7 +339,7 @@ export default function RiderDashboardPage() {
       } else if (delivery.status === 'picked_up') {
         await riderService.updateDeliveryStatus(delivery.id, 'in_transit');
         showToast(t('toastDeparted'), 'info');
-        if (nav) nav.location.href = navUrlFor(delivery);
+        if (nav) nav.open(navUrlFor(delivery));
       } else if (delivery.status === 'in_transit') {
         await riderService.updateDeliveryStatus(delivery.id, 'arrived_at_customer');
         showToast(t('toastArrivedDoor'), 'info');
@@ -318,7 +355,7 @@ export default function RiderDashboardPage() {
       }
       loadAll(true);
     } catch (error: any) {
-      nav?.close();
+      nav?.cancel();
       showToast(error.response?.data?.error?.message || t('statusUpdateFailed'), 'error');
     } finally {
       setBusyId(null);
@@ -411,6 +448,9 @@ export default function RiderDashboardPage() {
       .filter(Boolean)
       .join(' ') || t('notSet');
 
+  // Nothing about the rider could be read: the bar would say "Vehicle: Not set", "0 / 2 Active" and "ON DUTY" about someone it knows nothing about.
+  const couldNotRead = Boolean(loadError) && !loading && !blockedReason && !profile && mine.length === 0 && available.length === 0;
+
   return (
     <DashboardLayout
       title={t('title')}
@@ -421,66 +461,71 @@ export default function RiderDashboardPage() {
       <div className="max-w-7xl mx-auto space-y-6">
 
         {/* 1. COMPACT COMMAND & TELEMETRY BAR */}
-        <div className="bg-slate-900 text-white rounded-2xl p-5 shadow-lg border border-slate-800 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <div className="w-12 h-12 rounded-xl bg-gradient-to-tr from-emerald-500 to-cyan-500 flex items-center justify-center text-2xl flex-shrink-0 shadow-md">
-              🛵
-            </div>
-            <div>
-              <div className="flex items-center gap-2 flex-wrap">
-                <h2 className="font-black text-lg text-white">
-                  {profile?.name || (user as any)?.profile?.fullName || t('nameNotSet')}
-                </h2>
-                <span className="px-2 py-0.5 rounded text-[11px] font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
-                  ⭐ {riderRating ? t('fleetScore', { rating: riderRating }) : t('newRider')}
-                </span>
+        {!couldNotRead && (
+          <div className="bg-slate-900 text-white rounded-2xl p-5 shadow-lg border border-slate-800 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <div className="w-12 h-12 rounded-xl bg-gradient-to-tr from-emerald-500 to-cyan-500 flex items-center justify-center text-2xl flex-shrink-0 shadow-md">
+                🛵
               </div>
-              <p className="text-xs text-slate-400 mt-0.5">
-                {t('vehicleLabel')} <strong className="text-slate-200">{vehicleLabel}</strong> • {t('cityLabel')} <strong className="text-slate-200">{profile?.city || t('notSet')}</strong>
-              </p>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-3 flex-wrap w-full md:w-auto justify-between md:justify-end">
-            {/* Location sharing, only while on a job */}
-            <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-slate-800/80 border border-slate-700 text-xs" data-testid="location-sharing">
-              <span className={`w-2 h-2 rounded-full ${SHARING_BADGE[locationSharing].dot}`} />
-              <span className={`font-semibold ${SHARING_BADGE[locationSharing].tone}`}>{t(SHARING_BADGE[locationSharing].labelKey)}</span>
-            </div>
-
-            {/* Capacity Limit Indicator */}
-            <div
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold border transition-colors ${
-                activeDeliveries.length >= 2
-                  ? 'bg-amber-500/20 text-amber-300 border-amber-500/40'
-                  : 'bg-slate-800/80 text-slate-300 border-slate-700'
-              }`}
-            >
-              <span>🛵</span>
-              <span>{t('capacity', { count: activeDeliveries.length })}</span>
+              <div>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <h2 className="font-black text-lg text-white">
+                    {profile?.name || user?.profile?.fullName || t('nameNotSet')}
+                  </h2>
+                  <span className="px-2 py-0.5 rounded text-[11px] font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
+                    ⭐ {riderRating ? t('fleetScore', { rating: riderRating }) : t('newRider')}
+                  </span>
+                </div>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  {t('vehicleLabel')} <strong className="text-slate-200">{vehicleLabel}</strong> • {t('cityLabel')} <strong className="text-slate-200">{profile?.city || t('notSet')}</strong>
+                </p>
+              </div>
             </div>
 
-            {/* Duty Status Switch */}
-            <button
-              onClick={handleToggleDuty}
-              disabled={togglingDuty}
-              className={`px-3.5 py-1.5 rounded-xl font-bold text-xs tracking-wider transition-all duration-200 flex items-center gap-2 border shadow-sm ${
-                profile?.isAvailable !== false
-                  ? 'bg-emerald-500/20 border-emerald-500/40 text-emerald-300 hover:bg-emerald-500/30'
-                  : 'bg-slate-800 border-slate-600 text-slate-400 hover:bg-slate-700'
-              }`}
-            >
-              <span
-                className={`w-2 h-2 rounded-full ${
-                  profile?.isAvailable !== false ? 'bg-emerald-400' : 'bg-slate-500'
+            <div className="flex items-center gap-3 flex-wrap w-full md:w-auto justify-between md:justify-end">
+              {/* Location sharing, only while on a job */}
+              <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-slate-800/80 border border-slate-700 text-xs" data-testid="location-sharing">
+                <span className={`w-2 h-2 rounded-full ${SHARING_BADGE[locationSharing].dot}`} />
+                <span className={`font-semibold ${SHARING_BADGE[locationSharing].tone}`}>{t(SHARING_BADGE[locationSharing].labelKey)}</span>
+              </div>
+
+              {/* Capacity Limit Indicator */}
+              <div
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold border transition-colors ${
+                  activeDeliveries.length >= 2
+                    ? 'bg-amber-500/20 text-amber-300 border-amber-500/40'
+                    : 'bg-slate-800/80 text-slate-300 border-slate-700'
                 }`}
-              />
-              {profile?.isAvailable !== false ? t('onDuty') : t('offDuty')}
-            </button>
+              >
+                <span>🛵</span>
+                <span>{t('capacity', { count: activeDeliveries.length })}</span>
+              </div>
+
+              {/* Duty Status Switch */}
+              <button
+                onClick={handleToggleDuty}
+                disabled={togglingDuty}
+                className={`px-3.5 py-1.5 rounded-xl font-bold text-xs tracking-wider transition-all duration-200 flex items-center gap-2 border shadow-sm ${
+                  profile?.isAvailable !== false
+                    ? 'bg-emerald-500/20 border-emerald-500/40 text-emerald-300 hover:bg-emerald-500/30'
+                    : 'bg-slate-800 border-slate-600 text-slate-400 hover:bg-slate-700'
+                }`}
+              >
+                <span
+                  className={`w-2 h-2 rounded-full ${
+                    profile?.isAvailable !== false ? 'bg-emerald-400' : 'bg-slate-500'
+                  }`}
+                />
+                {profile?.isAvailable !== false ? t('onDuty') : t('offDuty')}
+              </button>
+            </div>
           </div>
-        </div>
+        )}
 
         {/* 2. UNIFIED 2-COLUMN MISSION CONTROL COCKPIT */}
+        {Boolean(loadError) && !blockedReason && (profile || mine.length > 0 || available.length > 0) && (
+          <LoadError compact error={loadError} onRetry={() => void loadAll()} title={t('loadFailed')} className="mb-4" />
+        )}
         {loading && !profile && mine.length === 0 ? (
           <div className="bg-white rounded-2xl p-16 text-center shadow-sm border border-slate-200">
             <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-emerald-600 mx-auto mb-4" />
@@ -496,6 +541,8 @@ export default function RiderDashboardPage() {
             <h2 className="text-xl font-bold text-slate-900 mb-2">{t(blockedReason.title)}</h2>
             <p className="text-slate-600 max-w-md mx-auto">{blockedReason.message ?? t('blockedContactSupport')}</p>
           </div>
+        ) : loadError && !profile && mine.length === 0 && available.length === 0 ? (
+          <LoadError error={loadError} onRetry={() => void loadAll()} title={t('loadFailed')} />
         ) : (
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
 
@@ -514,7 +561,7 @@ export default function RiderDashboardPage() {
                 >
                   <span>{t('tabActive')}</span>
                   {activeDeliveries.length > 0 && (
-                    <span className="px-2 py-0.5 rounded-full text-[11px] font-black bg-emerald-500 text-white animate-pulse">
+                    <span className="px-2 py-0.5 rounded-full text-[11px] font-black bg-emerald-700 text-white animate-pulse">
                       {activeDeliveries.length}
                     </span>
                   )}
@@ -608,12 +655,12 @@ export default function RiderDashboardPage() {
                               </div>
 
                               <div className="flex items-center gap-3 flex-wrap">
-                                <span className="text-[11px] font-bold text-slate-400">
+                                <span className="text-[11px] font-bold text-slate-500">
                                   {delivery.paymentMethod === 'cod' ? t('collect') : t('prepaid')}{' '}
                                   <span className="text-sm font-black text-emerald-400">{formatPrice(delivery.totalAmount || 0)}</span>
                                 </span>
                                 {delivery.riderFee != null && (
-                                  <span className="text-[11px] font-bold text-slate-400">
+                                  <span className="text-[11px] font-bold text-slate-500">
                                     {t('youEarn')}{' '}
                                     <span className="text-sm font-black text-white">{formatPrice(delivery.riderFee + (delivery.riderBonus ?? 0))}</span>
                                   </span>
@@ -642,7 +689,7 @@ export default function RiderDashboardPage() {
                                         <div
                                           className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold transition-all ${
                                             isDone
-                                              ? 'bg-emerald-500 text-white'
+                                              ? 'bg-emerald-700 text-white'
                                               : isCurrent
                                               ? 'bg-slate-900 text-white ring-2 ring-emerald-400 ring-offset-1 scale-110'
                                               : 'bg-white border border-slate-300 text-slate-400'
@@ -671,10 +718,8 @@ export default function RiderDashboardPage() {
                             {/* START NAVIGATION: opens the maps app for the current leg (checked against the server first) */}
                             {NAVIGABLE_STATUSES.includes(delivery.status) && (
                               <div className="px-5 pt-4">
-                                <a
+                                <ExternalLink
                                   href={navUrlFor(delivery)}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
                                   data-testid="start-navigation"
                                   aria-disabled={!canStartNavigation(delivery) || navBusyId === delivery.id}
                                   onClick={(e) => (canStartNavigation(delivery) ? handleStartNavigation(delivery, e) : e.preventDefault())}
@@ -683,14 +728,14 @@ export default function RiderDashboardPage() {
                                   }`}
                                 >
                                   {navBusyId === delivery.id ? t('processing') : headingToCustomer(delivery) ? t('startNavCustomer') : t('startNavKitchen')}
-                                </a>
+                                </ExternalLink>
                                 <p className="text-[11px] text-slate-500 text-center mt-1">{t('navHint')}</p>
                                 {(() => {
                                   const alt = alternativeMapsLink(navDestinationFor(delivery), platform);
                                   return alt ? (
-                                    <a href={alt.url} target="_blank" rel="noopener noreferrer" data-testid="alt-navigation" className="block text-center text-[11px] font-semibold text-emerald-700 underline mt-1">
+                                    <ExternalLink href={alt.url} data-testid="alt-navigation" className="block text-center text-[11px] font-semibold text-emerald-700 underline mt-1">
                                       {alt.kind === 'apple' ? t('openInAppleMaps') : t('openInOtherMaps')}
-                                    </a>
+                                    </ExternalLink>
                                   ) : null;
                                 })()}
                               </div>
@@ -709,14 +754,12 @@ export default function RiderDashboardPage() {
                                     </span>
                                   </div>
                                 </div>
-                                <a
+                                <ExternalLink
                                   href={delivery.pickupMapsUrl ?? `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(delivery.pickupAddress)}`}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
                                   className="px-2.5 py-1 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-[11px] font-bold shadow-xs whitespace-nowrap transition-all flex items-center gap-1"
                                 >
                                   {t('maps')}
-                                </a>
+                                </ExternalLink>
                               </div>
 
                               <div className="p-3.5 rounded-xl bg-emerald-50/60 border border-emerald-100 flex items-start justify-between gap-2.5">
@@ -751,14 +794,12 @@ export default function RiderDashboardPage() {
                                 {delivery.deliveryLatitude == null && (
                                   <p className="text-[11px] font-semibold text-amber-700" data-testid="no-map-pin">{t('noMapPin')}</p>
                                 )}
-                                <a
+                                <ExternalLink
                                   href={delivery.dropoffMapsUrl ?? `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(delivery.deliveryAddress)}`}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
                                   className="px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-[11px] font-bold shadow-xs whitespace-nowrap transition-all flex items-center gap-1"
                                 >
                                   {t('maps')}
-                                </a>
+                                </ExternalLink>
                               </div>
                             </div>
 
@@ -930,7 +971,7 @@ export default function RiderDashboardPage() {
                                 <p className="flex items-center gap-1.5">
                                   <span className="font-bold text-slate-800">{t('orderValue')}</span>
                                   <span className="font-black text-emerald-700">{formatPrice(d.totalAmount)}</span>
-                                  <span className="text-slate-400 text-[11px]">({d.paymentMethod?.toUpperCase() || 'COD'})</span>
+                                  <span className="text-slate-500 text-[11px]">({d.paymentMethod?.toUpperCase() || 'COD'})</span>
                                 </p>
                               )}
                             </div>
@@ -961,7 +1002,7 @@ export default function RiderDashboardPage() {
                           {activeDeliveries.length >= 2 ? (
                             <Button
                               disabled
-                              className="w-full bg-slate-200 text-slate-400 font-bold text-xs py-2 rounded-xl"
+                              className="w-full bg-slate-200 text-slate-500 font-bold text-xs py-2 rounded-xl"
                             >
                               {t('atCapacity')}
                             </Button>
@@ -1008,7 +1049,7 @@ export default function RiderDashboardPage() {
                   <div className="p-4 bg-slate-50 border-b border-slate-200 flex items-center justify-between">
                     <h3 className="font-black text-sm text-slate-900">{t('deliveredOrders')}</h3>
                     <span className="text-xs font-bold text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-full border border-emerald-200">
-                      {t('successfulCount', { count: completedDeliveries.length })}
+                      {t('successfulCount', { count: deliveredTotal })}
                     </span>
                   </div>
 
@@ -1039,6 +1080,17 @@ export default function RiderDashboardPage() {
                           </div>
                         </div>
                       ))}
+                      {!olderShown && deliveredTotal > completedDeliveries.length && (
+                        <div className="px-5 py-3 text-center">
+                          <button
+                            type="button"
+                            onClick={showOlderDeliveries}
+                            className="text-xs font-bold text-[#FF5500] hover:underline"
+                          >
+                            {t('showOlder')}
+                          </button>
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>
@@ -1068,7 +1120,7 @@ export default function RiderDashboardPage() {
 
                 <div className="my-3">
                   <span className="text-2xl font-black text-slate-900">{formatPrice(cashInHand)}</span>
-                  <span className="text-xs text-slate-400 ms-2">{t('limitSuffix', { limit: formatPrice(floatingLimit) })}</span>
+                  <span className="text-xs text-slate-500 ms-2">{t('limitSuffix', { limit: formatPrice(floatingLimit) })}</span>
                 </div>
 
                 <div className="w-full bg-slate-100 h-2.5 rounded-full overflow-hidden mb-2">
@@ -1100,12 +1152,12 @@ export default function RiderDashboardPage() {
 
                 <div className="grid grid-cols-2 gap-2 text-xs">
                   <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-100">
-                    <span className="text-slate-400 block text-[11px] font-bold uppercase">{t('runsDelivered')}</span>
+                    <span className="text-slate-500 block text-[11px] font-bold uppercase">{t('runsDelivered')}</span>
                     <span className="text-base font-black text-slate-800">{completedDeliveries.length}</span>
                   </div>
 
                   <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-100">
-                    <span className="text-slate-400 block text-[11px] font-bold uppercase">{t('activeNow')}</span>
+                    <span className="text-slate-500 block text-[11px] font-bold uppercase">{t('activeNow')}</span>
                     <span className="text-base font-black text-slate-800">{activeDeliveries.length}</span>
                   </div>
                 </div>

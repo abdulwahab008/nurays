@@ -3,13 +3,16 @@
 import { useState, useEffect } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import Link from 'next/link';
-import { UserLayout } from '@/components/layout/UserLayout';
+import { AdminShell } from '@/components/layout/AdminShell';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/toast';
+import { LoadError } from '@/components/ui/LoadError';
+import { useDialogs } from '@/components/ui/Dialogs';
 import { useAuthStore } from '@/lib/store/auth-store';
 import { apiClient } from '@/lib/api-client';
 import DocumentList from '@/components/admin/DocumentList';
 import { formatDate } from '@/lib/utils';
+import { RejectReasonModal } from '@/components/admin/RejectReasonModal';
 
 interface SellerDetail {
   id: string;
@@ -25,6 +28,8 @@ interface SellerDetail {
   createdAt: string;
   updatedAt: string;
   productCount: number;
+  /** What the application still lacks (the server works it out); empty when it is complete. */
+  missing?: string[];
   documents?: Array<{ id: string; type: string; url: string | null }>;
   user: {
     id: string;
@@ -44,9 +49,13 @@ export default function AdminSellerDetailPage() {
   const id = params?.id as string;
   const { isAuthenticated, user } = useAuthStore();
   const { showToast } = useToast();
+  const { confirm: confirmDialog } = useDialogs();
   const [loading, setLoading] = useState(true);
+  // A kitchen that could not be read is not a kitchen that does not exist: only a 404 says "not found".
+  const [loadError, setLoadError] = useState<unknown>(null);
   const [seller, setSeller] = useState<SellerDetail | null>(null);
   const [actionLoading, setActionLoading] = useState(false);
+  const [rejecting, setRejecting] = useState(false);
 
   useEffect(() => {
     if (!isAuthenticated) {
@@ -70,14 +79,11 @@ export default function AdminSellerDetailPage() {
       } else {
         setSeller(null);
       }
+      setLoadError(null);
     } catch (error: any) {
-      console.error('Failed to load seller:', error);
-      if (error.response?.status === 404) {
-        showToast('Seller not found', 'error');
-      } else {
-        showToast('Failed to load seller details', 'error');
-      }
       setSeller(null);
+      // Only a 404 says the kitchen does not exist; anything else is a read that failed, and says so.
+      setLoadError(error.response?.status === 404 ? null : error);
     } finally {
       setLoading(false);
     }
@@ -96,13 +102,12 @@ export default function AdminSellerDetailPage() {
     }
   };
 
-  const handleReject = async () => {
-    const reason = window.prompt('Rejection reason (optional):');
-    if (reason === null) return; // user cancelled
+  const handleReject = async (reason: string) => {
     try {
       setActionLoading(true);
-      await apiClient.post(`/admin/sellers/${id}/reject`, { approved: false, notes: reason || undefined });
+      await apiClient.post(`/admin/sellers/${id}/reject`, { approved: false, notes: reason });
       showToast('Seller rejected', 'success');
+      setRejecting(false);
       loadSeller();
     } catch (error: any) {
       showToast(error.response?.data?.error?.message || 'Failed to reject', 'error');
@@ -114,7 +119,7 @@ export default function AdminSellerDetailPage() {
   const handleToggleSuspend = async () => {
     if (!seller) return;
     const nextStatus = seller.status === 'suspended' ? 'active' : 'suspended';
-    if (nextStatus === 'suspended' && !window.confirm('Suspend this seller? Their storefront will be hidden from customers.')) {
+    if (nextStatus === 'suspended' && !(await confirmDialog({ title: 'Suspend this kitchen?', message: 'Suspend this seller? Their storefront will be hidden from customers.', confirmText: 'Suspend', variant: 'warning' }))) {
       return;
     }
     try {
@@ -145,7 +150,7 @@ export default function AdminSellerDetailPage() {
   }
 
   return (
-    <UserLayout showSidebar={true} showNavbar={true}>
+    <AdminShell>
       <div className="max-w-4xl mx-auto">
         <div className="mb-6">
           <Link
@@ -161,6 +166,8 @@ export default function AdminSellerDetailPage() {
             <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-green-600 mx-auto mb-4"></div>
             <p className="text-gray-600">Loading seller...</p>
           </div>
+        ) : loadError ? (
+          <LoadError error={loadError} onRetry={loadSeller} title="We couldn't load this kitchen" />
         ) : !seller ? (
           <div className="bg-white rounded-lg shadow-sm p-12 text-center">
             <h3 className="text-lg font-semibold text-gray-900 mb-2">Seller not found</h3>
@@ -190,14 +197,15 @@ export default function AdminSellerDetailPage() {
                   <div className="flex gap-2">
                     <Button
                       onClick={handleApprove}
-                      disabled={actionLoading}
+                      disabled={actionLoading || (seller.missing?.length ?? 0) > 0}
+                      title={(seller.missing?.length ?? 0) > 0 ? `Cannot be approved yet, missing: ${seller.missing!.join(', ')}` : undefined}
                       className="bg-green-600 hover:bg-green-700"
                     >
                       Approve
                     </Button>
                     <Button
                       variant="outline"
-                      onClick={handleReject}
+                      onClick={() => setRejecting(true)}
                       disabled={actionLoading}
                       className="border-red-300 text-red-700 hover:bg-red-50"
                     >
@@ -219,6 +227,13 @@ export default function AdminSellerDetailPage() {
                 )}
               </div>
             </div>
+
+            {seller.verificationStatus === 'pending' && (seller.missing?.length ?? 0) > 0 && (
+              <p className="mx-6 mt-4 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900" data-testid="application-incomplete">
+                Cannot be approved yet: this kitchen has not sent its {seller.missing!.join(', ')}. It can still add them to this
+                application; or reject it and say what is missing.
+              </p>
+            )}
 
             <div className="p-6 space-y-6">
               <div>
@@ -268,6 +283,16 @@ export default function AdminSellerDetailPage() {
           </div>
         )}
       </div>
-    </UserLayout>
+      <RejectReasonModal
+        isOpen={rejecting}
+        title={`Reject ${seller?.businessName ?? 'this kitchen'}?`}
+        description="The kitchen is told the reason. It can fix the application and send it again."
+        suggestions={['The photos of the CNIC are unclear', 'The kitchen photos are missing', 'The kitchen location does not match the address', 'The application is incomplete']}
+        confirmLabel="Reject application"
+        busy={actionLoading}
+        onConfirm={handleReject}
+        onCancel={() => setRejecting(false)}
+      />
+    </AdminShell>
   );
 }

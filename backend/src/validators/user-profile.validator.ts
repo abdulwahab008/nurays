@@ -19,6 +19,8 @@ export const addAddressSchema = z.object({
   label: z.string().max(50).optional(),
   addressLine1: z.string().min(5, 'Address line 1 is required').max(300),
   addressLine2: z.string().max(300).optional(),
+  // The house, flat or shop number a rider looks for on the door ("12-B", "Flat 4, 2nd floor").
+  houseNumber: z.string().trim().max(50).optional(),
   area: z.string().min(2, 'Area is required').max(100),
   city: z.string().min(2, 'City is required').max(100),
   postalCode: z.string().max(20).optional(),

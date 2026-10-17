@@ -1,12 +1,15 @@
 'use client';
 
 import PushPrompt from '@/components/notifications/PushPrompt';
+import { loginUrlHere } from '@/lib/auth-redirect';
 import { useState, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { DashboardLayout, SELLER_SIDEBAR_ITEMS } from '@/components/layout/DashboardShell';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/toast';
+import { LoadError } from '@/components/ui/LoadError';
+import { useDialogs } from '@/components/ui/Dialogs';
 import { useAuthStore } from '@/lib/store/auth-store';
 import { apiClient } from '@/lib/api-client';
 import { formatPrice } from '@/lib/utils';
@@ -99,10 +102,13 @@ interface SellerDashboard {
     pendingOrders: number;
     totalEarnings: number;
     pendingPayout: number;
-    todaySales?: number;
+    todayEarnings?: number;
     todayOrders?: number;
     grossSales?: number;
     platformFees?: number;
+    sellerDiscounts?: number;
+    deliveryEarned?: number;
+    deliveryPaid?: number;
     netEarnings?: number;
     pendingSettlement?: number;
     paidSettlement?: number;
@@ -141,9 +147,13 @@ function SellerDashboardContent() {
   const searchParams = useSearchParams();
   const { isAuthenticated, user } = useAuthStore();
   const { showToast } = useToast();
+  const { confirm: confirmDialog } = useDialogs();
   const t = useT(kitchenOrderMessages);
   const tc = useT(commonMessages);
   const [loading, setLoading] = useState(true);
+  // Why the dashboard could not be read when it was not a 404. A kitchen whose dashboard could not be read is not a kitchen
+  // that has to register, which is what the page said.
+  const [loadError, setLoadError] = useState<unknown>(null);
   const [dashboard, setDashboard] = useState<SellerDashboard | null>(null);
   const [showOnboarding, setShowOnboarding] = useState(false);
   const [needsOnboarding, setNeedsOnboarding] = useState(false);
@@ -152,7 +162,7 @@ function SellerDashboardContent() {
 
   useEffect(() => {
     if (!isAuthenticated) {
-      router.push('/login');
+      router.push(loginUrlHere());
       return;
     }
 
@@ -183,6 +193,7 @@ function SellerDashboardContent() {
         setDashboard(response.data.data);
         setNeedsOnboarding(false);
       }
+      setLoadError(null);
     } catch (error: any) {
       console.error('Failed to load seller dashboard:', error);
       
@@ -190,11 +201,11 @@ function SellerDashboardContent() {
       if (error.response?.status === 404) {
         setNeedsOnboarding(true);
         setShowOnboarding(true);
-        return; // Don't show error toast for this case
+        setLoadError(null);
+        return;
       }
       
-      const errorMessage = error.response?.data?.error?.message || error.response?.data?.message || t('dash.loadFailed');
-      showToast(errorMessage, 'error');
+      setLoadError(error);
     } finally {
       setLoading(false);
     }
@@ -228,10 +239,10 @@ function SellerDashboardContent() {
     showToast(t('dash.onboardingDone'), 'success');
   };
 
-  const handleOnboardingClose = () => {
+  const handleOnboardingClose = async () => {
     if (needsOnboarding) {
       // If they haven't completed onboarding, show a warning
-      if (confirm(t('dash.onboardingCloseConfirm'))) {
+      if ((await confirmDialog({ message: t('dash.onboardingCloseConfirm'), variant: 'warning' }))) {
         setShowOnboarding(false);
         router.push('/products');
       }
@@ -268,6 +279,14 @@ function SellerDashboardContent() {
         <div className="flex items-center justify-center h-64">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-gray-600"></div>
         </div>
+      </DashboardLayout>
+    );
+  }
+
+  if (!dashboard && loadError) {
+    return (
+      <DashboardLayout title={t('dash.title')} subtitle={t('dash.loadingSubtitle')} sidebarItems={sidebarItems} userType="seller">
+        <LoadError error={loadError} onRetry={loadDashboard} title={t('dash.loadFailed')} />
       </DashboardLayout>
     );
   }
@@ -350,7 +369,7 @@ function SellerDashboardContent() {
           <div className="mb-6 bg-amber-50 border border-amber-200 rounded-2xl p-5 shadow-sm flex items-center justify-between">
             <div>
               <div className="flex items-center gap-2">
-                <span className="w-6 h-6 rounded-full bg-amber-500 text-white flex items-center justify-center text-xs font-bold">⏳</span>
+                <span className="w-6 h-6 rounded-full bg-amber-600 text-white flex items-center justify-center text-xs font-bold">⏳</span>
                 <h3 className="text-base font-bold text-amber-900">{t('dash.reviewTitle')}</h3>
               </div>
               <p className="text-sm text-amber-700 mt-1 font-medium">
@@ -410,9 +429,9 @@ function SellerDashboardContent() {
           <div className="bg-white rounded-2xl p-4 sm:p-5 border border-slate-200/90 shadow-xs hover:border-slate-300 transition-colors">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1">{t('dash.todaySales')}</p>
-                <p className="text-xl sm:text-2xl font-black text-slate-900">{formatPrice(dashboard.overview.todaySales ?? 0)}</p>
-                <p className="text-[11px] text-slate-400 mt-1">{t('dash.ordersToday', { count: dashboard.overview.todayOrders ?? 0 })}</p>
+                <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1">{t('dash.todayEarnings')}</p>
+                <p className="text-xl sm:text-2xl font-black text-slate-900">{formatPrice(dashboard.overview.todayEarnings ?? 0)}</p>
+                <p className="text-[11px] text-slate-500 mt-1">{t('dash.ordersToday', { count: dashboard.overview.todayOrders ?? 0 })}</p>
               </div>
               <div className="w-10 h-10 bg-orange-50 text-orange-600 rounded-xl flex items-center justify-center font-bold text-base">
                 ₨
@@ -440,7 +459,7 @@ function SellerDashboardContent() {
               <div>
                 <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1">{t('dash.menuDishes')}</p>
                 <p className="text-xl sm:text-2xl font-black text-slate-900">{dashboard.overview.totalProducts ?? 0}</p>
-                <p className="text-[11px] text-slate-400 mt-1">{t('dash.activeDishes')}</p>
+                <p className="text-[11px] text-slate-500 mt-1">{t('dash.activeDishes')}</p>
               </div>
               <div className="w-10 h-10 bg-blue-50 text-blue-600 rounded-xl flex items-center justify-center">
                 {Icons.products}
@@ -454,7 +473,7 @@ function SellerDashboardContent() {
               <div>
                 <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1">{t('dash.totalEarnings')}</p>
                 <p className="text-xl sm:text-2xl font-black text-emerald-700">{formatPrice(dashboard.overview.totalEarnings ?? 0)}</p>
-                <p className="text-[11px] text-slate-400 mt-1">{t('dash.pendingAmount', { amount: formatPrice(dashboard.overview.pendingPayout ?? 0) })}</p>
+                <p className="text-[11px] text-slate-500 mt-1">{t('dash.pendingAmount', { amount: formatPrice(dashboard.overview.pendingPayout ?? 0) })}</p>
               </div>
               <div className="w-10 h-10 bg-emerald-50 text-emerald-700 rounded-xl flex items-center justify-center">
                 {Icons.earnings}
@@ -489,7 +508,7 @@ function SellerDashboardContent() {
               <div className="text-center py-12">
                 <div className="text-gray-300 mb-4">{Icons.package}</div>
                 <p className="text-gray-500 font-medium">{t('dash.noOrders')}</p>
-                <p className="text-gray-400 text-sm mt-1">{t('dash.noOrdersHint')}</p>
+                <p className="text-gray-500 text-sm mt-1">{t('dash.noOrdersHint')}</p>
               </div>
             ) : (
               <div className="space-y-3">
@@ -510,7 +529,7 @@ function SellerDashboardContent() {
                         <p className="text-sm text-gray-600">{order.productName} × {order.quantity}</p>
                         <p className="text-sm font-bold text-gray-900 mt-1">{formatPrice(order.totalPrice)}</p>
                       </div>
-                      <svg className="w-5 h-5 text-gray-400 rtl:-scale-x-100" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <svg className="w-5 h-5 text-gray-500 rtl:-scale-x-100" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
                       </svg>
                     </div>
@@ -546,7 +565,7 @@ function SellerDashboardContent() {
                   {Icons.check}
                 </div>
                 <p className="text-gray-500 font-medium">{t('dash.allStocked')}</p>
-                <p className="text-gray-400 text-sm mt-1">{t('dash.allStockedHint')}</p>
+                <p className="text-gray-500 text-sm mt-1">{t('dash.allStockedHint')}</p>
               </div>
             ) : (
               <div className="space-y-3">
@@ -560,7 +579,7 @@ function SellerDashboardContent() {
                       {product.images && product.images[0] ? (
                         <img src={product.images[0].imageUrl} alt={product.name} className="w-full h-full object-cover" />
                       ) : (
-                        <div className="text-gray-400">{Icons.food}</div>
+                        <div className="text-gray-500">{Icons.food}</div>
                       )}
                     </div>
                     <div className="flex-1 min-w-0">

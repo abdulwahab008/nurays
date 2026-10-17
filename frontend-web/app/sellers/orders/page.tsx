@@ -1,11 +1,13 @@
 'use client';
 
 import { useState, useEffect, useRef, useCallback } from 'react';
+import { loginUrlHere } from '@/lib/auth-redirect';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { DashboardLayout, SELLER_SIDEBAR_ITEMS } from '@/components/layout/DashboardShell';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/toast';
+import { LoadError } from '@/components/ui/LoadError';
 import { useAuthStore } from '@/lib/store/auth-store';
 import { useLiveRefresh } from '@/lib/hooks/use-live-refresh';
 import { apiClient } from '@/lib/api-client';
@@ -15,6 +17,7 @@ import SelfHandoverActions from '@/components/orders/SelfHandoverActions';
 import { useT } from '@/lib/i18n';
 import { commonMessages } from '@/lib/i18n/messages/common';
 import { kitchenOrderMessages, paymentMethodLabel, paymentStatusLabel } from '@/lib/i18n/messages/kitchen-orders';
+import { ExternalLink } from '@/components/ExternalLink';
 
 const sidebarItems = SELLER_SIDEBAR_ITEMS;
 
@@ -85,6 +88,8 @@ export default function SellerOrdersPage() {
   const t = useT(kitchenOrderMessages);
   const tc = useT(commonMessages);
   const [loading, setLoading] = useState(true);
+  // Why the orders could not be read; shown instead of "No orders yet", which a kitchen with orders waiting must never be told.
+  const [loadError, setLoadError] = useState<unknown>(null);
   const [orderTickets, setOrderTickets] = useState<OrderTicket[]>([]);
   const [filter, setFilter] = useState<string>('all');
   const [page, setPage] = useState(1);
@@ -123,17 +128,21 @@ export default function SellerOrdersPage() {
         setOrderTickets(rawOrders);
         setTotalPages(raw?.pagination?.totalPages ?? 1);
       }
+      setLoadError(null);
     } catch (error: any) {
       console.error('Failed to load orders:', error);
-      if (!silent) showToast(t('list.loadFailed'), 'error');
+      // A refresh that fails keeps the orders on the screen (and says they may be out of date); a first or chosen load that
+      // fails shows the failure, not the orders of the tab before.
+      if (!silent) setOrderTickets([]);
+      setLoadError(error);
     } finally {
       if (!silent) setLoading(false);
     }
-  }, [showToast, t]);
+  }, []);
 
   useEffect(() => {
     if (!isAuthenticated) {
-      router.push('/login');
+      router.push(loginUrlHere());
       return;
     }
     const role = user?.userType || user?.user_type;
@@ -333,11 +342,16 @@ export default function SellerOrdersPage() {
         </div>
 
         {/* Orders Listing */}
+        {Boolean(loadError) && orderTickets.length > 0 && (
+          <LoadError compact error={loadError} onRetry={() => void loadOrders()} title={t('list.loadFailed')} className="mb-4" />
+        )}
         {loading ? (
           <div className="text-center py-20 bg-white rounded-3xl border border-gray-100">
             <div className="w-12 h-12 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
             <p className="text-gray-600 font-medium">{t('list.syncing')}</p>
           </div>
+        ) : loadError && orderTickets.length === 0 ? (
+          <LoadError error={loadError} onRetry={() => void loadOrders()} title={t('list.loadFailed')} />
         ) : orderTickets.length === 0 ? (
           <div className="bg-white rounded-3xl p-16 text-center border border-gray-100 shadow-sm">
             <div className="w-20 h-20 bg-emerald-50 text-emerald-600 rounded-full flex items-center justify-center mx-auto mb-4 text-3xl">
@@ -451,14 +465,12 @@ export default function SellerOrdersPage() {
                               {ord.paymentReferenceNumber && ` • ${t('list.ref', { ref: ord.paymentReferenceNumber })}`}
                             </p>
                             {ord.paymentProofUrl && (
-                              <a
+                              <ExternalLink
                                 href={ord.paymentProofUrl}
-                                target="_blank"
-                                rel="noreferrer"
                                 className="text-emerald-700 hover:underline font-bold text-[11px] inline-flex items-center gap-1 mt-1"
                               >
                                 <span>{t('list.viewScreenshot')}</span>
-                              </a>
+                              </ExternalLink>
                             )}
                           </div>
                         </div>

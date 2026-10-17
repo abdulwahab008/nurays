@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { DashboardLayout, ADMIN_SIDEBAR_ITEMS } from '@/components/layout/DashboardShell';
 import { Button } from '@/components/ui/button';
+import { LoadError } from '@/components/ui/LoadError';
 import { useToast } from '@/components/ui/toast';
 import { useAuthStore } from '@/lib/store/auth-store';
 import { apiClient } from '@/lib/api-client';
@@ -56,6 +57,8 @@ export default function CategoryRequestsPage() {
 
   const [requests, setRequests] = useState<CategoryRequest[]>([]);
   const [loading, setLoading] = useState(true);
+  // Why the requests could not be read; shown instead of "No requests found", which would be untrue.
+  const [loadError, setLoadError] = useState<unknown>(null);
   const [filter, setFilter] = useState<string>('pending');
   const [selectedRequest, setSelectedRequest] = useState<CategoryRequest | null>(null);
   const [showRejectModal, setShowRejectModal] = useState(false);
@@ -79,6 +82,7 @@ export default function CategoryRequestsPage() {
 
   const loadRequests = async () => {
     setLoading(true);
+    setLoadError(null);
     try {
       const params = filter !== 'all' ? `?status=${filter}` : '';
       const response = await apiClient.get(`/category-requests${params}`);
@@ -87,7 +91,7 @@ export default function CategoryRequestsPage() {
       }
     } catch (error) {
       console.error('Failed to load requests:', error);
-      showToast('Failed to load category requests', 'error');
+      setLoadError(error);
     } finally {
       setLoading(false);
     }
@@ -190,6 +194,8 @@ export default function CategoryRequestsPage() {
               <span className="ms-3 text-gray-600">Loading requests...</span>
             </div>
           </div>
+        ) : loadError && requests.length === 0 ? (
+          <LoadError error={loadError} onRetry={loadRequests} title="We couldn't load the category requests" />
         ) : requests.length === 0 ? (
           <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-12 text-center">
             <div className="text-5xl mb-4">📭</div>
@@ -271,7 +277,7 @@ export default function CategoryRequestsPage() {
                             {request.seller?.businessName || 'Unknown Seller'}
                           </span>
                           {request.seller?.user?.email && (
-                            <span className="text-gray-400"> ({request.seller.user.email})</span>
+                            <span className="text-gray-500"> ({request.seller.user.email})</span>
                           )}
                         </span>
                       </div>
@@ -334,7 +340,7 @@ export default function CategoryRequestsPage() {
                   rows={4}
                   className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-red-500 focus:border-transparent resize-none"
                 />
-                <p className="text-xs text-gray-400 mt-2">
+                <p className="text-xs text-gray-500 mt-2">
                   This message will be visible to the seller.
                 </p>
               </div>

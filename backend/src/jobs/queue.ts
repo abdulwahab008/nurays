@@ -1,5 +1,6 @@
 import { Queue, Worker, type Job } from 'bullmq';
 import { redisUrl, newRedisConnection } from '../config/redis';
+import { logger } from '../utils/logger';
 
 /**
  * Background jobs: work that shouldn't hold up a request and must be retried when it fails
@@ -38,12 +39,40 @@ export function defineJob<T>(name: string, handler: (payload: T) => Promise<void
 }
 
 let queueConnection: ReturnType<typeof newRedisConnection> | null = null;
+// Set while the queue's connection is opening for the first time.
+let connecting: Promise<void> | null = null;
+
+const CONNECT_WAIT_MS = 2_000;
+
+/**
+ * Resolves when the connection first becomes ready, fails or closes, or after CONNECT_WAIT_MS. A job that
+ * arrives while the connection is still opening waits for it, so a start is not taken for an outage and
+ * the job run in this process, without the durability of the queue.
+ */
+function firstReady(connection: NonNullable<typeof queueConnection>): Promise<void> {
+  return new Promise<void>((resolve) => {
+    const events = ['ready', 'error', 'close'] as const;
+    const done = () => {
+      clearTimeout(timer);
+      for (const event of events) connection.off(event, done);
+      resolve();
+    };
+    const timer = setTimeout(done, CONNECT_WAIT_MS);
+    timer.unref?.();
+    for (const event of events) connection.on(event, done);
+  });
+}
 
 function getQueue(): Queue | null {
   if (!redisUrl()) return null;
   if (!queue) {
     queueConnection = newRedisConnection('queue', { maxRetriesPerRequest: null });
     queue = new Queue(QUEUE_NAME, { connection: queueConnection });
+    const opening = firstReady(queueConnection);
+    connecting = opening;
+    void opening.then(() => {
+      if (connecting === opening) connecting = null;
+    });
   }
   return queue;
 }
@@ -64,7 +93,7 @@ async function runLocally(name: string, payload: unknown, attempts: number, dela
       return;
     } catch (err) {
       const last = attempt === attempts;
-      console.error(`Job ${name} failed (attempt ${attempt}/${attempts})${last ? ', giving up' : ''}: ${(err as Error)?.message ?? err}`);
+      logger.error({ err, job: name, attempt, attempts, final: last }, last ? 'Job failed; giving up' : 'Job failed; will retry');
       if (!last) await sleep(Math.min(1000 * 2 ** (attempt - 1), 10_000));
     }
   }
@@ -74,6 +103,7 @@ async function runLocally(name: string, payload: unknown, attempts: number, dela
 export async function enqueue<T>(name: string, payload: T, opts: EnqueueOptions = {}): Promise<void> {
   if (!handlers.has(name)) throw new Error(`Unknown background job "${name}"`);
   const q = getQueue();
+  if (connecting) await connecting;
   // While Redis is unreachable the job runs here at once rather than holding the request
   // for the enqueue timeout on every call.
   if (q && queueReady()) {
@@ -90,7 +120,7 @@ export async function enqueue<T>(name: string, payload: T, opts: EnqueueOptions 
       await withTimeout(added, ENQUEUE_TIMEOUT_MS);
       return;
     } catch (err) {
-      console.error(`Could not queue job ${name} (${(err as Error)?.message ?? err}); running it in this process.`);
+      logger.error({ err, job: name }, 'Could not queue the job; running it in this process');
       // If the add lands later all the same, withdraw it: the job is being run here.
       added.then((job) => job.remove().catch(() => undefined)).catch(() => undefined);
     }
@@ -112,6 +142,7 @@ function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
 /** Start processing queued jobs in this process (no-op without Redis: jobs run inline). */
 export function startWorkers(concurrency = 5) {
   if (!redisUrl() || worker) return;
+  getQueue(); // the queue's own connection opens now too, so the first job finds it ready
   worker = new Worker(
     QUEUE_NAME,
     async (job: Job) => {
@@ -124,9 +155,9 @@ export function startWorkers(concurrency = 5) {
   worker.on('failed', (job, err) => {
     const attempts = job?.opts.attempts ?? 1;
     const final = (job?.attemptsMade ?? 0) >= attempts;
-    console.error(`Job ${job?.name} (${job?.id}) failed (attempt ${job?.attemptsMade}/${attempts})${final ? ', giving up' : ''}: ${err.message}`);
+    logger.error({ err, job: job?.name, jobId: job?.id, attempt: job?.attemptsMade, attempts, final }, final ? 'Job failed; giving up' : 'Job failed; will retry');
   });
-  worker.on('error', (err) => console.error('Job worker error:', err.message));
+  worker.on('error', (err) => logger.error({ err }, 'Job worker error'));
 }
 
 /** Finish running jobs and stop (graceful shutdown). */

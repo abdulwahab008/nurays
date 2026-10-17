@@ -9,7 +9,7 @@ import {
   updatePromotion,
   deletePromotion,
 } from '../controllers/promotion.controller';
-import { authenticate, authorize } from '../middleware/auth.middleware';
+import { authenticate, authorize, blockSuspendedSeller } from '../middleware/auth.middleware';
 import { validate } from '../middleware/validation.middleware';
 import { validatePromotionCodeSchema, createPromotionSchema, updatePromotionSchema } from '../validators/promotion.validator';
 import { promoValidateLimiter } from '../middleware/rateLimiter';
@@ -28,8 +28,9 @@ router.post('/validate', promoValidateLimiter, validate(validatePromotionCodeSch
 // Get available promotions (any authenticated user)
 router.get('/available', getAvailablePromotions);
 
-// Seller-only: list, create, get one, update, delete
+// Seller-only: list, create, get one, update, delete (not for a suspended kitchen)
 router.use(authorize('seller'));
+router.use(blockSuspendedSeller);
 router.get('/', listMyPromotions);
 router.get('/:id', getPromotion);
 router.post('/', validate(createPromotionSchema), createPromotion);

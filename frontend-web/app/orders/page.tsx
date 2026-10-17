@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useEffect, useState, useRef, useMemo } from 'react';
+import { loginUrlHere } from '@/lib/auth-redirect';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import {
@@ -17,23 +18,20 @@ import {
   Receipt,
   Search,
   Sparkles,
-  ShieldCheck,
-  AlertCircle,
   ExternalLink,
-  ChevronRight,
   CreditCard,
   Flame,
-  Store,
 } from 'lucide-react';
-import { orderService, Order } from '@/lib/services/order.service';
+import { orderService, Order, OrderItem } from '@/lib/services/order.service';
 import { formatPrice, formatDate } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
+import { LoadError } from '@/components/ui/LoadError';
 import { useAuthStore } from '@/lib/store/auth-store';
 import { DashboardLayout, CUSTOMER_SIDEBAR_ITEMS } from '@/components/layout/DashboardShell';
 import { useSocket } from '@/lib/hooks/use-socket';
 import { useToast } from '@/components/ui/toast';
 import { cartService } from '@/lib/services/cart.service';
-import { apiClient } from '@/lib/api-client';
+import { apiClient, apiErrorMessage } from '@/lib/api-client';
 import { useT } from '@/lib/i18n';
 import { commonMessages, statusKey } from '@/lib/i18n/messages/common';
 import { ordersMessages } from '@/lib/i18n/messages/orders';
@@ -66,6 +64,8 @@ function OrdersContent() {
   const [loadingMore, setLoadingMore] = useState(false);
   const ordersRef = useRef<Order[]>([]);
   const [loading, setLoading] = useState(true);
+  // Why the first page of orders could not be loaded; shown instead of an empty list, which would say there are no orders.
+  const [loadError, setLoadError] = useState<unknown>(null);
   const [filter, setFilter] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [reorderingId, setReorderingId] = useState<string | null>(null);
@@ -78,7 +78,7 @@ function OrdersContent() {
   useEffect(() => {
     const token = apiClient.getAccessToken();
     if (!token && !isAuthenticated) {
-      router.push('/login');
+      router.push(loginUrlHere());
       return;
     }
     loadOrders();
@@ -88,20 +88,20 @@ function OrdersContent() {
   useEffect(() => {
     if (!onOrderStatusUpdate) return;
     mountedRef.current = true;
-    const unsubscribe = onOrderStatusUpdate((data: any) => {
+    const unsubscribe = onOrderStatusUpdate((data) => {
       if (!mountedRef.current) return;
       // Keep the whole-history counts in step with the change (the order may not be
       // among the loaded ones, in which case only its old status is unknown).
-      const previous = ordersRef.current.find((o) => (o as any).id === data.orderId) as any;
+      const previous = ordersRef.current.find((o) => o.id === data.orderId);
       const previousStatus: string | undefined = previous?.orderStatus ?? previous?.status;
       if (!previousStatus) {
         // Not among the loaded orders (older page): its old status is unknown, so ask the
         // server for the true counts instead of letting the cards drift.
         orderService
           .getMyOrders({ page: 1, limit: 1 })
-          .then((r: any) => {
-            const d = r?.data ?? r;
-            if (mountedRef.current && d?.statusCounts) setStatusCounts(d.statusCounts);
+          .then((r) => {
+            const counts = r.data?.statusCounts;
+            if (mountedRef.current && counts) setStatusCounts(counts);
           })
           .catch(() => {});
       }
@@ -118,7 +118,7 @@ function OrdersContent() {
       }
       setOrders((prev) =>
         prev.map((o) =>
-          (o as any).id === data.orderId
+          o.id === data.orderId
             ? { ...o, orderStatus: data.status, status: data.status }
             : o
         )
@@ -152,21 +152,27 @@ function OrdersContent() {
   const loadOrders = async (pageToLoad = 1) => {
     const append = pageToLoad > 1;
     if (append) setLoadingMore(true);
-    else setLoading(true);
+    else {
+      setLoading(true);
+      setLoadError(null);
+    }
     try {
       const response = await orderService.getMyOrders({ page: pageToLoad, limit: PAGE_SIZE });
-      const data = (response as any)?.data ?? response;
+      const data = response.data;
       const incoming: Order[] = data?.orders ?? [];
       setOrders((prev) => {
         if (!append) return incoming;
-        const seen = new Set(prev.map((o) => (o as any).id));
-        return [...prev, ...incoming.filter((o) => !seen.has((o as any).id))];
+        const seen = new Set(prev.map((o) => o.id));
+        return [...prev, ...incoming.filter((o) => !seen.has(o.id))];
       });
       setPage(data?.pagination?.page ?? pageToLoad);
       setTotalPages(data?.pagination?.totalPages ?? 1);
       if (data?.statusCounts) setStatusCounts(data.statusCounts);
     } catch (error) {
       console.error('Failed to load orders:', error);
+      // The orders already on the screen stay; only the first page has nothing to fall back on.
+      if (append) showToast(apiErrorMessage(error, tc('somethingWrong')), 'error');
+      else setLoadError(error);
     } finally {
       if (append) setLoadingMore(false);
       else setLoading(false);
@@ -179,7 +185,7 @@ function OrdersContent() {
     setReorderingId(order.id);
     try {
       showToast(t('list.toastAddingToTray'), 'info');
-      let items = (order as any).items || [];
+      let items: OrderItem[] = order.items || [];
       if (!items.length || !items[0]?.productId) {
         try {
           const fullRes = await orderService.getOrder(order.id);
@@ -189,7 +195,7 @@ function OrdersContent() {
         }
       }
       for (const item of items) {
-        const pId = item.productId || (item as any).product?.id;
+        const pId = item.productId || item.product?.id;
         if (pId) {
           await cartService.addToCart({
             productId: pId,
@@ -210,11 +216,11 @@ function OrdersContent() {
   };
 
   // Derive effective status
-  const getOrderStatus = (o: Order | any): string => {
-    const raw = String(o?.orderStatus ?? o?.order_status ?? o?.status ?? 'pending');
+  const getOrderStatus = (o: Order): string => {
+    const raw = String(o.orderStatus ?? o.status ?? 'pending');
     if (raw === 'pending') {
-      const items: any[] = o?.items ?? [];
-      if (items.length > 0 && items.every((item: any) => item.status === 'cancelled')) {
+      const items = o.items ?? [];
+      if (items.length > 0 && items.every((item) => item.status === 'cancelled')) {
         return 'cancelled';
       }
     }
@@ -232,7 +238,7 @@ function OrdersContent() {
   // A pending order whose items were all cancelled is shown as cancelled (see getOrderStatus);
   // the server counts it as pending, so move the loaded ones across to keep cards and list in step.
   const derivedCancelled = orders.filter(
-    (o) => String((o as any)?.orderStatus ?? (o as any)?.status ?? 'pending') === 'pending' && getOrderStatus(o) === 'cancelled'
+    (o) => String(o.orderStatus ?? o.status ?? 'pending') === 'pending' && getOrderStatus(o) === 'cancelled'
   ).length;
   const inProgressCount = statusCounts
     ? Math.max(0, sumStatuses(['pending', 'confirmed', 'preparing', 'ready']) - derivedCancelled)
@@ -265,10 +271,7 @@ function OrdersContent() {
       if (searchQuery.trim()) {
         const q = searchQuery.toLowerCase().trim();
         const num = String(o.orderNumber || '').toLowerCase();
-        const items = (o as any).items || [];
-        const hasItemMatch = items.some((i: any) =>
-          (i.productName || i.name || '').toLowerCase().includes(q)
-        );
+        const hasItemMatch = (o.items || []).some((i) => (i.productName || '').toLowerCase().includes(q));
         return num.includes(q) || hasItemMatch;
       }
 
@@ -367,6 +370,10 @@ function OrdersContent() {
       userType="customer"
     >
       <div className="max-w-6xl mx-auto space-y-6 pb-12">
+        {loadError && !loading && orders.length === 0 ? (
+          <LoadError error={loadError} onRetry={() => loadOrders()} title={t('list.loadFailed')} />
+        ) : (
+        <>
         {/* ============================================================ */}
         {/* STATS SUMMARY METRICS (Rich Modern Bento Cards) */}
         {/* ============================================================ */}
@@ -377,7 +384,7 @@ function OrdersContent() {
               <div className="w-10 h-10 rounded-xl sm:rounded-2xl bg-slate-100 flex items-center justify-center text-slate-700 shadow-inner">
                 <Receipt className="w-5 h-5" />
               </div>
-              <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">
+              <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
                 {t('list.lifetime')}
               </span>
             </div>
@@ -421,12 +428,12 @@ function OrdersContent() {
                 <Truck className="w-5 h-5" />
               </div>
               {onTheWayCount > 0 ? (
-                <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-orange-100 text-[#FF5500] text-[11px] font-bold">
+                <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-orange-100 text-orange-800 text-[11px] font-bold">
                   <span className="w-1.5 h-1.5 rounded-full bg-[#FF5500] animate-ping" />
                   {t('list.riderDispatched')}
                 </span>
               ) : (
-                <span className="text-[11px] font-bold text-orange-400 uppercase tracking-wider">
+                <span className="text-[11px] font-bold text-orange-700 uppercase tracking-wider">
                   {t('list.transit')}
                 </span>
               )}
@@ -479,6 +486,7 @@ function OrdersContent() {
               return (
                 <button
                   key={tab.id}
+                  aria-pressed={active}
                   onClick={() => setFilter(tab.id)}
                   className={`inline-flex items-center gap-2 px-3.5 sm:px-4 py-2 rounded-xl sm:rounded-2xl text-xs sm:text-sm font-bold whitespace-nowrap transition-all duration-150 cursor-pointer ${
                     active
@@ -497,7 +505,7 @@ function OrdersContent() {
                   <span
                     className={`px-1.5 py-0.2 rounded-md text-[11px] font-extrabold ${
                       active
-                        ? 'bg-white/25 text-white'
+                        ? 'bg-black/20 text-white'
                         : 'bg-slate-100 text-slate-500'
                     }`}
                   >
@@ -516,13 +524,14 @@ function OrdersContent() {
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder={t('list.searchPlaceholder')}
+              aria-label={t('list.searchPlaceholder')}
               className="w-full ps-9 pe-3.5 py-2 rounded-xl text-xs sm:text-sm bg-slate-50 border border-slate-200/90 text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-[#FF5500]/20 focus:border-[#FF5500] transition-all"
             />
             {searchQuery && (
               <button
                 onClick={() => setSearchQuery('')}
                 aria-label={t('list.clearSearch')}
-                className="absolute end-3 top-1/2 -translate-y-1/2 text-xs text-slate-400 hover:text-slate-600"
+                className="absolute end-3 top-1/2 -translate-y-1/2 text-xs text-slate-500 hover:text-slate-600"
               >
                 ✕
               </button>
@@ -537,7 +546,7 @@ function OrdersContent() {
           <div className="bg-white rounded-3xl p-12 text-center border border-slate-200/80 shadow-xs">
             <div className="w-10 h-10 border-3 border-[#FF5500] border-t-transparent rounded-full animate-spin mx-auto mb-3" />
             <p className="text-sm font-bold text-slate-800">{t('list.loadingTitle')}</p>
-            <p className="text-xs text-slate-400 mt-1">{t('list.loadingSub')}</p>
+            <p className="text-xs text-slate-500 mt-1">{t('list.loadingSub')}</p>
           </div>
         ) : filteredOrders.length === 0 ? (
           /* Empty State */
@@ -580,8 +589,8 @@ function OrdersContent() {
                 'dispatched',
                 'in_transit',
               ].includes(status);
-              const items = (order as any).items ?? [];
-              const itemCount = items.length || (order as any).itemsCount || 1;
+              const items = order.items ?? [];
+              const itemCount = items.length || order.itemsCount || 1;
               const step = getStepProgress(status);
 
               return (
@@ -603,7 +612,7 @@ function OrdersContent() {
                           className="text-base sm:text-lg font-black text-slate-900 hover:text-[#FF5500] transition-colors flex items-center gap-1.5"
                         >
                           <span>{t('list.orderNumber', { number: order.orderNumber })}</span>
-                          <ExternalLink className="w-3.5 h-3.5 opacity-0 group-hover:opacity-100 transition-opacity text-slate-400" />
+                          <ExternalLink className="w-3.5 h-3.5 opacity-0 group-hover:opacity-100 transition-opacity text-slate-500" />
                         </Link>
 
                         {/* Status Badge */}
@@ -629,7 +638,7 @@ function OrdersContent() {
 
                       {/* Date & Time */}
                       <div className="flex items-center gap-1.5 text-xs font-semibold text-slate-500">
-                        <Calendar className="w-3.5 h-3.5 text-slate-400" />
+                        <Calendar className="w-3.5 h-3.5 text-slate-500" />
                         <span>{formatDate(order.createdAt)}</span>
                       </div>
                     </div>
@@ -647,7 +656,7 @@ function OrdersContent() {
                             { stepNum: 2, name: t('list.step.confirmed'), icon: Sparkles },
                             { stepNum: 3, name: t('list.step.cooking'), icon: ChefHat },
                             { stepNum: 4, name: t('list.step.onWay'), icon: Truck },
-                          ].map((st, idx) => {
+                          ].map((st) => {
                             const isDone = step >= st.stepNum;
                             const isCurrent = step === st.stepNum;
                             const IconComponent = st.icon;
@@ -687,7 +696,7 @@ function OrdersContent() {
                       <div className="flex-1 min-w-0">
                         {items.length > 0 ? (
                           <div className="flex flex-wrap items-center gap-2">
-                            {items.map((it: any, iIdx: number) => (
+                            {items.map((it, iIdx) => (
                               <div
                                 key={it.id ?? iIdx}
                                 className="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl bg-slate-50 border border-slate-200/70 text-xs font-bold text-slate-800"
@@ -696,7 +705,7 @@ function OrdersContent() {
                                   {it.quantity || 1}×
                                 </span>
                                 <span className="truncate max-w-[180px] sm:max-w-[240px]">
-                                  {it.productName || it.name || (it.product && it.product.name) || t('list.dishFallback')}
+                                  {it.productName || it.product?.name || t('list.dishFallback')}
                                 </span>
                               </div>
                             ))}
@@ -711,7 +720,7 @@ function OrdersContent() {
                       {/* Amount and CTAs */}
                       <div className="flex items-center justify-between sm:justify-end gap-3 sm:gap-4 pt-2 sm:pt-0 border-t sm:border-t-0 border-slate-100">
                         <div className="text-start sm:text-end">
-                          <span className="block text-[11px] font-bold text-slate-400 uppercase tracking-wider">
+                          <span className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider">
                             {t('list.orderTotal')}
                           </span>
                           <span className="text-lg sm:text-2xl font-black text-slate-950 tracking-tight">
@@ -760,11 +769,13 @@ function OrdersContent() {
               {loadingMore ? tc('loading') : t('list.loadMore', { loaded: orders.length, total: totalOrdersCount })}
             </Button>
             {filter !== 'all' && (
-              <p className="text-xs text-slate-400 mt-2">
+              <p className="text-xs text-slate-500 mt-2">
                 {t('list.filterNote')}
               </p>
             )}
           </div>
+        )}
+        </>
         )}
       </div>
     </DashboardLayout>

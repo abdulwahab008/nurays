@@ -47,7 +47,7 @@ export const verifyToken = (token: string): JWTPayload => {
   try {
     decoded = jwt.verify(token, JWT_SECRET) as JWTPayload;
   } catch (error) {
-    throw new Error('Invalid or expired token');
+    throw new Error('Invalid or expired token', { cause: error });
   }
   if (decoded.typ !== 'access') {
     throw new Error('Invalid or expired token');
@@ -64,7 +64,7 @@ export const verifyRefreshToken = (token: string): JWTPayload => {
   try {
     decoded = jwt.verify(token, JWT_SECRET) as JWTPayload;
   } catch (error) {
-    throw new Error('Invalid or expired token');
+    throw new Error('Invalid or expired token', { cause: error });
   }
   if (decoded.typ === 'refresh') return decoded;
   // A token that does not say it is a refresh token is not one (every token issued since the

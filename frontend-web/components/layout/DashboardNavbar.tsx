@@ -5,7 +5,9 @@ import { useRouter, usePathname } from 'next/navigation';
 import { useState, useEffect, useRef } from 'react';
 import { useAuthStore } from '@/lib/store/auth-store';
 import { useCartStore } from '@/lib/store/cart-store';
-import { apiClient } from '@/lib/api-client';
+import { apiClient, apiErrorMessage } from '@/lib/api-client';
+import { LoadError } from '@/components/ui/LoadError';
+import { useToast } from '@/components/ui/toast';
 import { useSocket } from '@/lib/hooks/use-socket';
 import { Mark, Wordmark } from '@/components/ui/Mark';
 import { CommunitySelector } from '@/components/community/CommunitySelector';
@@ -49,6 +51,7 @@ interface DashboardNavbarProps {
 export function DashboardNavbar({ title, subtitle, userType = 'customer', onMenuToggle, drawerOpen }: DashboardNavbarProps) {
   const router = useRouter();
   const t = useT(shellMessages);
+  const { showToast } = useToast();
   const pathname = usePathname() || '';
   const { logout, user, isAuthenticated } = useAuthStore();
   const { items } = useCartStore();
@@ -57,6 +60,8 @@ export function DashboardNavbar({ title, subtitle, userType = 'customer', onMenu
   const [notificationUnreadCount, setNotificationUnreadCount] = useState<number>(0);
   const [showNotificationsPanel, setShowNotificationsPanel] = useState<boolean>(false);
   const [recentNotifications, setRecentNotifications] = useState<NavbarNotification[]>([]);
+  // Why the recent notifications could not be read; shown instead of "All caught up", which would be untrue.
+  const [notificationsError, setNotificationsError] = useState<unknown>(null);
   const [loadingNotifications, setLoadingNotifications] = useState<boolean>(false);
   const notificationRef = useRef<HTMLDivElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -167,8 +172,10 @@ export function DashboardNavbar({ title, subtitle, userType = 'customer', onMenu
         );
         setNotificationUnreadCount(res.data.data.unreadCount ?? 0);
       }
+      setNotificationsError(null);
     } catch (error) {
       console.error('Failed to fetch recent notifications:', error);
+      setNotificationsError(error);
     } finally {
       setLoadingNotifications(false);
     }
@@ -204,6 +211,7 @@ export function DashboardNavbar({ title, subtitle, userType = 'customer', onMenu
       setNotificationUnreadCount(0);
     } catch (err) {
       console.error('Failed to mark all notifications read:', err);
+      showToast(apiErrorMessage(err, t('markAllReadFailed')), 'error');
     }
   };
 
@@ -273,7 +281,7 @@ export function DashboardNavbar({ title, subtitle, userType = 'customer', onMenu
 
   return (
     <nav
-      className="fixed top-0 start-0 end-0 z-50 h-16 bg-white/95 backdrop-blur-md border-b border-slate-200/80 shadow-xs"
+      className="fixed top-0 start-0 end-0 z-50 h-(--header-offset) pt-(--safe-top) pl-(--safe-left) pr-(--safe-right) bg-white/95 backdrop-blur-md border-b border-slate-200/80 shadow-xs"
     >
       <div className="flex items-center justify-between h-full px-3 sm:px-6 gap-2">
         {/* Logo Section */}
@@ -317,7 +325,7 @@ export function DashboardNavbar({ title, subtitle, userType = 'customer', onMenu
         {isCustomer && (
           <div className="hidden md:flex flex-1 max-w-lg mx-8">
             <form onSubmit={handleSearch} className="w-full relative">
-              <div className="absolute start-3 top-1/2 -translate-y-1/2 text-gray-400">
+              <div className="absolute start-3 top-1/2 -translate-y-1/2 text-gray-500">
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
                 </svg>
@@ -347,12 +355,12 @@ export function DashboardNavbar({ title, subtitle, userType = 'customer', onMenu
 
         {/* Center - Seller/Admin/Rider Title */}
         {(isSeller || isAdmin || isRider) && (
-          <div className="hidden md:flex flex-1 justify-center">
-            <div className="text-center">
-              <h2 className="font-display italic text-[22px]" style={{ color: 'var(--ink-900)' }}>
+          <div className="hidden md:flex flex-1 min-w-0 justify-center">
+            <div className="text-center min-w-0 max-w-full">
+              <h2 className="font-display italic text-[22px] truncate" style={{ color: 'var(--ink-900)' }} title={title}>
                 {title}
               </h2>
-              {subtitle && <p className="eyebrow mt-1">{subtitle}</p>}
+              {subtitle && <p className="eyebrow mt-1 truncate" title={subtitle}>{subtitle}</p>}
             </div>
           </div>
         )}
@@ -460,13 +468,17 @@ export function DashboardNavbar({ title, subtitle, userType = 'customer', onMenu
                 {/* Panel Body */}
                 <div className="max-h-80 overflow-y-auto divide-y divide-gray-50">
                   {loadingNotifications ? (
-                    <div className="py-8 flex flex-col items-center justify-center gap-2 text-gray-400">
+                    <div className="py-8 flex flex-col items-center justify-center gap-2 text-gray-500">
                       <div className="w-5 h-5 border-2 border-amber-500 border-t-transparent rounded-full animate-spin" />
                       <span className="text-xs">{t('loadingUpdates')}</span>
                     </div>
+                  ) : notificationsError && recentNotifications.length === 0 ? (
+                    <div className="p-3">
+                      <LoadError compact error={notificationsError} onRetry={fetchRecentNotifications} />
+                    </div>
                   ) : recentNotifications.length === 0 ? (
                     <div className="py-10 px-4 text-center">
-                      <div className="w-10 h-10 rounded-full bg-gray-100 flex items-center justify-center mx-auto mb-2 text-gray-400">
+                      <div className="w-10 h-10 rounded-full bg-gray-100 flex items-center justify-center mx-auto mb-2 text-gray-500">
                         <Bell className="w-5 h-5" />
                       </div>
                       <p className="text-sm font-semibold text-gray-900">{t('allCaughtUp')}</p>
@@ -489,7 +501,7 @@ export function DashboardNavbar({ title, subtitle, userType = 'customer', onMenu
                             <p className={`text-xs font-semibold truncate ${!notif.isRead ? 'text-gray-900' : 'text-gray-700'}`}>
                               {notif.title}
                             </p>
-                            <span className="text-[11px] text-gray-400 shrink-0">
+                            <span className="text-[11px] text-gray-500 shrink-0">
                               {formatRelativeTime(notif.createdAt, t)}
                             </span>
                           </div>
@@ -548,7 +560,7 @@ export function DashboardNavbar({ title, subtitle, userType = 'customer', onMenu
                 <span className="hidden sm:block text-gray-700 text-sm font-bold">
                   {user?.profile?.fullName?.split(' ')[0] || t('user')}
                 </span>
-                <svg className="w-4 h-4 text-gray-400 max-[380px]:hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg className="w-4 h-4 text-gray-500 max-[380px]:hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                 </svg>
               </button>
@@ -603,25 +615,25 @@ export function DashboardNavbar({ title, subtitle, userType = 'customer', onMenu
                   {isSeller && (
                     <>
                       <Link href="/sellers/dashboard" className="flex items-center gap-3 px-4 py-2 text-gray-700 hover:bg-gray-50 transition-colors">
-                        <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <svg className="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3.75 6A2.25 2.25 0 016 3.75h2.25A2.25 2.25 0 0110.5 6v2.25a2.25 2.25 0 01-2.25 2.25H6a2.25 2.25 0 01-2.25-2.25V6z" />
                         </svg>
                         <span className="text-sm">{t('dashboard')}</span>
                       </Link>
                       <Link href="/sellers/orders" className="flex items-center gap-3 px-4 py-2 text-gray-700 hover:bg-gray-50 transition-colors">
-                        <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <svg className="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M20.25 7.5l-.625 10.632a2.25 2.25 0 01-2.247 2.118H6.622a2.25 2.25 0 01-2.247-2.118L3.75 7.5M10 11.25h4M3.375 7.5h17.25c.621 0 1.125-.504 1.125-1.125v-1.5c0-.621-.504-1.125-1.125-1.125H3.375c-.621 0-1.125.504-1.125 1.125v1.5c0 .621.504 1.125 1.125 1.125z" />
                         </svg>
                         <span className="text-sm">{t('myOrders')}</span>
                       </Link>
                       <Link href="/sellers/products" className="flex items-center gap-3 px-4 py-2 text-gray-700 hover:bg-gray-50 transition-colors">
-                        <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <svg className="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 8.25v-1.5m0 1.5c-1.355 0-2.697.056-4.024.166C6.845 8.51 6 9.473 6 10.608v2.513m6-4.87c1.355 0 2.697.055 4.024.165" />
                         </svg>
                         <span className="text-sm">{t('myProducts')}</span>
                       </Link>
                       <Link href="/sellers/settings" className="flex items-center gap-3 px-4 py-2 text-gray-700 hover:bg-gray-50 transition-colors">
-                        <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <svg className="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.645.87.074.04.147.083.22.127.324.196.72.257 1.075.124l1.217-.456a1.125 1.125 0 011.37.49l1.296 2.247a1.125 1.125 0 01-.26 1.431l-1.003.827c-.293.24-.438.613-.431.992a6.759 6.759 0 010 .255c-.007.378.138.75.43.99l1.005.828c.424.35.534.954.26 1.43l-1.298 2.247a1.125 1.125 0 01-1.369.491l-1.217-.456c-.355-.133-.75-.072-1.076.124a6.57 6.57 0 01-.22.128c-.331.183-.581.495-.644.869l-.213 1.28c-.09.543-.56.941-1.11.941h-2.594c-.55 0-1.02-.398-1.11-.94l-.213-1.281c-.062-.374-.312-.686-.644-.87a6.52 6.52 0 01-.22-.127c-.325-.196-.72-.257-1.076-.124l-1.217.456a1.125 1.125 0 01-1.369-.49l-1.297-2.247a1.125 1.125 0 01.26-1.431l1.004-.827c.292-.24.437-.613.43-.992a6.932 6.932 0 010-.255c.007-.378-.138-.75-.43-.99l-1.004-.828a1.125 1.125 0 01-.26-1.43l1.297-2.247a1.125 1.125 0 011.37-.491l1.216.456c.356.133.751.072 1.076-.124.072-.044.146-.087.22-.128.332-.183.582-.495.644-.869l.214-1.281z" />
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
                         </svg>
@@ -633,19 +645,19 @@ export function DashboardNavbar({ title, subtitle, userType = 'customer', onMenu
                   {isCustomer && (
                     <>
                       <Link href="/profile" className="flex items-center gap-3 px-4 py-2 text-gray-700 hover:bg-gray-50 transition-colors">
-                        <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <svg className="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z" />
                         </svg>
                         <span className="text-sm">{t('myProfile')}</span>
                       </Link>
                       <Link href="/orders" className="flex items-center gap-3 px-4 py-2 text-gray-700 hover:bg-gray-50 transition-colors">
-                        <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <svg className="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M20.25 7.5l-.625 10.632a2.25 2.25 0 01-2.247 2.118H6.622a2.25 2.25 0 01-2.247-2.118L3.75 7.5M10 11.25h4M3.375 7.5h17.25c.621 0 1.125-.504 1.125-1.125v-1.5c0-.621-.504-1.125-1.125-1.125H3.375c-.621 0-1.125.504-1.125 1.125v1.5c0 .621.504 1.125 1.125 1.125z" />
                         </svg>
                         <span className="text-sm">{t('myOrders')}</span>
                       </Link>
                       <Link href="/profile/addresses" className="flex items-center gap-3 px-4 py-2 text-gray-700 hover:bg-gray-50 transition-colors">
-                        <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <svg className="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 10.5a3 3 0 11-6 0 3 3 0 016 0z" />
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M19.5 10.5c0 7.142-7.5 11.25-7.5 11.25S4.5 17.642 4.5 10.5a7.5 7.5 0 1115 0z" />
                         </svg>
@@ -658,7 +670,7 @@ export function DashboardNavbar({ title, subtitle, userType = 'customer', onMenu
                         <span className="text-sm">{t('favoriteKitchens')}</span>
                       </Link>
                       <Link href="/support" className="flex items-center gap-3 px-4 py-2 text-gray-700 hover:bg-gray-50 transition-colors">
-                        <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <svg className="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8.625 12a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0H8.25m4.125 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0H12m4.125 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0h-.375M21 12c0 4.556-4.03 8.25-9 8.25a9.764 9.764 0 01-2.555-.337A5.972 5.972 0 015.41 20.97a.75.75 0 01-.774-.75 3.75 3.75 0 01.408-1.706A8.281 8.281 0 013 12c0-4.556 4.03-8.25 9-8.25s9 3.694 9 8.25z" />
                         </svg>
                         <span className="text-sm">{t('helpSupport')}</span>
@@ -669,13 +681,13 @@ export function DashboardNavbar({ title, subtitle, userType = 'customer', onMenu
                   {isAdmin && (
                     <>
                       <Link href="/admin/dashboard" className="flex items-center gap-3 px-4 py-2 text-gray-700 hover:bg-gray-50 transition-colors">
-                        <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <svg className="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3.75 6A2.25 2.25 0 016 3.75h2.25A2.25 2.25 0 0110.5 6v2.25a2.25 2.25 0 01-2.25 2.25H6a2.25 2.25 0 01-2.25-2.25V6z" />
                         </svg>
                         <span className="text-sm">{t('dashboard')}</span>
                       </Link>
                       <Link href="/admin/settings" className="flex items-center gap-3 px-4 py-2 text-gray-700 hover:bg-gray-50 transition-colors">
-                        <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <svg className="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281" />
                         </svg>
                         <span className="text-sm">{t('settings')}</span>

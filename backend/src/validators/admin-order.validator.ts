@@ -45,7 +45,7 @@ export const cancelOrderSchema = z.object({
 });
 
 export const processRefundSchema = z.object({
-  refundAmount: z.number().positive().optional(),
+  refundAmount: z.number().positive().max(10_000_000).optional(),
   // Why the refund is given; kept on the refund and in the audit log.
   reason: z.string().trim().min(3).max(300).optional(),
 });

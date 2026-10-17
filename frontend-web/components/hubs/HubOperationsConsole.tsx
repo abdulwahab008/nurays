@@ -4,10 +4,12 @@ import { useState, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { DashboardLayout, ADMIN_SIDEBAR_ITEMS, HUB_MANAGER_SIDEBAR_ITEMS } from '@/components/layout/DashboardShell';
 import { Button } from '@/components/ui/button';
+import { LoadError } from '@/components/ui/LoadError';
 import { useToast } from '@/components/ui/toast';
 import { useAuthStore } from '@/lib/store/auth-store';
 import { apiClient } from '@/lib/api-client';
 import { DatePicker } from '@/components/ui/DatePicker';
+import { loginUrlHere } from '@/lib/auth-redirect';
 
 
 interface Hub {
@@ -96,7 +98,7 @@ interface FrozenProduct {
   id: string;
   name: string;
   price: number;
-  primaryImage?: { imageUrl: string } | null;
+  primaryImage?: string | null;
   category?: { name: string } | null;
   seller?: { id: string; businessName: string } | null;
 }
@@ -126,6 +128,10 @@ export default function HubOperationsConsole({ mode }: { mode: 'admin' | 'manage
 
   // Loaders
   const [loading, setLoading] = useState(true);
+  // Why the hubs could not be read (shown instead of "No hub is assigned to you yet", which would be untrue), and why the
+  // selected hub's figures could not (shown above them, so zeros and empty lists are not taken for the real thing).
+  const [initError, setInitError] = useState<unknown>(null);
+  const [opsError, setOpsError] = useState<unknown>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [submittingIntake, setSubmittingIntake] = useState(false);
   const [submittingProbe, setSubmittingProbe] = useState(false);
@@ -163,7 +169,7 @@ export default function HubOperationsConsole({ mode }: { mode: 'admin' | 'manage
   // Auth Guard
   useEffect(() => {
     if (!isAuthenticated) {
-      router.push(isManagerMode ? '/login' : '/admin/login');
+      router.push(loginUrlHere(isManagerMode ? '/login' : '/admin/login'));
       return;
     }
     const role = user?.userType ?? user?.user_type;
@@ -178,6 +184,7 @@ export default function HubOperationsConsole({ mode }: { mode: 'admin' | 'manage
   const initializeData = async () => {
     try {
       setLoading(true);
+      setInitError(null);
       // 1. Fetch Hub Centers
       const hubsRes = await apiClient.get(isManagerMode ? '/hubs/mine' : '/hubs');
       const hubsList: Hub[] = hubsRes.data.data || [];
@@ -205,8 +212,8 @@ export default function HubOperationsConsole({ mode }: { mode: 'admin' | 'manage
       if (currentHubId) {
         await loadHubOperations(currentHubId);
       }
-    } catch (err: any) {
-      showToast(err.response?.data?.error?.message || 'Failed to initialize cold hub data', 'error');
+    } catch (err: unknown) {
+      setInitError(err);
     } finally {
       setLoading(false);
     }
@@ -215,6 +222,7 @@ export default function HubOperationsConsole({ mode }: { mode: 'admin' | 'manage
   const loadHubOperations = async (hubId: string) => {
     try {
       setRefreshing(true);
+      setOpsError(null);
       const [statsRes, batchesRes, tempRes] = await Promise.all([
         apiClient.get(`/hubs/${hubId}/stats`),
         apiClient.get(`/hubs/${hubId}/batches`),
@@ -232,8 +240,8 @@ export default function HubOperationsConsole({ mode }: { mode: 'admin' | 'manage
         setTempLogs(tempRes.data.data.logs || []);
         setTempStats(tempRes.data.data.statistics || null);
       }
-    } catch (err: any) {
-      showToast(err.response?.data?.error?.message || 'Failed to sync hub operational metrics', 'error');
+    } catch (err: unknown) {
+      setOpsError(err);
     } finally {
       setRefreshing(false);
     }
@@ -420,6 +428,21 @@ export default function HubOperationsConsole({ mode }: { mode: 'admin' | 'manage
   const currentHubTemp = hubStats?.temperatureCelsius ?? null;
   const isHubSubZeroCompliant = currentHubTemp !== null ? currentHubTemp <= -18.0 : true;
 
+  if (!loading && initError && hubs.length === 0) {
+    return (
+      <DashboardLayout
+        title="Cold Hub Operations & FEFO Engine"
+        subtitle="Batch intake, temperature checks and the FEFO dispatch queue"
+        sidebarItems={isManagerMode ? HUB_MANAGER_SIDEBAR_ITEMS : ADMIN_SIDEBAR_ITEMS}
+        userType={isManagerMode ? 'hub_manager' : 'admin'}
+      >
+        <div className="max-w-xl mx-auto my-12">
+          <LoadError error={initError} onRetry={initializeData} title="We couldn't load your hubs" />
+        </div>
+      </DashboardLayout>
+    );
+  }
+
   if (!loading && hubs.length === 0) {
     return (
       <DashboardLayout
@@ -454,6 +477,9 @@ export default function HubOperationsConsole({ mode }: { mode: 'admin' | 'manage
       userType={isManagerMode ? 'hub_manager' : 'admin'}
     >
       <div className="space-y-6">
+        {Boolean(opsError) && (
+          <LoadError compact error={opsError} onRetry={() => loadHubOperations(selectedHubId)} title="We couldn't load this hub's figures" />
+        )}
         {/* TOP COMMAND BAR */}
         <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 text-white shadow-xl flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
           <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
@@ -486,7 +512,7 @@ export default function HubOperationsConsole({ mode }: { mode: 'admin' | 'manage
                   [{hubStats?.code || hubs.find((h) => h.id === selectedHubId)?.code || '—'}]
                 </span>
               </div>
-              <p className="text-xs text-slate-400 mt-1 flex items-center gap-1.5">
+              <p className="text-xs text-slate-500 mt-1 flex items-center gap-1.5">
                 <span>📍 {hubStats?.address || '—'}</span>
                 <span>•</span>
                 <span>Capacity: {hubStats?.capacityCubicFeet != null ? hubStats.capacityCubicFeet.toLocaleString() : '—'} cu ft</span>
@@ -722,23 +748,23 @@ export default function HubOperationsConsole({ mode }: { mode: 'admin' | 'manage
               </div>
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mt-4 pt-4 border-t border-gray-100 text-xs text-gray-600">
                 <div>
-                  <span className="text-gray-400 block">Total Volume:</span>
+                  <span className="text-gray-500 block">Total Volume:</span>
                   <span className="font-semibold text-gray-800">
                     {hubStats?.capacityCubicFeet != null ? hubStats.capacityCubicFeet.toLocaleString() : '—'} cu ft
                   </span>
                 </div>
                 <div>
-                  <span className="text-gray-400 block">Freezer Units:</span>
+                  <span className="text-gray-500 block">Freezer Units:</span>
                   <span className="font-semibold text-gray-800">
                     {hubStats?.freezerUnits || 2} Freezers Active
                   </span>
                 </div>
                 <div>
-                  <span className="text-gray-400 block">Operating Hours:</span>
+                  <span className="text-gray-500 block">Operating Hours:</span>
                   <span className="font-semibold text-gray-800">24/7 Cold-Chain Active</span>
                 </div>
                 <div>
-                  <span className="text-gray-400 block">Intake Compliance:</span>
+                  <span className="text-gray-500 block">Intake Compliance:</span>
                   <span className="font-semibold text-emerald-600">
                     {tempStats?.complianceRate ?? 100}% Sub-Zero Pass
                   </span>
@@ -842,10 +868,10 @@ export default function HubOperationsConsole({ mode }: { mode: 'admin' | 'manage
                   {selectedProduct && (
                     <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 flex items-center gap-4">
                       <div className="w-16 h-16 rounded-lg bg-gray-200 flex-shrink-0 relative overflow-hidden border border-gray-300">
-                        {selectedProduct.primaryImage?.imageUrl ? (
+                        {selectedProduct.primaryImage ? (
                           // eslint-disable-next-line @next/next/no-img-element
                           <img
-                            src={selectedProduct.primaryImage.imageUrl}
+                            src={selectedProduct.primaryImage}
                             alt={selectedProduct.name}
                             loading="lazy"
                             className="absolute inset-0 w-full h-full object-cover"
@@ -955,7 +981,7 @@ export default function HubOperationsConsole({ mode }: { mode: 'admin' | 'manage
 
                   {/* Expiry Presets */}
                   <div className="flex items-center gap-2 flex-wrap">
-                    <span className="text-xs text-gray-400 font-medium">Quick Presets:</span>
+                    <span className="text-xs text-gray-500 font-medium">Quick Presets:</span>
                     <button
                       type="button"
                       onClick={() => setExpiryPreset(30)}
@@ -1003,7 +1029,7 @@ export default function HubOperationsConsole({ mode }: { mode: 'admin' | 'manage
                         required
                         className="w-full border-2 border-cyan-500 rounded-xl px-4 py-3 text-xl font-mono font-black text-gray-900 focus:ring-4 focus:ring-cyan-500/20 outline-none"
                       />
-                      <span className="absolute end-4 top-3 text-sm font-bold text-gray-400">
+                      <span className="absolute end-4 top-3 text-sm font-bold text-gray-500">
                         °Celsius
                       </span>
                     </div>
@@ -1076,7 +1102,7 @@ export default function HubOperationsConsole({ mode }: { mode: 'admin' | 'manage
             {/* Search & Status Filters */}
             <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
               <div className="relative flex-1 w-full md:max-w-md">
-                <span className="absolute start-3.5 top-2.5 text-gray-400">🔍</span>
+                <span className="absolute start-3.5 top-2.5 text-gray-500">🔍</span>
                 <input
                   type="text"
                   placeholder="Filter by batch #, product, or barcode..."
@@ -1473,7 +1499,7 @@ export default function HubOperationsConsole({ mode }: { mode: 'admin' | 'manage
               </h3>
               <button
                 onClick={() => setStatusModalOpen(false)}
-                className="text-gray-400 hover:text-gray-600 text-lg leading-none"
+                className="text-gray-500 hover:text-gray-600 text-lg leading-none"
               >
                 ✕
               </button>
@@ -1490,7 +1516,7 @@ export default function HubOperationsConsole({ mode }: { mode: 'admin' | 'manage
                 </label>
                 <select
                   value={newStatusChoice}
-                  onChange={(e) => setNewStatusChoice(e.target.value as any)}
+                  onChange={(e) => setNewStatusChoice(e.target.value as 'available' | 'damaged')}
                   className="w-full border border-gray-300 rounded-xl px-3 py-2 text-sm font-semibold focus:ring-2 focus:ring-cyan-500 outline-none"
                 >
                   <option value="available">🟢 Available (Release to Sellable Inventory)</option>

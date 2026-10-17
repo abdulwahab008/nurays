@@ -14,7 +14,9 @@ export const getAvailableDeliveries = async (req: Request, res: Response) => {
 
 export const getMyDeliveries = async (req: Request, res: Response) => {
   if (!req.user) throw new AppError('Authentication required', 401, 'AUTH_REQUIRED');
-  const deliveries = await riderService.getMyDeliveries(req.user.userId);
+  // ?history=<n>: how many finished jobs to include (0 for none); anything that is not a whole number is ignored.
+  const asked = typeof req.query.history === 'string' && /^\d{1,9}$/.test(req.query.history) ? Number(req.query.history) : undefined;
+  const deliveries = await riderService.getMyDeliveries(req.user.userId, asked);
   res.status(200).json({ success: true, data: deliveries });
 };
 

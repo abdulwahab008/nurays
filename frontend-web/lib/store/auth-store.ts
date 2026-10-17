@@ -2,6 +2,8 @@ import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import { useCartStore } from './cart-store';
 import { apiClient } from '../api-client';
+import { dropPushSubscription } from '../push';
+import { tokenStore } from '../token-store';
 
 export interface User {
   id: string;
@@ -10,6 +12,8 @@ export interface User {
   user_type?: string;
   userType?: string;
   emailVerified?: boolean;
+  phoneVerified?: boolean;
+  status?: string;
   /** Staff accounts only: super_admin, admin or support, and what that role may do. */
   staffRole?: 'super_admin' | 'admin' | 'support' | null;
   permissions?: string[];
@@ -53,7 +57,7 @@ export const useAuthStore = create<AuthState>()(
               }
             : undefined,
         };
-        const hasToken = typeof window !== 'undefined' && !!(sessionStorage.getItem('access_token') || localStorage.getItem('access_token'));
+        const hasToken = !!apiClient.getAccessToken();
         set({ user: normalizedUser, isAuthenticated: hasToken });
       },
       logout: () => {
@@ -62,10 +66,7 @@ export const useAuthStore = create<AuthState>()(
         // server-side session revocation.
         // The token is read now, before it is cleared below: the request's auth
         // header is attached asynchronously, so it would otherwise go out empty.
-        const token =
-          typeof window !== 'undefined'
-            ? sessionStorage.getItem('access_token') || localStorage.getItem('access_token')
-            : null;
+        const token = apiClient.getAccessToken();
         apiClient
           .post('/auth/logout', {}, token ? { headers: { Authorization: `Bearer ${token}` } } : undefined)
           .catch(() => {
@@ -76,13 +77,9 @@ export const useAuthStore = create<AuthState>()(
         // their own server cart) the previous user's items.
         useCartStore.getState().clearCart();
         useCartStore.getState().setAppliedPromoCode(null);
-        if (typeof window !== 'undefined') {
-          sessionStorage.removeItem('access_token');
-          sessionStorage.removeItem('refresh_token');
-          sessionStorage.removeItem('tab_isolated');
-          localStorage.removeItem('access_token');
-          localStorage.removeItem('refresh_token');
-        }
+        // Nor should the next person on this browser inherit the previous account's push notifications.
+        void dropPushSubscription();
+        tokenStore().clear();
         set({ user: null, isAuthenticated: false });
       },
     }),
@@ -97,7 +94,7 @@ export const useAuthStore = create<AuthState>()(
         },
         setItem: (name: string, value: string) => {
           if (typeof window === 'undefined') return;
-          if (sessionStorage.getItem('tab_isolated') === 'true') {
+          if (tokenStore().tabIsolated()) {
             sessionStorage.setItem(name, value);
           } else {
             localStorage.setItem(name, value);
@@ -112,13 +109,10 @@ export const useAuthStore = create<AuthState>()(
       // On rehydrate, ensure tokens are valid and set isAuthenticated
       onRehydrateStorage: () => (state) => {
         if (state && typeof window !== 'undefined') {
-          const hasToken = !!(sessionStorage.getItem('access_token') || localStorage.getItem('access_token'));
+          const hasToken = !!apiClient.getAccessToken();
           // If we have a token but no user, clear the token (invalid state)
           if (hasToken && !state.user) {
-            sessionStorage.removeItem('access_token');
-            sessionStorage.removeItem('refresh_token');
-            localStorage.removeItem('access_token');
-            localStorage.removeItem('refresh_token');
+            tokenStore().clear();
             state.isAuthenticated = false;
           } else {
             // Update isAuthenticated based on user and token

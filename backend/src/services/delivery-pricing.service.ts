@@ -1,5 +1,6 @@
 import prisma from '../config/database';
 import { communityPairKey, type PlatformDeliveryPricing } from '../utils/deliveryFee';
+import { finiteOrNull } from '../utils/numbers';
 
 /**
  * Nuray's delivery prices (see platformDeliveryFee in utils/deliveryFee.ts): each community's
@@ -20,7 +21,7 @@ export function invalidateDeliveryPricing() {
   cached = null;
 }
 
-const num = (v: unknown, fallback: number) => (v != null && Number.isFinite(Number(v)) ? Number(v) : fallback);
+const num = (v: unknown, fallback: number) => finiteOrNull(v) ?? fallback;
 
 export async function getPlatformDeliveryPricing(): Promise<PlatformDeliveryPricing> {
   if (cached && Date.now() - cached.at < 60_000) return cached.value;
