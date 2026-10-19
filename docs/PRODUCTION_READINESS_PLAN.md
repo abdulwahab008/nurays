@@ -303,7 +303,7 @@ Status now: what the code shows today. Needs: code = can be done now; decision =
 | SEC-R5 | — | Done | code | P2 | XS | 0.5 (report) | Open job pool pin precision: already fixed by PRIV-2/AUTHZ-4; the Deliverable 4 row is stale |
 | SEC-R7 | — | Open | decision | P2 | M | 3 (#10) | Audit log: redact free text in requestData and add a retention purge that works with the append-only trigger |
 | NEW-priv-2 | — | Done | code | P2 | XS | 2 | Rider notifications keep the customer's street address after the job ends |
-| PERF-1 | Partly fixed | Partly open | code | P2 | M | 3 (#20) | Bound the seller balance computation (dashboard, payout request, payout completion) |
+| PERF-1 | Partly fixed | Partly open | code | P2 | M | 3 (#20) | Bound the seller balance computation (dashboard, payout request, payout completion). One summed row per order is in (about 4x faster); bounding to unsettled orders needs an approved running-total or settlement table |
 | PERF-6 | Partly fixed | Done | code | P2 | S | 2 | Trim the product card to the fields the web app reads. Declined after measuring: 20 cards are 2.9 KB on the wire, and the most a trim could save is about 0.5 KB |
 | CAP-4 | Partly fixed | Done | code | P2 | XS | 2 | Product card size (same as PERF-6): declined after measuring |
 | PERF-5 | Partly fixed | Done | code | P1 | M | 2 | A job is offered to the best rider first; pool events reach only riders on duty and the dashboard reloads only the list that changed |
