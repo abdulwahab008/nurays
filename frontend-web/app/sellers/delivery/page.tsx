@@ -19,6 +19,7 @@ import {
   X,
   Navigation,
 } from 'lucide-react';
+import { useShallow } from 'zustand/react/shallow';
 
 interface CommunityTerms {
   fee: number;
@@ -58,7 +59,7 @@ const toDraft = (row: CommunityRow): CommunityDraft => ({
 
 export default function SellerDeliveryPage() {
   const router = useRouter();
-  const { isAuthenticated, user } = useAuthStore();
+  const { isAuthenticated, user } = useAuthStore(useShallow((s) => ({ isAuthenticated: s.isAuthenticated, user: s.user })));
   const { showToast } = useToast();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);

@@ -10,6 +10,7 @@ import { useDialogs } from '@/components/ui/Dialogs';
 import { useAuthStore } from '@/lib/store/auth-store';
 import { apiClient } from '@/lib/api-client';
 import { formatPrice, formatDate } from '@/lib/utils';
+import { useShallow } from 'zustand/react/shallow';
 
 interface Payout {
   id: string;
@@ -28,7 +29,7 @@ const FILTERS = ['pending', 'completed', 'failed', 'all'] as const;
 
 export default function AdminPayoutsPage() {
   const router = useRouter();
-  const { isAuthenticated, user } = useAuthStore();
+  const { isAuthenticated, user } = useAuthStore(useShallow((s) => ({ isAuthenticated: s.isAuthenticated, user: s.user })));
   const { showToast } = useToast();
   const { ask: askDialog } = useDialogs();
   const [loading, setLoading] = useState(true);

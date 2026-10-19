@@ -12,6 +12,7 @@ import { authService } from '@/lib/services/auth.service';
 import { useAuthStore } from '@/lib/store/auth-store';
 import { apiClient } from '@/lib/api-client';
 import { useToast } from '@/components/ui/toast';
+import { useShallow } from 'zustand/react/shallow';
 
 interface DemoAccount {
   id: string;
@@ -115,7 +116,7 @@ export function DemoPasswordHint() {
 /** The quick-login cards. `onAutofill` puts an account's e-mail and password into the sign-in form. */
 export function DemoLoginPanel({ onAutofill, onError, busy }: { onAutofill: (email: string, password: string) => void; onError: (message: string) => void; busy: boolean }) {
   const router = useRouter();
-  const { setUser } = useAuthStore();
+  const { setUser } = useAuthStore(useShallow((s) => ({ setUser: s.setUser })));
   const { showToast } = useToast();
   const [quickLoadingId, setQuickLoadingId] = useState<string | null>(null);
 

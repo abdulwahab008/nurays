@@ -4,6 +4,7 @@ import { useCallback, useEffect, useReducer } from 'react';
 import type { Socket } from 'socket.io-client';
 import { useAuthStore } from '../store/auth-store';
 import { acquireSocket, currentSocket, onSocketChange, releaseSocket } from '../realtime/socket';
+import { useShallow } from 'zustand/react/shallow';
 
 /** `order:status:update`: an order's status changed. The payload carries no account ids (see the server's realtime-order service). */
 export interface OrderStatusEvent {
@@ -30,7 +31,7 @@ export interface DeliveryTrackingEvent {
  * the live connection instead of staying attached to a closed one.
  */
 export function useSocket() {
-  const { isAuthenticated } = useAuthStore();
+  const { isAuthenticated } = useAuthStore(useShallow((s) => ({ isAuthenticated: s.isAuthenticated })));
   const [, rerender] = useReducer((n: number) => n + 1, 0);
 
   useEffect(() => onSocketChange(rerender), []);

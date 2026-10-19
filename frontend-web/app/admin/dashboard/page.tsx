@@ -11,6 +11,7 @@ import { useAuthStore } from '@/lib/store/auth-store';
 import { apiClient } from '@/lib/api-client';
 import { formatPrice } from '@/lib/utils';
 import { RejectReasonModal } from '@/components/admin/RejectReasonModal';
+import { useShallow } from 'zustand/react/shallow';
 
 interface PendingSeller {
   id: string;
@@ -46,7 +47,7 @@ interface PlatformStats {
 
 export default function AdminDashboardPage() {
   const router = useRouter();
-  const { isAuthenticated, user } = useAuthStore();
+  const { isAuthenticated, user } = useAuthStore(useShallow((s) => ({ isAuthenticated: s.isAuthenticated, user: s.user })));
   const { showToast } = useToast();
   const [loading, setLoading] = useState(true);
   const [pendingSellers, setPendingSellers] = useState<PendingSeller[]>([]);

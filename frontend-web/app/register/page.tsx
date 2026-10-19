@@ -14,11 +14,12 @@ import { useT } from '@/lib/i18n';
 import { useRequestErrorMessage } from '@/components/ui/LoadError';
 import { authMessages } from '@/lib/i18n/messages/auth';
 import { weakPasswordMessage } from '@/lib/password-errors';
+import { useShallow } from 'zustand/react/shallow';
 
 function RegisterForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { setUser } = useAuthStore();
+  const { setUser } = useAuthStore(useShallow((s) => ({ setUser: s.setUser })));
   const { showToast } = useToast();
   const t = useT(authMessages);
   const requestError = useRequestErrorMessage();

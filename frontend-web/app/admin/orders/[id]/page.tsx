@@ -12,6 +12,7 @@ import { useAuthStore } from '@/lib/store/auth-store';
 import { apiClient } from '@/lib/api-client';
 import { formatPrice, formatDate } from '@/lib/utils';
 import { ExternalLink } from '@/components/ExternalLink';
+import { useShallow } from 'zustand/react/shallow';
 
 interface OrderDetail {
   id: string;
@@ -68,7 +69,7 @@ export default function AdminOrderDetailPage() {
   const router = useRouter();
   const params = useParams();
   const id = params?.id as string;
-  const { isAuthenticated, user } = useAuthStore();
+  const { isAuthenticated, user } = useAuthStore(useShallow((s) => ({ isAuthenticated: s.isAuthenticated, user: s.user })));
   const { showToast } = useToast();
   const { confirm: confirmDialog, ask: askDialog } = useDialogs();
   const [loading, setLoading] = useState(true);

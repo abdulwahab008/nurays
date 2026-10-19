@@ -11,6 +11,7 @@ import { useToast } from '@/components/ui/toast';
 import { useAuthStore } from '@/lib/store/auth-store';
 import { apiClient } from '@/lib/api-client';
 import { formatPrice } from '@/lib/utils';
+import { useShallow } from 'zustand/react/shallow';
 
 type PeriodType = '7d' | '30d' | '90d' | '1y';
 
@@ -51,7 +52,7 @@ interface AnalyticsData {
 
 export default function SellerAnalyticsPage() {
   const router = useRouter();
-  const { isAuthenticated, user } = useAuthStore();
+  const { isAuthenticated, user } = useAuthStore(useShallow((s) => ({ isAuthenticated: s.isAuthenticated, user: s.user })));
   const { showToast } = useToast();
 
   const [loading, setLoading] = useState(true);

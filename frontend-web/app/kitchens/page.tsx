@@ -28,6 +28,7 @@ import { CommunitySelector } from '@/components/community/CommunitySelector';
 import { useT } from '@/lib/i18n';
 import { browseMessages, businessTypeKey, type BrowseT } from '@/lib/i18n/messages/browse';
 import { kitchenMessages, kitchenKey, type KitchenT } from '@/lib/i18n/messages/kitchen';
+import { useShallow } from 'zustand/react/shallow';
 
 /** A kitchen card, built only from what the API returns — no made-up defaults. */
 interface Kitchen {
@@ -172,8 +173,8 @@ function toKitchen(s: PublicSeller): Kitchen {
 }
 
 export default function KitchensDirectoryPage() {
-  const { isAuthenticated } = useAuthStore();
-  const { items: cartItems } = useCartStore();
+  const { isAuthenticated } = useAuthStore(useShallow((s) => ({ isAuthenticated: s.isAuthenticated })));
+  const { items: cartItems } = useCartStore(useShallow((s) => ({ items: s.items })));
   const tb = useT(browseMessages);
   const tk = useT(kitchenMessages);
   const [search, setSearch] = useState('');

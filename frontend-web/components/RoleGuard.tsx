@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useAuthStore } from '@/lib/store/auth-store';
 import { useAuthInit } from '@/lib/hooks/use-auth-init';
 import { loginUrlHere } from '@/lib/auth-redirect';
+import { useShallow } from 'zustand/react/shallow';
 
 interface RoleGuardProps {
   allowedRoles: Array<'customer' | 'seller' | 'admin' | 'rider' | 'hub_manager'>;
@@ -32,7 +33,7 @@ export function RoleGuard({
 }: RoleGuardProps) {
   const router = useRouter();
   const { initialized } = useAuthInit();
-  const { isAuthenticated, user } = useAuthStore();
+  const { isAuthenticated, user } = useAuthStore(useShallow((s) => ({ isAuthenticated: s.isAuthenticated, user: s.user })));
 
   // Worked out from the current state on every render, so protected UI can never show on a stale decision.
   const role = user?.userType ?? user?.user_type;

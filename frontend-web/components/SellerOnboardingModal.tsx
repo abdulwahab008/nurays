@@ -45,11 +45,12 @@ interface FormData {
 import LocationMap from '@/components/ui/LocationMap';
 import { CITIES } from '@/lib/cities';
 import { reverseGeocode } from '@/lib/geocode';
+import { useShallow } from 'zustand/react/shallow';
 
 export function SellerOnboardingModal({ isOpen, onClose, onComplete }: SellerOnboardingModalProps) {
   const { showToast } = useToast();
   const t = useT(joinMessages);
-  const { user } = useAuthStore();
+  const { user } = useAuthStore(useShallow((s) => ({ user: s.user })));
   const [step, setStep] = useState(1);
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});

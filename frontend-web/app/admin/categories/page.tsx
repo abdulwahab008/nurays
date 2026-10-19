@@ -10,6 +10,7 @@ import { useToast } from '@/components/ui/toast';
 import { useDialogs } from '@/components/ui/Dialogs';
 import { useAuthStore } from '@/lib/store/auth-store';
 import { apiClient } from '@/lib/api-client';
+import { useShallow } from 'zustand/react/shallow';
 
 
 // Icons
@@ -424,7 +425,7 @@ function CategoryTreeItem({
 
 export default function AdminCategoriesPage() {
   const router = useRouter();
-  const { isAuthenticated, user } = useAuthStore();
+  const { isAuthenticated, user } = useAuthStore(useShallow((s) => ({ isAuthenticated: s.isAuthenticated, user: s.user })));
   const { showToast } = useToast();
   // Why the categories could not be read; shown with a retry instead of an empty list.
   const [loadError, setLoadError] = useState<unknown>(null);

@@ -13,6 +13,7 @@ import { riderService, RiderEarnings, RiderLedgerEntry } from '@/lib/services/ri
 import { formatPrice, formatDateTime } from '@/lib/utils';
 import { useT } from '@/lib/i18n';
 import { riderMessages, riderKeyFor } from '@/lib/i18n/messages/rider';
+import { useShallow } from 'zustand/react/shallow';
 
 /**
  * A rider's money with Nuray: what they've earned, the cash they carry for cash orders, and
@@ -21,7 +22,7 @@ import { riderMessages, riderKeyFor } from '@/lib/i18n/messages/rider';
  */
 export default function RiderEarningsPage() {
   const router = useRouter();
-  const { isAuthenticated, user } = useAuthStore();
+  const { isAuthenticated, user } = useAuthStore(useShallow((s) => ({ isAuthenticated: s.isAuthenticated, user: s.user })));
   const { showToast } = useToast();
   const t = useT(riderMessages);
   const [data, setData] = useState<RiderEarnings | null>(null);

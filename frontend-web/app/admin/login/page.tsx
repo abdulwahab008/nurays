@@ -9,11 +9,12 @@ import { useToast } from '@/components/ui/toast';
 import { authService } from '@/lib/services/auth.service';
 import { useAuthStore } from '@/lib/store/auth-store';
 import { apiClient } from '@/lib/api-client';
+import { useShallow } from 'zustand/react/shallow';
 
 export default function AdminLoginPage() {
   const router = useRouter();
   const { showToast } = useToast();
-  const { setUser } = useAuthStore();
+  const { setUser } = useAuthStore(useShallow((s) => ({ setUser: s.setUser })));
   const [loading, setLoading] = useState(false);
   const [formData, setFormData] = useState({
     email: '',

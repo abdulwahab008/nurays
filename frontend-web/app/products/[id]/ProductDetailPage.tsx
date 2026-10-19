@@ -23,6 +23,7 @@ import { Heart } from 'lucide-react';
 import { useT } from '@/lib/i18n';
 import { commonMessages } from '@/lib/i18n/messages/common';
 import { browseMessages, availabilityKey, type BrowseT } from '@/lib/i18n/messages/browse';
+import { useShallow } from 'zustand/react/shallow';
 
 interface CatalogPromotion {
   id: string;
@@ -106,11 +107,11 @@ interface ProductDetail {
 export default function ProductDetailPage() {
   const params = useParams();
   const router = useRouter();
-  const { isAuthenticated } = useAuthStore();
+  const { isAuthenticated } = useAuthStore(useShallow((s) => ({ isAuthenticated: s.isAuthenticated })));
   const { showToast } = useToast();
   const t = useT(browseMessages);
   const tc = useT(commonMessages);
-  const { addItem } = useCartStore();
+  const { addItem } = useCartStore(useShallow((s) => ({ addItem: s.addItem })));
   const [product, setProduct] = useState<ProductDetail | null>(null);
   const [catalogPromotions, setCatalogPromotions] = useState<CatalogPromotion[]>([]);
   const [loading, setLoading] = useState(true);

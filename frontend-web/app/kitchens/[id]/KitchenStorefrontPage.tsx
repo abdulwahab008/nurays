@@ -36,6 +36,7 @@ import {
   Bell,
   MessageSquare,
 } from 'lucide-react';
+import { useShallow } from 'zustand/react/shallow';
 
 interface KitchenDish {
   id: string;
@@ -237,7 +238,7 @@ function toKitchenProfile(s: PublicSeller, tb: BrowseT, tk: KitchenT): KitchenPr
 export default function KitchenStorefrontPage() {
   const params = useParams();
   const { showToast } = useToast();
-  const { isAuthenticated } = useAuthStore();
+  const { isAuthenticated } = useAuthStore(useShallow((s) => ({ isAuthenticated: s.isAuthenticated })));
   const tb = useT(browseMessages);
   const tk = useT(kitchenMessages);
   // The API's seller; the page's text is built from it in the current language.

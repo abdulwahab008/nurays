@@ -15,6 +15,7 @@ import { BrandLockup } from '@/components/ui/Mark';
 import { useT } from '@/lib/i18n';
 import { useRequestErrorMessage } from '@/components/ui/LoadError';
 import { authMessages } from '@/lib/i18n/messages/auth';
+import { useShallow } from 'zustand/react/shallow';
 
 // The one-click demo accounts live in their own file, which only a build that switches them on loads (next.config.ts sets
 // NEXT_PUBLIC_DEMO_LOGIN): elsewhere the condition is a constant false, the require is dropped, and no demo e-mail address or
@@ -27,7 +28,7 @@ const SHOW_DEMO_LOGIN = demo !== null;
 
 export default function LoginPage() {
   const router = useRouter();
-  const { setUser } = useAuthStore();
+  const { setUser } = useAuthStore(useShallow((s) => ({ setUser: s.setUser })));
   const { showToast } = useToast();
   const t = useT(authMessages);
   const requestError = useRequestErrorMessage();

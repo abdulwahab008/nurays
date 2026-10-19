@@ -9,6 +9,7 @@ import { LoadError } from '@/components/ui/LoadError';
 import { useAuthStore } from '@/lib/store/auth-store';
 import { apiClient } from '@/lib/api-client';
 import { formatDateTime } from '@/lib/utils';
+import { useShallow } from 'zustand/react/shallow';
 
 interface TicketSummary {
   id: string;
@@ -52,7 +53,7 @@ const statusColor = (status: string) => {
 
 export default function AdminSupportPage() {
   const router = useRouter();
-  const { isAuthenticated, user } = useAuthStore();
+  const { isAuthenticated, user } = useAuthStore(useShallow((s) => ({ isAuthenticated: s.isAuthenticated, user: s.user })));
   const { showToast } = useToast();
   const [loading, setLoading] = useState(true);
   // Why the tickets could not be read; shown instead of "No tickets here", which would be untrue.

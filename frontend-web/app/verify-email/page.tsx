@@ -10,11 +10,12 @@ import { authService } from '@/lib/services/auth.service';
 import { useAuthStore } from '@/lib/store/auth-store';
 import { useT } from '@/lib/i18n';
 import { authMessages } from '@/lib/i18n/messages/auth';
+import { useShallow } from 'zustand/react/shallow';
 
 function VerifyEmailContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { isAuthenticated, user, setUser } = useAuthStore();
+  const { isAuthenticated, user, setUser } = useAuthStore(useShallow((s) => ({ isAuthenticated: s.isAuthenticated, user: s.user, setUser: s.setUser })));
   const { showToast } = useToast();
   const t = useT(authMessages);
   const [status, setStatus] = useState<'verifying' | 'success' | 'error' | 'expired'>('verifying');

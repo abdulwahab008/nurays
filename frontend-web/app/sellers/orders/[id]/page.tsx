@@ -17,6 +17,7 @@ import { useT } from '@/lib/i18n';
 import { commonMessages } from '@/lib/i18n/messages/common';
 import { kitchenOrderMessages, kitchenStatusLabel, paymentMethodLabel, paymentStatusLabel } from '@/lib/i18n/messages/kitchen-orders';
 import { ExternalLink } from '@/components/ExternalLink';
+import { useShallow } from 'zustand/react/shallow';
 
 interface SellerOrderDetail {
   id: string;
@@ -57,7 +58,7 @@ export default function SellerOrderDetailPage() {
   const params = useParams();
   const router = useRouter();
   const orderId = params?.id as string;
-  const { isAuthenticated, user } = useAuthStore();
+  const { isAuthenticated, user } = useAuthStore(useShallow((s) => ({ isAuthenticated: s.isAuthenticated, user: s.user })));
   const { showToast } = useToast();
   const t = useT(kitchenOrderMessages);
   const tc = useT(commonMessages);

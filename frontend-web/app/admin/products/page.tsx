@@ -11,6 +11,7 @@ import { useToast } from '@/components/ui/toast';
 import { useAuthStore } from '@/lib/store/auth-store';
 import { apiClient } from '@/lib/api-client';
 import { formatPrice } from '@/lib/utils';
+import { useShallow } from 'zustand/react/shallow';
 
 interface Product {
   id: string;
@@ -26,7 +27,7 @@ interface Product {
 
 export default function AdminProductsPage() {
   const router = useRouter();
-  const { isAuthenticated, user } = useAuthStore();
+  const { isAuthenticated, user } = useAuthStore(useShallow((s) => ({ isAuthenticated: s.isAuthenticated, user: s.user })));
   const { showToast } = useToast();
   const [loading, setLoading] = useState(true);
   const [products, setProducts] = useState<Product[]>([]);

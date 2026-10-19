@@ -7,6 +7,7 @@ import { LoadError } from '@/components/ui/LoadError';
 import { apiClient } from '@/lib/api-client';
 import { useAuthStore } from '@/lib/store/auth-store';
 import { useLiveRefresh } from '@/lib/hooks/use-live-refresh';
+import { useShallow } from 'zustand/react/shallow';
 
 interface Queue {
   key: string;
@@ -28,7 +29,7 @@ function waiting(since: string | null) {
 
 /** Everything that needs a staff decision, in one place: what this role can act on, with how long the oldest has waited. */
 export default function AdminApprovalsPage() {
-  const { user } = useAuthStore();
+  const { user } = useAuthStore(useShallow((s) => ({ user: s.user })));
   const [queues, setQueues] = useState<Queue[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);

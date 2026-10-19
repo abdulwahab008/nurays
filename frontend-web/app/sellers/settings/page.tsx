@@ -15,6 +15,7 @@ import { apiClient } from '@/lib/api-client';
 import { DatePicker } from '@/components/ui/DatePicker';
 import { bankAccountIsWrong, walletNumberIsWrong } from '@/lib/payout-account';
 import { sendAskingForPassword } from '@/lib/send-asking-for-password';
+import { useShallow } from 'zustand/react/shallow';
 
 const MEAL_CATEGORIES = [
   { value: 'breakfast', label: 'Breakfast' },
@@ -48,7 +49,7 @@ const AVAILABILITY_OVERRIDES = [
 
 export default function SellerSettingsPage() {
   const router = useRouter();
-  const { isAuthenticated, user } = useAuthStore();
+  const { isAuthenticated, user } = useAuthStore(useShallow((s) => ({ isAuthenticated: s.isAuthenticated, user: s.user })));
   const { showToast } = useToast();
   const { ask: askDialog } = useDialogs();
   const [loading, setLoading] = useState(false);

@@ -13,6 +13,7 @@ import { apiClient } from '@/lib/api-client';
 import DocumentList from '@/components/admin/DocumentList';
 import { formatDate } from '@/lib/utils';
 import { RejectReasonModal } from '@/components/admin/RejectReasonModal';
+import { useShallow } from 'zustand/react/shallow';
 
 interface SellerDetail {
   id: string;
@@ -47,7 +48,7 @@ export default function AdminSellerDetailPage() {
   const router = useRouter();
   const params = useParams();
   const id = params?.id as string;
-  const { isAuthenticated, user } = useAuthStore();
+  const { isAuthenticated, user } = useAuthStore(useShallow((s) => ({ isAuthenticated: s.isAuthenticated, user: s.user })));
   const { showToast } = useToast();
   const { confirm: confirmDialog } = useDialogs();
   const [loading, setLoading] = useState(true);

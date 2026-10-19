@@ -24,6 +24,7 @@ import {
   ArrowRight,
   CheckCheck,
 } from 'lucide-react';
+import { useShallow } from 'zustand/react/shallow';
 
 interface Notification {
   id: string;
@@ -37,7 +38,7 @@ interface Notification {
 
 export default function NotificationsPage() {
   const router = useRouter();
-  const { isAuthenticated, user } = useAuthStore();
+  const { isAuthenticated, user } = useAuthStore(useShallow((s) => ({ isAuthenticated: s.isAuthenticated, user: s.user })));
   const { showToast } = useToast();
   const t = useT(accountMessages);
   const tc = useT(commonMessages);

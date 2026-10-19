@@ -10,6 +10,7 @@ import { useToast } from '@/components/ui/toast';
 import { useAuthStore } from '@/lib/store/auth-store';
 import { apiClient } from '@/lib/api-client';
 import { formatPrice, formatDate } from '@/lib/utils';
+import { useShallow } from 'zustand/react/shallow';
 
 interface AdminOrder {
   id: string;
@@ -44,7 +45,7 @@ function AdminOrdersContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [paymentFilter, setPaymentFilter] = useState<string>(searchParams.get('paymentStatus') ?? '');
-  const { isAuthenticated, user } = useAuthStore();
+  const { isAuthenticated, user } = useAuthStore(useShallow((s) => ({ isAuthenticated: s.isAuthenticated, user: s.user })));
   const { showToast } = useToast();
   const [loading, setLoading] = useState(true);
   // Why the orders could not be read; shown instead of "No orders found", which would be untrue.

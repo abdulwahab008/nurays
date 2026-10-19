@@ -42,6 +42,7 @@ import { commonMessages } from '@/lib/i18n/messages/common';
 import { checkoutMessages, richText } from '@/lib/i18n/messages/checkout';
 import { ExternalLink } from '@/components/ExternalLink';
 import { useDeliveryEstimate } from '@/lib/hooks/use-delivery-estimate';
+import { useShallow } from 'zustand/react/shallow';
 
 type CopyField = 'iban' | 'jazzcash' | 'easypaisa';
 
@@ -56,7 +57,7 @@ export default function CheckoutPage() {
   const router = useRouter();
   const t = useT(checkoutMessages);
   const tc = useT(commonMessages);
-  const { isAuthenticated } = useAuthStore();
+  const { isAuthenticated } = useAuthStore(useShallow((s) => ({ isAuthenticated: s.isAuthenticated })));
   const { showToast } = useToast();
 
   const [cart, setCart] = useState<CartResponse | null>(null);

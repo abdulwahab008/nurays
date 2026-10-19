@@ -17,6 +17,7 @@ import { SellerOnboardingModal } from '@/components/SellerOnboardingModal';
 import { useT } from '@/lib/i18n';
 import { commonMessages } from '@/lib/i18n/messages/common';
 import { kitchenOrderMessages, kitchenStatusLabel } from '@/lib/i18n/messages/kitchen-orders';
+import { useShallow } from 'zustand/react/shallow';
 
 // Professional SVG Icons
 const Icons = {
@@ -145,7 +146,7 @@ export default function SellerDashboardPage() {
 function SellerDashboardContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { isAuthenticated, user } = useAuthStore();
+  const { isAuthenticated, user } = useAuthStore(useShallow((s) => ({ isAuthenticated: s.isAuthenticated, user: s.user })));
   const { showToast } = useToast();
   const { confirm: confirmDialog } = useDialogs();
   const t = useT(kitchenOrderMessages);
