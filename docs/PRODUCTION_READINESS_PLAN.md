@@ -311,9 +311,9 @@ Status now: what the code shows today. Needs: code = can be done now; decision =
 | FE-14 | Partly fixed | Done | code | P2 | S | 2 | Products page duplicate fetch: the ?search cause only happens in development (the report now says so). Done: the real duplicate, for a signed-in buyer, is gone (the first list waits for the saved address, for up to two seconds) |
 | INTEG-2 | Partly fixed | Done | code | P1 | S | 2 | Per-address bucket on the Next geocode routes |
 | INTEG-6 | Partly fixed | Done | code | P2 | S | 2 | Clean up partial multi-size image writes. Done: a failed upload removes the sizes it wrote, a delete tries every size, a failed multi-photo request removes the earlier photos |
-| FE-11 | Open | Open | decision | P1 | S | 3 (#7) | Remove the plain-HTTP ip-api.com geolocation fallback |
-| OPS-13 | Open | Open | decision | P1 | XS | 3 (#7) | IP geolocation with no configuration or off switch (closed by FE-11) |
-| INTEG-7 | Open | Open | decision | P1 | XS | 3 (#7) | Uncached, unauthenticated IP proxy to ip-api.com (closed by FE-11) |
+| FE-11 | Open | Fixed | decision | P1 | S | 3 (#7) | Remove the plain-HTTP ip-api.com geolocation fallback |
+| OPS-13 | Open | Fixed | decision | P1 | XS | 3 (#7) | IP geolocation with no configuration or off switch (closed by FE-11) |
+| INTEG-7 | Open | Fixed | decision | P1 | XS | 3 (#7) | Uncached, unauthenticated IP proxy to ip-api.com (closed by FE-11) |
 | OPS-10 | Partly fixed | Done | code | P2 | M | 2 | Pin GitHub Actions to commit SHAs and add a lint gate. Done: every action is pinned (the release in a comment) and `.github/scripts/check-pinned-actions.sh` fails CI on one that is not |
 | D10-PRISMA7 | — | Report wrong | decision | P2 | S | 3 (#19) | Prisma CLI advisories: Prisma 7 does not fix them; remaining npm audit findings |
 | D2-W4 | — | Open | decision | P2 | M | 3 (#17) | In-process scheduler and queue worker: add run flags now, a worker process later |
@@ -329,7 +329,7 @@ Status now: what the code shows today. Needs: code = can be done now; decision =
 | BE-11 | Open | Done | code | P2 | M | 5 | Split order.service.ts into placement, views, manual payments and chat. Done: five files behind the same 59-line door, and the pricing arithmetic of `createOrder` is `utils/orderPricing.ts` |
 | BE-12 | Open | Partly done | code | P2 | M | 5 | Type req.seller, drop the req casts, cut down `any`. Done: `req.seller` typed, `currentUserId(req)`, the money helpers, ledger entries and twelve `where` clauses typed, lint cap 43. Left: 43 `any` (product service seller handling, gateways, error handler, a few others) |
 | BE-13 | Open | Done | code | P2 | M | 2 | Move query/formatting out of controllers; one seller lookup. Done: no controller reads the database but the health probe |
-| BE-14 | Open | Open | decision | P2 | XS | 3 (#14) | Remove (or quarantine) the unreferenced legacy scripts |
+| BE-14 | Open | Fixed | decision | P2 | XS | 3 (#14) | Remove (or quarantine) the unreferenced legacy scripts |
 | BE-15 | Open | Partly done | code | P2 | XS | 2 | Unify maskPhone, numeric coercion and the cash-at-door rule. Done: `maskPhone`, `isCashAtDoor`/`cashAtDoor`, `finiteOrNull`. Left: the numeric helpers whose contracts differ on purpose |
 | DELIV-11 | Partly fixed | Done | code | P1 | S | 2 | Mocked unit test for the delivery state machine |
 | NEW-seller-enums | — | Done | code | P2 | XS | 2 | Enforce the seller profile enums the validator already declares. Done: business type, delivery modes, availability override, `HH:MM` cut-off (also never null where no column can hold it); meal categories stay free text until decision 15 |
@@ -343,8 +343,8 @@ Status now: what the code shows today. Needs: code = can be done now; decision =
 | FE-8 | Open | Open | code | P2 | L | 5 | One seller product form; split the largest single-component pages |
 | FE-9 | Open | Done | code | P2 | M | 2 | One geocode/city module for reverse geocoding and city matching. Done: `lib/cities.ts` (list, Urdu names, matching) and `lib/geocode.ts` (the request and the reading of its answer), used by the address page and the kitchen sign-up |
 | FE-10 | Open | Partly done | decision | P2 | L | 3 (#13) | Server rendering and per-page metadata for the public marketplace pages. Done: titles, link previews, `robots.txt` and a sitemap (the first step of decision 13). Left: server-rendered detail pages |
-| FE-12 | Open | Open | code | P2 | S | 5 | Zustand selectors where they actually reduce re-renders (cart and community) |
-| FE-18 | Open | Open | code | P2 | XS | 5 | One button component: retire NurayButton |
+| FE-12 | Open | Fixed | code | P2 | S | 5 | Zustand selectors where they actually reduce re-renders (cart and community) |
+| FE-18 | Open | Fixed | code | P2 | XS | 5 | One button component: retire NurayButton |
 | FE-20 | Open | Open | decision | P2 | S | 3 (#12) | No silent default community on GPS denial or when no community is near |
 | NEW-web-1 | — | Done | code | P2 | XS | 2 | Address form defaulted the city to Karachi (also when the map named none) and the coordinate boxes called central Rawalpindi Islamabad. Done: `lib/cities.ts`; the city is typed text with suggestions, required on the address form, empty on sign-up |
 | NEW-web-2 | — | Done | code | P2 | XS | 2 | Unit test runner for web lib helpers. Done: `npm test` (Node's own runner), in CI; the city module is the first suite |
