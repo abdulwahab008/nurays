@@ -3,7 +3,7 @@
 import { useState, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
-import { NurayButton as Button } from '@/components/ui/NurayButton';
+import { Button } from '@/components/ui/button';
 import { GoogleSignInButton } from '@/components/GoogleSignInButton';
 import { useToast } from '@/components/ui/toast';
 import { authService } from '@/lib/services/auth.service';
@@ -516,7 +516,7 @@ function RegisterForm() {
             </label>
           </div>
 
-          <Button type="submit" className="w-full" size="lg" disabled={loading}>
+          <Button variant="primary" type="submit" className="w-full" size="lg" disabled={loading}>
             {loading ? (
               <span className="flex items-center gap-2">
                 <span className="animate-spin">⏳</span>

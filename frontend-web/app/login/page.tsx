@@ -5,7 +5,7 @@ import { homeFor } from '@/lib/utils';
 import { landingAfterLogin } from '@/lib/auth-redirect';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { NurayButton as Button } from '@/components/ui/NurayButton';
+import { Button } from '@/components/ui/button';
 import { GoogleSignInButton } from '@/components/GoogleSignInButton';
 import { useToast } from '@/components/ui/toast';
 import { authService } from '@/lib/services/auth.service';
@@ -266,7 +266,7 @@ export default function LoginPage() {
                       style={inputStyle}
                     />
                   </div>
-                  <Button type="submit" className="w-full h-12 text-sm font-bold shadow-md" disabled={loading}>
+                  <Button variant="primary" type="submit" className="w-full h-12 text-sm font-bold shadow-md" disabled={loading}>
                     {loading ? t('sending') : t('sendOtp')}
                   </Button>
                 </form>
@@ -292,7 +292,7 @@ export default function LoginPage() {
                       {t('otpSentTo', { phone: '\u2066' + phoneOrEmail + '\u2069' })}
                     </p>
                   </div>
-                  <Button type="submit" className="w-full h-12 text-sm font-bold shadow-md" disabled={loading}>
+                  <Button variant="primary" type="submit" className="w-full h-12 text-sm font-bold shadow-md" disabled={loading}>
                     {loading ? t('verifying') : t('verifyAndLogin')}
                   </Button>
                   <button
@@ -345,7 +345,7 @@ export default function LoginPage() {
                     </Link>
                   </div>
                 </div>
-                <Button type="submit" className="w-full h-12 text-sm font-bold shadow-md" disabled={loading}>
+                <Button variant="primary" type="submit" className="w-full h-12 text-sm font-bold shadow-md" disabled={loading}>
                   {loading ? t('loggingIn') : t('login')}
                 </Button>
 

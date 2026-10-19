@@ -3,7 +3,7 @@
 import { useEffect, useState, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
-import { NurayButton as Button } from '@/components/ui/NurayButton';
+import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/toast';
 import { apiClient } from '@/lib/api-client';
 import { authService } from '@/lib/services/auth.service';
@@ -125,7 +125,7 @@ function VerifyEmailContent() {
               </Link>
             ) : (
               <Link href="/products">
-                <Button size="lg" className="w-full">
+                <Button variant="primary" size="lg" className="w-full">
                   {t('browsePlates')}
                 </Button>
               </Link>
@@ -156,12 +156,12 @@ function VerifyEmailContent() {
                   {t('resendVerificationEmail')}
                 </Button>
                 <Link href="/products">
-                  <Button className="w-full">{t('continueToNuray')}</Button>
+                  <Button variant="primary" className="w-full">{t('continueToNuray')}</Button>
                 </Link>
               </div>
             ) : (
               <Link href="/login">
-                <Button className="w-full">{t('signIn')}</Button>
+                <Button variant="primary" className="w-full">{t('signIn')}</Button>
               </Link>
             )}
           </>
@@ -185,12 +185,12 @@ function VerifyEmailContent() {
               {t('linkExpiredBody')}
             </p>
             {isAuthenticated ? (
-              <Button onClick={handleResendEmail} className="w-full" size="lg">
+              <Button variant="primary" onClick={handleResendEmail} className="w-full" size="lg">
                 {t('resendVerificationEmail')}
               </Button>
             ) : (
               <Link href="/login">
-                <Button className="w-full" size="lg">
+                <Button variant="primary" className="w-full" size="lg">
                   {t('signInToResend')}
                 </Button>
               </Link>

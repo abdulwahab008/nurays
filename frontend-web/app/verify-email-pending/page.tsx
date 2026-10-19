@@ -3,7 +3,7 @@
 import { useState, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
-import { NurayButton as Button } from '@/components/ui/NurayButton';
+import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/toast';
 import { authService } from '@/lib/services/auth.service';
 import { useAuthStore } from '@/lib/store/auth-store';
@@ -134,7 +134,7 @@ function VerifyEmailPendingContent() {
             </Link>
           ) : (
             <Link href="/products">
-              <Button className="w-full">{t('browsePlates')}</Button>
+              <Button variant="primary" className="w-full">{t('browsePlates')}</Button>
             </Link>
           )}
         </div>

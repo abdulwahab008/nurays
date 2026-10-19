@@ -3,11 +3,14 @@ import { cn } from '@/lib/utils';
 import { asksForBorderColour, asksForTextColour } from '@/lib/class-colours';
 
 export interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
-  variant?: 'default' | 'dark' | 'outline' | 'ghost' | 'destructive';
+  /** `primary` is the gradient brand button of the sign-in pages (the `nuray-btn-primary` class in globals.css). */
+  variant?: 'default' | 'primary' | 'dark' | 'outline' | 'ghost' | 'destructive';
   size?: 'default' | 'sm' | 'lg';
 }
 
 const variantStyles: Record<NonNullable<ButtonProps['variant']>, React.CSSProperties> = {
+  // Coloured by its class instead (a gradient, a shadow and a hover lift), so no inline colours to override it.
+  primary: {},
   default: {
     background: '#FF5500',
     color: '#FFFFFF',
@@ -68,6 +71,7 @@ const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
           'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2',
           'disabled:pointer-events-none disabled:opacity-50',
           sizeClass[size],
+          variant === 'primary' && 'nuray-btn-primary font-bold',
           className,
         )}
         style={finalStyle}
