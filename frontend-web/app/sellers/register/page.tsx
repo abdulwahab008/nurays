@@ -14,6 +14,7 @@ import LocationMap from '@/components/ui/LocationMap';
 import FileUploadField from '@/components/ui/FileUploadField';
 import { useT } from '@/lib/i18n';
 import { joinMessages, type JoinMessageKey } from '@/lib/i18n/messages/join';
+import { useShallow } from 'zustand/react/shallow';
 
 interface CommunityOption {
   id: string;
@@ -49,7 +50,7 @@ const FOOD_CATEGORIES: { value: string; key: JoinMessageKey }[] = [
 
 export default function SellerRegisterPage() {
   const router = useRouter();
-  const { isAuthenticated, user } = useAuthStore();
+  const { isAuthenticated, user } = useAuthStore(useShallow((s) => ({ isAuthenticated: s.isAuthenticated, user: s.user })));
   const { showToast } = useToast();
   const t = useT(joinMessages);
   const [loading, setLoading] = useState(false);

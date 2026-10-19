@@ -8,6 +8,7 @@ import { LoadError } from '@/components/ui/LoadError';
 import { useToast } from '@/components/ui/toast';
 import { useAuthStore } from '@/lib/store/auth-store';
 import { apiClient } from '@/lib/api-client';
+import { useShallow } from 'zustand/react/shallow';
 
 interface CategoryRequest {
   id: string;
@@ -52,7 +53,7 @@ const statusStyles: Record<string, string> = {
 
 export default function CategoryRequestsPage() {
   const router = useRouter();
-  const { isAuthenticated, user } = useAuthStore();
+  const { isAuthenticated, user } = useAuthStore(useShallow((s) => ({ isAuthenticated: s.isAuthenticated, user: s.user })));
   const { showToast } = useToast();
 
   const [requests, setRequests] = useState<CategoryRequest[]>([]);

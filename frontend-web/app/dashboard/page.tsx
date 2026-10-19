@@ -52,6 +52,7 @@ import {
 import { useT } from '@/lib/i18n';
 import { commonMessages, statusKey } from '@/lib/i18n/messages/common';
 import { dashboardMessages } from '@/lib/i18n/messages/dashboard';
+import { useShallow } from 'zustand/react/shallow';
 
 type DashboardT = ReturnType<typeof useT<typeof dashboardMessages.en>>;
 
@@ -164,9 +165,9 @@ function shuffleArray<T>(items: T[]): T[] {
 
 export default function CustomerDashboardPage() {
   const router = useRouter();
-  const { isAuthenticated, user } = useAuthStore();
-  const { selectedCommunity } = useCommunityStore();
-  const { addItem: addCartItem, appliedPromoCode, setAppliedPromoCode } = useCartStore();
+  const { isAuthenticated, user } = useAuthStore(useShallow((s) => ({ isAuthenticated: s.isAuthenticated, user: s.user })));
+  const { selectedCommunity } = useCommunityStore(useShallow((s) => ({ selectedCommunity: s.selectedCommunity })));
+  const { addItem: addCartItem, appliedPromoCode, setAppliedPromoCode } = useCartStore(useShallow((s) => ({ addItem: s.addItem, appliedPromoCode: s.appliedPromoCode, setAppliedPromoCode: s.setAppliedPromoCode })));
   const { showToast } = useToast();
   const t = useT(dashboardMessages);
   const tc = useT(commonMessages);

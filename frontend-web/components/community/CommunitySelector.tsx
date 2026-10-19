@@ -9,6 +9,7 @@ import { useToast } from '@/components/ui/toast';
 import { useT } from '@/lib/i18n';
 import { shellMessages } from '@/lib/i18n/messages/shell';
 import { MapPin, Navigation, Search, X, Check, ChevronDown, Sparkles } from 'lucide-react';
+import { useShallow } from 'zustand/react/shallow';
 
 interface CommunitySelectorProps {
   variant?: 'navbar' | 'compact' | 'hero';
@@ -34,9 +35,9 @@ export function CommunitySelector({ variant = 'navbar' }: CommunitySelectorProps
     isSelectorModalOpen,
     openSelectorModal,
     closeSelectorModal,
-  } = useCommunityStore();
+  } = useCommunityStore(useShallow((s) => ({ selectedCommunity: s.selectedCommunity, communities: s.communities, loadCommunities: s.loadCommunities, setSelectedCommunity: s.setSelectedCommunity, detectCommunityFromGPS: s.detectCommunityFromGPS, resolveCommunityFromText: s.resolveCommunityFromText, isDetecting: s.isDetecting, isSelectorModalOpen: s.isSelectorModalOpen, openSelectorModal: s.openSelectorModal, closeSelectorModal: s.closeSelectorModal })));
 
-  const { isAuthenticated, user } = useAuthStore();
+  const { isAuthenticated, user } = useAuthStore(useShallow((s) => ({ isAuthenticated: s.isAuthenticated, user: s.user })));
   const { showToast } = useToast();
 
   const isOpen = localIsOpen || isSelectorModalOpen;

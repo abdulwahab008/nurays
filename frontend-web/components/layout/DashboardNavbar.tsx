@@ -28,6 +28,7 @@ import {
   Coins,
   MessageCircle,
 } from 'lucide-react';
+import { useShallow } from 'zustand/react/shallow';
 
 
 interface NavbarNotification {
@@ -53,8 +54,8 @@ export function DashboardNavbar({ title, subtitle, userType = 'customer', onMenu
   const t = useT(shellMessages);
   const { showToast } = useToast();
   const pathname = usePathname() || '';
-  const { logout, user, isAuthenticated } = useAuthStore();
-  const { items } = useCartStore();
+  const { logout, user, isAuthenticated } = useAuthStore(useShallow((s) => ({ logout: s.logout, user: s.user, isAuthenticated: s.isAuthenticated })));
+  const { items } = useCartStore(useShallow((s) => ({ items: s.items })));
   const [searchQuery, setSearchQuery] = useState('');
   const [showDropdown, setShowDropdown] = useState(false);
   const [notificationUnreadCount, setNotificationUnreadCount] = useState<number>(0);

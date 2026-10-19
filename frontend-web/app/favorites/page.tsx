@@ -15,15 +15,16 @@ import { useAuthStore } from '@/lib/store/auth-store';
 import { apiClient } from '@/lib/api-client';
 import { loginUrlHere } from '@/lib/auth-redirect';
 import { browseMessages, businessTypeKey } from '@/lib/i18n/messages/browse';
+import { useShallow } from 'zustand/react/shallow';
 
 export default function FavoritesPage() {
   const router = useRouter();
-  const { isAuthenticated } = useAuthStore();
+  const { isAuthenticated } = useAuthStore(useShallow((s) => ({ isAuthenticated: s.isAuthenticated })));
   const [favorites, setFavorites] = useState<FavoriteSellerItem[]>([]);
   const [loading, setLoading] = useState(true);
   // Why the list could not be read; shown instead of "no favourites yet", which would be untrue.
   const [loadError, setLoadError] = useState<unknown>(null);
-  const { selectedCommunity } = useCommunityStore();
+  const { selectedCommunity } = useCommunityStore(useShallow((s) => ({ selectedCommunity: s.selectedCommunity })));
   const { showToast } = useToast();
   const t = useT(browseMessages);
 

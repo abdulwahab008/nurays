@@ -12,6 +12,7 @@ import { useAuthStore } from '@/lib/store/auth-store';
 import { apiClient } from '@/lib/api-client';
 import { CategoryRequestModal } from '@/components/CategoryRequestModal';
 import MenuTypeField, { DEFAULT_MENU, MenuValue, menuError, menuPayload } from '@/components/sellers/MenuTypeField';
+import { useShallow } from 'zustand/react/shallow';
 
 const sidebarItems = SELLER_SIDEBAR_ITEMS;
 
@@ -40,7 +41,7 @@ interface ProductImage {
 
 export default function AddProductPage() {
   const router = useRouter();
-  const { isAuthenticated, user } = useAuthStore();
+  const { isAuthenticated, user } = useAuthStore(useShallow((s) => ({ isAuthenticated: s.isAuthenticated, user: s.user })));
   const { showToast } = useToast();
   const fileInputRef = useRef<HTMLInputElement>(null);
   

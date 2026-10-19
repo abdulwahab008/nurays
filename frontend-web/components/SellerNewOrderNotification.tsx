@@ -10,6 +10,7 @@ import { useToast } from '@/components/ui/toast';
 import { useT } from '@/lib/i18n';
 import { kitchenOrderMessages } from '@/lib/i18n/messages/kitchen-orders';
 import { newAudioContext } from '@/lib/audio';
+import { useShallow } from 'zustand/react/shallow';
 
 interface NewOrderData {
   orderId: string;
@@ -83,7 +84,7 @@ function playNewOrderSound() {
 }
 
 export function SellerNewOrderNotification() {
-  const { user } = useAuthStore();
+  const { user } = useAuthStore(useShallow((s) => ({ user: s.user })));
   const { onNewOrder } = useSocket();
   const router = useRouter();
   const pathname = usePathname();

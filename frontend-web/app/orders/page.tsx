@@ -35,6 +35,7 @@ import { apiClient, apiErrorMessage } from '@/lib/api-client';
 import { useT } from '@/lib/i18n';
 import { commonMessages, statusKey } from '@/lib/i18n/messages/common';
 import { ordersMessages } from '@/lib/i18n/messages/orders';
+import { useShallow } from 'zustand/react/shallow';
 
 export default function OrdersPage() {
   return (
@@ -52,7 +53,7 @@ export default function OrdersPage() {
 
 function OrdersContent() {
   const router = useRouter();
-  const { isAuthenticated } = useAuthStore();
+  const { isAuthenticated } = useAuthStore(useShallow((s) => ({ isAuthenticated: s.isAuthenticated })));
   const { showToast } = useToast();
   const { onOrderStatusUpdate } = useSocket();
   const [orders, setOrders] = useState<Order[]>([]);

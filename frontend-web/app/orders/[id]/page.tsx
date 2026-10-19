@@ -25,6 +25,7 @@ import dynamic from 'next/dynamic';
 import { useT } from '@/lib/i18n';
 import { commonMessages, statusKey } from '@/lib/i18n/messages/common';
 import { ordersMessages } from '@/lib/i18n/messages/orders';
+import { useShallow } from 'zustand/react/shallow';
 
 type OrdersT = ReturnType<typeof useT<typeof ordersMessages.en>>;
 
@@ -265,7 +266,7 @@ function OrderDetailContent() {
   const params = useParams();
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { isAuthenticated, user } = useAuthStore();
+  const { isAuthenticated, user } = useAuthStore(useShallow((s) => ({ isAuthenticated: s.isAuthenticated, user: s.user })));
   const { showToast } = useToast();
   const { joinOrderRoom, onOrderStatusUpdate, onDeliveryTracking } = useSocket();
   const [order, setOrder] = useState<OrderDetail | null>(null);

@@ -20,6 +20,7 @@ import { apiClient, apiErrorMessage } from '@/lib/api-client';
 import { disablePush, enablePush, getPushState, PushState } from '@/lib/push';
 import { useT } from '@/lib/i18n';
 import { accountMessages } from '@/lib/i18n/messages/account';
+import { useShallow } from 'zustand/react/shallow';
 
 type AccountKey = keyof typeof accountMessages.en;
 
@@ -68,7 +69,7 @@ const PUSH_TEXT: Record<PushState, AccountKey> = {
 /** Which notifications reach this person outside the app, and on which devices. */
 export default function NotificationSettingsPage() {
   const router = useRouter();
-  const { isAuthenticated, user } = useAuthStore();
+  const { isAuthenticated, user } = useAuthStore(useShallow((s) => ({ isAuthenticated: s.isAuthenticated, user: s.user })));
   const { showToast } = useToast();
   const t = useT(accountMessages);
   const [settings, setSettings] = useState<Settings | null>(null);

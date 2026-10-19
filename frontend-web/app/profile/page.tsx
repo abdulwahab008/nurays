@@ -38,10 +38,11 @@ import {
   Globe,
   ShieldCheck,
 } from 'lucide-react';
+import { useShallow } from 'zustand/react/shallow';
 
 export default function ProfilePage() {
   const router = useRouter();
-  const { isAuthenticated, user, setUser, logout } = useAuthStore();
+  const { isAuthenticated, user, setUser, logout } = useAuthStore(useShallow((s) => ({ isAuthenticated: s.isAuthenticated, user: s.user, setUser: s.setUser, logout: s.logout })));
   const [deleting, setDeleting] = useState(false);
   // Set when this page signs the person out itself (the button, or closing the account): the page is then already on its way to the
   // home page, and the "sign in to see your profile" redirect below must not send it to the sign-in page instead.

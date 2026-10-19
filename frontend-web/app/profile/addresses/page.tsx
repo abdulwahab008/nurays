@@ -55,6 +55,7 @@ import {
   Bell,
   FileText,
 } from 'lucide-react';
+import { useShallow } from 'zustand/react/shallow';
 
 // Address type labels with icons (label is what the API stores; labelKey is what we show)
 const addressTypes = [
@@ -113,7 +114,7 @@ function withPlace<T extends { city: string; area: string; addressLine1: string;
 
 export default function AddressesPage() {
   const router = useRouter();
-  const { isAuthenticated } = useAuthStore();
+  const { isAuthenticated } = useAuthStore(useShallow((s) => ({ isAuthenticated: s.isAuthenticated })));
   const { showToast } = useToast();
   const { confirm: confirmDialog } = useDialogs();
   const t = useT(accountMessages);

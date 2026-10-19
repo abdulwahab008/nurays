@@ -22,6 +22,7 @@ import { commonMessages } from '@/lib/i18n/messages/common';
 import { riderMessages, riderKeyFor, type RiderMessageKey } from '@/lib/i18n/messages/rider';
 import { ExternalLink } from '@/components/ExternalLink';
 import { reserveExternal } from '@/lib/open-external';
+import { useShallow } from 'zustand/react/shallow';
 
 const ROAD_STEPS: { id: string; labelKey: RiderMessageKey; icon: string }[] = [
   { id: 'assigned', labelKey: 'step.assigned', icon: '📋' },
@@ -56,7 +57,7 @@ const STEP_ORDER: Record<string, number> = {
 
 export default function RiderDashboardPage() {
   const router = useRouter();
-  const { isAuthenticated, user } = useAuthStore();
+  const { isAuthenticated, user } = useAuthStore(useShallow((s) => ({ isAuthenticated: s.isAuthenticated, user: s.user })));
   const { showToast } = useToast();
   const { confirm: confirmDialog } = useDialogs();
   const t = useT(riderMessages);

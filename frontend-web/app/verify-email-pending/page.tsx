@@ -3,18 +3,19 @@
 import { useState, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
-import { NurayButton as Button } from '@/components/ui/NurayButton';
+import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/toast';
 import { authService } from '@/lib/services/auth.service';
 import { useAuthStore } from '@/lib/store/auth-store';
 import { apiClient } from '@/lib/api-client';
 import { useT } from '@/lib/i18n';
 import { authMessages } from '@/lib/i18n/messages/auth';
+import { useShallow } from 'zustand/react/shallow';
 
 function VerifyEmailPendingContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { isAuthenticated, user } = useAuthStore();
+  const { isAuthenticated, user } = useAuthStore(useShallow((s) => ({ isAuthenticated: s.isAuthenticated, user: s.user })));
   const { showToast } = useToast();
   const t = useT(authMessages);
   const [loading, setLoading] = useState(false);
@@ -134,7 +135,7 @@ function VerifyEmailPendingContent() {
             </Link>
           ) : (
             <Link href="/products">
-              <Button className="w-full">{t('browsePlates')}</Button>
+              <Button variant="primary" className="w-full">{t('browsePlates')}</Button>
             </Link>
           )}
         </div>

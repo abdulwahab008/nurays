@@ -8,6 +8,7 @@ import { useT } from '@/lib/i18n';
 import { commonMessages, statusKey } from '@/lib/i18n/messages/common';
 import { ordersMessages } from '@/lib/i18n/messages/orders';
 import { newAudioContext } from '@/lib/audio';
+import { useShallow } from 'zustand/react/shallow';
 
 interface OrderItemUpdate {
   orderItemId: string;
@@ -117,7 +118,7 @@ const STATUS_CONFIG: Record<string, { labelKey: keyof typeof ordersMessages.en; 
 const NOTIFY_STATUSES = new Set(['confirmed', 'preparing', 'ready', 'dispatched', 'delivered']);
 
 export function CustomerOrderNotification() {
-  const { user } = useAuthStore();
+  const { user } = useAuthStore(useShallow((s) => ({ user: s.user })));
   const { onOrderItemStatusUpdate } = useSocket();
   const router = useRouter();
   const [notifications, setNotifications] = useState<Notification[]>([]);

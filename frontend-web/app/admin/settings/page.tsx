@@ -10,10 +10,11 @@ import { LoadError } from '@/components/ui/LoadError';
 import { useAuthStore } from '@/lib/store/auth-store';
 import { apiClient } from '@/lib/api-client';
 import { checkSettingsForm, type SettingsForm } from '@/lib/admin-settings';
+import { useShallow } from 'zustand/react/shallow';
 
 export default function AdminSettingsPage() {
   const router = useRouter();
-  const { isAuthenticated, user } = useAuthStore();
+  const { isAuthenticated, user } = useAuthStore(useShallow((s) => ({ isAuthenticated: s.isAuthenticated, user: s.user })));
   const { showToast } = useToast();
   const [loading, setLoading] = useState(false);
   // The settings as the server holds them. Nothing is shown (and so nothing can be saved) until they have been read: a form

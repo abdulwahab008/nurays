@@ -6,6 +6,7 @@ import { usePathname, useSearchParams } from 'next/navigation';
 import { useT } from '@/lib/i18n';
 import { navMessages } from '@/lib/i18n/messages/nav';
 import { useAuthStore } from '@/lib/store/auth-store';
+import { useShallow } from 'zustand/react/shallow';
 
 export interface SubItem {
   name: string;
@@ -163,7 +164,7 @@ function DashboardSidebarContent({ items: allItems, userType }: DashboardSidebar
   const searchParams = useSearchParams();
   const queryString = searchParams?.toString() || '';
   const currentHref = queryString ? `${pathname}?${queryString}` : pathname;
-  const { user } = useAuthStore();
+  const { user } = useAuthStore(useShallow((s) => ({ user: s.user })));
   // Staff only see the pages their role may open (the server enforces it too).
   const items = userType === 'admin' ? allItems.filter((i) => !i.needs || (user?.permissions ?? []).includes(i.needs)) : allItems;
 

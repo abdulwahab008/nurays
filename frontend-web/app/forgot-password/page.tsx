@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
-import { NurayButton as Button } from '@/components/ui/NurayButton';
+import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/toast';
 import { apiClient } from '@/lib/api-client';
 import { BrandLockup } from '@/components/ui/Mark';
@@ -61,7 +61,7 @@ export default function ForgotPasswordPage() {
               required
               className="w-full h-12 rounded-lg border border-slate-300 px-3 text-sm"
             />
-            <Button type="submit" className="w-full h-12 text-sm font-bold" disabled={loading}>
+            <Button variant="primary" type="submit" className="w-full h-12 text-sm font-bold" disabled={loading}>
               {loading ? t('sendingEllipsis') : t('sendResetLink')}
             </Button>
             <Link href="/login" className="block text-center text-sm text-slate-500 underline">

@@ -10,6 +10,7 @@ import { LoadError } from '@/components/ui/LoadError';
 import { useAuthStore } from '@/lib/store/auth-store';
 import { apiClient } from '@/lib/api-client';
 import { formatDate } from '@/lib/utils';
+import { useShallow } from 'zustand/react/shallow';
 
 interface Seller {
   id: string;
@@ -26,7 +27,7 @@ interface Seller {
 
 export default function AdminAllSellersPage() {
   const router = useRouter();
-  const { isAuthenticated, user } = useAuthStore();
+  const { isAuthenticated, user } = useAuthStore(useShallow((s) => ({ isAuthenticated: s.isAuthenticated, user: s.user })));
   const { showToast } = useToast();
   const [loading, setLoading] = useState(true);
   const [sellers, setSellers] = useState<Seller[]>([]);

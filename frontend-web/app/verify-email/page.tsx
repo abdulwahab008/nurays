@@ -3,18 +3,19 @@
 import { useEffect, useState, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
-import { NurayButton as Button } from '@/components/ui/NurayButton';
+import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/toast';
 import { apiClient } from '@/lib/api-client';
 import { authService } from '@/lib/services/auth.service';
 import { useAuthStore } from '@/lib/store/auth-store';
 import { useT } from '@/lib/i18n';
 import { authMessages } from '@/lib/i18n/messages/auth';
+import { useShallow } from 'zustand/react/shallow';
 
 function VerifyEmailContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { isAuthenticated, user, setUser } = useAuthStore();
+  const { isAuthenticated, user, setUser } = useAuthStore(useShallow((s) => ({ isAuthenticated: s.isAuthenticated, user: s.user, setUser: s.setUser })));
   const { showToast } = useToast();
   const t = useT(authMessages);
   const [status, setStatus] = useState<'verifying' | 'success' | 'error' | 'expired'>('verifying');
@@ -125,7 +126,7 @@ function VerifyEmailContent() {
               </Link>
             ) : (
               <Link href="/products">
-                <Button size="lg" className="w-full">
+                <Button variant="primary" size="lg" className="w-full">
                   {t('browsePlates')}
                 </Button>
               </Link>
@@ -156,12 +157,12 @@ function VerifyEmailContent() {
                   {t('resendVerificationEmail')}
                 </Button>
                 <Link href="/products">
-                  <Button className="w-full">{t('continueToNuray')}</Button>
+                  <Button variant="primary" className="w-full">{t('continueToNuray')}</Button>
                 </Link>
               </div>
             ) : (
               <Link href="/login">
-                <Button className="w-full">{t('signIn')}</Button>
+                <Button variant="primary" className="w-full">{t('signIn')}</Button>
               </Link>
             )}
           </>
@@ -185,12 +186,12 @@ function VerifyEmailContent() {
               {t('linkExpiredBody')}
             </p>
             {isAuthenticated ? (
-              <Button onClick={handleResendEmail} className="w-full" size="lg">
+              <Button variant="primary" onClick={handleResendEmail} className="w-full" size="lg">
                 {t('resendVerificationEmail')}
               </Button>
             ) : (
               <Link href="/login">
-                <Button className="w-full" size="lg">
+                <Button variant="primary" className="w-full" size="lg">
                   {t('signInToResend')}
                 </Button>
               </Link>

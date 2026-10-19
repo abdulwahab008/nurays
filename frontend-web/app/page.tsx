@@ -47,6 +47,7 @@ import { ConfirmModal } from '@/components/ui/ConfirmModal';
 import { LanguageSwitcher } from '@/components/i18n/LanguageSwitcher';
 import { useLocale, useT, type Locale, type Vars } from '@/lib/i18n';
 import { homeMessages, type HomeKey } from '@/lib/i18n/messages/home';
+import { useShallow } from 'zustand/react/shallow';
 
 /** The home page's translate function, passed to the helpers below. */
 type HomeT = (key: HomeKey, vars?: Vars) => string;
@@ -380,8 +381,8 @@ function DishCardSkeleton() {
 
 export default function Home() {
   const router = useRouter();
-  const { isAuthenticated, user, logout } = useAuthStore();
-  const { addItem, getItemCount } = useCartStore();
+  const { isAuthenticated, user, logout } = useAuthStore(useShallow((s) => ({ isAuthenticated: s.isAuthenticated, user: s.user, logout: s.logout })));
+  const { addItem, getItemCount } = useCartStore(useShallow((s) => ({ addItem: s.addItem, getItemCount: s.getItemCount })));
   const { showToast } = useToast();
   const t = useT(homeMessages);
   const { locale } = useLocale();

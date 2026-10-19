@@ -22,6 +22,7 @@ import { useAuthStore } from '@/lib/store/auth-store';
 import { BrandLockup } from '@/components/ui/Mark';
 import { useT } from '@/lib/i18n';
 import { homeMessages, type HomeKey } from '@/lib/i18n/messages/home';
+import { useShallow } from 'zustand/react/shallow';
 
 interface UberLeftSidebarProps {
   isOpen: boolean;
@@ -38,7 +39,7 @@ export function UberLeftSidebar({
 }: UberLeftSidebarProps) {
   const pathname = usePathname();
   const t = useT(homeMessages);
-  const { isAuthenticated, user, logout } = useAuthStore();
+  const { isAuthenticated, user, logout } = useAuthStore(useShallow((s) => ({ isAuthenticated: s.isAuthenticated, user: s.user, logout: s.logout })));
 
   const mainNavItems: Array<{ label: HomeKey; href: string; icon: typeof Home; id: string }> = [
     { label: 'nav.home', href: '/', icon: Home, id: 'home' },

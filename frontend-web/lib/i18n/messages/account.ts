@@ -175,6 +175,7 @@ export const accountMessages = defineMessages({
     detectMyLocation: 'Detect my location',
     myLocation: 'My Location',
     mapHint: 'Click anywhere on the map or drag the pin to reposition',
+    locateFailed: 'Your device did not share its location. Search for your area or drag the pin.',
     // Notifications
     notifications: 'Notifications',
     unreadOne: '{count} unread notification',
@@ -493,6 +494,7 @@ export const accountMessages = defineMessages({
     detectMyLocation: 'میری لوکیشن معلوم کریں',
     myLocation: 'میری لوکیشن',
     mapHint: 'نقشے پر کہیں بھی کلک کریں یا پن کو کھینچ کر جگہ بدلیں',
+    locateFailed: 'آپ کے آلے نے لوکیشن نہیں بتائی۔ اپنا علاقہ تلاش کریں یا پن کو کھینچیں۔',
     notifications: 'نوٹیفیکیشنز',
     unreadOne: '{count} نوٹیفیکیشن نہیں پڑھا گیا',
     unreadMany: '{count} نوٹیفیکیشنز نہیں پڑھے گئے',

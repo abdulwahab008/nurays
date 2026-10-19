@@ -8,6 +8,7 @@ import { LoadError } from '@/components/ui/LoadError';
 import { useAuthStore } from '@/lib/store/auth-store';
 import { apiClient } from '@/lib/api-client';
 import { formatPrice } from '@/lib/utils';
+import { useShallow } from 'zustand/react/shallow';
 
 interface AnalyticsData {
   overview: {
@@ -33,7 +34,7 @@ interface AnalyticsData {
 
 export default function AdminAnalyticsPage() {
   const router = useRouter();
-  const { isAuthenticated, user } = useAuthStore();
+  const { isAuthenticated, user } = useAuthStore(useShallow((s) => ({ isAuthenticated: s.isAuthenticated, user: s.user })));
   const { showToast } = useToast();
   const [loading, setLoading] = useState(true);
   const [analytics, setAnalytics] = useState<AnalyticsData | null>(null);

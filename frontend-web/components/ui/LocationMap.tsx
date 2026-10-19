@@ -52,6 +52,7 @@ function LocationMapInner({
   const [searchQuery, setSearchQuery] = useState('');
   const [isSearching, setIsSearching] = useState(false);
   const [locating, setLocating] = useState(false);
+  const [locateFailed, setLocateFailed] = useState(false);
   const [currentCoords, setCurrentCoords] = useState<{ lat: number; lng: number } | null>(
     markerPosition ?? null
   );
@@ -113,12 +114,14 @@ L.tileLayer(MAP_TILE_URL, { attribution: MAP_ATTRIBUTION, maxZoom: MAP_MAX_ZOOM 
           marker.on('dragend', () => {
             const pos = marker.getLatLng();
             setCurrentCoords({ lat: pos.lat, lng: pos.lng });
+            setLocateFailed(false);
             onLocationSelect?.({ lat: pos.lat, lng: pos.lng });
           });
 
           map.on('click', (e: any) => {
             marker.setLatLng(e.latlng);
             setCurrentCoords({ lat: e.latlng.lat, lng: e.latlng.lng });
+            setLocateFailed(false);
             onLocationSelect?.({ lat: e.latlng.lat, lng: e.latlng.lng });
           });
 
@@ -206,10 +209,11 @@ L.tileLayer(MAP_TILE_URL, { attribution: MAP_ATTRIBUTION, maxZoom: MAP_MAX_ZOOM 
     mapInstanceRef.current.flyTo([lat, lng], zoomLevel, { duration: 1.2 });
     markerRef.current.setLatLng([lat, lng]);
     setCurrentCoords({ lat, lng });
+    setLocateFailed(false);
     onLocationSelect?.({ lat, lng, address });
   }, [onLocationSelect]);
 
-  // Handle Geolocation with graceful fallback
+  // Handle Geolocation: the device's own position, or a plain message when it gives none
   const handleLocateMe = async () => {
     setLocating(true);
 
@@ -254,22 +258,12 @@ L.tileLayer(MAP_TILE_URL, { attribution: MAP_ATTRIBUTION, maxZoom: MAP_MAX_ZOOM 
         jumpTo(browserCoords.lat, browserCoords.lng, 16);
         return;
       }
-
-      // Fallback to IP-based location
-      const ipRes = await fetch('/api/geocode/ip');
-      if (ipRes.ok) {
-        const ipData = await ipRes.json();
-        if (ipData.lat && ipData.lng) {
-          jumpTo(ipData.lat, ipData.lng, 15, ipData.city);
-          return;
-        }
-      }
-
-      // Default fallback
-      jumpTo(31.5204, 74.3587, 14, 'Lahore');
+      // No position from the device: the map stays where it is and says so. (It used to ask ip-api.com, over plain HTTP,
+      // where the visitor's address was, and otherwise jumped to Lahore as if that were their location.)
+      setLocateFailed(true);
     } catch (err) {
-      console.warn('Locate me failed, using default:', err);
-      jumpTo(31.5204, 74.3587, 14, 'Lahore');
+      console.warn('Locate me failed:', err);
+      setLocateFailed(true);
     } finally {
       setLocating(false);
     }
@@ -373,7 +367,7 @@ L.tileLayer(MAP_TILE_URL, { attribution: MAP_ATTRIBUTION, maxZoom: MAP_MAX_ZOOM 
       <div className="px-3 py-1.5 bg-white/95 backdrop-blur-xs border-t border-slate-100 flex items-center justify-between text-[11px] text-slate-500">
         <span className="flex items-center gap-1 text-slate-600">
           <MapPin className="w-3 h-3 text-[#FF5500]" />
-          <span>{t('mapHint')}</span>
+          <span role={locateFailed ? 'status' : undefined}>{locateFailed ? t('locateFailed') : t('mapHint')}</span>
         </span>
         {currentCoords && (
           <span className="font-mono font-medium text-slate-700 bg-slate-100 px-2 py-0.5 rounded text-[11px]" data-ltr>

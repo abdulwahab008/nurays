@@ -14,6 +14,7 @@ import { apiClient, apiErrorMessage } from '@/lib/api-client';
 import { formatDate } from '@/lib/utils';
 import { useT } from '@/lib/i18n';
 import { accountMessages } from '@/lib/i18n/messages/account';
+import { useShallow } from 'zustand/react/shallow';
 
 const sidebarItems = SELLER_SIDEBAR_ITEMS;
 
@@ -68,7 +69,7 @@ interface Notification {
 
 export default function SellerNotificationsPage() {
   const router = useRouter();
-  const { isAuthenticated, user } = useAuthStore();
+  const { isAuthenticated, user } = useAuthStore(useShallow((s) => ({ isAuthenticated: s.isAuthenticated, user: s.user })));
   const { showToast } = useToast();
   const t = useT(accountMessages);
   const [loading, setLoading] = useState(true);

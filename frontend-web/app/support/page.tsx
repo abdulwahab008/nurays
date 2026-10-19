@@ -25,10 +25,11 @@ import { apiClient } from '@/lib/api-client';
 import MyTickets from '@/components/support/MyTickets';
 import { useT } from '@/lib/i18n';
 import { accountMessages } from '@/lib/i18n/messages/account';
+import { useShallow } from 'zustand/react/shallow';
 
 export default function SupportPage() {
   const router = useRouter();
-  const { isAuthenticated, user } = useAuthStore();
+  const { isAuthenticated, user } = useAuthStore(useShallow((s) => ({ isAuthenticated: s.isAuthenticated, user: s.user })));
   const { showToast } = useToast();
   const t = useT(accountMessages);
   const [activeTab, setActiveTab] = useState<'faq' | 'contact' | 'tickets'>('faq');

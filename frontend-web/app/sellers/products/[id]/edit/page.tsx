@@ -11,6 +11,7 @@ import { useDialogs } from '@/components/ui/Dialogs';
 import { useAuthStore } from '@/lib/store/auth-store';
 import { apiClient } from '@/lib/api-client';
 import MenuTypeField, { DEFAULT_MENU, MenuType, MenuValue, menuError, menuPayload } from '@/components/sellers/MenuTypeField';
+import { useShallow } from 'zustand/react/shallow';
 
 const sidebarItems = SELLER_SIDEBAR_ITEMS;
 
@@ -69,7 +70,7 @@ export default function EditProductPage() {
   const router = useRouter();
   const params = useParams();
   const productId = params.id as string;
-  const { isAuthenticated, user } = useAuthStore();
+  const { isAuthenticated, user } = useAuthStore(useShallow((s) => ({ isAuthenticated: s.isAuthenticated, user: s.user })));
   const { showToast } = useToast();
   const { confirm: confirmDialog } = useDialogs();
   const fileInputRef = useRef<HTMLInputElement>(null);

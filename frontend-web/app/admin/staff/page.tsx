@@ -9,6 +9,7 @@ import { useDialogs } from '@/components/ui/Dialogs';
 import { apiClient, apiErrorMessage } from '@/lib/api-client';
 import { useAuthStore } from '@/lib/store/auth-store';
 import { formatDateTime } from '@/lib/utils';
+import { useShallow } from 'zustand/react/shallow';
 
 interface Member {
   id: string;
@@ -29,7 +30,7 @@ const ROLE_HELP = {
 export default function AdminStaffPage() {
   const { showToast } = useToast();
   const { confirm: confirmDialog, ask: askDialog } = useDialogs();
-  const { user } = useAuthStore();
+  const { user } = useAuthStore(useShallow((s) => ({ user: s.user })));
   const allowed = !!user?.permissions?.includes('staff.manage');
   const [members, setMembers] = useState<Member[]>([]);
   const [loading, setLoading] = useState(true);

@@ -13,6 +13,7 @@ import { paymentService, WalletSummary, WalletTransaction } from '@/lib/services
 import { formatPrice, formatDateTime } from '@/lib/utils';
 import { useT } from '@/lib/i18n';
 import { paymentsMessages } from '@/lib/i18n/messages/payments';
+import { useShallow } from 'zustand/react/shallow';
 
 const PRESETS = [500, 1000, 2000, 5000];
 
@@ -34,7 +35,7 @@ function WalletContent() {
   const t = useT(paymentsMessages);
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { isAuthenticated } = useAuthStore();
+  const { isAuthenticated } = useAuthStore(useShallow((s) => ({ isAuthenticated: s.isAuthenticated })));
   const { showToast } = useToast();
   const [wallet, setWallet] = useState<WalletSummary | null>(null);
   const [transactions, setTransactions] = useState<WalletTransaction[]>([]);

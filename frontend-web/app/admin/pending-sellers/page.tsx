@@ -12,6 +12,7 @@ import { apiClient } from '@/lib/api-client';
 import DocumentList from '@/components/admin/DocumentList';
 import { ExternalLink } from '@/components/ExternalLink';
 import { RejectReasonModal } from '@/components/admin/RejectReasonModal';
+import { useShallow } from 'zustand/react/shallow';
 
 interface PendingSeller {
   id: string;
@@ -40,7 +41,7 @@ interface PendingSeller {
 
 export default function AdminPendingSellersPage() {
   const router = useRouter();
-  const { isAuthenticated, user } = useAuthStore();
+  const { isAuthenticated, user } = useAuthStore(useShallow((s) => ({ isAuthenticated: s.isAuthenticated, user: s.user })));
   const { showToast } = useToast();
   const [loading, setLoading] = useState(true);
   const [pendingSellers, setPendingSellers] = useState<PendingSeller[]>([]);

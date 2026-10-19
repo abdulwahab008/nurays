@@ -3,7 +3,7 @@
 import { useState, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
-import { NurayButton as Button } from '@/components/ui/NurayButton';
+import { Button } from '@/components/ui/button';
 import { GoogleSignInButton } from '@/components/GoogleSignInButton';
 import { useToast } from '@/components/ui/toast';
 import { authService } from '@/lib/services/auth.service';
@@ -14,11 +14,12 @@ import { useT } from '@/lib/i18n';
 import { useRequestErrorMessage } from '@/components/ui/LoadError';
 import { authMessages } from '@/lib/i18n/messages/auth';
 import { weakPasswordMessage } from '@/lib/password-errors';
+import { useShallow } from 'zustand/react/shallow';
 
 function RegisterForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { setUser } = useAuthStore();
+  const { setUser } = useAuthStore(useShallow((s) => ({ setUser: s.setUser })));
   const { showToast } = useToast();
   const t = useT(authMessages);
   const requestError = useRequestErrorMessage();
@@ -516,7 +517,7 @@ function RegisterForm() {
             </label>
           </div>
 
-          <Button type="submit" className="w-full" size="lg" disabled={loading}>
+          <Button variant="primary" type="submit" className="w-full" size="lg" disabled={loading}>
             {loading ? (
               <span className="flex items-center gap-2">
                 <span className="animate-spin">⏳</span>

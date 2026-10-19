@@ -12,6 +12,7 @@ import { useDialogs } from '@/components/ui/Dialogs';
 import { useAuthStore } from '@/lib/store/auth-store';
 import { apiClient } from '@/lib/api-client';
 import { formatPrice } from '@/lib/utils';
+import { useShallow } from 'zustand/react/shallow';
 
 const sidebarItems = SELLER_SIDEBAR_ITEMS;
 
@@ -576,7 +577,7 @@ function PromotionForm({
 
 export default function SellerPromotionsPage() {
   const router = useRouter();
-  const { isAuthenticated, user } = useAuthStore();
+  const { isAuthenticated, user } = useAuthStore(useShallow((s) => ({ isAuthenticated: s.isAuthenticated, user: s.user })));
   const { showToast } = useToast();
   const { confirm: confirmDialog } = useDialogs();
 

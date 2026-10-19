@@ -8,6 +8,7 @@ import { formatPrice } from '@/lib/utils';
 import { useT } from '@/lib/i18n';
 import { riderMessages } from '@/lib/i18n/messages/rider';
 import { riderService } from '@/lib/services/rider.service';
+import { useShallow } from 'zustand/react/shallow';
 
 interface JobPopup {
   key: string;
@@ -54,7 +55,7 @@ function chime() {
  * they are already carrying another job, and a lighter one when a job nobody took stays open in the pool.
  */
 export function RiderNewJobNotification() {
-  const { user } = useAuthStore();
+  const { user } = useAuthStore(useShallow((s) => ({ user: s.user })));
   const { subscribe } = useSocket();
   const router = useRouter();
   const t = useT(riderMessages);

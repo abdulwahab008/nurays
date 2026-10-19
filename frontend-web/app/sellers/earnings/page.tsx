@@ -16,6 +16,7 @@ import { commonMessages } from '@/lib/i18n/messages/common';
 import { kitchenEarningsMessages } from '@/lib/i18n/messages/kitchen-earnings';
 import { payoutDestinationIsWrong } from '@/lib/payout-account';
 import { sendAskingForPassword } from '@/lib/send-asking-for-password';
+import { useShallow } from 'zustand/react/shallow';
 
 const sidebarItems = SELLER_SIDEBAR_ITEMS;
 
@@ -87,7 +88,7 @@ interface EarningsData {
 
 export default function SellerEarningsPage() {
   const router = useRouter();
-  const { isAuthenticated, user } = useAuthStore();
+  const { isAuthenticated, user } = useAuthStore(useShallow((s) => ({ isAuthenticated: s.isAuthenticated, user: s.user })));
   const { showToast } = useToast();
   const t = useT(kitchenEarningsMessages);
   const tc = useT(commonMessages);

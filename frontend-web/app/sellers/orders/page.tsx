@@ -18,6 +18,7 @@ import { useT } from '@/lib/i18n';
 import { commonMessages } from '@/lib/i18n/messages/common';
 import { kitchenOrderMessages, paymentMethodLabel, paymentStatusLabel } from '@/lib/i18n/messages/kitchen-orders';
 import { ExternalLink } from '@/components/ExternalLink';
+import { useShallow } from 'zustand/react/shallow';
 
 const sidebarItems = SELLER_SIDEBAR_ITEMS;
 
@@ -83,7 +84,7 @@ interface OrderTicket {
 
 export default function SellerOrdersPage() {
   const router = useRouter();
-  const { isAuthenticated, user } = useAuthStore();
+  const { isAuthenticated, user } = useAuthStore(useShallow((s) => ({ isAuthenticated: s.isAuthenticated, user: s.user })));
   const { showToast } = useToast();
   const t = useT(kitchenOrderMessages);
   const tc = useT(commonMessages);

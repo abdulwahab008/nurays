@@ -51,6 +51,7 @@ import {
 import { useT } from '@/lib/i18n';
 import { commonMessages } from '@/lib/i18n/messages/common';
 import { browseMessages, productTypeKey, type BrowseT } from '@/lib/i18n/messages/browse';
+import { useShallow } from 'zustand/react/shallow';
 
 type SortOption = NonNullable<ProductFilters['sort']>;
 
@@ -123,9 +124,9 @@ function deliveryFeeLabel(p: Product, t: BrowseT): string | null {
 function ProductsContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { isAuthenticated, user, logout } = useAuthStore();
+  const { isAuthenticated, user, logout } = useAuthStore(useShallow((s) => ({ isAuthenticated: s.isAuthenticated, user: s.user, logout: s.logout })));
   const { showToast } = useToast();
-  const { items: cartItems } = useCartStore();
+  const { items: cartItems } = useCartStore(useShallow((s) => ({ items: s.items })));
   const t = useT(browseMessages);
   const tc = useT(commonMessages);
 
@@ -165,7 +166,7 @@ function ProductsContent() {
     openSelectorModal,
     isLoading: communitiesLoading,
     error: communitiesError,
-  } = useCommunityStore();
+  } = useCommunityStore(useShallow((s) => ({ selectedCommunity: s.selectedCommunity, loadCommunities: s.loadCommunities, openSelectorModal: s.openSelectorModal, isLoading: s.isLoading, error: s.error })));
   const [communityListReady, setCommunityListReady] = useState(false);
   const [communityDetail, setCommunityDetail] = useState<CommunityDetail | null>(null);
   const [communityKitchensLoading, setCommunityKitchensLoading] = useState(false);

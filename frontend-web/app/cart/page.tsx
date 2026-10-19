@@ -39,6 +39,7 @@ import { useT } from '@/lib/i18n';
 import { getPromotionLabel, getStackedDiscountedPrice } from '@/lib/pricing';
 import { commonMessages } from '@/lib/i18n/messages/common';
 import { checkoutMessages, richText } from '@/lib/i18n/messages/checkout';
+import { useShallow } from 'zustand/react/shallow';
 
 interface CatalogPromotion {
   id: string;
@@ -84,10 +85,10 @@ export default function CartPage() {
   const router = useRouter();
   const t = useT(checkoutMessages);
   const tc = useT(commonMessages);
-  const { isAuthenticated } = useAuthStore();
+  const { isAuthenticated } = useAuthStore(useShallow((s) => ({ isAuthenticated: s.isAuthenticated })));
   const { showToast } = useToast();
   const storeItems = useCartStore((s) => s.items);
-  const { setItems, clearCart: clearCartStore, appliedPromoCode, setAppliedPromoCode } = useCartStore();
+  const { setItems, clearCart: clearCartStore, appliedPromoCode, setAppliedPromoCode } = useCartStore(useShallow((s) => ({ setItems: s.setItems, clearCart: s.clearCart, appliedPromoCode: s.appliedPromoCode, setAppliedPromoCode: s.setAppliedPromoCode })));
   const [cart, setCart] = useState<CartResponse | null>(() => {
     // Optimistically initialize cart if items already exist in local store
     if (typeof window !== 'undefined') {

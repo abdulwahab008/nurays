@@ -20,6 +20,7 @@ import { formatPrice } from '@/lib/utils';
 import { useT } from '@/lib/i18n';
 import { homeMessages } from '@/lib/i18n/messages/home';
 import { commonMessages } from '@/lib/i18n/messages/common';
+import { useShallow } from 'zustand/react/shallow';
 
 interface SlideOverCartDrawerProps {
   isOpen: boolean;
@@ -27,7 +28,7 @@ interface SlideOverCartDrawerProps {
 }
 
 export function SlideOverCartDrawer({ isOpen, onClose }: SlideOverCartDrawerProps) {
-  const { items, updateItem, removeItem, clearCart, getTotal, getItemCount } = useCartStore();
+  const { items, updateItem, removeItem, clearCart, getTotal, getItemCount } = useCartStore(useShallow((s) => ({ items: s.items, updateItem: s.updateItem, removeItem: s.removeItem, clearCart: s.clearCart, getTotal: s.getTotal, getItemCount: s.getItemCount })));
   const drawerRef = useRef<HTMLDivElement>(null);
   const t = useT(homeMessages);
   const tc = useT(commonMessages);

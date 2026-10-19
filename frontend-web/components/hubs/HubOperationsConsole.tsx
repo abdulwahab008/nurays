@@ -10,6 +10,7 @@ import { useAuthStore } from '@/lib/store/auth-store';
 import { apiClient } from '@/lib/api-client';
 import { DatePicker } from '@/components/ui/DatePicker';
 import { loginUrlHere } from '@/lib/auth-redirect';
+import { useShallow } from 'zustand/react/shallow';
 
 
 interface Hub {
@@ -110,7 +111,7 @@ interface FrozenProduct {
 export default function HubOperationsConsole({ mode }: { mode: 'admin' | 'manager' }) {
   const isManagerMode = mode === 'manager';
   const router = useRouter();
-  const { isAuthenticated, user } = useAuthStore();
+  const { isAuthenticated, user } = useAuthStore(useShallow((s) => ({ isAuthenticated: s.isAuthenticated, user: s.user })));
   const { showToast } = useToast();
 
   // Navigation & Tabs

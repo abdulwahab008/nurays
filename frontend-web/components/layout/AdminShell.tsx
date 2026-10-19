@@ -8,6 +8,7 @@ import { DashboardNavbar } from './DashboardNavbar';
 import { adminSidebarFor } from './DashboardShell';
 import { useAuthStore } from '@/lib/store/auth-store';
 import { useHydrated } from '@/lib/hooks/use-hydrated';
+import { useShallow } from 'zustand/react/shallow';
 
 /**
  * The frame of an admin page that brings its own heading: the top bar, the side menu (a slide-out drawer on phones and
@@ -17,7 +18,7 @@ import { useHydrated } from '@/lib/hooks/use-hydrated';
  * Who may open an admin page is decided by app/admin/layout.tsx, which sends everyone else away.
  */
 export function AdminShell({ children }: { children: ReactNode }) {
-  const { user, isAuthenticated } = useAuthStore();
+  const { user, isAuthenticated } = useAuthStore(useShallow((s) => ({ user: s.user, isAuthenticated: s.isAuthenticated })));
   const pathname = usePathname();
   const mounted = useHydrated();
   // The phone menu belongs to the page it was opened on, so navigating closes it without an effect.
