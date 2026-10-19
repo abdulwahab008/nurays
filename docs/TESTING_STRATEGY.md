@@ -130,9 +130,10 @@ and 2 if the script itself crashed. Run it when you touch orders, payments, refu
 anything that locks rows. When you fix a money bug, add the check that would have caught it here. CI runs it in the
 `money-flows` job against its own PostgreSQL.
 
-Other scripts in `backend/scripts/` (`verify-gap-resolutions.ts`, `run-ideal-flow.ts`, `test-order-progression.ts`,
-`test-chat-features.ts`) are older, API-driven helpers that expect a running backend and seeded users. They are not
-part of any pipeline.
+Two other scripts in `backend/scripts/` (`verify-gap-resolutions.ts`, and `run-ideal-flow.ts`, which `tests/e2e/ideal-flow.spec.ts`
+runs) are older, API-driven helpers that expect a running backend and seeded users. They are not part of any pipeline. The
+other old helpers (one-off seeders from the FrozenNuray import, a chat test against an order that no longer exists, an
+order-progression walk the API checks now cover) were removed.
 
 ## 2b. API checks over HTTP
 

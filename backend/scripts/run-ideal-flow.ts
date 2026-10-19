@@ -1,5 +1,31 @@
-import axios from 'axios';
 import { PrismaClient } from '@prisma/client';
+
+/**
+ * The few axios calls this script makes, on Node's own fetch (the backend does not depend on axios): the answer is in
+ * `.data`, and a 4xx/5xx throws an error carrying `.response.data`, as axios did.
+ */
+type Options = { headers?: Record<string, string> };
+async function send(method: string, url: string, body?: unknown, options: Options = {}) {
+  const res = await fetch(url, {
+    method,
+    headers: { 'Content-Type': 'application/json', ...(options.headers ?? {}) },
+    body: body === undefined ? undefined : JSON.stringify(body),
+  });
+  const text = await res.text();
+  let data: any = text;
+  try {
+    data = text ? JSON.parse(text) : null;
+  } catch {
+    // not JSON: keep the text
+  }
+  if (!res.ok) throw Object.assign(new Error(`${method} ${url} answered ${res.status}`), { response: { status: res.status, data } });
+  return { status: res.status, data };
+}
+const axios = {
+  get: (url: string, options?: Options) => send('GET', url, undefined, options),
+  post: (url: string, body?: unknown, options?: Options) => send('POST', url, body, options),
+  patch: (url: string, body?: unknown, options?: Options) => send('PATCH', url, body, options),
+};
 
 const API_BASE = 'http://localhost:3001/api/v1';
 const prisma = new PrismaClient();
