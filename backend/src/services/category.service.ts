@@ -1,6 +1,19 @@
 import prisma from '../config/database';
 import { AppError } from '../middleware/errorHandler';
 
+/** A category in the grouped tree: the fields the menus show, its subcategories and how many dishes it holds. */
+export interface CategoryTreeNode {
+  id: string;
+  name: string;
+  nameUrdu: string | null;
+  slug: string;
+  iconUrl: string | null;
+  productType: string | null;
+  parentId: string | null;
+  children: CategoryTreeNode[];
+  productCount: number;
+}
+
 export class CategoryService {
   /**
    * Get all categories
@@ -22,8 +35,9 @@ export class CategoryService {
     });
 
     // Build category tree
-    const categoryMap = new Map();
-    const rootCategories: any[] = [];
+    type TreeNode = (typeof categories)[number] & { children: TreeNode[]; productCount: number };
+    const categoryMap = new Map<string, TreeNode>();
+    const rootCategories: TreeNode[] = [];
 
     // First pass: create map
     categories.forEach((category) => {
@@ -37,6 +51,7 @@ export class CategoryService {
     // Second pass: build tree
     categories.forEach((category) => {
       const categoryNode = categoryMap.get(category.id);
+      if (!categoryNode) return; // set in the first pass
       if (category.parentId) {
         const parent = categoryMap.get(category.parentId);
         if (parent) {
@@ -73,8 +88,8 @@ export class CategoryService {
     });
 
     // Build category tree first
-    const categoryMap = new Map();
-    const rootCategories: any[] = [];
+    const categoryMap = new Map<string, CategoryTreeNode>();
+    const rootCategories: CategoryTreeNode[] = [];
 
     // First pass: create map
     categories.forEach((category) => {
@@ -94,6 +109,7 @@ export class CategoryService {
     // Second pass: build tree
     categories.forEach((category) => {
       const categoryNode = categoryMap.get(category.id);
+      if (!categoryNode) return; // set in the first pass
       if (category.parentId) {
         const parent = categoryMap.get(category.parentId);
         if (parent) {

@@ -8,7 +8,7 @@ import { DashboardLayout, SELLER_SIDEBAR_ITEMS } from '@/components/layout/Dashb
 import { useToast } from '@/components/ui/toast';
 import { LoadError } from '@/components/ui/LoadError';
 import { useAuthStore } from '@/lib/store/auth-store';
-import { apiClient } from '@/lib/api-client';
+import { apiClient, apiErrorMessage, apiErrorStatus } from '@/lib/api-client';
 import { formatPrice, formatDateTime, imageVariant } from '@/lib/utils';
 import SelfHandoverActions from '@/components/orders/SelfHandoverActions';
 import OrderChatModal from '@/components/orders/OrderChatModal';
@@ -77,9 +77,9 @@ export default function SellerOrderDetailPage() {
       const res = await apiClient.get(`/seller/orders/${orderId}`);
       setOrder(res.data?.data ?? null);
       setNotFound(!res.data?.data);
-    } catch (err: any) {
+    } catch (err) {
       // 400 is an address that is not an order id at all (the server refuses it before looking).
-      if (err.response?.status === 404 || err.response?.status === 403 || err.response?.status === 400) setNotFound(true);
+      if (apiErrorStatus(err) === 404 || apiErrorStatus(err) === 403 || apiErrorStatus(err) === 400) setNotFound(true);
       else setLoadError(err);
     } finally {
       setLoading(false);
@@ -114,8 +114,8 @@ export default function SellerOrderDetailPage() {
       await apiClient.post(path, body);
       showToast(ok, 'success');
       await load();
-    } catch (err: any) {
-      showToast(err.response?.data?.error?.message || t('couldNotUpdate'), 'error');
+    } catch (err) {
+      showToast(apiErrorMessage(err, t('couldNotUpdate')), 'error');
     } finally {
       setBusy(null);
     }

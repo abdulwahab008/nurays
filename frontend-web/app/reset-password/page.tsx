@@ -37,7 +37,7 @@ function ResetForm() {
       await apiClient.post('/auth/reset-password', { token, password });
       showToast(t('passwordUpdated'), 'success');
       router.push('/login');
-    } catch (err: any) {
+    } catch (err) {
       showToast(weakPasswordMessage(err, t) || requestError(err, t('resetLinkInvalid')), 'error');
     } finally {
       setLoading(false);

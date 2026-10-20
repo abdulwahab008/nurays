@@ -9,7 +9,7 @@ import { useToast } from '@/components/ui/toast';
 import { LoadError } from '@/components/ui/LoadError';
 import { useDialogs } from '@/components/ui/Dialogs';
 import { useAuthStore } from '@/lib/store/auth-store';
-import { apiClient } from '@/lib/api-client';
+import { apiClient, apiErrorMessage, apiErrorStatus } from '@/lib/api-client';
 import DocumentList from '@/components/admin/DocumentList';
 import { formatDate } from '@/lib/utils';
 import { RejectReasonModal } from '@/components/admin/RejectReasonModal';
@@ -81,10 +81,10 @@ export default function AdminSellerDetailPage() {
         setSeller(null);
       }
       setLoadError(null);
-    } catch (error: any) {
+    } catch (error) {
       setSeller(null);
       // Only a 404 says the kitchen does not exist; anything else is a read that failed, and says so.
-      setLoadError(error.response?.status === 404 ? null : error);
+      setLoadError(apiErrorStatus(error) === 404 ? null : error);
     } finally {
       setLoading(false);
     }
@@ -96,8 +96,8 @@ export default function AdminSellerDetailPage() {
       await apiClient.post(`/admin/sellers/${id}/approve`, { approved: true });
       showToast('Seller approved successfully', 'success');
       loadSeller();
-    } catch (error: any) {
-      showToast(error.response?.data?.error?.message || 'Failed to approve', 'error');
+    } catch (error) {
+      showToast(apiErrorMessage(error, 'Failed to approve'), 'error');
     } finally {
       setActionLoading(false);
     }
@@ -110,8 +110,8 @@ export default function AdminSellerDetailPage() {
       showToast('Seller rejected', 'success');
       setRejecting(false);
       loadSeller();
-    } catch (error: any) {
-      showToast(error.response?.data?.error?.message || 'Failed to reject', 'error');
+    } catch (error) {
+      showToast(apiErrorMessage(error, 'Failed to reject'), 'error');
     } finally {
       setActionLoading(false);
     }
@@ -128,8 +128,8 @@ export default function AdminSellerDetailPage() {
       await apiClient.post(`/admin/sellers/${id}/status`, { status: nextStatus });
       showToast(nextStatus === 'suspended' ? 'Seller suspended' : 'Seller reactivated', 'success');
       loadSeller();
-    } catch (error: any) {
-      showToast(error.response?.data?.error?.message || 'Failed to update seller status', 'error');
+    } catch (error) {
+      showToast(apiErrorMessage(error, 'Failed to update seller status'), 'error');
     } finally {
       setActionLoading(false);
     }

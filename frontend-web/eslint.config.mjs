@@ -7,9 +7,9 @@ const eslintConfig = defineConfig([
   ...nextTs,
   {
     rules: {
-      // Widespread in older code (API answers, socket payloads): reported as a warning, and the lint script's
-      // --max-warnings cap stops the count from growing. Take them out as the code around them is touched.
-      "@typescript-eslint/no-explicit-any": "warn",
+      // None left (FE-7): an API answer gets a type, a caught error is `unknown` read through lib/api-client.ts
+      // (apiErrorMessage, apiErrorCode, apiErrorStatus, apiErrorDetails).
+      "@typescript-eslint/no-explicit-any": "error",
     },
   },
   // Override default ignores of eslint-config-next.

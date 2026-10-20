@@ -58,7 +58,7 @@ export default function FavoritesPage() {
       await favoriteService.removeFavorite(sellerId);
       setFavorites((prev) => prev.filter((f) => f.sellerId !== sellerId));
       showToast(t('favRemovedQuoted', { name }), 'info');
-    } catch (err: any) {
+    } catch (err) {
       showToast(t('favRemoveFailed'), 'error');
     }
   };

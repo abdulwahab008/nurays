@@ -3,6 +3,7 @@ import prisma from '../config/database';
 import { pageArgs } from '../utils/pagination';
 import { refreshRatingScores } from './ranking.service';
 import { AppError } from '../middleware/errorHandler';
+import { thrown } from '../utils/thrown';
 
 export class ReviewService {
   /**
@@ -88,8 +89,8 @@ export class ReviewService {
         isApproved: true, // Auto-approve for now
       },
     })
-    } catch (err: any) {
-      if (err?.code === 'P2002') {
+    } catch (err) {
+      if (thrown(err).code === 'P2002') {
         throw new AppError('Review already exists', 400, 'REVIEW_ALREADY_EXISTS');
       }
       throw err;

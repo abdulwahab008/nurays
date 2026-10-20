@@ -10,8 +10,14 @@
 import { smsProvider } from '../config/env';
 import { maskPhone } from '../utils/mask';
 import { logger } from '../utils/logger';
+import { thrown } from '../utils/thrown';
 
-let twilioClient: any = null;
+/** The one call made on the Twilio client (the package is loaded on first use). */
+interface SmsClient {
+  messages: { create(args: { body: string; from: string; to: string }): Promise<unknown> };
+}
+
+let twilioClient: SmsClient | null = null;
 
 function getTwilioClient() {
   if (twilioClient) return twilioClient;
@@ -46,8 +52,9 @@ export async function sendSMS(phone: string, message: string): Promise<boolean> 
       try {
         await client.messages.create({ body: message, from, to: phone });
         return true;
-      } catch (err: any) {
-        const transient = !err?.status || err.status >= 500;
+      } catch (err) {
+        const status = Number(thrown(err).status) || 0;
+        const transient = !status || status >= 500;
         logger.error({ phone: maskPhone(phone), attempt, err }, 'SMS failed');
         if (!transient) break;
       }

@@ -101,7 +101,7 @@ export default function SellerNotificationsPage() {
       if (response.data.success) {
         const list = response.data.data.notifications || [];
         setNotifications(
-          list.map((n: any) => ({
+          (list as Array<Notification & { actionUrl?: string }>).map((n) => ({
             ...n,
             link: n.link ?? n.actionUrl,
           }))

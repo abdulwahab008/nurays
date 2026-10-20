@@ -10,7 +10,7 @@ import { LoadError } from '@/components/ui/LoadError';
 import { useToast } from '@/components/ui/toast';
 import { useDialogs } from '@/components/ui/Dialogs';
 import { useAuthStore } from '@/lib/store/auth-store';
-import { apiClient } from '@/lib/api-client';
+import { apiClient, apiErrorMessage } from '@/lib/api-client';
 import { formatPrice } from '@/lib/utils';
 import { useShallow } from 'zustand/react/shallow';
 
@@ -196,8 +196,8 @@ function SellerProductsContent() {
       await apiClient.patch(`/products/${productId}`, { isActive: !currentStatus });
       showToast(`Product ${!currentStatus ? 'activated' : 'hidden'} successfully`, 'success');
       loadProducts();
-    } catch (error: any) {
-      showToast(error.response?.data?.error?.message || 'Failed to update product', 'error');
+    } catch (error) {
+      showToast(apiErrorMessage(error, 'Failed to update product'), 'error');
     }
   };
 
@@ -207,8 +207,8 @@ function SellerProductsContent() {
       await apiClient.patch(`/products/${productId}`, { menuDate: on ? 'today' : null });
       showToast(on ? "Added to today's menu" : "Taken off today's menu", 'success');
       loadProducts();
-    } catch (error: any) {
-      showToast(error.response?.data?.error?.message || 'Failed to update the menu', 'error');
+    } catch (error) {
+      showToast(apiErrorMessage(error, 'Failed to update the menu'), 'error');
     }
   };
 
@@ -229,8 +229,8 @@ function SellerProductsContent() {
       setProducts((prev) =>
         prev.map((p) => (p.id === productId ? { ...p, stockQuantity: newStock } : p))
       );
-    } catch (error: any) {
-      showToast(error.response?.data?.error?.message || 'Failed to update stock', 'error');
+    } catch (error) {
+      showToast(apiErrorMessage(error, 'Failed to update stock'), 'error');
     } finally {
       setUpdatingStock((prev) => ({ ...prev, [productId]: false }));
     }
@@ -260,8 +260,8 @@ function SellerProductsContent() {
       setBulkStockValue('');
       setSelectedProducts([]);
       loadProducts();
-    } catch (error: any) {
-      showToast(error.response?.data?.error?.message || 'Failed to bulk update stock', 'error');
+    } catch (error) {
+      showToast(apiErrorMessage(error, 'Failed to bulk update stock'), 'error');
     } finally {
       setLoading(false);
     }
@@ -278,8 +278,8 @@ function SellerProductsContent() {
       await apiClient.delete(`/products/${productId}`);
       showToast('Product removed from catalog', 'success');
       loadProducts();
-    } catch (error: any) {
-      showToast(error.response?.data?.error?.message || 'Failed to delete product', 'error');
+    } catch (error) {
+      showToast(apiErrorMessage(error, 'Failed to delete product'), 'error');
     }
   };
 

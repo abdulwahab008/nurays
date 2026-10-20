@@ -6,6 +6,7 @@ import { useSearchParams } from 'next/navigation';
 import { paymentService } from '@/lib/services/payment.service';
 import { useT } from '@/lib/i18n';
 import { paymentsMessages } from '@/lib/i18n/messages/payments';
+import { apiErrorMessage } from '@/lib/api-client';
 
 /**
  * Where a customer lands when an online payment didn't go through: they cancelled on the
@@ -55,8 +56,8 @@ function PaymentReturnContent() {
       setOpening(true);
       setError(null);
       window.location.href = await paymentService.startOrderPayment(orderId);
-    } catch (err: any) {
-      setError(err.response?.data?.error?.message || t('payPageFailedFromOrder'));
+    } catch (err) {
+      setError(apiErrorMessage(err, t('payPageFailedFromOrder')));
       setOpening(false);
     }
   };

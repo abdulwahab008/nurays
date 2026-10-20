@@ -70,7 +70,7 @@ export default function AdminAllSellersPage() {
         setSellers([]);
       }
       setLoadError(null);
-    } catch (error: any) {
+    } catch (error) {
       // The kitchens on the screen belong to the filter before this change, so they go with the failure.
       setSellers([]);
       setLoadError(error);

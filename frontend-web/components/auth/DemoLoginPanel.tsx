@@ -10,7 +10,7 @@ import { ShoppingCart, ChefHat, Clock, AlertCircle, Bike, ShieldCheck, Sparkles,
 import { homeFor } from '@/lib/utils';
 import { authService } from '@/lib/services/auth.service';
 import { useAuthStore } from '@/lib/store/auth-store';
-import { apiClient } from '@/lib/api-client';
+import { apiClient, errorMessage } from '@/lib/api-client';
 import { useToast } from '@/components/ui/toast';
 import { useShallow } from 'zustand/react/shallow';
 
@@ -135,8 +135,8 @@ export function DemoLoginPanel({ onAutofill, onError, busy }: { onAutofill: (ema
         const userType = response.data.user?.userType || response.data.user?.user_type;
         router.push(homeFor(userType));
       }
-    } catch (err: any) {
-      onError(err.response?.data?.error?.message || err.message || 'Quick login failed');
+    } catch (err) {
+      onError(errorMessage(err, 'Quick login failed'));
     } finally {
       setQuickLoadingId(null);
     }

@@ -9,7 +9,7 @@ import { useToast } from '@/components/ui/toast';
 import { LoadError } from '@/components/ui/LoadError';
 import { useDialogs } from '@/components/ui/Dialogs';
 import { useAuthStore } from '@/lib/store/auth-store';
-import { apiClient } from '@/lib/api-client';
+import { apiClient, apiErrorMessage, apiErrorStatus } from '@/lib/api-client';
 import { formatPrice, formatDate } from '@/lib/utils';
 import { ExternalLink } from '@/components/ExternalLink';
 import { useShallow } from 'zustand/react/shallow';
@@ -93,8 +93,8 @@ export default function AdminOrderDetailPage() {
       showToast('Order status updated', 'success');
       loadOrder();
       setSelectedStatus('');
-    } catch (error: any) {
-      showToast(error.response?.data?.error?.message || 'Failed to update status', 'error');
+    } catch (error) {
+      showToast(apiErrorMessage(error, 'Failed to update status'), 'error');
     } finally {
       setUpdating(false);
     }
@@ -112,8 +112,8 @@ export default function AdminOrderDetailPage() {
       setShowCancelForm(false);
       setCancelReason('');
       loadOrder();
-    } catch (error: any) {
-      showToast(error.response?.data?.error?.message || 'Failed to cancel order', 'error');
+    } catch (error) {
+      showToast(apiErrorMessage(error, 'Failed to cancel order'), 'error');
     } finally {
       setUpdating(false);
     }
@@ -126,8 +126,8 @@ export default function AdminOrderDetailPage() {
       await apiClient.post(`/admin/orders/${order.id}/retry-delivery`, {});
       showToast('Delivery sent back out for dispatch', 'success');
       loadOrder();
-    } catch (error: any) {
-      showToast(error.response?.data?.error?.message || 'Failed to retry delivery', 'error');
+    } catch (error) {
+      showToast(apiErrorMessage(error, 'Failed to retry delivery'), 'error');
     } finally {
       setUpdating(false);
     }
@@ -143,8 +143,8 @@ export default function AdminOrderDetailPage() {
       showToast('Payment confirmed', 'success');
       setConfirmNote('');
       await loadOrder();
-    } catch (error: any) {
-      showToast(error.response?.data?.error?.message || 'Could not confirm the payment', 'error');
+    } catch (error) {
+      showToast(apiErrorMessage(error, 'Could not confirm the payment'), 'error');
     } finally {
       setConfirmingPayment(false);
     }
@@ -160,8 +160,8 @@ export default function AdminOrderDetailPage() {
       await apiClient.post(`/admin/refunds/${refundId}/complete`, reference ? { reference } : {});
       showToast('Refund marked as sent', 'success');
       loadOrder();
-    } catch (error: any) {
-      showToast(error.response?.data?.error?.message || 'Failed to update refund', 'error');
+    } catch (error) {
+      showToast(apiErrorMessage(error, 'Failed to update refund'), 'error');
     } finally {
       setUpdating(false);
     }
@@ -179,8 +179,8 @@ export default function AdminOrderDetailPage() {
       await apiClient.post(`/admin/refunds/${refundId}/dismiss`, { reason: reason.trim() });
       showToast('Refund dismissed', 'success');
       loadOrder();
-    } catch (error: any) {
-      showToast(error.response?.data?.error?.message || 'Failed to dismiss refund', 'error');
+    } catch (error) {
+      showToast(apiErrorMessage(error, 'Failed to dismiss refund'), 'error');
     } finally {
       setUpdating(false);
     }
@@ -200,8 +200,8 @@ export default function AdminOrderDetailPage() {
       setShowRefundForm(false);
       setRefundAmount('');
       loadOrder();
-    } catch (error: any) {
-      showToast(error.response?.data?.error?.message || 'Failed to process refund', 'error');
+    } catch (error) {
+      showToast(apiErrorMessage(error, 'Failed to process refund'), 'error');
     } finally {
       setUpdating(false);
     }
@@ -230,10 +230,10 @@ export default function AdminOrderDetailPage() {
         setOrder(null);
       }
       setLoadError(null);
-    } catch (error: any) {
+    } catch (error) {
       setOrder(null);
       // Only a 404 says the order does not exist; anything else is a read that failed, and says so.
-      setLoadError(error.response?.status === 404 ? null : error);
+      setLoadError(apiErrorStatus(error) === 404 ? null : error);
     } finally {
       setLoading(false);
     }

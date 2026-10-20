@@ -2,6 +2,7 @@ import webpush from 'web-push';
 import prisma from '../config/database';
 import { AppError } from '../middleware/errorHandler';
 import { logger } from '../utils/logger';
+import { thrown } from '../utils/thrown';
 
 /**
  * Web push: notifications on a person's phone or computer even when Nuray isn't open.
@@ -83,12 +84,12 @@ export async function sendPushToUser(userId: string, payload: PushPayload): Prom
       });
       delivered++;
       await prisma.pushSubscription.update({ where: { id: sub.id }, data: { lastUsedAt: new Date() } }).catch(() => undefined);
-    } catch (err: any) {
-      if (err?.statusCode === 404 || err?.statusCode === 410) {
+    } catch (err) {
+      if (thrown(err).statusCode === 404 || thrown(err).statusCode === 410) {
         await prisma.pushSubscription.delete({ where: { id: sub.id } }).catch(() => undefined);
       } else {
         lastError = err;
-        logger.warn({ err: { message: err?.message, statusCode: err?.statusCode }, userId }, 'Push delivery failed');
+        logger.warn({ err: { message: thrown(err).message, statusCode: thrown(err).statusCode }, userId }, 'Push delivery failed');
       }
     }
   }

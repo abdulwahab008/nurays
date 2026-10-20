@@ -1,8 +1,9 @@
+import type { Prisma } from '@prisma/client';
 import { AppError } from '../middleware/errorHandler';
 import { sellableCutoff } from '../utils/hubStock';
 
-// Accept the interactive-transaction client without importing prisma types here.
-type Tx = any;
+// The caller's interactive-transaction client.
+type Tx = Prisma.TransactionClient;
 
 interface LockedBatch {
   id: string;
@@ -92,7 +93,7 @@ export async function releaseHubAllocations(
   orderId: string,
   opts: { orderItemIds?: string[]; productIds?: string[]; reason: string; performedBy: string }
 ) {
-  const scope: any[] = [];
+  const scope: Prisma.HubBatchAllocationWhereInput[] = [];
   if (opts.orderItemIds?.length) scope.push({ orderItemId: { in: opts.orderItemIds } });
   if (opts.productIds?.length) scope.push({ orderItemId: null, productId: { in: opts.productIds } });
   const limited = opts.orderItemIds !== undefined || opts.productIds !== undefined;

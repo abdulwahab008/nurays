@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/toast';
 import { LoadError } from '@/components/ui/LoadError';
 import { useAuthStore } from '@/lib/store/auth-store';
-import { apiClient } from '@/lib/api-client';
+import { apiClient, apiErrorMessage } from '@/lib/api-client';
 import { formatPrice } from '@/lib/utils';
 import { RejectReasonModal } from '@/components/admin/RejectReasonModal';
 import { useShallow } from 'zustand/react/shallow';
@@ -127,8 +127,8 @@ export default function AdminDashboardPage() {
         setRejecting(null);
         loadDashboardData(); // Reload the list
       }
-    } catch (error: any) {
-      const errorMessage = error.response?.data?.error?.message || error.response?.data?.message || `Failed to ${action} seller`;
+    } catch (error) {
+      const errorMessage = apiErrorMessage(error, `Failed to ${action} seller`);
       showToast(errorMessage, 'error');
     } finally {
       setProcessingId(null);

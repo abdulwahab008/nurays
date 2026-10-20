@@ -22,6 +22,7 @@ import type {
   VerifyPaymentRequest,
   VerifyPaymentResult,
 } from './types';
+import { thrownMessage } from '../utils/thrown';
 
 const BANK_API_URL = process.env.BANK_API_URL;
 const BANK_MERCHANT_ID = process.env.BANK_MERCHANT_ID;
@@ -34,6 +35,24 @@ const BANK_REQUEST_TIMEOUT_MS = configuredTimeout > 0 ? configuredTimeout : 15_0
 const PAID_STATES = new Set(['paid', 'completed', 'success', 'successful']);
 const CANCELLED_STATES = new Set(['cancelled', 'canceled', 'void']);
 const FAILED_STATES = new Set(['failed', 'declined', 'error', 'rejected']);
+
+/** The bank's create-payment answer (the fields read here). */
+interface BankCreateResponse {
+  reference?: string;
+  redirectUrl?: string;
+  redirect_url?: string;
+  message?: string;
+}
+
+/** The bank's payment-status answer (the fields read here). */
+interface BankStatusResponse {
+  status?: string;
+  transaction_id?: string;
+  reference?: string;
+  paid_at?: string;
+  amount?: number | string;
+  message?: string;
+}
 
 export const bankGateway: IPaymentGateway = {
   name: 'bank',
@@ -71,7 +90,7 @@ export const bankGateway: IPaymentGateway = {
         signal: AbortSignal.timeout(BANK_REQUEST_TIMEOUT_MS),
       });
 
-      const json = (await res.json().catch(() => null)) as any;
+      const json = (await res.json().catch(() => null)) as BankCreateResponse | null;
       if (!res.ok || !json?.reference) {
         return {
           success: false,
@@ -88,11 +107,11 @@ export const bankGateway: IPaymentGateway = {
         transactionRef: json.reference,
         expiresAt: new Date(Date.now() + 30 * 60 * 1000),
       };
-    } catch (err: any) {
+    } catch (err) {
       return {
         success: false,
         paymentId: `BANK-ERROR-${Date.now()}`,
-        message: err?.message ?? 'Bank gateway is unreachable',
+        message: thrownMessage(err, 'Bank gateway is unreachable'),
         errorCode: 'BANK_INIT_FAILED',
       };
     }
@@ -115,7 +134,7 @@ export const bankGateway: IPaymentGateway = {
         `${BANK_API_URL}/payments/${encodeURIComponent(req.paymentId)}/status`,
         { headers: { Authorization: `Bearer ${BANK_API_KEY}` }, signal: AbortSignal.timeout(BANK_REQUEST_TIMEOUT_MS) }
       );
-      const json = (await res.json().catch(() => null)) as any;
+      const json = (await res.json().catch(() => null)) as BankStatusResponse | null;
       if (!res.ok || !json) {
         return {
           success: false,
@@ -143,11 +162,11 @@ export const bankGateway: IPaymentGateway = {
       }
       // Any unrecognized or in-progress state is treated as pending — never assume paid.
       return { success: false, status: 'pending', message: `Payment status: ${remoteStatus || 'unknown'}` };
-    } catch (err: any) {
+    } catch (err) {
       return {
         success: false,
         status: 'failed',
-        message: err?.message ?? 'Bank gateway verification failed',
+        message: thrownMessage(err, 'Bank gateway verification failed'),
         errorCode: 'BANK_VERIFY_FAILED',
       };
     }

@@ -9,7 +9,7 @@ import { LoadError } from '@/components/ui/LoadError';
 import { RejectReasonModal } from '@/components/admin/RejectReasonModal';
 import { useToast } from '@/components/ui/toast';
 import { useAuthStore } from '@/lib/store/auth-store';
-import { apiClient } from '@/lib/api-client';
+import { apiClient, apiErrorMessage } from '@/lib/api-client';
 import { formatPrice } from '@/lib/utils';
 import { useShallow } from 'zustand/react/shallow';
 
@@ -81,8 +81,8 @@ export default function AdminProductsPage() {
       showToast(`Product ${action === 'approve' ? 'approved' : 'rejected'} successfully`, 'success');
       setRejecting(null);
       loadProducts();
-    } catch (error: any) {
-      showToast(error.response?.data?.error?.message || 'Failed to moderate product', 'error');
+    } catch (error) {
+      showToast(apiErrorMessage(error, 'Failed to moderate product'), 'error');
     } finally {
       setBusyId(null);
     }

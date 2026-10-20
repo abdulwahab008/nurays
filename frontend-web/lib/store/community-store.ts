@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { Community, communityService } from '../services/community.service';
 import { resolveLocationSmart, SmartMatchResult } from '../utils/location-resolver';
+import { errorMessage } from '../api-client';
 
 interface CommunityState {
   selectedCommunity: Community | null;
@@ -58,8 +59,8 @@ export const useCommunityStore = create<CommunityState>()(
               set({ selectedCommunity: fresh });
             }
           }
-        } catch (err: any) {
-          set({ error: err.message || 'Failed to load communities', isLoading: false });
+        } catch (err) {
+          set({ error: errorMessage(err, 'Failed to load communities'), isLoading: false });
         }
       },
 

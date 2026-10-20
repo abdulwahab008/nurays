@@ -21,7 +21,7 @@ import { DashboardLayout, CUSTOMER_SIDEBAR_ITEMS } from '@/components/layout/Das
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/toast';
 import { useAuthStore } from '@/lib/store/auth-store';
-import { apiClient } from '@/lib/api-client';
+import { apiClient, apiErrorMessage } from '@/lib/api-client';
 import MyTickets from '@/components/support/MyTickets';
 import { useT } from '@/lib/i18n';
 import { accountMessages } from '@/lib/i18n/messages/account';
@@ -138,8 +138,8 @@ export default function SupportPage() {
       showToast(t('messageSent'), 'success');
       setFormData({ subject: '', message: '', category: 'general' });
       setActiveTab('tickets');
-    } catch (error: any) {
-      showToast(error.response?.data?.error?.message || t('messageSendFailed'), 'error');
+    } catch (error) {
+      showToast(apiErrorMessage(error, t('messageSendFailed')), 'error');
     } finally {
       setSubmitting(false);
     }

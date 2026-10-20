@@ -32,6 +32,7 @@ import type {
   VerifyPaymentRequest,
   VerifyPaymentResult,
 } from './types';
+import { thrownMessage } from '../utils/thrown';
 
 const env = () => (process.env.SAFEPAY_SANDBOX === 'false' ? 'production' : 'sandbox');
 const apiBase = () =>
@@ -113,12 +114,19 @@ export function verifySafepayWebhook(body: unknown, signature: string | undefine
 }
 
 /** Safepay's own record of a checkout session (diagnostics). Throws when it can't be reached. */
+/** Safepay's reporter answer for one payment (the fields read here). */
+interface SafepayLookupResponse {
+  message?: string;
+  status?: { message?: string };
+  data?: { state?: string; tracker?: { state?: string }; payment?: { state?: string } };
+}
+
 export async function fetchSafepayPayment(tracker: string): Promise<{ state: string; raw: unknown }> {
   const res = await fetch(`${apiBase()}/reporter/api/v1/payments/${encodeURIComponent(tracker)}`, {
     headers: { 'x-sfpy-merchant-secret': secretKey() },
     signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
   });
-  const json = (await res.json().catch(() => ({}))) as Record<string, any>;
+  const json = (await res.json().catch(() => ({}))) as SafepayLookupResponse;
   if (!res.ok) throw new Error(json?.message || json?.status?.message || `Safepay lookup failed (${res.status})`);
   const data = json?.data ?? {};
   const state = String(data?.tracker?.state ?? data?.state ?? data?.payment?.state ?? '').toUpperCase();
@@ -150,8 +158,8 @@ export const safepayGateway: IPaymentGateway = {
         redirectUrl: checkout.redirectUrl,
         expiresAt: new Date(Date.now() + 30 * 60 * 1000),
       };
-    } catch (err: any) {
-      return { success: false, paymentId: '', message: err?.message ?? 'Safepay initiation failed', errorCode: 'SAFEPAY_INIT_FAILED' };
+    } catch (err) {
+      return { success: false, paymentId: '', message: thrownMessage(err, 'Safepay initiation failed'), errorCode: 'SAFEPAY_INIT_FAILED' };
     }
   },
 
@@ -164,8 +172,8 @@ export const safepayGateway: IPaymentGateway = {
     try {
       const { state } = await fetchSafepayPayment(req.paymentId);
       return { success: false, status: 'pending', message: `Safepay reports: ${state || 'unknown'}` };
-    } catch (err: any) {
-      return { success: false, status: 'failed', message: err?.message ?? 'Lookup failed', errorCode: 'SAFEPAY_VERIFY_FAILED' };
+    } catch (err) {
+      return { success: false, status: 'failed', message: thrownMessage(err, 'Lookup failed'), errorCode: 'SAFEPAY_VERIFY_FAILED' };
     }
   },
 };

@@ -1,4 +1,4 @@
-import { test, expect, request, APIRequestContext } from '@playwright/test';
+import { test, expect, request, APIRequestContext, type Page } from '@playwright/test';
 import { execSync } from 'node:child_process';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
@@ -37,7 +37,7 @@ async function postJson(
 interface TestUserSession {
   email: string;
   jwt: string;
-  user: any;
+  user: { id: string } & Record<string, unknown>;
   addressId: string;
 }
 
@@ -91,9 +91,9 @@ async function createVerifiedCustomer(): Promise<TestUserSession> {
   return { email, jwt, user, addressId };
 }
 
-async function setSession(page: any, session: TestUserSession) {
+async function setSession(page: Page, session: TestUserSession) {
   await page.addInitScript(
-    ({ token, user }: { token: string; user: any }) => {
+    ({ token, user }: { token: string; user: TestUserSession['user'] }) => {
       window.localStorage.setItem('auth_token', token);
       window.localStorage.setItem('access_token', token);
       window.localStorage.setItem('refresh_token', token);

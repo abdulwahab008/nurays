@@ -66,7 +66,7 @@ describe('authenticate', () => {
     const { error } = await run(bearer(generateToken(payload)));
     expect(error).toBe(outage);
     // ...which the error handler answers as a 503, not as a rejected token
-    const answered = toAppError(error) as AppError;
+    const answered = toAppError(error as Error) as AppError;
     expect([answered.statusCode, answered.code]).toEqual([503, 'SERVICE_UNAVAILABLE']);
   });
 
@@ -77,7 +77,7 @@ describe('authenticate', () => {
         throw busy;
       });
       const { error } = await run(bearer(generateToken(payload)));
-      expect([(toAppError(error) as AppError).statusCode, (toAppError(error) as AppError).code]).toEqual([503, 'SERVICE_BUSY']);
+      expect([(toAppError(error as Error) as AppError).statusCode, (toAppError(error as Error) as AppError).code]).toEqual([503, 'SERVICE_BUSY']);
     }
   });
 });

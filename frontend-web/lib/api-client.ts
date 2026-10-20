@@ -234,6 +234,27 @@ export function apiErrorMessage(err: unknown, fallback: string): string {
   return fallback;
 }
 
+/** The HTTP status of a failed request, or undefined when there was no answer (offline, timed out) or it was not a request. */
+export function apiErrorStatus(err: unknown): number | undefined {
+  return axios.isAxiosError(err) ? err.response?.status : undefined;
+}
+
+/** The server's message, else the error's own message (a network failure, a bug), else `fallback`. */
+export function errorMessage(err: unknown, fallback: string): string {
+  return apiErrorMessage(err, '') || (err instanceof Error && err.message) || fallback;
+}
+
+/** What the server says when the tray already holds another kitchen's dishes (CART_SELLER_MISMATCH). */
+export interface CartConflictDetails {
+  existingSeller?: { id?: string; name?: string };
+  newSeller?: { id?: string; name?: string };
+}
+
+/** The details the server attached to a refusal (the fields a validation error names, the kitchen already in the tray). */
+export function apiErrorDetails(err: unknown): unknown {
+  return axios.isAxiosError<ApiError>(err) ? err.response?.data?.error?.details : undefined;
+}
+
 /** The server's error code for a failed request (e.g. `OWN_REVIEW`), for showing a message in the person's language. */
 export function apiErrorCode(err: unknown): string | undefined {
   if (axios.isAxiosError<ApiError>(err)) return err.response?.data?.error?.code;

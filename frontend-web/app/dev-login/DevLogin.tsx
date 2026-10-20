@@ -3,7 +3,7 @@
 import { useEffect, useState, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
-import { apiClient } from '@/lib/api-client';
+import { apiClient, errorMessage } from '@/lib/api-client';
 import { useAuthStore } from '@/lib/store/auth-store';
 import { Mark, BrandLockup } from '@/components/ui/Mark';
 
@@ -123,8 +123,8 @@ function DevLoginContent() {
         setStatusMessage(`Success! Redirecting to ${role.targetUrl}...`);
         router.push(role.targetUrl);
       }
-    } catch (err: any) {
-      setStatusMessage(`Login failed: ${err.response?.data?.error?.message || err.message}`);
+    } catch (err) {
+      setStatusMessage(`Login failed: ${errorMessage(err, '')}`);
       setLoadingRole(null);
     }
   };

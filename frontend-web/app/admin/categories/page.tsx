@@ -9,7 +9,7 @@ import { LoadError } from '@/components/ui/LoadError';
 import { useToast } from '@/components/ui/toast';
 import { useDialogs } from '@/components/ui/Dialogs';
 import { useAuthStore } from '@/lib/store/auth-store';
-import { apiClient } from '@/lib/api-client';
+import { apiClient, apiErrorMessage } from '@/lib/api-client';
 import { useShallow } from 'zustand/react/shallow';
 
 
@@ -67,7 +67,7 @@ interface Category {
 interface CategoryModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSubmit: (data: any) => void;
+  onSubmit: (data: CategoryPayload) => void;
   category?: Category | null;
   parentCategories: Category[];
 }
@@ -82,6 +82,9 @@ const BLANK_CATEGORY_FORM = {
   sortOrder: 0,
   isActive: true,
 };
+
+/** What the form sends: an empty parent or product type is left out. */
+type CategoryPayload = Omit<typeof BLANK_CATEGORY_FORM, 'parentId' | 'productType'> & { parentId?: string; productType?: string };
 
 function categoryFormFor(category?: Category | null) {
   if (!category) return BLANK_CATEGORY_FORM;
@@ -478,7 +481,7 @@ export default function AdminCategoriesPage() {
     return result;
   };
 
-  const handleCreateCategory = async (data: any) => {
+  const handleCreateCategory = async (data: CategoryPayload) => {
     try {
       const response = await apiClient.post('/categories', data);
       if (response.data.success) {
@@ -486,12 +489,12 @@ export default function AdminCategoriesPage() {
         setShowModal(false);
         loadCategories();
       }
-    } catch (error: any) {
-      showToast(error.response?.data?.error?.message || 'Failed to create category', 'error');
+    } catch (error) {
+      showToast(apiErrorMessage(error, 'Failed to create category'), 'error');
     }
   };
 
-  const handleUpdateCategory = async (data: any) => {
+  const handleUpdateCategory = async (data: CategoryPayload) => {
     if (!editingCategory) return;
     
     try {
@@ -502,8 +505,8 @@ export default function AdminCategoriesPage() {
         setEditingCategory(null);
         loadCategories();
       }
-    } catch (error: any) {
-      showToast(error.response?.data?.error?.message || 'Failed to update category', 'error');
+    } catch (error) {
+      showToast(apiErrorMessage(error, 'Failed to update category'), 'error');
     }
   };
 
@@ -518,8 +521,8 @@ export default function AdminCategoriesPage() {
         showToast('Category deleted successfully!', 'success');
         loadCategories();
       }
-    } catch (error: any) {
-      showToast(error.response?.data?.error?.message || 'Failed to delete category', 'error');
+    } catch (error) {
+      showToast(apiErrorMessage(error, 'Failed to delete category'), 'error');
     }
   };
 

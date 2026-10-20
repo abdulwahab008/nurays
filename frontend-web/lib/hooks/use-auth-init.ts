@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useAuthStore, type User } from '@/lib/store/auth-store';
-import { apiClient, type ApiResponse } from '@/lib/api-client';
+import { apiClient, type ApiResponse, apiErrorStatus } from '@/lib/api-client';
 
 /**
  * Hook to initialize auth state on app load
@@ -32,10 +32,10 @@ export function useAuthInit() {
                 // Invalid token, clear it
                 apiClient.clearTokens();
               }
-            } catch (error: any) {
+            } catch (error) {
               // Token is invalid or expired, clear it
               if (mounted) {
-                if (error.response?.status === 401) {
+                if (apiErrorStatus(error) === 401) {
                   apiClient.clearTokens();
                 }
               }

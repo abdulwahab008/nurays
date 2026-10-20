@@ -11,7 +11,7 @@ import { useToast } from '@/components/ui/toast';
 import { LoadError } from '@/components/ui/LoadError';
 import { useDialogs } from '@/components/ui/Dialogs';
 import { useAuthStore } from '@/lib/store/auth-store';
-import { apiClient } from '@/lib/api-client';
+import { apiClient, apiErrorMessage, apiErrorStatus } from '@/lib/api-client';
 import { formatPrice } from '@/lib/utils';
 import { SellerOnboardingModal } from '@/components/SellerOnboardingModal';
 import { useT } from '@/lib/i18n';
@@ -195,11 +195,11 @@ function SellerDashboardContent() {
         setNeedsOnboarding(false);
       }
       setLoadError(null);
-    } catch (error: any) {
+    } catch (error) {
       console.error('Failed to load seller dashboard:', error);
       
       // If seller profile doesn't exist (404), show onboarding modal
-      if (error.response?.status === 404) {
+      if (apiErrorStatus(error) === 404) {
         setNeedsOnboarding(true);
         setShowOnboarding(true);
         setLoadError(null);
@@ -219,15 +219,15 @@ function SellerDashboardContent() {
       setTogglingLive(true);
       const res = await apiClient.post('/sellers/me/toggle-live');
       if (res.data.success) {
-        setDashboard((prev: any) => prev ? {
+        setDashboard((prev) => prev ? {
           ...prev,
           isStoreOpen: res.data.data.isOpen,
           availabilityOverride: res.data.data.availabilityOverride,
         } : prev);
         showToast(res.data.message || (res.data.data.isOpen ? t('dash.storeOpenToast') : t('dash.storeClosedToast')), 'success');
       }
-    } catch (err: any) {
-      showToast(err.response?.data?.error?.message || t('dash.toggleFailed'), 'error');
+    } catch (err) {
+      showToast(apiErrorMessage(err, t('dash.toggleFailed')), 'error');
     } finally {
       setTogglingLive(false);
     }

@@ -10,7 +10,7 @@ import { LoadError } from '@/components/ui/LoadError';
 import { useToast } from '@/components/ui/toast';
 import { useDialogs } from '@/components/ui/Dialogs';
 import { useAuthStore } from '@/lib/store/auth-store';
-import { apiClient } from '@/lib/api-client';
+import { apiClient, apiErrorMessage, apiErrorDetails } from '@/lib/api-client';
 import { formatPrice } from '@/lib/utils';
 import { useShallow } from 'zustand/react/shallow';
 
@@ -127,8 +127,8 @@ interface Promotion {
 interface CreatePromotionModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSubmit: (data: any) => void;
-  onUpdate?: (id: string, data: any) => void;
+  onSubmit: (data: PromotionPayload) => void;
+  onUpdate?: (id: string, data: PromotionPayload) => void;
   onError?: (message: string) => void;
   initialData?: Promotion | null;
   promotionId?: string | null;
@@ -154,6 +154,9 @@ interface PromotionFormValues {
 }
 
 /** The form's starting values: the promotion being edited, or a week-long 15% deal starting now. */
+/** What the form sends: its values and the dishes the deal applies to. */
+type PromotionPayload = PromotionFormValues & { applyTo: 'selected'; selectedProductIds: string[] };
+
 function promotionFormFor(initialData?: Promotion | null): PromotionFormValues {
   if (initialData) {
     return {
@@ -654,7 +657,7 @@ export default function SellerPromotionsPage() {
     }
   };
 
-  const handleCreatePromotion = async (data: any) => {
+  const handleCreatePromotion = async (data: PromotionPayload) => {
     const discountType = data.type === 'fixed' || data.type === 'percentage' ? data.type : 'percentage';
     const code = (data.code || data.name?.replace(/\s/g, '').toUpperCase().slice(0, 20) || 'PROMO')
       .toUpperCase()
@@ -691,17 +694,16 @@ export default function SellerPromotionsPage() {
       } else {
         showToast('Failed to create promotion', 'error');
       }
-    } catch (error: any) {
-      const err = error.response?.data?.error;
-      const details = err?.details as Array<{ field?: string; message?: string }> | undefined;
+    } catch (error) {
+      const details = apiErrorDetails(error) as Array<{ field?: string; message?: string }> | undefined;
       const msg = details?.length
         ? details.map((d) => (d.field ? `${d.field}: ${d.message}` : d.message)).join('. ')
-        : err?.message ?? error.response?.data?.message ?? 'Failed to create promotion';
+        : apiErrorMessage(error, 'Failed to create promotion');
       showToast(msg, 'error');
     }
   };
 
-  const handleUpdatePromotion = async (id: string, data: any) => {
+  const handleUpdatePromotion = async (id: string, data: PromotionPayload) => {
     const discountType = data.type === 'fixed' || data.type === 'percentage' ? data.type : 'percentage';
     const code = (data.code || data.name?.replace(/\s/g, '').toUpperCase().slice(0, 20) || 'PROMO')
       .toUpperCase()
@@ -739,12 +741,11 @@ export default function SellerPromotionsPage() {
       } else {
         showToast('Failed to update promotion', 'error');
       }
-    } catch (error: any) {
-      const err = error.response?.data?.error;
-      const details = err?.details as Array<{ field?: string; message?: string }> | undefined;
+    } catch (error) {
+      const details = apiErrorDetails(error) as Array<{ field?: string; message?: string }> | undefined;
       const msg = details?.length
         ? details.map((d) => (d.field ? `${d.field}: ${d.message}` : d.message)).join('. ')
-        : err?.message ?? error.response?.data?.message ?? 'Failed to update promotion';
+        : apiErrorMessage(error, 'Failed to update promotion');
       showToast(msg, 'error');
     }
   };
@@ -760,8 +761,8 @@ export default function SellerPromotionsPage() {
         setEditingPromo(null);
         setShowCreateModal(false);
       }
-    } catch (error: any) {
-      showToast(error.response?.data?.error?.message || 'Failed to delete promotion', 'error');
+    } catch (error) {
+      showToast(apiErrorMessage(error, 'Failed to delete promotion'), 'error');
     }
   };
 

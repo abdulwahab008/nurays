@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/toast';
 import { LoadError } from '@/components/ui/LoadError';
 import { useAuthStore } from '@/lib/store/auth-store';
-import { apiClient } from '@/lib/api-client';
+import { apiClient, apiErrorMessage } from '@/lib/api-client';
 import { formatDateTime } from '@/lib/utils';
 import { useShallow } from 'zustand/react/shallow';
 
@@ -88,7 +88,7 @@ export default function AdminSupportPage() {
       const res = await apiClient.get('/admin/support/tickets', { params: { status: filter !== 'all' ? filter : undefined, priority: priority || undefined, search: searchApplied || undefined } });
       if (res.data.success) setTickets(res.data.data.tickets || []);
       setLoadError(null);
-    } catch (error: any) {
+    } catch (error) {
       // The tickets on the screen belong to the filter before this change, so they go with the failure.
       setTickets([]);
       setLoadError(error);
@@ -124,8 +124,8 @@ export default function AdminSupportPage() {
         setInternal(false);
         loadTickets();
       }
-    } catch (error: any) {
-      showToast(error.response?.data?.error?.message || 'Failed to send reply', 'error');
+    } catch (error) {
+      showToast(apiErrorMessage(error, 'Failed to send reply'), 'error');
     } finally {
       setSending(false);
     }

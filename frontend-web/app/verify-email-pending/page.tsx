@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/toast';
 import { authService } from '@/lib/services/auth.service';
 import { useAuthStore } from '@/lib/store/auth-store';
-import { apiClient } from '@/lib/api-client';
+import { apiClient, apiErrorMessage } from '@/lib/api-client';
 import { useT } from '@/lib/i18n';
 import { authMessages } from '@/lib/i18n/messages/auth';
 import { useShallow } from 'zustand/react/shallow';
@@ -38,8 +38,8 @@ function VerifyEmailPendingContent() {
     try {
       await authService.resendVerificationEmail();
       showToast(t('verificationEmailSent'), 'success');
-    } catch (err: any) {
-      showToast(err.response?.data?.error?.message || t('resendEmailFailed'), 'error');
+    } catch (err) {
+      showToast(apiErrorMessage(err, t('resendEmailFailed')), 'error');
     } finally {
       setLoading(false);
     }

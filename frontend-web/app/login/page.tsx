@@ -10,7 +10,7 @@ import { GoogleSignInButton } from '@/components/GoogleSignInButton';
 import { useToast } from '@/components/ui/toast';
 import { authService } from '@/lib/services/auth.service';
 import { useAuthStore } from '@/lib/store/auth-store';
-import { apiClient } from '@/lib/api-client';
+import { apiClient, apiErrorCode } from '@/lib/api-client';
 import { BrandLockup } from '@/components/ui/Mark';
 import { useT } from '@/lib/i18n';
 import { useRequestErrorMessage } from '@/components/ui/LoadError';
@@ -65,7 +65,7 @@ export default function LoginPage() {
           router.push(landingAfterLogin(homeFor(userType)));
         }
       }
-    } catch (err: any) {
+    } catch (err) {
       const errorMessage = requestError(err, t('googleFailed'));
       setError(errorMessage);
     } finally {
@@ -81,9 +81,9 @@ export default function LoginPage() {
     try {
       await authService.loginSendOtp({ phone: phoneOrEmail });
       setStep('verify');
-    } catch (err: any) {
+    } catch (err) {
       const errorMessage = requestError(err, t('errSendOtp'));
-      const errorCode = err.response?.data?.error?.code;
+      const errorCode = apiErrorCode(err);
       
       if (errorCode === 'USER_NOT_FOUND') {
         setError(t('errNoAccountPhone'));
@@ -107,9 +107,9 @@ export default function LoginPage() {
       
       const userType = response.data.user?.userType || response.data.user?.user_type;
       router.push(landingAfterLogin(homeFor(userType)));
-    } catch (err: any) {
+    } catch (err) {
       const errorMessage = requestError(err, t('errOtpFailed'));
-      const errorCode = err.response?.data?.error?.code;
+      const errorCode = apiErrorCode(err);
       
       if (errorCode === 'ACCOUNT_SUSPENDED') {
         setError(t('errAccountSuspended'));
@@ -141,9 +141,9 @@ export default function LoginPage() {
         const userType = response.data.user?.userType || response.data.user?.user_type;
         router.push(landingAfterLogin(homeFor(userType)));
       }
-    } catch (err: any) {
+    } catch (err) {
       const errorMessage = requestError(err, t('errLoginFailed'));
-      const errorCode = err.response?.data?.error?.code;
+      const errorCode = apiErrorCode(err);
       
       if (errorCode === 'ACCOUNT_SUSPENDED') {
         setError(t('errAccountSuspended'));

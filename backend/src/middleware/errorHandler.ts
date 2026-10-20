@@ -5,11 +5,11 @@ import { reportError } from '../config/sentry';
 export class AppError extends Error {
   statusCode: number;
   code: string;
-  details?: any;
+  details?: unknown;
   /** A 5xx the system gives on purpose, in a state it knows about (see `AppError.expected`). */
   isExpected = false;
 
-  constructor(message: string, statusCode: number = 500, code: string = 'INTERNAL_ERROR', details?: any) {
+  constructor(message: string, statusCode: number = 500, code: string = 'INTERNAL_ERROR', details?: unknown) {
     super(message);
     this.statusCode = statusCode;
     this.code = code;
@@ -35,7 +35,15 @@ export class AppError extends Error {
  * A database that was too busy to answer in time becomes a 503. Anything
  * unrecognised is returned unchanged and handled as a real 500.
  */
-export const toAppError = (err: any): Error | AppError => {
+/** The fields the libraries below put on their errors (Prisma, body-parser, multer); all optional. */
+interface LibraryError extends Error {
+  code?: string;
+  clientVersion?: string;
+  meta?: { code?: unknown };
+  type?: string;
+}
+
+export const toAppError = (err: LibraryError): Error | AppError => {
   if (err instanceof AppError) return err;
 
   // Prisma (identified by shape so this file needn't import the client)
@@ -131,7 +139,7 @@ export const errorHandler = (
       error: {
         code: err.code || 'INTERNAL_ERROR',
         message: err.message || 'Internal Server Error',
-        ...(err.details && { details: err.details }),
+        ...(err.details ? { details: err.details } : {}),
         ...(isDev && err.stack && { stack: err.stack }),
       },
       requestId,

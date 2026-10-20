@@ -161,7 +161,7 @@ export function DashboardNavbar({ title, subtitle, userType = 'customer', onMenu
       if (res.data?.success && res.data?.data) {
         const list = res.data.data.notifications || [];
         setRecentNotifications(
-          list.map((n: any) => ({
+          (list as Array<Partial<NavbarNotification> & { id: string; title: string; message: string; createdAt: string; link?: string }>).map((n) => ({
             id: n.id,
             type: n.type || 'system',
             title: n.title,

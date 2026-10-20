@@ -13,7 +13,7 @@ import { CoverImage } from '@/components/ui/CoverImage';
 import { useToast } from '@/components/ui/toast';
 import { useAuthStore } from '@/lib/store/auth-store';
 import { useCartStore } from '@/lib/store/cart-store';
-import { apiClient } from '@/lib/api-client';
+import { apiClient, apiErrorCode, apiErrorStatus, apiErrorDetails, errorMessage, type CartConflictDetails } from '@/lib/api-client';
 import { DashboardLayout, CUSTOMER_SIDEBAR_ITEMS } from '@/components/layout/DashboardShell';
 import { BrandLockup } from '@/components/ui/Mark';
 import { useCommunityStore } from '@/lib/store/community-store';
@@ -387,9 +387,9 @@ function ProductsContent() {
         stockType: product.productType === 'frozen' ? 'hub' : 'direct',
       });
       showToast(t('toastAdded', { name: product.name }), 'success');
-    } catch (err: any) {
-      if (err?.response?.status === 409 || err?.response?.data?.error?.code === 'CART_SELLER_MISMATCH') {
-        const details = err?.response?.data?.error?.details;
+    } catch (err) {
+      if (apiErrorStatus(err) === 409 || apiErrorCode(err) === 'CART_SELLER_MISMATCH') {
+        const details = apiErrorDetails(err) as CartConflictDetails | undefined;
         setCartConflict({
           existingSellerName: details?.existingSeller?.name || t('previousKitchen'),
           newSellerName: details?.newSeller?.name || product.seller?.businessName || t('newKitchen'),
@@ -410,7 +410,7 @@ function ProductsContent() {
           onCancel: () => setCartConflict(null),
         });
       } else {
-        const msg = err?.response?.data?.error?.message || err?.message || t('toastAddDishFailed');
+        const msg = errorMessage(err, t('toastAddDishFailed'));
         showToast(msg, 'error');
       }
     } finally {

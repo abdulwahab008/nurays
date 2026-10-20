@@ -8,6 +8,7 @@ import { LoadError } from '@/components/ui/LoadError';
 import { formatPrice } from '@/lib/utils';
 import { useT } from '@/lib/i18n';
 import { paymentsMessages } from '@/lib/i18n/messages/payments';
+import { apiErrorMessage } from '@/lib/api-client';
 
 interface Props {
   orderId: string;
@@ -56,8 +57,8 @@ export default function OnlinePaymentCard({ orderId, totalAmount }: Props) {
     try {
       setOpening(true);
       window.location.href = await paymentService.startOrderPayment(orderId);
-    } catch (err: any) {
-      showToast(err.response?.data?.error?.message || t('payPageFailed'), 'error');
+    } catch (err) {
+      showToast(apiErrorMessage(err, t('payPageFailed')), 'error');
       setOpening(false);
     }
   };

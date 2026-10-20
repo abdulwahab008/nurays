@@ -7,6 +7,7 @@ import { SELLER_COMMUNITY_DELIVERY_SELECT } from '../utils/sellerDeliverySelect'
 import { communityService } from './community.service';
 import promotionService from './promotion.service';
 import { sellableBatchWhere } from '../utils/hubStock';
+import { thrown } from '../utils/thrown';
 
 export class CartService {
   /**
@@ -24,10 +25,10 @@ export class CartService {
             userId,
           },
         });
-      } catch (err: any) {
+      } catch (err) {
         // A user's first two requests can race to create the cart (userId is unique):
         // the loser just uses the winner's row.
-        if (err?.code !== 'P2002') throw err;
+        if (thrown(err).code !== 'P2002') throw err;
         cart = await prisma.cart.findUniqueOrThrow({ where: { userId } });
       }
     }
