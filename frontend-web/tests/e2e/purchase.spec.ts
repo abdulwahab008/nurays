@@ -73,6 +73,9 @@ async function createVerifiedCustomer() {
       addressLine1: '123 Test Street',
       area: 'DHA Phase 5',
       city: 'Karachi',
+      // A home-delivery order needs the door's pin (DELIV-4).
+      latitude: 24.8145,
+      longitude: 67.0345,
       isDefault: true,
     },
     jwt,

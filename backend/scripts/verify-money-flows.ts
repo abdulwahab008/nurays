@@ -274,7 +274,7 @@ async function main() {
   await prisma.sellerPayoutSchedule.create({ data: { sellerId: platS.id, minimumPayoutAmount: 1, payoutMethod: 'bank_transfer' } as any });
   const dc = await mkUser();
   await prisma.wallet.create({ data: { userId: dc.id, balance: 100000 } }); // wallet orders are paid at checkout
-  const addr = await prisma.userAddress.create({ data: { userId: dc.id, addressLine1: 'House 1 Street', area: 'X', city: 'Lahore' } });
+  const addr = await prisma.userAddress.create({ data: { userId: dc.id, addressLine1: 'House 1 Street', area: 'X', city: 'Lahore', latitude: 31.4728, longitude: 74.4538 } });
   const sp1 = await mkProduct(selfS.id, 20, 500);
   const sp2 = await mkProduct(platS.id, 20, 400);
   const homeOrder = (items: any[], pm: string) =>
@@ -463,7 +463,7 @@ async function main() {
   // ---- 17d. handover code: only the customer sees it; it gates every handover ----
   const { default: riderService } = require('../src/services/rider.service');
   const hoCust = await mkUser();
-  const hoAddr = await prisma.userAddress.create({ data: { userId: hoCust.id, addressLine1: 'House 2 Street', area: 'X', city: 'Lahore' } });
+  const hoAddr = await prisma.userAddress.create({ data: { userId: hoCust.id, addressLine1: 'House 2 Street', area: 'X', city: 'Lahore', latitude: 31.4728, longitude: 74.4538 } });
   const hoProd = await mkProduct(platS.id, 20, 300);
   const hoOrder: any = await orderService.createOrder(hoCust.id, { items: [{ productId: hoProd.id, quantity: 1 }], deliveryType: 'home_delivery', deliveryAddressId: hoAddr.id, paymentMethod: 'cod' } as any);
   const hoCode = (await prisma.order.findUnique({ where: { id: hoOrder.id }, select: { handoverCode: true } }))!.handoverCode;
@@ -534,6 +534,11 @@ async function main() {
     settledBoth.filter((r) => r === 'OK').length === 1 && rm.cashHeld === 0 && rm.balance === 0 && rm.paidOut === hoFee, `${settledBoth} ${JSON.stringify(rm)}`);
   ok('with nothing owed, a payout is refused', (await code(recordPayout(hoRider.id, admin.id, { amount: 1 }))) === 'PAYOUT_EXCEEDS_BALANCE');
 
+  // an address saved before pins were required: the order is refused until the pin is added (DELIV-4)
+  const noPin = await prisma.userAddress.create({ data: { userId: hoCust.id, addressLine1: 'House 4 Street', area: 'X', city: 'Lahore' } });
+  ok('a home delivery to an address with no map pin is refused, asking for the pin',
+    (await code(orderService.createOrder(hoCust.id, { items: [{ productId: hoProd.id, quantity: 1 }], deliveryType: 'home_delivery', deliveryAddressId: noPin.id, paymentMethod: 'cod' } as any))) === 'ADDRESS_PIN_REQUIRED');
+
   // the cash limit: a cash order that would take the rider past it isn't theirs to take
   const limOrder: any = await orderService.createOrder(hoCust.id, { items: [{ productId: hoProd.id, quantity: 1 }], deliveryType: 'home_delivery', deliveryAddressId: hoAddr.id, paymentMethod: 'cod' } as any);
   await prisma.order.update({ where: { id: limOrder.id }, data: { orderStatus: 'ready' } });
@@ -547,6 +552,8 @@ async function main() {
   ok('back on the default limit it can be claimed', (await code(riderService.claimDelivery(riderUser.id, limJob.id))) === 'OK');
 
   // where the rider is: shared with the customer while the food is on its way, never their pay
+  // (A job from before pins were required has no drop-off point; new orders always carry one.)
+  await prisma.delivery.update({ where: { id: limJob.id }, data: { deliveryLatitude: null, deliveryLongitude: null } });
   await riderService.updateDeliveryStatus(riderUser.id, limJob.id, 'picked_up');
   const loc: any = await riderService.updateRiderLocation(riderUser.id, limJob.id, 31.5204, 74.3587);
   ok('an unknown drop-off location never triggers an arrival', loc.autoTriggeredStatus === null && loc.distanceToDeliveryMeters === null);
@@ -660,7 +667,7 @@ async function main() {
   const { sweepStaleOrders } = require('../src/services/order-maintenance.service');
   const { runExclusive } = require('../src/jobs/scheduler');
   const swCust = await mkUser();
-  const swAddr = await prisma.userAddress.create({ data: { userId: swCust.id, addressLine1: 'House 3 Street', area: 'X', city: 'Lahore' } });
+  const swAddr = await prisma.userAddress.create({ data: { userId: swCust.id, addressLine1: 'House 3 Street', area: 'X', city: 'Lahore', latitude: 31.4728, longitude: 74.4538 } });
   const swProd = await mkProduct(platS.id, 50, 200);
   const homeO = () => orderService.createOrder(swCust.id, { items: [{ productId: swProd.id, quantity: 1 }], deliveryType: 'home_delivery', deliveryAddressId: swAddr.id, paymentMethod: 'cod' } as any) as Promise<any>;
 
@@ -1470,7 +1477,7 @@ async function main() {
   const notifySvc = require('../src/services/notify.service');
   const pushSvc = require('../src/services/push.service');
   const nCust = await mkUser();
-  const nAddr = await prisma.userAddress.create({ data: { userId: nCust.id, addressLine1: 'House 9 Street', area: 'X', city: 'Lahore' } });
+  const nAddr = await prisma.userAddress.create({ data: { userId: nCust.id, addressLine1: 'House 9 Street', area: 'X', city: 'Lahore', latitude: 31.4728, longitude: 74.4538 } });
   const nOrder: any = await orderService.createOrder(nCust.id, { items: [{ productId: hoProd.id, quantity: 1 }], deliveryType: 'home_delivery', deliveryAddressId: nAddr.id, paymentMethod: 'cod' } as any);
   const kitchenNew = await prisma.notification.findMany({ where: { userId: platUser, dedupeKey: `order:${nOrder.id}:new:${platUser}` } });
   ok('the kitchen gets one new-order notification', kitchenNew.length === 1);
@@ -1645,7 +1652,7 @@ async function main() {
     const kA2 = await mkSeller({ deliveryProvider: 'platform', communityId: cA.id });
     const kB = await mkSeller({ deliveryProvider: 'platform', communityId: cB.id });
     const buyer = await mkUser();
-    const addr = await prisma.userAddress.create({ data: { userId: buyer.id, addressLine1: 'House 9', area: 'A', city: 'Lahore', communityId: cA.id, landmark: 'Green gate', houseNumber: '9' } as any });
+    const addr = await prisma.userAddress.create({ data: { userId: buyer.id, addressLine1: 'House 9', area: 'A', city: 'Lahore', communityId: cA.id, landmark: 'Green gate', houseNumber: '9', latitude: 31.5, longitude: 74.35 } as any });
     const pA = await mkProduct(kA.id, 50, 500), pA2 = await mkProduct(kA2.id, 50, 500), pB = await mkProduct(kB.id, 50, 500);
     const placeCod = (productId: string) => orderService.createOrder(buyer.id, { items: [{ productId, quantity: 1 }], deliveryType: 'home_delivery', deliveryAddressId: addr.id, paymentMethod: 'cod', deliveryInstructions: 'Ring twice' } as any) as Promise<any>;
     const jobFor = async (o: any) => {
@@ -1725,7 +1732,7 @@ async function main() {
     ok('a weekly dish cannot be added to the cart on another day', (await code(cartService.addToCart(mb.id, { productId: pWeekOff.id, quantity: 1 } as any))) === 'NOT_ON_MENU_TODAY');
     ok("a daily dish that is not on today's menu cannot be added either", (await code(cartService.addToCart(mb.id, { productId: pDailyOff.id, quantity: 1 } as any))) === 'NOT_ON_MENU_TODAY');
     ok('a dish on today\'s menu can be added', (await code(cartService.addToCart(mb.id, { productId: pWeekOn.id, quantity: 1 } as any))) === 'OK');
-    const mAddr = await prisma.userAddress.create({ data: { userId: mb.id, addressLine1: 'House 3', area: 'A', city: 'Lahore' } as any });
+    const mAddr = await prisma.userAddress.create({ data: { userId: mb.id, addressLine1: 'House 3', area: 'A', city: 'Lahore', latitude: 31.4728, longitude: 74.4538 } as any });
     ok('an order for a dish that is not on the menu is refused', (await code(orderService.createOrder(mb.id, { items: [{ productId: pWeekOff.id, quantity: 1 }], deliveryType: 'home_delivery', deliveryAddressId: mAddr.id, paymentMethod: 'cod' } as any))) === 'NOT_ON_MENU_TODAY');
     ok('a kitchen can put a daily dish on today\'s menu', (await code(productService.updateProduct(pDailyOff.id, kM.userId, { menuDate: 'today' }))) === 'OK' && (await prisma.product.findUnique({ where: { id: pDailyOff.id } }))!.menuDate?.getTime() === karachiDay().date.getTime());
     ok('a weekly dish needs at least one day', (await code(productService.updateProduct(pWeekOn.id, kM.userId, { menuType: 'weekly', availableDays: [] }))) === 'MENU_DAYS_REQUIRED');

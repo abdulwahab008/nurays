@@ -86,7 +86,7 @@ export const register = async (req: Request, res: Response) => {
 export const login = async (req: Request, res: Response) => {
   const { phoneOrEmail, otpCodeOrPassword, loginMethod = 'email' } = req.body;
 
-  const result = await authService.login(phoneOrEmail, otpCodeOrPassword, loginMethod);
+  const result = await authService.login(phoneOrEmail, otpCodeOrPassword, loginMethod, req.ip);
 
   res.status(200).json({
     success: true,

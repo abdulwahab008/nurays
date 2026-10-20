@@ -4,6 +4,12 @@ import { Community, communityService } from '../services/community.service';
 import { resolveLocationSmart, SmartMatchResult } from '../utils/location-resolver';
 import { errorMessage } from '../api-client';
 
+/** What the device's position gave: the area it is in, or why none was chosen (no position shared, or outside every area). */
+export interface GpsDetection {
+  community: Community | null;
+  reason?: 'denied' | 'outside';
+}
+
 interface CommunityState {
   selectedCommunity: Community | null;
   communities: Community[];
@@ -16,7 +22,7 @@ interface CommunityState {
   setSelectedCommunity: (community: Community) => void;
   /** Fetches the list once per session; `force` refetches (the retry button, an admin edit). */
   loadCommunities: (force?: boolean) => Promise<void>;
-  detectCommunityFromGPS: () => Promise<Community | null>;
+  detectCommunityFromGPS: () => Promise<GpsDetection>;
   resolveCommunityFromText: (text: string) => SmartMatchResult | null;
 }
 
@@ -66,11 +72,11 @@ export const useCommunityStore = create<CommunityState>()(
 
       detectCommunityFromGPS: async () => {
         if (typeof window === 'undefined' || !navigator.geolocation) {
-          return null;
+          return { community: null, reason: 'denied' };
         }
 
         set({ isDetecting: true });
-        return new Promise<Community | null>((resolve) => {
+        return new Promise<GpsDetection>((resolve) => {
           navigator.geolocation.getCurrentPosition(
             async (position) => {
               try {
@@ -93,29 +99,27 @@ export const useCommunityStore = create<CommunityState>()(
                   // Fallback to local
                 }
 
-                const finalMatched = localMatch?.community || backendMatch || list.find((c) => c.slug === 'askari-11') || list[0];
+                // Only a real match is chosen. A position outside every area picks nothing: the buyer chooses (FE-20).
+                const finalMatched = localMatch?.community || backendMatch;
                 if (finalMatched) {
                   set({ selectedCommunity: finalMatched, isDetecting: false });
-                  resolve(finalMatched);
+                  resolve({ community: finalMatched });
                   return;
                 }
+                set({ isDetecting: false });
+                resolve({ community: null, reason: 'outside' });
+                return;
               } catch (e) {
                 console.warn('GPS community detection failed:', e);
               }
               set({ isDetecting: false });
-              resolve(null);
+              resolve({ community: null, reason: 'denied' });
             },
             (error) => {
               console.warn('Geolocation error:', error);
-              // Fallback to Askari 11 on GPS denial/error
-              const askari = get().communities.find((c) => c.slug === 'askari-11');
-              if (askari) {
-                set({ selectedCommunity: askari, isDetecting: false });
-                resolve(askari);
-                return;
-              }
+              // No area is chosen for a buyer whose device did not share where they are: they pick one (FE-20).
               set({ isDetecting: false });
-              resolve(null);
+              resolve({ community: null, reason: 'denied' });
             },
             { timeout: 8000, enableHighAccuracy: true }
           );

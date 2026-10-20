@@ -282,7 +282,7 @@ Status now: what the code shows today. Needs: code = can be done now; decision =
 | SEC-2 | Partly fixed | Partly open | approval | P1 | XS | 3 (#1) | Finish session revocation: logout/rotation residual (umbrella for SEC-R1/SEC-R2) |
 | SEC-R1 | — | Open | approval | P1 | L | 3 (#1) | Per-device sessions: refresh-token rotation with reuse detection |
 | SEC-R2 | — | Open | decision | P1 | M | 3 (#2) | Move the refresh token to an httpOnly cookie with CSRF protection |
-| SEC-3 | Open | Open | decision | P1 | M | 3 (#3) | Staff lockout that cannot be used to lock out the super admin |
+| SEC-3 | Open | Partly done | code | P1 | M | 3 (#3) | Staff lockout that cannot be used to lock out the super admin. Done: counted per account and address, ceiling of 50 across addresses. Left: two-factor sign-in for staff (migration) |
 | SEC-4 | Partly fixed | Done | code | P1 | M | 2 | OTP, forgot-password and verification-email limits per target; login backstops |
 | SEC-5 | Partly fixed | Done | code | P2 | S | 2 | Common/breached password check (plus the leftover 6-character UI hint) |
 | SEC-7 | Partly fixed | Partly done | code | P1 | S | 2 | Collector, Playwright check and `CSP_ENFORCE` are in; left: a week of reports, then enforce |
@@ -298,7 +298,7 @@ Status now: what the code shows today. Needs: code = can be done now; decision =
 | MONEY-8 | Fixed | Partly open | approval | P2 | XS | 3 (#11) | Drop the unused inventory_reservations table |
 | BE-9 | Open | Open | approval | P2 | S | 3 (#11) | Drop the four unused models: UserActivityLog, SearchQuery, SellerBadge, SellerPayoutSchedule |
 | DELIV-3 | Partly fixed | Partly open | decision | P1 | S | 3 (#5) | Let a map pin decide the community: stop area-name and home-community fallbacks from overriding a pin that falls outside every community |
-| DELIV-4 | Open | Open | decision | P1 | S | 3 (#6) | Require a map pin for home delivery at the API (grace rule and how to measure) |
+| DELIV-4 | Open | Done | code | P1 | S | 3 (#6) | Require a map pin for home delivery at the API: `ADDRESS_PIN_REQUIRED`; an older address gets its pin on the address page |
 | INTEG-3 | Open | Done | code | P2 | XS | 2 | Refuse online-payment orders when Safepay is not configured |
 | SEC-R5 | — | Done | code | P2 | XS | 0.5 (report) | Open job pool pin precision: already fixed by PRIV-2/AUTHZ-4; the Deliverable 4 row is stale |
 | SEC-R7 | — | Open | decision | P2 | M | 3 (#10) | Audit log: redact free text in requestData and add a retention purge that works with the append-only trigger |
@@ -330,7 +330,7 @@ Status now: what the code shows today. Needs: code = can be done now; decision =
 | BE-12 | Open | Done | code | P2 | M | 5 | Type req.seller, drop the req casts, remove `any`. Done: no `any` left in `src`, `no-explicit-any` is an error, lint cap 0 (and a 500 on dish edits that sent tags, fixed) |
 | BE-13 | Open | Done | code | P2 | M | 2 | Move query/formatting out of controllers; one seller lookup. Done: no controller reads the database but the health probe |
 | BE-14 | Open | Fixed | decision | P2 | XS | 3 (#14) | Remove (or quarantine) the unreferenced legacy scripts |
-| BE-15 | Open | Partly done | code | P2 | XS | 2 | Unify maskPhone, numeric coercion and the cash-at-door rule. Done: `maskPhone`, `isCashAtDoor`/`cashAtDoor`, `finiteOrNull`. Left: the numeric helpers whose contracts differ on purpose |
+| BE-15 | Open | Done | code | P2 | XS | 2 | Unify maskPhone, numeric coercion and the cash-at-door rule. Done; the numeric helpers left differ on purpose |
 | DELIV-11 | Partly fixed | Done | code | P1 | S | 2 | Mocked unit test for the delivery state machine |
 | NEW-seller-enums | — | Done | code | P2 | XS | 2 | Enforce the seller profile enums the validator already declares. Done: business type, delivery modes, availability override, `HH:MM` cut-off (also never null where no column can hold it); meal categories stay free text until decision 15 |
 | NEW-cart-fee | — | Done | code | P2 | S | 2 | Cart page invented a delivery fee and a Rs 800 free-delivery bar. Done: the page shows what `GET /cart/delivery-estimate` says (fee, `freeDeliveryThreshold`, `deliverySubtotal`), the bar only for a kitchen with such an amount, "calculated at checkout" with no estimate, and "Not available" for an address the kitchen does not reach; the estimate counts the dishes as checkout does |
@@ -345,7 +345,7 @@ Status now: what the code shows today. Needs: code = can be done now; decision =
 | FE-10 | Open | Partly done | decision | P2 | L | 3 (#13) | Server rendering and per-page metadata for the public marketplace pages. Done: titles, link previews, `robots.txt` and a sitemap (the first step of decision 13). Left: server-rendered detail pages |
 | FE-12 | Open | Fixed | code | P2 | S | 5 | Zustand selectors where they actually reduce re-renders (cart and community) |
 | FE-18 | Open | Fixed | code | P2 | XS | 5 | One button component: retire NurayButton |
-| FE-20 | Open | Open | decision | P2 | S | 3 (#12) | No silent default community on GPS denial or when no community is near |
+| FE-20 | Open | Done | code | P2 | S | 3 (#12) | No silent default community on GPS denial or when no community is near (done) |
 | NEW-web-1 | — | Done | code | P2 | XS | 2 | Address form defaulted the city to Karachi (also when the map named none) and the coordinate boxes called central Rawalpindi Islamabad. Done: `lib/cities.ts`; the city is typed text with suggestions, required on the address form, empty on sign-up |
 | NEW-web-2 | — | Done | code | P2 | XS | 2 | Unit test runner for web lib helpers. Done: `npm test` (Node's own runner), in CI; the city module is the first suite |
 | NEW-web-3 | — | Done | code | P2 | XS | 2 | The sign-up form asked for a "Hyperlocal Community" (preset to Askari 11) and a house number that were never sent, under a promise about nearest kitchens. Done: both removed with the unused `area` value; checked in a browser, and the check fails on the old form |

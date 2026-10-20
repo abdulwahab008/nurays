@@ -355,13 +355,16 @@ export default function CustomerDashboardPage() {
         if (!cancelled) setDishesLoading(false);
       });
 
-    const commId = selectedCommunity?.id || selectedCommunity?.slug || 'askari-11';
-    communityService
-      .getCommunity(commId)
-      .then((detail) => {
-        if (!cancelled && detail) setCommunityDetail(detail);
-      })
-      .catch(() => {});
+    // Only the area the buyer chose (or GPS found) is shown; none is picked on their behalf (FE-20).
+    const commId = selectedCommunity?.id || selectedCommunity?.slug;
+    if (commId) {
+      communityService
+        .getCommunity(commId)
+        .then((detail) => {
+          if (!cancelled && detail) setCommunityDetail(detail);
+        })
+        .catch(() => {});
+    }
 
     if (isAuthenticated) {
       apiClient
