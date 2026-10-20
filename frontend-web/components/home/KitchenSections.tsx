@@ -1,0 +1,345 @@
+'use client';
+
+/** The home page's kitchens: trending now, the avatar row, and the grid of kitchen cards with its states. */
+import Link from 'next/link';
+import { Flame, ChevronRight, Sparkles, ChefHat, Heart, Clock, ShieldCheck, MapPin, Star, Bike } from 'lucide-react';
+import { CoverImage } from '@/components/ui/CoverImage';
+import { useT } from '@/lib/i18n';
+import { homeMessages } from '@/lib/i18n/messages/home';
+import { countLabel, kitchenCaption } from '@/lib/home-feed';
+import { formatCount, type HomeKitchen, type LoadState } from '@/lib/home-filters';
+import { KitchenAvatarSkeleton, KitchenCardSkeleton, RetryButton, SectionNotice } from './HomeStates';
+
+type ToggleFavorite = (kitchenId: string, e: React.MouseEvent) => void;
+
+/** Most ordered from right now (recent orders count most; see backend utils/ranking.ts). Hidden until there is real recent demand. */
+export function TrendingKitchens({ kitchens: trendingKitchens }: { kitchens: HomeKitchen[] }) {
+  const t = useT(homeMessages);
+  if (trendingKitchens.length === 0) return null;
+  return (
+    <section className="max-w-[1440px] mx-auto px-4 sm:px-8 pt-6" data-testid="trending-kitchens">
+      <div className="mb-3">
+        <h3 className="text-lg sm:text-xl font-bold text-slate-900 tracking-tight flex items-center gap-1.5">
+          <Flame className="w-5 h-5 text-[#FF5500]" />
+          {t('trendingKitchens')}
+        </h3>
+        <p className="text-xs text-slate-500 font-medium mt-0.5">{t('trendingKitchensSub')}</p>
+      </div>
+      <div className="flex items-stretch gap-3 overflow-x-auto scrollbar-none py-1 px-0.5">
+        {trendingKitchens.map((k, i) => (
+          <Link
+            key={k.id}
+            href={k.href}
+            className="flex-shrink-0 w-56 flex items-center gap-3 p-2.5 rounded-2xl bg-white border border-slate-200/80 hover:border-[#FF5500] shadow-2xs transition-colors group"
+          >
+            <span className="w-6 text-center text-lg font-black text-[#FF5500]">{i + 1}</span>
+            <div className="relative w-12 h-12 rounded-full overflow-hidden border border-slate-200 flex-shrink-0">
+              <CoverImage src={k.avatar || k.coverPhoto} alt={k.name} label={k.name} size="sm" className="w-full h-full" />
+            </div>
+            <div className="min-w-0">
+              <span className="block text-sm font-bold text-slate-900 truncate group-hover:text-[#FF5500]">{k.name}</span>
+              <span className="block text-[11px] text-slate-500 truncate">
+                {[k.rating ? `★ ${k.rating}` : null, k.statusLabel].filter(Boolean).join(' · ')}
+              </span>
+            </div>
+          </Link>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+/** "Kitchens on Nuray" as a row of avatars. Hidden when there is nothing to show; the grid below explains why. */
+export function KitchenAvatarRow({ kitchens, state }: { kitchens: HomeKitchen[]; state: LoadState }) {
+  const t = useT(homeMessages);
+  if (!(state === 'loading' || (state === 'ready' && kitchens.length > 0))) return null;
+  return (
+    <section className="max-w-[1440px] mx-auto px-4 sm:px-8 py-6">
+      <div className="flex items-center justify-between mb-4">
+        <div>
+          <h3 className="text-lg sm:text-xl font-bold text-slate-900 tracking-tight">{t('kitchensOnNuray')}</h3>
+          <p className="text-xs text-slate-500 font-medium mt-0.5">{t('kitchensOnNuraySub')}</p>
+        </div>
+        <Link href="/kitchens" className="text-xs font-bold text-[#FF5500] hover:underline flex items-center gap-1">
+          <span>{t('seeAll')}</span>
+          <ChevronRight className="rtl:-scale-x-100 w-3.5 h-3.5" />
+        </Link>
+      </div>
+
+      {/* Compact Avatar Row */}
+      <div className="flex items-center gap-4 sm:gap-6 overflow-x-auto scrollbar-none py-1 px-0.5">
+        {state === 'loading'
+          ? Array.from({ length: 8 }, (_, i) => <KitchenAvatarSkeleton key={i} />)
+          : kitchens.map((k) => {
+              const caption = kitchenCaption(t, k);
+              return (
+                <Link key={k.id} href={k.href} className="flex-shrink-0 flex flex-col items-center gap-1.5 group text-center">
+                  <div className="relative w-14 h-14 sm:w-16 sm:h-16 rounded-full overflow-hidden border border-slate-200 group-hover:border-[#FF5500] transition-all shadow-2xs">
+                    <CoverImage
+                      src={k.avatar || k.coverPhoto}
+                      alt={k.name}
+                      label={k.name}
+                      size="sm"
+                      className="w-full h-full group-hover:scale-105 transition-transform"
+                    />
+                    {k.statusLabel && (
+                      <span
+                        className={`absolute bottom-0.5 end-0.5 w-3 h-3 rounded-full border border-white ${
+                          k.isOpen ? 'bg-emerald-500' : 'bg-slate-400'
+                        }`}
+                        title={k.statusLabel}
+                      />
+                    )}
+                  </div>
+                  <div>
+                    <span className="block text-xs font-semibold text-slate-900 group-hover:text-[#FF5500] max-w-[85px] sm:max-w-[95px] truncate">
+                      {k.name}
+                    </span>
+                    {caption && <span className="block text-[11px] text-slate-500 font-medium">{caption}</span>}
+                  </div>
+                </Link>
+              );
+            })}
+      </div>
+    </section>
+  );
+}
+
+export function KitchenCard({
+  kitchen,
+  isFav,
+  onToggleFavorite,
+}: {
+  kitchen: HomeKitchen;
+  isFav: boolean;
+  onToggleFavorite: ToggleFavorite;
+}) {
+  const t = useT(homeMessages);
+  return (
+    <Link
+      href={kitchen.href}
+      className="group flex flex-col justify-between bg-white rounded-2xl border border-slate-200/90 shadow-xs hover:shadow-md hover:border-slate-300 transition-all duration-200 overflow-hidden"
+    >
+      {/* Cover Image */}
+      <div className="relative aspect-[16/10] w-full overflow-hidden bg-slate-100">
+        <CoverImage
+          src={kitchen.coverPhoto}
+          alt={kitchen.name}
+          label={kitchen.name}
+          size="md"
+          className="w-full h-full transition-transform duration-500 group-hover:scale-105"
+        />
+        <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-black/10" />
+
+        {/* Deal Tag — only when one of its dishes is really discounted */}
+        {kitchen.deal && (
+          <span className="absolute top-3 start-3 px-2.5 py-1 rounded-md text-white text-[11px] font-bold bg-[#FF5500] shadow-xs uppercase tracking-wider">
+            {kitchen.deal}
+          </span>
+        )}
+
+        {/* Heart Button */}
+        <button
+          onClick={(e) => onToggleFavorite(kitchen.id, e)}
+          className="absolute top-3 end-3 w-8 h-8 rounded-full bg-white/90 backdrop-blur-xs flex items-center justify-center text-slate-700 hover:scale-110 transition-transform shadow-xs"
+          aria-label={isFav ? t('removeSaved') : t('saveFav')}
+          aria-pressed={isFav}
+        >
+          <Heart className={`w-4 h-4 transition-colors ${isFav ? 'fill-red-500 text-red-500' : 'text-slate-600 hover:text-red-500'}`} />
+        </button>
+
+        {/* Prep Time Pill (the kitchen's own minimum prep time) */}
+        {kitchen.prepMinutes != null && (
+          <span className="absolute bottom-3 end-3 px-2.5 py-1 rounded-lg bg-black/75 backdrop-blur-xs text-white text-[11px] font-bold flex items-center gap-1">
+            <Clock className="w-3 h-3" />
+            <span>{t('minPrep', { n: kitchen.prepMinutes })}</span>
+          </span>
+        )}
+
+        {/* Kitchen Type Badge (every listed kitchen is verified) */}
+        <span className="absolute bottom-3 start-3 px-2 py-0.5 rounded-md bg-emerald-600/90 backdrop-blur-xs text-white text-[11px] font-bold flex items-center gap-1">
+          <ShieldCheck className="w-3 h-3" />
+          <span>{kitchen.badge}</span>
+        </span>
+      </div>
+
+      {/* Card Body */}
+      <div className="p-4 flex-1 flex flex-col justify-between">
+        <div>
+          <div className="flex items-start justify-between gap-2 mb-2">
+            <div className="flex items-center gap-2.5 min-w-0">
+              <CoverImage
+                src={kitchen.avatar}
+                alt={kitchen.chef || kitchen.name}
+                label={kitchen.chef || kitchen.name}
+                size="sm"
+                className="w-9 h-9 rounded-xl border border-slate-200 flex-shrink-0"
+              />
+              <div className="min-w-0">
+                <h3 className="text-sm font-bold text-slate-900 group-hover:text-[#FF5500] truncate transition-colors">{kitchen.name}</h3>
+                {(kitchen.chef || kitchen.area) && (
+                  <p className="text-[11px] text-slate-500 font-medium truncate flex items-center gap-1">
+                    {kitchen.chef && <span>{kitchen.chef}</span>}
+                    {kitchen.chef && kitchen.area && <span>•</span>}
+                    {kitchen.area && (
+                      <>
+                        <MapPin className="w-3 h-3 text-slate-500 inline flex-shrink-0" />
+                        <span>{kitchen.area}</span>
+                      </>
+                    )}
+                  </p>
+                )}
+              </div>
+            </div>
+
+            {/* Rating pill: the real rating, or "New" before any reviews */}
+            {kitchen.rating ? (
+              <span
+                className="flex-shrink-0 bg-amber-50 text-amber-900 px-2 py-0.5 rounded-lg text-xs font-bold border border-amber-200/80 flex items-center gap-1"
+                title={countLabel(t, kitchen.reviewsCount, 'reviewsOne', 'reviewsMany')}
+              >
+                <Star className="w-3 h-3 fill-amber-500 text-amber-500" />
+                <span>{kitchen.rating}</span>
+                <span className="font-medium text-amber-700/80">({formatCount(kitchen.reviewsCount)})</span>
+              </span>
+            ) : (
+              <span className="flex-shrink-0 bg-slate-50 text-slate-600 px-2 py-0.5 rounded-lg text-xs font-bold border border-slate-200">
+                {t('newBadge')}
+              </span>
+            )}
+          </div>
+
+          {/* Open / closed, from the kitchen's real schedule */}
+          {kitchen.statusLabel && (
+            <div className="mt-2 text-[11px] font-semibold flex items-center gap-1.5">
+              <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${kitchen.isOpen ? 'bg-emerald-500' : 'bg-slate-400'}`} />
+              <span className={kitchen.isOpen ? 'text-emerald-700' : 'text-slate-500'}>{kitchen.statusLabel}</span>
+              {kitchen.isOpen && kitchen.closesAt && (
+                <span className="font-medium text-slate-500">{t('closesAt', { time: kitchen.closesAt })}</span>
+              )}
+              {!kitchen.isOpen && kitchen.opensAt && (
+                <span className="font-medium text-slate-500">{t('opensAt', { time: kitchen.opensAt })}</span>
+              )}
+            </div>
+          )}
+
+          {/* Delivery terms — only what the kitchen has set */}
+          {(kitchen.deliveryFee || kitchen.minOrder) && (
+            <div className="mt-2 text-xs text-slate-600 font-medium flex items-center gap-2">
+              {kitchen.deliveryFee && (
+                <span className="flex items-center gap-1 text-slate-700">
+                  <Bike className="w-3.5 h-3.5 text-slate-500" />
+                  <span>{kitchen.deliveryFee}</span>
+                </span>
+              )}
+              {kitchen.deliveryFee && kitchen.minOrder && <span className="text-slate-300">•</span>}
+              {kitchen.minOrder && <span className="text-[11px] text-slate-500">{t('minOrder', { amount: kitchen.minOrder })}</span>}
+            </div>
+          )}
+        </div>
+
+        {/* Meal categories the kitchen chose */}
+        {kitchen.cuisine.length > 0 && (
+          <div className="mt-3 pt-2.5 border-t border-slate-100 flex flex-wrap gap-1">
+            {kitchen.cuisine.map((c) => (
+              <span key={c} className="px-2 py-0.5 rounded-md bg-slate-50 text-[11px] font-semibold text-slate-600 border border-slate-100">
+                {c}
+              </span>
+            ))}
+          </div>
+        )}
+      </div>
+    </Link>
+  );
+}
+
+/** Every verified kitchen the filters let through, or why there are none: loading, could not load, none yet, none match. */
+export function KitchenGrid({
+  kitchens,
+  filteredKitchens,
+  state,
+  onRetry,
+  onClearFilters,
+  isAuthenticated,
+  favoriteKitchenIds,
+  onToggleFavorite,
+}: {
+  kitchens: HomeKitchen[];
+  filteredKitchens: HomeKitchen[];
+  state: LoadState;
+  onRetry: () => void;
+  onClearFilters: () => void;
+  isAuthenticated: boolean;
+  favoriteKitchenIds: Set<string>;
+  onToggleFavorite: ToggleFavorite;
+}) {
+  const t = useT(homeMessages);
+  return (
+    <section className="max-w-[1440px] mx-auto px-4 sm:px-8 py-6">
+      <div className="flex items-center justify-between mb-5">
+        <div>
+          <div className="inline-flex items-center gap-1 text-[11px] font-bold uppercase tracking-wider text-[#FF5500] mb-0.5">
+            <Sparkles className="w-3.5 h-3.5" />
+            <span>{t('verifiedKitchens')}</span>
+          </div>
+          <h2 className="text-xl sm:text-2xl font-bold text-slate-900 tracking-tight">{t('browseHomeKitchens')}</h2>
+        </div>
+        <Link href="/kitchens" className="text-xs font-bold text-[#FF5500] hover:underline flex items-center gap-1">
+          <span>{t('viewAll')}</span>
+          <ChevronRight className="rtl:-scale-x-100 w-3.5 h-3.5" />
+        </Link>
+      </div>
+
+      {state === 'loading' ? (
+        <div role="status" className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-3 gap-5">
+          <span className="sr-only">{t('loadingKitchens')}</span>
+          {Array.from({ length: 6 }, (_, i) => (
+            <KitchenCardSkeleton key={i} />
+          ))}
+        </div>
+      ) : state === 'error' ? (
+        <SectionNotice role="alert" title={t('kitchensError')} message={t('checkConnection')} action={<RetryButton onClick={onRetry} />} />
+      ) : kitchens.length === 0 ? (
+        <SectionNotice
+          title={t('noKitchens')}
+          message={t('noKitchensBody')}
+          action={
+            <Link
+              href="/sellers/register"
+              className="inline-flex items-center gap-1.5 bg-slate-950 hover:bg-black text-white px-3.5 py-2 rounded-xl text-xs font-semibold transition-colors shadow-sm"
+            >
+              <ChefHat className="w-3.5 h-3.5" />
+              <span>{t('openHomeKitchen')}</span>
+            </Link>
+          }
+        />
+      ) : filteredKitchens.length === 0 ? (
+        <SectionNotice
+          title={t('noMatch')}
+          message={t('noMatchBody')}
+          action={
+            <button
+              type="button"
+              onClick={onClearFilters}
+              className="inline-flex items-center gap-1.5 bg-slate-950 hover:bg-black text-white px-3.5 py-2 rounded-xl text-xs font-semibold transition-colors shadow-sm"
+            >
+              {t('clearFilters')}
+            </button>
+          }
+        />
+      ) : (
+        /* Responsive Grid */
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-3 gap-5">
+          {filteredKitchens.map((kitchen) => (
+            <KitchenCard
+              key={kitchen.id}
+              kitchen={kitchen}
+              isFav={isAuthenticated && favoriteKitchenIds.has(kitchen.id)}
+              onToggleFavorite={onToggleFavorite}
+            />
+          ))}
+        </div>
+      )}
+    </section>
+  );
+}
