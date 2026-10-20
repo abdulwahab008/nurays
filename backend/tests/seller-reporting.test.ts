@@ -79,16 +79,15 @@ beforeEach(() => {
     totalReviews: 3,
     products: [],
   });
-  // Lifetime aggregate over earned lines only (the query filters in SQL); the order being cooked is the one active order.
-  mockPrisma.$queryRaw.mockResolvedValue([
-    { active_orders: 1, pending_orders: 1, gross_sales: 1000, platform_fees: 100, item_payouts: 900 },
-  ]);
+  // Two raw queries: the dashboard's lifetime aggregate over earned lines (the query filters in SQL; the order being cooked is
+  // the one active order), and computeSellerBalance's orders, one summed row each: the earned order and the refunded one.
+  const stats = [{ active_orders: 1, pending_orders: 1, gross_sales: 1000, platform_fees: 100, item_payouts: 900 }];
+  const balanceRows = [
+    { id: 'order-earned', total_amount: 1150, payment_method: 'card', payment_collected_by: 'platform', payment_status: 'paid', has_paid_at: true, order_status: 'delivered', delivery_type: 'home_delivery', delivery_provider: 'platform', delivery_fee_breakdown: riderFee, live_payout: 900, first_seller_id: SELLER, refunds_failed: 0, refunds_completed: 0 },
+    { id: 'order-refunded', total_amount: 1800, payment_method: 'card', payment_collected_by: 'platform', payment_status: 'refunded', has_paid_at: true, order_status: 'delivered', delivery_type: 'home_delivery', delivery_provider: 'platform', delivery_fee_breakdown: [], live_payout: 1620, first_seller_id: SELLER, refunds_failed: 0, refunds_completed: 1800 },
+  ];
+  mockPrisma.$queryRaw.mockImplementation(async (sql: TemplateStringsArray) => (sql.join('').includes('first_seller_id') ? balanceRows : stats));
   mockPrisma.orderItem.findMany.mockResolvedValue(lines);
-  // What computeSellerBalance sees: the earned order and the refunded one.
-  mockPrisma.order.findMany.mockResolvedValue([
-    { ...earnedOrder, totalAmount: 1150, paymentMethod: 'card', paymentCollectedBy: 'platform', paidAt: today, deliveryType: 'home_delivery', deliveryProvider: 'platform', items: [{ sellerId: SELLER, status: 'delivered', sellerPayout: 900 }], refunds: [] },
-    { ...refundedOrder, totalAmount: 1800, paymentMethod: 'card', paymentCollectedBy: 'platform', paidAt: today, deliveryType: 'home_delivery', deliveryProvider: 'platform', deliveryFeeBreakdown: [], items: [{ sellerId: SELLER, status: 'delivered', sellerPayout: 1620 }], refunds: [{ amount: 1800, status: 'completed' }] },
-  ]);
   mockPrisma.sellerPayout.findMany.mockResolvedValue([]);
   mockPrisma.riderLedgerEntry.findMany.mockResolvedValue([]);
   mockPrisma.riderLedgerEntry.aggregate.mockResolvedValue({ _sum: { amount: 0 } });

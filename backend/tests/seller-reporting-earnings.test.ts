@@ -150,7 +150,24 @@ describe('the ledger and the reports', () => {
       });
       for (const m of mine) lines.push({ status: m.status, quantity: m.quantity, sellerPayout: m.sellerPayout, order: o });
     }
-    const client: any = { order: { findMany: async () => ledgerOrders }, sellerPayout: { findMany: async () => [] } };
+    // What the balance's query returns for these orders: one row each, its lines and refunds summed for this kitchen.
+    const rows = ledgerOrders.map((o) => ({
+      id: o.id,
+      total_amount: o.totalAmount,
+      payment_method: o.paymentMethod,
+      payment_collected_by: o.paymentCollectedBy,
+      payment_status: o.paymentStatus,
+      has_paid_at: !!o.paidAt,
+      order_status: o.orderStatus,
+      delivery_type: o.deliveryType,
+      delivery_provider: o.deliveryProvider,
+      delivery_fee_breakdown: o.deliveryFeeBreakdown,
+      live_payout: o.items.filter((i: any) => i.sellerId === SELLER && i.status !== 'cancelled').reduce((sum: number, i: any) => sum + i.sellerPayout, 0),
+      first_seller_id: o.items[0]?.sellerId ?? null,
+      refunds_failed: 0,
+      refunds_completed: 0,
+    }));
+    const client: any = { $queryRaw: async () => rows, sellerPayout: { findMany: async () => [] } };
     const ledger = await computeSellerBalance(client, SELLER);
 
     const earned = earnedOrders(lines, SELLER);

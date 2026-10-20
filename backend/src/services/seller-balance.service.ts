@@ -87,35 +87,106 @@ async function ordersWithCashHandedIn(client: Client, orderIds: string[]): Promi
   return covered;
 }
 
+/**
+ * One order as the balance needs it: the order's own fields, with its lines and refunds already summed in the database
+ * for this kitchen. A kitchen with tens of thousands of orders used to send every line and every refund row across to be
+ * added up here; now it is one row per order.
+ */
+export interface BalanceOrder {
+  id: string;
+  totalAmount: number;
+  paymentMethod: string;
+  paymentCollectedBy: string | null;
+  paymentStatus: string;
+  /** The order has a paidAt (the money was confirmed at some point). */
+  paidAt: boolean;
+  orderStatus: string;
+  deliveryType: string;
+  deliveryProvider: string | null;
+  deliveryFeeBreakdown: unknown;
+  /** Payout of this kitchen's lines that are not cancelled. */
+  livePayout: number;
+  /** The seller of the order's first line (oldest, then by id): the payee of an older multi-seller order. */
+  firstSellerId: string | null;
+  refundsFailed: number;
+  refundsCompleted: number;
+}
+
+/**
+ * The orders that matter to a kitchen's balance: delivered ones (earned if still paid, or refunded after delivery), and
+ * cancelled ones whose money was collected or refunded.
+ */
+async function balanceOrders(client: Client, sellerId: string): Promise<BalanceOrder[]> {
+  const rows = await client.$queryRaw<
+    Array<{
+      id: string;
+      total_amount: number;
+      payment_method: string;
+      payment_collected_by: string | null;
+      payment_status: string;
+      has_paid_at: boolean;
+      order_status: string;
+      delivery_type: string;
+      delivery_provider: string | null;
+      delivery_fee_breakdown: unknown;
+      live_payout: number;
+      first_seller_id: string | null;
+      refunds_failed: number;
+      refunds_completed: number;
+    }>
+  >`
+    WITH mine AS (
+      SELECT order_id, COALESCE(SUM(seller_payout) FILTER (WHERE status <> 'cancelled'), 0)::float8 AS live_payout
+      FROM order_items
+      WHERE seller_id = ${sellerId}
+      GROUP BY order_id
+    )
+    SELECT
+      o.id,
+      o.total_amount::float8 AS total_amount,
+      o.payment_method,
+      o.payment_collected_by,
+      o.payment_status,
+      (o.paid_at IS NOT NULL) AS has_paid_at,
+      o.order_status,
+      o.delivery_type,
+      o.delivery_provider,
+      o.delivery_fee_breakdown,
+      mine.live_payout,
+      (SELECT f.seller_id FROM order_items f WHERE f.order_id = o.id ORDER BY f.created_at ASC, f.id ASC LIMIT 1) AS first_seller_id,
+      COALESCE(r.failed, 0)::float8 AS refunds_failed,
+      COALESCE(r.completed, 0)::float8 AS refunds_completed
+    FROM mine
+    JOIN orders o ON o.id = mine.order_id
+    LEFT JOIN LATERAL (
+      SELECT SUM(x.amount) FILTER (WHERE x.status = 'failed') AS failed, SUM(x.amount) FILTER (WHERE x.status = 'completed') AS completed
+      FROM refunds x
+      WHERE x.order_id = o.id
+    ) r ON true
+    WHERE (o.order_status IN ('delivered', 'completed') AND o.payment_status IN ('paid', 'refund_pending', 'refunded'))
+       OR (o.order_status IN ('cancelled', 'refunded')
+           AND (o.paid_at IS NOT NULL OR EXISTS (SELECT 1 FROM refunds c WHERE c.order_id = o.id AND c.status = 'completed')))
+  `;
+  return rows.map((r) => ({
+    id: r.id,
+    totalAmount: Number(r.total_amount),
+    paymentMethod: r.payment_method,
+    paymentCollectedBy: r.payment_collected_by,
+    paymentStatus: r.payment_status,
+    paidAt: r.has_paid_at,
+    orderStatus: r.order_status,
+    deliveryType: r.delivery_type,
+    deliveryProvider: r.delivery_provider,
+    deliveryFeeBreakdown: r.delivery_fee_breakdown,
+    livePayout: Number(r.live_payout),
+    firstSellerId: r.first_seller_id,
+    refundsFailed: Number(r.refunds_failed),
+    refundsCompleted: Number(r.refunds_completed),
+  }));
+}
+
 export async function computeSellerBalance(client: Client, sellerId: string): Promise<SellerBalance> {
-  const orders = await client.order.findMany({
-    where: {
-      items: { some: { sellerId } },
-      OR: [
-        // Delivered: earned (if still paid), or fully refunded after delivery.
-        { orderStatus: { in: ['delivered', 'completed'] }, paymentStatus: { in: ['paid', 'refund_pending', 'refunded'] } },
-        // Cancelled after the money was collected: the refund decides who is owed what.
-        { orderStatus: { in: ['cancelled', 'refunded'] }, OR: [{ paidAt: { not: null } }, { refunds: { some: { status: 'completed' } } }] },
-      ],
-    },
-    select: {
-      id: true,
-      totalAmount: true,
-      paymentMethod: true,
-      paymentCollectedBy: true,
-      paymentStatus: true,
-      paidAt: true,
-      orderStatus: true,
-      deliveryType: true,
-      deliveryProvider: true,
-      deliveryFeeBreakdown: true,
-      items: {
-        select: { sellerId: true, status: true, sellerPayout: true },
-        orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
-      },
-      refunds: { select: { amount: true, status: true } },
-    },
-  });
+  const orders = await balanceOrders(client, sellerId);
 
   const cashByRider = orders
     .filter((o) => (o.orderStatus === 'delivered' || o.orderStatus === 'completed') && o.paymentStatus === 'paid' && collectorOf(o) === 'rider')
@@ -134,11 +205,7 @@ export async function computeSellerBalance(client: Client, sellerId: string): Pr
     const earned = delivered && o.paymentStatus === 'paid';
     const kept = earned ? selfDeliveryFeeFor(o.deliveryFeeBreakdown, sellerId) : 0;
     const paid = earned ? sellerPaidDeliveryFor(o.deliveryFeeBreakdown, sellerId) : 0;
-    const entitlement = earned
-      ? o.items
-          .filter((i) => i.sellerId === sellerId && i.status !== 'cancelled')
-          .reduce((sum, i) => sum + Number(i.sellerPayout), 0) + kept - paid
-      : 0;
+    const entitlement = earned ? o.livePayout + kept - paid : 0;
     if (earned) {
       totalEarnings += entitlement;
       deliveryEarned += kept;
@@ -152,17 +219,17 @@ export async function computeSellerBalance(client: Client, sellerId: string): Pr
       continue;
     }
 
-    const isPayee = o.items[0]?.sellerId === sellerId;
+    const isPayee = o.firstSellerId === sellerId;
     let collected = 0;
     let keptRefunds = 0;
     if (isPayee) {
       if (o.paidAt) {
-        collected = Number(o.totalAmount);
-        keptRefunds = o.refunds.filter((r) => r.status === 'failed').reduce((s, r) => s + Number(r.amount), 0);
+        collected = o.totalAmount;
+        keptRefunds = o.refundsFailed;
       } else {
         // Never confirmed by the seller, yet the platform refunded the customer
         // after checking the transfer had arrived: recover what it paid out.
-        collected = o.refunds.filter((r) => r.status === 'completed').reduce((s, r) => s + Number(r.amount), 0);
+        collected = o.refundsCompleted;
       }
     }
     sellerOwesPlatform += collected - entitlement - keptRefunds;
