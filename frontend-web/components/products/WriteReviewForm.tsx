@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { apiClient } from '@/lib/api-client';
+import { apiClient, apiErrorMessage, apiErrorCode } from '@/lib/api-client';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/toast';
 import { useT } from '@/lib/i18n';
@@ -60,13 +60,13 @@ export default function WriteReviewForm({ orderId, orderItemId, productName }: W
       showToast(t('thanksReview'), 'success');
       setSubmitted(true);
       setOpen(false);
-    } catch (error: any) {
-      const code = error.response?.data?.error?.code;
+    } catch (error) {
+      const code = apiErrorCode(error);
       if (code === 'REVIEW_ALREADY_EXISTS') {
         setSubmitted(true);
         setOpen(false);
       } else {
-        showToast(error.response?.data?.error?.message || t('submitReviewFailed'), 'error');
+        showToast(apiErrorMessage(error, t('submitReviewFailed')), 'error');
       }
     } finally {
       setSubmitting(false);

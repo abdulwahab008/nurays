@@ -7,7 +7,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { Wallet, ArrowDownLeft, ArrowUpRight, Plus, Lock } from 'lucide-react';
 import { DashboardLayout, CUSTOMER_SIDEBAR_ITEMS } from '@/components/layout/DashboardShell';
 import { useToast } from '@/components/ui/toast';
-import { apiClient } from '@/lib/api-client';
+import { apiClient, apiErrorMessage } from '@/lib/api-client';
 import { useAuthStore } from '@/lib/store/auth-store';
 import { paymentService, WalletSummary, WalletTransaction } from '@/lib/services/payment.service';
 import { formatPrice, formatDateTime } from '@/lib/utils';
@@ -92,8 +92,8 @@ function WalletContent() {
       setStarting(true);
       const url = await paymentService.startTopUp(chosen);
       window.location.href = url;
-    } catch (err: any) {
-      showToast(err.response?.data?.error?.message || t('topUpFailed'), 'error');
+    } catch (err) {
+      showToast(apiErrorMessage(err, t('topUpFailed')), 'error');
       setStarting(false);
     }
   };

@@ -10,7 +10,7 @@ import { useToast } from '@/components/ui/toast';
 import { LoadError } from '@/components/ui/LoadError';
 import { useAuthStore } from '@/lib/store/auth-store';
 import { useLiveRefresh } from '@/lib/hooks/use-live-refresh';
-import { apiClient } from '@/lib/api-client';
+import { apiClient, apiErrorMessage } from '@/lib/api-client';
 import { formatPrice, formatDate } from '@/lib/utils';
 import OrderChatModal from '@/components/orders/OrderChatModal';
 import SelfHandoverActions from '@/components/orders/SelfHandoverActions';
@@ -130,7 +130,7 @@ export default function SellerOrdersPage() {
         setTotalPages(raw?.pagination?.totalPages ?? 1);
       }
       setLoadError(null);
-    } catch (error: any) {
+    } catch (error) {
       console.error('Failed to load orders:', error);
       // A refresh that fails keeps the orders on the screen (and says they may be out of date); a first or chosen load that
       // fails shows the failure, not the orders of the tab before.
@@ -186,8 +186,8 @@ export default function SellerOrdersPage() {
         );
         loadOrders(true);
       }
-    } catch (err: any) {
-      showToast(err.response?.data?.error?.message || t('list.paymentUpdateFailed'), 'error');
+    } catch (err) {
+      showToast(apiErrorMessage(err, t('list.paymentUpdateFailed')), 'error');
     } finally {
       setActionLoadingId(null);
     }
@@ -204,8 +204,8 @@ export default function SellerOrdersPage() {
         }
         loadOrders(true);
       }
-    } catch (error: any) {
-      showToast(error.response?.data?.error?.message || t('acceptFailed'), 'error');
+    } catch (error) {
+      showToast(apiErrorMessage(error, t('acceptFailed')), 'error');
     } finally {
       setActionLoadingId(null);
     }
@@ -219,8 +219,8 @@ export default function SellerOrdersPage() {
         showToast(t('list.markedReady'), 'success');
         loadOrders(true);
       }
-    } catch (error: any) {
-      showToast(error.response?.data?.error?.message || t('list.markReadyFailed'), 'error');
+    } catch (error) {
+      showToast(apiErrorMessage(error, t('list.markReadyFailed')), 'error');
     } finally {
       setActionLoadingId(null);
     }
@@ -259,8 +259,8 @@ export default function SellerOrdersPage() {
         closeRejectModal();
         loadOrders(true);
       }
-    } catch (error: any) {
-      showToast(error.response?.data?.error?.message || t('rejectFailed'), 'error');
+    } catch (error) {
+      showToast(apiErrorMessage(error, t('rejectFailed')), 'error');
     } finally {
       setIsSubmittingReject(false);
     }

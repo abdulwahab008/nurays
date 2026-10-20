@@ -7,6 +7,7 @@ import markerIcon2x from 'leaflet/dist/images/marker-icon-2x.png';
 import markerShadow from 'leaflet/dist/images/marker-shadow.png';
 
 import { useEffect, useRef, useState, useCallback } from 'react';
+import type * as Leaflet from 'leaflet';
 import dynamic from 'next/dynamic';
 import { Search, Navigation, MapPin, Loader2, Check } from 'lucide-react';
 import { useT } from '@/lib/i18n';
@@ -43,10 +44,10 @@ function LocationMapInner({
   const t = useT(accountMessages);
   const tc = useT(commonMessages);
   const mapRef = useRef<HTMLDivElement>(null);
-  const mapInstanceRef = useRef<any>(null);
-  const markerRef = useRef<any>(null);
-  const circleRef = useRef<any>(null);
-  const LRef = useRef<any>(null);
+  const mapInstanceRef = useRef<Leaflet.Map | null>(null);
+  const markerRef = useRef<Leaflet.Marker | null>(null);
+  const circleRef = useRef<Leaflet.Circle | null>(null);
+  const LRef = useRef<typeof Leaflet | null>(null);
 
   const [isLoaded, setIsLoaded] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
@@ -118,7 +119,7 @@ L.tileLayer(MAP_TILE_URL, { attribution: MAP_ATTRIBUTION, maxZoom: MAP_MAX_ZOOM 
             onLocationSelect?.({ lat: pos.lat, lng: pos.lng });
           });
 
-          map.on('click', (e: any) => {
+          map.on('click', (e: Leaflet.LeafletMouseEvent) => {
             marker.setLatLng(e.latlng);
             setCurrentCoords({ lat: e.latlng.lat, lng: e.latlng.lng });
             setLocateFailed(false);

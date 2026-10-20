@@ -3,7 +3,7 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { Copy, Check, ShieldCheck, Clock, CheckCircle2, UploadCloud, X, Image as ImageIcon, Smartphone } from 'lucide-react';
 import { orderService, SellerPaymentDetails, SellerPaymentAccount } from '@/lib/services/order.service';
-import { apiClient } from '@/lib/api-client';
+import { apiClient, apiErrorMessage } from '@/lib/api-client';
 import { formatPrice } from '@/lib/utils';
 import { useToast } from '@/components/ui/toast';
 import { LoadError } from '@/components/ui/LoadError';
@@ -196,8 +196,8 @@ export default function ManualPaymentCard({
       setSubmittedLocal(true);
       setShowSubmitModal(false);
       onPaymentSubmitted();
-    } catch (err: any) {
-      const msg = err.response?.data?.error?.message || t('submitFailed');
+    } catch (err) {
+      const msg = apiErrorMessage(err, t('submitFailed'));
       showToast(msg, 'error');
     } finally {
       setSubmitting(false);

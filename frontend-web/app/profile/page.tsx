@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { loginUrlHere } from '@/lib/auth-redirect';
-import { apiClient, apiErrorMessage } from '@/lib/api-client';
+import { apiClient, apiErrorMessage, apiErrorCode, errorMessage } from '@/lib/api-client';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { userProfileService, UserProfile } from '@/lib/services/user-profile.service';
@@ -62,14 +62,14 @@ export default function ProfilePage() {
       setDeleting(true);
       try {
         await attempt();
-      } catch (error: any) {
-        if (error?.response?.data?.error?.code !== 'PASSWORD_REQUIRED') throw error;
+      } catch (error) {
+        if (apiErrorCode(error) !== 'PASSWORD_REQUIRED') throw error;
         const password = (await askDialog({ title: t('password'), message: t('deletePasswordPrompt'), type: 'password' }));
         if (!password) return;
         await attempt(password);
       }
-    } catch (error: any) {
-      showToast(error?.response?.data?.error?.message || error?.message || 'Could not close the account', 'error');
+    } catch (error) {
+      showToast(errorMessage(error, 'Could not close the account'), 'error');
     } finally {
       setDeleting(false);
     }
@@ -129,8 +129,8 @@ export default function ProfilePage() {
       setPhoneInput(number);
       setPhoneCodeSent(true);
       showToast(t('codeSent'), 'success');
-    } catch (err: any) {
-      showToast(err.response?.data?.error?.message || t('codeSendFailed'), 'error');
+    } catch (err) {
+      showToast(apiErrorMessage(err, t('codeSendFailed')), 'error');
     } finally {
       setPhoneBusy(false);
     }
@@ -145,8 +145,8 @@ export default function ProfilePage() {
       setPhoneCode('');
       setPhoneCodeSent(false);
       loadProfile();
-    } catch (err: any) {
-      showToast(err.response?.data?.error?.message || t('codeDidNotWork'), 'error');
+    } catch (err) {
+      showToast(apiErrorMessage(err, t('codeDidNotWork')), 'error');
     } finally {
       setPhoneBusy(false);
     }
@@ -195,8 +195,8 @@ export default function ProfilePage() {
       let response;
       try {
         response = await submit();
-      } catch (error: any) {
-        if (!emailChanged || error?.response?.data?.error?.code !== 'PASSWORD_REQUIRED') throw error;
+      } catch (error) {
+        if (!emailChanged || apiErrorCode(error) !== 'PASSWORD_REQUIRED') throw error;
         const currentPassword = (await askDialog({ title: t('password'), message: t('emailChangePasswordPrompt'), type: 'password' }));
         if (!currentPassword) return;
         response = await submit(currentPassword);
@@ -206,8 +206,8 @@ export default function ProfilePage() {
       setUser(user ? { ...user, ...response.data } : null);
       setEditing(false);
       showToast(t('profileUpdated'), 'success');
-    } catch (error: any) {
-      showToast(error.response?.data?.error?.message || t('profileUpdateFailed'), 'error');
+    } catch (error) {
+      showToast(apiErrorMessage(error, t('profileUpdateFailed')), 'error');
     }
   };
 

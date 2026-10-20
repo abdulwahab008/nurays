@@ -93,7 +93,7 @@ export default function SellerAnalyticsPage() {
       } else {
         throw new Error(response.data.message || 'Failed to load analytics');
       }
-    } catch (err: any) {
+    } catch (err) {
       console.error('Failed to load analytics:', err);
       setError(failureMessage(err));
     } finally {

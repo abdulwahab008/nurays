@@ -35,7 +35,7 @@ import { useCartStore } from '@/lib/store/cart-store';
 import { DashboardLayout, CUSTOMER_SIDEBAR_ITEMS } from '@/components/layout/DashboardShell';
 import { DatePicker } from '@/components/ui/DatePicker';
 import { ConfirmModal } from '@/components/ui/ConfirmModal';
-import { apiClient } from '@/lib/api-client';
+import { apiClient, apiErrorMessage, apiErrorCode, errorMessage, apiErrorStatus } from '@/lib/api-client';
 import { paymentService } from '@/lib/services/payment.service';
 import { useT } from '@/lib/i18n';
 import { commonMessages } from '@/lib/i18n/messages/common';
@@ -131,8 +131,8 @@ export default function CheckoutPage() {
               quantity: item.quantity,
               stockType: item.stockType || 'direct',
             });
-          } catch (err: any) {
-            console.warn('Syncing local cart item to server in checkout:', err?.message);
+          } catch (err) {
+            console.warn('Syncing local cart item to server in checkout:', errorMessage(err, ''));
           }
         }
         const fresh = await cartService.getCart();
@@ -219,8 +219,8 @@ export default function CheckoutPage() {
       useCartStore.getState().setAppliedPromoCode(null);
       setCart(null);
       showToast(t('trayClearedCheckout'), 'info');
-    } catch (err: any) {
-      showToast(err?.response?.data?.error?.message || t('failedClearTray'), 'error');
+    } catch (err) {
+      showToast(apiErrorMessage(err, t('failedClearTray')), 'error');
     } finally {
       setClearingCart(false);
       setShowClearModal(false);
@@ -239,8 +239,8 @@ export default function CheckoutPage() {
         const fresh = await cartService.getCart();
         setCart(fresh.data);
         showToast(t('itemRemoved'), 'info');
-      } catch (err: any) {
-        showToast(err?.response?.data?.error?.message || t('failedRemoveItem'), 'error');
+      } catch (err) {
+        showToast(apiErrorMessage(err, t('failedRemoveItem')), 'error');
       } finally {
         setUpdatingItemId(null);
       }
@@ -273,8 +273,8 @@ export default function CheckoutPage() {
 
       await cartService.updateCartItem(itemId, newQty);
       setTrayVersion((v) => v + 1);
-    } catch (err: any) {
-      showToast(err?.response?.data?.error?.message || t('couldNotUpdatePortion'), 'error');
+    } catch (err) {
+      showToast(apiErrorMessage(err, t('couldNotUpdatePortion')), 'error');
       const fresh = await cartService.getCart();
       if (fresh.data) setCart(fresh.data);
     } finally {
@@ -373,8 +373,8 @@ export default function CheckoutPage() {
         try {
           window.location.href = await paymentService.startOrderPayment(orderId);
           return;
-        } catch (payErr: any) {
-          showToast(payErr.response?.data?.error?.message || t('payPageFailed'), 'error', 8000);
+        } catch (payErr) {
+          showToast(apiErrorMessage(payErr, t('payPageFailed')), 'error', 8000);
           router.push(`/orders/${orderId}?placed=1`);
           return;
         }
@@ -382,21 +382,21 @@ export default function CheckoutPage() {
 
       showToast(paymentMethod === 'wallet' ? t('placedWallet') : t('placedSuccess'), 'success');
       router.push(`/orders/${orderId}?placed=1`);
-    } catch (error: any) {
-      if (!error.response) {
+    } catch (error) {
+      if (apiErrorStatus(error) === undefined) {
         // No answer (timeout / connection lost): the order may or may not exist. Keep the
         // key so pressing "Place order" again returns the same order, never a duplicate.
         showToast(t('connectionProblem'), 'error');
       } else {
         // The server refused it, so nothing was placed: a new attempt gets a new key.
         checkoutKeyRef.current = null;
-        const code = error.response?.data?.error?.code;
+        const code = apiErrorCode(error);
         if (code === 'GATEWAY_UNAVAILABLE') {
           // The gateway went away after the page loaded: take the option off, so the next press does not fail the same way.
           setOnlineAvailable(false);
           setPaymentMethod('cod');
         }
-        showToast(code === 'GATEWAY_UNAVAILABLE' ? t('onlineUnavailable') : error.response?.data?.error?.message || t('placeFailed'), 'error');
+        showToast(code === 'GATEWAY_UNAVAILABLE' ? t('onlineUnavailable') : apiErrorMessage(error, t('placeFailed')), 'error');
       }
     } finally {
       setProcessing(false);
@@ -1207,8 +1207,8 @@ export default function CheckoutPage() {
                             useCartStore.getState().setAppliedPromoCode(res.data.data.code);
                             showToast(t('voucherAppliedToast', { amount: formatPrice(res.data.data.discountAmount) }), 'success');
                           }
-                        } catch (err: any) {
-                          showToast(err?.response?.data?.error?.message || t('invalidVoucher'), 'error');
+                        } catch (err) {
+                          showToast(apiErrorMessage(err, t('invalidVoucher')), 'error');
                         } finally {
                           setPromoValidating(false);
                         }

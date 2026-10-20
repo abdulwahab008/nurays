@@ -87,7 +87,7 @@ function AdminOrdersContent() {
         setOrders(response.data.data.orders || []);
         setTotalPages(response.data.data.pagination?.totalPages || 1);
       }
-    } catch (error: any) {
+    } catch (error) {
       console.error('Failed to load orders:', error);
       setLoadError(error);
     } finally {

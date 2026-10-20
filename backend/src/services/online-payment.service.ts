@@ -305,11 +305,20 @@ export async function attemptByTracker(tracker: string) {
  * formats differ between Safepay's API versions, so both shapes are read; anything that isn't
  * clearly a success is ignored.
  */
-export function successfulTrackerFromWebhook(body: any): string | null {
-  const type = String(body?.type ?? body?.event ?? '').toLowerCase();
-  const data = body?.data ?? {};
-  const tracker = typeof data.tracker === 'string' ? data.tracker : data?.tracker?.token ?? data?.token ?? null;
-  const state = String(data?.tracker?.state ?? data?.state ?? '').toUpperCase();
+/** A Safepay webhook body, in either API version's shape; every field may be missing. */
+interface SafepayWebhookBody {
+  type?: unknown;
+  event?: unknown;
+  data?: { tracker?: string | { token?: string; state?: string }; token?: string; state?: string };
+}
+
+export function successfulTrackerFromWebhook(rawBody: unknown): string | null {
+  const body = (rawBody ?? {}) as SafepayWebhookBody;
+  const type = String(body.type ?? body.event ?? '').toLowerCase();
+  const data = body.data ?? {};
+  const trackerObject = typeof data.tracker === 'object' ? data.tracker : undefined;
+  const tracker = typeof data.tracker === 'string' ? data.tracker : trackerObject?.token ?? data.token ?? null;
+  const state = String(trackerObject?.state ?? data.state ?? '').toUpperCase();
   const successType = /^payment[.:](created|succeeded|success|paid|completed)$/.test(type);
   const successState = state === 'TRACKER_PAID';
   return tracker && (successType || successState) ? String(tracker) : null;

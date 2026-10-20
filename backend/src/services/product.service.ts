@@ -1,18 +1,23 @@
 import { Prisma } from '@prisma/client';
+import type { z } from 'zod';
+import type { updateProductSchema } from '../validators/product.validator';
+
+type UpdateProductInput = z.infer<typeof updateProductSchema>;
 import { logger } from '../utils/logger';
 import prisma from '../config/database';
 import { pageArgs } from '../utils/pagination';
 import { getPlatformDeliveryPricing } from './delivery-pricing.service';
 import { searchRankedProductIds } from './ranking.service';
 import { AppError } from '../middleware/errorHandler';
-import { computeSellerAvailability, isAcceptingOrders } from './availability.service';
-import { getDeliveryFeeForSeller, haversineKm } from '../utils/deliveryFee';
+import { computeSellerAvailability, isAcceptingOrders, type SellerAvailabilityInput } from './availability.service';
+import { getDeliveryFeeForSeller, haversineKm, type SellerDeliveryPolicy } from '../utils/deliveryFee';
 import { isOnMenu, menuNote, normalizeMenuInput, onMenuWhere } from '../utils/menu';
 import { notifyApprovers } from './approvals.service';
 import { notifySeller } from './notify.service';
 import { SELLER_COMMUNITY_DELIVERY_SELECT } from '../utils/sellerDeliverySelect';
 import { isUploadedBy } from '../utils/uploadPaths';
 import { isStoredFile } from '../storage';
+import { thrown } from '../utils/thrown';
 
 const SELLER_AVAILABILITY_SELECT = {
   status: true,
@@ -82,19 +87,20 @@ function publicSellerCard<T extends Record<string, unknown>>(seller: T): Record<
   return out;
 }
 
-function attachAvailability<T extends Record<string, unknown>>(seller: T) {
-  const availability = computeSellerAvailability(seller as any);
+function availabilityOf(seller: SellerAvailabilityInput) {
+  const availability = computeSellerAvailability(seller);
   return {
-    ...seller,
-    availability: {
-      status: availability.status,
-      isOpen: availability.isOpen,
-      opensAt: availability.opensAt,
-      closesAt: availability.closesAt,
-      nextOpenAt: availability.nextOpenAt,
-      reason: availability.reason,
-    },
+    status: availability.status,
+    isOpen: availability.isOpen,
+    opensAt: availability.opensAt,
+    closesAt: availability.closesAt,
+    nextOpenAt: availability.nextOpenAt,
+    reason: availability.reason,
   };
+}
+
+function attachAvailability<T extends SellerAvailabilityInput>(seller: T) {
+  return { ...seller, availability: availabilityOf(seller) };
 }
 
 /**
@@ -181,22 +187,22 @@ async function sellersPassingComputedFilters(
  * delivery fee, distance, eligibility, and an ETA.
  */
 export async function computeCustomerFacingSellerInfo(
-  seller: Record<string, unknown> & {
-    id: string;
-    latitude: unknown;
-    longitude: unknown;
-    minPrepTimeMinutes: number | null;
-  },
+  seller: Parameters<typeof isAcceptingOrders>[0] &
+    SellerDeliveryPolicy & {
+      latitude: unknown;
+      longitude: unknown;
+      minPrepTimeMinutes: number | null;
+    },
   customerLat?: number | null,
   customerLng?: number | null,
   customerCommunityId?: string | null
 ) {
-  const accepting = await isAcceptingOrders(seller as any);
+  const accepting = await isAcceptingOrders(seller);
   if ((customerLat == null || customerLng == null) && !customerCommunityId) {
     return { isAcceptingOrders: accepting.accepting, acceptingReason: accepting.reason, delivery: null };
   }
   const feeResult = getDeliveryFeeForSeller(
-    seller as any,
+    seller,
     { latitude: customerLat, longitude: customerLng, communityId: customerCommunityId },
     seller.latitude != null ? Number(seller.latitude) : null,
     seller.longitude != null ? Number(seller.longitude) : null,
@@ -269,11 +275,11 @@ function expandSearchTerms(search: string): string[] {
 const REVIEWED_FIELDS = ['name', 'nameUrdu', 'description', 'descriptionUrdu', 'categoryId', 'productType', 'ingredients', 'allergens', 'heatingInstructions', 'heatingInstructionsUrdu'] as const;
 const fileName = (url: string) => decodeURIComponent(url.split('?')[0].split('/').pop() ?? url);
 
-export function contentChanged(existing: Record<string, any>, data: Record<string, any>, existingImageUrls: string[]): boolean {
+export function contentChanged(existing: Record<string, unknown>, data: Record<string, unknown>, existingImageUrls: string[]): boolean {
   for (const f of REVIEWED_FIELDS) {
     if (data[f] !== undefined && String(data[f] ?? '') !== String(existing[f] ?? '')) return true;
   }
-  if (data.dietaryInfo !== undefined && JSON.stringify([...(data.dietaryInfo ?? [])].sort()) !== JSON.stringify([...(existing.dietaryInfo ?? [])].sort())) return true;
+  if (data.dietaryInfo !== undefined && JSON.stringify([...((data.dietaryInfo as string[] | null) ?? [])].sort()) !== JSON.stringify([...((existing.dietaryInfo as string[] | null) ?? [])].sort())) return true;
   if (data.images !== undefined) {
     const next = (data.images as string[]).map(fileName).sort();
     const prev = existingImageUrls.map(fileName).sort();
@@ -558,7 +564,7 @@ export class ProductService {
     // (and the DB query isAcceptingOrders makes) when several products share a seller.
     const sellerInfoById = new Map<string, Awaited<ReturnType<typeof computeCustomerFacingSellerInfo>>>();
     const uniqueSellers = Array.from(
-      new Map(products.map((p) => [(p.seller as any).id, p.seller as any])).values()
+      new Map(products.map((p) => [p.seller.id, p.seller])).values()
     );
     await Promise.all(
       uniqueSellers.map(async (seller) => {
@@ -571,7 +577,7 @@ export class ProductService {
     const baseUrl = process.env.BASE_URL || 'http://localhost:3001';
     const formattedProducts = products.map((product) => {
       const imageUrl = product.images[0]?.imageUrl || null;
-      const seller = product.seller as any;
+      const seller = product.seller;
       const sellerInfo = sellerInfoById.get(seller.id)!;
       const sellerCommunity = seller.community || (seller.primaryCommunityName ? { name: seller.primaryCommunityName } : null);
 
@@ -583,7 +589,7 @@ export class ProductService {
         if (seller.communityId === targetCommunity.id) {
           communityBadge = 'Same Community';
           isSameCommunity = true;
-        } else if (targetCommunity.neighborCommunityIds.includes(seller.communityId)) {
+        } else if (seller.communityId && targetCommunity.neighborCommunityIds.includes(seller.communityId)) {
           communityBadge = 'Nearby Community';
           isCrossCommunity = true;
         } else {
@@ -611,7 +617,8 @@ export class ProductService {
         isSameCommunity,
         isCrossCommunity,
         seller: {
-          ...attachAvailability(publicSellerCard(product.seller)),
+          ...publicSellerCard(product.seller),
+          availability: availabilityOf(product.seller),
           community: sellerCommunity,
           isAcceptingOrders: sellerInfo.isAcceptingOrders,
           acceptingOrdersReason: sellerInfo.acceptingReason,
@@ -619,8 +626,8 @@ export class ProductService {
         delivery: sellerInfo.delivery,
         estimatedDeliveryMinMinutes: sellerInfo.delivery?.estimatedMinMinutes ?? null,
         estimatedDeliveryMaxMinutes: sellerInfo.delivery?.estimatedMaxMinutes ?? null,
-        minOrderAmountForDelivery: (product.seller as any).minOrderAmountForDelivery != null
-          ? Number((product.seller as any).minOrderAmountForDelivery)
+        minOrderAmountForDelivery: product.seller.minOrderAmountForDelivery != null
+          ? Number(product.seller.minOrderAmountForDelivery)
           : null,
         stockQuantity: product.stockQuantity,
         stockType: product.stockType,
@@ -713,7 +720,7 @@ export class ProductService {
 
     // Format images with full URLs
     const baseUrl = process.env.BASE_URL || 'http://localhost:3001';
-    const sellerInfo = await computeCustomerFacingSellerInfo(product.seller as any, customerLat, customerLng, customerCommunityId);
+    const sellerInfo = await computeCustomerFacingSellerInfo(product.seller, customerLat, customerLng, customerCommunityId);
 
     // This endpoint is public. `product.seller` is the full Seller row (bank and
     // wallet numbers, commission rate, home coordinates, the seller's phone), so
@@ -898,9 +905,9 @@ export class ProductService {
         const created = await createRow(slug);
         notifyApprovers({ title: 'New dish to approve', message: `"${created.name}" was added and is waiting for approval.`, actionUrl: '/admin/products', dedupeKey: `product-new:${created.id}` });
         return created;
-      } catch (err: any) {
-        const target = String(err?.meta?.target ?? '');
-        if (err?.code !== 'P2002' || !/slug/i.test(target) || attempt >= 5) throw err;
+      } catch (err) {
+        const target = String(thrown(err).meta?.target ?? '');
+        if (thrown(err).code !== 'P2002' || !/slug/i.test(target) || attempt >= 5) throw err;
       }
     }
   }
@@ -908,7 +915,7 @@ export class ProductService {
   /**
    * Update product (seller only)
    */
-  async updateProduct(productId: string, sellerId: string, data: any) {
+  async updateProduct(productId: string, sellerId: string, data: UpdateProductInput) {
     // Verify product belongs to seller
     const product = await prisma.product.findFirst({
       where: {
@@ -963,25 +970,27 @@ export class ProductService {
         });
       }
       
-      // Remove images from data to prevent Prisma error
-      delete data.images;
     }
 
     // Menu type, days and date are checked together and saved as columns.
-    const { menuType, availableDays, menuDate, ...rest } = data;
+    // Images (handled above) and tags are rows of their own, not columns.
+    const { menuType, availableDays, menuDate, tags, images, ...rest } = data;
     const menu = menuType !== undefined || availableDays !== undefined || menuDate !== undefined ? normalizeMenuInput({ menuType, availableDays, menuDate }, product) : {};
 
     // Update product - no re-approval needed
-    const updatedProduct = await prisma.product.update({
-      where: { id: productId },
-      data: {
+    const changes: Prisma.ProductUncheckedUpdateInput = {
         ...rest,
+        // An edit that sends tags replaces them (they were passed through as a column, which Prisma refused: a 500).
+        ...(tags !== undefined ? { tags: { deleteMany: {}, create: tags.map((tag) => ({ tag })) } } : {}),
         ...menu,
         ...(needsReview ? { approvalStatus: 'pending', rejectionReason: null } : {}),
         slug,
         // Keep current approval status and active state
         // Unless explicitly changed via isActive field
-      },
+    };
+    const updatedProduct = await prisma.product.update({
+      where: { id: productId },
+      data: changes,
       include: {
         category: true,
         images: true,

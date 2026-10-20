@@ -87,7 +87,7 @@ export const communityService = {
   },
 
   setPrimaryCommunity: async (communityId: string) => {
-    const res = await apiClient.post<ApiResponse<{ success: boolean; primaryCommunity: any }>>(
+    const res = await apiClient.post<ApiResponse<{ success: boolean; primaryCommunity: Community }>>(
       '/communities/me/primary',
       { communityId }
     );

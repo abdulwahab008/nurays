@@ -9,7 +9,7 @@ import { Button } from '@/components/ui/button';
 import { LoadError } from '@/components/ui/LoadError';
 import { useToast } from '@/components/ui/toast';
 import { useDialogs } from '@/components/ui/Dialogs';
-import { apiClient } from '@/lib/api-client';
+import { apiClient, apiErrorMessage } from '@/lib/api-client';
 import { useAuthStore } from '@/lib/store/auth-store';
 import { DashboardLayout, CUSTOMER_SIDEBAR_ITEMS } from '@/components/layout/DashboardShell';
 import { useT } from '@/lib/i18n';
@@ -281,8 +281,8 @@ export default function AddressesPage() {
       
       resetForm();
       loadAddresses();
-    } catch (error: any) {
-      showToast(error.response?.data?.error?.message || t('addressSaveFailed'), 'error');
+    } catch (error) {
+      showToast(apiErrorMessage(error, t('addressSaveFailed')), 'error');
     }
   };
 
@@ -292,8 +292,8 @@ export default function AddressesPage() {
       await userProfileService.deleteAddress(addressId);
       showToast(t('addressDeleted'), 'success');
       loadAddresses();
-    } catch (error: any) {
-      showToast(error.response?.data?.error?.message || t('addressDeleteFailed'), 'error');
+    } catch (error) {
+      showToast(apiErrorMessage(error, t('addressDeleteFailed')), 'error');
     }
   };
 
@@ -302,8 +302,8 @@ export default function AddressesPage() {
       await userProfileService.setDefaultAddress(addressId);
       showToast(t('defaultUpdated'), 'success');
       loadAddresses();
-    } catch (error: any) {
-      showToast(error.response?.data?.error?.message || t('updateFailed'), 'error');
+    } catch (error) {
+      showToast(apiErrorMessage(error, t('updateFailed')), 'error');
     }
   };
 

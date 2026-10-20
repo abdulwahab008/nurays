@@ -9,7 +9,7 @@ import { CoverImage } from '@/components/ui/CoverImage';
 import { useAuthStore } from '@/lib/store/auth-store';
 import { useToast } from '@/components/ui/toast';
 import { displayRating, formatPrice } from '@/lib/utils';
-import { apiClient, ApiResponse } from '@/lib/api-client';
+import { apiClient, ApiResponse, apiErrorStatus, apiErrorCode, apiErrorDetails, errorMessage, type CartConflictDetails } from '@/lib/api-client';
 import type { PublicSeller, PublicSellerAvailability } from '@/lib/services/seller.service';
 import { cartService } from '@/lib/services/cart.service';
 import { useCartStore } from '@/lib/store/cart-store';
@@ -286,7 +286,7 @@ export default function KitchenStorefrontPage() {
       .catch((err: unknown) => {
         if (cancelled) return;
         setSeller(null);
-        if (isAxiosError(err) && err.response?.status === 404) {
+        if (isAxiosError(err) && apiErrorStatus(err) === 404) {
           setLoadState('not_found');
         } else {
           console.error('Failed to load seller storefront:', err);
@@ -342,9 +342,9 @@ export default function KitchenStorefrontPage() {
           quantity: 1,
           stockType: dish.isFrozen ? 'hub' : 'direct',
         });
-      } catch (err: any) {
-        if (err?.response?.status === 409 || err?.response?.data?.error?.code === 'CART_SELLER_MISMATCH') {
-          const details = err?.response?.data?.error?.details;
+      } catch (err) {
+        if (apiErrorStatus(err) === 409 || apiErrorCode(err) === 'CART_SELLER_MISMATCH') {
+          const details = apiErrorDetails(err) as CartConflictDetails | undefined;
           // Revert optimistic add
           setAddedItems((prev) => {
             const next = { ...prev };
@@ -362,7 +362,7 @@ export default function KitchenStorefrontPage() {
           });
           return;
         } else {
-          console.warn('Backend cart add notice:', err?.message);
+          console.warn('Backend cart add notice:', errorMessage(err, ''));
         }
       }
     }

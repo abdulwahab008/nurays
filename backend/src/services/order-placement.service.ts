@@ -21,6 +21,7 @@ import { onlinePaymentsAvailable } from './online-payment.service';
 import { newHandoverCode } from './handover.service';
 import { debitWallet } from './wallet.service';
 import { logger } from '../utils/logger';
+import { thrownMessage, thrown } from '../utils/thrown';
 
 /** Placing an order: the cart's items priced, discounted, split by kitchen and written in one transaction. */
 export class OrderPlacement {
@@ -51,14 +52,14 @@ export class OrderPlacement {
     for (let attempt = 1; ; attempt++) {
       try {
         return await create(this.generateOrderNumber());
-      } catch (err: any) {
-        const target = err?.meta?.target;
+      } catch (err) {
+        const target = thrown(err).meta?.target;
         const isOrderNumberClash =
-          err?.code === 'P2002' &&
+          thrown(err).code === 'P2002' &&
           (Array.isArray(target) ? target.includes('order_number') || target.includes('orderNumber') : /order_?number/i.test(String(target ?? '')));
         // A deadlock / serialization failure aborts only this attempt; the whole
         // transaction is safe to run again.
-        const isDeadlock = err?.code === 'P2034' || /deadlock detected|40P01/i.test(String(err?.message ?? ''));
+        const isDeadlock = thrown(err).code === 'P2034' || /deadlock detected|40P01/i.test(String(thrownMessage(err, '')));
         if (!(isOrderNumberClash || isDeadlock) || attempt >= MAX_ATTEMPTS) throw err;
       }
     }
@@ -701,10 +702,10 @@ export class OrderPlacement {
     }));
     try {
       order = await placeOrder();
-    } catch (err: any) {
+    } catch (err) {
       // The same checkout submitted twice at once: the other request placed it.
-      const target = String(err?.meta?.target ?? '');
-      if (idempotencyKey && err?.code === 'P2002' && /idempotency/i.test(target)) {
+      const target = String(thrown(err).meta?.target ?? '');
+      if (idempotencyKey && thrown(err).code === 'P2002' && /idempotency/i.test(target)) {
         const existing = await prisma.order.findUnique({
           where: { customerId_idempotencyKey: { customerId, idempotencyKey } },
           select: { id: true },

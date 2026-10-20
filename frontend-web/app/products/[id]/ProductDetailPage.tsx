@@ -14,7 +14,7 @@ import { useToast } from '@/components/ui/toast';
 import { useCartStore } from '@/lib/store/cart-store';
 import { useAuthStore } from '@/lib/store/auth-store';
 import { DashboardLayout, CUSTOMER_SIDEBAR_ITEMS } from '@/components/layout/DashboardShell';
-import { apiClient } from '@/lib/api-client';
+import { apiClient, apiErrorCode, apiErrorStatus, apiErrorDetails, errorMessage, type CartConflictDetails } from '@/lib/api-client';
 import { LoadError } from '@/components/ui/LoadError';
 import ProductReviews from '@/components/products/ProductReviews';
 import { favoriteService } from '@/lib/services/favorite.service';
@@ -35,6 +35,24 @@ interface CatalogPromotion {
 function formatClock(iso: string): string {
   return new Date(iso).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
 }
+
+/**
+ * GET /products/:id as it may arrive: stock as one number or per channel, images with `imageUrl`, and seller fields
+ * that older rows spell in snake_case. The page reads it into a ProductDetail.
+ */
+type RawProduct = Omit<ProductDetail, 'images' | 'stock' | 'seller' | 'variants'> & {
+  stock?: { hub?: number; direct?: number };
+  stockQuantity?: number;
+  stockType?: string;
+  images?: Array<{ url?: string; imageUrl?: string; isPrimary?: boolean }>;
+  variants?: ProductDetail['variants'];
+  seller?: Partial<Omit<ProductDetail['seller'], 'rating'>> & {
+    business_name?: string;
+    is_verified?: boolean;
+    rating?: number | string;
+    ratingAverage?: number | string;
+  };
+};
 
 interface ProductDetail {
   id: string;
@@ -175,7 +193,8 @@ export default function ProductDetailPage() {
       // Apply unless something newer has already been applied. (Not "unless a newer one is
       // merely in flight": if that one then fails, nothing would ever be shown.)
       if (seq < appliedSeqRef.current) return;
-      const data = response.data as any;
+      // The service types the list item; the detail endpoint sends more (delivery, variants, per-channel stock).
+      const data = response.data as unknown as RawProduct | undefined;
       if (!data) return;
       appliedSeqRef.current = seq;
       loadedProductRef.current = requestedId;
@@ -338,9 +357,9 @@ export default function ProductDetailPage() {
       });
       setJustAddedToCart(true);
       showToast(t('toastAddedLong'), 'success');
-    } catch (err: any) {
-      if (err?.response?.status === 409 || err?.response?.data?.error?.code === 'CART_SELLER_MISMATCH') {
-        const details = err?.response?.data?.error?.details;
+    } catch (err) {
+      if (apiErrorStatus(err) === 409 || apiErrorCode(err) === 'CART_SELLER_MISMATCH') {
+        const details = apiErrorDetails(err) as CartConflictDetails | undefined;
         setCartConflict({
           existingSellerName: details?.existingSeller?.name || t('previousKitchen'),
           newSellerName: details?.newSeller?.name || product.seller.businessName || t('newKitchen'),
@@ -377,7 +396,7 @@ export default function ProductDetailPage() {
           onCancel: () => setCartConflict(null),
         });
       } else {
-        const msg = err?.response?.data?.error?.message || err?.response?.data?.message || err?.message || t('toastAddToCartFailed');
+        const msg = errorMessage(err, t('toastAddToCartFailed'));
         showToast(msg, 'error');
       }
     } finally {
@@ -407,10 +426,10 @@ export default function ProductDetailPage() {
         stockType: 'direct',
       });
       router.push('/checkout');
-    } catch (err: any) {
+    } catch (err) {
       // The tray holds another kitchen: ask what to do, as "Add to Bag" does (the code is the server's CART_SELLER_MISMATCH).
-      if (err?.response?.status === 409 || err?.response?.data?.error?.code === 'CART_SELLER_MISMATCH') {
-        const conflictDetails = err.response.data?.error?.details;
+      if (apiErrorStatus(err) === 409 || apiErrorCode(err) === 'CART_SELLER_MISMATCH') {
+        const conflictDetails = apiErrorDetails(err) as CartConflictDetails | undefined;
         setCartConflict({
           existingSellerName: conflictDetails?.existingSeller?.name || t('anotherKitchen'),
           newSellerName: conflictDetails?.newSeller?.name || product.seller.businessName,
@@ -432,7 +451,7 @@ export default function ProductDetailPage() {
           onCancel: () => setCartConflict(null),
         });
       } else {
-        const msg = err?.response?.data?.error?.message || err?.response?.data?.message || err?.message || t('toastInstantCheckoutFailed');
+        const msg = errorMessage(err, t('toastInstantCheckoutFailed'));
         showToast(msg, 'error');
       }
     } finally {

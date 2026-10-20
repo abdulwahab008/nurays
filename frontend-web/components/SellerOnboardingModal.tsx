@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/toast';
-import { apiClient } from '@/lib/api-client';
+import { apiClient, apiErrorMessage } from '@/lib/api-client';
 import { useAuthStore } from '@/lib/store/auth-store';
 import { useT } from '@/lib/i18n';
 import { joinMessages } from '@/lib/i18n/messages/join';
@@ -205,7 +205,7 @@ export function SellerOnboardingModal({ isOpen, onClose, onComplete }: SellerOnb
 
     setLoading(true);
     try {
-      const sellerData: any = {
+      const sellerData: Record<string, unknown> = {
         businessName: formData.businessName,
       };
 
@@ -235,8 +235,8 @@ export function SellerOnboardingModal({ isOpen, onClose, onComplete }: SellerOnb
         showToast(t('ob.submitted'), 'success');
         onComplete();
       }
-    } catch (error: any) {
-      const errorMessage = error.response?.data?.error?.message || error.response?.data?.message || t('ob.registerFailed');
+    } catch (error) {
+      const errorMessage = apiErrorMessage(error, t('ob.registerFailed'));
       showToast(errorMessage, 'error');
     } finally {
       setLoading(false);

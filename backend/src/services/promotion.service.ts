@@ -1,3 +1,4 @@
+import type { Prisma } from '@prisma/client';
 import prisma from '../config/database';
 import { AppError } from '../middleware/errorHandler';
 import { codeDiscount } from '../utils/orderPricing';
@@ -59,13 +60,7 @@ export function eligibleSubtotalForPromotion(
  * cancel transaction.
  */
 export async function releasePromotionUsage(
-  tx: {
-    promotionUsage: {
-      findMany: (a: any) => Promise<Array<{ id: string; promotionId: string }>>;
-      deleteMany: (a: any) => Promise<unknown>;
-    };
-    promotion: { updateMany: (a: any) => Promise<unknown> };
-  },
+  tx: Pick<Prisma.TransactionClient, 'promotionUsage' | 'promotion'>,
   orderId: string
 ) {
   const usages = await tx.promotionUsage.findMany({ where: { orderId } });

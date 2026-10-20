@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/toast';
 import { LoadError } from '@/components/ui/LoadError';
 import { useAuthStore } from '@/lib/store/auth-store';
-import { apiClient } from '@/lib/api-client';
+import { apiClient, apiErrorMessage } from '@/lib/api-client';
 import { bankAccountIsWrong, walletNumberIsWrong } from '@/lib/payout-account';
 import LocationMap from '@/components/ui/LocationMap';
 import FileUploadField from '@/components/ui/FileUploadField';
@@ -54,7 +54,8 @@ export default function SellerRegisterPage() {
   const { showToast } = useToast();
   const t = useT(joinMessages);
   const [loading, setLoading] = useState(false);
-  const [sellerInfo, setSellerInfo] = useState<any>(null);
+  // The kitchen as GET /sellers/me/dashboard returns it; the page reads where its application stands.
+  const [sellerInfo, setSellerInfo] = useState<{ verificationStatus?: string; applicationMissing?: string[]; rejectionReason?: string | null } | null>(null);
   const [loadingSellerInfo, setLoadingSellerInfo] = useState(true);
   // Why the kitchen's saved details could not be read when it was not a 404 (that one means "not registered yet"). Sending the
   // form with the details missing would write the blanks over a kitchen that already has them.
@@ -248,8 +249,8 @@ export default function SellerRegisterPage() {
         await loadSellerInfo();
         setIsEditing(false);
       }
-    } catch (error: any) {
-      showToast(error.response?.data?.error?.message || error.response?.data?.message || t('reg.submitFailed'), 'error');
+    } catch (error) {
+      showToast(apiErrorMessage(error, t('reg.submitFailed')), 'error');
     } finally {
       setLoading(false);
     }

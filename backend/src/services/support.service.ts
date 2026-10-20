@@ -4,6 +4,7 @@ import prisma from '../config/database';
 import { pageArgs } from '../utils/pagination';
 import { AppError } from '../middleware/errorHandler';
 import { notify } from './notify.service';
+import { thrown } from '../utils/thrown';
 
 export class SupportService {
   /**
@@ -55,8 +56,8 @@ export class SupportService {
           },
         });
         break;
-      } catch (err: any) {
-        if (err?.code !== 'P2002' || attempt >= 5) throw err;
+      } catch (err) {
+        if (thrown(err).code !== 'P2002' || attempt >= 5) throw err;
       }
     }
 

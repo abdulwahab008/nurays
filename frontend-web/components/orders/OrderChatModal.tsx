@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState, useRef, useCallback } from 'react';
 import { Send, X, ShieldCheck, Mic, Square, Trash2, Play, Pause, Check, CheckCheck, Sparkles } from 'lucide-react';
-import { apiClient } from '@/lib/api-client';
+import { apiClient, apiErrorMessage } from '@/lib/api-client';
 import { orderService, OrderMessage } from '@/lib/services/order.service';
 import { useToast } from '@/components/ui/toast';
 import { useLiveRefresh } from '@/lib/hooks/use-live-refresh';
@@ -298,8 +298,8 @@ export default function OrderChatModal({
         setMessages((prev) => [...prev, { ...res.data, isMe: true }]);
         if (customText === undefined) setNewMessage('');
       }
-    } catch (err: any) {
-      const msg = err.response?.data?.error?.message || t('chat.sendFailed');
+    } catch (err) {
+      const msg = apiErrorMessage(err, t('chat.sendFailed'));
       showToast(msg, 'error');
     } finally {
       setSending(false);
@@ -328,7 +328,7 @@ export default function OrderChatModal({
       recordingTimerRef.current = setInterval(() => {
         setRecordingSeconds((sec) => sec + 1);
       }, 1000);
-    } catch (err: any) {
+    } catch (err) {
       console.error('Microphone error:', err);
       showToast(t('chat.micDenied'), 'error');
     }
@@ -383,8 +383,8 @@ export default function OrderChatModal({
         if (res.data) {
           setMessages((prev) => [...prev, { ...res.data, isMe: true }]);
         }
-      } catch (err: any) {
-        showToast(err.response?.data?.error?.message || t('chat.voiceFailed'), 'error');
+      } catch (err) {
+        showToast(apiErrorMessage(err, t('chat.voiceFailed')), 'error');
       } finally {
         setSending(false);
       }
@@ -499,7 +499,7 @@ export default function OrderChatModal({
               </p>
             </div>
           ) : (
-            messages.map((msg: any) => {
+            messages.map((msg) => {
               // Crucial role separation fix:
               // A message belongs on the right (isMe) ONLY if its senderRole matches the current modal role perspective!
               const isMe = msg.senderRole === currentRole;

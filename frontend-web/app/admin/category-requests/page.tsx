@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button';
 import { LoadError } from '@/components/ui/LoadError';
 import { useToast } from '@/components/ui/toast';
 import { useAuthStore } from '@/lib/store/auth-store';
-import { apiClient } from '@/lib/api-client';
+import { apiClient, apiErrorMessage } from '@/lib/api-client';
 import { useShallow } from 'zustand/react/shallow';
 
 interface CategoryRequest {
@@ -106,8 +106,8 @@ export default function CategoryRequestsPage() {
         showToast('Category request approved and category created!', 'success');
         loadRequests();
       }
-    } catch (error: any) {
-      const message = error.response?.data?.error?.message || 'Failed to approve request';
+    } catch (error) {
+      const message = apiErrorMessage(error, 'Failed to approve request');
       showToast(message, 'error');
     } finally {
       setActionLoading(false);
@@ -132,8 +132,8 @@ export default function CategoryRequestsPage() {
         setRejectReason('');
         loadRequests();
       }
-    } catch (error: any) {
-      const message = error.response?.data?.error?.message || 'Failed to reject request';
+    } catch (error) {
+      const message = apiErrorMessage(error, 'Failed to reject request');
       showToast(message, 'error');
     } finally {
       setActionLoading(false);

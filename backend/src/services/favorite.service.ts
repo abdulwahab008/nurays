@@ -45,7 +45,7 @@ export class FavoriteService {
 
     return favorites.map((fav) => {
       const s = fav.seller;
-      const availability = computeSellerAvailability(s as any);
+      const availability = computeSellerAvailability(s);
 
       let distanceKm: number | null = null;
       if (

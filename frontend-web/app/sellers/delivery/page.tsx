@@ -212,7 +212,7 @@ export default function SellerDeliveryPage() {
       const deliveryModes = ['delivery'];
       if (formData.allowPickup) deliveryModes.push('pickup');
 
-      let payload: Record<string, any> = {
+      let payload: Record<string, unknown> = {
         deliveryModes,
         deliveryProvider: deliveryModel === 'model_b' ? 'self' : 'platform',
         allowCrossCommunity,
@@ -312,7 +312,7 @@ export default function SellerDeliveryPage() {
         }
         showToast('Delivery settings saved successfully.', 'success');
       }
-    } catch (err: any) {
+    } catch (err) {
       console.error('Failed to save delivery settings:', err);
       showToast(failureMessage(err), 'error');
       // The first request (settings) may have been saved before the second failed:

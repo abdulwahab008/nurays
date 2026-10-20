@@ -124,7 +124,7 @@ export const getSellerProfitLoss = async (userId: string, filters?: {
         : 0;
 
       return acc;
-    }, {} as Record<string, any>)
+    }, {} as Record<string, { productId: string; productName: string; unitsSold: number; revenue: number; cost: number; profit: number; margin: number }>)
   ).sort((a, b) => b.profit - a.profit);
 
   // Breakdown by period

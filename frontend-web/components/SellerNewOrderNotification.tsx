@@ -4,7 +4,7 @@ import { useEffect, useRef, useState, useCallback } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import { useAuthStore } from '@/lib/store/auth-store';
 import { useSocket } from '@/lib/hooks/use-socket';
-import { apiClient } from '@/lib/api-client';
+import { apiClient, apiErrorMessage } from '@/lib/api-client';
 import { formatPrice } from '@/lib/utils';
 import { useToast } from '@/components/ui/toast';
 import { useT } from '@/lib/i18n';
@@ -208,8 +208,8 @@ export function SellerNewOrderNotification() {
   // Listen for order status updates from the kitchen orders page
   // If an order is accepted or rejected in the orders list, close the alert immediately
   useEffect(() => {
-    const handleStatusChanged = (e: any) => {
-      const orderId = e.detail?.orderId;
+    const handleStatusChanged = (e: Event) => {
+      const orderId = (e as CustomEvent<{ orderId?: string }>).detail?.orderId;
       if (orderId) {
         handledOrderIdsRef.current.add(orderId);
         if (activeOrder?.orderId === orderId) {
@@ -243,8 +243,8 @@ export function SellerNewOrderNotification() {
           window.dispatchEvent(new CustomEvent('seller-order-status-changed', { detail: { orderId, status: 'accepted' } }));
         }
       }
-    } catch (err: any) {
-      showToast(err.response?.data?.error?.message || t('acceptFailed'), 'error');
+    } catch (err) {
+      showToast(apiErrorMessage(err, t('acceptFailed')), 'error');
     } finally {
       setIsProcessing(false);
     }
@@ -271,8 +271,8 @@ export function SellerNewOrderNotification() {
           window.dispatchEvent(new CustomEvent('seller-order-status-changed', { detail: { orderId, status: 'rejected' } }));
         }
       }
-    } catch (err: any) {
-      showToast(err.response?.data?.error?.message || t('rejectFailed'), 'error');
+    } catch (err) {
+      showToast(apiErrorMessage(err, t('rejectFailed')), 'error');
     } finally {
       setIsProcessing(false);
     }

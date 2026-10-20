@@ -11,7 +11,8 @@ export default tseslint.config(
     files: ['**/*.ts'],
     rules: {
       'no-console': 'warn',
-      '@typescript-eslint/no-explicit-any': 'warn',
+      // None left in src (BE-12): a caught error is read through utils/thrown.ts, an outside answer gets an interface.
+      '@typescript-eslint/no-explicit-any': 'error',
       '@typescript-eslint/no-unused-vars': ['error', { argsIgnorePattern: '^_', varsIgnorePattern: '^_', caughtErrors: 'none', ignoreRestSiblings: true }],
       '@typescript-eslint/no-namespace': ['error', { allowDeclarations: true }],
     },

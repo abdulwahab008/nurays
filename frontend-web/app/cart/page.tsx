@@ -31,7 +31,7 @@ import { LoadError } from '@/components/ui/LoadError';
 import { useAuthStore } from '@/lib/store/auth-store';
 import { useCartStore, CartItem as LocalCartItem } from '@/lib/store/cart-store';
 import { DashboardLayout, CUSTOMER_SIDEBAR_ITEMS } from '@/components/layout/DashboardShell';
-import { apiClient } from '@/lib/api-client';
+import { apiClient, apiErrorMessage, errorMessage } from '@/lib/api-client';
 import { useToast } from '@/components/ui/toast';
 import { ConfirmModal } from '@/components/ui/ConfirmModal';
 import { DEFAULT_ADDRESS, useDeliveryEstimate } from '@/lib/hooks/use-delivery-estimate';
@@ -132,8 +132,8 @@ export default function CartPage() {
         setCartPromoInput('');
         showToast(t('promoAppliedTray', { code }), 'success');
       }
-    } catch (err: any) {
-      const msg = err?.response?.data?.error?.message || t('invalidCode');
+    } catch (err) {
+      const msg = apiErrorMessage(err, t('invalidCode'));
       showToast(msg, 'error');
     } finally {
       setPromoValidating(false);
@@ -190,8 +190,8 @@ export default function CartPage() {
                 quantity: item.quantity,
                 stockType: item.stockType || 'direct',
               });
-            } catch (err: any) {
-              console.warn('Syncing guest cart item to server:', err?.message);
+            } catch (err) {
+              console.warn('Syncing guest cart item to server:', errorMessage(err, ''));
             }
           }
           const fresh = await cartService.getCart();
@@ -291,8 +291,8 @@ export default function CartPage() {
         await cartService.updateCartItem(itemId, quantity);
         setTrayVersion((v) => v + 1);
       }
-    } catch (error: any) {
-      showToast(error?.response?.data?.error?.message || t('couldNotUpdateQty'), 'error');
+    } catch (error) {
+      showToast(apiErrorMessage(error, t('couldNotUpdateQty')), 'error');
       await restoreCart(snapshot);
     } finally {
       setUpdatingItem(null);
@@ -341,8 +341,8 @@ export default function CartPage() {
         await cartService.removeCartItem(itemId);
         setTrayVersion((v) => v + 1);
       }
-    } catch (error: any) {
-      showToast(error?.response?.data?.error?.message || t('failedRemoveItem'), 'error');
+    } catch (error) {
+      showToast(apiErrorMessage(error, t('failedRemoveItem')), 'error');
       await restoreCart(snapshot);
     } finally {
       setUpdatingItem(null);
@@ -359,8 +359,8 @@ export default function CartPage() {
       clearCartStore();
       setCart(null);
       showToast(t('trayCleared'), 'info');
-    } catch (error: any) {
-      showToast(error?.response?.data?.error?.message || t('failedClearTray'), 'error');
+    } catch (error) {
+      showToast(apiErrorMessage(error, t('failedClearTray')), 'error');
     } finally {
       setClearingCart(false);
       setShowClearModal(false);

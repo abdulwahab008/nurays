@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/toast';
 import { LoadError } from '@/components/ui/LoadError';
-import { apiClient } from '@/lib/api-client';
+import { apiClient, apiErrorMessage, apiErrorStatus } from '@/lib/api-client';
 
 interface Category {
   id: string;
@@ -118,11 +118,10 @@ export function CategoryRequestModal({
       resetForm();
       onSuccess?.();
       onClose();
-    } catch (error: any) {
+    } catch (error) {
       console.error('Category request error:', error);
-      console.error('Response:', error.response);
-      console.error('Status:', error.response?.status);
-      const message = error.response?.data?.error?.message || 'Failed to submit request';
+      console.error('Status:', apiErrorStatus(error));
+      const message = apiErrorMessage(error, 'Failed to submit request');
       showToast(message, 'error');
     } finally {
       setLoading(false);

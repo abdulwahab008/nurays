@@ -11,7 +11,7 @@ import { LoadError } from '@/components/ui/LoadError';
 import { useDialogs } from '@/components/ui/Dialogs';
 import { useToast } from '@/components/ui/toast';
 import { useAuthStore } from '@/lib/store/auth-store';
-import { apiClient } from '@/lib/api-client';
+import { apiClient, apiErrorDetails, apiErrorMessage } from '@/lib/api-client';
 import { DatePicker } from '@/components/ui/DatePicker';
 import { bankAccountIsWrong, walletNumberIsWrong } from '@/lib/payout-account';
 import { sendAskingForPassword } from '@/lib/send-asking-for-password';
@@ -304,7 +304,7 @@ export default function SellerSettingsPage() {
           ? { fixedDaily: { open: fixedDailyOpen, close: fixedDailyClose } }
           : null;
 
-      let deliveryPayload: Record<string, any> = {
+      let deliveryPayload: Record<string, unknown> = {
         deliveryModes: deliveryModes && deliveryModes.length ? deliveryModes : ['delivery'],
         deliveryProvider: deliveryModel === 'model_b' ? 'self' : 'platform',
         latitude: latitude ?? undefined,
@@ -422,10 +422,9 @@ export default function SellerSettingsPage() {
         setFormData((prev) => ({ ...prev, ...numbers }));
       }
       showToast('Settings saved successfully.', 'success');
-    } catch (error: any) {
-      const firstIssue = error.response?.data?.error?.details?.[0]?.message;
-      const generalMsg = error.response?.data?.error?.message;
-      showToast(firstIssue || generalMsg || 'Failed to save settings', 'error');
+    } catch (error) {
+      const firstIssue = (apiErrorDetails(error) as Array<{ message?: string }> | undefined)?.[0]?.message;
+      showToast(firstIssue || apiErrorMessage(error, 'Failed to save settings'), 'error');
     } finally {
       setLoading(false);
     }

@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/toast';
 import { LoadError } from '@/components/ui/LoadError';
 import { useAuthStore } from '@/lib/store/auth-store';
-import { apiClient } from '@/lib/api-client';
+import { apiClient, apiErrorMessage } from '@/lib/api-client';
 import DocumentList from '@/components/admin/DocumentList';
 import { ExternalLink } from '@/components/ExternalLink';
 import { RejectReasonModal } from '@/components/admin/RejectReasonModal';
@@ -73,7 +73,7 @@ export default function AdminPendingSellersPage() {
         setPendingSellers(response.data.data || []);
       }
       setLoadError(null);
-    } catch (error: any) {
+    } catch (error) {
       setLoadError(error);
     } finally {
       setLoading(false);
@@ -93,8 +93,8 @@ export default function AdminPendingSellersPage() {
         setRejecting(null);
         loadPendingSellers();
       }
-    } catch (error: any) {
-      const errorMessage = error.response?.data?.error?.message || error.response?.data?.message || `Failed to ${action} seller`;
+    } catch (error) {
+      const errorMessage = apiErrorMessage(error, `Failed to ${action} seller`);
       showToast(errorMessage, 'error');
     } finally {
       setProcessingId(null);

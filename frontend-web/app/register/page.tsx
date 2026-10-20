@@ -8,7 +8,7 @@ import { GoogleSignInButton } from '@/components/GoogleSignInButton';
 import { useToast } from '@/components/ui/toast';
 import { authService } from '@/lib/services/auth.service';
 import { useAuthStore } from '@/lib/store/auth-store';
-import { apiClient } from '@/lib/api-client';
+import { apiClient, apiErrorCode, apiErrorDetails } from '@/lib/api-client';
 import { BrandLockup } from '@/components/ui/Mark';
 import { useT } from '@/lib/i18n';
 import { useRequestErrorMessage } from '@/components/ui/LoadError';
@@ -85,7 +85,7 @@ function RegisterForm() {
           }
         }
       }
-    } catch (err: any) {
+    } catch (err) {
       const errorMessage = requestError(err, t('googleFailed'));
       setError(errorMessage);
     } finally {
@@ -180,9 +180,9 @@ function RegisterForm() {
       } else {
         throw new Error(t('errInvalidResponse'));
       }
-    } catch (err: any) {
+    } catch (err) {
       const errorMessage = requestError(err, t('errRegistrationFailed'));
-      const errorCode = err.response?.data?.error?.code;
+      const errorCode = apiErrorCode(err);
       
       // Provide more specific error messages
       const weak = weakPasswordMessage(err, t);
@@ -193,9 +193,9 @@ function RegisterForm() {
       } else if (errorCode === 'PHONE_EXISTS' || errorMessage.includes('Phone number already')) {
         setError(t('errPhoneExists'));
       } else if (errorCode === 'VALIDATION_ERROR') {
-        const validationErrors = err.response?.data?.error?.details;
+        const validationErrors = apiErrorDetails(err);
         if (validationErrors && Array.isArray(validationErrors)) {
-          setError(validationErrors.map((e: any) => e.message).join(', '));
+          setError((validationErrors as Array<{ message?: string }>).map((e) => e.message).join(', '));
         } else {
           setError(errorMessage);
         }
@@ -443,7 +443,7 @@ function RegisterForm() {
                       await authService.registerSendPhoneOtp(formData.phone.trim());
                       setPhoneOtpSent(true);
                       setPhoneOtpMessage(t('codeSent'));
-                    } catch (err: any) {
+                    } catch (err) {
                       setPhoneOtpMessage(requestError(err, t('codeSendFailed')));
                     } finally {
                       setSendingPhoneOtp(false);

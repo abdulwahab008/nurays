@@ -26,7 +26,7 @@ export default function ForgotPasswordPage() {
       await apiClient.post('/auth/forgot-password', { email: email.trim() });
       // The server answers the same whether or not the account exists.
       setSent(true);
-    } catch (err: any) {
+    } catch (err) {
       showToast(requestError(err, t('errResetEmail')), 'error');
     } finally {
       setLoading(false);

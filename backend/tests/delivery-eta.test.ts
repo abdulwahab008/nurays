@@ -18,7 +18,24 @@ jest.mock('../src/storage', () => ({ isStoredFile: jest.fn(), presentFile: jest.
 
 import { computeCustomerFacingSellerInfo } from '../src/services/product.service';
 
-const LAHORE_KITCHEN = { id: 's1', latitude: 31.4728, longitude: 74.4538, minPrepTimeMinutes: 30, deliveryProvider: 'platform' };
+const LAHORE_KITCHEN = {
+  id: 's1',
+  latitude: 31.4728,
+  longitude: 74.4538,
+  minPrepTimeMinutes: 30,
+  deliveryProvider: 'platform',
+  freeDeliveryAreas: null,
+  // What the availability check reads (it is a double here).
+  status: 'active',
+  scheduleMode: 'always',
+  operatingHours: null,
+  availabilityOverride: null,
+  availabilityOverrideUntil: null,
+  availabilityNote: null,
+  orderCutoffTime: null,
+  maxDailyOrders: null,
+  preOrderOnly: false,
+};
 
 describe('delivery time shown to a buyer', () => {
   it('is a range for an address the kitchen delivers to', async () => {

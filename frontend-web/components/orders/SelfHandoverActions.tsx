@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { apiClient } from '@/lib/api-client';
+import { apiClient, apiErrorMessage } from '@/lib/api-client';
 import { useToast } from '@/components/ui/toast';
 import { useT } from '@/lib/i18n';
 import { commonMessages } from '@/lib/i18n/messages/common';
@@ -40,8 +40,8 @@ export default function SelfHandoverActions({ orderId, orderStatus, deliveryType
       setCode('');
       setReason('');
       onChanged();
-    } catch (err: any) {
-      showToast(err.response?.data?.error?.message || t('couldNotUpdate'), 'error');
+    } catch (err) {
+      showToast(apiErrorMessage(err, t('couldNotUpdate')), 'error');
     } finally {
       setBusy(null);
     }

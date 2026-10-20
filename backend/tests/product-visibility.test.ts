@@ -60,3 +60,19 @@ describe('a kitchen hiding and showing a dish', () => {
     }
   });
 });
+
+describe('a kitchen editing its tags', () => {
+  // Tags are rows of their own; the edit passed the list through as if it were a column, which Prisma refuses (a 500).
+  it('replaces the tags instead of writing the list into the dish row', async () => {
+    givenProduct({});
+    await productService.updateProduct('p1', 'u1', { tags: ['spicy', 'bbq'] });
+    const { data } = db.product.update.mock.calls[0][0];
+    expect(data.tags).toEqual({ deleteMany: {}, create: [{ tag: 'spicy' }, { tag: 'bbq' }] });
+  });
+
+  it('leaves the tags alone when an edit does not send them', async () => {
+    givenProduct({});
+    await productService.updateProduct('p1', 'u1', { price: 500 });
+    expect(db.product.update.mock.calls[0][0].data).not.toHaveProperty('tags');
+  });
+});

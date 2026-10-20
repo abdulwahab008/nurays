@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/toast';
 import { authService } from '@/lib/services/auth.service';
 import { useAuthStore } from '@/lib/store/auth-store';
-import { apiClient } from '@/lib/api-client';
+import { apiClient, apiErrorMessage } from '@/lib/api-client';
 import { useShallow } from 'zustand/react/shallow';
 
 export default function AdminLoginPage() {
@@ -60,8 +60,8 @@ export default function AdminLoginPage() {
       } else {
         throw new Error('Invalid response from server');
       }
-    } catch (err: any) {
-      const errorMessage = err.response?.data?.error?.message || err.response?.data?.message || 'Login failed';
+    } catch (err) {
+      const errorMessage = apiErrorMessage(err, 'Login failed');
       setError(errorMessage);
       showToast(errorMessage, 'error');
     } finally {

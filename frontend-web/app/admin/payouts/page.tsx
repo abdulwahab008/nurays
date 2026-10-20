@@ -8,7 +8,7 @@ import { useToast } from '@/components/ui/toast';
 import { LoadError } from '@/components/ui/LoadError';
 import { useDialogs } from '@/components/ui/Dialogs';
 import { useAuthStore } from '@/lib/store/auth-store';
-import { apiClient } from '@/lib/api-client';
+import { apiClient, apiErrorMessage } from '@/lib/api-client';
 import { formatPrice, formatDate } from '@/lib/utils';
 import { useShallow } from 'zustand/react/shallow';
 
@@ -62,7 +62,7 @@ export default function AdminPayoutsPage() {
         setPayouts(response.data.data.payouts || []);
       }
       setLoadError(null);
-    } catch (error: any) {
+    } catch (error) {
       // The payouts on the screen belong to the filter before this change, so they go with the failure.
       setPayouts([]);
       setLoadError(error);
@@ -87,8 +87,8 @@ export default function AdminPayoutsPage() {
       await apiClient.post(`/admin/payouts/${payoutId}/complete`, reference ? { transactionId: reference } : {});
       showToast('Payout marked as completed', 'success');
       loadPayouts();
-    } catch (error: any) {
-      showToast(error.response?.data?.error?.message || 'Failed to complete payout', 'error');
+    } catch (error) {
+      showToast(apiErrorMessage(error, 'Failed to complete payout'), 'error');
     } finally {
       setProcessingId(null);
     }
@@ -106,8 +106,8 @@ export default function AdminPayoutsPage() {
       setFailReasonFor(null);
       setFailReason('');
       loadPayouts();
-    } catch (error: any) {
-      showToast(error.response?.data?.error?.message || 'Failed to update payout', 'error');
+    } catch (error) {
+      showToast(apiErrorMessage(error, 'Failed to update payout'), 'error');
     } finally {
       setProcessingId(null);
     }

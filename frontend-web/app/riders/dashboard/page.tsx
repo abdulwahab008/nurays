@@ -11,7 +11,7 @@ import { useDialogs } from '@/components/ui/Dialogs';
 import { useAuthStore } from '@/lib/store/auth-store';
 import { riderService, Delivery, RiderProfile } from '@/lib/services/rider.service';
 import { formatPrice, displayRating } from '@/lib/utils';
-import { apiClient } from '@/lib/api-client';
+import { apiClient, apiErrorMessage, apiErrorCode } from '@/lib/api-client';
 import { useLiveRefresh } from '@/lib/hooks/use-live-refresh';
 import { useRiderLocation, LocationSharing } from '@/lib/hooks/use-rider-location';
 import { alternativeMapsLink, canNavigateTo, googleMapsDirectionsUrl, mobilePlatform, NavDestination } from '@/lib/navigation-links';
@@ -124,12 +124,12 @@ export default function RiderDashboardPage() {
         setActiveTab('active');
       }
       setLoadError(null);
-    } catch (error: any) {
-      const code = error.response?.data?.error?.code;
+    } catch (error) {
+      const code = apiErrorCode(error);
       if (code && (code === 'RIDER_NOT_APPROVED' || code === 'RIDER_REJECTED' || code === 'RIDER_SUSPENDED')) {
         setBlockedReason({
           title: code === 'RIDER_NOT_APPROVED' ? 'blockedUnderReview' : 'blockedInactive',
-          message: error.response?.data?.error?.message || null,
+          message: apiErrorMessage(error, '') || null,
           code,
         });
       } else {
@@ -229,8 +229,8 @@ export default function RiderDashboardPage() {
       );
       // Pool events reach only riders on duty, so the list may have moved on while they were off.
       if (res.data.isAvailable) void loadAvailable();
-    } catch (error: any) {
-      showToast(error.response?.data?.error?.message || t('toggleDutyFailed'), 'error');
+    } catch (error) {
+      showToast(apiErrorMessage(error, t('toggleDutyFailed')), 'error');
     } finally {
       setTogglingDuty(false);
     }
@@ -253,9 +253,9 @@ export default function RiderDashboardPage() {
       );
       setActiveTab('active');
       loadAll(true);
-    } catch (error: any) {
+    } catch (error) {
       nav?.cancel();
-      showToast(error.response?.data?.error?.message || t('claimFailed'), 'error');
+      showToast(apiErrorMessage(error, t('claimFailed')), 'error');
     } finally {
       setBusyId(null);
     }
@@ -269,8 +269,8 @@ export default function RiderDashboardPage() {
       await riderService.releaseDelivery(delivery.id);
       showToast(t('handedBack'), 'info');
       loadAll(true);
-    } catch (error: any) {
-      showToast(error.response?.data?.error?.message || t('claimFailed'), 'error');
+    } catch (error) {
+      showToast(apiErrorMessage(error, t('claimFailed')), 'error');
     } finally {
       setBusyId(null);
     }
@@ -355,9 +355,9 @@ export default function RiderDashboardPage() {
         setTimeout(() => pinInputRefs[0].current?.focus(), 150);
       }
       loadAll(true);
-    } catch (error: any) {
+    } catch (error) {
       nav?.cancel();
-      showToast(error.response?.data?.error?.message || t('statusUpdateFailed'), 'error');
+      showToast(apiErrorMessage(error, t('statusUpdateFailed')), 'error');
     } finally {
       setBusyId(null);
     }
@@ -403,9 +403,9 @@ export default function RiderDashboardPage() {
       setPinModalDelivery(null);
       setActiveTab('history');
       loadAll(true);
-    } catch (error: any) {
-      if (error.response?.data?.error?.code === 'HANDOVER_LOCKED') setPinLocked(true);
-      showToast(error.response?.data?.error?.message || t('pinInvalid'), 'error');
+    } catch (error) {
+      if (apiErrorCode(error) === 'HANDOVER_LOCKED') setPinLocked(true);
+      showToast(apiErrorMessage(error, t('pinInvalid')), 'error');
     } finally {
       setVerifyingPin(false);
     }
@@ -426,8 +426,8 @@ export default function RiderDashboardPage() {
       setReportModalDelivery(null);
       setReportNotes('');
       loadAll(true);
-    } catch (error: any) {
-      showToast(error.response?.data?.error?.message || t('issueReportFailed'), 'error');
+    } catch (error) {
+      showToast(apiErrorMessage(error, t('issueReportFailed')), 'error');
     } finally {
       setReporting(false);
     }

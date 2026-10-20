@@ -217,7 +217,7 @@ export class RealtimeOrderService {
     }
 
     // Group items by seller
-    const sellerOrders = new Map<string, any[]>();
+    const sellerOrders = new Map<string, Array<{ productName: string; quantity: number; totalPrice: number }>>();
     order.items.forEach((item) => {
       if (item.seller.userId) {
         if (!sellerOrders.has(item.seller.userId)) {

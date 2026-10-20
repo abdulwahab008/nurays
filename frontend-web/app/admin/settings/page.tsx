@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/toast';
 import { LoadError } from '@/components/ui/LoadError';
 import { useAuthStore } from '@/lib/store/auth-store';
-import { apiClient } from '@/lib/api-client';
+import { apiClient, apiErrorMessage } from '@/lib/api-client';
 import { checkSettingsForm, type SettingsForm } from '@/lib/admin-settings';
 import { useShallow } from 'zustand/react/shallow';
 
@@ -73,8 +73,8 @@ export default function AdminSettingsPage() {
       setLoading(true);
       await apiClient.patch('/admin/settings', checked.body);
       showToast('Settings updated successfully', 'success');
-    } catch (error: any) {
-      showToast(error.response?.data?.error?.message || 'Failed to update settings', 'error');
+    } catch (error) {
+      showToast(apiErrorMessage(error, 'Failed to update settings'), 'error');
     } finally {
       setLoading(false);
     }

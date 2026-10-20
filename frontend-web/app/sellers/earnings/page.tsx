@@ -9,7 +9,7 @@ import { LoadError } from '@/components/ui/LoadError';
 import { useDialogs } from '@/components/ui/Dialogs';
 import { useToast } from '@/components/ui/toast';
 import { useAuthStore } from '@/lib/store/auth-store';
-import { apiClient } from '@/lib/api-client';
+import { apiClient, apiErrorMessage } from '@/lib/api-client';
 import { formatPrice, formatDate } from '@/lib/utils';
 import { useT } from '@/lib/i18n';
 import { commonMessages } from '@/lib/i18n/messages/common';
@@ -189,8 +189,8 @@ export default function SellerEarningsPage() {
         setAccountNumber('');
         loadEarnings();
       }
-    } catch (error: any) {
-      showToast(error.response?.data?.error?.message || t('payoutFailed'), 'error');
+    } catch (error) {
+      showToast(apiErrorMessage(error, t('payoutFailed')), 'error');
     } finally {
       setRequestingPayout(false);
     }

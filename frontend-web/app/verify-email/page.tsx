@@ -5,7 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/toast';
-import { apiClient } from '@/lib/api-client';
+import { apiClient, apiErrorMessage, apiErrorCode } from '@/lib/api-client';
 import { authService } from '@/lib/services/auth.service';
 import { useAuthStore } from '@/lib/store/auth-store';
 import { useT } from '@/lib/i18n';
@@ -52,13 +52,13 @@ function VerifyEmailContent() {
           // Ignore error refreshing user
         }
       }
-    } catch (err: any) {
-      const errorCode = err.response?.data?.error?.code;
+    } catch (err) {
+      const errorCode = apiErrorCode(err);
       if (errorCode === 'TOKEN_EXPIRED') {
         setStatus('expired');
       } else {
         setStatus('error');
-        setError(err.response?.data?.error?.message || t('verificationFailedMsg'));
+        setError(apiErrorMessage(err, t('verificationFailedMsg')));
       }
     } finally {
       setLoading(false);
@@ -74,8 +74,8 @@ function VerifyEmailContent() {
     try {
       await apiClient.post('/auth/resend-verification');
       showToast(t('verificationEmailSent'), 'success');
-    } catch (err: any) {
-      showToast(err.response?.data?.error?.message || t('resendEmailFailed'), 'error');
+    } catch (err) {
+      showToast(apiErrorMessage(err, t('resendEmailFailed')), 'error');
     }
   };
 
