@@ -180,6 +180,7 @@ jobs:
           NODE_ENV: development
           # The E2E specs claim jobs from the open pool by hand; automatic assignment has its own checks.
           AUTO_ASSIGN_ENABLED: "false"
+          WEEKLY_PAYOUTS_ENABLED: "false"
         run: |
           npm run build
           node dist/index.js &
@@ -354,6 +355,7 @@ jobs:
           NODE_ENV: development
           # The sockets scenario needs every job to reach the open pool.
           AUTO_ASSIGN_ENABLED: "false"
+          WEEKLY_PAYOUTS_ENABLED: "false"
         run: |
           npm run build
           node dist/index.js &

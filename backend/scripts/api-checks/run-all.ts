@@ -24,6 +24,7 @@ const SUITES: Array<[name: string, load: () => Promise<{ default: () => Promise<
   ['sign-in', () => import('./sign-in')],
   ['moderation', () => import('./moderation')],
   ['payout-accounts', () => import('./payout-accounts')],
+  ['kitchen-money', () => import('./kitchen-money')],
 ];
 
 /** The hosts that count as this machine. */

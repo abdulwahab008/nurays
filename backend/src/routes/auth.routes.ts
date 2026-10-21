@@ -9,6 +9,9 @@ import {
   refreshToken,
   getCurrentUser,
   logout,
+  logoutAll,
+  getSessions,
+  deleteSession,
   requestPhoneVerification,
   verifyPhone,
   forgotPassword,
@@ -58,6 +61,9 @@ router.post('/refresh', validate(refreshTokenSchema), refreshToken);
 router.get('/me', authenticate, getCurrentUser);
 router.post('/resend-verification', authenticate, resendVerificationLimiter, resendVerificationEmail);
 router.post('/logout', authenticate, logout);
+router.post('/logout-all', authenticate, logoutAll);
+router.get('/sessions', authenticate, getSessions);
+router.delete('/sessions/:id', authenticate, deleteSession);
 // Asks for the current password again; wrong ones are counted per account (services/reauth.service.ts).
 router.post('/change-password', authenticate, validate(changePasswordSchema), changePassword);
 

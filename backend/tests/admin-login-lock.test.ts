@@ -33,6 +33,7 @@ const admin = (id: string) => ({
 function givenAdmin(id: string, { failuresInAuditLog = 0 } = {}) {
   db.user = { findFirst: jest.fn(async () => admin(id)), update: jest.fn(async () => ({})) };
   db.auditLog = { findFirst: jest.fn(async () => null), count: jest.fn(async () => failuresInAuditLog) };
+  db.refreshToken = { create: jest.fn(async () => ({})), updateMany: jest.fn(async () => ({ count: 0 })) };
 }
 
 const login = (id: string, password: string) => authService.login(`${id}@nuray.test`, password, 'email');

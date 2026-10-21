@@ -8,6 +8,10 @@ import {
   getProductsForModeration,
   moderateProduct,
   getPayouts,
+  getPayoutStatement,
+  getKitchenOwing,
+  getOwingKitchens,
+  recordKitchenPayment,
   completePayout,
   failPayout,
   getSettings,
@@ -59,6 +63,7 @@ import {
   moderateProductSchema,
   updateSellerStatusSchema,
   completePayoutSchema,
+  paymentToNuraySchema,
   failPayoutSchema,
   updateSettingsSchema,
   approveRejectRiderSchema,
@@ -177,6 +182,11 @@ router.post('/products/:id/moderate', validate(moderateProductSchema), moderateP
 
 // List / complete / fail seller payout requests
 router.get('/payouts', getPayouts);
+router.get('/payouts/:id/statement', getPayoutStatement);
+// A kitchen that owes Nuray (commission on cash it collected): what it owes, and recording that it paid
+router.get('/kitchens-owing', getOwingKitchens);
+router.get('/sellers/:id/owing', getKitchenOwing);
+router.post('/sellers/:id/payments-to-nuray', validate(paymentToNuraySchema), recordKitchenPayment);
 router.post('/payouts/:id/complete', validate(completePayoutSchema), completePayout);
 router.post('/payouts/:id/fail', validate(failPayoutSchema), failPayout);
 

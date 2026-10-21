@@ -61,9 +61,20 @@ async function currentSubscription(): Promise<PushSubscription | null> {
   return reg ? await reg.pushManager.getSubscription() : null;
 }
 
+/** The address this browser receives push notifications at, or null (none, or push not supported). Never throws. */
+export async function pushEndpointHere(): Promise<string | null> {
+  if (!pushSupported()) return null;
+  try {
+    return (await currentSubscription())?.endpoint ?? null;
+  } catch {
+    return null;
+  }
+}
+
 /**
  * On sign-out: this browser stops holding a subscription for the account that is leaving, so whoever uses it next
- * starts clean. (The server forgets the account's subscriptions when it ends the account's sessions.) Never throws.
+ * starts clean. (Sign-out tells the server which subscription is this device's, see `pushEndpointHere`; the account's
+ * other devices keep theirs.) Never throws.
  */
 export async function dropPushSubscription(): Promise<void> {
   if (!pushSupported()) return;

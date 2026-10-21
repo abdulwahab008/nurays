@@ -28,6 +28,14 @@ beforeEach(() => {
 });
 
 describe('authenticate', () => {
+  it('stops the access token of a device that was signed out, and lets a live session through', async () => {
+    db.refreshToken = { findFirst: jest.fn(async () => null) };
+    expect((await run(bearer(generateToken({ ...payload, sid: 'ended' })))).error).toMatchObject({ statusCode: 401, code: 'SESSION_REVOKED' });
+    db.refreshToken.findFirst = jest.fn(async () => ({ id: 'rt1' }));
+    expect((await run(bearer(generateToken({ ...payload, sid: 'live' })))).error).toBeUndefined();
+    expect(db.refreshToken.findFirst).toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining({ familyId: 'live', revokedAt: null }) }));
+  });
+
   it('lets a good token through with the freshly read role', async () => {
     db.user.findUnique = jest.fn(async () => user({ userType: 'seller' }));
     const { req, error } = await run(bearer(generateToken(payload)));

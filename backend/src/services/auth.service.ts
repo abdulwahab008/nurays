@@ -1,7 +1,8 @@
 import { maskEmail } from '../utils/mask';
 import prisma from '../config/database';
 import socketManager from '../config/socket';
-import { generateToken, generateRefreshToken, tokenTtlSeconds, isTokenRevoked, JWTPayload } from '../utils/jwt';
+import { tokenTtlSeconds } from '../utils/jwt';
+import { startSession, rotateSession, endAllSessions } from './session.service';
 import { formatPhoneNumber, isValidPhoneNumber, realPhoneOrNull } from '../utils/otp';
 import { AppError } from '../middleware/errorHandler';
 import bcrypt from 'bcrypt';
@@ -227,14 +228,7 @@ export class AuthService {
     }
 
     // Generate tokens (user can use app but should verify email)
-    const tokenPayload: JWTPayload = {
-      userId: user.id,
-      userType: user.userType,
-      phone: user.phone,
-    };
-
-    const accessToken = generateToken(tokenPayload);
-    const refreshToken = generateRefreshToken(tokenPayload);
+    const { accessToken, refreshToken } = await startSession(user);
 
     await prisma.user.update({
       where: { id: user.id },
@@ -421,14 +415,7 @@ export class AuthService {
       }
 
       // Generate tokens
-      const tokenPayload: JWTPayload = {
-        userId: user.id,
-        userType: user.userType,
-        phone: user.phone,
-      };
-
-      const accessToken = generateToken(tokenPayload);
-      const refreshToken = generateRefreshToken(tokenPayload);
+      const { accessToken, refreshToken } = await startSession(user);
 
       // Update last login
       await prisma.user.update({
@@ -503,14 +490,7 @@ export class AuthService {
       }
 
       // Generate tokens
-      const tokenPayload: JWTPayload = {
-        userId: user.id,
-        userType: user.userType,
-        phone: user.phone,
-      };
-
-      const accessToken = generateToken(tokenPayload);
-      const refreshToken = generateRefreshToken(tokenPayload);
+      const { accessToken, refreshToken } = await startSession(user);
 
       // Update last login
       await prisma.user.update({
@@ -712,7 +692,7 @@ export class AuthService {
    * so this cut-off (`tokensValidAfter`) is the only way a sign-out can mean anything.
    */
   async revokeSessions(userId: string): Promise<void> {
-    await prisma.user.update({ where: { id: userId }, data: { tokensValidAfter: new Date() } });
+    await endAllSessions(userId);
   }
 
   /**
@@ -759,15 +739,14 @@ export class AuthService {
     // Hashed first: the cut-off is taken as late as possible, so a session another device starts meanwhile is not spared.
     const passwordHash = await bcrypt.hash(newPassword, 10);
     const changedAt = new Date();
-    await prisma.user.update({ where: { id: userId }, data: { passwordHash, tokensValidAfter: changedAt } });
+    await prisma.user.update({ where: { id: userId }, data: { passwordHash } });
+    await endAllSessions(userId);
     socketManager.disconnectUser(userId);
     void recordAudit({ userId, action: 'auth:PASSWORD_CHANGED', entityType: 'user', entityId: userId, ipAddress: ctx.ip ?? null, responseStatus: 200 });
     void notifyPasswordChanged({ email: user.email, emailVerified: user.emailVerified, fullName: user.profile?.fullName }, changedAt);
 
     // Tokens made after the cut-off: this session carries on, every older one is void.
-    const tokenPayload: JWTPayload = { userId: user.id, userType: user.userType, phone: user.phone };
-    const accessToken = generateToken(tokenPayload);
-    const refreshToken = generateRefreshToken(tokenPayload);
+    const { accessToken, refreshToken } = await startSession(user);
     return {
       tokens: {
         access_token: accessToken,
@@ -781,42 +760,9 @@ export class AuthService {
    * Refresh access token
    */
   async refreshToken(refreshToken: string) {
-    const { verifyRefreshToken, generateToken } = await import('../utils/jwt');
-    // Only a bad token is "invalid"; a revoked session, a closed account or a database
-    // outage each answer as what they are (the client keeps its session on a 5xx).
-    let payload: JWTPayload;
-    try {
-      payload = verifyRefreshToken(refreshToken);
-    } catch {
-      throw new AppError('Invalid refresh token', 401, 'INVALID_REFRESH_TOKEN');
-    }
-
-    // Verify user still exists and is active
-    const user = await prisma.user.findUnique({
-      where: { id: payload.userId },
-    });
-
-    if (!user || user.status !== 'active') {
-      throw new AppError('User not found or inactive', 401, 'USER_INACTIVE');
-    }
-    if (isTokenRevoked(payload, user.tokensValidAfter)) {
-      throw new AppError('Session expired, please log in again', 401, 'SESSION_REVOKED');
-    }
-
-    // Generate new tokens
-    const tokenPayload: JWTPayload = {
-      userId: user.id,
-      userType: user.userType,
-      phone: user.phone,
-    };
-
-    const newAccessToken = generateToken(tokenPayload);
-    const newRefreshToken = generateRefreshToken(tokenPayload);
-
-    return {
-      accessToken: newAccessToken,
-      refreshToken: newRefreshToken,
-    };
+    // Each refresh token works once; see session.service.ts for what happens when one comes back.
+    const { accessToken, refreshToken: newRefreshToken } = await rotateSession(refreshToken);
+    return { accessToken, refreshToken: newRefreshToken };
   }
 
   /**

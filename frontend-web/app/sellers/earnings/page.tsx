@@ -17,6 +17,7 @@ import { kitchenEarningsMessages } from '@/lib/i18n/messages/kitchen-earnings';
 import { payoutDestinationIsWrong } from '@/lib/payout-account';
 import { sendAskingForPassword } from '@/lib/send-asking-for-password';
 import { useShallow } from 'zustand/react/shallow';
+import { PayoutStatement } from '@/components/payouts/PayoutStatement';
 
 const sidebarItems = SELLER_SIDEBAR_ITEMS;
 
@@ -75,6 +76,8 @@ interface EarningsData {
   availableBalance: number;
   codCommissionOwed: number;
   awaitingRiderCash: number;
+  /** What is still owed to Nuray after netting, and the cash pause (kitchen-owing.service.ts). */
+  owing: { amount: number; since: string | null; cashPausesAt: string | null; cashPaused: boolean };
   payouts: Array<{
     id: string;
     amount: number;
@@ -83,6 +86,9 @@ interface EarningsData {
     payoutMethod: string;
     requestedAt: string;
     processedAt?: string;
+    periodStart?: string;
+    periodEnd?: string;
+    automatic?: boolean;
   }>;
 }
 
@@ -101,6 +107,7 @@ export default function SellerEarningsPage() {
   const [showPayoutForm, setShowPayoutForm] = useState(false);
   const [payoutMethod, setPayoutMethod] = useState<'bank_transfer' | 'jazzcash' | 'easypaisa'>('jazzcash');
   const [accountNumber, setAccountNumber] = useState('');
+  const [statementFor, setStatementFor] = useState<string | null>(null);
 
   useEffect(() => {
     if (!isAuthenticated) {
@@ -144,6 +151,7 @@ export default function SellerEarningsPage() {
           availableBalance: ov.availableForPayout ?? 0,
           codCommissionOwed: ov.codCommissionOwed ?? 0,
           awaitingRiderCash: ov.awaitingRiderCash ?? 0,
+          owing: ov.owing ?? { amount: 0, since: null, cashPausesAt: null, cashPaused: false },
           payouts: payoutsRes.data.success ? payoutsRes.data.data : [],
         });
       }
@@ -312,8 +320,25 @@ export default function SellerEarningsPage() {
               </div>
             </div>
 
+            {/* Still owed to Nuray after netting: and when (or that) cash orders pause */}
+            {earnings.owing.amount > 0 && (
+              <div
+                className={`rounded-2xl p-5 mb-6 border ${earnings.owing.cashPaused ? 'bg-red-50 border-red-200' : 'bg-amber-50 border-amber-200'}`}
+                role="status"
+                data-testid="owing-banner"
+              >
+                <p className={`font-bold ${earnings.owing.cashPaused ? 'text-red-800' : 'text-amber-900'}`}>{t('owingTitle', { amount: formatPrice(earnings.owing.amount) })}</p>
+                <p className="text-sm text-gray-800 mt-1">{t('owingBody')}</p>
+                <p className={`text-sm mt-1 font-semibold ${earnings.owing.cashPaused ? 'text-red-800' : 'text-amber-900'}`}>
+                  {earnings.owing.cashPaused
+                    ? t('owingPaused')
+                    : t('owingPausesOn', { date: earnings.owing.cashPausesAt ? formatDate(earnings.owing.cashPausesAt) : '—' })}
+                </p>
+              </div>
+            )}
+
             {/* Money the seller collected themselves */}
-            {earnings.codCommissionOwed > 0 && (
+            {earnings.codCommissionOwed > 0 && earnings.owing.amount === 0 && (
               <div className="bg-gray-50 border border-gray-200 rounded-2xl p-5 mb-8 flex items-start gap-3">
                 <div className="w-9 h-9 rounded-full bg-gray-200 flex items-center justify-center flex-shrink-0 text-gray-600 font-bold">i</div>
                 <p className="text-sm text-gray-600">
@@ -335,6 +360,7 @@ export default function SellerEarningsPage() {
                       {t('availableForWithdrawal')} <span className="font-bold text-emerald-600">{formatPrice(earnings.availableBalance)}</span>
                     </p>
                     <p className="text-sm text-gray-500 mt-1">{t('processingTime')}</p>
+                    <p className="text-sm text-gray-600 mt-1">{t('weeklyNote')}</p>
                   </div>
                   {!showPayoutForm && (
                     <Button
@@ -425,7 +451,14 @@ export default function SellerEarningsPage() {
                         <div key={payout.id} className="border border-gray-100 rounded-xl p-4 hover:shadow-md transition-all duration-200 bg-gray-50/50 hover:bg-white">
                           <div className="flex items-center justify-between">
                             <div>
-                              <p className="font-bold text-gray-900 text-lg">{formatPrice(payout.netAmount)}</p>
+                              <p className="font-bold text-gray-900 text-lg" data-ltr>
+                                {payout.netAmount < 0 ? '-' : ''}{formatPrice(Math.abs(payout.netAmount))}
+                                {payout.automatic && <span className="ms-2 align-middle rounded-full bg-blue-50 px-2 py-0.5 text-xs font-semibold text-blue-800">{t('weekly')}</span>}
+                                {payout.payoutMethod === 'paid_to_nuray' && <span className="ms-2 align-middle rounded-full bg-gray-100 px-2 py-0.5 text-xs font-semibold text-gray-800">{t('paidToNuray')}</span>}
+                              </p>
+                              {payout.periodStart && payout.periodEnd && payout.payoutMethod !== 'paid_to_nuray' && (
+                                <p className="text-sm text-gray-600 mt-1">{t('period', { from: payout.periodStart, to: payout.periodEnd })}</p>
+                              )}
                               <p className="text-sm text-gray-500 mt-1">
                                 {t('requested', { date: formatDate(payout.requestedAt) })}
                               </p>
@@ -435,12 +468,19 @@ export default function SellerEarningsPage() {
                                 </p>
                               )}
                             </div>
+                            <div className="flex flex-col items-end gap-2">
                             <span className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold ${statusConfig.bg} ${statusConfig.text}`}>
                               <span className={`w-1.5 h-1.5 rounded-full ${statusConfig.dot}`}></span>
                               {`payout.${payout.status}` in kitchenEarningsMessages.en
                                 ? t(`payout.${payout.status}` as keyof typeof kitchenEarningsMessages.en)
                                 : payout.status.charAt(0).toUpperCase() + payout.status.slice(1)}
                             </span>
+                            {payout.payoutMethod !== 'paid_to_nuray' && (
+                              <Button variant="outline" size="sm" onClick={() => setStatementFor(payout.id)} data-testid="open-statement">
+                                {t('statement')}
+                              </Button>
+                            )}
+                            </div>
                           </div>
                         </div>
                       );
@@ -462,6 +502,7 @@ export default function SellerEarningsPage() {
           </div>
         )}
       </div>
+      {statementFor && <PayoutStatement basePath="/sellers/me/payouts" payoutId={statementFor} onClose={() => setStatementFor(null)} />}
     </DashboardLayout>
   );
 }

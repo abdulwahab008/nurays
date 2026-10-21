@@ -9,6 +9,7 @@ import {
   getSellerAnalytics,
   requestPayout,
   getPayoutHistory,
+  getPayoutStatement,
   toggleStoreLive,
   getPublicSellers,
   getPublicSellerById,
@@ -51,6 +52,7 @@ router.get('/me/analytics', getSellerAnalytics);
 // Request payout / list own payout history
 router.post('/me/payouts', validate(requestPayoutSchema), requestPayout);
 router.get('/me/payouts', getPayoutHistory);
+router.get('/me/payouts/:id/statement', getPayoutStatement);
 
 export default router;
 

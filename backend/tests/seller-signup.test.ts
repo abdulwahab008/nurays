@@ -18,6 +18,7 @@ beforeEach(() => {
   db.seller = { create: jest.fn(async ({ data }: any) => ({ id: 's1', status: 'active', ...data })) };
   db.rider = { create: jest.fn(async () => ({})) };
   db.emailVerification = { create: jest.fn(async () => ({})) };
+  db.refreshToken = { create: jest.fn(async () => ({})), updateMany: jest.fn(async () => ({ count: 0 })) };
 });
 
 describe('signing up as a kitchen', () => {

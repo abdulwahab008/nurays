@@ -18,7 +18,7 @@ export function requestId(req: Request, res: Response, next: NextFunction) {
   (req as Request & { id: string; startedAt: number }).id = id;
   (req as Request & { startedAt: number }).startedAt = Date.now();
   res.setHeader('X-Request-Id', id);
-  requestContext.run({ requestId: id }, () => next());
+  requestContext.run({ requestId: id, ip: req.ip, userAgent: req.get('user-agent')?.slice(0, 300) }, () => next());
 }
 
 /** One log line per request: method, path, status and duration. Health checks are skipped. */

@@ -8,6 +8,7 @@ jest.mock('../src/config/database', () => ({
   __esModule: true,
   default: {
     user: { findFirst: jest.fn(), update: jest.fn(), create: jest.fn() },
+    refreshToken: { create: jest.fn(async () => ({})), updateMany: jest.fn(async () => ({ count: 0 })) },
   },
 }));
 

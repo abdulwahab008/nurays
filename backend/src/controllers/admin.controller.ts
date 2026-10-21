@@ -1,4 +1,8 @@
 import { Request, Response } from 'express';
+import { listOwingKitchens, recordPaymentToNuray, refreshOwing } from '../services/kitchen-owing.service';
+import prisma from '../config/database';
+import { getPayoutStatement as getStatement } from '../services/weekly-payout.service';
+import { sendStatement } from './payout-statement';
 import { qstr } from '../utils/query';
 import adminService from '../services/admin.service';
 import { AppError } from '../middleware/errorHandler';
@@ -97,6 +101,33 @@ export const approveRejectRider = async (req: Request, res: Response) => {
     data: result,
     message: result.message,
   });
+};
+
+/** Any kitchen payout, order by order (?format=csv for a spreadsheet). */
+export const getPayoutStatement = async (req: Request, res: Response) => {
+  sendStatement(res, await getStatement(String(req.params.id)), req.query.format);
+};
+
+/** Record that a kitchen paid Nuray what it owed. */
+export const recordKitchenPayment = async (req: Request, res: Response) => {
+  const result = await recordPaymentToNuray({
+    sellerId: String(req.params.id),
+    amount: req.body.amount,
+    reference: req.body.reference,
+    adminId: req.user!.userId,
+    ip: req.ip,
+  });
+  res.status(201).json({ success: true, data: result, message: 'Payment recorded' });
+};
+
+/** Every kitchen that owes Nuray now. */
+export const getOwingKitchens = async (_req: Request, res: Response) => {
+  res.status(200).json({ success: true, data: { kitchens: await listOwingKitchens() } });
+};
+
+/** What a kitchen owes Nuray now, after netting. */
+export const getKitchenOwing = async (req: Request, res: Response) => {
+  res.status(200).json({ success: true, data: await refreshOwing(prisma, String(req.params.id)) });
 };
 
 export const getPayouts = async (req: Request, res: Response) => {

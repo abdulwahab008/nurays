@@ -45,6 +45,7 @@ model User {
 
   profile       UserProfile?
   pushSubscriptions PushSubscription[]
+  refreshTokens     RefreshToken[]
   primaryCommunity Community? @relation(fields: [primaryCommunityId], references: [id], onDelete: SetNull)
   addresses     UserAddress[]
   managedHubs   HubCenter[] @relation("HubManager")
@@ -179,6 +180,9 @@ model Seller {
   jazzcashAccountTitle String? @map("jazzcash_account_title")
   easypaisaNumber   String?   @map("easypaisa_number")
   easypaisaAccountTitle String? @map("easypaisa_account_title")
+  // Since when the kitchen has owed Nuray (commission on cash it collected beyond what its online earnings cover);
+  // null while it does not. Fourteen days on, its new cash orders pause until it pays (kitchen-owing.service.ts).
+  owesSince         DateTime? @map("owes_since")
   lowStockThreshold Int       @default(10) @map("low_stock_threshold") // Default threshold for low stock alerts
   enableStockAlerts Boolean   @default(true) @map("enable_stock_alerts") // Enable/disable stock alert notifications
   freeDeliveryAreas   Json?     @map("free_delivery_areas") // Areas/cities where this seller offers free delivery, e.g. ["Askari", "DHA"]
@@ -1503,3 +1507,26 @@ model OrderMessage {
   @@map("order_messages")
 }
 
+/// One refresh token (its id is the token's `jti`). A session (`familyId`) is one device's sign-in: every refresh replaces
+/// the token in it, and a token that comes back after it was replaced ends the session, because only a copy can do that
+/// (OAuth 2.0 Security BCP, RFC 9700). SEC-2.
+model RefreshToken {
+  id        String    @id
+  userId    String    @map("user_id")
+  familyId  String    @map("family_id")
+  userAgent String?   @map("user_agent")
+  ipAddress String?   @map("ip_address")
+  createdAt DateTime  @default(now()) @map("created_at")
+  expiresAt DateTime  @map("expires_at")
+  /// Replaced by a newer token in the same session.
+  usedAt    DateTime? @map("used_at")
+  /// The session was ended (signed out, ended from another device, or a copied token was used).
+  revokedAt DateTime? @map("revoked_at")
+
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([familyId])
+  @@index([userId, createdAt])
+  @@index([expiresAt])
+  @@map("refresh_tokens")
+}

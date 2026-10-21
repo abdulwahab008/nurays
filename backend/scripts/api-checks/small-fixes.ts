@@ -100,7 +100,6 @@ export default async function smallFixes() {
   ok('an access token cannot mint new tokens', minted.status === 401, minted.code);
   const renewed = await call(null, 'POST', '/auth/refresh', { refreshToken: person.refresh });
   ok('while the refresh token itself does', renewed.status === 200 && !!renewed.body.data?.accessToken, renewed.code);
-  await sleep(1100); // tokens are dated to the second; the logout must come after the sign-in
   await person.as('POST', '/auth/logout', {});
   const revoked = await call(null, 'POST', '/auth/refresh', { refreshToken: person.refresh });
   ok('after logout the refresh token says the session was revoked (SESSION_REVOKED)', revoked.status === 401 && revoked.code === 'SESSION_REVOKED', revoked.code);

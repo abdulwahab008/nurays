@@ -67,6 +67,8 @@ export default function CheckoutPage() {
   const [onlineAvailable, setOnlineAvailable] = useState(false);
   const [walletBalance, setWalletBalance] = useState<number | null>(null);
   const [transactionRef, setTransactionRef] = useState<string>('');
+  // The kitchen owes Nuray and its cash orders are paused (CASH_UNAVAILABLE): cash comes off the list.
+  const [cashUnavailable, setCashUnavailable] = useState(false);
   const [deliveryInstructions, setDeliveryInstructions] = useState<string>('');
   const [deliverySlot, setDeliverySlot] = useState({ date: '', time: 'evening' as 'morning' | 'afternoon' | 'evening' });
   const [promoCode, setPromoCode] = useState('');
@@ -396,7 +398,14 @@ export default function CheckoutPage() {
           setOnlineAvailable(false);
           setPaymentMethod('cod');
         }
-        showToast(code === 'GATEWAY_UNAVAILABLE' ? t('onlineUnavailable') : apiErrorMessage(error, t('placeFailed')), 'error');
+        if (code === 'CASH_UNAVAILABLE') {
+          setCashUnavailable(true);
+          setPaymentMethod(onlineAvailable ? 'safepay' : 'bank');
+        }
+        showToast(
+          code === 'GATEWAY_UNAVAILABLE' ? t('onlineUnavailable') : code === 'CASH_UNAVAILABLE' ? t('cashUnavailable') : apiErrorMessage(error, t('placeFailed')),
+          'error'
+        );
       }
     } finally {
       setProcessing(false);
@@ -667,7 +676,13 @@ export default function CheckoutPage() {
               </div>
 
               <div className="space-y-3">
+                {cashUnavailable && (
+                  <p role="status" className="p-3 rounded-xl bg-amber-50 border border-amber-200 text-xs font-semibold text-amber-900" data-testid="cash-unavailable">
+                    {t('cashUnavailable')}
+                  </p>
+                )}
                 {/* Method 1: Cash on Delivery */}
+                {!cashUnavailable && (
                 <label
                   className={`block p-4 rounded-2xl border-2 cursor-pointer transition-all ${
                     paymentMethod === 'cod'
@@ -704,6 +719,7 @@ export default function CheckoutPage() {
                     </div>
                   )}
                 </label>
+                )}
 
                 {/* Online: card / JazzCash / EasyPaisa through Safepay */}
                 {onlineAvailable && (
