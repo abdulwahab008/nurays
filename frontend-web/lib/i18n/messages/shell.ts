@@ -81,6 +81,7 @@ export const shellMessages = defineMessages({
     locationSet: 'Location set to {name}',
     locationDetected: 'Detected location: {name}!',
     gpsFailed: 'Could not access GPS. Please pick your society below.',
+    gpsOutsideAreas: "We don't deliver where you are yet. Please pick your area below.",
     // Email verification banner
     verifySent: 'Verification email sent! Please check your inbox.',
     verifyFailed: 'Failed to resend email',
@@ -167,6 +168,7 @@ export const shellMessages = defineMessages({
     locationSet: 'لوکیشن {name} سیٹ ہو گئی',
     locationDetected: 'لوکیشن مل گئی: {name}!',
     gpsFailed: 'GPS تک رسائی نہیں ہو سکی۔ براہِ کرم نیچے سے اپنی سوسائٹی چنیں۔',
+    gpsOutsideAreas: 'ہم ابھی آپ کے مقام پر ڈیلیور نہیں کرتے۔ براہِ کرم نیچے سے اپنا علاقہ چنیں۔',
     verifySent: 'تصدیقی ای میل بھیج دی گئی! براہِ کرم اپنا ان باکس دیکھیں۔',
     verifyFailed: 'ای میل دوبارہ نہیں بھیجی جا سکی',
     verifyTitle: 'اپنی ای میل کی تصدیق کریں',

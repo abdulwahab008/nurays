@@ -86,6 +86,28 @@ describe('admin sign-in under a burst of guesses', () => {
   });
 });
 
+describe('a stranger cannot lock the administrator out (SEC-3)', () => {
+  const loginFrom = (id: string, password: string, ip: string) => authService.login(`${id}@nuray.test`, password, 'email', ip);
+
+  it('locks only the address the wrong passwords came from', async () => {
+    givenAdmin('from-ip');
+    for (let i = 0; i < 5; i++) expect(await outcome(loginFrom('from-ip', `nope-${i}`, '203.0.113.9'))).toBe('INVALID_CREDENTIALS');
+    expect(await outcome(loginFrom('from-ip', RIGHT, '203.0.113.9'))).toBe('ACCOUNT_LOCKED');
+    // The administrator, somewhere else, still signs in.
+    expect(await outcome(loginFrom('from-ip', RIGHT, '198.51.100.4'))).toBe('ok');
+    expect(recordAudit).toHaveBeenCalledWith(expect.objectContaining({ action: 'auth:LOGIN_FAILED', ipAddress: '203.0.113.9' }));
+  });
+
+  it('still stops guessing spread over many addresses, at 50 wrong passwords in the window', async () => {
+    givenAdmin('spread');
+    for (let i = 0; i < 50; i++) expect(await outcome(loginFrom('spread', `nope-${i}`, `192.0.2.${i}`))).toBe('INVALID_CREDENTIALS');
+    expect(await outcome(loginFrom('spread', RIGHT, '198.51.100.77'))).toBe('ACCOUNT_LOCKED');
+  });
+});
+
 afterAll(async () => {
-  for (const id of ['burst', 'locked', 'forgives', 'audited', 'first', 'second']) await budgetReset(`admin-login:${id}`);
+  for (const id of ['burst', 'locked', 'forgives', 'audited', 'first', 'second', 'from-ip', 'spread']) {
+    await budgetReset(`admin-login:${id}`);
+    await budgetReset(`admin-login:${id}:unknown`);
+  }
 });

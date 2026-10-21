@@ -27,10 +27,16 @@ export const placeholderPhone = (seed: string): string =>
 /** A valid bcrypt hash of a random string, for equalising login timing when the account doesn't exist. */
 const DUMMY_PASSWORD_HASH = bcrypt.hashSync(randomBytes(16).toString('hex'), 10);
 
-/** An admin account is locked for a while after this many wrong passwords. */
+/**
+ * Wrong admin passwords are counted per account AND network address (OWASP, NIST SP 800-63B: throttle, don't let a stranger
+ * lock the account): five from one address lock that address out of that account for a while, and the administrator signing
+ * in from anywhere else is not affected. A ceiling across all addresses still stops guessing spread over many machines.
+ */
 const ADMIN_MAX_FAILED_LOGINS = 5;
+const ADMIN_ACCOUNT_CEILING = 50;
 const ADMIN_LOCK_MINUTES = 15;
-const adminLoginBudgetKey = (userId: string) => `admin-login:${userId}`;
+const adminLoginBudgetKey = (userId: string, ip: string) => `admin-login:${userId}:${ip}`;
+const adminAccountBudgetKey = (userId: string) => `admin-login:${userId}`;
 
 export class AuthService {
   /**
@@ -345,7 +351,7 @@ export class AuthService {
   /**
    * Login user with OTP or Email/Password
    */
-  async login(phoneOrEmail: string, otpCodeOrPassword?: string, loginMethod: 'otp' | 'email' = 'otp') {
+  async login(phoneOrEmail: string, otpCodeOrPassword?: string, loginMethod: 'otp' | 'email' = 'otp', clientIp?: string | null) {
     if (loginMethod === 'email') {
       // Email/Password login
       if (!otpCodeOrPassword) {
@@ -371,33 +377,38 @@ export class AuthService {
         throw new AppError('Password not set. Please use phone login or reset password', 400, 'PASSWORD_NOT_SET');
       }
 
-      // Admin accounts: locked after repeated wrong passwords (counted from the audit log).
+      // Admin accounts: throttled after repeated wrong passwords (counted from the audit log and a shared counter).
       const isAdmin = user.userType === 'admin';
+      const ip = clientIp || 'unknown';
       if (isAdmin) {
-        const since = new Date(Date.now() - ADMIN_LOCK_MINUTES * 60 * 1000);
+        const windowMs = ADMIN_LOCK_MINUTES * 60 * 1000;
+        const since = new Date(Date.now() - windowMs);
         const lastOk = await prisma.auditLog.findFirst({ where: { action: 'auth:LOGIN', userId: user.id, createdAt: { gte: since } }, orderBy: { createdAt: 'desc' }, select: { createdAt: true } });
-        const failures = await prisma.auditLog.count({
-          where: { action: 'auth:LOGIN_FAILED', entityId: user.id, createdAt: { gte: lastOk?.createdAt ?? since } },
-        });
+        const failedSince = { action: 'auth:LOGIN_FAILED', entityId: user.id, createdAt: { gte: lastOk?.createdAt ?? since } };
+        const [fromHere, fromAnywhere] = await Promise.all([
+          prisma.auditLog.count({ where: { ...failedSince, ipAddress: ip } }),
+          prisma.auditLog.count({ where: failedSince }),
+        ]);
         // The audit rows are only written after a password has been checked, so a burst of simultaneous guesses would
         // all read the same count and every one of them would be checked. This attempt is counted before its password
-        // is looked at: at most ADMIN_MAX_FAILED_LOGINS passwords are compared in a window, however fast they arrive.
-        const attempts = failures >= ADMIN_MAX_FAILED_LOGINS ? Infinity : await budgetAdd(adminLoginBudgetKey(user.id), ADMIN_LOCK_MINUTES * 60 * 1000);
-        if (attempts > ADMIN_MAX_FAILED_LOGINS) {
-          void recordAudit({ action: 'auth:LOGIN_LOCKED', entityType: 'user', entityId: user.id, responseStatus: 429 });
-          throw new AppError(`Too many wrong passwords. This account is locked for ${ADMIN_LOCK_MINUTES} minutes.`, 429, 'ACCOUNT_LOCKED');
+        // is looked at: at most ADMIN_MAX_FAILED_LOGINS passwords per address are compared in a window, however fast they arrive.
+        const here = fromHere >= ADMIN_MAX_FAILED_LOGINS ? Infinity : await budgetAdd(adminLoginBudgetKey(user.id, ip), windowMs);
+        const anywhere = fromAnywhere >= ADMIN_ACCOUNT_CEILING ? Infinity : await budgetAdd(adminAccountBudgetKey(user.id), windowMs);
+        if (here > ADMIN_MAX_FAILED_LOGINS || anywhere > ADMIN_ACCOUNT_CEILING) {
+          void recordAudit({ action: 'auth:LOGIN_LOCKED', entityType: 'user', entityId: user.id, ipAddress: ip, responseStatus: 429 });
+          throw new AppError(`Too many wrong passwords. Try again in ${ADMIN_LOCK_MINUTES} minutes.`, 429, 'ACCOUNT_LOCKED');
         }
       }
 
       // Verify password
       const isPasswordValid = await bcrypt.compare(otpCodeOrPassword, user.passwordHash);
       if (!isPasswordValid) {
-        if (isAdmin) await recordAudit({ action: 'auth:LOGIN_FAILED', entityType: 'user', entityId: user.id, responseStatus: 401 });
+        if (isAdmin) await recordAudit({ action: 'auth:LOGIN_FAILED', entityType: 'user', entityId: user.id, ipAddress: ip, responseStatus: 401 });
         throw new AppError('Invalid email or password', 401, 'INVALID_CREDENTIALS');
       }
 
-      // A right password clears the count of wrong ones.
-      if (isAdmin) await budgetReset(adminLoginBudgetKey(user.id));
+      // A right password clears the counts of wrong ones.
+      if (isAdmin) await Promise.all([budgetReset(adminLoginBudgetKey(user.id, ip)), budgetReset(adminAccountBudgetKey(user.id))]);
 
       if (user.status !== 'active') {
         throw new AppError(`Account is ${user.status}`, 403, 'ACCOUNT_SUSPENDED');

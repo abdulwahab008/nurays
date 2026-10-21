@@ -319,6 +319,11 @@ export class OrderPlacement {
       // each seller delivers there and at what fee — it can't be skipped.
       throw new AppError('A delivery address is required for home delivery', 400, 'ADDRESS_REQUIRED');
     }
+    if (data.deliveryType === 'home_delivery' && deliveryAddress && (deliveryAddress.latitude == null || deliveryAddress.longitude == null)) {
+      // The pin is how the rider finds the door and how the fee and the community are worked out. The checkout already asks
+      // for it; an address saved before pins were required gets one on the address page first (DELIV-4).
+      throw new AppError('This address has no map pin. Add the pin on the address, then place the order.', 400, 'ADDRESS_PIN_REQUIRED');
+    }
     if (data.deliveryType === 'self_pickup' || data.deliveryType === 'hub_pickup') {
       deliveryFee = 0;
     } else if (data.deliveryType === 'home_delivery' && deliveryAddress && orderItems.length > 0) {

@@ -95,12 +95,12 @@ export function CommunitySelector({ variant = 'navbar' }: CommunitySelectorProps
 
   // GPS auto-detection with smart match
   const handleGPSDetect = async () => {
-    const detected = await detectCommunityFromGPS();
+    const { community: detected, reason } = await detectCommunityFromGPS();
     if (detected) {
       showToast(t('locationDetected', { name: detected.name }), 'success');
       handleClose();
     } else {
-      showToast(t('gpsFailed'), 'error');
+      showToast(t(reason === 'outside' ? 'gpsOutsideAreas' : 'gpsFailed'), reason === 'outside' ? 'info' : 'error');
     }
   };
 
