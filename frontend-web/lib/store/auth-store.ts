@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import { useCartStore } from './cart-store';
 import { apiClient } from '../api-client';
-import { dropPushSubscription } from '../push';
+import { dropPushSubscription, pushEndpointHere } from '../push';
 import { tokenStore } from '../token-store';
 
 export interface User {
@@ -61,24 +61,26 @@ export const useAuthStore = create<AuthState>()(
         set({ user: normalizedUser, isAuthenticated: hasToken });
       },
       logout: () => {
-        // Fire-and-forget — we don't block UI on the server response, but we
-        // do tell the backend so it can blacklist the token if it implements
-        // server-side session revocation.
+        // Fire-and-forget: the UI does not wait for the server. It ends this device's session (its tokens stop working
+        // at once; the account's other devices stay signed in) and forgets this browser's push subscription.
         // The token is read now, before it is cleared below: the request's auth
         // header is attached asynchronously, so it would otherwise go out empty.
         const token = apiClient.getAccessToken();
-        apiClient
-          .post('/auth/logout', {}, token ? { headers: { Authorization: `Bearer ${token}` } } : undefined)
-          .catch(() => {
-            // Ignore — logout is best-effort.
-          });
+        void (async () => {
+          const pushEndpoint = await pushEndpointHere();
+          await apiClient
+            .post('/auth/logout', pushEndpoint ? { pushEndpoint } : {}, token ? { headers: { Authorization: `Bearer ${token}` } } : undefined)
+            .catch(() => {
+              // Ignore — logout is best-effort.
+            });
+          // Nor should the next person on this browser inherit the previous account's push notifications.
+          await dropPushSubscription();
+        })();
         // The cart is persisted per browser, not per account: leaving it behind
         // let the next person to sign in on this device inherit (and sync into
         // their own server cart) the previous user's items.
         useCartStore.getState().clearCart();
         useCartStore.getState().setAppliedPromoCode(null);
-        // Nor should the next person on this browser inherit the previous account's push notifications.
-        void dropPushSubscription();
         tokenStore().clear();
         set({ user: null, isAuthenticated: false });
       },

@@ -13,6 +13,9 @@ import { runtimeMode } from '../config/env';
 export interface RequestContext {
   requestId: string;
   userId?: string;
+  /** Where the request came from, for the list of signed-in devices. */
+  ip?: string;
+  userAgent?: string;
 }
 
 export const requestContext = new AsyncLocalStorage<RequestContext>();

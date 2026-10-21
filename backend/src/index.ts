@@ -19,6 +19,7 @@ import { checkAndCreateStockAlerts } from './services/stock-alert.service';
 import hubService from './services/hub.service';
 import { recomputeRankings } from './services/ranking.service';
 import { scheduleJob, stopScheduler } from './jobs/scheduler';
+import { pruneRefreshTokens } from './services/session.service';
 import { startWorkers, stopWorkers } from './jobs/queue';
 import './jobs/email.jobs';
 import prisma from './config/database';
@@ -168,6 +169,8 @@ httpServer.listen(PORT, () => {
   scheduleJob('stale-orders', 2 * 60 * 1000, () => sweepStaleOrders());
   // Old one-time codes and used / expired reset tokens.
   scheduleJob('purge-expired-secrets', 6 * 60 * 60 * 1000, () => purgeExpiredSecrets());
+  // Refresh tokens nobody can use any more (expired, or in a session that ended a day ago).
+  scheduleJob('prune-refresh-tokens', 6 * 60 * 60 * 1000, () => pruneRefreshTokens());
   // Online checkout sessions nobody completed (a late payment confirmation still settles).
   scheduleJob('expire-payment-attempts', 15 * 60 * 1000, () => expireAbandonedAttempts());
   // Trending and rating scores the listings sort by (recent orders fade over days, so this

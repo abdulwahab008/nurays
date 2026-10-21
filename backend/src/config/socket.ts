@@ -6,6 +6,7 @@ import { verifyToken, isTokenRevoked } from '../utils/jwt';
 import prisma from './database';
 import { canTakePoolJobs } from '../utils/riderDuty';
 import { logger } from '../utils/logger';
+import { isSessionActive } from '../services/session.service';
 
 /**
  * The connections of riders who can take a job from the open pool (approved, active, on duty). Pool
@@ -96,7 +97,12 @@ class SocketManager {
           select: { id: true, status: true, userType: true, tokensValidAfter: true },
         });
 
-        if (!user || user.status !== 'active' || isTokenRevoked(payload, user.tokensValidAfter)) {
+        if (
+          !user ||
+          user.status !== 'active' ||
+          isTokenRevoked(payload, user.tokensValidAfter) ||
+          (payload.sid && !(await isSessionActive(payload.sid)))
+        ) {
           return next(new Error('Authentication error: User not found or inactive'));
         }
 
@@ -108,6 +114,8 @@ class SocketManager {
           userId: payload.userId,
           userType: user.userType,
         };
+        // Its own room, so signing out this one device closes this device's connections.
+        if (payload.sid) socket.join(`session:${payload.sid}`);
 
         next();
       } catch (error) {
@@ -271,6 +279,11 @@ class SocketManager {
    */
   disconnectUser(userId: string) {
     this.io?.in(`user:${userId}`).disconnectSockets(true);
+  }
+
+  /** Close one signed-in device's connections (see session.service.ts). */
+  disconnectSession(sessionId: string) {
+    this.io?.in(`session:${sessionId}`).disconnectSockets(true);
   }
 
   /**

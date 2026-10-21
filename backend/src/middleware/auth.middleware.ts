@@ -3,6 +3,7 @@ import { verifyToken, isTokenRevoked, JWTPayload } from '../utils/jwt';
 import { AppError } from './errorHandler';
 import prisma from '../config/database';
 import { setLogUser } from '../utils/logger';
+import { isSessionActive } from '../services/session.service';
 
 // Extend Express Request to include user
 declare global {
@@ -79,6 +80,10 @@ export const authenticate = async (
     if (isTokenRevoked(payload, user.tokensValidAfter)) {
       throw new AppError('Session expired, please log in again', 401, 'SESSION_REVOKED');
     }
+    // Signed out on this device (or from another one): its access token ends with it, not an hour later.
+    if (payload.sid && !(await isSessionActive(payload.sid))) {
+      throw new AppError('Session expired, please log in again', 401, 'SESSION_REVOKED');
+    }
 
     // Attach user to request — use the freshly-fetched userType, not the JWT's
     // payload.userType, which is a snapshot from whenever the token was issued
@@ -119,7 +124,12 @@ export const optionalAuthenticate = async (
         select: { id: true, status: true, userType: true, staffRole: true, tokensValidAfter: true },
       });
 
-      if (user && user.status === 'active' && !isTokenRevoked(payload, user.tokensValidAfter)) {
+      if (
+        user &&
+        user.status === 'active' &&
+        !isTokenRevoked(payload, user.tokensValidAfter) &&
+        (!payload.sid || (await isSessionActive(payload.sid)))
+      ) {
         req.user = {
           ...payload,
           userType: user.userType,

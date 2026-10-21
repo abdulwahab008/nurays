@@ -1,6 +1,7 @@
 import prisma from '../config/database';
 import { isProduction } from '../config/env';
-import { generateToken, generateRefreshToken, tokenTtlSeconds, JWTPayload } from '../utils/jwt';
+import { tokenTtlSeconds } from '../utils/jwt';
+import { startSession } from './session.service';
 import { AppError } from '../middleware/errorHandler';
 import { GoogleIdTokenError, verifyGoogleIdToken } from '../utils/google-id-token';
 import { logger } from '../utils/logger';
@@ -143,15 +144,7 @@ export class GoogleAuthService {
         },
       });
 
-      // Generate tokens
-      const tokenPayload: JWTPayload = {
-        userId: updatedUser.id,
-        userType: updatedUser.userType,
-        phone: updatedUser.phone,
-      };
-
-      const accessToken = generateToken(tokenPayload);
-      const refreshToken = generateRefreshToken(tokenPayload);
+      const { accessToken, refreshToken } = await startSession(updatedUser);
 
       return {
         user: {
@@ -205,15 +198,7 @@ export class GoogleAuthService {
         },
       });
 
-      // Generate tokens
-      const tokenPayload: JWTPayload = {
-        userId: user.id,
-        userType: user.userType,
-        phone: user.phone,
-      };
-
-      const accessToken = generateToken(tokenPayload);
-      const refreshToken = generateRefreshToken(tokenPayload);
+      const { accessToken, refreshToken } = await startSession(user);
 
       return {
         user: {

@@ -4,7 +4,8 @@ import googleAuthService from '../services/google-auth.service';
 import { AppError } from '../middleware/errorHandler';
 import socketManager from '../config/socket';
 import { recordAudit } from '../middleware/audit';
-import { removeAllSubscriptions } from '../services/push.service';
+import { removeAllSubscriptions, removeSubscription } from '../services/push.service';
+import { endSession, listSessions } from '../services/session.service';
 import { logger } from '../utils/logger';
 
 export const requestOTP = async (req: Request, res: Response) => {
@@ -173,17 +174,26 @@ export const changePassword = async (req: Request, res: Response) => {
   res.status(200).json({ success: true, message: 'Password changed. Your other devices were signed out.', data: result });
 };
 
+/**
+ * Sign out of this device: its session ends (its access and refresh tokens stop working) and, when the app says which
+ * push subscription is this device's, that one is forgotten. The account's other devices stay signed in. A token from
+ * before sessions were recorded carries no session id, so it signs out everywhere, as logout used to.
+ */
 export const logout = async (req: Request, res: Response) => {
-  // Logging out ends every session the account has, on every device: a copied token (and the
-  // 30-day refresh token with it) stops working at once. Tokens are stateless, so this is the
-  // only way a sign-out can mean anything.
   if (req.user) {
-    await authService.revokeSessions(req.user.userId);
-    socketManager.disconnectUser(req.user.userId);
-    // ...and no device goes on receiving the account's push notifications (an order's status, a new job) once nobody is signed in on it.
-    await removeAllSubscriptions(req.user.userId).catch((err) => logger.warn({ err: (err as Error)?.message, userId: req.user?.userId }, 'Could not forget the push subscriptions at logout'));
+    const { userId, sid } = req.user;
+    const pushEndpoint = typeof req.body?.pushEndpoint === 'string' ? req.body.pushEndpoint : null;
+    if (sid) {
+      await endSession(userId, sid);
+      socketManager.disconnectSession(sid);
+      if (pushEndpoint) {
+        await removeSubscription(userId, pushEndpoint).catch((err) => logger.warn({ err: (err as Error)?.message, userId }, 'Could not forget the push subscription at logout'));
+      }
+    } else {
+      await endEverywhere(userId);
+    }
     if (req.user.userType === 'admin') {
-      void recordAudit({ userId: req.user.userId, action: 'auth:LOGOUT', entityType: 'user', entityId: req.user.userId, ipAddress: req.ip, responseStatus: 200 });
+      void recordAudit({ userId, action: 'auth:LOGOUT', entityType: 'user', entityId: userId, ipAddress: req.ip, responseStatus: 200 });
     }
   }
 
@@ -191,4 +201,38 @@ export const logout = async (req: Request, res: Response) => {
     success: true,
     message: 'Logged out successfully',
   });
+};
+
+/** Every device: sessions, live connections and push notifications. */
+async function endEverywhere(userId: string) {
+  await authService.revokeSessions(userId);
+  socketManager.disconnectUser(userId);
+  await removeAllSubscriptions(userId).catch((err) => logger.warn({ err: (err as Error)?.message, userId }, 'Could not forget the push subscriptions at logout'));
+}
+
+/** Sign out of every device, this one included. */
+export const logoutAll = async (req: Request, res: Response) => {
+  if (!req.user) throw new AppError('Authentication required', 401, 'AUTH_REQUIRED');
+  await endEverywhere(req.user.userId);
+  void recordAudit({ userId: req.user.userId, action: 'auth:LOGOUT_ALL', entityType: 'user', entityId: req.user.userId, ipAddress: req.ip, responseStatus: 200 });
+  res.status(200).json({ success: true, message: 'Signed out on every device' });
+};
+
+/** The devices this account is signed in on. */
+export const getSessions = async (req: Request, res: Response) => {
+  if (!req.user) throw new AppError('Authentication required', 401, 'AUTH_REQUIRED');
+  const sessions = await listSessions(req.user.userId, req.user.sid);
+  res.status(200).json({ success: true, data: { sessions } });
+};
+
+/** Sign one device out. */
+export const deleteSession = async (req: Request, res: Response) => {
+  if (!req.user) throw new AppError('Authentication required', 401, 'AUTH_REQUIRED');
+  const sessionId = String(req.params.id);
+  if (!(await endSession(req.user.userId, sessionId))) {
+    throw new AppError('No such signed-in device', 404, 'SESSION_NOT_FOUND');
+  }
+  socketManager.disconnectSession(sessionId);
+  void recordAudit({ userId: req.user.userId, action: 'auth:SESSION_ENDED', entityType: 'session', entityId: sessionId, ipAddress: req.ip, responseStatus: 200 });
+  res.status(200).json({ success: true, message: 'That device was signed out' });
 };

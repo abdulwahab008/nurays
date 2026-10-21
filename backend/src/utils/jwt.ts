@@ -18,6 +18,10 @@ export interface JWTPayload {
   phone: string;
   /** Token purpose. Access and refresh tokens share a secret, so this keeps one from standing in for the other. */
   typ?: 'access' | 'refresh';
+  /** The session (one device's sign-in) the token belongs to; see services/session.service.ts. */
+  sid?: string;
+  /** A refresh token's own id, recorded in refresh_tokens. */
+  jti?: string;
   /** Issue time in milliseconds: revocation is exact to the millisecond, not the second. */
   iatMs?: number;
   /** Issued-at / expiry (seconds), added by jsonwebtoken. */
@@ -35,6 +39,12 @@ export const generateRefreshToken = (payload: JWTPayload): string => {
   return jwt.sign({ ...payload, typ: 'refresh', iatMs: Date.now() }, JWT_SECRET, {
     expiresIn: JWT_REFRESH_EXPIRES_IN,
   } as jwt.SignOptions);
+};
+
+/** When a token expires, from its own `exp` claim. */
+export const tokenExpiry = (token: string): Date => {
+  const decoded = jwt.decode(token) as { exp?: number } | null;
+  return new Date((decoded?.exp ?? Math.floor(Date.now() / 1000) + 30 * 24 * 3600) * 1000);
 };
 
 /**

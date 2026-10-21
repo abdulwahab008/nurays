@@ -3,7 +3,7 @@
  * of one order, who may read a kitchen's raw variants, what logging out ends, what changing an
  * e-mail address needs, and where a password-reset link is not sent.
  */
-import { call, deepKeys, makeKitchen, makeProduct, makeRider, makeUser, ok, PASSWORD, placeHomeOrder, acceptOrder, claimJob, prisma, sleep, unique } from './lib';
+import { call, deepKeys, login, makeKitchen, makeProduct, makeRider, makeUser, ok, PASSWORD, placeHomeOrder, acceptOrder, claimJob, prisma, sleep, unique } from './lib';
 
 const claims = (token: string) => JSON.parse(Buffer.from(token.split('.')[1], 'base64url').toString());
 
@@ -47,22 +47,61 @@ export default async function security() {
   const asOwner = await kitchen.owner.as('GET', `/product-variants/product/${productId}`);
   ok('the kitchen itself still can', asOwner.status === 200, asOwner.code);
 
-  // 4. logging out ends the session: access token and refresh token, and no device goes on receiving the account's push notifications
+  // 4. logging out ends this device's session (access and refresh token, and this device's push), not the others';
+  //    "sign out everywhere" ends them all (SEC-2)
   const leaver = await makeUser('customer');
+  const leaverPhone = await login(leaver.email); // the same account on a second device
   const staying = await makeUser('customer');
   const device = (who: string, n: number) => ({ endpoint: `https://push.example.test/${who}/${n}`, keys: { p256dh: `p256dh-${who}-${n}-0123456789`, auth: `auth-${who}-${n}-012345` } });
-  const subscribed = [];
-  for (const sub of [device(leaver.id, 1), device(leaver.id, 2)]) subscribed.push(await leaver.as('POST', '/notifications/push/subscriptions', sub));
-  subscribed.push(await staying.as('POST', '/notifications/push/subscriptions', device(staying.id, 1)));
+  const subscribed = [
+    await leaver.as('POST', '/notifications/push/subscriptions', device(leaver.id, 1)),
+    await call(leaverPhone.access, 'POST', '/notifications/push/subscriptions', device(leaver.id, 2)),
+    await staying.as('POST', '/notifications/push/subscriptions', device(staying.id, 1)),
+  ];
   ok('two devices of one account and one of another are subscribed to push', subscribed.every((r) => r.status === 201) && (await prisma.pushSubscription.count({ where: { userId: leaver.id } })) === 2, subscribed.map((r) => r.status).join());
-  await sleep(1100); // tokens are dated to the second; the logout must come after
-  const out = await leaver.as('POST', '/auth/logout', {});
+  const out = await leaver.as('POST', '/auth/logout', { pushEndpoint: device(leaver.id, 1).endpoint });
   ok('logout answers 200', out.status === 200, out.code);
-  ok("and the account's push subscriptions are forgotten, on every device (nobody is signed in on any of them any more), the other account's are not", (await prisma.pushSubscription.count({ where: { userId: leaver.id } })) === 0 && (await prisma.pushSubscription.count({ where: { userId: staying.id } })) === 1);
+  const leftSubs = await prisma.pushSubscription.findMany({ where: { userId: { in: [leaver.id, staying.id] } }, select: { endpoint: true } });
+  ok("and only this device's push subscription is forgotten (the account's other device and the other account keep theirs)", leftSubs.map((x) => x.endpoint).sort().join() === [device(leaver.id, 2).endpoint, device(staying.id, 1).endpoint].sort().join(), leftSubs.map((x) => x.endpoint).join());
   const meAfter = await leaver.as('GET', '/auth/me');
-  ok('the access token is dead after logout', meAfter.status === 401 || meAfter.status === 403, meAfter.code);
+  ok('the access token is dead at once after logout (not an hour later)', meAfter.status === 401 && meAfter.code === 'SESSION_REVOKED', meAfter.code);
   const refreshAfter = await call(null, 'POST', '/auth/refresh', { refreshToken: leaver.refresh });
-  ok('and so is the refresh token', refreshAfter.status === 401, refreshAfter.code);
+  ok('and so is the refresh token', refreshAfter.status === 401 && refreshAfter.code === 'SESSION_REVOKED', refreshAfter.code);
+  ok("the account's other device is still signed in", (await call(leaverPhone.access, 'GET', '/auth/me')).status === 200);
+  const everywhere = await call(leaverPhone.access, 'POST', '/auth/logout-all', {});
+  ok('"sign out everywhere" answers 200', everywhere.status === 200, everywhere.code);
+  ok('and ends every session and forgets every push subscription of the account', (await call(leaverPhone.access, 'GET', '/auth/me')).status === 401 && (await call(null, 'POST', '/auth/refresh', { refreshToken: leaverPhone.refresh })).status === 401 && (await prisma.pushSubscription.count({ where: { userId: leaver.id } })) === 0 && (await prisma.pushSubscription.count({ where: { userId: staying.id } })) === 1);
+  ok('"sign out everywhere" leaves a trail', (await prisma.auditLog.count({ where: { userId: leaver.id, action: 'auth:LOGOUT_ALL' } })) === 1);
+
+  // 4b. refresh tokens rotate: each works once, and a copied one that comes back ends its session (SEC-2)
+  const rotator = await makeUser('customer');
+  const r1 = await call(null, 'POST', '/auth/refresh', { refreshToken: rotator.refresh });
+  const t1 = r1.body?.data;
+  ok('a refresh hands out a new access token and a new refresh token in the same session', r1.status === 200 && !!t1?.refreshToken && t1.refreshToken !== rotator.refresh && claims(t1.accessToken).sid === claims(rotator.access).sid, r1.code);
+  const twin = await call(null, 'POST', '/auth/refresh', { refreshToken: rotator.refresh });
+  ok('the same refresh token again within a few seconds (another tab refreshing at once) still works', twin.status === 200, twin.code);
+  await prisma.refreshToken.updateMany({ where: { id: claims(rotator.refresh).jti }, data: { usedAt: new Date(Date.now() - 60_000) } }); // as if it was spent a minute ago
+  const replay = await call(null, 'POST', '/auth/refresh', { refreshToken: rotator.refresh });
+  ok('a spent refresh token that comes back later is refused with 401 REFRESH_TOKEN_REUSED', replay.status === 401 && replay.code === 'REFRESH_TOKEN_REUSED', replay.code);
+  const afterReplay = [await call(t1?.accessToken ?? 'none', 'GET', '/auth/me'), await call(null, 'POST', '/auth/refresh', { refreshToken: t1?.refreshToken ?? 'none' })];
+  ok('and the whole session ends: the newest access and refresh tokens stop working too', afterReplay.every((r) => r.status === 401), afterReplay.map((r) => r.code).join());
+  ok('the reuse leaves a trail', (await prisma.auditLog.count({ where: { userId: rotator.id, action: 'auth:REFRESH_REUSE' } })) === 1);
+
+  // 4c. the signed-in devices list (SEC-2)
+  const owner2 = await makeUser('customer');
+  const laptop = await login(owner2.email);
+  const other = await makeUser('customer');
+  const listed = await owner2.as('GET', '/auth/sessions');
+  const sessions: Array<{ id: string; current: boolean; userAgent: string | null }> = listed.body?.data?.sessions ?? [];
+  ok('GET /auth/sessions lists both devices, marking this one', listed.status === 200 && sessions.length === 2 && sessions.filter((x) => x.current).length === 1 && sessions.find((x) => x.current)?.id === claims(owner2.access).sid, JSON.stringify(sessions.map((x) => x.current)));
+  ok('the list says nothing about tokens', !deepKeys(listed.body).has('refreshToken') && !deepKeys(listed.body).has('familyId'));
+  const laptopSid = claims(laptop.access).sid;
+  const notYours = await other.as('DELETE', `/auth/sessions/${laptopSid}`);
+  ok("another account cannot sign out someone else's device (404)", notYours.status === 404 && notYours.code === 'SESSION_NOT_FOUND' && (await call(laptop.access, 'GET', '/auth/me')).status === 200, notYours.code);
+  const ended = await owner2.as('DELETE', `/auth/sessions/${laptopSid}`);
+  ok('the owner signs the laptop out from the phone (200): the laptop is out, the phone stays in', ended.status === 200 && (await call(laptop.access, 'GET', '/auth/me')).status === 401 && (await owner2.as('GET', '/auth/me')).status === 200, ended.code);
+  ok('and the list shows one device now', ((await owner2.as('GET', '/auth/sessions')).body?.data?.sessions ?? []).length === 1);
+  ok('the sessions list needs a signed-in account (401)', (await call(null, 'GET', '/auth/sessions')).status === 401);
 
   // 5. changing the e-mail address needs the password
   const owner = await makeUser('customer');

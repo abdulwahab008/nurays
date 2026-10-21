@@ -39,6 +39,8 @@ function givenAccount(over: Record<string, unknown> = {}) {
     findUnique: jest.fn(async () => account(over)),
     update: jest.fn(async (args: any) => args),
   };
+  db.refreshToken = { create: jest.fn(async () => ({})), updateMany: jest.fn(async () => ({ count: 1 })) };
+  db.$transaction = jest.fn(async (ops: Promise<unknown>[]) => Promise.all(ops));
 }
 
 beforeAll(async () => {
@@ -60,7 +62,13 @@ describe('changePassword', () => {
     const update = db.user.update.mock.calls[0][0];
     expect(update.where).toEqual({ id: 'u1' });
     expect(await bcrypt.compare(NEXT, update.data.passwordHash)).toBe(true);
-    expect(update.data.tokensValidAfter.getTime()).toBeGreaterThanOrEqual(before);
+    // every recorded session ends, and the cut-off voids any token from before sessions were recorded
+    expect(db.refreshToken.updateMany).toHaveBeenCalledWith({ where: { userId: 'u1', revokedAt: null }, data: { revokedAt: expect.any(Date) } });
+    const cutoff = db.user.update.mock.calls.map((c: any[]) => c[0]).find((a: any) => a.data.tokensValidAfter);
+    expect(cutoff.data.tokensValidAfter.getTime()).toBeGreaterThanOrEqual(before);
+    update.data.tokensValidAfter = cutoff.data.tokensValidAfter;
+    // the fresh pair belongs to a new session
+    expect(db.refreshToken.create).toHaveBeenCalledWith({ data: expect.objectContaining({ userId: 'u1', familyId: verifyToken(result.tokens.access_token).sid }) });
 
     // the tokens it hands back are good (not older than the cut-off) and are the right kind; a token from before is void
     const { access_token, refresh_token, expires_in } = result.tokens;
