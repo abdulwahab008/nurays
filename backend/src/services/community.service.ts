@@ -1,4 +1,5 @@
 import prisma from '../config/database';
+import { logger } from '../utils/logger';
 import { AppError } from '../middleware/errorHandler';
 import { haversineKm } from '../utils/deliveryFee';
 import { onMenuWhere } from '../utils/menu';
@@ -202,7 +203,9 @@ export class CommunityService {
    *   1. GPS point inside a community's radius (nearest wins)
    *   2. the address area naming a community ("Askari 11")
    *   3. the buyer's own community, if it is in the same city as the address
-   * Returns null when nothing matches (the seller-wide delivery policy then applies).
+   * Steps 2 and 3 are only for an address with no pin: a pin outside every community is
+   * not filed under one by its typed area name (DELIV-3); delivery there is refused instead
+   * (see pinOutsideEveryCommunity). Returns null when nothing matches.
    */
   async resolveCommunityIdForAddress(
     address: { area?: string | null; city?: string | null; latitude?: unknown; longitude?: unknown },
@@ -221,7 +224,8 @@ export class CommunityService {
           best = { id: c.id, distance };
         }
       }
-      if (best) return best.id;
+      // The pin is where the rider goes: it outranks whatever area name was typed.
+      return best ? best.id : null;
     }
 
     const norm = (v?: string | null) => (v ?? '').trim().toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
@@ -253,6 +257,26 @@ export class CommunityService {
     }
 
     return null;
+  }
+
+  /**
+   * True when communities are set up and this pin lies outside all of them: Nuray does not deliver
+   * there yet (DELIV-3). False when there is no pin, or no community at all (nothing to measure by).
+   * A refused pin is logged rounded to about a kilometre: where demand is coming from, not who.
+   */
+  async pinOutsideEveryCommunity(latitude: unknown, longitude: unknown): Promise<boolean> {
+    if (latitude == null || longitude == null) return false;
+    const lat = Number(latitude);
+    const lng = Number(longitude);
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) return false;
+    const communities = await prisma.community.findMany({
+      where: { isActive: true },
+      select: { centerLatitude: true, centerLongitude: true, radiusKm: true },
+    });
+    if (communities.length === 0) return false;
+    const inside = communities.some((c) => haversineKm(lat, lng, Number(c.centerLatitude), Number(c.centerLongitude)) <= c.radiusKm);
+    if (!inside) logger.info({ lat: Math.round(lat * 100) / 100, lng: Math.round(lng * 100) / 100 }, 'Delivery asked for outside every community');
+    return !inside;
   }
 
   /**

@@ -7,11 +7,12 @@ import { recordAudit } from '../middleware/audit';
 import { removeAllSubscriptions, removeSubscription } from '../services/push.service';
 import { endSession, listSessions } from '../services/session.service';
 import { logger } from '../utils/logger';
+import { guardAccountProbe } from '../middleware/accountProbe';
 
 export const requestOTP = async (req: Request, res: Response) => {
   const { phone, purpose } = req.body;
 
-  const result = await authService.requestOTP(phone, purpose);
+  const result = await guardAccountProbe(req, () => authService.requestOTP(phone, purpose));
 
   res.status(200).json({
     success: true,
@@ -58,7 +59,7 @@ export const register = async (req: Request, res: Response) => {
   }
 
   // Map snake_case from request to camelCase for service method
-  const result = await authService.register(
+  const result = await guardAccountProbe(req, () => authService.register(
     email,
     password,
     user_type as 'customer' | 'seller' | 'rider',
@@ -68,7 +69,7 @@ export const register = async (req: Request, res: Response) => {
     area,
     business_name,
     phone_otp
-  );
+  ));
 
   const message =
     user_type === 'seller'
@@ -87,7 +88,7 @@ export const register = async (req: Request, res: Response) => {
 export const login = async (req: Request, res: Response) => {
   const { phoneOrEmail, otpCodeOrPassword, loginMethod = 'email' } = req.body;
 
-  const result = await authService.login(phoneOrEmail, otpCodeOrPassword, loginMethod, req.ip);
+  const result = await guardAccountProbe(req, () => authService.login(phoneOrEmail, otpCodeOrPassword, loginMethod, req.ip));
 
   res.status(200).json({
     success: true,

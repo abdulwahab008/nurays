@@ -484,7 +484,20 @@ async function main() {
   const kvPrivate = ['latitude', 'longitude', 'postalCode', 'userId', 'customerId', 'idempotencyKey', 'paymentTransactionId', 'handoverCode', 'deliveryAddressSnapshot', 'deliveryAddressId', 'hubId', 'changedBy'];
   ok("GET /seller/orders/:id: no pin, postcode, customer id or internal keys", !kvPrivate.some((k) => deepKeys(kvSeller).has(k)), kvPrivate.filter((k) => deepKeys(kvSeller).has(k)).join(','));
   ok('GET /orders/:id gives the kitchen the same view', !kvPrivate.some((k) => deepKeys(kvOrders).has(k)) && kvOrders.orderNumber === kvSeller.orderNumber && kvOrders.sellerTotals?.subtotal === kvSeller.sellerTotals.subtotal, kvPrivate.filter((k) => deepKeys(kvOrders).has(k)).join(','));
-  ok('the kitchen still gets the door and the customer\'s contact', kvSeller.deliveryAddress?.houseNumber === '9' && kvSeller.deliveryAddress?.addressLine1 === 'House 9 Street 5' && kvSeller.deliveryAddress?.area === 'Askari 11' && !!kvSeller.customer?.phone);
+  // PRIV-4: a Nuray rider delivers this one, so the kitchen gets the area but never the phone or door.
+  ok("a Nuray rider's order: the kitchen sees the area and the first name, not the phone or the door", kvSeller.contactHidden === 'nuray_rider' && kvSeller.deliveryAddress?.area === 'Askari 11' && kvSeller.deliveryAddress?.houseNumber === null && kvSeller.deliveryAddress?.addressLine1 === null && kvSeller.customer?.phone === null, JSON.stringify({ h: kvSeller.contactHidden, a: kvSeller.deliveryAddress, p: kvSeller.customer?.phone }));
+  // The same order as the kitchen's own delivery: hidden until accepted, shown while it is being made and delivered.
+  await prisma.order.update({ where: { id: kvOrder.id }, data: { deliveryProvider: 'self' } });
+  const kvPending: any = await sellerOrderService.getSellerOrderDetails(kvOrder.id, platUser);
+  ok("the kitchen's own delivery: no phone or door before it accepts", kvPending.contactHidden === 'not_accepted' && kvPending.customer?.phone === null && kvPending.deliveryAddress?.houseNumber === null, kvPending.contactHidden);
+  await prisma.order.update({ where: { id: kvOrder.id }, data: { orderStatus: 'preparing' } });
+  const kvAccepted: any = await sellerOrderService.getSellerOrderDetails(kvOrder.id, platUser);
+  const kvList: any = await sellerOrderService.getSellerOrders(platUser, {});
+  const kvRow = (kvList.orders ?? kvList.data ?? kvList).find?.((r: any) => r.order?.id === kvOrder.id)?.order;
+  ok('once accepted the kitchen gets the door and the customer\'s phone', kvAccepted.contactHidden === null && kvAccepted.deliveryAddress?.houseNumber === '9' && kvAccepted.deliveryAddress?.addressLine1 === 'House 9 Street 5' && !!kvAccepted.customer?.phone, JSON.stringify(kvAccepted.deliveryAddress));
+  await prisma.order.update({ where: { id: kvOrder.id }, data: { orderStatus: 'delivered', deliveredAt: new Date(Date.now() - 25 * 3600e3) } });
+  ok('a day after delivery they are hidden again', (await sellerOrderService.getSellerOrderDetails(kvOrder.id, platUser) as any).contactHidden === 'closed');
+  ok('the order list follows the same rule', kvRow?.contactHidden === null && !!kvRow?.customerPhone, JSON.stringify(kvRow ? { h: kvRow.contactHidden } : Object.keys(kvList)));
   ok('the pin and postcode are not anywhere in the kitchen payload text', !/\b(54000|31\.4|74\.4)\b/.test(JSON.stringify(kvSeller)) && !/\b(54000|74\.4)\b/.test(JSON.stringify(kvOrders)));
   const kvCustomer: any = await orderService.getOrderDetails(kvOrder.id, hoCust.id);
   ok('the customer still gets their own full order, pin included', Number(kvCustomer.deliveryAddress?.latitude) === 31.4 && kvCustomer.customerId === hoCust.id);
@@ -1388,6 +1401,12 @@ async function main() {
   ok('reactivating restores the account and the kitchen', (await prisma.user.findUnique({ where: { id: susUser } }))!.status === 'active' && (await prisma.seller.findUnique({ where: { id: susSeller.id } }))!.status === 'active');
   const found: any = await people.listUsers({ search: susRow!.phone.slice(-7) });
   ok('the users list finds an account by phone, with its kitchen', found.users.length === 1 && found.users[0].seller?.id === susSeller.id);
+
+  // DELIV-3: communities exist now (the catalog checks made them) and the test pin is in none of them.
+  ok('a home delivery to a pin outside every community is refused, whatever area name was typed', (await code(orderService.createOrder(hoCust.id, { items: [{ productId: hoProd.id, quantity: 1 }], deliveryType: 'home_delivery', deliveryAddressId: hoAddr.id, paymentMethod: 'cod' } as any))) === 'ADDRESS_OUTSIDE_SERVICE_AREA');
+  ok('pickup from there still works', (await code(orderService.createOrder(hoCust.id, { items: [{ productId: hoProd.id, quantity: 1 }], deliveryType: 'self_pickup', paymentMethod: 'cod' } as any))) === 'OK');
+  // From here on the test addresses are inside a community.
+  await prisma.community.create({ data: { name: 'Test town ' + uniq(), slug: 'test-town-' + uniq(), city: 'Lahore', centerLatitude: 31.4728, centerLongitude: 74.4538, radiusKm: 30 } as any });
 
   // a rider taken off the road: jobs not yet picked up go back to the pool
   const offRiderUser = await mkUser('rider');

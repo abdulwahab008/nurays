@@ -11,7 +11,7 @@ import { priceOrder } from '../utils/pricing';
 import { codeDiscount, priceLines, shareCodeDiscount, splitDeliveryFees, type KitchenDeliveryFee } from '../utils/orderPricing';
 import { allocateHubStock } from './hub-allocation.service';
 import { DeliveryFeeShare } from '../utils/deliveryEarnings';
-import { getDeliveryFeeForSeller } from '../utils/deliveryFee';
+import { OUTSIDE_AREAS_MESSAGE, getDeliveryFeeForSeller } from '../utils/deliveryFee';
 import { assertOnMenu } from '../utils/menu';
 import { createStockAlert } from './stock-alert.service';
 import promotionService from './promotion.service';
@@ -324,6 +324,9 @@ export class OrderPlacement {
       // The pin is how the rider finds the door and how the fee and the community are worked out. The checkout already asks
       // for it; an address saved before pins were required gets one on the address page first (DELIV-4).
       throw new AppError('This address has no map pin. Add the pin on the address, then place the order.', 400, 'ADDRESS_PIN_REQUIRED');
+    }
+    if (data.deliveryType === 'home_delivery' && deliveryAddress && (await communityService.pinOutsideEveryCommunity(deliveryAddress.latitude, deliveryAddress.longitude))) {
+      throw new AppError(OUTSIDE_AREAS_MESSAGE, 400, 'ADDRESS_OUTSIDE_SERVICE_AREA');
     }
     if (data.deliveryType === 'self_pickup' || data.deliveryType === 'hub_pickup') {
       deliveryFee = 0;

@@ -131,5 +131,6 @@ export default async function privacy() {
   const view = await second.kitchen.owner.as('GET', `/seller/orders/${second.orderId}`);
   const address = view.body.data?.deliveryAddress ?? {};
   const leaks = [...addressKeys.filter((k) => k in address), ...[second.customer.id, `PCB${u}`, '24.8015', '67.0655'].filter((s) => JSON.stringify(view.body).includes(s))];
-  ok('the kitchen\'s order view has the street but no owner id, pin or postcode anywhere in it', view.status === 200 && address.addressLine1 === `Plot B${u}, Lane 4` && leaks.length === 0, leaks.join(' | ') || view.code);
+  // A Nuray rider delivers this order, so the kitchen gets the area, not the street (PRIV-4; utils/kitchenOrderView.ts).
+  ok('the kitchen\'s order view has the area, no street (a Nuray rider delivers it), and no owner id, pin or postcode anywhere in it', view.status === 200 && view.body.data?.contactHidden === 'nuray_rider' && address.addressLine1 === null && !!address.area && !JSON.stringify(view.body).includes(`Plot B${u}`) && leaks.length === 0, leaks.join(' | ') || view.code);
 }
