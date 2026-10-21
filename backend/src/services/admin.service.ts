@@ -561,6 +561,9 @@ export class AdminService {
         failedReason: p.failedReason,
         requestedAt: p.createdAt,
         processedAt: p.processedAt,
+        periodStart: p.periodStart.toISOString().slice(0, 10),
+        periodEnd: p.periodEnd.toISOString().slice(0, 10),
+        automatic: (p.accountDetails as { automatic?: unknown } | null)?.automatic === true,
       })),
       pagination: {
         page,
@@ -660,6 +663,8 @@ export class AdminService {
     supportPhone: '+92-300-1234567',
     commissionRate: 15,
     minPayoutAmount: 1000,
+    // Every Monday each kitchen's balance becomes a payout by itself (weekly-payout.service.ts).
+    weeklyPayouts: true,
     // Nuray rider delivery to other communities (see delivery-pricing.service.ts).
     ...DELIVERY_SETTING_DEFAULTS,
   };

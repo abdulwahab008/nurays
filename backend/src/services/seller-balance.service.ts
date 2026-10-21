@@ -29,6 +29,8 @@ export interface SellerBalance {
   deliveryPaid: number;
   /** Payouts completed. */
   paidOut: number;
+  /** What the kitchen paid Nuray itself, recorded by an admin (kitchen-owing.service.ts). */
+  paidToNuray: number;
   /** Payouts requested and not yet completed. */
   pendingPayout: number;
   /** What can be withdrawn now. Negative means the seller owes the platform. */
@@ -94,6 +96,9 @@ async function ordersWithCashHandedIn(client: Client, orderIds: string[]): Promi
  */
 export interface BalanceOrder {
   id: string;
+  orderNumber: string;
+  placedAt: Date;
+  deliveredAt: Date | null;
   totalAmount: number;
   paymentMethod: string;
   paymentCollectedBy: string | null;
@@ -120,6 +125,9 @@ async function balanceOrders(client: Client, sellerId: string): Promise<BalanceO
   const rows = await client.$queryRaw<
     Array<{
       id: string;
+      order_number: string;
+      created_at: Date;
+      delivered_at: Date | null;
       total_amount: number;
       payment_method: string;
       payment_collected_by: string | null;
@@ -143,6 +151,9 @@ async function balanceOrders(client: Client, sellerId: string): Promise<BalanceO
     )
     SELECT
       o.id,
+      o.order_number,
+      o.created_at,
+      o.delivered_at,
       o.total_amount::float8 AS total_amount,
       o.payment_method,
       o.payment_collected_by,
@@ -169,6 +180,9 @@ async function balanceOrders(client: Client, sellerId: string): Promise<BalanceO
   `;
   return rows.map((r) => ({
     id: r.id,
+    orderNumber: r.order_number,
+    placedAt: r.created_at,
+    deliveredAt: r.delivered_at,
     totalAmount: Number(r.total_amount),
     paymentMethod: r.payment_method,
     paymentCollectedBy: r.payment_collected_by,
@@ -185,7 +199,26 @@ async function balanceOrders(client: Client, sellerId: string): Promise<BalanceO
   }));
 }
 
-export async function computeSellerBalance(client: Client, sellerId: string): Promise<SellerBalance> {
+/** Who held an order's money, as a statement line says it. */
+export type LineKind = 'online' | 'rider_cash' | 'rider_cash_waiting' | 'kitchen_collected';
+
+/** One order's part in a kitchen's balance. */
+export interface BalanceLine {
+  orderId: string;
+  orderNumber: string;
+  placedAt: Date;
+  deliveredAt: Date | null;
+  kind: LineKind;
+  /** What the order customer paid. */
+  orderTotal: number;
+  /** The kitchen's share: its lines' payout (net of commission) plus the delivery fee it keeps, minus the one it pays. 0 unless earned. */
+  kitchenShare: number;
+  /** What the order adds to (positive) or takes from (negative) the money Nuray owes the kitchen. */
+  effect: number;
+}
+
+/** Every order's part in the kitchen's balance, with the totals computeSellerBalance reports. */
+export async function sellerBalanceLines(client: Client, sellerId: string) {
   const orders = await balanceOrders(client, sellerId);
 
   const cashByRider = orders
@@ -199,6 +232,7 @@ export async function computeSellerBalance(client: Client, sellerId: string): Pr
   let awaitingRiderCash = 0;
   let platformOwesSeller = 0;
   let sellerOwesPlatform = 0;
+  const lines: BalanceLine[] = [];
 
   for (const o of orders) {
     const delivered = o.orderStatus === 'delivered' || o.orderStatus === 'completed';
@@ -211,11 +245,17 @@ export async function computeSellerBalance(client: Client, sellerId: string): Pr
       deliveryEarned += kept;
       deliveryPaid += paid;
     }
+    const line = { orderId: o.id, orderNumber: o.orderNumber, placedAt: o.placedAt, deliveredAt: o.deliveredAt, orderTotal: o.totalAmount, kitchenShare: roundMoney(entitlement) };
 
     if (collectorOf(o) !== 'seller') {
       // A rider's cash order is paid out once the rider has handed that cash in.
-      if (earned && collectorOf(o) === 'rider' && !cashHandedIn.has(o.id)) awaitingRiderCash += entitlement;
-      else platformOwesSeller += entitlement;
+      if (earned && collectorOf(o) === 'rider' && !cashHandedIn.has(o.id)) {
+        awaitingRiderCash += entitlement;
+        lines.push({ ...line, kind: 'rider_cash_waiting', effect: 0 });
+      } else {
+        platformOwesSeller += entitlement;
+        lines.push({ ...line, kind: collectorOf(o) === 'rider' ? 'rider_cash' : 'online', effect: roundMoney(entitlement) });
+      }
       continue;
     }
 
@@ -232,14 +272,24 @@ export async function computeSellerBalance(client: Client, sellerId: string): Pr
         collected = o.refundsCompleted;
       }
     }
-    sellerOwesPlatform += collected - entitlement - keptRefunds;
+    const owed = collected - entitlement - keptRefunds;
+    sellerOwesPlatform += owed;
+    lines.push({ ...line, kind: 'kitchen_collected', effect: roundMoney(-owed) });
   }
+
+  return { lines, totalEarnings, deliveryEarned, deliveryPaid, awaitingRiderCash, platformOwesSeller, sellerOwesPlatform };
+}
+
+export async function computeSellerBalance(client: Client, sellerId: string): Promise<SellerBalance> {
+  const { totalEarnings, deliveryEarned, deliveryPaid, awaitingRiderCash, platformOwesSeller, sellerOwesPlatform } = await sellerBalanceLines(client, sellerId);
 
   const payouts = await client.sellerPayout.findMany({
     where: { sellerId, status: { in: ['completed', 'pending', 'processing'] } },
     select: { netAmount: true, status: true },
   });
-  const paidOut = payouts.filter((p) => p.status === 'completed').reduce((s, p) => s + Number(p.netAmount), 0);
+  // A payment the kitchen made to Nuray is kept as a completed payout with a negative amount.
+  const paidOut = payouts.filter((p) => p.status === 'completed' && Number(p.netAmount) > 0).reduce((s, p) => s + Number(p.netAmount), 0);
+  const paidToNuray = -payouts.filter((p) => p.status === 'completed' && Number(p.netAmount) < 0).reduce((s, p) => s + Number(p.netAmount), 0);
   const pendingPayout = payouts.filter((p) => p.status !== 'completed').reduce((s, p) => s + Number(p.netAmount), 0);
 
   return {
@@ -250,7 +300,8 @@ export async function computeSellerBalance(client: Client, sellerId: string): Pr
     deliveryEarned: roundMoney(deliveryEarned),
     deliveryPaid: roundMoney(deliveryPaid),
     paidOut: roundMoney(paidOut),
+    paidToNuray: roundMoney(paidToNuray),
     pendingPayout: roundMoney(pendingPayout),
-    available: roundMoney(platformOwesSeller - sellerOwesPlatform - paidOut - pendingPayout),
+    available: roundMoney(platformOwesSeller - sellerOwesPlatform - paidOut - pendingPayout + paidToNuray),
   };
 }

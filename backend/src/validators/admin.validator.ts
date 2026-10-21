@@ -29,6 +29,12 @@ export const completePayoutSchema = z.object({
   transactionId: z.string().max(100).optional(),
 });
 
+/** A kitchen paid Nuray what it owed (kitchen-owing.service.ts). */
+export const paymentToNuraySchema = z.object({
+  amount: z.number().positive().max(10_000_000),
+  reference: z.string().trim().min(1, 'Enter the transaction or receipt reference').max(100),
+});
+
 export const failPayoutSchema = z.object({
   reason: z.string().min(1, 'A reason is required').max(1000),
 });
@@ -39,6 +45,7 @@ export const updateSettingsSchema = z.object({
   supportPhone: z.string().min(1).optional(),
   commissionRate: z.number().min(0).max(100).optional(),
   minPayoutAmount: z.number().min(0).max(10_000_000).optional(),
+  weeklyPayouts: z.boolean().optional(),
   // Nuray rider delivery to other communities (delivery-pricing.service.ts).
   deliveryPerKm: z.number().min(0).max(1000).optional(),
   deliveryIncludedKm: z.number().min(0).max(100).optional(),

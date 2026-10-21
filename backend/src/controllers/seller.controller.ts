@@ -1,4 +1,6 @@
 import { Request, Response } from 'express';
+import { getPayoutStatement as getStatement } from '../services/weekly-payout.service';
+import { sendStatement } from './payout-statement';
 import { qstr } from '../utils/query';
 import sellerService from '../services/seller.service';
 import * as publicSellerService from '../services/public-seller.service';
@@ -115,6 +117,13 @@ export const getPayoutHistory = async (req: Request, res: Response) => {
     success: true,
     data: payouts,
   });
+};
+
+/** One of this kitchen's payouts, order by order (?format=csv for a spreadsheet). */
+export const getPayoutStatement = async (req: Request, res: Response) => {
+  const sellerId = await currentSellerId(req);
+  const statement = await getStatement(String(req.params.id), { sellerId });
+  sendStatement(res, statement, req.query.format);
 };
 
 export const toggleStoreLive = async (req: Request, res: Response) => {

@@ -11,6 +11,7 @@ import { useAuthStore } from '@/lib/store/auth-store';
 import { apiClient, apiErrorMessage } from '@/lib/api-client';
 import { formatPrice, formatDate } from '@/lib/utils';
 import { useShallow } from 'zustand/react/shallow';
+import { PayoutStatement } from '@/components/payouts/PayoutStatement';
 
 interface Payout {
   id: string;
@@ -23,6 +24,19 @@ interface Payout {
   failedReason?: string;
   requestedAt: string;
   processedAt?: string;
+  periodStart?: string;
+  periodEnd?: string;
+  automatic?: boolean;
+}
+
+/** GET /admin/kitchens-owing */
+interface OwingKitchen {
+  sellerId: string;
+  businessName: string;
+  owed: number;
+  owesSince: string | null;
+  cashPausesAt: string | null;
+  cashPaused: boolean;
 }
 
 const FILTERS = ['pending', 'completed', 'failed', 'all'] as const;
@@ -40,6 +54,10 @@ export default function AdminPayoutsPage() {
   const [processingId, setProcessingId] = useState<string | null>(null);
   const [failReasonFor, setFailReasonFor] = useState<string | null>(null);
   const [failReason, setFailReason] = useState('');
+  const [statementFor, setStatementFor] = useState<string | null>(null);
+  const [owing, setOwing] = useState<OwingKitchen[]>([]);
+  const [owingError, setOwingError] = useState<unknown>(null);
+  const [recordingFor, setRecordingFor] = useState<string | null>(null);
 
   useEffect(() => {
     if (!isAuthenticated) {
@@ -52,7 +70,53 @@ export default function AdminPayoutsPage() {
       return;
     }
     loadPayouts();
+    loadOwing();
   }, [isAuthenticated, user, router, filter]);
+
+  // Kitchens whose commission on cash they took themselves is more than Nuray owes them (kitchen-owing.service.ts).
+  const loadOwing = async () => {
+    try {
+      const res = await apiClient.get<{ data: { kitchens: OwingKitchen[] } }>('/admin/kitchens-owing');
+      setOwing(res.data.data.kitchens);
+      setOwingError(null);
+    } catch (error) {
+      setOwingError(error);
+    }
+  };
+
+  const recordPayment = async (k: OwingKitchen) => {
+    const amountText = await askDialog({
+      title: `${k.businessName} paid Nuray`,
+      message: `They owe ${formatPrice(k.owed)}. Enter what they paid (up to that). Only record money that has arrived in Nuray's account.`,
+      label: 'Amount (Rs)',
+      placeholder: String(k.owed),
+      confirmText: 'Next',
+    });
+    if (amountText === null) return;
+    const amount = Number(amountText.replace(/[,\s]/g, ''));
+    if (!Number.isFinite(amount) || amount <= 0) {
+      showToast('Enter an amount above zero', 'warning');
+      return;
+    }
+    const reference = await askDialog({
+      title: 'Payment reference',
+      message: `${formatPrice(amount)} from ${k.businessName}. The transaction or receipt reference is kept with it and shown to the kitchen.`,
+      label: 'Reference',
+      confirmText: 'Record payment',
+    });
+    if (!reference) return;
+    try {
+      setRecordingFor(k.sellerId);
+      await apiClient.post(`/admin/sellers/${k.sellerId}/payments-to-nuray`, { amount, reference });
+      showToast('Payment recorded', 'success');
+      loadOwing();
+      loadPayouts();
+    } catch (error) {
+      showToast(apiErrorMessage(error, 'Could not record the payment'), 'error');
+    } finally {
+      setRecordingFor(null);
+    }
+  };
 
   const loadPayouts = async () => {
     try {
@@ -139,6 +203,32 @@ export default function AdminPayoutsPage() {
           </Button>
         </div>
 
+        {/* Kitchens that owe Nuray */}
+        {owingError ? (
+          <div className="mb-6"><LoadError compact error={owingError} onRetry={loadOwing} title="We couldn't load the kitchens that owe Nuray" /></div>
+        ) : owing.length > 0 ? (
+          <div className="mb-6 bg-amber-50 border border-amber-200 rounded-lg p-4" data-testid="owing-kitchens">
+            <h2 className="font-semibold text-gray-900">Kitchens that owe Nuray</h2>
+            <p className="text-sm text-gray-700 mb-3">Commission on cash they collected themselves, after netting against their online earnings. After two weeks owing, their new cash orders pause until they pay.</p>
+            <ul className="divide-y divide-amber-200">
+              {owing.map((k) => (
+                <li key={k.sellerId} className="flex flex-wrap items-center justify-between gap-3 py-2">
+                  <div className="min-w-0">
+                    <p className="font-medium text-gray-900">{k.businessName} <span className="font-bold">{formatPrice(k.owed)}</span></p>
+                    <p className="text-xs text-gray-700">
+                      {k.owesSince ? `Owing since ${formatDate(k.owesSince)}` : ''}
+                      {k.cashPaused ? ' · cash orders paused' : k.cashPausesAt ? ` · cash pauses ${formatDate(k.cashPausesAt)}` : ''}
+                    </p>
+                  </div>
+                  <Button size="sm" variant="outline" disabled={recordingFor === k.sellerId} onClick={() => recordPayment(k)} data-testid="record-kitchen-payment">
+                    {recordingFor === k.sellerId ? 'Saving…' : 'Record payment'}
+                  </Button>
+                </li>
+              ))}
+            </ul>
+          </div>
+        ) : null}
+
         <div className="flex gap-2 mb-6">
           {FILTERS.map((f) => (
             <button
@@ -176,6 +266,8 @@ export default function AdminPayoutsPage() {
                       <span className={`px-2 py-1 text-xs font-medium rounded ${statusColor(payout.status)}`}>
                         {payout.status}
                       </span>
+                      {payout.automatic && <span className="px-2 py-1 text-xs font-medium rounded bg-blue-100 text-blue-800">weekly</span>}
+                      {payout.payoutMethod === 'paid_to_nuray' && <span className="px-2 py-1 text-xs font-medium rounded bg-gray-100 text-gray-800">kitchen paid Nuray</span>}
                     </div>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-sm">
                       <div><span className="text-gray-500">Requested:</span> <span className="font-medium">{formatPrice(payout.amount)}</span></div>
@@ -183,6 +275,9 @@ export default function AdminPayoutsPage() {
                       <div><span className="text-gray-500">Method:</span> <span className="font-medium capitalize">{payout.payoutMethod.replace('_', ' ')}</span></div>
                       <div><span className="text-gray-500">Account:</span> <span className="font-medium">{payout.accountDetails?.accountNumber || '—'}</span></div>
                       <div><span className="text-gray-500">Requested at:</span> <span className="font-medium">{formatDate(payout.requestedAt)}</span></div>
+                      {payout.periodStart && payout.periodEnd && payout.payoutMethod !== 'paid_to_nuray' && (
+                        <div><span className="text-gray-500">Covers:</span> <span className="font-medium">{payout.periodStart} to {payout.periodEnd}</span></div>
+                      )}
                       {payout.processedAt && (
                         <div><span className="text-gray-500">Processed at:</span> <span className="font-medium">{formatDate(payout.processedAt)}</span></div>
                       )}
@@ -192,6 +287,11 @@ export default function AdminPayoutsPage() {
                     </div>
                   </div>
 
+                  {payout.payoutMethod !== 'paid_to_nuray' && (
+                    <Button variant="outline" size="sm" onClick={() => setStatementFor(payout.id)} data-testid="open-statement">
+                      Statement
+                    </Button>
+                  )}
                   {payout.status === 'pending' && (
                     <div className="flex flex-col gap-2 items-end">
                       <div className="flex gap-2">
@@ -236,6 +336,7 @@ export default function AdminPayoutsPage() {
           </div>
         )}
       </div>
+      {statementFor && <PayoutStatement basePath="/admin/payouts" payoutId={statementFor} onClose={() => setStatementFor(null)} />}
     </AdminShell>
   );
 }

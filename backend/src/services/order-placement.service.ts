@@ -16,7 +16,8 @@ import { assertOnMenu } from '../utils/menu';
 import { createStockAlert } from './stock-alert.service';
 import promotionService from './promotion.service';
 import { isAcceptingOrders, validateOrderTiming } from './availability.service';
-import { ONLINE_GATEWAY_METHODS } from '../utils/paymentCustody';
+import { ONLINE_GATEWAY_METHODS, codCollectorOf } from '../utils/paymentCustody';
+import { assertKitchenTakesCash } from './kitchen-owing.service';
 import { onlinePaymentsAvailable } from './online-payment.service';
 import { newHandoverCode } from './handover.service';
 import { debitWallet } from './wallet.service';
@@ -475,6 +476,11 @@ export class OrderPlacement {
         : orderItems.some((i) => i.fulfillmentType === 'hub') || onlySeller?.deliveryProvider !== 'self'
           ? 'platform'
           : 'self';
+
+    // A kitchen that has owed Nuray for two weeks takes no new cash it would collect itself (kitchen-owing.service.ts).
+    if (data.paymentMethod === 'cod' && onlySeller && codCollectorOf({ deliveryType: data.deliveryType, deliveryProvider }) === 'seller') {
+      await assertKitchenTakesCash(onlySeller.id);
+    }
 
     // 5% GST on the goods after discounts; the total in whole rupees (see priceOrder).
     const { taxAmount, totalAmount } = priceOrder(subtotal - discountAmount, deliveryFee);

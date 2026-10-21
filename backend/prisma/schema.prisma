@@ -180,6 +180,9 @@ model Seller {
   jazzcashAccountTitle String? @map("jazzcash_account_title")
   easypaisaNumber   String?   @map("easypaisa_number")
   easypaisaAccountTitle String? @map("easypaisa_account_title")
+  // Since when the kitchen has owed Nuray (commission on cash it collected beyond what its online earnings cover);
+  // null while it does not. Fourteen days on, its new cash orders pause until it pays (kitchen-owing.service.ts).
+  owesSince         DateTime? @map("owes_since")
   lowStockThreshold Int       @default(10) @map("low_stock_threshold") // Default threshold for low stock alerts
   enableStockAlerts Boolean   @default(true) @map("enable_stock_alerts") // Enable/disable stock alert notifications
   freeDeliveryAreas   Json?     @map("free_delivery_areas") // Areas/cities where this seller offers free delivery, e.g. ["Askari", "DHA"]

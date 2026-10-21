@@ -7,11 +7,14 @@ import { AppError } from '../middleware/errorHandler';
 import adminService from './admin.service';
 import { computeSellerAvailability } from './availability.service';
 import { computeSellerBalance } from './seller-balance.service';
+import { refreshOwing } from './kitchen-owing.service';
 import { earnedOrders, earningsOf, isEarned, orderCounts, periodTotals } from './seller-reporting';
 import { assertOwnDocument, assertOwnPublicImage } from '../utils/documents';
 import { notifyApprovers } from './approvals.service';
 import { kitchenApplicationGaps } from '../utils/kitchenApplication';
 import { changedPayoutDetails } from '../utils/payoutAccount';
+import { pktDate } from '../utils/payoutWeek';
+import { nextPeriodStart } from './weekly-payout.service';
 import { confirmPasswordIfSet } from './reauth.service';
 
 /** Shared shape for the business-operations fields — read by getSellerProfile, written by updateSellerProfile. */
@@ -644,6 +647,8 @@ export class SellerService {
     // they collected themselves (COD at their own door, transfers into their own account).
     const codCommissionOwed = Math.max(0, balance.sellerOwesPlatform);
     const availableForPayout = balance.available;
+    // What it owes Nuray, if anything, and when its cash orders pause.
+    const owing = await refreshOwing(prisma, sellerId, new Date(), balance.available);
 
     // Get recent orders
     const recentOrderItems = await prisma.orderItem.findMany({
@@ -734,6 +739,14 @@ export class SellerService {
         codCommissionOwed,
         owedToPlatform: codCommissionOwed,
         availableForPayout: Math.max(0, availableForPayout),
+        // What is still owed to Nuray after netting against online earnings (0 when nothing), and the cash pause.
+        owing: {
+          amount: owing.owed,
+          since: owing.owesSince,
+          cashPausesAt: owing.cashPausesAt,
+          cashPaused: owing.cashPaused,
+        },
+        paidToNuray: balance.paidToNuray,
         // Your share of cash orders whose cash a Nuray rider has not handed in yet.
         awaitingRiderCash: balance.awaitingRiderCash,
         rating: Number(seller.ratingAverage),
@@ -999,8 +1012,9 @@ export class SellerService {
             accountNumber: data.accountNumber,
           },
           status: 'pending',
-          periodStart: new Date(),
-          periodEnd: new Date(),
+          // What the statement lists: the days since the last payout, up to today.
+          periodStart: await nextPeriodStart(tx, sellerId, seller.createdAt),
+          periodEnd: new Date(`${pktDate(new Date())}T00:00:00Z`),
         },
       });
 
@@ -1040,6 +1054,9 @@ export class SellerService {
       requestedAt: p.createdAt,
       processedAt: p.processedAt,
       failedReason: p.failedReason,
+      periodStart: p.periodStart.toISOString().slice(0, 10),
+      periodEnd: p.periodEnd.toISOString().slice(0, 10),
+      automatic: (p.accountDetails as { automatic?: unknown } | null)?.automatic === true,
     }));
   }
 

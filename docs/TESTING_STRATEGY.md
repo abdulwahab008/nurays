@@ -167,7 +167,7 @@ cd backend
 export DATABASE_URL=postgresql://postgres@localhost:5432/nuray_checks
 export JWT_SECRET=any-string-of-at-least-32-characters
 npx prisma migrate deploy
-AUTO_ASSIGN_ENABLED=false PORT=3001 npm run dev          # another terminal
+AUTO_ASSIGN_ENABLED=false WEEKLY_PAYOUTS_ENABLED=false PORT=3001 npm run dev          # another terminal
 
 # run every suite, or only those whose name contains a word
 API_URL=http://localhost:3001/api/v1 npm run api-checks

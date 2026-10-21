@@ -24,6 +24,8 @@ import cartService from '../src/services/cart.service';
 import productService from '../src/services/product.service';
 import ledgerService from '../src/services/ledger.service';
 import sellerService from '../src/services/seller.service';
+import { computeSellerBalance } from '../src/services/seller-balance.service';
+const computeBalanceFor = (sellerId: string) => computeSellerBalance(prisma, sellerId);
 import { priceOrder } from '../src/utils/pricing';
 import sellerOrderService from '../src/services/seller-order.service';
 import reviewService from '../src/services/review.service';
@@ -1763,6 +1765,137 @@ async function main() {
   const capPhone = pn();
   for (let i = 0; i < 5; i++) await prisma.otpVerification.create({ data: { phone: capPhone, otpCode: '111111', purpose: 'login', expiresAt: new Date(Date.now() - 1000), attempts: 5 } });
   ok('no more than 5 codes per number per hour', (await otpService.generateOTP(capPhone, 'login').then(() => 'OK', (e: any) => e.code)) === 'OTP_RATE_LIMITED');
+
+  // ---- Weekly kitchen payouts (Money 1) ----
+  {
+    const weekly = require('../src/services/weekly-payout.service');
+    const adminSvc = require('../src/services/admin.service').default;
+    const wCust = await mkUser();
+    // The next Monday, 07:00 Pakistan time (02:00 UTC): its week (ending the Sunday before) holds today's orders.
+    const nextMonday = (() => { const d = new Date(); const pk = new Date(d.getTime() + 5 * 3600e3); const add = ((8 - pk.getUTCDay()) % 7) || 7; return new Date(Date.UTC(pk.getUTCFullYear(), pk.getUTCMonth(), pk.getUTCDate() + add, 2, 0)); })();
+    const tuesday = new Date(nextMonday.getTime() + 24 * 3600e3);
+    const earn = async (sellerId: string, price: number) => {
+      const prod = await mkProduct(sellerId, 10, price);
+      const o: any = (await order(wCust.id, [{ productId: prod.id, quantity: 1 }], { paymentMethod: 'cod' })).order;
+      await prisma.order.update({ where: { id: o.id }, data: { orderStatus: 'delivered', deliveredAt: new Date(), paymentMethod: 'wallet', paymentCollectedBy: 'platform', paymentStatus: 'paid', paidAt: new Date() } });
+      return { order: o, goods: Number((await prisma.orderItem.findFirst({ where: { orderId: o.id } }))!.sellerPayout) };
+    };
+    const approved = { verificationStatus: 'approved' };
+    const wk = await mkSeller({ ...approved, bankAccountNumber: '1234 5678 9012', bankAccountName: 'Weekly Kitchen', bankName: 'HBL' });
+    const wkEarn = await earn(wk.id, 2000);
+    const noAcct = await mkSeller(approved); await earn(noAcct.id, 2000);
+    const small = await mkSeller({ ...approved, bankAccountNumber: '123456789' }); await earn(small.id, 500);
+    const optedOut = await mkSeller({ ...approved, bankAccountNumber: '123456789' }); await earn(optedOut.id, 2000);
+    await prisma.sellerPayoutSchedule.create({ data: { sellerId: optedOut.id, payoutMethod: 'bank_transfer', autoPayout: false } as any });
+    const wallet = await mkSeller({ ...approved, bankAccountNumber: '123456789', jazzcashNumber: '0300-1234567', jazzcashAccountTitle: 'JC Kitchen' }); await earn(wallet.id, 2000);
+    await prisma.sellerPayoutSchedule.create({ data: { sellerId: wallet.id, payoutMethod: 'jazzcash', autoPayout: true, minimumPayoutAmount: 1000 } as any });
+    const unapproved = await mkSeller({ bankAccountNumber: '123456789' }); await earn(unapproved.id, 2000);
+    const payoutsOf = (sellerId: string) => prisma.sellerPayout.findMany({ where: { sellerId } });
+
+    const midweek = await weekly.runWeeklyPayouts(tuesday);
+    ok('no weekly payouts are made on a day other than Monday', midweek.ran === false && (await payoutsOf(wk.id)).length === 0);
+    const early = await weekly.runWeeklyPayouts(new Date(nextMonday.getTime() - 2 * 3600e3)); // 05:00 PKT
+    ok('nor on Monday before 06:00', early.ran === false && (await payoutsOf(wk.id)).length === 0);
+
+    const run1 = await weekly.runWeeklyPayouts(nextMonday);
+    const [wkPayout] = await payoutsOf(wk.id);
+    const sunday = new Date(nextMonday.getTime() - 24 * 3600e3).toISOString().slice(0, 10);
+    ok('on Monday a kitchen with a balance gets a payout of all of it, to its bank account, for the week to Sunday',
+      run1.ran && !!wkPayout && wkPayout.status === 'pending' && Math.abs(Number(wkPayout.netAmount) - wkEarn.goods) < 0.01 && wkPayout.payoutMethod === 'bank_transfer' &&
+        (wkPayout.accountDetails as any)?.accountNumber === '123456789012' && (wkPayout.accountDetails as any)?.automatic === true && wkPayout.periodEnd.toISOString().slice(0, 10) === sunday,
+      `${wkPayout?.netAmount} vs ${wkEarn.goods} ${wkPayout?.payoutMethod} ${JSON.stringify(wkPayout?.accountDetails)} ${wkPayout?.periodEnd?.toISOString()}`);
+    ok('the period starts the day the kitchen joined (its first payout)', wkPayout?.periodStart.toISOString().slice(0, 10) === new Date(wk.createdAt.getTime() + 5 * 3600e3).toISOString().slice(0, 10));
+    ok('no payout for a kitchen with no payout account, one under the minimum, one that switched weekly payouts off, or one not approved',
+      (await payoutsOf(noAcct.id)).length === 0 && (await payoutsOf(small.id)).length === 0 && (await payoutsOf(optedOut.id)).length === 0 && (await payoutsOf(unapproved.id)).length === 0);
+    const [wPayout] = await payoutsOf(wallet.id);
+    ok("a kitchen whose payout schedule names JazzCash is paid there first", wPayout?.payoutMethod === 'jazzcash' && (wPayout.accountDetails as any)?.accountNumber === '03001234567', `${wPayout?.payoutMethod} ${JSON.stringify(wPayout?.accountDetails)}`);
+    ok('the kitchen is told', (await prisma.notification.count({ where: { userId: wk.userId, dedupeKey: `payout:${wkPayout?.id}:weekly` } })) === 1);
+    const admins = await prisma.user.count({ where: { userType: 'admin', status: 'active' } });
+    ok('and so are the admins, once per run', admins === 0 || (await prisma.notification.count({ where: { dedupeKey: { startsWith: `weekly-payouts:${run1.runDate}:` } } })) === admins);
+
+    const run2 = await weekly.runWeeklyPayouts(new Date(nextMonday.getTime() + 3600e3));
+    ok('the next hourly run makes no second payout while the first one waits', (await payoutsOf(wk.id)).length === 1 && !run2.created.some((c: any) => c.sellerId === wk.id));
+    await adminSvc.completePayout(wkPayout.id, 'TX-WEEKLY');
+    await earn(wk.id, 1500);
+    await weekly.runWeeklyPayouts(new Date(nextMonday.getTime() + 2 * 3600e3));
+    ok('nor once it is sent and more money comes in the same Monday: one weekly payout per kitchen per week', (await payoutsOf(wk.id)).length === 1);
+
+    const st = await weekly.getPayoutStatement(wkPayout.id, { sellerId: wk.id });
+    ok("the statement lists the week's order with what it adds, and adds up to the payout",
+      st.lines.length === 1 && st.lines[0].orderNumber === wkEarn.order.orderNumber && st.lines[0].kind === 'online' && Math.abs(st.lines[0].effect - wkEarn.goods) < 0.01 &&
+        Math.abs(st.totals.period - wkEarn.goods) < 0.01 && Math.abs(st.totals.earlierAndAdjustments) < 0.01 && st.payout.transactionId === 'TX-WEEKLY',
+      JSON.stringify(st.totals));
+    ok("another kitchen cannot read it", (await code(weekly.getPayoutStatement(wkPayout.id, { sellerId: wallet.id }))) === 'PAYOUT_NOT_FOUND');
+    const csv: string = weekly.statementCsv(st);
+    ok('the statement downloads as a spreadsheet with the order on it', csv.includes(wkEarn.order.orderNumber) && csv.includes('Earlier balance and adjustments') && csv.split('\n')[0].startsWith('Kitchen,'));
+    ok('a cell that would be a spreadsheet formula is written as text', weekly.statementCsv({ ...st, kitchen: { ...st.kitchen, businessName: '=HYPERLINK("x")' } }).includes(`"'=HYPERLINK(""x"")"`));
+
+    // a "withdraw now" request covers the days since the last payout, up to today
+    const wn = await mkSeller({ ...approved, bankAccountNumber: '123456789' });
+    await prisma.sellerPayoutSchedule.create({ data: { sellerId: wn.id, payoutMethod: 'bank_transfer', autoPayout: true, minimumPayoutAmount: 1 } as any });
+    const wnEarn = await earn(wn.id, 800);
+    await sellerService.requestPayout(wn.id, { amount: wnEarn.goods, payoutMethod: 'bank_transfer', accountNumber: '123456789' });
+    const [wnPayout] = await payoutsOf(wn.id);
+    const todayPk = new Date(Date.now() + 5 * 3600e3).toISOString().slice(0, 10);
+    ok('"withdraw now" still works, and its statement covers up to today', wnPayout?.periodEnd.toISOString().slice(0, 10) === todayPk && (await weekly.getPayoutStatement(wnPayout.id)).lines.length === 1);
+
+    await prisma.systemSetting.upsert({ where: { key: 'weeklyPayouts' }, create: { key: 'weeklyPayouts', value: false as any }, update: { value: false as any } });
+    const off = await weekly.runWeeklyPayouts(new Date(nextMonday.getTime() + 7 * 24 * 3600e3));
+    ok('an admin can switch weekly payouts off', off.ran === false);
+    await prisma.systemSetting.delete({ where: { key: 'weeklyPayouts' } });
+  }
+
+  // ---- Netting and the cash pause (Money 3) ----
+  {
+    const owing = require('../src/services/kitchen-owing.service');
+    const oCust = await mkUser();
+    const cashKitchen = async () => {
+      const k = await mkSeller({ verificationStatus: 'approved' });
+      const prod = await mkProduct(k.id, 50, 1000);
+      // Cash the kitchen took itself at a pickup: it holds all of it and owes the commission.
+      const o: any = (await order(oCust.id, [{ productId: prod.id, quantity: 1 }], { paymentMethod: 'cod' })).order;
+      await prisma.order.update({ where: { id: o.id }, data: { orderStatus: 'delivered', deliveredAt: new Date(), paymentStatus: 'paid', paidAt: new Date(), paymentCollectedBy: 'seller' } });
+      return { k, prod };
+    };
+    const { k: ck, prod: cprod } = await cashKitchen();
+    const b0 = await computeBalanceFor(ck.id);
+    const s0 = await owing.refreshOwing(prisma, ck.id);
+    ok('a kitchen that took the cash itself owes Nuray the commission, and the day it started owing is kept', b0.available < 0 && s0.owed === -b0.available && s0.owesSince instanceof Date && !s0.cashPaused, `${b0.available} ${JSON.stringify(s0)}`);
+    const cod = () => code(order(oCust.id, [{ productId: cprod.id, quantity: 1 }], { paymentMethod: 'cod' }));
+    ok('for two weeks it still takes cash orders', (await cod()) === 'OK');
+    // (that order is not delivered yet, so it owes nothing more)
+    await prisma.seller.update({ where: { id: ck.id }, data: { owesSince: new Date(Date.now() - 15 * 24 * 3600e3) } });
+    ok('owing for more than two weeks, a new cash order it would collect itself is refused with CASH_UNAVAILABLE', (await cod()) === 'CASH_UNAVAILABLE');
+    ok('paying another way still works', (await code(order(oCust.id, [{ productId: cprod.id, quantity: 1 }], { paymentMethod: 'bank' }))) === 'OK');
+    const dash: any = await sellerService.getSellerDashboard(ck.id);
+    ok("the kitchen's dashboard says what it owes and that cash is paused", dash.overview.owing.amount === s0.owed && dash.overview.owing.cashPaused === true && !!dash.overview.owing.cashPausesAt, JSON.stringify(dash.overview.owing));
+
+    // netting: an online order's earnings pay the commission off by themselves, and cash opens again
+    const net: any = (await order(oCust.id, [{ productId: cprod.id, quantity: 1 }], { paymentMethod: 'cod' }).catch(() => null));
+    ok('(the refused order was not placed)', net === null);
+    const online: any = (await order(oCust.id, [{ productId: cprod.id, quantity: 1 }], { paymentMethod: 'bank' })).order;
+    await prisma.order.update({ where: { id: online.id }, data: { orderStatus: 'delivered', deliveredAt: new Date(), paymentMethod: 'wallet', paymentCollectedBy: 'platform', paymentStatus: 'paid', paidAt: new Date() } });
+    const b1 = await computeBalanceFor(ck.id);
+    ok('online earnings are netted against the commission owed', Math.abs(b1.available - (b0.available + Number((await prisma.orderItem.findFirst({ where: { orderId: online.id } }))!.sellerPayout))) < 0.01 && b1.available >= 0, `${b0.available} -> ${b1.available}`);
+    ok('and once nothing is owed, cash orders open again at once', (await cod()) === 'OK' && (await prisma.seller.findUnique({ where: { id: ck.id } }))!.owesSince === null);
+
+    // an admin records the kitchen paying Nuray
+    const { k: pk } = await cashKitchen();
+    const owed = (await owing.refreshOwing(prisma, pk.id)).owed;
+    const { default: adminSvc } = require('../src/services/admin.service');
+    const admin = await mkUser('admin');
+    ok('a payment larger than what is owed is refused', (await code(owing.recordPaymentToNuray({ sellerId: pk.id, amount: owed + 1, reference: 'R1', adminId: admin.id }))) === 'AMOUNT_EXCEEDS_OWED');
+    const half = Math.round((owed / 2) * 100) / 100;
+    const part = await owing.recordPaymentToNuray({ sellerId: pk.id, amount: half, reference: 'R-PART', adminId: admin.id });
+    ok('part of it leaves the rest owed', Math.abs(part.owed - (owed - half)) < 0.01 && part.owesSince instanceof Date, JSON.stringify(part));
+    const rest = await owing.recordPaymentToNuray({ sellerId: pk.id, amount: Math.round((owed - half) * 100) / 100, reference: 'R-REST', adminId: admin.id });
+    const b2 = await computeBalanceFor(pk.id);
+    ok('paying the rest clears it: nothing owed, cash open, and the balance is zero', rest.owed === 0 && rest.owesSince === null && Math.abs(b2.available) < 0.01 && Math.abs(b2.paidToNuray - owed) < 0.01 && b2.paidOut === 0, JSON.stringify(b2));
+    const hist: any[] = await sellerService.getPayoutHistory(pk.id);
+    ok("the kitchen's payout history shows its payments to Nuray", hist.filter((h) => h.payoutMethod === 'paid_to_nuray' && h.status === 'completed' && h.netAmount < 0).length === 2);
+    ok('a payment to Nuray is never something an admin can "complete" or "fail" again', (await code(adminSvc.failPayout(part.paymentId, 'x'))) === 'PAYOUT_NOT_PENDING');
+    ok('each payment leaves a trail', (await prisma.auditLog.count({ where: { action: 'admin:KITCHEN_PAID_NURAY', entityId: { in: [part.paymentId, rest.paymentId] } } })) === 2);
+  }
 
   console.log(`\n${pass} passed, ${fail} failed`);
   await prisma.$disconnect();

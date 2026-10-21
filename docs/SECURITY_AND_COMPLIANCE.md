@@ -11,6 +11,14 @@ Code: `backend/src/services/auth.service.ts`, `utils/jwt.ts`, `middleware/auth.m
   (`JWT_REFRESH_EXPIRES_IN`, default 30d), signed with `JWT_SECRET`. Each carries a `typ` claim, so a refresh token
   is rejected as an API credential and an access token cannot mint refresh tokens. `POST /auth/refresh` issues a
   new pair.
+- **Sessions and rotation** (`services/session.service.ts`, table `refresh_tokens`). Each sign-in starts a session
+  (one device); every refresh token issued is a row (its `jti`, the session's `familyId`, user agent and address).
+  A refresh token works once: refreshing marks it used and hands out a new one in the same session. A used token
+  presented again after 30 seconds means it was copied: the whole session ends and the reuse is audited
+  (`auth:REFRESH_REUSE`). The access token carries the session id (`sid`), and `authenticate` and socket connections
+  refuse it once the session has ended, so signing a device out takes effect at once. Logout ends this device's
+  session; "sign out everywhere" and the profile's Signed-in devices list end all or one. Expired rows, and rows of
+  sessions that ended a day ago, are pruned every 6 hours.
 - **Every request re-checks the user.** `authenticate` loads the user from the database on each call: the account
   must exist and be `active` (suspended gives 403), and the role used is the current one, not the one in the token.
   Socket.IO connections run the same check (`config/socket.ts`).
@@ -321,9 +329,9 @@ anything else: orders, ledger entries, chat, uploaded documents and receipts are
 
 ## Known limitations
 
-- **Refresh tokens are not rotated or revocable one by one.** `/auth/refresh` mints a new pair but the old refresh
-  token stays valid until it expires or the account's sessions are ended as a whole (`tokensValidAfter`: logout,
-  password reset, password change, suspension, role change, account closure). There is no per-device session list.
+- **A refresh response that never arrives** (connection lost after the server rotated the token) leaves the device
+  holding a spent token: retried within 30 seconds it still works, later it ends the session and the person signs in
+  again. That is the price of reuse detection.
 - **OTP codes and email-verification tokens are stored in plain text** in the database (reset tokens are hashed).
   They are short-lived and purged, but a database read exposes live ones.
 - **No breached-password lookup.** Passwords are checked against a bundled list of common ones, not against a live

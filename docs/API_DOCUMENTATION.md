@@ -37,10 +37,10 @@ Where a route is only "authenticated" but the service enforces ownership or a ro
 
 1. Log in or register: the response carries `tokens: { access_token, refresh_token, expires_in }` (snake_case; `expires_in` is the access token's lifetime in seconds).
 2. When a request returns 401, call `POST /auth/refresh` with `{ refreshToken }`.
-3. The response is `{ success, data: { accessToken, refreshToken } }` (camelCase, no `expires_in`): both tokens are replaced. The old refresh token is not invalidated server-side.
-4. Retry the original request once. If refresh fails (401 `INVALID_REFRESH_TOKEN`), sign out.
+3. The response is `{ success, data: { accessToken, refreshToken } }` (camelCase, no `expires_in`): both tokens are replaced. **Each refresh token works once** (rotation): keep the new one. The same token presented again within 30 seconds (two tabs refreshing at once) still gets a new pair; later, it ends the whole session and answers 401 `REFRESH_TOKEN_REUSED` (it was copied).
+4. Retry the original request once. If refresh fails (401 `INVALID_REFRESH_TOKEN`, `SESSION_REVOKED`, `REFRESH_TOKEN_REUSED`), sign out. A refresh token issued before rotation existed answers `SESSION_REVOKED` once: sign in again.
 
-The web client (`frontend-web/lib/api-client.ts`) does exactly this, shares one in-flight refresh between concurrent 401s, and never retries `/auth/refresh`, `/auth/login`, `/auth/logout` or `/auth/register`. `POST /auth/logout` ends every session the account has (it sets `tokensValidAfter`), so the client discards its tokens and every other device has to sign in again.
+The web client (`frontend-web/lib/api-client.ts`) does exactly this, shares one in-flight refresh between concurrent 401s, and never retries `/auth/refresh`, `/auth/login`, `/auth/logout` or `/auth/register`. `POST /auth/logout` ends this device's session only; `POST /auth/logout-all` ends them all.
 
 ### Response envelope
 
@@ -138,7 +138,10 @@ Uploaded public images are served from the storage layer's public URL. Private f
 | `GET /auth/me` | authenticated | none | `{ id, phone, email, userType, status, emailVerified, phoneVerified, profile, defaultAddress }` |
 | `POST /auth/resend-verification` | authenticated | none | message |
 | `POST /auth/change-password` | authenticated | `currentPassword` (asked for again: a wrong one is 400 `INVALID_PASSWORD`, never 401, and five wrong ones in 15 minutes stop even the right one with 429 `RATE_LIMITED`, the same budget as changing the e-mail or closing the account), `newPassword` (the same rules as sign-up, judged first, so a weak one costs no attempt: 400 `WEAK_PASSWORD` with `details.reason` and `details.minLength`, staff 12 characters; the same password again is 400 `PASSWORD_UNCHANGED`) | `{ tokens: { access_token, refresh_token, expires_in } }` for this session; every older session, on this device and every other, is void (401 `SESSION_REVOKED`) and the account's sockets are closed. An account with no password (it signs in with Google) is refused with 400 `NO_PASSWORD_SET`: it sets one through `forgot-password`, which writes to its verified address. The change is audited (`auth:PASSWORD_CHANGED`) and the verified address is e-mailed a notice |
-| `POST /auth/logout` | authenticated | none | message; ends every session the account has, on every device (older access and refresh tokens are refused with 401 `SESSION_REVOKED`), closes its sockets and forgets every push subscription the account has (nobody is signed in on those devices any more; the web app registers a browser's own subscription again for whoever signs in on it) |
+| `POST /auth/logout` | authenticated | optional `pushEndpoint` (this browser's push subscription) | message; ends this device's session: its access and refresh tokens are refused at once with 401 `SESSION_REVOKED`, its sockets close, and the push subscription named is forgotten. The account's other devices stay signed in. (A token from before sessions were recorded has no session, so it ends every session, as logout used to.) |
+| `POST /auth/logout-all` | authenticated | none | message; ends every session the account has, closes all its sockets and forgets all its push subscriptions; audited `auth:LOGOUT_ALL` |
+| `GET /auth/sessions` | authenticated | none | `{ sessions: [{ id, current, userAgent, ipAddress, signedInAt, lastActiveAt }] }`: the devices signed in, most recently active first |
+| `DELETE /auth/sessions/:id` | authenticated | none | signs that device out (404 `SESSION_NOT_FOUND` when it is not this account's or has already ended); audited `auth:SESSION_ENDED` |
 | `POST /auth/phone/request` | authenticated, otp limit | `phone` | `{ message, phone }`; sends a code to that number |
 | `POST /auth/phone/verify` | authenticated, login limit | `phone`, `otp` (6 digits) | `{ phone, phoneVerified }`; the number becomes the account's |
 
@@ -174,7 +177,8 @@ All routes need authentication (`user-profile.routes.ts`).
 | `PUT /sellers/me/community-delivery` | role seller (not suspended) | `terms[]` (max 200), each `{ communityId, fee (0-100000, default 0), freeAbove?, minOrderAmount?, isEnabled? }`. The fee is only used for self-delivery; with Nuray riders the delivery fee is Nuray's | saved terms |
 | `GET /sellers/me/analytics` | role seller (not suspended) | query `period` (default `30d`) | sales analytics |
 | `POST /sellers/me/payouts` | role seller (not suspended) | `amount` (min 100), `payoutMethod`: `bank_transfer` \| `jazzcash` \| `easypaisa`, `accountNumber` (a Pakistani mobile number for JazzCash and EasyPaisa, an IBAN or 8-20 digits for a bank transfer, else 400 `VALIDATION_ERROR`; stored in one form), `currentPassword` (asked for on every request on an account that has a password: 400 `PASSWORD_REQUIRED`, 400 `INVALID_PASSWORD`; an account that signs in without a password, by a phone code or Google, is not asked) | 201 the payout request; the amount must reach the minimum payout (`minPayoutAmount` setting or the seller's payout schedule) and not exceed the available balance (400 `INSUFFICIENT_BALANCE`) |
-| `GET /sellers/me/payouts` | role seller (not suspended) | none | the seller's payout history |
+| `GET /sellers/me/payouts` | role seller (not suspended) | none | the seller's payout history, each with `periodStart`, `periodEnd`, `automatic` (a weekly payout) and `payoutMethod` (`paid_to_nuray` with a negative amount for a payment the kitchen made to Nuray) |
+| `GET /sellers/me/payouts/:id/statement` | role seller (not suspended) | `format=csv` (optional) | the payout's statement: `payout`, `kitchen`, `lines` (`orderNumber`, `deliveredOn`, `kind`: `online` \| `rider_cash` \| `rider_cash_waiting` \| `kitchen_collected`, `orderTotal`, `kitchenShare`, `effect`), `totals` (`period`, `earlierAndAdjustments`, `waitingForRiderCash`…); a CSV download with `format=csv`; 404 `PAYOUT_NOT_FOUND` for another kitchen's payout |
 
 ## Seller orders: `/seller`
 
@@ -562,7 +566,11 @@ Same body schemas as seller promotions (see Promotions), but the discount is pai
 
 | Method and path | Body / query | Returns |
 |---|---|---|
-| `GET /admin/payouts` | query `status`, `page`, `limit` | payout requests with pagination |
+| `GET /admin/payouts` | query `status`, `page`, `limit` | payout requests with pagination, each with `periodStart`, `periodEnd`, `automatic` |
+| `GET /admin/payouts/:id/statement` | `format=csv` (optional) | any payout's statement (as the kitchen's) |
+| `GET /admin/kitchens-owing` | none | `{ kitchens: [{ sellerId, businessName, owed, owesSince, cashPausesAt, cashPaused }] }`: kitchens that owe Nuray after netting |
+| `GET /admin/sellers/:id/owing` | none | that kitchen's `{ owed, owesSince, cashPausesAt, cashPaused }` |
+| `POST /admin/sellers/:id/payments-to-nuray` | `amount` (> 0), `reference` (required) | 201 `{ paymentId, amount, owed, owesSince, cashPausesAt, cashPaused }`; records that the kitchen paid Nuray; 400 `AMOUNT_EXCEEDS_OWED` above what it owes; needs `money.write` |
 | `POST /admin/payouts/:id/complete` | optional `transactionId` | marks paid; 409 `PAYOUT_EXCEEDS_BALANCE` when a refund since the request means the kitchen's balance no longer covers it (fail it instead) |
 | `POST /admin/payouts/:id/fail` | `reason` (required) | marks failed |
 
