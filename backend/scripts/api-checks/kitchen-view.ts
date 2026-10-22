@@ -1,6 +1,7 @@
 /**
  * What a kitchen may see of an order, and what the live data other people on the order receive may carry.
- * The kitchen gets the customer's name and phone, the door and its own dishes, never the customer's account
+ * The kitchen gets its own dishes, the area and the customer's first name, and the phone and the door only while it
+ * hands the order over itself (accepted, until a day after delivery: PRIV-4); never the customer's account
  * id, the map pin, the postcode or the checkout's internal keys; the customer still gets their whole order;
  * tracking, chat and live events name people by role, never by account id.
  */
@@ -61,14 +62,27 @@ export default async function kitchenView() {
     ok(`${route} has none of the private values as text (postcode, pin, gateway id, checkout key, handover code, customer and rider account ids, address id)`, secrets.every((s) => !text(r.body).includes(s)), secrets.filter((s) => text(r.body).includes(s)).join(' | '));
   }
   const view = bySeller.body.data;
-  ok('the kitchen still gets the customer\'s name and phone', view?.customer?.phone === customer.phone && view?.customer?.profile?.fullName === customerName, view?.customer);
+  // A Nuray rider delivers this order (the kitchen's default), so the phone and the door stay with the rider.
+  ok("a Nuray rider's order: the kitchen gets the customer's first name, not the phone", view?.contactHidden === 'nuray_rider' && view?.customer?.phone === null && view?.customer?.profile?.fullName === customerName.split(' ')[0], view?.customer);
   const seen = view?.deliveryAddress;
-  ok('and the door: house number, street line, area, city, landmark', seen?.houseNumber === 'H-55' && seen?.addressLine1 === door.addressLine1 && seen?.area === door.area && seen?.city === door.city && seen?.landmark === door.landmark, seen);
+  ok('and the area and city, not the door', seen?.houseNumber === null && seen?.addressLine1 === null && seen?.landmark === null && seen?.area === door.area && seen?.city === door.city, seen);
   const item = view?.items?.[0];
   const dishOk = view?.items?.length === 1 && item?.productId === productId && item?.quantity === 2 && item?.totalPrice === 600;
   const totalsOk = view?.subtotal === 600 && view?.totalAmount === placed.body.data?.order?.totalAmount && view?.sellerTotals?.subtotal === 600;
   ok('and its own dish, the quantity and the totals', dishOk && totalsOk, item);
   ok('both routes give the kitchen exactly the same view', text(byOrders.body.data) === text(view));
+
+  // 1b. a kitchen that delivers itself: nothing before it accepts, the phone and the door once it has (PRIV-4)
+  const selfKitchen = await makeKitchen({ provider: 'self' });
+  const selfDish = await makeProduct(selfKitchen.sellerId, { price: 300 });
+  const selfOrder = orderIdOf(await placeOrder(customer, [{ productId: selfDish }], { addressId }));
+  const before = (await selfKitchen.owner.as('GET', `/seller/orders/${selfOrder}`)).body.data;
+  const listBefore = ((await selfKitchen.owner.as('GET', '/seller/orders')).body.data?.orders ?? []).find((o: { order?: { id?: string } }) => o.order?.id === selfOrder)?.order;
+  ok('before the kitchen accepts its own delivery: no phone, no door, in the order and in the list', before?.contactHidden === 'not_accepted' && before?.customer?.phone === null && before?.deliveryAddress?.houseNumber === null && listBefore?.customerPhone === null && listBefore?.contactHidden === 'not_accepted', JSON.stringify({ h: before?.contactHidden, l: listBefore?.contactHidden }));
+  await acceptOrder({ kitchen: selfKitchen, orderId: selfOrder });
+  const after = (await selfKitchen.owner.as('GET', `/seller/orders/${selfOrder}`)).body.data;
+  ok('once it accepts: the customer\'s full name, phone and the door (house number, street line, landmark)', after?.contactHidden === null && after?.customer?.phone === customer.phone && after?.customer?.profile?.fullName === customerName && after?.deliveryAddress?.houseNumber === 'H-55' && after?.deliveryAddress?.addressLine1 === door.addressLine1 && after?.deliveryAddress?.landmark === door.landmark, JSON.stringify(after?.deliveryAddress));
+  ok('still none of the private keys or values', found(after, PRIVATE_KEYS).length === 0 && !text(after).includes(`"${POSTCODE}"`) && !text(after).includes('24.86197'), found(after, PRIVATE_KEYS).join(','));
 
   // 2. the customer keeps their whole order (this also shows the key and text scans can find those values)
   const mine = await customer.as('GET', `/orders/${orderId}`);

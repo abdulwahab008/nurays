@@ -71,7 +71,9 @@ interface OrderTicket {
     /** The kitchen hands this order over itself (self-delivery or customer pickup). */
     sellerHandsOver?: boolean;
     customerName?: string;
-    customerPhone?: string;
+    customerPhone?: string | null;
+    /** Why the phone and door are not shown (PRIV-4), or null when they are. */
+    contactHidden?: 'nuray_rider' | 'not_accepted' | 'closed' | null;
     deliveryAddress?: {
       area?: string;
       city?: string;
@@ -426,6 +428,9 @@ export default function SellerOrdersPage() {
                         <span className="font-semibold text-gray-900">{ord.customerName || t('customer')}</span>
                         {ord.customerPhone && (
                           <span className="text-gray-500" data-ltr>({ord.customerPhone})</span>
+                        )}
+                        {ord.contactHidden && (
+                          <span className="text-gray-600" data-testid="contact-hidden">{t(`contact.${ord.contactHidden}`)}</span>
                         )}
 
                         {/* Two-Way Chat Button */}

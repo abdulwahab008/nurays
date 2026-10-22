@@ -33,6 +33,17 @@ Access labels used below:
 
 Where a route is only "authenticated" but the service enforces ownership or a role (for example order access, or seller-only variant writes), the table says so.
 
+### Sign-up answers
+
+Sign-up (`EMAIL_EXISTS`, `PHONE_EXISTS`), the code request (`USER_EXISTS`) and login (`PASSWORD_NOT_SET`) say plainly
+when an account exists. Those answers are counted per network address: after five in an hour the address gets 429
+`RATE_LIMITED` for the rest of the hour.
+
+### Delivery area
+
+`POST /orders` with home delivery to a pin outside every community answers 400 `ADDRESS_OUTSIDE_SERVICE_AREA`
+("We don't deliver to this pin yet. Pick a pin inside one of our areas, or choose pickup.").
+
 ### Refresh flow
 
 1. Log in or register: the response carries `tokens: { access_token, refresh_token, expires_in }` (snake_case; `expires_in` is the access token's lifetime in seconds).
@@ -186,8 +197,8 @@ Note the singular. `seller-order.routes.ts`. All routes need role `seller` or `a
 
 | Method and path | Body / query | Returns |
 |---|---|---|
-| `GET /seller/orders` | query `page`, `limit`, `status` (`pending`, `preparing`, `ready`, `dispatched`, `cancelled`; item status), `orderStatus` (any order status), `dateFrom`, `dateTo` | `{ orders, pagination }` containing the seller's items |
-| `GET /seller/orders/:id` | none | the kitchen's view of one order: its own items, the customer's name and phone, the door (address as at checkout), payment details for a manual transfer, status history and the kitchen's earnings. Never the customer's account id, map pin, postcode, idempotency key or payment-gateway transaction id |
+| `GET /seller/orders` | query `page`, `limit`, `status` (`pending`, `preparing`, `ready`, `dispatched`, `cancelled`; item status), `orderStatus` (any order status), `dateFrom`, `dateTo` | `{ orders, pagination }` containing the seller's items; each order's `customerPhone` and door follow the same rule as the detail, with `contactHidden` |
+| `GET /seller/orders/:id` | none | the kitchen's view of one order: its own items, the area and city, the customer's first name, and (only while the kitchen hands the order over itself, from accepting it until 24 h after delivery) the full name, phone and door (address as at checkout); `contactHidden` says why they are not there (`not_accepted`, `nuray_rider`, `closed`) or is null; payment details for a manual transfer, status history and the kitchen's earnings. Never the customer's account id, map pin, postcode, idempotency key or payment-gateway transaction id |
 | `POST /seller/orders/:id/accept` | none | accepts the order (starts preparation); when Nuray delivers, a delivery job is created for riders |
 | `POST /seller/orders/:id/reject` | `reason` (not schema-validated) | rejects and notifies the customer |
 | `POST /seller/orders/:id/ready` | none | marks it ready for pickup |
@@ -282,7 +293,7 @@ All routes need authentication (`cart.routes.ts`, `cart.validator.ts`). One cart
 |---|---|---|
 | `GET /cart` | none | `{ items, summary: { subtotal, totalItems, totalSellers }, activeSeller }`: the dishes at the kitchens' prices. The summary carries no delivery fee, discount or total: those are worked out where they are known (the estimate below, and checkout) |
 | `GET /cart/validate` | none | checkout validation of the cart (stock, availability, rules) |
-| `GET /cart/delivery-estimate` | query `addressId` (required, else 400 `VALIDATION_ERROR`) | what delivering the cart to that address costs the customer, worked out as an order for the same dishes would be: `{ deliveryFee, isFree, isDeliverable, reason, kitchenPaysDelivery, freeDeliveryThreshold, deliverySubtotal }`. `deliverySubtotal` is the amount the kitchen's rules were checked against: the dishes at today's prices after the kitchen's own deals, before any voucher code. `freeDeliveryThreshold` is the order amount at which a self-delivering kitchen's fee is waived (still to reach while the fee is charged, reached once it is waived) and is `null` when no rule says so or a Nuray rider delivers (the kitchen pays that fee); progress is `deliverySubtotal / freeDeliveryThreshold`. `isDeliverable: false` means the kitchen does not deliver to that address (`reason` says why) and `deliveryFee` is then 0 and must not be shown as free |
+| `GET /cart/delivery-estimate` | query `addressId` (required, else 400 `VALIDATION_ERROR`) | what delivering the cart to that address costs the customer, worked out as an order for the same dishes would be: `{ deliveryFee, isFree, isDeliverable, reason, kitchenPaysDelivery, freeDeliveryThreshold, deliverySubtotal }`. `deliverySubtotal` is the amount the kitchen's rules were checked against: the dishes at today's prices after the kitchen's own deals, before any voucher code. `freeDeliveryThreshold` is the order amount at which a self-delivering kitchen's fee is waived (still to reach while the fee is charged, reached once it is waived) and is `null` when no rule says so or a Nuray rider delivers (the kitchen pays that fee); progress is `deliverySubtotal / freeDeliveryThreshold`. `isDeliverable: false` means the kitchen does not deliver to that address (`reason` says why) and `deliveryFee` is then 0 and must not be shown as free; a pin outside every community answers `isDeliverable: false`, `outsideServiceArea: true` and the reason |
 | `POST /cart/items` | `productId` (id or slug), `quantity` (>=1); optional `variantId` (uuid), `stockType`, `hubId`, `clearAndAdd` (empty the cart first) | 201 the item. 400 `SELLER_UNAVAILABLE` (naming the kitchen) for a dish of a suspended kitchen; 409 `CART_SELLER_MISMATCH` when the tray holds another kitchen's dishes, with `details: { existingSeller: { id, name }, newSeller: { id, name } }` (send again with `clearAndAdd: true` to start from the new kitchen) |
 | `PATCH /cart/items/:id` | optional `quantity` (>=0; 0 removes the item), `stockType`, `hubId` | the item, or a message when removed |
 | `DELETE /cart/items/:id` | none | message |

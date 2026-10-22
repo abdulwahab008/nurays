@@ -12,7 +12,7 @@ import { releasePromotionUsage } from './promotion.service';
 import { refundForCancelledItems } from './refund.service';
 import ledgerService from './ledger.service';
 import { releaseHubAllocations } from './hub-allocation.service';
-import { kitchenOrderSelect, presentKitchenOrder } from '../utils/kitchenOrderView';
+import { firstName, kitchenContactRule, kitchenOrderSelect, presentKitchenOrder, withoutDoor } from '../utils/kitchenOrderView';
 import { logger } from '../utils/logger';
 
 /**
@@ -118,6 +118,7 @@ export class SellerOrderService {
             deliveryType: true,
             deliveryProvider: true,
             deliveryFeeBreakdown: true,
+            deliveredAt: true,
             deliveryAddress: {
               select: {
                 area: true,
@@ -159,6 +160,9 @@ export class SellerOrderService {
 
       const orderId = item.order.id;
       if (!orderMap.has(orderId)) {
+        // The phone and door only while the kitchen hands this order over itself (utils/kitchenOrderView.ts).
+        const contactHidden = kitchenContactRule(item.order, seller.deliveryProvider);
+        const fullName = item.order.customer?.profile?.fullName || null;
         orderMap.set(orderId, {
           order: {
             id: item.order.id,
@@ -183,9 +187,10 @@ export class SellerOrderService {
             sellerHandsOver:
               item.order.deliveryType === 'self_pickup' ||
               deliveryProviderOf(item.order, seller.deliveryProvider) === 'self',
-            customerName: item.order.customer?.profile?.fullName || 'Customer',
-            customerPhone: item.order.customer?.phone,
-            deliveryAddress: item.order.deliveryAddress,
+            customerName: (contactHidden ? firstName(fullName) : fullName) || 'Customer',
+            customerPhone: contactHidden ? null : item.order.customer?.phone,
+            deliveryAddress: contactHidden ? withoutDoor(item.order.deliveryAddress) : item.order.deliveryAddress,
+            contactHidden,
           },
           items: [],
         });

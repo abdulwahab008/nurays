@@ -40,6 +40,8 @@ interface SellerOrderDetail {
   paymentSenderName?: string | null;
   paymentProofUrl?: string | null;
   customer?: { phone?: string | null; profile?: { fullName?: string | null } | null } | null;
+  /** Why the phone and door are not shown (PRIV-4), or null when they are. */
+  contactHidden?: 'nuray_rider' | 'not_accepted' | 'closed' | null;
   deliveryAddress?: { label?: string; addressLine1?: string; area?: string; city?: string; landmark?: string } | null;
   items: Array<{
     id: string;
@@ -226,6 +228,9 @@ export default function SellerOrderDetailPage() {
                 <h2 className="font-bold text-gray-900">{t('customer')}</h2>
                 <p>{order.customer?.profile?.fullName || t('customer')}</p>
                 {order.customer?.phone && <p className="text-gray-600" data-ltr>{order.customer.phone}</p>}
+                {order.contactHidden && (
+                  <p className="text-xs text-gray-600 bg-gray-50 rounded-lg p-2" data-testid="contact-hidden">{t(`contact.${order.contactHidden}`)}</p>
+                )}
                 {order.deliveryType === 'home_delivery' && order.deliveryAddress && (
                   <p className="text-gray-600">
                     {[order.deliveryAddress.addressLine1, order.deliveryAddress.area, order.deliveryAddress.city].filter(Boolean).join(', ')}

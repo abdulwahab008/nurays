@@ -34,13 +34,13 @@ export default async function snapshot() {
   const kitchen = await makeKitchen();
   const productId = await makeProduct(kitchen.sellerId);
   const customer = await makeUser('customer');
-  const addressId = await makeAddress(customer, { landmark: 'Opposite the park', latitude: 24.8607, longitude: 67.0011, houseNumber: 'H-55' });
+  const addressId = await makeAddress(customer, { landmark: 'Opposite the park', latitude: 24.826, longitude: 67.031, houseNumber: 'H-55' });
   const order = await placeOrder(customer, [{ productId }], { addressId });
   const orderId = orderIdOf(order);
   const copyOf = async () => (await prisma.order.findUnique({ where: { id: orderId }, select: { deliveryAddressSnapshot: true } }))?.deliveryAddressSnapshot as Record<string, unknown> | null;
   const frozen = await copyOf();
   ok('an order is placed to that address', order.status === 201, order.code);
-  ok('its copy of the address holds the house number, the landmark and the map pin as numbers', frozen?.houseNumber === 'H-55' && frozen?.landmark === 'Opposite the park' && frozen?.latitude === 24.8607 && frozen?.longitude === 67.0011, frozen);
+  ok('its copy of the address holds the house number, the landmark and the map pin as numbers', frozen?.houseNumber === 'H-55' && frozen?.landmark === 'Opposite the park' && frozen?.latitude === 24.826 && frozen?.longitude === 67.031, frozen);
 
   const edit = await customer.as('PATCH', `/users/me/addresses/${addressId}`, { addressLine1: 'Plot 1, Lane 2', area: 'Gulshan Block 7', landmark: 'Moved away', latitude: 31.5204, longitude: 74.3587, houseNumber: 'H-99' });
   ok('the saved address was edited afterwards (street, area, landmark, pin)', edit.status === 200 && edit.body.data?.landmark === 'Moved away' && edit.body.data?.coordinates?.latitude === 31.5204, edit.code);
@@ -52,16 +52,16 @@ export default async function snapshot() {
   await claimJob(rider2, deliveryId2);
   const job = await jobOf(rider2, deliveryId2);
   ok('the rider is shown the door as it was at checkout (house number, landmark)', job?.dropoffDetails?.houseNumber === 'H-55' && job?.dropoffDetails?.landmark === 'Opposite the park', job?.dropoffDetails);
-  ok('and the map pin as it was at checkout', Math.abs(job?.deliveryLatitude - 24.8607) < 1e-6 && Math.abs(job?.deliveryLongitude - 67.0011) < 1e-6, [job?.deliveryLatitude, job?.deliveryLongitude]);
+  ok('and the map pin as it was at checkout', Math.abs(job?.deliveryLatitude - 24.826) < 1e-6 && Math.abs(job?.deliveryLongitude - 67.031) < 1e-6, [job?.deliveryLatitude, job?.deliveryLongitude]);
   ok('and the street line as it was at checkout, not the edited one', String(job?.deliveryAddress).includes('House 9, Street 5') && !String(job?.deliveryAddress).includes('Plot 1'), job?.deliveryAddress);
   const page = (await rider2.as('GET', `/orders/${orderId}`)).body.data?.deliveryAddress;
-  ok('the rider\'s order page shows the same door: street, landmark and pin as at checkout', page?.addressLine1 === 'House 9, Street 5' && page?.landmark === 'Opposite the park' && Math.abs(Number(page?.latitude) - 24.8607) < 1e-6, page);
+  ok('the rider\'s order page shows the same door: street, landmark and pin as at checkout', page?.addressLine1 === 'House 9, Street 5' && page?.landmark === 'Opposite the park' && Math.abs(Number(page?.latitude) - 24.826) < 1e-6, page);
 
   // The customer's own order page reads the same copy: not moved by a later edit, and not lost when the saved address is deleted.
   const mine = (await customer.as('GET', `/orders/${orderId}`)).body.data?.deliveryAddress;
   ok(
     "the customer's own order shows the street, the landmark and the pin as ordered, not as the saved address was edited",
-    mine?.addressLine1 === 'House 9, Street 5' && mine?.area !== 'Gulshan Block 7' && mine?.landmark === 'Opposite the park' && Math.abs(Number(mine?.latitude) - 24.8607) < 1e-6,
+    mine?.addressLine1 === 'House 9, Street 5' && mine?.area !== 'Gulshan Block 7' && mine?.landmark === 'Opposite the park' && Math.abs(Number(mine?.latitude) - 24.826) < 1e-6,
     mine
   );
   const removed = await customer.as('DELETE', `/users/me/addresses/${addressId}`);
@@ -73,7 +73,7 @@ export default async function snapshot() {
       afterDelete?.deliveryAddress?.area === frozen?.area &&
       afterDelete?.deliveryAddress?.houseNumber === 'H-55' &&
       afterDelete?.deliveryAddress?.landmark === 'Opposite the park' &&
-      Math.abs(Number(afterDelete?.deliveryAddress?.latitude) - 24.8607) < 1e-6,
+      Math.abs(Number(afterDelete?.deliveryAddress?.latitude) - 24.826) < 1e-6,
     afterDelete?.deliveryAddress
   );
 

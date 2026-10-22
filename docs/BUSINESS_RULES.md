@@ -363,3 +363,19 @@ Code: `backend/src/services/notify.service.ts`, `backend/src/jobs/notify.jobs.ts
 - The delivery job is assigned when the kitchen accepts (food may still be preparing); a rider cannot pick up until the kitchen marks it ready, and holds one of their two slots meanwhile.
 - Nuray's delivery fee and the rider's pay are independent numbers: a short trip priced by the community fixed fee can pay the rider more than the customer paid.
 - Delivery-price cache is per process (section 3b).
+
+## Delivery area and what a kitchen sees of the customer
+
+- **Outside every community** (`community.service.ts` `pinOutsideEveryCommunity`). When communities are set up, a
+  home-delivery pin that lies in none of them is not delivered to: the delivery quote says "We don't deliver to this
+  pin yet. Pick a pin inside one of our areas, or choose pickup." and the order is refused (400
+  `ADDRESS_OUTSIDE_SERVICE_AREA`). A pin decides the community; the typed area name only helps an address with no pin.
+  Refused pins are logged rounded to about a kilometre, to show where demand is.
+- **The customer's contact** (`utils/kitchenOrderView.ts` `kitchenContactRule`). A kitchen always sees the order, the
+  area and city, and the customer's first name. It sees the phone, the full name and the door (street, house number,
+  landmark) only when it hands the order over itself (its own delivery or a pickup), from accepting the order until
+  24 hours after delivery. Before acceptance, after that day, once cancelled, and on every order a Nuray rider
+  delivers, the order says why they are hidden. Chat with the customer works throughout.
+- **"This account already exists"** is said plainly at sign-up and in the code request, but an address that gets it
+  five times in an hour is answered 429 for the rest of the hour (`middleware/accountProbe.ts`).
+

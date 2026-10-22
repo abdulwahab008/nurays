@@ -343,4 +343,23 @@ export default async function delivery() {
     const answered = odd === '%00' ? r.status === 400 && r.code === 'INVALID_CHARACTERS' : r.status === 200 && Array.isArray(r.body.data);
     ok(`?history=${odd} is not a server error`, answered, said(r));
   }
+
+  // DELIV-3: a pin outside every community is not delivered to, whatever area name was typed; pickup still works.
+  {
+    const kitchen = await makeKitchen();
+    const dish = await makeProduct(kitchen.sellerId, { price: 400 });
+    const buyer = await makeUser('customer');
+    // Central Karachi: between Clifton, PECHS and DHA, inside none of their circles; typed as one of them.
+    const outside = await makeAddress(buyer, { area: 'DHA Phase 6', latitude: KARACHI.latitude, longitude: KARACHI.longitude });
+    const inside = await makeAddress(buyer, { area: 'Clifton', latitude: 24.826, longitude: 67.031 });
+    await buyer.as('POST', '/cart/items', { productId: dish, quantity: 1 });
+    const quoteOut = await buyer.as('GET', `/cart/delivery-estimate?addressId=${outside}`);
+    ok('the delivery quote for a pin outside every community says it is not delivered to, and why', quoteOut.status === 200 && quoteOut.body.data?.isDeliverable === false && quoteOut.body.data?.outsideServiceArea === true && /don't deliver to this pin/.test(quoteOut.body.data?.reason ?? ''), said(quoteOut));
+    const quoteIn = await buyer.as('GET', `/cart/delivery-estimate?addressId=${inside}`);
+    ok('a pin inside one is quoted as usual', quoteIn.status === 200 && quoteIn.body.data?.isDeliverable === true, said(quoteIn));
+    const refused = await placeOrder(buyer, [{ productId: dish }], { addressId: outside });
+    ok('an order to it is refused with 400 ADDRESS_OUTSIDE_SERVICE_AREA', refused.status === 400 && refused.code === 'ADDRESS_OUTSIDE_SERVICE_AREA', said(refused));
+    ok('pickup from there still works', (await placeOrder(buyer, [{ productId: dish }])).status === 201);
+    ok('and so does delivery to the pin inside a community', (await placeOrder(buyer, [{ productId: dish }], { addressId: inside })).status === 201);
+  }
 }

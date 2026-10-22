@@ -1,7 +1,7 @@
 import prisma from '../config/database';
 import { getPlatformDeliveryPricing } from './delivery-pricing.service';
 import { AppError } from '../middleware/errorHandler';
-import { getDeliveryFeeForSeller } from '../utils/deliveryFee';
+import { OUTSIDE_AREAS_MESSAGE, getDeliveryFeeForSeller } from '../utils/deliveryFee';
 import { isOnMenu } from '../utils/menu';
 import { SELLER_COMMUNITY_DELIVERY_SELECT } from '../utils/sellerDeliverySelect';
 import { communityService } from './community.service';
@@ -227,6 +227,10 @@ export class CartService {
     });
     if (!address) {
       throw new AppError('Address not found', 404, 'ADDRESS_NOT_FOUND');
+    }
+    // A pin outside every community is not delivered to (DELIV-3): say so before the order is tried.
+    if (await communityService.pinOutsideEveryCommunity(address.latitude, address.longitude)) {
+      return { deliveryFee: 0, isFree: false, isDeliverable: false, reason: OUTSIDE_AREAS_MESSAGE, outsideServiceArea: true, freeDeliveryThreshold: null, deliverySubtotal: 0 };
     }
     const resolvedCommunityId = address.communityId ?? (await communityService.resolveCommunityIdForAddress(address, userId));
     const addr = {

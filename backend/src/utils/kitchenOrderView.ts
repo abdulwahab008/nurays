@@ -12,9 +12,51 @@ import { doorField } from './addressSnapshot';
  * the address row's owner id, map pin or postcode, the checkout's idempotency key, the payment
  * gateway's transaction id or the handover code.
  *
- * Who sees the customer's phone and street, and when, is a separate product rule; this module
- * keeps today's visibility and only removes what no kitchen needs.
+ * The customer's phone and door (street, house, landmark) follow `kitchenContactRule` (PRIV-4): the
+ * kitchen sees them only when it hands the order over itself, from accepting it until a day after delivery.
  */
+
+/** How long after delivery the kitchen still sees the customer's phone and door (for a forgotten item, a question). */
+export const CONTACT_AFTER_DELIVERY_MS = 24 * 60 * 60 * 1000;
+
+/** The order states between accepting an order and its delivery. */
+const ACCEPTED_STATUSES = ['confirmed', 'preparing', 'ready', 'dispatched', 'in_transit', 'delivery_failed'];
+
+/**
+ * Why the customer's phone and door are hidden from the kitchen, or null when it sees them.
+ *  - nuray_rider:  a Nuray rider (or a hub) hands the order over; the rider and support do the contact.
+ *  - not_accepted: the kitchen has not accepted the order yet (or it was cancelled before).
+ *  - closed:       delivered more than a day ago, or cancelled or refunded.
+ * The area and city are always shown, and the customer's first name; the full name with the contact.
+ */
+export type ContactHidden = 'nuray_rider' | 'not_accepted' | 'closed' | null;
+
+export function kitchenContactRule(
+  order: { orderStatus: string; deliveryType: string; deliveryProvider?: string | null; deliveryFeeBreakdown?: unknown; deliveredAt?: Date | null },
+  sellerDeliveryProvider?: string | null,
+  now: Date = new Date()
+): ContactHidden {
+  const handsOver = order.deliveryType === 'self_pickup' || deliveryProviderOf(order, sellerDeliveryProvider) === 'self';
+  if (!handsOver) return 'nuray_rider';
+  if (order.orderStatus === 'delivered' || order.orderStatus === 'completed') {
+    const at = order.deliveredAt?.getTime();
+    return at != null && now.getTime() - at <= CONTACT_AFTER_DELIVERY_MS ? null : 'closed';
+  }
+  if (order.orderStatus === 'cancelled' || order.orderStatus === 'refunded') return 'closed';
+  return ACCEPTED_STATUSES.includes(order.orderStatus) ? null : 'not_accepted';
+}
+
+/** The first word of a name: what a kitchen sees of the customer while the contact is hidden. */
+export const firstName = (name: string | null | undefined): string | null => name?.trim().split(/\s+/)[0] || null;
+
+/** The door fields that go with the phone. */
+const DOOR_FIELDS = ['addressLine1', 'addressLine2', 'houseNumber', 'landmark'] as const;
+export function withoutDoor<T extends Record<string, unknown> | null>(address: T): T {
+  if (!address) return address;
+  const out: Record<string, unknown> = { ...address };
+  for (const f of DOOR_FIELDS) if (f in out) out[f] = null;
+  return out as T;
+}
 
 /** The query for one order, as the kitchen with this seller id may read it. */
 export function kitchenOrderSelect(sellerId: string) {
@@ -133,6 +175,9 @@ export function presentKitchenOrder(order: KitchenOrderRow, ctx: KitchenOrderCon
     { subtotal: 0, commission: 0, payout: 0 }
   );
 
+  const contactHidden = kitchenContactRule(order, ctx.sellerDeliveryProvider);
+  const fullName = order.customer?.profile?.fullName ?? null;
+
   return {
     id: order.id,
     orderNumber: order.orderNumber,
@@ -169,9 +214,14 @@ export function presentKitchenOrder(order: KitchenOrderRow, ctx: KitchenOrderCon
     paymentConfirmedAt: order.paymentConfirmedAt,
     paidAt: order.paidAt,
     customer: order.customer
-      ? { phone: order.customer.phone, profile: order.customer.profile ? { fullName: order.customer.profile.fullName } : null }
+      ? {
+          phone: contactHidden ? null : order.customer.phone,
+          profile: order.customer.profile ? { fullName: contactHidden ? firstName(fullName) : fullName } : null,
+        }
       : null,
-    deliveryAddress: kitchenAddress(order),
+    deliveryAddress: contactHidden ? withoutDoor(kitchenAddress(order)) : kitchenAddress(order),
+    // Why the phone and door are not shown (null when they are): see kitchenContactRule.
+    contactHidden,
     items: order.items.map((i) => ({
       id: i.id,
       productId: i.productId,

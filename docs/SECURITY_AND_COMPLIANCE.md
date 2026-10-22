@@ -133,9 +133,10 @@ To enforce it:
 1. Run the report-only build on staging or the soft launch, using every role's screens, for about a week.
 2. Search the frontend logs for `"type":"csp-violation"`. A legitimate origin goes into the policy in
    `next.config.ts`; reports whose blocked address is a browser extension (`chrome-extension`, `moz-extension`) are noise.
-3. When a week is clean, rebuild the frontend with the build argument `CSP_ENFORCE=true` (in the publish workflow:
-   the repository variable `CSP_ENFORCE`). The header becomes `Content-Security-Policy`; reports keep coming, so
-   keep the same search saved.
+3. When a week is clean, restart the web server with `CSP_ENFORCE=true` in its environment (Docker:
+   `-e CSP_ENFORCE=true`, or the compose `.env`); no rebuild. `frontend-web/proxy.ts` reads it at start-up and the
+   header becomes `Content-Security-Policy`. (The `CSP_ENFORCE` build argument, in the publish workflow the
+   repository variable, still sets the image's default.) Reports keep coming, so keep the same search saved.
 
 `'unsafe-inline'` stays in `script-src` and `style-src` for now (Next.js's inline bootstrap script and inline
 styles); replacing it with per-request nonces is a separate decision.

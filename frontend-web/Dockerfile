@@ -64,10 +64,14 @@ RUN npm run build
 FROM node:22-bookworm-slim AS runner
 WORKDIR /app
 
+# The build argument is only the default: proxy.ts reads CSP_ENFORCE when the server starts, so
+# `docker run -e CSP_ENFORCE=true` (or the compose environment) switches the policy without a rebuild.
+ARG CSP_ENFORCE
 ENV NODE_ENV=production \
     NEXT_TELEMETRY_DISABLED=1 \
     PORT=3000 \
-    HOSTNAME=0.0.0.0
+    HOSTNAME=0.0.0.0 \
+    CSP_ENFORCE=${CSP_ENFORCE}
 
 # Debian security fixes the upstream Node image has not picked up yet (the CI image scan
 # fails on fixable high and critical issues). Nothing new is installed.

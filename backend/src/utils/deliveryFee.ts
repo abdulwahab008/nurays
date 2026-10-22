@@ -34,6 +34,9 @@ export interface AddressForDelivery {
   communityUnresolved?: boolean;
 }
 
+/** What a customer is told when the pin is outside every community Nuray serves (DELIV-3). */
+export const OUTSIDE_AREAS_MESSAGE = "We don't deliver to this pin yet. Pick a pin inside one of our areas, or choose pickup.";
+
 /** One community's delivery terms, fixed by the seller (SellerCommunityDelivery). */
 export interface CommunityDeliveryRule {
   communityId: string;

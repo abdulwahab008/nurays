@@ -79,6 +79,8 @@ services:
       # The API as the web server sees it (the build's NEXT_PUBLIC_API_URL is the browser's view), to read a dish or a kitchen
       # for its page title and link preview.
       API_INTERNAL_URL: ${API_INTERNAL_URL:-http://backend:3001/api/v1}
+      # Read when the server starts: set true and restart to enforce the Content-Security-Policy (no rebuild).
+      CSP_ENFORCE: ${CSP_ENFORCE:-false}
     container_name: nuray-frontend
     restart: unless-stopped
     logging: *logging
