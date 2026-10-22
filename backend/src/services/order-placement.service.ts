@@ -1,4 +1,5 @@
 import { randomInt } from 'crypto';
+import { orderFingerprint } from '../utils/orderFingerprint';
 import type { Prisma, Seller } from '@prisma/client';
 import prisma from '../config/database';
 import { getPlatformDeliveryPricing } from './delivery-pricing.service';
@@ -90,15 +91,29 @@ export class OrderPlacement {
     },
     opts: { idempotencyKey?: string } = {}
   ) {
-    // A retried checkout (same Idempotency-Key) gets the order it already placed.
+    // A retried checkout (same Idempotency-Key) gets the order it already placed; the same key with a different
+    // request is refused, never answered with the old order as if the new one were placed (MONEY-7).
     const idempotencyKey = opts.idempotencyKey || null;
-    if (idempotencyKey) {
+    const fingerprint = idempotencyKey ? orderFingerprint(data) : null;
+    const replay = async () => {
+      if (!idempotencyKey) return null;
       const existing = await prisma.order.findUnique({
         where: { customerId_idempotencyKey: { customerId, idempotencyKey } },
-        select: { id: true },
+        select: { id: true, idempotencyFingerprint: true },
       });
-      if (existing) return this.loadPlacedOrder(existing.id);
-    }
+      if (!existing) return null;
+      // An order placed before fingerprints were kept has none: it is answered as before.
+      if (existing.idempotencyFingerprint && existing.idempotencyFingerprint !== fingerprint) {
+        throw new AppError(
+          'This checkout key was already used for a different order. Refresh the page and place the order again.',
+          409,
+          'IDEMPOTENCY_KEY_REUSED'
+        );
+      }
+      return this.loadPlacedOrder(existing.id);
+    };
+    const earlier = await replay();
+    if (earlier) return earlier;
 
     // An online-payment order needs a working gateway. Without one it could never be paid and would sit
     // until the stale-order sweep cancelled it, so refuse it now, before anything is reserved or charged.
@@ -497,6 +512,7 @@ export class OrderPlacement {
           orderNumber,
           customerId,
           idempotencyKey,
+          idempotencyFingerprint: fingerprint,
           handoverCode: newHandoverCode(),
           subtotal,
           deliveryFee,
@@ -720,11 +736,8 @@ export class OrderPlacement {
       // The same checkout submitted twice at once: the other request placed it.
       const target = String(thrown(err).meta?.target ?? '');
       if (idempotencyKey && thrown(err).code === 'P2002' && /idempotency/i.test(target)) {
-        const existing = await prisma.order.findUnique({
-          where: { customerId_idempotencyKey: { customerId, idempotencyKey } },
-          select: { id: true },
-        });
-        if (existing) return this.loadPlacedOrder(existing.id);
+        const placedMeanwhile = await replay();
+        if (placedMeanwhile) return placedMeanwhile;
       }
       throw err;
     }

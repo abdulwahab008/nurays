@@ -8,6 +8,9 @@ import { removeAllSubscriptions, removeSubscription } from '../services/push.ser
 import { endSession, listSessions } from '../services/session.service';
 import { logger } from '../utils/logger';
 import { guardAccountProbe } from '../middleware/accountProbe';
+import * as twoFactor from '../services/staff-two-factor.service';
+import { verifyChallenge, type ChallengePurpose } from '../utils/jwt';
+import prisma from '../config/database';
 
 export const requestOTP = async (req: Request, res: Response) => {
   const { phone, purpose } = req.body;
@@ -90,6 +93,15 @@ export const login = async (req: Request, res: Response) => {
 
   const result = await guardAccountProbe(req, () => authService.login(phoneOrEmail, otpCodeOrPassword, loginMethod, req.ip));
 
+  // A staff member's password was right, and the second step is next: no session yet (SEC-3).
+  if ('challengeToken' in result) {
+    res.status(200).json({
+      success: true,
+      message: 'twoFactorRequired' in result ? 'Enter the code from your authenticator app' : 'Set up two-step sign-in to continue',
+      data: result,
+    });
+    return;
+  }
   res.status(200).json({
     success: true,
     message: result.requiresEmailVerification 
@@ -97,6 +109,61 @@ export const login = async (req: Request, res: Response) => {
       : 'Login successful',
     data: result,
   });
+};
+
+const challengeUser = (token: unknown, purpose: ChallengePurpose): string => {
+  if (typeof token !== 'string' || !token) throw new AppError('The sign-in has expired. Enter your password again.', 401, 'CHALLENGE_EXPIRED');
+  try {
+    return verifyChallenge(token, purpose).userId;
+  } catch {
+    throw new AppError('The sign-in has expired. Enter your password again.', 401, 'CHALLENGE_EXPIRED');
+  }
+};
+
+/** The second step of a staff sign-in: the code from the app, or a backup code. Answers as a sign-in does. */
+export const verifyTwoFactor = async (req: Request, res: Response) => {
+  const userId = challengeUser(req.body?.challengeToken, 'mfa');
+  const check = await twoFactor.verifySecondStep(userId, String(req.body?.code ?? ''), req.ip);
+  const user = await prisma.user.findUniqueOrThrow({ where: { id: userId }, include: { profile: true } });
+  const result = await authService.finishStaffOrEmailLogin(user);
+  res.status(200).json({ success: true, message: 'Login successful', data: { ...result, backupCodesLeft: check.backupCodesLeft, usedBackupCode: check.method === 'backup' } });
+};
+
+/** Whose set-up this is: the challenge token of a staff sign-in that must set it up, or a signed-in staff member. */
+const setupUser = (req: Request): { userId: string; viaChallenge: boolean } => {
+  if (req.body?.challengeToken) return { userId: challengeUser(req.body.challengeToken, 'mfa-setup'), viaChallenge: true };
+  if (req.user?.userType === 'admin') return { userId: req.user.userId, viaChallenge: false };
+  if (req.user) throw new AppError('Two-step sign-in is for staff accounts', 403, 'NOT_STAFF');
+  throw new AppError('Authentication required', 401, 'AUTH_REQUIRED');
+};
+
+/** Start setting the authenticator app up: the secret and the link the app opens. */
+export const beginTwoFactorSetup = async (req: Request, res: Response) => {
+  const { userId } = setupUser(req);
+  res.status(200).json({ success: true, data: await twoFactor.beginSetup(userId) });
+};
+
+/** Confirm the set-up with a first code: the backup codes (shown once) and, when it was the sign-in's step, the session. */
+export const confirmTwoFactorSetup = async (req: Request, res: Response) => {
+  const { userId, viaChallenge } = setupUser(req);
+  const { backupCodes } = await twoFactor.confirmSetup(userId, String(req.body?.code ?? ''), req.ip);
+  if (!viaChallenge) {
+    res.status(200).json({ success: true, message: 'Two-step sign-in is on', data: { backupCodes } });
+    return;
+  }
+  const user = await prisma.user.findUniqueOrThrow({ where: { id: userId }, include: { profile: true } });
+  const result = await authService.finishStaffOrEmailLogin(user);
+  res.status(200).json({ success: true, message: 'Two-step sign-in is on', data: { ...result, backupCodes } });
+};
+
+export const getTwoFactorStatus = async (req: Request, res: Response) => {
+  if (req.user?.userType !== 'admin') throw new AppError('Two-step sign-in is for staff accounts', 403, 'NOT_STAFF');
+  res.status(200).json({ success: true, data: await twoFactor.twoFactorStatus(req.user.userId) });
+};
+
+export const renewBackupCodes = async (req: Request, res: Response) => {
+  if (req.user?.userType !== 'admin') throw new AppError('Two-step sign-in is for staff accounts', 403, 'NOT_STAFF');
+  res.status(200).json({ success: true, data: await twoFactor.regenerateBackupCodes(req.user.userId, String(req.body?.code ?? ''), req.ip) });
 };
 
 export const verifyEmail = async (req: Request, res: Response) => {

@@ -46,6 +46,7 @@ model User {
   profile       UserProfile?
   pushSubscriptions PushSubscription[]
   refreshTokens     RefreshToken[]
+  twoFactor         StaffTwoFactor?
   primaryCommunity Community? @relation(fields: [primaryCommunityId], references: [id], onDelete: SetNull)
   addresses     UserAddress[]
   managedHubs   HubCenter[] @relation("HubManager")
@@ -59,8 +60,6 @@ model User {
   notifications Notification[]
   supportTickets SupportTicket[]
   auditLogs     AuditLog[]
-  activityLogs  UserActivityLog[]
-  searchQueries SearchQuery[]
   wallet        Wallet?
   paymentAttempts PaymentAttempt[]
   emailVerification EmailVerification?
@@ -247,7 +246,6 @@ model Seller {
   community         Community? @relation(fields: [communityId], references: [id], onDelete: SetNull)
   products          Product[]
   documents         SellerDocument[]
-  badges            SellerBadge[]
   orderItems        OrderItem[]
   reviews           Review[]
   favoriteSellers   FavoriteSeller[]
@@ -279,21 +277,6 @@ model SellerDocument {
   @@index([sellerId])
 
   @@map("seller_documents")
-}
-
-model SellerBadge {
-  id        String   @id @default(uuid())
-  sellerId  String   @map("seller_id")
-  badgeType String   @map("badge_type") // top_rated, customer_favorite, reliable, premium_quality
-  badgeName String   @map("badge_name")
-  badgeIcon String?  @map("badge_icon")
-  earnedAt  DateTime @default(now()) @map("earned_at")
-
-  seller    Seller   @relation(fields: [sellerId], references: [id], onDelete: Cascade)
-
-  @@index([sellerId])
-
-  @@map("seller_badges")
 }
 
 model StockAlert {
@@ -429,7 +412,6 @@ model Product {
   cartItems             CartItem[]
   hubInventory          HubInventory[]
   inventoryReservations InventoryReservation[]
-  searchQueries         SearchQuery[]
 
   @@index([sellerId])
   @@index([categoryId])
@@ -650,6 +632,8 @@ model Order {
   // One checkout attempt = one key (Idempotency-Key header): a retry after a timeout
   // returns the order already placed instead of creating a duplicate.
   idempotencyKey      String?   @map("idempotency_key")
+  // What the checkout with that key asked for (utils/orderFingerprint.ts): a reused key with a different request is refused.
+  idempotencyFingerprint String? @map("idempotency_fingerprint") @db.Char(64)
   deliveryAddressId   String?   @map("delivery_address_id")
   deliveryAddressSnapshot Json? @map("delivery_address_snapshot")
   hubId               String?   @map("hub_id")
@@ -1228,46 +1212,6 @@ model InventoryReservation {
 }
 
 // ============================================
-// ANALYTICS & TRACKING
-// ============================================
-
-model UserActivityLog {
-  id          String   @id @default(uuid())
-  userId      String?  @map("user_id")
-  activityType String  @map("activity_type")
-  entityType  String?  @map("entity_type")
-  entityId    String?  @map("entity_id")
-  metadata    Json?
-  ipAddress   String?  @map("ip_address")
-  userAgent   String?  @map("user_agent")
-  deviceType  String?  @map("device_type")
-  createdAt   DateTime @default(now()) @map("created_at")
-
-  user        User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
-
-  @@index([userId, createdAt])
-
-  @@map("user_activity_logs")
-}
-
-model SearchQuery {
-  id            String   @id @default(uuid())
-  userId        String?  @map("user_id")
-  query         String
-  filters       Json?
-  resultsCount  Int?     @map("results_count")
-  clickedProductId String? @map("clicked_product_id")
-  createdAt     DateTime @default(now()) @map("created_at")
-
-  user          User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
-  clickedProduct Product? @relation(fields: [clickedProductId], references: [id], onDelete: SetNull)
-
-  @@index([userId])
-
-  @@map("search_queries")
-}
-
-// ============================================
 // SYSTEM CONFIGURATION
 // ============================================
 
@@ -1510,6 +1454,23 @@ model OrderMessage {
 /// One refresh token (its id is the token's `jti`). A session (`familyId`) is one device's sign-in: every refresh replaces
 /// the token in it, and a token that comes back after it was replaced ends the session, because only a copy can do that
 /// (OAuth 2.0 Security BCP, RFC 9700). SEC-2.
+/// Two-step sign-in for staff (SEC-3; services/staff-two-factor.service.ts). The secret is sealed (AES-256-GCM).
+model StaffTwoFactor {
+  userId           String    @id @map("user_id")
+  secretSealed     String    @map("secret_sealed")
+  /// Null while set-up is not confirmed with a first code.
+  enabledAt        DateTime? @map("enabled_at")
+  /// The 30-second step of the last code accepted: a code works once.
+  lastUsedStep     Int?      @map("last_used_step")
+  /// SHA-256 of each backup code not yet used.
+  backupCodeHashes String[]  @default([]) @map("backup_code_hashes")
+  createdAt        DateTime  @default(now()) @map("created_at")
+  updatedAt        DateTime  @updatedAt @map("updated_at")
+  user             User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("staff_two_factor")
+}
+
 model RefreshToken {
   id        String    @id
   userId    String    @map("user_id")

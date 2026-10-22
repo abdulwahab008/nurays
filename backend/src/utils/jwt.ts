@@ -41,6 +41,30 @@ export const generateRefreshToken = (payload: JWTPayload): string => {
   } as jwt.SignOptions);
 };
 
+/**
+ * A staff member's password was right and the second step is next (SEC-3): this short-lived token says so and
+ * nothing more. It is no API credential (verifyToken wants typ 'access') and cannot be refreshed.
+ *  - mfa:       enter the code from the authenticator app (or a backup code)
+ *  - mfa-setup: set the authenticator app up first
+ */
+export type ChallengePurpose = 'mfa' | 'mfa-setup';
+const CHALLENGE_TTL: Record<ChallengePurpose, string> = { mfa: '5m', 'mfa-setup': '15m' };
+
+export const signChallenge = (userId: string, purpose: ChallengePurpose): string =>
+  jwt.sign({ userId, typ: purpose, iatMs: Date.now() }, JWT_SECRET, { expiresIn: CHALLENGE_TTL[purpose] } as jwt.SignOptions);
+
+/** The user a challenge token is for, or an error when it is not a live token of that purpose. */
+export const verifyChallenge = (token: string, purpose: ChallengePurpose): { userId: string; iatMs?: number } => {
+  let decoded: { userId?: string; typ?: string; iatMs?: number };
+  try {
+    decoded = jwt.verify(token, JWT_SECRET) as typeof decoded;
+  } catch (error) {
+    throw new Error('Invalid or expired token', { cause: error });
+  }
+  if (decoded.typ !== purpose || !decoded.userId) throw new Error('Invalid or expired token');
+  return { userId: decoded.userId, iatMs: decoded.iatMs };
+};
+
 /** When a token expires, from its own `exp` claim. */
 export const tokenExpiry = (token: string): Date => {
   const decoded = jwt.decode(token) as { exp?: number } | null;

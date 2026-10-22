@@ -22,6 +22,7 @@ const present = (u: {
   lastLoginAt: Date | null;
   createdAt: Date;
   profile: { fullName: string | null } | null;
+  twoFactor?: { enabledAt: Date | null } | null;
 }) => ({
   id: u.id,
   name: u.profile?.fullName ?? null,
@@ -32,9 +33,11 @@ const present = (u: {
   status: u.status,
   lastLoginAt: u.lastLoginAt,
   createdAt: u.createdAt,
+  // Two-step sign-in is on (SEC-3).
+  twoFactorEnabled: !!u.twoFactor?.enabledAt,
 });
 
-const SELECT = { id: true, email: true, phone: true, staffRole: true, status: true, lastLoginAt: true, createdAt: true, profile: { select: { fullName: true } } } as const;
+const SELECT = { id: true, email: true, phone: true, staffRole: true, status: true, lastLoginAt: true, createdAt: true, profile: { select: { fullName: true } }, twoFactor: { select: { enabledAt: true } } } as const;
 
 /** A staff password: long (twelve characters), not a common one, not made of the person's own name or e-mail. */
 function assertPassword(password: string, who: { email?: string | null; name?: string | null } = {}) {

@@ -25,7 +25,7 @@ import sellerOrderService from './seller-order.service';
 function stripForRider<T extends Record<string, unknown>>(order: T, jobRunning: boolean): T {
   const {
     paymentReferenceNumber: _r, paymentSenderName: _n, paymentSenderAccount: _a, paymentNotes: _p, paymentDisputeReason: _d,
-    paymentTransactionId: _t, paymentConfirmedBy: _c, paymentSubmittedAt: _s, paymentConfirmedAt: _ca, idempotencyKey: _k,
+    paymentTransactionId: _t, paymentConfirmedBy: _c, paymentSubmittedAt: _s, paymentConfirmedAt: _ca, idempotencyKey: _k, idempotencyFingerprint: _fp,
     deliveryFeeBreakdown: _f, sellerDeliveryCharge: _sc, ...rest
   } = order as Record<string, unknown>;
   const address = rest.deliveryAddress as Record<string, unknown> | null | undefined;

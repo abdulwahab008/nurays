@@ -15,6 +15,7 @@ import { authService } from '@/lib/services/auth.service';
 import { useAuthStore } from '@/lib/store/auth-store';
 import { PasswordCard } from '@/components/profile/PasswordCard';
 import { SessionsCard } from '@/components/profile/SessionsCard';
+import { TwoFactorCard } from '@/components/profile/TwoFactorCard';
 import { DashboardLayout, CUSTOMER_SIDEBAR_ITEMS } from '@/components/layout/DashboardShell';
 import { useT, useLocale, LOCALES, LOCALE_NAMES } from '@/lib/i18n';
 import { commonMessages } from '@/lib/i18n/messages/common';
@@ -605,6 +606,7 @@ export default function ProfilePage() {
             <div className="space-y-3">
               <PasswordCard hasPassword={profile?.hasPassword !== false} email={profile?.email} emailVerified={!!profile?.emailVerified} />
               <SessionsCard />
+              {(user?.userType ?? user?.user_type) === 'admin' && <TwoFactorCard />}
               {profile?.email && (
                 <div className="flex items-center justify-between gap-3 p-4 bg-gray-50 rounded-xl">
                   <div className="flex items-center gap-3 min-w-0">

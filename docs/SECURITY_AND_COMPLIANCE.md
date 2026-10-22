@@ -26,6 +26,15 @@ Code: `backend/src/services/auth.service.ts`, `utils/jwt.ts`, `middleware/auth.m
   access and refresh alike. It is set on logout, password reset and password change, when a phone number is taken
   over by its proven owner, when an unverified-email account is claimed through Google sign-in, when an admin
   suspends a user, and when a user's role changes (hub manager assigned or removed, `admin-people.service.ts`).
+- **Two-step sign-in for staff** (SEC-3, `services/staff-two-factor.service.ts`, table `staff_two_factor`). After
+  the right password a staff account gets a five-minute challenge token instead of a session, and signs in with a
+  six-digit code from an authenticator app (RFC 6238, accepted one step either side and each code once) or one of ten
+  one-time backup codes (stored as SHA-256). The app secret is sealed with AES-256-GCM under a key derived from
+  `JWT_SECRET` (so rotating `JWT_SECRET` means staff set the app up again). Five wrong codes lock the second step for
+  15 minutes. `STAFF_2FA_REQUIRED` (default: on in production) makes set-up part of the first sign-in; a staff member
+  who has set it up is always asked. The super admin resets a staff member who lost the phone and the backup codes
+  (`DELETE /admin/staff/:id/two-factor`); for the super admin, `npm run staff:reset-2fa -- <e-mail>` on the server.
+  Every step is audited (`auth:2FA_ENABLED`, `auth:2FA_FAILED`, `auth:2FA_BACKUP_CODE_USED`, `staff:2FA_RESET`).
 - **Passwords.** bcrypt, cost 10. Login for an unknown email still runs a bcrypt comparison against a dummy hash, so
   timing does not reveal whether an account exists; the error is the same for both cases.
 - **Email verification.** A random 32-byte token, valid 24 hours, mailed as a link. Password-reset tokens are random,

@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { StaffSecondStep } from '@/components/auth/StaffSecondStep';
 import { homeFor } from '@/lib/utils';
 import { landingAfterLogin } from '@/lib/auth-redirect';
 import { useRouter } from 'next/navigation';
@@ -39,6 +40,8 @@ export default function LoginPage() {
   const [step, setStep] = useState<'input' | 'verify'>('input');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  // A staff account's password was right and its second step is next (SEC-3).
+  const [staffStep, setStaffStep] = useState<{ mode: 'code' | 'setup'; challengeToken: string } | null>(null);
 
   const handleGoogleSuccess = async (accessToken: string) => {
     setLoading(true);
@@ -132,6 +135,11 @@ export default function LoginPage() {
 
     try {
       const response = await authService.loginWithEmail(phoneOrEmail, password);
+      const step = response.data as typeof response.data & { challengeToken?: string; twoFactorSetupRequired?: boolean };
+      if (step.challengeToken) {
+        setStaffStep({ mode: step.twoFactorSetupRequired ? 'setup' : 'code', challengeToken: step.challengeToken });
+        return;
+      }
       apiClient.setTokens(response.data.tokens.access_token, response.data.tokens.refresh_token);
       setUser(response.data.user);
       
@@ -167,6 +175,29 @@ export default function LoginPage() {
   const inputClass = 'nuray-input';
   const inputStyle: React.CSSProperties = {};
   const labelClass = 'text-xs font-black uppercase tracking-wider text-slate-500 block mb-2';
+
+  if (staffStep) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50 px-4 py-12">
+        <div className="max-w-md w-full bg-white rounded-xl shadow-lg p-8">
+          <StaffSecondStep
+            mode={staffStep.mode}
+            challengeToken={staffStep.challengeToken}
+            onDone={(result) => {
+              apiClient.setTokens(result.tokens.access_token, result.tokens.refresh_token);
+              setUser(result.user);
+              router.push(landingAfterLogin(homeFor(result.user.userType || result.user.user_type)));
+            }}
+            onRestart={(message) => {
+              setStaffStep(null);
+              setPassword('');
+              setError(message);
+            }}
+          />
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen py-10 px-4 bg-gradient-to-br from-slate-50 via-orange-50/20 to-slate-100 flex flex-col items-center justify-center">
