@@ -2,11 +2,22 @@
  * Staff two-step sign-in (SEC-3) and the order fingerprint (MONEY-7), as the outside sees them. The test server runs
  * with STAFF_2FA_REQUIRED unset (not production), so set-up is voluntary here; once on, the second step is always asked.
  */
-import { type Actor, call, login, makeKitchen, makeProduct, makeUser, ok, PASSWORD, prisma, unique } from './lib';
+import { type Actor, call, login, makeKitchen, makeProduct, makeUser, ok, PASSWORD, prisma, sleep, unique } from './lib';
 import { base32Decode, hotp, stepAt } from '../../src/utils/totp';
+import type { Prisma } from '@prisma/client';
 
 const codeAt = (secret: string, offsetSteps = 0) => hotp(base32Decode(secret), stepAt(Date.now()) + offsetSteps);
 const said = (r: { status: number; code: unknown }) => `${r.status} ${r.code}`;
+/** Audit rows are written in the background: count them once they have had a moment to land. */
+async function auditRows(where: Prisma.AuditLogWhereInput, atLeast = 1): Promise<number> {
+  let n = 0;
+  for (let i = 0; i < 15; i++) {
+    n = await prisma.auditLog.count({ where });
+    if (n >= atLeast) break;
+    await sleep(200);
+  }
+  return n;
+}
 const signIn = (email: string, password = PASSWORD) => call(null, 'POST', '/auth/login', { phoneOrEmail: email, otpCodeOrPassword: password, loginMethod: 'email' });
 
 /** The database allows one super admin: reuse the one an earlier run made (it has the shared password). */
@@ -45,7 +56,7 @@ export default async function staffTwoFactor() {
   const backupCodes: string[] = confirmed.body.data?.backupCodes ?? [];
   ok('the right code turns it on and gives ten backup codes, once', confirmed.status === 200 && backupCodes.length === 10, said(confirmed));
   ok('set-up again is refused while it is on (409)', (await staff.as('POST', '/auth/2fa/setup', {})).code === 'TWO_FACTOR_ALREADY_ON');
-  ok('turning it on leaves a trail', (await prisma.auditLog.count({ where: { userId: staff.id, action: 'auth:2FA_ENABLED' } })) === 1);
+  ok('turning it on leaves a trail', (await auditRows({ userId: staff.id, action: 'auth:2FA_ENABLED' })) === 1);
 
   // 2. now the password alone is not enough
   const first = await signIn(staff.email);
@@ -67,20 +78,36 @@ export default async function staffTwoFactor() {
   const backupAgain = await call(null, 'POST', '/auth/2fa/verify', { challengeToken: (await signIn(staff.email)).body.data?.challengeToken, code: backupCodes[0] });
   ok('the same backup code does not work again', backupAgain.status === 400 && backupAgain.code === 'INVALID_TWO_FACTOR_CODE', said(backupAgain));
 
+  // 3b. the same code sent by two sign-ins at once lets exactly one through (an app code, then a backup code)
+  const racePair = async (code: string) => {
+    const [a, b] = await Promise.all([signIn(staff.email), signIn(staff.email)]);
+    return Promise.all([
+      call(null, 'POST', '/auth/2fa/verify', { challengeToken: a.body.data?.challengeToken, code }),
+      call(null, 'POST', '/auth/2fa/verify', { challengeToken: b.body.data?.challengeToken, code }),
+    ]);
+  };
+  // (the codes for now and the next step are spent: forget that, so this race is on a fresh code)
+  await prisma.staffTwoFactor.update({ where: { userId: staff.id }, data: { lastUsedStep: null } });
+  const appRace = await racePair(codeAt(secret));
+  ok('an app code sent by two sign-ins at once lets exactly one through', appRace.filter((r) => r.status === 200).length === 1, appRace.map(said).join(' | '));
+  const backupRace = await racePair(backupCodes[2]);
+  ok('a backup code sent by two sign-ins at once lets exactly one through', backupRace.filter((r) => r.status === 200).length === 1, backupRace.map(said).join(' | '));
+
   // 4. wrong codes lock the second step for a while
   const lockChallenge = (await signIn(staff.email)).body.data?.challengeToken;
   const tries = [];
   for (let i = 0; i < 5; i++) tries.push((await call(null, 'POST', '/auth/2fa/verify', { challengeToken: lockChallenge, code: '123456' })).code);
   const locked = await call(null, 'POST', '/auth/2fa/verify', { challengeToken: lockChallenge, code: backupCodes[1] });
   ok('after five wrong codes even a right one waits (429 TWO_FACTOR_LOCKED)', locked.status === 429 && locked.code === 'TWO_FACTOR_LOCKED', `${tries.join(',')} then ${said(locked)}`);
-  ok('wrong codes leave a trail', (await prisma.auditLog.count({ where: { entityId: staff.id, action: 'auth:2FA_FAILED' } })) >= 5);
+  ok('wrong codes leave a trail', (await auditRows({ entityId: staff.id, action: 'auth:2FA_FAILED' }, 5)) >= 5);
 
   // 5. the super admin resets a staff member who lost the phone: they set it up again at their next sign-in
   const boss = await superAdmin();
   if (boss) {
     ok("an ordinary admin cannot reset another's two-step sign-in (403)", (await (await makeUser('admin')).as('DELETE', `/admin/staff/${staff.id}/two-factor`)).status === 403);
     const reset = await boss.as('DELETE', `/admin/staff/${staff.id}/two-factor`);
-    ok('the super admin resets it (200), and it leaves a trail', reset.status === 200 && reset.body.data?.reset === true && (await prisma.auditLog.count({ where: { entityId: staff.id, action: 'staff:2FA_RESET' } })) === 1, said(reset));
+    const resetRows = await auditRows({ entityId: staff.id, action: 'staff:2FA_RESET' });
+    ok('the super admin resets it (200), and it leaves a trail', reset.status === 200 && reset.body.data?.reset === true && resetRows === 1, `${said(reset)} rows=${resetRows}`);
     ok("and the staff member's sessions ended", (await call(done.body.data?.tokens?.access_token, 'GET', '/auth/me')).status === 401);
     const after = await signIn(staff.email);
     ok('the next sign-in needs no code (not required on this server) and the lock is gone', after.status === 200 && !!after.body.data?.tokens, said(after));
@@ -104,5 +131,11 @@ export default async function staffTwoFactor() {
   const changed = await buyer.as('POST', '/orders', { ...body, items: [{ productId: otherDish, quantity: 2 }] }, { headers: { 'Idempotency-Key': key } });
   ok('the same key with a different basket is refused (409 IDEMPOTENCY_KEY_REUSED), not answered with the old order', changed.status === 409 && changed.code === 'IDEMPOTENCY_KEY_REUSED', said(changed));
   ok('and no second order was made', (await prisma.order.count({ where: { customerId: buyer.id } })) === 1);
+  const raceKey = unique();
+  const sameAtOnce = await Promise.all([1, 2, 3].map(() => buyer.as('POST', '/orders', body, { headers: { 'Idempotency-Key': raceKey } })));
+  ok('the same checkout sent three times at once makes one order, and all three get it', new Set(sameAtOnce.map(orderIdOf)).size === 1 && sameAtOnce.every((r) => r.status < 300) && (await prisma.order.count({ where: { customerId: buyer.id } })) === 2, sameAtOnce.map(said).join(' | '));
+  const mixedKey = unique();
+  const mixedAtOnce = await Promise.all([body, { ...body, items: [{ productId: otherDish, quantity: 1 }] }].map((b) => buyer.as('POST', '/orders', b, { headers: { 'Idempotency-Key': mixedKey } })));
+  ok('two different baskets with one key at once: one order, the other 409 IDEMPOTENCY_KEY_REUSED', mixedAtOnce.filter((r) => r.status === 201).length === 1 && mixedAtOnce.filter((r) => r.code === 'IDEMPOTENCY_KEY_REUSED').length === 1 && (await prisma.order.count({ where: { customerId: buyer.id } })) === 3, mixedAtOnce.map(said).join(' | '));
   ok('the fingerprint is not shown to a rider or kitchen, and the customer has it only as an internal field at most', !JSON.stringify((await kitchen.owner.as('GET', `/seller/orders/${orderIdOf(placed)}`)).body).includes('idempotencyFingerprint'));
 }

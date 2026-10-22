@@ -38,4 +38,25 @@ describe('when staff are asked for the second step (SEC-3)', () => {
     db.staffTwoFactor.findUnique = jest.fn(async () => ({ enabledAt: null }));
     expect(await secondStepFor({ id: 'u2' })).toBeNull();
   });
+
+  it('a challenge token stops working when its time is up: 5 minutes for the code, 15 for set-up', async () => {
+    jest.useFakeTimers({ now: new Date('2026-10-22T10:00:00Z') });
+    try {
+      db.staffTwoFactor = { findUnique: jest.fn(async () => ({ enabledAt: new Date() })) };
+      const code: any = await secondStepFor({ id: 'u3' });
+      db.staffTwoFactor.findUnique = jest.fn(async () => null);
+      process.env.STAFF_2FA_REQUIRED = 'true';
+      const setup: any = await secondStepFor({ id: 'u3' });
+      jest.setSystemTime(new Date('2026-10-22T10:04:50Z'));
+      expect(verifyChallenge(code.challengeToken, 'mfa').userId).toBe('u3');
+      jest.setSystemTime(new Date('2026-10-22T10:05:10Z'));
+      expect(() => verifyChallenge(code.challengeToken, 'mfa')).toThrow();
+      expect(verifyChallenge(setup.challengeToken, 'mfa-setup').userId).toBe('u3');
+      jest.setSystemTime(new Date('2026-10-22T10:15:10Z'));
+      expect(() => verifyChallenge(setup.challengeToken, 'mfa-setup')).toThrow();
+    } finally {
+      jest.useRealTimers();
+    }
+  });
 });
+
