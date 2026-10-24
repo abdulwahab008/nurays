@@ -40,7 +40,7 @@ function formatClock(iso: string): string {
  * GET /products/:id as it may arrive: stock as one number or per channel, images with `imageUrl`, and seller fields
  * that older rows spell in snake_case. The page reads it into a ProductDetail.
  */
-type RawProduct = Omit<ProductDetail, 'images' | 'stock' | 'seller' | 'variants'> & {
+export type RawProduct = Omit<ProductDetail, 'images' | 'stock' | 'seller' | 'variants'> & {
   stock?: { hub?: number; direct?: number };
   stockQuantity?: number;
   stockType?: string;
@@ -122,7 +122,58 @@ interface ProductDetail {
   isSameCommunity?: boolean;
 }
 
-export default function ProductDetailPage() {
+/** A dish as the page shows it, from the API's answer (also the server's copy the page starts from). */
+function normalizeProduct(data: RawProduct, sellerFallback: string): ProductDetail {
+  // Ensure stock shape (API may return stockQuantity only or stock: { hub, direct })
+  const stockHub = data.stock?.hub ?? data.stockQuantity ?? 0;
+  const stockDirect = data.stock?.direct ?? data.stockQuantity ?? 0;
+  // Ensure seller shape so rating/toFixed and businessName never throw
+  const seller = data.seller
+    ? {
+        id: data.seller.id ?? '',
+        businessName: data.seller.businessName ?? data.seller.business_name ?? sellerFallback,
+        rating: Number(data.seller.rating ?? data.seller.ratingAverage ?? 0),
+        isVerified: Boolean(data.seller.isVerified ?? data.seller.is_verified),
+        mealCategories: Array.isArray(data.seller.mealCategories) ? data.seller.mealCategories : [],
+        businessType: data.seller.businessType,
+        preOrderOnly: Boolean(data.seller.preOrderOnly),
+        isAcceptingOrders: Boolean(data.seller.isAcceptingOrders),
+        acceptingOrdersReason: data.seller.acceptingOrdersReason ?? null,
+        availability: data.seller.availability,
+      }
+    : { id: '', businessName: sellerFallback, rating: 0, isVerified: false, mealCategories: [], preOrderOnly: false, isAcceptingOrders: false, acceptingOrdersReason: null, availability: undefined };
+  // Normalize images: API may return imageUrl, frontend uses url
+  const images = Array.isArray(data.images)
+    ? data.images.map((img: { url?: string; imageUrl?: string; isPrimary?: boolean }) => ({
+        url: img.url ?? img.imageUrl ?? '',
+        isPrimary: Boolean(img.isPrimary),
+      }))
+    : [];
+
+  const variants = Array.isArray(data.variants) ? data.variants : [];
+
+  return {
+    ...data,
+    images,
+    stock: { hub: Number(stockHub), direct: Number(stockDirect) },
+    seller,
+    variants,
+  };
+}
+
+/** Where the dish is bought from at first: from the kitchen when only it has stock, or when the dish says so. */
+function initialStockType(data: RawProduct, dish: ProductDetail): 'direct' | 'hub' {
+  if (dish.stock.hub === 0 && dish.stock.direct > 0) return 'direct';
+  return data.stockType === 'direct' ? 'direct' : 'hub';
+}
+
+const defaultVariantId = (dish: ProductDetail) => (dish.variants.find((v) => v.isDefault) ?? dish.variants[0])?.id ?? null;
+
+/**
+ * `initial` is the server's copy of the dish (the same public read the page's link preview uses): with it the page is
+ * rendered with the dish on the server, and the browser then refreshes it for the signed-in customer and their address.
+ */
+export default function ProductDetailPage({ initial }: { initial?: RawProduct }) {
   const params = useParams();
   const router = useRouter();
   const { isAuthenticated } = useAuthStore(useShallow((s) => ({ isAuthenticated: s.isAuthenticated })));
@@ -130,18 +181,19 @@ export default function ProductDetailPage() {
   const t = useT(browseMessages);
   const tc = useT(commonMessages);
   const { addItem } = useCartStore(useShallow((s) => ({ addItem: s.addItem })));
-  const [product, setProduct] = useState<ProductDetail | null>(null);
+  const [first] = useState(() => (initial ? normalizeProduct(initial, t('seller')) : null));
+  const [product, setProduct] = useState<ProductDetail | null>(first);
   const [catalogPromotions, setCatalogPromotions] = useState<CatalogPromotion[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(!first);
   // Why the dish could not be read when it was not a 404: a dish that could not be read is not a dish that does not exist.
   const [loadError, setLoadError] = useState<unknown>(null);
   const [quantity, setQuantity] = useState(1);
-  const [stockType, setStockType] = useState<'direct' | 'hub'>('hub');
+  const [stockType, setStockType] = useState<'direct' | 'hub'>(() => (initial && first ? initialStockType(initial, first) : 'hub'));
   const [selectedHub, setSelectedHub] = useState<string>('');
   const [selectedImage, setSelectedImage] = useState(0);
   const [addToCartLoading, setAddToCartLoading] = useState(false);
   const [justAddedToCart, setJustAddedToCart] = useState(false);
-  const [selectedVariantId, setSelectedVariantId] = useState<string | null>(null);
+  const [selectedVariantId, setSelectedVariantId] = useState<string | null>(() => (first ? defaultVariantId(first) : null));
   const [isFavorite, setIsFavorite] = useState(false);
   const [cartConflict, setCartConflict] = useState<CartConflictInfo | null>(null);
   const [specialInstructions, setSpecialInstructions] = useState('');
@@ -153,7 +205,8 @@ export default function ProductDetailPage() {
   // fetch flashed the full-page spinner, reset the customer's chosen variant and stock
   // type, and — if the responses arrived out of order — let the less precise one win.
   const loadSeqRef = useRef(0);
-  const loadedProductRef = useRef<string | null>(null);
+  // The server's copy counts as loaded: the first browser read refreshes it without the spinner or resetting choices.
+  const loadedProductRef = useRef<string | null>(first ? (params.id as string) : null);
   const appliedSeqRef = useRef(0);
 
   const loadProduct = async (customerLat?: number, customerLng?: number) => {
@@ -172,55 +225,13 @@ export default function ProductDetailPage() {
       appliedSeqRef.current = seq;
       loadedProductRef.current = requestedId;
       setLoadError(null);
-      // Ensure stock shape (API may return stockQuantity only or stock: { hub, direct })
-      const stockHub = data.stock?.hub ?? data.stockQuantity ?? 0;
-      const stockDirect = data.stock?.direct ?? data.stockQuantity ?? 0;
-      // Ensure seller shape so rating/toFixed and businessName never throw
-      const seller = data.seller
-        ? {
-            id: data.seller.id ?? '',
-            businessName: data.seller.businessName ?? data.seller.business_name ?? t('seller'),
-            rating: Number(data.seller.rating ?? data.seller.ratingAverage ?? 0),
-            isVerified: Boolean(data.seller.isVerified ?? data.seller.is_verified),
-            mealCategories: Array.isArray(data.seller.mealCategories) ? data.seller.mealCategories : [],
-            businessType: data.seller.businessType,
-            preOrderOnly: Boolean(data.seller.preOrderOnly),
-            isAcceptingOrders: Boolean(data.seller.isAcceptingOrders),
-            acceptingOrdersReason: data.seller.acceptingOrdersReason ?? null,
-            availability: data.seller.availability,
-          }
-        : { id: '', businessName: t('seller'), rating: 0, isVerified: false, mealCategories: [], preOrderOnly: false, isAcceptingOrders: false, acceptingOrdersReason: null, availability: undefined };
-      // Normalize images: API may return imageUrl, frontend uses url
-      const images = Array.isArray(data.images)
-        ? data.images.map((img: { url?: string; imageUrl?: string; isPrimary?: boolean }) => ({
-            url: img.url ?? img.imageUrl ?? '',
-            isPrimary: Boolean(img.isPrimary),
-          }))
-        : [];
-
-      const variants = Array.isArray(data.variants) ? data.variants : [];
-
-      setProduct({
-        ...data,
-        images,
-        stock: { hub: Number(stockHub), direct: Number(stockDirect) },
-        seller,
-        variants,
-      });
+      const next = normalizeProduct(data, t('seller'));
+      setProduct(next);
       // Initial choices only on the first load of this product; a refresh keeps what the
       // customer already picked.
-      if (!isRefresh) {
-        if (Number(stockHub) === 0 && Number(stockDirect) > 0) {
-          setStockType('direct');
-        } else if (data.stockType === 'direct') {
-          setStockType('direct');
-        }
-      }
-      const defaultVariant = variants.find((v: { isDefault?: boolean }) => v.isDefault) ?? variants[0];
+      if (!isRefresh) setStockType(initialStockType(data, next));
       setSelectedVariantId((current) =>
-        isRefresh && current && variants.some((v: { id: string }) => v.id === current)
-          ? current
-          : defaultVariant?.id ?? null
+        isRefresh && current && next.variants.some((v) => v.id === current) ? current : defaultVariantId(next)
       );
       // Fetch catalog promotions for this product (same as listing – stacked 30% + 5% etc.)
       try {
@@ -236,9 +247,9 @@ export default function ProductDetailPage() {
         setCatalogPromotions([]);
       }
 
-      if (seller.id && isAuthenticated) {
+      if (next.seller.id && isAuthenticated) {
         try {
-          const isFav = await favoriteService.checkFavorite(seller.id);
+          const isFav = await favoriteService.checkFavorite(next.seller.id);
           setIsFavorite(isFav);
         } catch {
           setIsFavorite(false);

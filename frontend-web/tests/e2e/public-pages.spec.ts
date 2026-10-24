@@ -57,6 +57,28 @@ test.describe('the legal pages', () => {
   }
 });
 
+test.describe('dish and kitchen pages', () => {
+  // FE-10: the server renders them with their content, so the first paint and a search engine that runs no scripts see it.
+  test('show the dish and the kitchen without JavaScript', async ({ browser, request }) => {
+    const api = (process.env.API_BASE ?? 'http://localhost:3001/api/v1').replace(/\/$/, '');
+    const list = await request.get(`${api}/products?limit=1`);
+    test.skip(!list.ok(), 'the API is not running');
+    const body = await list.json();
+    const dish = (body.data?.products ?? body.data ?? [])[0] as { id: string; name: string; seller?: { id?: string; businessName?: string } } | undefined;
+    test.skip(!dish?.seller?.id, 'no dish on sale');
+
+    const context = await browser.newContext({ javaScriptEnabled: false });
+    const page = await context.newPage();
+    await page.goto(`/products/${dish!.id}`);
+    await expect(page.locator('h1')).toContainText(dish!.name);
+    await expect(page.getByText('Loading product...')).toHaveCount(0);
+    await page.goto(`/kitchens/${dish!.seller!.id}`);
+    await expect(page.locator('h1')).toContainText(dish!.seller!.businessName!);
+    await expect(page.getByText(dish!.name).first()).toBeVisible();
+    await context.close();
+  });
+});
+
 test.describe('the files that tie the website to the store apps', () => {
   const full = {
     ANDROID_APP_PACKAGE: 'pk.nuray.app',
