@@ -68,21 +68,6 @@ export default function SellerAnalyticsPage() {
     y: number;
   } | null>(null);
 
-  useEffect(() => {
-    if (!isAuthenticated) {
-      router.push(loginUrlHere());
-      return;
-    }
-
-    if (user?.userType !== 'seller' && user?.user_type !== 'seller') {
-      router.push('/dashboard');
-      showToast('Access denied. Seller privileges required.', 'error');
-      return;
-    }
-
-    loadAnalytics(selectedPeriod);
-  }, [isAuthenticated, user, router, selectedPeriod]);
-
   const loadAnalytics = async (period: PeriodType) => {
     try {
       setLoading(true);
@@ -100,6 +85,21 @@ export default function SellerAnalyticsPage() {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    if (!isAuthenticated) {
+      router.push(loginUrlHere());
+      return;
+    }
+
+    if (user?.userType !== 'seller' && user?.user_type !== 'seller') {
+      router.push('/dashboard');
+      showToast('Access denied. Seller privileges required.', 'error');
+      return;
+    }
+
+    loadAnalytics(selectedPeriod);
+  }, [isAuthenticated, user, router, selectedPeriod]);
 
   // Compute calculated metrics
   const totalRevenue = analytics?.revenue?.total ?? 0;

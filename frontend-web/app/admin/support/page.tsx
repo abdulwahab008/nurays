@@ -69,19 +69,6 @@ export default function AdminSupportPage() {
   const [search, setSearch] = useState('');
   const [searchApplied, setSearchApplied] = useState('');
 
-  useEffect(() => {
-    if (!isAuthenticated) {
-      router.push('/admin/login');
-      return;
-    }
-    if (user?.user_type !== 'admin' && user?.userType !== 'admin') {
-      router.push('/products');
-      showToast('Access denied. Admin privileges required.', 'error');
-      return;
-    }
-    loadTickets();
-  }, [isAuthenticated, user, router, filter, priority, searchApplied]);
-
   const loadTickets = async () => {
     try {
       setLoading(true);
@@ -96,6 +83,19 @@ export default function AdminSupportPage() {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    if (!isAuthenticated) {
+      router.push('/admin/login');
+      return;
+    }
+    if (user?.user_type !== 'admin' && user?.userType !== 'admin') {
+      router.push('/products');
+      showToast('Access denied. Admin privileges required.', 'error');
+      return;
+    }
+    loadTickets();
+  }, [isAuthenticated, user, router, filter, priority, searchApplied]);
 
   const openTicket = async (id: string) => {
     try {

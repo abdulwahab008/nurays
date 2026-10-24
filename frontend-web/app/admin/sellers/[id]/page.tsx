@@ -58,19 +58,6 @@ export default function AdminSellerDetailPage() {
   const [actionLoading, setActionLoading] = useState(false);
   const [rejecting, setRejecting] = useState(false);
 
-  useEffect(() => {
-    if (!isAuthenticated) {
-      router.push('/admin/login');
-      return;
-    }
-    if (user?.user_type !== 'admin' && user?.userType !== 'admin') {
-      router.push('/products');
-      showToast('Access denied. Admin privileges required.', 'error');
-      return;
-    }
-    if (id) loadSeller();
-  }, [isAuthenticated, user, id, router]);
-
   const loadSeller = async () => {
     try {
       setLoading(true);
@@ -89,6 +76,19 @@ export default function AdminSellerDetailPage() {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    if (!isAuthenticated) {
+      router.push('/admin/login');
+      return;
+    }
+    if (user?.user_type !== 'admin' && user?.userType !== 'admin') {
+      router.push('/products');
+      showToast('Access denied. Admin privileges required.', 'error');
+      return;
+    }
+    if (id) loadSeller();
+  }, [isAuthenticated, user, id, router]);
 
   const handleApprove = async () => {
     try {

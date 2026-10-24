@@ -38,21 +38,6 @@ export default function AdminProductsPage() {
   const [busyId, setBusyId] = useState<string | null>(null);
   const [filter, setFilter] = useState<string>('all');
 
-  useEffect(() => {
-    if (!isAuthenticated) {
-      router.push('/admin/login');
-      return;
-    }
-
-    if (user?.user_type !== 'admin' && user?.userType !== 'admin') {
-      router.push('/products');
-      showToast('Access denied. Admin privileges required.', 'error');
-      return;
-    }
-
-    loadProducts();
-  }, [isAuthenticated, user, filter, router]);
-
   const loadProducts = async () => {
     try {
       setLoading(true);
@@ -70,6 +55,21 @@ export default function AdminProductsPage() {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    if (!isAuthenticated) {
+      router.push('/admin/login');
+      return;
+    }
+
+    if (user?.user_type !== 'admin' && user?.userType !== 'admin') {
+      router.push('/products');
+      showToast('Access denied. Admin privileges required.', 'error');
+      return;
+    }
+
+    loadProducts();
+  }, [isAuthenticated, user, filter, router]);
 
   const handleModerate = async (productId: string, action: 'approve' | 'reject', reason?: string) => {
     try {

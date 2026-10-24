@@ -60,16 +60,6 @@ export function CategoryRequestModal({
     parentCategoryId: '',
   });
 
-  // Load categories when modal opens
-  useEffect(() => {
-    if (isOpen) {
-      loadCategories();
-      if (preselectedProductType) {
-        setProductType(preselectedProductType);
-      }
-    }
-  }, [isOpen, preselectedProductType]);
-
   const loadCategories = async () => {
     setLoadingCategories(true);
     setCategoriesError(null);
@@ -85,6 +75,16 @@ export function CategoryRequestModal({
       setLoadingCategories(false);
     }
   };
+
+  // Load categories when modal opens
+  useEffect(() => {
+    if (isOpen) {
+      loadCategories();
+      if (preselectedProductType) {
+        setProductType(preselectedProductType);
+      }
+    }
+  }, [isOpen, preselectedProductType]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

@@ -35,21 +35,6 @@ export default function AdminAllSellersPage() {
   const [loadError, setLoadError] = useState<unknown>(null);
   const [filter, setFilter] = useState<string>('all');
 
-  useEffect(() => {
-    if (!isAuthenticated) {
-      router.push('/admin/login');
-      return;
-    }
-
-    if (user?.user_type !== 'admin' && user?.userType !== 'admin') {
-      router.push('/products');
-      showToast('Access denied. Admin privileges required.', 'error');
-      return;
-    }
-
-    loadSellers();
-  }, [isAuthenticated, user, filter, router]);
-
   const loadSellers = async () => {
     try {
       setLoading(true);
@@ -78,6 +63,21 @@ export default function AdminAllSellersPage() {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    if (!isAuthenticated) {
+      router.push('/admin/login');
+      return;
+    }
+
+    if (user?.user_type !== 'admin' && user?.userType !== 'admin') {
+      router.push('/products');
+      showToast('Access denied. Admin privileges required.', 'error');
+      return;
+    }
+
+    loadSellers();
+  }, [isAuthenticated, user, filter, router]);
 
   const getStatusColor = (status: string) => {
     const statusMap: Record<string, string> = {

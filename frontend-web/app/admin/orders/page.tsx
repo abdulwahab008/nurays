@@ -55,21 +55,6 @@ function AdminOrdersContent() {
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
 
-  useEffect(() => {
-    if (!isAuthenticated) {
-      router.push('/admin/login');
-      return;
-    }
-
-    if (user?.user_type !== 'admin' && user?.userType !== 'admin') {
-      router.push('/products');
-      showToast('Access denied. Admin privileges required.', 'error');
-      return;
-    }
-
-    loadOrders();
-  }, [isAuthenticated, user, filter, paymentFilter, page, router]);
-
   // The menu's "Transfers to check" link changes the query string on the same page.
   useEffect(() => {
     setPaymentFilter(searchParams.get('paymentStatus') ?? '');
@@ -94,6 +79,21 @@ function AdminOrdersContent() {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    if (!isAuthenticated) {
+      router.push('/admin/login');
+      return;
+    }
+
+    if (user?.user_type !== 'admin' && user?.userType !== 'admin') {
+      router.push('/products');
+      showToast('Access denied. Admin privileges required.', 'error');
+      return;
+    }
+
+    loadOrders();
+  }, [isAuthenticated, user, filter, paymentFilter, page, router]);
 
   const getStatusColor = (status: string) => {
     const statusMap: Record<string, string> = {

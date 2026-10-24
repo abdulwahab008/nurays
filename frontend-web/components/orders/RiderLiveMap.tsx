@@ -38,7 +38,9 @@ export default function RiderLiveMap({ rider, destination, height = '260px' }: P
   const riderMarkerRef = useRef<any>(null);
   const userMovedRef = useRef(false);
   const riderRef = useRef(rider);
-  riderRef.current = rider;
+  useEffect(() => {
+    riderRef.current = rider;
+  }, [rider]);
 
   useEffect(() => {
     let cancelled = false;

@@ -116,21 +116,6 @@ export default function SellerSettingsPage() {
     advanceBookingMaxDays: null as number | null,
   });
 
-  useEffect(() => {
-    if (!isAuthenticated) {
-      router.push(loginUrlHere());
-      return;
-    }
-
-    if (user?.userType !== 'seller' && user?.user_type !== 'seller') {
-      router.push('/dashboard');
-      showToast('Seller access required.', 'error');
-      return;
-    }
-
-    loadSettings();
-  }, [isAuthenticated, user, router]);
-
   const loadSettings = async () => {
     try {
       setLoading(true);
@@ -210,6 +195,21 @@ export default function SellerSettingsPage() {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    if (!isAuthenticated) {
+      router.push(loginUrlHere());
+      return;
+    }
+
+    if (user?.userType !== 'seller' && user?.user_type !== 'seller') {
+      router.push('/dashboard');
+      showToast('Seller access required.', 'error');
+      return;
+    }
+
+    loadSettings();
+  }, [isAuthenticated, user, router]);
 
   /** A number typed again no longer shows the message about what was typed before. */
   const clearPayoutError = (field: string) =>

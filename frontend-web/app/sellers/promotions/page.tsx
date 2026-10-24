@@ -594,21 +594,6 @@ export default function SellerPromotionsPage() {
   const [editingPromo, setEditingPromo] = useState<Promotion | null>(null);
   const [searchFilter, setSearchFilter] = useState('');
 
-  useEffect(() => {
-    if (!isAuthenticated) {
-      router.push(loginUrlHere());
-      return;
-    }
-
-    if (user?.userType !== 'seller' && user?.user_type !== 'seller') {
-      router.push('/dashboard');
-      showToast('Access denied. Seller privileges required.', 'error');
-      return;
-    }
-
-    loadPromotions();
-  }, [isAuthenticated, user, router]);
-
   const loadPromotions = async () => {
     try {
       setLoading(true);
@@ -656,6 +641,21 @@ export default function SellerPromotionsPage() {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    if (!isAuthenticated) {
+      router.push(loginUrlHere());
+      return;
+    }
+
+    if (user?.userType !== 'seller' && user?.user_type !== 'seller') {
+      router.push('/dashboard');
+      showToast('Access denied. Seller privileges required.', 'error');
+      return;
+    }
+
+    loadPromotions();
+  }, [isAuthenticated, user, router]);
 
   const handleCreatePromotion = async (data: PromotionPayload) => {
     const discountType = data.type === 'fixed' || data.type === 'percentage' ? data.type : 'percentage';

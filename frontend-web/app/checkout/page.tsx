@@ -89,24 +89,6 @@ export default function CheckoutPage() {
 
   const sidebarItems = CUSTOMER_SIDEBAR_ITEMS;
 
-  useEffect(() => {
-    const token = apiClient.getAccessToken();
-    if (!token && !isAuthenticated) {
-      router.push(loginUrlHere());
-      return;
-    }
-    loadData();
-    // Online payment and the wallet are offered only when they can actually be used.
-    paymentService
-      .getMethods()
-      .then((methods) => setOnlineAvailable(!!methods.find((m) => m.id === 'safepay')?.isAvailable))
-      .catch(() => setOnlineAvailable(false));
-    paymentService
-      .getWallet()
-      .then((w) => setWalletBalance(w.isLocked ? 0 : w.balance))
-      .catch(() => setWalletBalance(null));
-  }, [isAuthenticated]);
-
   // What delivery to the chosen address costs is the server's to say (the kitchen, the address and the order's amount
   // decide it); nothing is assumed while it is not known.
   const { estimate: deliveryEstimate, pending: estimatePending } = useDeliveryEstimate({
@@ -200,6 +182,24 @@ export default function CheckoutPage() {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    const token = apiClient.getAccessToken();
+    if (!token && !isAuthenticated) {
+      router.push(loginUrlHere());
+      return;
+    }
+    loadData();
+    // Online payment and the wallet are offered only when they can actually be used.
+    paymentService
+      .getMethods()
+      .then((methods) => setOnlineAvailable(!!methods.find((m) => m.id === 'safepay')?.isAvailable))
+      .catch(() => setOnlineAvailable(false));
+    paymentService
+      .getWallet()
+      .then((w) => setWalletBalance(w.isLocked ? 0 : w.balance))
+      .catch(() => setWalletBalance(null));
+  }, [isAuthenticated]);
 
   const handleCopy = (text: string, field: CopyField) => {
     if (typeof navigator !== 'undefined' && navigator.clipboard) {
