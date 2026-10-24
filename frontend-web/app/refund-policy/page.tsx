@@ -1,6 +1,5 @@
 import type { Metadata } from 'next';
-import Link from 'next/link';
-import { LegalPage, LEGAL } from '@/components/legal/LegalPage';
+import { LegalPage, ContactUs } from '@/components/legal/LegalPage';
 
 export const metadata: Metadata = {
   title: 'Refund & Cancellation Policy | Nuray',
@@ -9,7 +8,7 @@ export const metadata: Metadata = {
 
 export default function RefundPolicyPage() {
   return (
-    <LegalPage title="Refund & Cancellation Policy" updated="2 October 2026">
+    <LegalPage title="Refund & Cancellation Policy" updated="24 October 2026">
       <h2>Cancelling an order</h2>
       <ul>
         <li><strong>You</strong> can cancel an order yourself until the kitchen accepts it, from the order page.</li>
@@ -29,13 +28,14 @@ export default function RefundPolicyPage() {
       <h2>How refunds are paid</h2>
       <ul>
         <li><strong>Paid with Nuray Wallet</strong>: refunded to your wallet straight away.</li>
-        <li><strong>Paid online or by transfer</strong>: refunded by transfer to you, normally within 3 to 7 working days. If you reported a transfer that the kitchen never received, we check before refunding.</li>
+        <li><strong>Paid online or by transfer</strong>: refunded by transfer to you, normally within 3 to 7 working days. Card refunds go back through our payment provider, and your bank may take longer to show them. If you reported a transfer that the kitchen never received, we check before refunding.</li>
       </ul>
 
-      <h2>Questions</h2>
+      <h2>Complaints</h2>
       <p>
-        Use the <Link href="/support" className="underline">support page</Link> or write to {LEGAL.email}. Rights you have under
-        consumer protection law are not affected by this policy.
+        Tell us through <ContactUs />, with your order number and photos if something arrived wrong. If we cannot settle it,
+        you can still use your rights under the consumer protection law of your province, including going to the consumer
+        court. This policy does not take those rights away.
       </p>
     </LegalPage>
   );
