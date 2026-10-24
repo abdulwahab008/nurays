@@ -24,18 +24,6 @@ function VerifyEmailContent() {
   
   const isSeller = user?.userType === 'seller' || user?.user_type === 'seller';
 
-  useEffect(() => {
-    const token = searchParams.get('token');
-    if (!token) {
-      setStatus('error');
-      setError(t('noToken'));
-      setLoading(false);
-      return;
-    }
-
-    verifyEmail(token);
-  }, [searchParams]);
-
   const verifyEmail = async (token: string) => {
     try {
       await authService.verifyEmail(token);
@@ -64,6 +52,18 @@ function VerifyEmailContent() {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    const token = searchParams.get('token');
+    if (!token) {
+      setStatus('error');
+      setError(t('noToken'));
+      setLoading(false);
+      return;
+    }
+
+    verifyEmail(token);
+  }, [searchParams]);
 
   const handleResendEmail = async () => {
     if (!isAuthenticated) {

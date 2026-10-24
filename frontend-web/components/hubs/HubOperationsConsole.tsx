@@ -50,21 +50,33 @@ export default function HubOperationsConsole({ mode }: { mode: 'admin' | 'manage
   const [opsError, setOpsError] = useState<unknown>(null);
   const [refreshing, setRefreshing] = useState(false);
 
-  // Auth Guard
-  useEffect(() => {
-    if (!isAuthenticated) {
-      router.push(loginUrlHere(isManagerMode ? '/login' : '/admin/login'));
-      return;
+  const loadHubOperations = async (hubId: string) => {
+    try {
+      setRefreshing(true);
+      setOpsError(null);
+      const [statsRes, batchesRes, tempRes] = await Promise.all([
+        apiClient.get(`/hubs/${hubId}/stats`),
+        apiClient.get(`/hubs/${hubId}/batches`),
+        apiClient.get(`/hubs/${hubId}/temperature-logs`),
+      ]);
+
+      if (statsRes.data.success) {
+        setHubStats(statsRes.data.data);
+      }
+      if (batchesRes.data.success) {
+        setBatches(batchesRes.data.data.batches || []);
+        setBatchSummary(batchesRes.data.data.summary || null);
+      }
+      if (tempRes.data.success) {
+        setTempLogs(tempRes.data.data.logs || []);
+        setTempStats(tempRes.data.data.statistics || null);
+      }
+    } catch (err: unknown) {
+      setOpsError(err);
+    } finally {
+      setRefreshing(false);
     }
-    const role = user?.userType ?? user?.user_type;
-    if (role !== (isManagerMode ? 'hub_manager' : 'admin')) {
-      router.push('/products');
-      showToast(isManagerMode ? 'This page is for hub managers.' : 'Access denied. Administrator privileges required.', 'error');
-      return;
-    }
-    initializeData();
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- load once per signed-in user
-  }, [isAuthenticated, user, router]);
+  };
 
   const initializeData = async () => {
     try {
@@ -99,33 +111,21 @@ export default function HubOperationsConsole({ mode }: { mode: 'admin' | 'manage
     }
   };
 
-  const loadHubOperations = async (hubId: string) => {
-    try {
-      setRefreshing(true);
-      setOpsError(null);
-      const [statsRes, batchesRes, tempRes] = await Promise.all([
-        apiClient.get(`/hubs/${hubId}/stats`),
-        apiClient.get(`/hubs/${hubId}/batches`),
-        apiClient.get(`/hubs/${hubId}/temperature-logs`),
-      ]);
-
-      if (statsRes.data.success) {
-        setHubStats(statsRes.data.data);
-      }
-      if (batchesRes.data.success) {
-        setBatches(batchesRes.data.data.batches || []);
-        setBatchSummary(batchesRes.data.data.summary || null);
-      }
-      if (tempRes.data.success) {
-        setTempLogs(tempRes.data.data.logs || []);
-        setTempStats(tempRes.data.data.statistics || null);
-      }
-    } catch (err: unknown) {
-      setOpsError(err);
-    } finally {
-      setRefreshing(false);
+  // Auth Guard
+  useEffect(() => {
+    if (!isAuthenticated) {
+      router.push(loginUrlHere(isManagerMode ? '/login' : '/admin/login'));
+      return;
     }
-  };
+    const role = user?.userType ?? user?.user_type;
+    if (role !== (isManagerMode ? 'hub_manager' : 'admin')) {
+      router.push('/products');
+      showToast(isManagerMode ? 'This page is for hub managers.' : 'Access denied. Administrator privileges required.', 'error');
+      return;
+    }
+    initializeData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- load once per signed-in user
+  }, [isAuthenticated, user, router]);
 
   const handleHubChange = (hubId: string) => {
     setSelectedHubId(hubId);

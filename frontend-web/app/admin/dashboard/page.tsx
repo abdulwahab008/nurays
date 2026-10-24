@@ -60,29 +60,6 @@ export default function AdminDashboardPage() {
   const [sellersError, setSellersError] = useState<unknown>(null);
   const [statsError, setStatsError] = useState<unknown>(null);
 
-
-  useEffect(() => {
-    if (!isAuthenticated) {
-      router.push('/admin/login');
-      return;
-    }
-
-    // Check if user is admin
-    if (user?.user_type !== 'admin' && user?.userType !== 'admin') {
-      router.push('/products');
-      showToast('Access denied. Admin privileges required.', 'error');
-      return;
-    }
-
-    // The dashboard shows platform figures; staff without that access start at their approvals.
-    if (user?.permissions && !user.permissions.includes('read.finance')) {
-      router.replace('/admin/approvals');
-      return;
-    }
-
-    loadDashboardData();
-  }, [isAuthenticated, user, router]);
-
   const loadDashboardData = async () => {
     setLoading(true);
     // Three independent reads: one failing must not hide the other two, and none may be shown as "nothing" when it failed.
@@ -113,6 +90,28 @@ export default function AdminDashboardPage() {
     }
     setLoading(false);
   };
+
+  useEffect(() => {
+    if (!isAuthenticated) {
+      router.push('/admin/login');
+      return;
+    }
+
+    // Check if user is admin
+    if (user?.user_type !== 'admin' && user?.userType !== 'admin') {
+      router.push('/products');
+      showToast('Access denied. Admin privileges required.', 'error');
+      return;
+    }
+
+    // The dashboard shows platform figures; staff without that access start at their approvals.
+    if (user?.permissions && !user.permissions.includes('read.finance')) {
+      router.replace('/admin/approvals');
+      return;
+    }
+
+    loadDashboardData();
+  }, [isAuthenticated, user, router]);
 
   const handleApproveReject = async (sellerId: string, action: 'approve' | 'reject', reason?: string) => {
     try {

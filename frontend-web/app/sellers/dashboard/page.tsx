@@ -161,31 +161,6 @@ function SellerDashboardContent() {
 
   const sidebarItems = SELLER_SIDEBAR_ITEMS;
 
-  useEffect(() => {
-    if (!isAuthenticated) {
-      router.push(loginUrlHere());
-      return;
-    }
-
-    // Check if user is a seller or admin
-    const role = user?.userType || user?.user_type;
-    if (role !== 'seller' && role !== 'admin') {
-      router.push('/dashboard');
-      showToast(t('accessDenied'), 'error');
-      return;
-    }
-
-    // Check if onboarding modal should be shown
-    const onboardingParam = searchParams.get('onboarding');
-    if (onboardingParam === 'true') {
-      setShowOnboarding(true);
-      // Clean URL
-      window.history.replaceState({}, '', '/sellers/dashboard');
-    }
-
-    loadDashboard();
-  }, [isAuthenticated, user, router, searchParams]);
-
   const loadDashboard = async () => {
     try {
       setLoading(true);
@@ -211,6 +186,31 @@ function SellerDashboardContent() {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    if (!isAuthenticated) {
+      router.push(loginUrlHere());
+      return;
+    }
+
+    // Check if user is a seller or admin
+    const role = user?.userType || user?.user_type;
+    if (role !== 'seller' && role !== 'admin') {
+      router.push('/dashboard');
+      showToast(t('accessDenied'), 'error');
+      return;
+    }
+
+    // Check if onboarding modal should be shown
+    const onboardingParam = searchParams.get('onboarding');
+    if (onboardingParam === 'true') {
+      setShowOnboarding(true);
+      // Clean URL
+      window.history.replaceState({}, '', '/sellers/dashboard');
+    }
+
+    loadDashboard();
+  }, [isAuthenticated, user, router, searchParams]);
 
   const [togglingLive, setTogglingLive] = useState(false);
 

@@ -247,7 +247,6 @@ function mapOrderToDetail(raw: OrderDetails): OrderDetail {
   };
 }
 
-
 export default function OrderDetailPage() {
   return (
     <Suspense
@@ -295,15 +294,32 @@ function OrderDetailContent() {
   };
 
   useEffect(() => {
-    const token = apiClient.getAccessToken();
-    if (!token && !isAuthenticated) {
-      router.push(loginUrlHere());
-      return;
+    if (searchParams.get('placed') === '1') setShowPlacedBanner(true);
+  }, [searchParams]);
+
+  // Latest-wins loading: a slow response for an older request must never overwrite a
+  // newer one (polling, a cancel reload and the first load can overlap).
+  const loadSeqRef = useRef(0);
+  const inFlightRef = useRef(false);
+
+  const loadOrder = async (silent = false) => {
+    const seq = ++loadSeqRef.current;
+    inFlightRef.current = true;
+    if (!silent) setLoading(true);
+    try {
+      const response = await orderService.getOrderDetails(params.id as string);
+      if (seq !== loadSeqRef.current) return; // a newer load superseded this one
+      setOrder(mapOrderToDetail(response.data));
+      setLoadError(null);
+    } catch (error) {
+      console.error('Failed to load order:', error);
+      // An order already on the screen stays (a refresh that fails changes nothing); with none, only a 404 says it does not exist.
+      if (seq === loadSeqRef.current) setLoadError((error as { response?: { status?: number } })?.response?.status === 404 ? null : error);
+    } finally {
+      if (seq === loadSeqRef.current) inFlightRef.current = false;
+      if (!silent) setLoading(false);
     }
-    if (params.id) {
-      loadOrder();
-    }
-  }, [params.id, isAuthenticated]);
+  };
 
   // Real-time updates. Depends on the socket-bound functions, so it re-runs (and
   // re-joins the order room) whenever the socket is replaced — e.g. after a token
@@ -343,32 +359,15 @@ function OrderDetailContent() {
   }, [params.id, joinOrderRoom, onOrderStatusUpdate, onDeliveryTracking, t]);
 
   useEffect(() => {
-    if (searchParams.get('placed') === '1') setShowPlacedBanner(true);
-  }, [searchParams]);
-
-  // Latest-wins loading: a slow response for an older request must never overwrite a
-  // newer one (polling, a cancel reload and the first load can overlap).
-  const loadSeqRef = useRef(0);
-  const inFlightRef = useRef(false);
-
-  const loadOrder = async (silent = false) => {
-    const seq = ++loadSeqRef.current;
-    inFlightRef.current = true;
-    if (!silent) setLoading(true);
-    try {
-      const response = await orderService.getOrderDetails(params.id as string);
-      if (seq !== loadSeqRef.current) return; // a newer load superseded this one
-      setOrder(mapOrderToDetail(response.data));
-      setLoadError(null);
-    } catch (error) {
-      console.error('Failed to load order:', error);
-      // An order already on the screen stays (a refresh that fails changes nothing); with none, only a 404 says it does not exist.
-      if (seq === loadSeqRef.current) setLoadError((error as { response?: { status?: number } })?.response?.status === 404 ? null : error);
-    } finally {
-      if (seq === loadSeqRef.current) inFlightRef.current = false;
-      if (!silent) setLoading(false);
+    const token = apiClient.getAccessToken();
+    if (!token && !isAuthenticated) {
+      router.push(loginUrlHere());
+      return;
     }
-  };
+    if (params.id) {
+      loadOrder();
+    }
+  }, [params.id, isAuthenticated]);
 
   // Reload when anything about this order changes (status, an item, payment, a rider taking
   // the job), on reconnect, and when the tab comes back; a slow timer covers changes that

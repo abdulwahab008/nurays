@@ -69,10 +69,6 @@ export default function ManualPaymentCard({
   const uploadToken = useRef(0);
   const { showToast } = useToast();
 
-  useEffect(() => {
-    loadDetails();
-  }, [orderId]);
-
   const loadDetails = async () => {
     setLoading(true);
     setLoadError(null);
@@ -92,6 +88,10 @@ export default function ManualPaymentCard({
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    loadDetails();
+  }, [orderId]);
 
   const copyToClipboard = (text: string, key: string) => {
     navigator.clipboard.writeText(text);

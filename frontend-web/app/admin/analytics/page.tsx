@@ -41,21 +41,6 @@ export default function AdminAnalyticsPage() {
   // Why the figures could not be read: never shown as zeros, which would read as "no business at all".
   const [loadError, setLoadError] = useState<unknown>(null);
 
-  useEffect(() => {
-    if (!isAuthenticated) {
-      router.push('/admin/login');
-      return;
-    }
-
-    if (user?.user_type !== 'admin' && user?.userType !== 'admin') {
-      router.push('/products');
-      showToast('Access denied. Admin privileges required.', 'error');
-      return;
-    }
-
-    loadAnalytics();
-  }, [isAuthenticated, user, router]);
-
   const loadAnalytics = async () => {
     try {
       setLoading(true);
@@ -73,6 +58,21 @@ export default function AdminAnalyticsPage() {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    if (!isAuthenticated) {
+      router.push('/admin/login');
+      return;
+    }
+
+    if (user?.user_type !== 'admin' && user?.userType !== 'admin') {
+      router.push('/products');
+      showToast('Access denied. Admin privileges required.', 'error');
+      return;
+    }
+
+    loadAnalytics();
+  }, [isAuthenticated, user, router]);
 
   if (!isAuthenticated || (user?.user_type !== 'admin' && user?.userType !== 'admin')) {
     return null;

@@ -107,16 +107,6 @@ export default function ProfilePage() {
 
   const sidebarItems = CUSTOMER_SIDEBAR_ITEMS;
 
-  useEffect(() => {
-    if (leaving.current) return;
-    const token = apiClient.getAccessToken();
-    if (!token && !isAuthenticated) {
-      router.push(loginUrlHere());
-      return;
-    }
-    loadProfile();
-  }, [isAuthenticated]);
-
   const hasRealPhone = !!profile?.phone && !profile.phone.startsWith('+999');
 
   const sendPhoneCode = async () => {
@@ -187,6 +177,16 @@ export default function ProfilePage() {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    if (leaving.current) return;
+    const token = apiClient.getAccessToken();
+    if (!token && !isAuthenticated) {
+      router.push(loginUrlHere());
+      return;
+    }
+    loadProfile();
+  }, [isAuthenticated]);
 
   const handleUpdateProfile = async (e: React.FormEvent) => {
     e.preventDefault();

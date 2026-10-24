@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useMemo } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import {
@@ -149,10 +149,6 @@ export default function CartPage() {
     }
   }, [storeItems]);
 
-  useEffect(() => {
-    loadCart();
-  }, [isAuthenticated]);
-
   const loadCart = async () => {
     setLoading(true);
     setLoadError(null);
@@ -252,6 +248,10 @@ export default function CartPage() {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    loadCart();
+  }, [isAuthenticated]);
 
   const handleUpdateQuantity = async (itemId: string, quantity: number) => {
     if (quantity <= 0) {
@@ -370,15 +370,13 @@ export default function CartPage() {
   // Calculations
   const hasItems = cart && cart.items && cart.items.length > 0;
 
-  const discountedSubtotal = useMemo(() => {
-    if (!hasItems) return 0;
-    return cart.items.reduce((sum, item) => {
-      const basePrice = item.variant?.price ?? item.product.price;
-      const promos = promotionsByProductId[item.product.id] || [];
-      const unitPrice = promos.length > 0 ? getStackedDiscountedPrice(basePrice, promos) : basePrice;
-      return sum + unitPrice * item.quantity;
-    }, 0);
-  }, [cart, promotionsByProductId, hasItems]);
+  // A sum over the few lines of one cart: cheap enough to work out on every render.
+  const discountedSubtotal = (cart?.items ?? []).reduce((sum, item) => {
+    const basePrice = item.variant?.price ?? item.product.price;
+    const promos = promotionsByProductId[item.product.id] || [];
+    const unitPrice = promos.length > 0 ? getStackedDiscountedPrice(basePrice, promos) : basePrice;
+    return sum + unitPrice * item.quantity;
+  }, 0);
 
   const promotionSavings = hasItems ? Math.max(0, cart.summary.subtotal - discountedSubtotal) : 0;
 

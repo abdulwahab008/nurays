@@ -85,6 +85,38 @@ export default function AdminOrderDetailPage() {
   const [confirmNote, setConfirmNote] = useState('');
   const [confirmingPayment, setConfirmingPayment] = useState(false);
 
+  const loadOrder = async () => {
+    try {
+      setLoading(true);
+      const response = await apiClient.get(`/admin/orders/${id}`);
+      if (response.data.success) {
+        setOrder(response.data.data);
+      } else {
+        setOrder(null);
+      }
+      setLoadError(null);
+    } catch (error) {
+      setOrder(null);
+      // Only a 404 says the order does not exist; anything else is a read that failed, and says so.
+      setLoadError(apiErrorStatus(error) === 404 ? null : error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (!isAuthenticated) {
+      router.push('/admin/login');
+      return;
+    }
+    if (user?.user_type !== 'admin' && user?.userType !== 'admin') {
+      router.push('/products');
+      showToast('Access denied. Admin privileges required.', 'error');
+      return;
+    }
+    if (id) loadOrder();
+  }, [isAuthenticated, user, id, router]);
+
   const updateStatus = async () => {
     if (!order || !selectedStatus || selectedStatus === order.orderStatus) return;
     try {
@@ -204,38 +236,6 @@ export default function AdminOrderDetailPage() {
       showToast(apiErrorMessage(error, 'Failed to process refund'), 'error');
     } finally {
       setUpdating(false);
-    }
-  };
-
-  useEffect(() => {
-    if (!isAuthenticated) {
-      router.push('/admin/login');
-      return;
-    }
-    if (user?.user_type !== 'admin' && user?.userType !== 'admin') {
-      router.push('/products');
-      showToast('Access denied. Admin privileges required.', 'error');
-      return;
-    }
-    if (id) loadOrder();
-  }, [isAuthenticated, user, id, router]);
-
-  const loadOrder = async () => {
-    try {
-      setLoading(true);
-      const response = await apiClient.get(`/admin/orders/${id}`);
-      if (response.data.success) {
-        setOrder(response.data.data);
-      } else {
-        setOrder(null);
-      }
-      setLoadError(null);
-    } catch (error) {
-      setOrder(null);
-      // Only a 404 says the order does not exist; anything else is a read that failed, and says so.
-      setLoadError(apiErrorStatus(error) === 404 ? null : error);
-    } finally {
-      setLoading(false);
     }
   };
 

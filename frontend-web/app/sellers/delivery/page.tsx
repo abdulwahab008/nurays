@@ -98,21 +98,6 @@ export default function SellerDeliveryPage() {
   const [allowCrossCommunity, setAllowCrossCommunity] = useState(true);
   const [homeCommunityName, setHomeCommunityName] = useState<string | null>(null);
 
-  useEffect(() => {
-    if (!isAuthenticated) {
-      router.push(loginUrlHere());
-      return;
-    }
-
-    if (user?.userType !== 'seller' && user?.user_type !== 'seller') {
-      router.push('/dashboard');
-      showToast('Seller access required.', 'error');
-      return;
-    }
-
-    loadDeliverySettings();
-  }, [isAuthenticated, user, router]);
-
   const loadDeliverySettings = async (silent = false) => {
     try {
       if (!silent) setLoading(true);
@@ -170,6 +155,21 @@ export default function SellerDeliveryPage() {
       if (!silent) setLoading(false);
     }
   };
+
+  useEffect(() => {
+    if (!isAuthenticated) {
+      router.push(loginUrlHere());
+      return;
+    }
+
+    if (user?.userType !== 'seller' && user?.user_type !== 'seller') {
+      router.push('/dashboard');
+      showToast('Seller access required.', 'error');
+      return;
+    }
+
+    loadDeliverySettings();
+  }, [isAuthenticated, user, router]);
 
   const handleAddArea = () => {
     const trimmed = newAreaInput.trim();

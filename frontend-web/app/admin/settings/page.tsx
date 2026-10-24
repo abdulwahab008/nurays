@@ -23,21 +23,6 @@ export default function AdminSettingsPage() {
   const [loadError, setLoadError] = useState<unknown>(null);
   const [problem, setProblem] = useState<string | null>(null);
 
-  useEffect(() => {
-    if (!isAuthenticated) {
-      router.push('/admin/login');
-      return;
-    }
-
-    if (user?.user_type !== 'admin' && user?.userType !== 'admin') {
-      router.push('/products');
-      showToast('Access denied. Admin privileges required.', 'error');
-      return;
-    }
-
-    loadSettings();
-  }, [isAuthenticated, user, router]);
-
   const loadSettings = async () => {
     try {
       setLoadError(null);
@@ -59,6 +44,21 @@ export default function AdminSettingsPage() {
       setLoadError(error);
     }
   };
+
+  useEffect(() => {
+    if (!isAuthenticated) {
+      router.push('/admin/login');
+      return;
+    }
+
+    if (user?.user_type !== 'admin' && user?.userType !== 'admin') {
+      router.push('/products');
+      showToast('Access denied. Admin privileges required.', 'error');
+      return;
+    }
+
+    loadSettings();
+  }, [isAuthenticated, user, router]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
