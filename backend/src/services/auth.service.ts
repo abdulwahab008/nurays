@@ -3,6 +3,7 @@ import prisma from '../config/database';
 import socketManager from '../config/socket';
 import { tokenTtlSeconds } from '../utils/jwt';
 import { startSession, rotateSession, endAllSessions } from './session.service';
+import { secondStepFor } from './staff-two-factor.service';
 import { formatPhoneNumber, isValidPhoneNumber, realPhoneOrNull } from '../utils/otp';
 import { AppError } from '../middleware/errorHandler';
 import bcrypt from 'bcrypt';
@@ -414,36 +415,13 @@ export class AuthService {
         // You can make this stricter by throwing an error if needed
       }
 
-      // Generate tokens
-      const { accessToken, refreshToken } = await startSession(user);
+      // Staff: the second step comes before any session (SEC-3, staff-two-factor.service.ts).
+      if (isAdmin) {
+        const step = await secondStepFor(user);
+        if (step) return step;
+      }
 
-      // Update last login
-      await prisma.user.update({
-        where: { id: user.id },
-        data: { lastLoginAt: new Date() },
-      });
-      if (isAdmin) await recordAudit({ userId: user.id, action: 'auth:LOGIN', entityType: 'user', entityId: user.id, responseStatus: 200 });
-
-      return {
-        user: {
-          id: user.id,
-          phone: user.phone,
-          email: user.email,
-          userType: user.userType,
-          staffRole: user.staffRole,
-          permissions: permissionsFor(user.staffRole),
-          status: user.status,
-          profile: user.profile,
-          emailVerified: user.emailVerified,
-          phoneVerified: user.phoneVerified,
-        },
-        tokens: {
-          access_token: accessToken,
-          refresh_token: refreshToken,
-          expires_in: tokenTtlSeconds(accessToken),
-        },
-        requiresEmailVerification: false, // Email verification disabled for now
-      };
+      return this.finishStaffOrEmailLogin(user);
     } else {
       // OTP login (existing phone-based login)
       if (!otpCodeOrPassword) {
@@ -763,6 +741,36 @@ export class AuthService {
     // Each refresh token works once; see session.service.ts for what happens when one comes back.
     const { accessToken, refreshToken: newRefreshToken } = await rotateSession(refreshToken);
     return { accessToken, refreshToken: newRefreshToken };
+  }
+
+  /**
+   * The end of an email sign-in, and of a staff member's second step: a session, the last sign-in time, and (for
+   * staff) the audit row.
+   */
+  async finishStaffOrEmailLogin(user: { id: string; phone: string; email: string | null; userType: string; staffRole: string | null; status: string; emailVerified: boolean; phoneVerified: boolean; profile?: unknown }) {
+    const { accessToken, refreshToken } = await startSession(user);
+    await prisma.user.update({ where: { id: user.id }, data: { lastLoginAt: new Date() } });
+    if (user.userType === 'admin') await recordAudit({ userId: user.id, action: 'auth:LOGIN', entityType: 'user', entityId: user.id, responseStatus: 200 });
+    return {
+      user: {
+        id: user.id,
+        phone: user.phone,
+        email: user.email,
+        userType: user.userType,
+        staffRole: user.staffRole,
+        permissions: permissionsFor(user.staffRole),
+        status: user.status,
+        profile: user.profile,
+        emailVerified: user.emailVerified,
+        phoneVerified: user.phoneVerified,
+      },
+      tokens: {
+        access_token: accessToken,
+        refresh_token: refreshToken,
+        expires_in: tokenTtlSeconds(accessToken),
+      },
+      requiresEmailVerification: false, // Email verification disabled for now
+    };
   }
 
   /**

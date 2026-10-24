@@ -12,6 +12,7 @@
     "prisma:migrate": "prisma migrate dev",
     "db:migrate": "prisma migrate deploy",
     "db:baseline": "ts-node scripts/db-baseline.ts",
+    "staff:reset-2fa": "ts-node scripts/reset-staff-2fa.ts",
     "db:check": "prisma migrate diff --from-url \"$DATABASE_URL\" --to-schema-datamodel prisma/schema.prisma --exit-code",
     "prisma:studio": "prisma studio",
     "seed:e2e": "ts-node prisma/seed-e2e.ts",

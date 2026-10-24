@@ -7,6 +7,6 @@
     "declarationMap": false,
     "sourceMap": false
   },
-  "include": ["src/**/*", "scripts/api-checks/**/*", "scripts/load/**/*"],
+  "include": ["src/**/*", "scripts/api-checks/**/*", "scripts/load/**/*", "scripts/reset-staff-2fa.ts"],
   "exclude": ["node_modules", "dist", "tests"]
 }

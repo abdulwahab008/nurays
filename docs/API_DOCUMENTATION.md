@@ -39,6 +39,26 @@ Sign-up (`EMAIL_EXISTS`, `PHONE_EXISTS`), the code request (`USER_EXISTS`) and l
 when an account exists. Those answers are counted per network address: after five in an hour the address gets 429
 `RATE_LIMITED` for the rest of the hour.
 
+### Staff two-step sign-in
+
+`POST /auth/login` for a staff account with the right password answers `{ twoFactorRequired: true, challengeToken }`
+(enter the code) or `{ twoFactorSetupRequired: true, challengeToken }` (set the app up first), with no tokens. The
+challenge token is no API credential and lasts 5 minutes (15 for set-up).
+
+| Endpoint | Body | Result |
+|---|---|---|
+| `POST /auth/2fa/verify` | `challengeToken`, `code` (six digits, or a backup code) | the sign-in (`user`, `tokens`), with `backupCodesLeft` and `usedBackupCode`; 400 `INVALID_TWO_FACTOR_CODE`, 429 `TWO_FACTOR_LOCKED`, 401 `CHALLENGE_EXPIRED` |
+| `POST /auth/2fa/setup` | `challengeToken` (set-up required), or signed in as staff | `{ secret, otpauthUrl }`; 409 `TWO_FACTOR_ALREADY_ON` |
+| `POST /auth/2fa/setup/confirm` | `code`, and `challengeToken` when it is the sign-in's step | `{ backupCodes }` (shown once), plus the sign-in when by challenge |
+| `GET /auth/2fa` | signed in as staff | `{ enabled, enabledAt, backupCodesLeft, required }` |
+| `POST /auth/2fa/backup-codes` | `code` from the app | new `{ backupCodes }`; the old ones stop working |
+| `DELETE /admin/staff/:id/two-factor` | super admin | resets that staff member's two-step sign-in and ends their sessions |
+
+### Order keys
+
+The same `Idempotency-Key` with the same request returns the order already placed; with a different request it answers
+409 `IDEMPOTENCY_KEY_REUSED` (refresh and place the order again).
+
 ### Delivery area
 
 `POST /orders` with home delivery to a pin outside every community answers 400 `ADDRESS_OUTSIDE_SERVICE_AREA`

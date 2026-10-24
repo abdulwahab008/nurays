@@ -18,6 +18,8 @@ interface Member {
   role: 'super_admin' | 'admin' | 'support';
   status: string;
   lastLoginAt: string | null;
+  /** Two-step sign-in is on (an authenticator app). */
+  twoFactorEnabled?: boolean;
 }
 
 const ROLE_LABEL = { super_admin: 'Super admin', admin: 'Admin', support: 'Customer support' } as const;
@@ -79,6 +81,11 @@ export default function AdminStaffPage() {
     const password = (await askDialog({ title: 'New password', message: `New password for ${m.email} (at least 12 characters). Give it to them yourself; they are signed out now.`, label: 'New password', type: 'password', minLength: 12, confirmText: 'Set password' }));
     if (!password) return;
     run(m.id, () => apiClient.post(`/admin/staff/${m.id}/password`, { password }), 'Password changed');
+  };
+
+  const resetTwoFactor = async (m: Member) => {
+    if (!(await confirmDialog({ title: 'Reset two-step sign-in?', message: `Only if ${m.email} lost both the phone and the backup codes. They are signed out and set their authenticator app up again at their next sign-in.`, confirmText: 'Reset' }))) return;
+    run(m.id, () => apiClient.delete(`/admin/staff/${m.id}/two-factor`), 'Two-step sign-in reset');
   };
 
   const remove = async (m: Member) => {
@@ -143,6 +150,9 @@ export default function AdminStaffPage() {
                           {m.name ?? m.email}{' '}
                           <span className="ms-1 rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-700">{ROLE_LABEL[m.role]}</span>
                           {m.status !== 'active' && <span className="ms-1 rounded-full bg-red-100 px-2 py-0.5 text-xs font-medium text-red-700">{m.status}</span>}
+                          <span className={`ms-1 rounded-full px-2 py-0.5 text-xs font-medium ${m.twoFactorEnabled ? 'bg-green-100 text-green-800' : 'bg-amber-100 text-amber-900'}`} data-testid="staff-2fa">
+                            {m.twoFactorEnabled ? 'Two-step on' : 'Two-step not set up'}
+                          </span>
                         </p>
                         <p className="text-xs text-gray-500">{m.email} · {m.lastLoginAt ? `last sign-in ${formatDateTime(m.lastLoginAt)}` : 'never signed in'}</p>
                       </div>
@@ -164,6 +174,9 @@ export default function AdminStaffPage() {
                             {m.status === 'active' ? 'Suspend' : 'Reactivate'}
                           </Button>
                           <Button variant="outline" size="sm" disabled={busy === m.id} onClick={() => resetPassword(m)}>Reset password</Button>
+                          {m.twoFactorEnabled && (
+                            <Button variant="outline" size="sm" disabled={busy === m.id} onClick={() => resetTwoFactor(m)}>Reset two-step</Button>
+                          )}
                           <Button variant="outline" size="sm" disabled={busy === m.id} onClick={() => remove(m)}>Remove</Button>
                         </div>
                       )}

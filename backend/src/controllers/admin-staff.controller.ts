@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import { AppError } from '../middleware/errorHandler';
 import { getApprovals } from '../services/approvals.service';
+import { resetTwoFactor } from '../services/staff-two-factor.service';
 import { listStaff, createStaff, changeStaffRole, setStaffStatus, resetStaffPassword, removeStaff } from '../services/staff.service';
 
 const actor = (req: Request) => {
@@ -23,6 +24,10 @@ export const postStaffStatus = async (req: Request, res: Response) => {
 };
 export const postStaffPassword = async (req: Request, res: Response) => {
   res.status(200).json({ success: true, data: await resetStaffPassword(actor(req), req.params.id, req.body.password), message: 'Password changed' });
+};
+/** A staff member lost the phone and the backup codes: their two-step sign-in is reset, to set up again at the next sign-in. */
+export const deleteStaffTwoFactor = async (req: Request, res: Response) => {
+  res.status(200).json({ success: true, data: await resetTwoFactor(String(req.params.id), actor(req), req.ip), message: 'Two-step sign-in reset' });
 };
 export const deleteStaff = async (req: Request, res: Response) => {
   res.status(200).json({ success: true, data: await removeStaff(actor(req), req.params.id), message: 'Staff access removed' });

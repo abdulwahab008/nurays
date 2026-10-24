@@ -10,6 +10,7 @@ import { authService } from '@/lib/services/auth.service';
 import { useAuthStore } from '@/lib/store/auth-store';
 import { apiClient, apiErrorMessage } from '@/lib/api-client';
 import { useShallow } from 'zustand/react/shallow';
+import { StaffSecondStep, type StaffSignIn } from '@/components/auth/StaffSecondStep';
 
 export default function AdminLoginPage() {
   const router = useRouter();
@@ -21,6 +22,16 @@ export default function AdminLoginPage() {
     password: '',
   });
   const [error, setError] = useState('');
+  // The second step of a staff sign-in (SEC-3), when the right password asked for it.
+  const [second, setSecond] = useState<{ mode: 'code' | 'setup'; challengeToken: string } | null>(null);
+
+  const finish = (authData: StaffSignIn) => {
+    const user = authData.user;
+    apiClient.setTokens(authData.tokens.access_token, authData.tokens.refresh_token);
+    setUser(user);
+    showToast(authData.usedBackupCode ? `Signed in with a backup code (${authData.backupCodesLeft ?? 0} left)` : 'Login successful!', authData.usedBackupCode ? 'info' : 'success');
+    router.push(landingAfterLogin(user.permissions?.includes('read.finance') ? '/admin/dashboard' : '/admin/approvals'));
+  };
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
@@ -39,8 +50,13 @@ export default function AdminLoginPage() {
         formData.password
       );
 
-      // The sign-in answers { user, tokens } (authService returns the API's { success, data } envelope).
-      const authData = response.data;
+      // The sign-in answers { user, tokens } (authService returns the API's { success, data } envelope), or for a
+      // staff account the second step: { twoFactorRequired | twoFactorSetupRequired, challengeToken }.
+      const authData = response.data as typeof response.data & { challengeToken?: string; twoFactorSetupRequired?: boolean };
+      if (authData?.challengeToken) {
+        setSecond({ mode: authData.twoFactorSetupRequired ? 'setup' : 'code', challengeToken: authData.challengeToken });
+        return;
+      }
       const user = authData?.user;
 
       if (user) {
@@ -80,6 +96,18 @@ export default function AdminLoginPage() {
 
         {/* Login Form */}
         <div className="bg-white rounded-xl shadow-lg p-8">
+          {second ? (
+            <StaffSecondStep
+              mode={second.mode}
+              challengeToken={second.challengeToken}
+              onDone={finish}
+              onRestart={(message) => {
+                setSecond(null);
+                setFormData((prev) => ({ ...prev, password: '' }));
+                setError(message);
+              }}
+            />
+          ) : (
           <form onSubmit={handleSubmit} className="space-y-6">
             {error && (
               <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm">
@@ -125,6 +153,7 @@ export default function AdminLoginPage() {
               {loading ? 'Logging in...' : 'Login'}
             </Button>
           </form>
+          )}
 
           <div className="mt-6 text-center">
             <Link href="/login" className="text-sm text-gray-600 hover:text-green-600">

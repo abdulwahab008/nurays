@@ -85,7 +85,7 @@ import {
   assignHubManagerSchema,
 } from '../validators/admin.validator';
 import { adminReplySchema } from '../validators/support.validator';
-import { getStaff, postStaff, patchStaffRole, postStaffStatus, postStaffPassword, deleteStaff, getApprovalQueues } from '../controllers/admin-staff.controller';
+import { getStaff, postStaff, patchStaffRole, postStaffStatus, postStaffPassword, deleteStaffTwoFactor, deleteStaff, getApprovalQueues } from '../controllers/admin-staff.controller';
 import { getReviews, postHideReview, postKeepReview, postRestoreReview } from '../controllers/admin-reviews.controller';
 import { staffReviewsQuerySchema } from '../validators/review.validator';
 
@@ -104,6 +104,7 @@ router.post('/staff', validate(createStaffSchema), postStaff);
 router.patch('/staff/:id', validate(staffRoleSchema), patchStaffRole);
 router.post('/staff/:id/status', validate(accountStatusSchema), postStaffStatus);
 router.post('/staff/:id/password', validate(staffPasswordSchema), postStaffPassword);
+router.delete('/staff/:id/two-factor', deleteStaffTwoFactor);
 router.delete('/staff/:id', deleteStaff);
 
 // Reviews that were reported, and the ones staff hid. Support staff decide these too (support.handle).

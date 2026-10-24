@@ -3,7 +3,6 @@
 --   npx prisma migrate diff --from-empty --to-schema-datamodel prisma/schema.prisma --script > ../docs/DATABASE_SCHEMA.sql
 -- The migrations in backend/prisma/migrations are what actually build the database (they also add CHECK constraints
 -- and the pg_trgm extension, which this file leaves out).
-
 -- CreateSchema
 CREATE SCHEMA IF NOT EXISTS "public";
 
@@ -128,6 +127,7 @@ CREATE TABLE "sellers" (
     "jazzcash_account_title" TEXT,
     "easypaisa_number" TEXT,
     "easypaisa_account_title" TEXT,
+    "owes_since" TIMESTAMP(3),
     "low_stock_threshold" INTEGER NOT NULL DEFAULT 10,
     "enable_stock_alerts" BOOLEAN NOT NULL DEFAULT true,
     "free_delivery_areas" JSONB,
@@ -179,18 +179,6 @@ CREATE TABLE "seller_documents" (
     "uploaded_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
     CONSTRAINT "seller_documents_pkey" PRIMARY KEY ("id")
-);
-
--- CreateTable
-CREATE TABLE "seller_badges" (
-    "id" TEXT NOT NULL,
-    "seller_id" TEXT NOT NULL,
-    "badge_type" TEXT NOT NULL,
-    "badge_name" TEXT NOT NULL,
-    "badge_icon" TEXT,
-    "earned_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-
-    CONSTRAINT "seller_badges_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
@@ -443,6 +431,7 @@ CREATE TABLE "orders" (
     "handover_code" TEXT,
     "handover_attempts" INTEGER NOT NULL DEFAULT 0,
     "idempotency_key" TEXT,
+    "idempotency_fingerprint" CHAR(64),
     "delivery_address_id" TEXT,
     "delivery_address_snapshot" JSONB,
     "hub_id" TEXT,
@@ -845,35 +834,6 @@ CREATE TABLE "inventory_reservations" (
 );
 
 -- CreateTable
-CREATE TABLE "user_activity_logs" (
-    "id" TEXT NOT NULL,
-    "user_id" TEXT,
-    "activity_type" TEXT NOT NULL,
-    "entity_type" TEXT,
-    "entity_id" TEXT,
-    "metadata" JSONB,
-    "ip_address" TEXT,
-    "user_agent" TEXT,
-    "device_type" TEXT,
-    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-
-    CONSTRAINT "user_activity_logs_pkey" PRIMARY KEY ("id")
-);
-
--- CreateTable
-CREATE TABLE "search_queries" (
-    "id" TEXT NOT NULL,
-    "user_id" TEXT,
-    "query" TEXT NOT NULL,
-    "filters" JSONB,
-    "results_count" INTEGER,
-    "clicked_product_id" TEXT,
-    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-
-    CONSTRAINT "search_queries_pkey" PRIMARY KEY ("id")
-);
-
--- CreateTable
 CREATE TABLE "system_settings" (
     "id" TEXT NOT NULL,
     "key" TEXT NOT NULL,
@@ -1040,6 +1000,34 @@ CREATE TABLE "order_messages" (
     CONSTRAINT "order_messages_pkey" PRIMARY KEY ("id")
 );
 
+-- CreateTable
+CREATE TABLE "staff_two_factor" (
+    "user_id" TEXT NOT NULL,
+    "secret_sealed" TEXT NOT NULL,
+    "enabled_at" TIMESTAMP(3),
+    "last_used_step" INTEGER,
+    "backup_code_hashes" TEXT[] DEFAULT ARRAY[]::TEXT[],
+    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updated_at" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "staff_two_factor_pkey" PRIMARY KEY ("user_id")
+);
+
+-- CreateTable
+CREATE TABLE "refresh_tokens" (
+    "id" TEXT NOT NULL,
+    "user_id" TEXT NOT NULL,
+    "family_id" TEXT NOT NULL,
+    "user_agent" TEXT,
+    "ip_address" TEXT,
+    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "expires_at" TIMESTAMP(3) NOT NULL,
+    "used_at" TIMESTAMP(3),
+    "revoked_at" TIMESTAMP(3),
+
+    CONSTRAINT "refresh_tokens_pkey" PRIMARY KEY ("id")
+);
+
 -- CreateIndex
 CREATE UNIQUE INDEX "users_phone_key" ON "users"("phone");
 
@@ -1051,6 +1039,9 @@ CREATE UNIQUE INDEX "users_referral_code_key" ON "users"("referral_code");
 
 -- CreateIndex
 CREATE INDEX "users_primary_community_id_idx" ON "users"("primary_community_id");
+
+-- CreateIndex
+CREATE INDEX "users_user_type_created_at_idx" ON "users"("user_type", "created_at");
 
 -- CreateIndex
 CREATE UNIQUE INDEX "user_profiles_user_id_key" ON "user_profiles"("user_id");
@@ -1081,9 +1072,6 @@ CREATE INDEX "sellers_status_verification_status_idx" ON "sellers"("status", "ve
 
 -- CreateIndex
 CREATE INDEX "seller_documents_seller_id_idx" ON "seller_documents"("seller_id");
-
--- CreateIndex
-CREATE INDEX "seller_badges_seller_id_idx" ON "seller_badges"("seller_id");
 
 -- CreateIndex
 CREATE INDEX "stock_alerts_seller_id_idx" ON "stock_alerts"("seller_id");
@@ -1293,6 +1281,12 @@ CREATE UNIQUE INDEX "support_tickets_ticket_number_key" ON "support_tickets"("ti
 CREATE INDEX "support_tickets_user_id_idx" ON "support_tickets"("user_id");
 
 -- CreateIndex
+CREATE INDEX "support_tickets_status_created_at_idx" ON "support_tickets"("status", "created_at");
+
+-- CreateIndex
+CREATE INDEX "support_tickets_order_id_idx" ON "support_tickets"("order_id");
+
+-- CreateIndex
 CREATE INDEX "support_messages_ticket_id_idx" ON "support_messages"("ticket_id");
 
 -- CreateIndex
@@ -1311,12 +1305,6 @@ CREATE INDEX "inventory_reservations_product_id_idx" ON "inventory_reservations"
 CREATE INDEX "inventory_reservations_reservation_id_idx" ON "inventory_reservations"("reservation_id");
 
 -- CreateIndex
-CREATE INDEX "user_activity_logs_user_id_created_at_idx" ON "user_activity_logs"("user_id", "created_at");
-
--- CreateIndex
-CREATE INDEX "search_queries_user_id_idx" ON "search_queries"("user_id");
-
--- CreateIndex
 CREATE UNIQUE INDEX "system_settings_key_key" ON "system_settings"("key");
 
 -- CreateIndex
@@ -1324,6 +1312,12 @@ CREATE INDEX "audit_logs_user_id_created_at_idx" ON "audit_logs"("user_id", "cre
 
 -- CreateIndex
 CREATE INDEX "audit_logs_entity_type_entity_id_idx" ON "audit_logs"("entity_type", "entity_id");
+
+-- CreateIndex
+CREATE INDEX "audit_logs_created_at_idx" ON "audit_logs"("created_at");
+
+-- CreateIndex
+CREATE INDEX "audit_logs_entity_id_created_at_idx" ON "audit_logs"("entity_id", "created_at");
 
 -- CreateIndex
 CREATE INDEX "ledger_entries_order_id_idx" ON "ledger_entries"("order_id");
@@ -1376,6 +1370,15 @@ CREATE UNIQUE INDEX "favorite_sellers_user_id_seller_id_key" ON "favorite_seller
 -- CreateIndex
 CREATE INDEX "order_messages_order_id_created_at_idx" ON "order_messages"("order_id", "created_at");
 
+-- CreateIndex
+CREATE INDEX "refresh_tokens_family_id_idx" ON "refresh_tokens"("family_id");
+
+-- CreateIndex
+CREATE INDEX "refresh_tokens_user_id_created_at_idx" ON "refresh_tokens"("user_id", "created_at");
+
+-- CreateIndex
+CREATE INDEX "refresh_tokens_expires_at_idx" ON "refresh_tokens"("expires_at");
+
 -- AddForeignKey
 ALTER TABLE "users" ADD CONSTRAINT "users_primary_community_id_fkey" FOREIGN KEY ("primary_community_id") REFERENCES "communities"("id") ON DELETE SET NULL ON UPDATE CASCADE;
 
@@ -1399,9 +1402,6 @@ ALTER TABLE "sellers" ADD CONSTRAINT "sellers_community_id_fkey" FOREIGN KEY ("c
 
 -- AddForeignKey
 ALTER TABLE "seller_documents" ADD CONSTRAINT "seller_documents_seller_id_fkey" FOREIGN KEY ("seller_id") REFERENCES "sellers"("id") ON DELETE CASCADE ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "seller_badges" ADD CONSTRAINT "seller_badges_seller_id_fkey" FOREIGN KEY ("seller_id") REFERENCES "sellers"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "stock_alerts" ADD CONSTRAINT "stock_alerts_seller_id_fkey" FOREIGN KEY ("seller_id") REFERENCES "sellers"("id") ON DELETE CASCADE ON UPDATE CASCADE;
@@ -1578,15 +1578,6 @@ ALTER TABLE "cart_items" ADD CONSTRAINT "cart_items_hub_id_fkey" FOREIGN KEY ("h
 ALTER TABLE "inventory_reservations" ADD CONSTRAINT "inventory_reservations_product_id_fkey" FOREIGN KEY ("product_id") REFERENCES "products"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "user_activity_logs" ADD CONSTRAINT "user_activity_logs_user_id_fkey" FOREIGN KEY ("user_id") REFERENCES "users"("id") ON DELETE SET NULL ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "search_queries" ADD CONSTRAINT "search_queries_user_id_fkey" FOREIGN KEY ("user_id") REFERENCES "users"("id") ON DELETE SET NULL ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "search_queries" ADD CONSTRAINT "search_queries_clicked_product_id_fkey" FOREIGN KEY ("clicked_product_id") REFERENCES "products"("id") ON DELETE SET NULL ON UPDATE CASCADE;
-
--- AddForeignKey
 ALTER TABLE "audit_logs" ADD CONSTRAINT "audit_logs_user_id_fkey" FOREIGN KEY ("user_id") REFERENCES "users"("id") ON DELETE SET NULL ON UPDATE CASCADE;
 
 -- AddForeignKey
@@ -1624,4 +1615,10 @@ ALTER TABLE "order_messages" ADD CONSTRAINT "order_messages_order_id_fkey" FOREI
 
 -- AddForeignKey
 ALTER TABLE "order_messages" ADD CONSTRAINT "order_messages_sender_id_fkey" FOREIGN KEY ("sender_id") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "staff_two_factor" ADD CONSTRAINT "staff_two_factor_user_id_fkey" FOREIGN KEY ("user_id") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "refresh_tokens" ADD CONSTRAINT "refresh_tokens_user_id_fkey" FOREIGN KEY ("user_id") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 

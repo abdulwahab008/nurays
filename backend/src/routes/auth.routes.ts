@@ -12,6 +12,11 @@ import {
   logoutAll,
   getSessions,
   deleteSession,
+  verifyTwoFactor,
+  beginTwoFactorSetup,
+  confirmTwoFactorSetup,
+  getTwoFactorStatus,
+  renewBackupCodes,
   requestPhoneVerification,
   verifyPhone,
   forgotPassword,
@@ -32,7 +37,7 @@ import {
   changePasswordSchema,
   googleLoginSchema,
 } from '../validators/auth.validator';
-import { authenticate } from '../middleware/auth.middleware';
+import { authenticate, optionalAuthenticate } from '../middleware/auth.middleware';
 import {
   forgotIpLimiter,
   forgotTargetLimiter,
@@ -56,6 +61,11 @@ router.post('/verify-email', validate(verifyEmailSchema), verifyEmail);
 router.post('/forgot-password', forgotIpLimiter, forgotTargetLimiter, validate(forgotPasswordSchema), forgotPassword);
 router.post('/reset-password', loginLimiter, validate(resetPasswordSchema), resetPassword);
 router.post('/refresh', validate(refreshTokenSchema), refreshToken);
+// Staff two-step sign-in (SEC-3): the second step, and setting the authenticator app up (by the sign-in's challenge
+// token, or signed in).
+router.post('/2fa/verify', loginLimiter, verifyTwoFactor);
+router.post('/2fa/setup', loginLimiter, optionalAuthenticate, beginTwoFactorSetup);
+router.post('/2fa/setup/confirm', loginLimiter, optionalAuthenticate, confirmTwoFactorSetup);
 
 // Protected routes
 router.get('/me', authenticate, getCurrentUser);
@@ -63,6 +73,8 @@ router.post('/resend-verification', authenticate, resendVerificationLimiter, res
 router.post('/logout', authenticate, logout);
 router.post('/logout-all', authenticate, logoutAll);
 router.get('/sessions', authenticate, getSessions);
+router.get('/2fa', authenticate, getTwoFactorStatus);
+router.post('/2fa/backup-codes', authenticate, loginLimiter, renewBackupCodes);
 router.delete('/sessions/:id', authenticate, deleteSession);
 // Asks for the current password again; wrong ones are counted per account (services/reauth.service.ts).
 router.post('/change-password', authenticate, validate(changePasswordSchema), changePassword);
