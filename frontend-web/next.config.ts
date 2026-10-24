@@ -5,17 +5,17 @@ const BACKEND_URL = process.env.NEXT_PUBLIC_API_URL
   : 'http://localhost:3001';
 
 /**
- * A build that says the legal texts were reviewed (NEXT_PUBLIC_LEGAL_REVIEWED=true) must also carry the
- * company's details. Otherwise the Terms, Privacy and Refund pages would go live showing "[Company legal name]"
- * with their draft notice removed.
+ * A build that says the legal texts were reviewed (NEXT_PUBLIC_LEGAL_REVIEWED=true) must also carry a support
+ * e-mail, so the reviewed pages give a way to reach us besides the support page. The company name and address are
+ * optional: the pages leave them out when they are not set.
  */
 function assertLegalDetails() {
   if (process.env.NEXT_PUBLIC_LEGAL_REVIEWED !== 'true') return;
-  const missing = ['NEXT_PUBLIC_LEGAL_COMPANY_NAME', 'NEXT_PUBLIC_LEGAL_ADDRESS', 'NEXT_PUBLIC_SUPPORT_EMAIL'].filter((name) => !process.env[name]?.trim());
+  const missing = ['NEXT_PUBLIC_SUPPORT_EMAIL'].filter((name) => !process.env[name]?.trim());
   if (missing.length > 0) {
     throw new Error(
       `NEXT_PUBLIC_LEGAL_REVIEWED is true, but ${missing.join(', ')} ${missing.length === 1 ? 'is' : 'are'} not set: ` +
-        'the legal pages would show bracketed placeholders without their draft notice.'
+        'the reviewed legal pages would have no e-mail contact.'
     );
   }
 }

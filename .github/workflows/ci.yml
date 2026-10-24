@@ -181,6 +181,9 @@ jobs:
           # The E2E specs claim jobs from the open pool by hand; automatic assignment has its own checks.
           AUTO_ASSIGN_ENABLED: "false"
           WEEKLY_PAYOUTS_ENABLED: "false"
+          # No real mail: development otherwise sends through Ethereal, and a slow Ethereal kept the queue's
+          # workers busy long enough for a password-reset check to time out. The specs read tokens from the database.
+          EMAIL_SERVICE: console
         run: |
           npm run build
           node dist/index.js &

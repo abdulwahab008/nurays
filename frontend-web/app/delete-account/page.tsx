@@ -20,8 +20,14 @@ export default function DeleteAccountPage() {
         <li>Type <strong>DELETE</strong> to confirm, and enter your password if your account has one.</li>
       </ol>
       <p>
-        The account is closed immediately and you are signed out everywhere. If you cannot sign in, email{' '}
-        <a href={`mailto:${LEGAL.email}`} className="underline">{LEGAL.email}</a> from the address on the account, or use the{' '}
+        The account is closed immediately and you are signed out everywhere. If you cannot sign in,{' '}
+        {LEGAL.email ? (
+          <>
+            email <a href={`mailto:${LEGAL.email}`} className="underline">{LEGAL.email}</a> from the address on the account, or use the{' '}
+          </>
+        ) : (
+          <>use the </>
+        )}
         <Link href="/support" className="underline">support page</Link>, and we will close it for you.
       </p>
 

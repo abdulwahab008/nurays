@@ -1,23 +1,39 @@
 import Link from 'next/link';
 import type { ReactNode } from 'react';
 
+const setting = (value: string | undefined) => value?.trim() || null;
+
 /**
- * Company details for the legal pages. Set these at build time; until they are set
- * the pages show visible placeholders so nobody mistakes them for final text.
+ * Who runs Nuray, for the legal pages, set at build time. Each one is optional: a sole trader may have no company
+ * name or published address yet, and the pages then leave that detail out (never a bracketed placeholder). Without a
+ * support e-mail the pages point to the support page instead.
  */
 export const LEGAL = {
-  company: process.env.NEXT_PUBLIC_LEGAL_COMPANY_NAME || '[Company legal name]',
-  address: process.env.NEXT_PUBLIC_LEGAL_ADDRESS || '[Registered address]',
-  email: process.env.NEXT_PUBLIC_SUPPORT_EMAIL || '[support email]',
+  company: setting(process.env.NEXT_PUBLIC_LEGAL_COMPANY_NAME),
+  address: setting(process.env.NEXT_PUBLIC_LEGAL_ADDRESS),
+  email: setting(process.env.NEXT_PUBLIC_SUPPORT_EMAIL),
   reviewed: process.env.NEXT_PUBLIC_LEGAL_REVIEWED === 'true',
 };
 
-/** Whether a support e-mail address has been configured (until then the pages show a bracketed placeholder). */
-export const supportEmailIsSet = !LEGAL.email.startsWith('[');
+/** Whether a support e-mail address has been configured. */
+export const supportEmailIsSet = LEGAL.email != null;
+
+/** "Nuray", or "Nuray, run by <company>, <address>" when those are set. */
+export function Operator() {
+  if (!LEGAL.company) return <>Nuray</>;
+  return <>Nuray, run by {LEGAL.company}{LEGAL.address ? <> ({LEGAL.address})</> : null}</>;
+}
+
+/** How to reach us in a sentence: the support e-mail as a link and the support page, or the support page alone. */
+export function ContactUs() {
+  const page = <Link href="/support" className="underline">support page</Link>;
+  if (!LEGAL.email) return <>the {page}</>;
+  return <><a href={`mailto:${LEGAL.email}`} className="underline">{LEGAL.email}</a> or the {page}</>;
+}
 
 /**
  * The page frame for the public text pages. `legalText` is true for the terms, the privacy and refund policies and
- * the like, which carry the draft notice until a lawyer has reviewed them; the help page is not a legal text.
+ * the like, which carry a notice until a lawyer has reviewed them (NEXT_PUBLIC_LEGAL_REVIEWED); the help page is not a legal text.
  */
 export function LegalPage({ title, updated, children, legalText = true }: { title: string; updated: string; children: ReactNode; legalText?: boolean }) {
   return (
@@ -28,8 +44,8 @@ export function LegalPage({ title, updated, children, legalText = true }: { titl
         <p className="mt-1 text-sm text-slate-500">Last updated: {updated}</p>
         {legalText && !LEGAL.reviewed && (
           <p className="mt-4 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
-            Draft: this text describes how Nuray works today and must be reviewed by a qualified lawyer (and the
-            placeholders in brackets filled in) before launch.
+            This text describes how Nuray works today. It has not yet been reviewed by a lawyer; if anything is
+            unclear, contact us before you order.
           </p>
         )}
         <div className="mt-6 space-y-6 text-[15px] leading-7 text-slate-700 [&_h2]:text-lg [&_h2]:font-semibold [&_h2]:text-slate-900 [&_h2]:mt-8 [&_ul]:list-disc [&_ul]:ps-6 [&_ul]:space-y-1">

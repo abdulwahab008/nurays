@@ -28,14 +28,11 @@ export default function HelpPage() {
       <section aria-labelledby="contact" className="rounded-2xl border border-orange-200 bg-orange-50/60 p-5">
         <h2 id="contact" className="!mt-0">Talk to us</h2>
         <ul className="mt-2">
-          <li>
-            <strong>Email:</strong>{' '}
-            {supportEmailIsSet ? (
-              <a href={`mailto:${LEGAL.email}`} className="underline">{LEGAL.email}</a>
-            ) : (
-              <span>{LEGAL.email}</span>
-            )}
-          </li>
+          {supportEmailIsSet && (
+            <li>
+              <strong>Email:</strong> <a href={`mailto:${LEGAL.email}`} className="underline">{LEGAL.email}</a>
+            </li>
+          )}
           <li>
             <strong>About an order:</strong> <Link href="/login" className="underline">sign in</Link>, open{' '}
             <Link href="/orders" className="underline">My Orders</Link> and choose the order. You can chat with the kitchen

@@ -15,10 +15,10 @@ test.describe('the help page', () => {
     await expect(page).toHaveURL(/\/help$/);
     await expect(page.getByRole('heading', { level: 1, name: 'Help & contact' })).toBeVisible();
     await expect(page.getByRole('heading', { name: 'Talk to us' })).toBeVisible();
-    // The support address is shown (the configured one, or the visible placeholder while none is set).
-    await expect(page.getByText('Email:')).toBeVisible();
-    // Not a legal text: no "must be reviewed by a lawyer" notice.
-    await expect(page.getByText(/must be reviewed by a qualified lawyer/)).toHaveCount(0);
+    // The support e-mail is listed only when one is configured, never as a bracketed placeholder.
+    await expect(page.getByText(/\[support email\]/)).toHaveCount(0);
+    // Not a legal text: no "not yet been reviewed by a lawyer" notice.
+    await expect(page.getByText(/not yet been reviewed by a lawyer/)).toHaveCount(0);
   });
 
   test('a question opens to its answer', async ({ page }) => {
@@ -43,6 +43,18 @@ test.describe('the help page', () => {
     await page.getByRole('link', { name: 'Help & contact' }).click();
     await expect(page).toHaveURL(/\/help$/);
   });
+});
+
+test.describe('the legal pages', () => {
+  for (const path of ['/terms', '/privacy', '/refund-policy']) {
+    test(`${path} has no bracketed placeholders and a way to reach us`, async ({ page }) => {
+      await page.goto(path);
+      const article = page.locator('article');
+      await expect(article).toBeVisible();
+      await expect(article).not.toContainText(/\[(Company legal name|Registered address|support email)\]/);
+      await expect(article.getByRole('link', { name: 'support page' }).first()).toBeVisible();
+    });
+  }
 });
 
 test.describe('the files that tie the website to the store apps', () => {
