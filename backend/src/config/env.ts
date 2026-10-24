@@ -44,7 +44,10 @@ export function smsProvider(env: NodeJS.ProcessEnv = process.env): SmsProvider {
 }
 
 export function emailProvider(env: NodeJS.ProcessEnv = process.env): EmailProvider {
-  if ((env.EMAIL_SERVICE || '').toLowerCase() === 'gmail') return 'gmail';
+  const service = (env.EMAIL_SERVICE || '').trim().toLowerCase();
+  if (service === 'gmail') return 'gmail';
+  // Explicitly nothing sent (CI, offline development); production still refuses to start without gmail or smtp.
+  if (service === 'console') return 'console';
   if (env.SMTP_HOST) return 'smtp';
   if (runtimeMode(env) === 'development') return 'ethereal';
   return 'console';

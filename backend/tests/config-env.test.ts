@@ -103,9 +103,14 @@ describe('startup configuration', () => {
     expect(configProblems({ ...goodProd, VAPID_PUBLIC_KEY: 'BPub', VAPID_PRIVATE_KEY: 'priv' })).toEqual([]);
   });
 
+  it('refuses EMAIL_SERVICE=console in production', () => {
+    expect(configProblems({ ...goodProd, SMTP_HOST: undefined, EMAIL_SERVICE: 'console' } as any).join(' ')).toMatch(/Email is not configured/);
+  });
+
   it('is relaxed in development', () => {
     expect(configProblems({ NODE_ENV: 'development', DATABASE_URL: 'postgresql://x', JWT_SECRET: 'x'.repeat(10) + 'abcdefghijklmnopqrstuvwxyz' } as any)).toEqual([]);
     expect(emailProvider({ NODE_ENV: 'development' } as any)).toBe('ethereal');
+    expect(emailProvider({ NODE_ENV: 'development', EMAIL_SERVICE: 'console' } as any)).toBe('console');
     expect(smsProvider({ NODE_ENV: 'development' } as any)).toBe('console');
   });
 });
