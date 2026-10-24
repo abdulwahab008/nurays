@@ -36,7 +36,6 @@ interface CategoryRequest {
   };
 }
 
-
 const productTypeLabels: Record<string, { label: string; icon: string; color: string }> = {
   frozen: { label: 'Frozen', icon: '❄️', color: 'blue' },
   fresh: { label: 'Fresh', icon: '🥬', color: 'green' },
@@ -66,21 +65,6 @@ export default function CategoryRequestsPage() {
   const [rejectReason, setRejectReason] = useState('');
   const [actionLoading, setActionLoading] = useState(false);
 
-  useEffect(() => {
-    if (!isAuthenticated) {
-      router.push('/admin/login');
-      return;
-    }
-
-    if (user?.userType !== 'admin' && user?.user_type !== 'admin') {
-      router.push('/dashboard');
-      showToast('Access denied. Admin privileges required.', 'error');
-      return;
-    }
-
-    loadRequests();
-  }, [isAuthenticated, user, router, filter]);
-
   const loadRequests = async () => {
     setLoading(true);
     setLoadError(null);
@@ -97,6 +81,21 @@ export default function CategoryRequestsPage() {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    if (!isAuthenticated) {
+      router.push('/admin/login');
+      return;
+    }
+
+    if (user?.userType !== 'admin' && user?.user_type !== 'admin') {
+      router.push('/dashboard');
+      showToast('Access denied. Admin privileges required.', 'error');
+      return;
+    }
+
+    loadRequests();
+  }, [isAuthenticated, user, router, filter]);
 
   const handleApprove = async (request: CategoryRequest) => {
     setActionLoading(true);

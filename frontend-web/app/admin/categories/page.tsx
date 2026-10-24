@@ -12,7 +12,6 @@ import { useAuthStore } from '@/lib/store/auth-store';
 import { apiClient, apiErrorMessage } from '@/lib/api-client';
 import { useShallow } from 'zustand/react/shallow';
 
-
 // Icons
 const Icons = {
   plus: (
@@ -438,21 +437,6 @@ export default function AdminCategoriesPage() {
   const [showModal, setShowModal] = useState(false);
   const [editingCategory, setEditingCategory] = useState<Category | null>(null);
 
-  useEffect(() => {
-    if (!isAuthenticated) {
-      router.push('/login');
-      return;
-    }
-
-    if (user?.userType !== 'admin' && user?.user_type !== 'admin') {
-      router.push('/dashboard');
-      showToast('Access denied. Admin privileges required.', 'error');
-      return;
-    }
-
-    loadCategories();
-  }, [isAuthenticated, user, router]);
-
   const loadCategories = async () => {
     try {
       setLoading(true);
@@ -469,6 +453,21 @@ export default function AdminCategoriesPage() {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    if (!isAuthenticated) {
+      router.push('/login');
+      return;
+    }
+
+    if (user?.userType !== 'admin' && user?.user_type !== 'admin') {
+      router.push('/dashboard');
+      showToast('Access denied. Admin privileges required.', 'error');
+      return;
+    }
+
+    loadCategories();
+  }, [isAuthenticated, user, router]);
 
   // Get flat list of categories for parent selection
   const getFlatCategories = (cats: Category[], result: Category[] = []): Category[] => {

@@ -78,21 +78,6 @@ export default function SellerNotificationsPage() {
   // Why the notifications could not be read; shown instead of "No notifications", which would be untrue.
   const [loadError, setLoadError] = useState<unknown>(null);
 
-  useEffect(() => {
-    if (!isAuthenticated) {
-      router.push(loginUrlHere());
-      return;
-    }
-
-    if (user?.userType !== 'seller' && user?.user_type !== 'seller') {
-      router.push('/dashboard');
-      showToast(t('sellerAccessDenied'), 'error');
-      return;
-    }
-
-    loadNotifications();
-  }, [isAuthenticated, user, router]);
-
   const loadNotifications = async () => {
     setLoadError(null);
     try {
@@ -115,6 +100,21 @@ export default function SellerNotificationsPage() {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    if (!isAuthenticated) {
+      router.push(loginUrlHere());
+      return;
+    }
+
+    if (user?.userType !== 'seller' && user?.user_type !== 'seller') {
+      router.push('/dashboard');
+      showToast(t('sellerAccessDenied'), 'error');
+      return;
+    }
+
+    loadNotifications();
+  }, [isAuthenticated, user, router]);
 
   // The page only changes after the server has agreed, so what it shows is what the next load will show.
   const handleMarkAsRead = async (notificationId: string) => {

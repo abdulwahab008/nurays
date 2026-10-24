@@ -148,33 +148,6 @@ export default function ProductDetailPage() {
 
   const sidebarItems = CUSTOMER_SIDEBAR_ITEMS;
 
-  useEffect(() => {
-    const productId = params?.id as string | undefined;
-    if (!productId) return;
-
-    // 1. Immediately fetch product details without blocking on coordinates
-    loadProduct();
-
-    // 2. In parallel, fetch saved coordinates for precise hyperlocal delivery estimates
-    if (isAuthenticated) {
-      addressService
-        .getAddresses()
-        .then((res) => {
-          const addresses = res.data || [];
-          const withCoords =
-            addresses.find((a) => a.isDefault && a.coordinates) ||
-            addresses.find((a) => a.coordinates);
-          if (withCoords?.coordinates) {
-            loadProduct(
-              withCoords.coordinates.latitude,
-              withCoords.coordinates.longitude
-            );
-          }
-        })
-        .catch(() => {});
-    }
-  }, [params?.id, isAuthenticated]);
-
   // The product is fetched twice on load: once immediately, and again with the saved
   // address's coordinates for a precise delivery estimate. Without care the second
   // fetch flashed the full-page spinner, reset the customer's chosen variant and stock
@@ -279,6 +252,33 @@ export default function ProductDetailPage() {
       if (seq === loadSeqRef.current || loadedProductRef.current === requestedId) setLoading(false);
     }
   };
+
+  useEffect(() => {
+    const productId = params?.id as string | undefined;
+    if (!productId) return;
+
+    // 1. Immediately fetch product details without blocking on coordinates
+    loadProduct();
+
+    // 2. In parallel, fetch saved coordinates for precise hyperlocal delivery estimates
+    if (isAuthenticated) {
+      addressService
+        .getAddresses()
+        .then((res) => {
+          const addresses = res.data || [];
+          const withCoords =
+            addresses.find((a) => a.isDefault && a.coordinates) ||
+            addresses.find((a) => a.coordinates);
+          if (withCoords?.coordinates) {
+            loadProduct(
+              withCoords.coordinates.latitude,
+              withCoords.coordinates.longitude
+            );
+          }
+        })
+        .catch(() => {});
+    }
+  }, [params?.id, isAuthenticated]);
 
   const handleToggleFavorite = async () => {
     if (!isAuthenticated) {

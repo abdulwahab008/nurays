@@ -24,7 +24,6 @@ interface CommunityOption {
   centerLongitude: number;
 }
 
-
 const BUSINESS_TYPES: { id: string; title: JoinMessageKey; desc: JoinMessageKey }[] = [
   { id: 'home_kitchen', title: 'bt.home_kitchen', desc: 'bt.home_kitchen.desc' },
   { id: 'restaurant', title: 'bt.restaurant', desc: 'bt.restaurant.desc' },
@@ -102,16 +101,6 @@ export default function SellerRegisterPage() {
       .catch(() => setCommunities([]));
   }, []);
 
-  useEffect(() => {
-    const token = apiClient.getAccessToken();
-    if (!token && !isAuthenticated) {
-      router.push(loginUrlHere());
-      return;
-    }
-
-    loadSellerInfo();
-  }, [isAuthenticated, router]);
-
   const loadSellerInfo = async () => {
     try {
       setLoadingSellerInfo(true);
@@ -142,6 +131,16 @@ export default function SellerRegisterPage() {
       setLoadingSellerInfo(false);
     }
   };
+
+  useEffect(() => {
+    const token = apiClient.getAccessToken();
+    if (!token && !isAuthenticated) {
+      router.push(loginUrlHere());
+      return;
+    }
+
+    loadSellerInfo();
+  }, [isAuthenticated, router]);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
@@ -255,7 +254,6 @@ export default function SellerRegisterPage() {
       setLoading(false);
     }
   };
-
 
   if (loadError && !sellerInfo) {
     return (

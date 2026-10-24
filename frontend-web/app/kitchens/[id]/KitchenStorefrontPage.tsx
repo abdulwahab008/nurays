@@ -100,6 +100,9 @@ const PKT = 'Asia/Karachi';
 // Labels: kitchen and dish types are browseMessages `biz.*` / `type.*`; closed statuses are
 // kitchenMessages `status.*` (badge) and `isClosed.*` (banner sentence).
 
+/** A new line id for the client cart: called from the add-to-cart handlers, never while rendering. */
+const newCartLineId = (dishId: string) => `${dishId}-${Date.now()}`;
+
 function positiveAmount(value: number | null | undefined): number | null {
   const n = Number(value);
   return value != null && Number.isFinite(n) && n > 0 ? n : null;
@@ -323,7 +326,7 @@ export default function KitchenStorefrontPage() {
 
     // Add to global client cart store
     useCartStore.getState().addItem({
-      id: `${dish.id}-${Date.now()}`,
+      id: newCartLineId(dish.id),
       productId: dish.id,
       productName: dish.name,
       productImage: dish.photo ?? undefined,
@@ -383,7 +386,7 @@ export default function KitchenStorefrontPage() {
       });
       useCartStore.getState().clearCart();
       useCartStore.getState().addItem({
-        id: `${dish.id}-${Date.now()}`,
+        id: newCartLineId(dish.id),
         productId: dish.id,
         productName: dish.name,
         productImage: dish.photo ?? undefined,

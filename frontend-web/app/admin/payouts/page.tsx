@@ -59,20 +59,6 @@ export default function AdminPayoutsPage() {
   const [owingError, setOwingError] = useState<unknown>(null);
   const [recordingFor, setRecordingFor] = useState<string | null>(null);
 
-  useEffect(() => {
-    if (!isAuthenticated) {
-      router.push('/admin/login');
-      return;
-    }
-    if (user?.user_type !== 'admin' && user?.userType !== 'admin') {
-      router.push('/products');
-      showToast('Access denied. Admin privileges required.', 'error');
-      return;
-    }
-    loadPayouts();
-    loadOwing();
-  }, [isAuthenticated, user, router, filter]);
-
   // Kitchens whose commission on cash they took themselves is more than Nuray owes them (kitchen-owing.service.ts).
   const loadOwing = async () => {
     try {
@@ -134,6 +120,20 @@ export default function AdminPayoutsPage() {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    if (!isAuthenticated) {
+      router.push('/admin/login');
+      return;
+    }
+    if (user?.user_type !== 'admin' && user?.userType !== 'admin') {
+      router.push('/products');
+      showToast('Access denied. Admin privileges required.', 'error');
+      return;
+    }
+    loadPayouts();
+    loadOwing();
+  }, [isAuthenticated, user, router, filter]);
 
   const handleComplete = async (payout: Payout) => {
     // Marking a payout as sent is final and the kitchen is told it has been paid: ask first, and keep the transfer reference.

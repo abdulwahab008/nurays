@@ -153,15 +153,6 @@ export default function AddressesPage() {
 
   const sidebarItems = CUSTOMER_SIDEBAR_ITEMS;
 
-  useEffect(() => {
-    // The saved session loads a moment after the page; a stored token means "signed in".
-    if (!isAuthenticated && !apiClient.getAccessToken()) {
-      router.push(loginUrlHere());
-      return;
-    }
-    loadAddresses();
-  }, [isAuthenticated]);
-
   const loadAddresses = async () => {
     setLoading(true);
     setLoadError(null);
@@ -175,6 +166,15 @@ export default function AddressesPage() {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    // The saved session loads a moment after the page; a stored token means "signed in".
+    if (!isAuthenticated && !apiClient.getAccessToken()) {
+      router.push(loginUrlHere());
+      return;
+    }
+    loadAddresses();
+  }, [isAuthenticated]);
 
   // Detect current location using GPS
   const detectCurrentLocation = useCallback(() => {

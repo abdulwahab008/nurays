@@ -136,7 +136,6 @@ function DevLoginContent() {
 
     if (roleParam && auto === '1') {
       // This development-only hub signs in the role the link names; the state it sets is the "signing in" message.
-      // eslint-disable-next-line react-hooks/set-state-in-effect
       performLogin(roleParam, true);
     }
   }, [searchParams]);

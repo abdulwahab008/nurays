@@ -159,21 +159,6 @@ function SellerProductsContent() {
   const [selectedProducts, setSelectedProducts] = useState<string[]>([]);
   const [bulkModalSearch, setBulkModalSearch] = useState('');
 
-  useEffect(() => {
-    if (!isAuthenticated) {
-      router.push(loginUrlHere());
-      return;
-    }
-
-    if (user?.userType !== 'seller' && user?.user_type !== 'seller') {
-      router.push('/dashboard');
-      showToast('Access denied. Seller privileges required.', 'error');
-      return;
-    }
-
-    loadProducts();
-  }, [isAuthenticated, user, router]);
-
   const loadProducts = async () => {
     try {
       setLoading(true);
@@ -190,6 +175,21 @@ function SellerProductsContent() {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    if (!isAuthenticated) {
+      router.push(loginUrlHere());
+      return;
+    }
+
+    if (user?.userType !== 'seller' && user?.user_type !== 'seller') {
+      router.push('/dashboard');
+      showToast('Access denied. Seller privileges required.', 'error');
+      return;
+    }
+
+    loadProducts();
+  }, [isAuthenticated, user, router]);
 
   const handleToggleActive = async (productId: string, currentStatus: boolean) => {
     try {

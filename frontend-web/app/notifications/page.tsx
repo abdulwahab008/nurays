@@ -50,15 +50,6 @@ export default function NotificationsPage() {
 
   const sidebarItems = CUSTOMER_SIDEBAR_ITEMS;
 
-  useEffect(() => {
-    const token = apiClient.getAccessToken();
-    if (!token && !isAuthenticated) {
-      router.push(loginUrlHere());
-      return;
-    }
-    loadNotifications();
-  }, [isAuthenticated]);
-
   const loadNotifications = async () => {
     setLoadError(null);
     setLoading(true);
@@ -83,6 +74,15 @@ export default function NotificationsPage() {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    const token = apiClient.getAccessToken();
+    if (!token && !isAuthenticated) {
+      router.push(loginUrlHere());
+      return;
+    }
+    loadNotifications();
+  }, [isAuthenticated]);
 
   const renderNotificationIcon = (type: string) => {
     switch (type) {

@@ -284,15 +284,6 @@ function ProductsContent() {
   const waitingForAddress = !hydrated || (isAuthenticated && !addressSettled);
 
   useEffect(() => {
-    if (waitingForAddress) return;
-    loadProducts();
-  }, [
-    page, selectedCategory, selectedProductType, sortBy, searchQuery, openNow,
-    deliveryAvailable, pickupAvailable, freeDelivery, offersAvailable,
-    businessType, maxDistanceKm, fastDeliveryOnly, customerLocation, selectedCommunity?.id, waitingForAddress,
-  ]);
-
-  useEffect(() => {
     const paramSearch = searchParams.get('search') || '';
     setSearchQuery(paramSearch);
     setSearchInput(paramSearch);
@@ -362,6 +353,15 @@ function ProductsContent() {
       if (isCurrent()) setLoading(false);
     }
   };
+
+  useEffect(() => {
+    if (waitingForAddress) return;
+    loadProducts();
+  }, [
+    page, selectedCategory, selectedProductType, sortBy, searchQuery, openNow,
+    deliveryAvailable, pickupAvailable, freeDelivery, offersAvailable,
+    businessType, maxDistanceKm, fastDeliveryOnly, customerLocation, selectedCommunity?.id, waitingForAddress,
+  ]);
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();

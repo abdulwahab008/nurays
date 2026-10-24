@@ -109,21 +109,6 @@ export default function SellerEarningsPage() {
   const [accountNumber, setAccountNumber] = useState('');
   const [statementFor, setStatementFor] = useState<string | null>(null);
 
-  useEffect(() => {
-    if (!isAuthenticated) {
-      router.push(loginUrlHere());
-      return;
-    }
-
-    if (user?.userType !== 'seller' && user?.user_type !== 'seller') {
-      router.push('/dashboard');
-      showToast(t('accessDenied'), 'error');
-      return;
-    }
-
-    loadEarnings();
-  }, [isAuthenticated, user, router]);
-
   const loadEarnings = async () => {
     try {
       setLoading(true);
@@ -162,6 +147,21 @@ export default function SellerEarningsPage() {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    if (!isAuthenticated) {
+      router.push(loginUrlHere());
+      return;
+    }
+
+    if (user?.userType !== 'seller' && user?.user_type !== 'seller') {
+      router.push('/dashboard');
+      showToast(t('accessDenied'), 'error');
+      return;
+    }
+
+    loadEarnings();
+  }, [isAuthenticated, user, router]);
 
   const handleRequestPayout = async () => {
     if (!earnings || earnings.availableBalance <= 0) {

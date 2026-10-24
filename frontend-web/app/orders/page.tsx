@@ -76,15 +76,6 @@ function OrdersContent() {
 
   const sidebarItems = CUSTOMER_SIDEBAR_ITEMS;
 
-  useEffect(() => {
-    const token = apiClient.getAccessToken();
-    if (!token && !isAuthenticated) {
-      router.push(loginUrlHere());
-      return;
-    }
-    loadOrders();
-  }, [isAuthenticated]);
-
   // Live status updates via socket — no manual page refresh required
   useEffect(() => {
     if (!onOrderStatusUpdate) return;
@@ -180,6 +171,15 @@ function OrdersContent() {
     }
   };
 
+  useEffect(() => {
+    const token = apiClient.getAccessToken();
+    if (!token && !isAuthenticated) {
+      router.push(loginUrlHere());
+      return;
+    }
+    loadOrders();
+  }, [isAuthenticated]);
+
   const handleReorder = async (e: React.MouseEvent, order: Order) => {
     e.preventDefault();
     e.stopPropagation();
@@ -228,7 +228,9 @@ function OrdersContent() {
     return raw;
   };
 
-  ordersRef.current = orders;
+  useEffect(() => {
+    ordersRef.current = orders;
+  }, [orders]);
 
   // Count summaries
   const sumStatuses = (statuses: string[]) =>

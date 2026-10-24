@@ -111,8 +111,11 @@ export default function SellerOrdersPage() {
 
   const filterRef = useRef(filter);
   const pageRef = useRef(page);
-  filterRef.current = filter;
-  pageRef.current = page;
+  // Kept current for loadOrders, which is stable; declared before the effects that load, so it runs first.
+  useEffect(() => {
+    filterRef.current = filter;
+    pageRef.current = page;
+  }, [filter, page]);
 
   const loadOrders = useCallback(async (silent = false) => {
     try {

@@ -50,21 +50,6 @@ export default function AdminPendingSellersPage() {
   const [processingId, setProcessingId] = useState<string | null>(null);
   const [rejecting, setRejecting] = useState<PendingSeller | null>(null);
 
-  useEffect(() => {
-    if (!isAuthenticated) {
-      router.push('/admin/login');
-      return;
-    }
-
-    if (user?.user_type !== 'admin' && user?.userType !== 'admin') {
-      router.push('/products');
-      showToast('Access denied. Admin privileges required.', 'error');
-      return;
-    }
-
-    loadPendingSellers();
-  }, [isAuthenticated, user, router]);
-
   const loadPendingSellers = async () => {
     try {
       setLoading(true);
@@ -79,6 +64,21 @@ export default function AdminPendingSellersPage() {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    if (!isAuthenticated) {
+      router.push('/admin/login');
+      return;
+    }
+
+    if (user?.user_type !== 'admin' && user?.userType !== 'admin') {
+      router.push('/products');
+      showToast('Access denied. Admin privileges required.', 'error');
+      return;
+    }
+
+    loadPendingSellers();
+  }, [isAuthenticated, user, router]);
 
   const handleApproveReject = async (sellerId: string, action: 'approve' | 'reject', reason?: string) => {
     try {
