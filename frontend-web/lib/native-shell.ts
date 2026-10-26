@@ -25,6 +25,8 @@ export interface NativePlugins {
   SplashScreen?: { hide(): Promise<void> };
   SocialLogin?: SocialLoginPlugin;
   PushNotifications?: PushNotificationsPlugin;
+  BackgroundGeolocation?: BackgroundGeolocationPlugin;
+  CapacitorHttp?: CapacitorHttpPlugin;
 }
 
 /** The secure storage plugin's native methods (@aparajita/capacitor-secure-storage: Keychain on iOS, Keystore on Android). */
@@ -261,4 +263,51 @@ export function notificationPath(data: Record<string, unknown> | undefined): str
   const url = data?.url;
   if (typeof url !== 'string' || !url.startsWith('/') || url.startsWith('//') || url.includes('\\')) return null;
   return url;
+}
+
+/** A position from the background location plugin (@capacitor-community/background-geolocation). */
+export interface BackgroundLocation {
+  latitude: number;
+  longitude: number;
+  accuracy?: number;
+  time?: number | null;
+}
+
+/**
+ * The background location plugin. A watcher with `backgroundMessage` keeps reporting while the app is in the background
+ * (on Android through a foreground service, which shows a notification with that text, on iOS with the blue bar).
+ */
+export interface BackgroundGeolocationPlugin {
+  addWatcher(
+    options: { backgroundMessage?: string; backgroundTitle?: string; requestPermissions?: boolean; stale?: boolean; distanceFilter?: number },
+    callback: (location?: BackgroundLocation, error?: { code?: string; message?: string }) => void
+  ): Promise<string>;
+  removeWatcher(options: { id: string }): Promise<void>;
+  openSettings(): Promise<void>;
+}
+
+/** Capacitor's own HTTP plugin: a request made by the phone, not the WebView (which Android slows down in the background). */
+export interface CapacitorHttpPlugin {
+  request(options: { url: string; method: string; headers?: Record<string, string>; data?: unknown; connectTimeout?: number; readTimeout?: number }): Promise<{ status: number; data: unknown }>;
+}
+
+/**
+ * The rider's answer to the disclosure about sharing their location in the background: 'yes', 'no' (only while the app
+ * is open), or null (not asked yet). Kept on the phone.
+ */
+export const BACKGROUND_LOCATION_CHOICE = 'nuray-rider-background-location';
+export type BackgroundLocationChoice = 'yes' | 'no' | null;
+
+export function backgroundLocationChoice(storage: Pick<Storage, 'getItem'> | null): BackgroundLocationChoice {
+  try {
+    const value = storage?.getItem(BACKGROUND_LOCATION_CHOICE);
+    return value === 'yes' || value === 'no' ? value : null;
+  } catch {
+    return null;
+  }
+}
+
+/** An absolute URL for an API path (the phone's HTTP plugin cannot resolve a relative one). */
+export function absoluteApiUrl(apiBase: string, path: string, origin: string): string {
+  return new URL(`${apiBase.replace(/\/+$/, '')}${path}`, origin).toString();
 }

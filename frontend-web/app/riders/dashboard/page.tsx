@@ -14,6 +14,8 @@ import { formatPrice, displayRating } from '@/lib/utils';
 import { apiClient, apiErrorMessage, apiErrorCode } from '@/lib/api-client';
 import { useLiveRefresh } from '@/lib/hooks/use-live-refresh';
 import { useRiderLocation, LocationSharing } from '@/lib/hooks/use-rider-location';
+import { BackgroundLocationNotice } from '@/components/riders/BackgroundLocationNotice';
+import { BACKGROUND_LOCATION_CHOICE, backgroundLocationChoice, nativePlugins, type BackgroundLocationChoice, type NativeWindow } from '@/lib/native-shell';
 import { alternativeMapsLink, canNavigateTo, googleMapsDirectionsUrl, mobilePlatform, NavDestination } from '@/lib/navigation-links';
 import Link from 'next/link';
 import RiderApplicationForm from '@/components/riders/RiderApplicationForm';
@@ -209,10 +211,29 @@ export default function RiderDashboardPage() {
     void loadAll(true);
   };
 
+  // In the store app the rider is asked once whether the position may go on being shared with the app closed.
+  const [inApp, setInApp] = useState(false);
+  const [bgChoice, setBgChoice] = useState<BackgroundLocationChoice>(null);
+  useEffect(() => {
+    setInApp(!!nativePlugins(window as unknown as NativeWindow)?.BackgroundGeolocation);
+    setBgChoice(backgroundLocationChoice(typeof localStorage === 'undefined' ? null : localStorage));
+  }, []);
+  const chooseBackground = (allow: boolean | null) => {
+    const choice: BackgroundLocationChoice = allow === null ? null : allow ? 'yes' : 'no';
+    setBgChoice(choice);
+    try {
+      if (choice) localStorage.setItem(BACKGROUND_LOCATION_CHOICE, choice);
+      else localStorage.removeItem(BACKGROUND_LOCATION_CHOICE);
+    } catch {
+      // Private storage: asked again next time.
+    }
+  };
+
   // The phone's position goes to each job in progress (and nowhere when there is none).
   const locationSharing = useRiderLocation(
     activeDeliveries.map((d) => d.id),
-    () => loadAll(true)
+    () => loadAll(true),
+    { background: inApp && bgChoice === 'yes', notice: { title: t('bgloc.noticeTitle'), message: t('bgloc.noticeMessage') } }
   );
 
   // Toggle on-duty / off-duty
@@ -488,7 +509,13 @@ export default function RiderDashboardPage() {
               <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-slate-800/80 border border-slate-700 text-xs" data-testid="location-sharing">
                 <span className={`w-2 h-2 rounded-full ${SHARING_BADGE[locationSharing].dot}`} />
                 <span className={`font-semibold ${SHARING_BADGE[locationSharing].tone}`}>{t(SHARING_BADGE[locationSharing].labelKey)}</span>
+                {inApp && bgChoice === 'no' && (
+                  <button type="button" onClick={() => chooseBackground(null)} className="ms-1 underline text-slate-300 hover:text-white" data-testid="background-location-ask">
+                    {t('bgloc.change')}
+                  </button>
+                )}
               </div>
+              {inApp && bgChoice === null && activeDeliveries.length > 0 && <BackgroundLocationNotice onChoice={chooseBackground} />}
 
               {/* Capacity Limit Indicator */}
               <div

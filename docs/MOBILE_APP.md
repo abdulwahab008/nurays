@@ -21,10 +21,11 @@ exposes (`window.Capacitor.Plugins`), wired up in `frontend-web/components/Nativ
 | Android back button | Goes back; on the first page it closes the app. |
 | Permissions | Camera (documents and receipts), location while in use (address pin, rider position). |
 | Google sign-in | The phone's own Google sign-in (Android's account picker, Google's iOS sheet) instead of the web button, which Google refuses inside an app. It shows only once the client ids below are set. |
+| Rider location | During a job only. The first time a rider has one, the app explains (English or Urdu) that their location is shared with the app closed until the job is done, then asks the phone. With "Allow", the phone keeps sharing in the background (Android shows a notification, iPhones the blue bar); "Only while the app is open" shares as the website does. |
 | Push notifications | Order and delivery alerts on the phone: the app asks for permission when the person turns them on (Notification settings, or the kitchen's prompt), and a tapped alert opens its page. Android through Firebase (FCM), iPhones through Apple's push service (APNs). Each is on once its settings below are in. |
 | Sign in with Apple | On iPhones (App Store rule 4.8 asks for it next to Google). Apple's sheet hands back a signed token that the server checks against Apple's keys (`POST /auth/apple`). |
 
-Still to come: the rider's location in the background during a job.
+Everything planned for the app is in; what is left is the store accounts and checks on real phones.
 
 ## Building
 
@@ -103,3 +104,14 @@ and the server sends to browsers only.
 3. `APNS_SANDBOX=true` only while testing a build run from Xcode. TestFlight and the App Store use the default (false).
 
 Check on real phones: turn alerts on, place an order to the account's kitchen, and tap the alert.
+
+## Store notes for the rider's background location
+
+- **Google Play**: the app runs a location foreground service during a job. In Play Console, App content, declare it
+  (foreground service type "location", purpose: showing the customer where their delivery is). The app asks only for
+  location while in use; it does not ask for "Allow all the time", so no background location declaration should be
+  needed. Have a short video of the notice and the notification ready in case review asks.
+- **App Store**: the app has the "location" background mode. In the review notes, explain that riders share their
+  position with the customer during a delivery, after the in-app notice, and that it stops with the job. Give the
+  reviewer a rider demo account with a job.
+- Check a full ride on a locked phone on both.

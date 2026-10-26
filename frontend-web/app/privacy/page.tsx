@@ -9,7 +9,7 @@ export const metadata: Metadata = {
 
 export default function PrivacyPage() {
   return (
-    <LegalPage title="Privacy Policy" updated="24 October 2026">
+    <LegalPage title="Privacy Policy" updated="26 October 2026">
       <p>
         This policy explains what personal information <Operator /> (&quot;Nuray&quot;, &quot;we&quot;) collects when you
         use Nuray, why, who it is shared with and the choices you have. We handle it in line with the laws of Pakistan that
@@ -23,7 +23,7 @@ export default function PrivacyPage() {
         <li><strong>Orders</strong>: what you ordered, from which kitchen, prices, delivery details, status history, and your reviews.</li>
         <li><strong>Payments</strong>: the payment method, transaction references and, for transfers to a kitchen, the receipt image you upload. We do not see or store card numbers; card payments are handled by our payment provider.</li>
         <li><strong>Messages</strong>: chat messages and voice notes exchanged about an order.</li>
-        <li><strong>Sellers and riders</strong>: business and identity details and documents submitted for verification (for example CNIC, licence, kitchen photos), payout account details, and delivery activity, including a rider&apos;s location while on a delivery.</li>
+        <li><strong>Sellers and riders</strong>: business and identity details and documents submitted for verification (for example CNIC, licence, kitchen photos), payout account details, and delivery activity, including a rider&apos;s location while on a delivery (in the Nuray app, also with the app in the background or the screen off, if the rider allows it; it stops when the delivery is done).</li>
         <li><strong>Technical data</strong>: IP address, device and browser information and logs, used for security and to keep the service running.</li>
       </ul>
 
