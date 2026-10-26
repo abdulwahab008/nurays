@@ -60,6 +60,12 @@
 	<string>Nuray uses your photos to attach kitchen and rider documents and payment receipts.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>Nuray uses your location to place your delivery pin and, for riders, to share your position with the customer during a delivery.</string>
+	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+	<string>For riders only: while you have a delivery in progress, Nuray keeps sharing your position with the customer when the app is closed or the screen is locked. It stops when your last job is done.</string>
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>location</string>
+	</array>
 	<key>UILaunchStoryboardName</key>
 	<string>LaunchScreen</string>
 	<key>UIMainStoryboardFile</key>

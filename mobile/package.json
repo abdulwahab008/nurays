@@ -16,6 +16,7 @@
   },
   "dependencies": {
     "@aparajita/capacitor-secure-storage": "8.0.1",
+    "@capacitor-community/background-geolocation": "1.2.26",
     "@capacitor/android": "8.5.3",
     "@capacitor/app": "8.1.2",
     "@capacitor/app-launcher": "8.0.1",

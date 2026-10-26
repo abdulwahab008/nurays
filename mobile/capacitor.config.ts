@@ -20,6 +20,9 @@ const config: CapacitorConfig = {
   android: {
     // Content is never mixed: the website is https.
     allowMixedContent: false,
+    // The rider's background location stops reaching the page after five minutes in the background with the newer
+    // bridge (capacitor-community/background-geolocation#89).
+    useLegacyBridge: true,
   },
   ios: {
     // Keeps the page clear of the notch and the home indicator.

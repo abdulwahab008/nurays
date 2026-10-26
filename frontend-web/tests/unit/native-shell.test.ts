@@ -179,3 +179,20 @@ test('a tapped notification opens only a path on this site', async () => {
   assert.equal(notificationPath({ url: 42 }), null);
   assert.equal(notificationPath(undefined), null);
 });
+
+test("the rider's background location answer is read safely", async () => {
+  const { backgroundLocationChoice, BACKGROUND_LOCATION_CHOICE } = await import('../../lib/native-shell.ts');
+  const store = (value: string | null) => ({ getItem: (k: string) => (k === BACKGROUND_LOCATION_CHOICE ? value : null) });
+  assert.equal(backgroundLocationChoice(store('yes')), 'yes');
+  assert.equal(backgroundLocationChoice(store('no')), 'no');
+  assert.equal(backgroundLocationChoice(store('maybe')), null);
+  assert.equal(backgroundLocationChoice(store(null)), null);
+  assert.equal(backgroundLocationChoice(null), null);
+  assert.equal(backgroundLocationChoice({ getItem: () => { throw new Error('blocked'); } }), null);
+});
+
+test('API paths become absolute for the phone', async () => {
+  const { absoluteApiUrl } = await import('../../lib/native-shell.ts');
+  assert.equal(absoluteApiUrl('https://api.nuray.pk/api/v1', '/riders/deliveries/d1/location', 'https://nuray.pk'), 'https://api.nuray.pk/api/v1/riders/deliveries/d1/location');
+  assert.equal(absoluteApiUrl('/api/v1/', '/riders/deliveries/d1/location', 'https://nuray.pk'), 'https://nuray.pk/api/v1/riders/deliveries/d1/location');
+});

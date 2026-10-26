@@ -2,6 +2,9 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { riderService } from '@/lib/services/rider.service';
+import { API_BASE_URL } from '@/lib/config';
+import { tokenStore } from '@/lib/token-store';
+import { absoluteApiUrl, nativePlugins, type CapacitorHttpPlugin, type NativeWindow } from '@/lib/native-shell';
 
 export type LocationSharing = 'off' | 'waiting' | 'sharing' | 'denied' | 'unavailable';
 
@@ -24,9 +27,16 @@ function metersBetween(a: { latitude: number; longitude: number }, b: { latitude
  * Sends every 10 s, or after 3 s once the rider has moved 30 m. Nothing is shared without a job.
  * Browsers only run this while the dashboard is in front: when the rider comes back from Google
  * Maps the watch is restarted and a fix sent at once, and the screen is kept awake meanwhile.
- * True background tracking (dashboard closed) needs a native wrapper; see the launch plan.
+ * In the store app, once the rider agreed to it (`background`, after the disclosure in
+ * BackgroundLocationNotice), the phone keeps reporting with the app in the background or the screen
+ * locked, still only while there is a job: the watch ends with the last one. Android shows a
+ * notification (`notice`) for as long as it runs, iOS its blue location bar.
  */
-export function useRiderLocation(deliveryIds: string[], onAutoAdvance?: (status: string) => void): LocationSharing {
+export function useRiderLocation(
+  deliveryIds: string[],
+  onAutoAdvance?: (status: string) => void,
+  options: { background?: boolean; notice?: { title: string; message: string } } = {}
+): LocationSharing {
   // What the current watch reported, tagged with the jobs it was for.
   const [reported, setReported] = useState<{ key: string; state: LocationSharing } | null>(null);
   const idsRef = useRef(deliveryIds);
@@ -35,8 +45,14 @@ export function useRiderLocation(deliveryIds: string[], onAutoAdvance?: (status:
     idsRef.current = deliveryIds;
     advanceRef.current = onAutoAdvance;
   });
+  const noticeRef = useRef(options.notice);
+  useEffect(() => {
+    noticeRef.current = options.notice;
+  });
   const key = [...deliveryIds].sort().join(',');
-  const supported = typeof navigator !== 'undefined' && !!navigator.geolocation;
+  const plugins = typeof window !== 'undefined' ? nativePlugins(window as unknown as NativeWindow) : null;
+  const background = !!options.background && !!plugins?.BackgroundGeolocation;
+  const supported = background || (typeof navigator !== 'undefined' && !!navigator.geolocation);
 
   useEffect(() => {
     if (!key || !supported) return;
@@ -44,14 +60,18 @@ export function useRiderLocation(deliveryIds: string[], onAutoAdvance?: (status:
     let pending: { latitude: number; longitude: number } | null = null;
     let timer: ReturnType<typeof setTimeout> | null = null;
 
+    const phone = background ? nativePlugins(window as unknown as NativeWindow) : null;
+    const http = phone?.CapacitorHttp;
+    const post = (id: string, here: { latitude: number; longitude: number }) =>
+      http
+        ? sendThroughPhone(http, id, here)
+        : riderService.sendLocationUpdate(id, here.latitude, here.longitude).then((res) => res.data?.autoTriggeredStatus ?? null);
     const send = (here: { latitude: number; longitude: number }) => {
       last = { ...here, at: Date.now() };
       pending = null;
       for (const id of idsRef.current) {
-        riderService
-          .sendLocationUpdate(id, here.latitude, here.longitude)
-          .then((res) => {
-            const triggered = res.data?.autoTriggeredStatus;
+        post(id, here)
+          .then((triggered) => {
             if (triggered) advanceRef.current?.(triggered);
           })
           // A job that just finished or was cancelled stops accepting positions: harmless.
@@ -80,8 +100,42 @@ export function useRiderLocation(deliveryIds: string[], onAutoAdvance?: (status:
       setReported((prev) => (prev?.key === key ? prev : { key, state: 'unavailable' }));
     }, 12_000);
 
+    const sharing = () => setReported((prev) => (prev?.key === key && prev.state === 'sharing' ? prev : { key, state: 'sharing' }));
+
+    if (phone?.BackgroundGeolocation) {
+      // The phone's own watch: it goes on in the background, so no restart on return and no wake lock.
+      const geo = phone.BackgroundGeolocation;
+      const notice = noticeRef.current;
+      let watcher: string | null = null;
+      let stopped = false;
+      void geo
+        .addWatcher(
+          { backgroundTitle: notice?.title, backgroundMessage: notice?.message ?? ' ', requestPermissions: true, stale: false, distanceFilter: 10 },
+          (location, error) => {
+            if (error) {
+              setReported({ key, state: error.code === 'NOT_AUTHORIZED' ? 'denied' : 'unavailable' });
+              return;
+            }
+            if (!location) return;
+            sharing();
+            consider({ latitude: location.latitude, longitude: location.longitude });
+          }
+        )
+        .then((id) => {
+          if (stopped) void geo.removeWatcher({ id }).catch(() => {});
+          else watcher = id;
+        })
+        .catch(() => setReported({ key, state: 'unavailable' }));
+      return () => {
+        stopped = true;
+        clearTimeout(slowTimer);
+        if (timer) clearTimeout(timer);
+        if (watcher) void geo.removeWatcher({ id: watcher }).catch(() => {});
+      };
+    }
+
     const onPosition = (pos: GeolocationPosition) => {
-      setReported((prev) => (prev?.key === key && prev.state === 'sharing' ? prev : { key, state: 'sharing' }));
+      sharing();
       consider({ latitude: pos.coords.latitude, longitude: pos.coords.longitude });
     };
     const onError = (err: GeolocationPositionError) => {
@@ -117,7 +171,7 @@ export function useRiderLocation(deliveryIds: string[], onAutoAdvance?: (status:
       watchId = navigator.geolocation.watchPosition(onPosition, onError, WATCH_OPTIONS);
       navigator.geolocation.getCurrentPosition(
         (pos) => {
-          setReported((prev) => (prev?.key === key && prev.state === 'sharing' ? prev : { key, state: 'sharing' }));
+          sharing();
           send({ latitude: pos.coords.latitude, longitude: pos.coords.longitude });
         },
         () => {},
@@ -136,9 +190,44 @@ export function useRiderLocation(deliveryIds: string[], onAutoAdvance?: (status:
       wakeLock = null;
       held?.release().catch(() => {});
     };
-  }, [key, supported]);
+  }, [key, supported, background]);
 
   if (!key) return 'off';
   if (!supported) return 'unavailable';
   return reported?.key === key ? reported.state : 'waiting';
+}
+
+/**
+ * One position for one job, sent by the phone rather than the WebView: Android slows the WebView's requests down after
+ * a few minutes in the background. An answer the phone cannot use as it is (the access token expired, say) goes
+ * through the site's own client instead, which renews the token.
+ */
+async function sendThroughPhone(http: CapacitorHttpPlugin, deliveryId: string, here: { latitude: number; longitude: number }): Promise<string | null> {
+  const path = `/riders/deliveries/${encodeURIComponent(deliveryId)}/location`;
+  const token = tokenStore().access();
+  const res = await http
+    .request({
+      url: absoluteApiUrl(API_BASE_URL, path, window.location.origin),
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+      data: here,
+      connectTimeout: 15_000,
+      readTimeout: 15_000,
+    })
+    .catch(() => null);
+  if (res && res.status >= 200 && res.status < 300) {
+    const body = (typeof res.data === 'string' ? safeJson(res.data) : res.data) as { data?: { autoTriggeredStatus?: string | null } } | null;
+    return body?.data?.autoTriggeredStatus ?? null;
+  }
+  if (res && res.status !== 401) throw new Error(`Location not accepted (${res.status})`);
+  const fallback = await riderService.sendLocationUpdate(deliveryId, here.latitude, here.longitude);
+  return fallback.data?.autoTriggeredStatus ?? null;
+}
+
+function safeJson(text: string): unknown {
+  try {
+    return JSON.parse(text);
+  } catch {
+    return null;
+  }
 }

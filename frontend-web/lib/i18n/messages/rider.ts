@@ -27,6 +27,17 @@ export const riderMessages = defineMessages({
     'loc.unavailable': 'No location yet: turn on GPS and allow this site',
     'loc.off': 'Location shared only during a job',
 
+    // In the store app: sharing the location in the background during a job (shown before the phone asks)
+    'bgloc.title': 'Keep sharing your location during a delivery, even with the app closed?',
+    'bgloc.body1': 'While you have a delivery in progress, Nuray uses your location even when the app is closed or the screen is off.',
+    'bgloc.body2': 'The customer sees where their order is, and reaching the kitchen or the door moves the job on by itself.',
+    'bgloc.body3': 'It stops when your last job is done. Nuray does not use your location in the background at any other time, and Android shows a notification while it is on.',
+    'bgloc.allow': 'Allow',
+    'bgloc.notNow': 'Only while the app is open',
+    'bgloc.change': 'Share with the app closed',
+    'bgloc.noticeTitle': 'Nuray: delivery in progress',
+    'bgloc.noticeMessage': 'Sharing your location with the customer until the job is done.',
+
     // Journey steps
     'step.assigned': 'Claimed',
     'step.arrived_at_pickup': 'At Kitchen',
@@ -289,6 +300,16 @@ export const riderMessages = defineMessages({
     'loc.denied': 'لوکیشن بند ہے: اس سائٹ کو اجازت دیں',
     'loc.unavailable': 'لوکیشن نہیں ملی: GPS آن کریں اور اس سائٹ کو اجازت دیں',
     'loc.off': 'لوکیشن صرف ڈیلیوری کے دوران شیئر ہوتی ہے',
+
+    'bgloc.title': 'کیا ڈیلیوری کے دوران ایپ بند ہونے پر بھی آپ کی لوکیشن شیئر ہوتی رہے؟',
+    'bgloc.body1': 'جب آپ کی کوئی ڈیلیوری جاری ہو، Nuray آپ کی لوکیشن استعمال کرتا ہے، چاہے ایپ بند ہو یا اسکرین آف ہو۔',
+    'bgloc.body2': 'گاہک دیکھ سکتا ہے کہ اس کا آرڈر کہاں ہے، اور کچن یا گاہک کے دروازے پر پہنچنے پر ڈیلیوری خود اگلے مرحلے پر چلی جاتی ہے۔',
+    'bgloc.body3': 'آپ کی آخری ڈیلیوری مکمل ہوتے ہی یہ بند ہو جاتا ہے۔ اس کے علاوہ Nuray کبھی بھی پس منظر میں آپ کی لوکیشن استعمال نہیں کرتا، اور اس دوران Android ایک نوٹیفکیشن دکھاتا ہے۔',
+    'bgloc.allow': 'اجازت دیں',
+    'bgloc.notNow': 'صرف جب ایپ کھلی ہو',
+    'bgloc.change': 'ایپ بند ہونے پر بھی شیئر کریں',
+    'bgloc.noticeTitle': 'Nuray: ڈیلیوری جاری ہے',
+    'bgloc.noticeMessage': 'ڈیلیوری مکمل ہونے تک آپ کی لوکیشن گاہک کے ساتھ شیئر ہو رہی ہے۔',
 
     'step.assigned': 'آرڈر لیا',
     'step.arrived_at_pickup': 'کچن پر',

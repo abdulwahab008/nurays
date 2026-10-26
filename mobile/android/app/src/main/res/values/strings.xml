@@ -4,4 +4,6 @@
     <string name="title_activity_main">Nuray</string>
     <string name="package_name">pk.nuray.app</string>
     <string name="custom_url_scheme">pk.nuray.app</string>
+    <!-- The notification channel a rider sees while their location is shared during a delivery. -->
+    <string name="capacitor_background_geolocation_notification_channel_name">Delivery in progress</string>
 </resources>
