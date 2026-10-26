@@ -589,14 +589,22 @@ Fixture notes for whoever re-runs these locally: the API checks need the API sta
 
 ### Pre-submission checklist
 
-- [ ] Native shell builds for Android (AAB, 64-bit, target API at Play's current minimum) and iOS (Xcode, current SDK).
-- [ ] Sign in with Apple implemented and tested; Google sign-in works inside the WebView (use the system browser flow, not an embedded one).
-- [ ] Push notifications via FCM/APNs; web push kept for browsers.
-- [ ] Rider background location with the prominent disclosure and the permission rationale; verified on a locked phone for a full ride.
-- [ ] Deep links: order pages, Safepay return, e-mail links.
-- [ ] Privacy policy, terms, refund policy and `/delete-account` URLs entered in both consoles; data-safety and privacy labels filled from the list above.
-- [ ] Reviewer accounts and a reviewer note describing the demo order path.
-- [ ] Store listings (en, ur), screenshots per device class, feature graphic, app icon without alpha (iOS).
+Brought up to date on 26 October 2026, after the store app work (eleventh to fourteenth addenda). Code that is in is
+ticked; what is left needs the store accounts, a real phone, or both. `docs/MOBILE_APP.md` has the steps.
+
+- [x] Native shell for Android and iOS (`mobile/`, Capacitor in remote-URL mode); CI builds the Android debug app on every push.
+- [ ] Store builds: a signed Android AAB (upload key, Play App Signing) and an iOS archive from Xcode with the distribution certificate.
+- [x] Sign in with Apple and the phone's own Google sign-in in the app (`POST /auth/apple`, `POST /auth/google` with an ID token).
+- [ ] Sign-in set up and tried on real phones: Google client ids for Android and iOS, the SHA-1s, the iOS URL scheme, Sign in with Apple on the App ID, `APPLE_CLIENT_IDS` (MOBILE-1, MOBILE-2).
+- [x] Push notifications through FCM and APNs in the app; web push kept for browsers.
+- [ ] Push set up and tried on real phones: `google-services.json` and `FCM_SERVICE_ACCOUNT`, the APNs key, Push Notifications on the App ID (MOBILE-3).
+- [x] Rider background location during jobs only, after an in-app disclosure in English and Urdu.
+- [ ] Rider location tried on a locked phone for a full ride, and the Play Console location declaration and App Store review notes written (MOBILE-9, DELIV-7).
+- [x] Links into the app (order pages, the Safepay return, e-mail links) and links out of it (maps, phone numbers) are in the code.
+- [ ] App Links and Universal Links switched on: `ANDROID_SHA256_CERT_FINGERPRINTS` and `IOS_APP_IDS` on the web server, Associated Domains in Xcode, and the links tried on phones (MOBILE-4, MOBILE-7).
+- [ ] Privacy policy, terms, refund policy and `/delete-account` URLs entered in both consoles; data-safety and privacy labels filled from the list above. Needs the legal pages final first (MOBILE-5).
+- [ ] Reviewer accounts (customer, kitchen, rider with a job) and a reviewer note describing the demo order path.
+- [ ] Store listings (en, ur), screenshots per device class, feature graphic, app icon without alpha (iOS); the app still has Capacitor's default icon and splash screen (MOBILE-12).
 - [ ] Crash reporting (Sentry already configured for the web app) wired to the native shells.
 
 ## Deliverable 9: Pre-launch checklist
@@ -604,63 +612,63 @@ Fixture notes for whoever re-runs these locally: the API checks need the API sta
 ### P0: before any launch (web or app)
 
 Operational items that are not code changes:
-- [ ] Production configuration complete: `CORS_ORIGIN`, `FRONTEND_URL`, `BASE_URL` (https), `JWT_SECRET` (64 random hex), `REDIS_URL`, `DATABASE_URL` with `connection_limit`, `TRUST_PROXY` matching the real proxy count, SMTP, SMS provider, S3 (`STORAGE_DRIVER=s3`), Safepay live keys and webhook secret, VAPID keys, Sentry DSNs. The API refuses to start with placeholders, so run it once against the real `.env` before launch day.
+- [ ] Production configuration complete: `CORS_ORIGIN`, `FRONTEND_URL`, `BASE_URL` (https), `JWT_SECRET` (64 random hex), `REDIS_URL`, `DATABASE_URL` with `connection_limit`, `TRUST_PROXY` matching the real proxy count, SMTP, SMS provider, S3 (`STORAGE_DRIVER=s3`), Safepay live keys and webhook secret, VAPID keys, Sentry DSNs; for the apps also `FCM_SERVICE_ACCOUNT`, the `APNS_*` key, `APPLE_CLIENT_IDS` and `GOOGLE_NATIVE_CLIENT_IDS`. The API refuses to start with placeholders, so run it once against the real `.env` before launch day.
 - [ ] TLS at the load balancer with HSTS; one proxy hop (or set `TRUST_PROXY`).
 - [ ] Map tiles and geocoder: a provider account (`NEXT_PUBLIC_MAP_TILE_URL`, `NOMINATIM_BASE_URL` or a paid geocoder); the public OpenStreetMap servers are for development only.
 - [ ] Database backups scheduled and a restore rehearsed once (deployment guide: Backups, Rollback).
-- [x] CI green on Node 22 with Trivy, gitleaks and Playwright: PR #26 and PR #38 pass every job. Keep `main` green too: its first run after the merge failed in the web build because the runner could not download Google Fonts, so the fonts are now served from the app (`frontend-web/app/fonts`) and no build calls Google.
+- [x] CI green on Node 22 with Trivy, gitleaks and Playwright, on every PR through abdulwahab008/nurays#68 and on `main`.
 - [ ] Device checks from Deliverable 6 on one Android phone and one iPhone: Start navigation opens Maps at the pin; position keeps flowing after returning from Maps; the PIN handover completes.
 - [ ] Load test per Deliverable 5 on the production stack (two instances).
 
 P0 findings still carrying work (the exploitable part of each code finding is fixed):
-- [ ] **MOBILE-5** (partly fixed, ninth addendum): Legal pages render a 'Draft' banner and bracketed placeholders until NEXT_PUBLIC_LEGAL_* are set; store listings require a final privacy policy URL. Operational: set the legal identity build args and `NEXT_PUBLIC_LEGAL_REVIEWED=true` after legal review; the pages show a draft banner until then. On the P0 checklist. A release guard keeps a draft from shipping by accident: a build marked reviewed without the company details fails, and the publish workflow warns on `main` and refuses a `v*` tag until the repository variables are set.
-- [x] **SEC-2** (fixed, sixth addendum): Non-admin logout revokes nothing and refresh tokens are never rotated or reuse-detected; 24 h access / 30 d refresh tokens live in localStorage. Refresh tokens rotate with reuse detection, logout ends this device, and the profile lists and signs out devices (`refresh_tokens` table).
+- [ ] **MOBILE-5** (partly fixed, ninth addendum): Legal pages render a 'Draft' banner until the legal build values are set; store listings require a final privacy policy URL. The pages are written for Pakistani law in modest wording. Left: set the support e-mail (and the company name and address, if any) and `NEXT_PUBLIC_LEGAL_REVIEWED=true` after review. A build marked reviewed without the support e-mail fails, and the publish workflow refuses a `v*` tag until the repository variables are set.
+- [x] **SEC-2** (fixed, sixth addendum): Refresh tokens rotate with reuse detection, logout ends this device, and the profile lists and signs out devices (`refresh_tokens` table).
 
 ### P1: before the public launch or within its first weeks
 
-- [ ] **MOBILE-1** (partly fixed): Google sign-in uses the web OAuth popup and an access token, which cannot work inside a Capacitor/WKWebView build. `POST /auth/google` now accepts a native app's Google ID token (`idToken`) and verifies it against Google's published keys; the web button is unchanged. The app now uses the phone's own Google sign-in. Left: the Android and iOS client ids, the SHA-1s and the iOS URL scheme, and a check on real phones.
-- [ ] **MOBILE-2** (partly fixed): Offering Google Sign-In without Sign in with Apple violates App Store guideline 4.8. The iPhone app now has Sign in with Apple, checked by `POST /auth/apple`. Left: the capability on the App ID, `APPLE_CLIENT_IDS`, and a check on a real iPhone.
-- [ ] **MOBILE-3** (partly fixed): Push notifications are web-push only; no FCM/APNs transport, so iOS wrappers (and any Capacitor build) get no background order/job alerts. The store app now gets push through FCM and APNs. Left: the Firebase project, the APNs key, the iOS capability, and a check on real phones.
-- [ ] **MOBILE-4** (partly fixed): Rider maps hand-off relied on window.open('', '_blank') + later href assignment and target=_blank anchors with no external-link abstraction. All links out of the app go through `lib/open-external.ts` now; the native branch (Capacitor Browser and AppLauncher) is written but can be tried only on a device once the shell exists.
-- [x] **DELIV-3** (fixed, seventh addendum): No Pakistan/community bounds on address pins; area-name fallback overrides a pin that matches no community. Pins must lie inside Pakistan (addresses, kitchens, and a rider's reported position). The area-name fallback for a pin outside every community radius is kept (product decision). `api-checks/delivery`.
-- [ ] **DELIV-4** (open): API accepts home-delivery orders for addresses without a map pin; only the checkout UI blocks them. One-line API check ready, not applied: it would refuse orders to saved addresses that predate the pin requirement. Decide on a grace rule.
-- [ ] **DELIV-7** (partly fixed): Rider location sharing is foreground-only: opening Google Maps backgrounds the dashboard and the hook has no visibility/resume or wake-lock handling. Watch restarted and a fix sent on return from Maps; screen wake lock. Background tracking needs the native wrapper (Deliverable 8). Device check pending. An automated test (`rider-location-resume.spec.ts`: a phone-sized screen, mocked position, visibility and screen lock) checks that coming back sends a position at once and asks for the lock again; the device check on a real phone remains.
-- [ ] **MOBILE-7** (partly fixed): The Digital Asset Links and Apple App Site Association files are served from `ANDROID_APP_PACKAGE`, `ANDROID_SHA256_CERT_FINGERPRINTS` and `IOS_APP_IDS` (404 while unset). Left: set them once the apps and their signing certificates exist.
-- [ ] **MOBILE-9** (partly fixed): Rider location is only tracked while the dashboard is in the foreground; a native build needs background location with its permission disclosures. The store app now shares it in the background during a job, after the rider agrees to an in-app disclosure (English and Urdu). Left: the store declarations and a full ride on a locked phone.
-- [ ] **PERF-1** (partly fixed): Seller dashboard and balance load the kitchen's entire order history on every request. Dashboard counts and sums in one SQL aggregate; the balance reads one summed row per order (about 4x faster on 20,000 orders, same results). Bounding it to unsettled orders needs an approved schema change (a running total or settlement snapshot).
-- [x] **PRIV-4** (fixed, seventh addendum): Kitchens receive the customer's phone and full address row (coordinates, postal code, userId, paymentSenderAccount) for every order regardless of delivery type or status. A kitchen now reads its orders through an explicit allow-list: no customer account id, pin, postcode, idempotency key, gateway transaction id or handover code, and no gateway reference in the order history; the tracking snapshot, live events and chat no longer name another party's account id. Phone and street for platform-delivered or closed orders remain a product decision.
-- [x] **SEC-3** (fixed, eighth addendum): Admin lockout is a one-request denial of service against the single super admin. Owner decision on the staff lockout design (lock on account + address, progressive delay, unlock link). Not changed.
-- [ ] **SEC-7** (partly fixed): No Content-Security-Policy or other security headers on the web app while tokens sit in localStorage. nosniff, frame DENY, Referrer-Policy, Permissions-Policy, X-Powered-By off, CSP in report-only mode with a violation collector (`/api/csp-report`) and a build switch to enforce it (`CSP_ENFORCE=true`). Remaining: run the report-only build on staging or the soft launch for a week, read the `csp-violation` log lines, then enforce (SEC-R2). HSTS at the TLS terminator (documented).
+- [ ] **MOBILE-1** (partly fixed, twelfth addendum): The app uses the phone's own Google sign-in and sends the ID token. Left: the Android and iOS client ids, the SHA-1s, the iOS URL scheme, and a check on real phones.
+- [ ] **MOBILE-2** (partly fixed, twelfth addendum): The iPhone app has Sign in with Apple, checked by `POST /auth/apple`. Left: the capability on the App ID, `APPLE_CLIENT_IDS`, and a check on a real iPhone.
+- [ ] **MOBILE-3** (partly fixed, thirteenth addendum): The app gets push through FCM and APNs (the approved `push_subscriptions.platform` migration is in). Left: the Firebase project, the APNs key, the iOS capability, and a check on real phones.
+- [ ] **MOBILE-4** (partly fixed): All links out of the app go through `lib/open-external.ts`, with the in-app browser and the phone's app launcher inside the app. Left: a check on real phones.
+- [x] **DELIV-3** (fixed, seventh addendum): Pins must lie inside Pakistan (addresses, kitchens, and a rider's reported position); the area-name fallback for a pin outside every community is kept (product decision).
+- [x] **DELIV-4** (fixed, fifth addendum): The API refuses a home-delivery order to an address with no map pin (400 `ADDRESS_PIN_REQUIRED`), as the checkout does; an older address gets its pin from the address page.
+- [ ] **DELIV-7** (partly fixed): Watch restarted and a fix sent on return from Maps, screen wake lock, and in the app background location during a job (MOBILE-9). Left: the device check on a real phone.
+- [ ] **MOBILE-7** (partly fixed): The Digital Asset Links and Apple App Site Association files are served from `ANDROID_APP_PACKAGE`, `ANDROID_SHA256_CERT_FINGERPRINTS` and `IOS_APP_IDS` (404 while unset). Left: set them once the signing certificates exist, and add Associated Domains in Xcode.
+- [ ] **MOBILE-9** (partly fixed, fourteenth addendum): The app shares the rider's location in the background during a job, after the rider agrees to an in-app disclosure (English and Urdu). Left: the store declarations and a full ride on a locked phone.
+- [ ] **PERF-1** (partly fixed): Dashboard counts and sums in one SQL aggregate; the balance reads one summed row per order (about 4x faster on 20,000 orders). Bounding it to unsettled orders needs an approved schema change (a running total or settlement snapshot); it matters only once kitchens have very many orders.
+- [x] **PRIV-4** (fixed): A kitchen reads its orders through an explicit allow-list, and sees the customer's phone and door only when it hands the order over itself, until a day after delivery (`utils/kitchenOrderView.ts`).
+- [x] **SEC-3** (fixed, eighth addendum): A stranger can no longer lock the administrator out (wrong passwords counted per account and address), and staff sign in in two steps (an authenticator code or a backup code).
+- [ ] **SEC-7** (partly fixed): Security headers on, CSP in report-only mode with a violation collector (`/api/csp-report`) and a build switch (`CSP_ENFORCE=true`). Left: run the report-only build on staging or the soft launch for a week, read the `csp-violation` log lines, then enforce (SEC-R2). HSTS at the TLS terminator (documented).
 
 ### P2: after launch
 
-- [x] **BE-2** (fixed): `crypto` stub and `google-auth-library` removed; `@types/multer` moved to dev; the two scripts that imported the undeclared `axios` are gone or use Node's own fetch (`scripts/run-ideal-flow.ts`).
-- [x] **FE-10** (fixed, tenth addendum): Public marketplace pages are client-only with data fetched after hydration and no per-page metadata. Dish and kitchen pages now carry a title and link preview, and the site a `robots.txt` and sitemap; server-rendered detail pages (SEO, first paint) remain.
-- [x] **FE-11** (fixed): The `/api/geocode/ip` route is deleted. With no position from the device the map stays where it is and says so (English and Urdu); it never guesses a city.
-- [x] **FE-7** (fixed): 235 explicit `any` usages; the 47 `as any` casts hide missing fields on Order/Product/response types and a dead login-shape branch. Type the API shapes the pages read; remove `as any`. The customer's order pages, the order service's responses and the live-update payloads are typed (one `as any` cast is left, in the dish page's normaliser; the `catch (err: any)` handlers and the API item mappers are as they were).
-- [x] **FE-8** (fixed): 13 files exceed 1000 lines; the two seller product forms are 60% identical and several pages are one 1200-1300 line component. One product form (`components/sellers/product-form/`), and the home page and the hub console split into parts.
-- [x] **MOBILE-10** (fixed, eleventh addendum): Static export / bundled Capacitor mode is blocked by server routes, cookies() and single-origin CORS; remote-URL mode is the only drop-in option. Ship Capacitor in remote-URL mode; bundling would need the geocode routes and the locale cookie moved.
-- [x] **BE-12** (fixed): 112 `any` usages; 12 were `(req as any).seller` because the Express Request augmentation typed `user` but not `seller`. `req.seller` is typed and the casts are gone; the money helpers, the ledger entries and twelve `where` clauses are typed too, and 43 `any` warnings remain (the product service's seller handling, the payment gateways, the error handler and a few others).
-- [x] **BE-14** (fixed): The eight scripts, `test-chat-features.ts` and `test-order-progression.ts` (covered by the API checks) are deleted; `docs/TESTING_STRATEGY.md` says so.
-- [ ] **BE-15** (partly fixed): Small helpers duplicated with drifting semantics: maskPhone, numeric coercion `num()`, COD cash computation. `maskPhone`, the cash-at-the-door rule and the three identical numeric helpers are one each now; the numeric helpers with genuinely different contracts remain.
-- [x] **BE-9** (fixed, eighth addendum): Four Prisma models have no application code path: UserActivityLog, SearchQuery, SellerBadge, and SellerPayoutSchedule (read but never written). Drop or wire four unused Prisma models (migration).
-- [x] **FE-12** (fixed): All 77 store reads select exactly the fields they use, compared with zustand's `useShallow`.
-- [x] **FE-18** (fixed): `NurayButton` is folded into `Button` as its `primary` variant (the same gradient class); the six sign-in pages use `Button` and `NurayButton.tsx` is deleted.
-- [ ] **FE-20** (open): Community store silently selects 'askari-11' or the first community when GPS is denied, contradicting its own no-default rule. Product decision: no silent default community.
-- [x] **INTEG-7** (fixed): Closed with FE-11: the route is gone.
-- [x] **MOBILE-11** (fixed, eleventh addendum): Auth tokens kept in localStorage; a native wrapper should use secure/persistent native storage. Every token read and write goes through one store (`lib/token-store.ts`, replaceable with `setTokenStore()`); the native secure store behind it is shell work.
-- [ ] **MOBILE-12** (partly fixed): Manifest lacks id/scope/screenshots and Playwright has no mobile viewport project; store assets do not exist yet. Manifest now has `id`, `scope` and `categories`, and a `mobile` Playwright project runs 14 phone checks in CI; store icons, feature graphic and screenshots remain.
-- [x] **MONEY-7** (fixed, eighth addendum): Idempotency-Key replay ignores the request body: a reused key returns the earlier order and silently drops the new one. Needs a request fingerprint column or table (migration, your approval).
-- [x] **OPS-13** (fixed): Closed with FE-11: the route is gone.
-- [x] **SEC-11** (fixed, seventh addendum): Account existence is revealed by register, OTP request and the PASSWORD_NOT_SET branch. Product decision on uniform answers for register/OTP (sign-up errors are often wanted explicit).
+- [x] **BE-2** (fixed): `crypto` stub and `google-auth-library` removed; `@types/multer` moved to dev; no script imports an undeclared package.
+- [x] **FE-10** (fixed, tenth addendum): Dish and kitchen pages are rendered on the server with their title and link preview; the site has a `robots.txt` and sitemap.
+- [x] **FE-11** (fixed): The `/api/geocode/ip` route is deleted; with no position from the device the map says so and never guesses a city.
+- [x] **FE-7** (fixed): No explicit `any` left in the web app or the backend, and `no-explicit-any` is an error in both lint configs.
+- [x] **FE-8** (fixed): One seller product form, and the home page and the hub console split into parts.
+- [x] **MOBILE-10** (fixed, eleventh addendum): The store app ships in remote-URL mode.
+- [x] **BE-12** (fixed): `req.seller` is typed and no `any` is left in the backend.
+- [x] **BE-14** (fixed): The eight old scripts are deleted; `docs/TESTING_STRATEGY.md` says so.
+- [x] **BE-15** (fixed): `maskPhone`, the cash-at-the-door rule and the identical numeric helpers are one each; the helpers left have different contracts on purpose.
+- [x] **BE-9** (fixed, eighth addendum): `SellerBadge`, `UserActivityLog` and `SearchQuery` are gone from the schema (a table with rows is kept as `archived_<name>`); `SellerPayoutSchedule` stays, for weekly payouts.
+- [x] **FE-12** (fixed): All store reads select exactly the fields they use, compared with zustand's `useShallow`.
+- [x] **FE-18** (fixed): `NurayButton` is folded into `Button` as its `primary` variant.
+- [x] **FE-20** (fixed, fifth addendum): No area is chosen on the buyer's behalf; without a position the area picker stays open and says why.
+- [x] **INTEG-7** (fixed): Closed with FE-11.
+- [x] **MOBILE-11** (fixed, eleventh addendum): Inside the app the tokens are also kept in the Keychain or Keystore and come back from there.
+- [ ] **MOBILE-12** (partly fixed): The manifest has `id`, `scope` and `categories`, and a `mobile` Playwright project runs the phone checks in CI. Left: the app icon, splash screen, feature graphic and screenshots.
+- [x] **MONEY-7** (fixed, eighth addendum): An Idempotency-Key reused with a different order is refused (request fingerprint, approved migration).
+- [x] **OPS-13** (fixed): Closed with FE-11.
+- [x] **SEC-11** (fixed, seventh addendum): Sign-up and the code request still say when an account exists (kept on purpose), but those answers are counted per network address, and after five in an hour that address gets 429 (`middleware/accountProbe.ts`).
 
 ## Deliverable 10: Final launch recommendation
 
-**Web and PWA: ready for a soft launch** once the P0 operational list above is done (a few days of configuration and one rehearsal), with the P1 decisions scheduled for the first weeks. The code-level blockers found by this audit are fixed, tested and documented; the remaining risks are known, bounded and listed with owners' decisions attached.
+**Web and PWA: ready for a soft launch** once the P0 operational list above is done (a few days of configuration and one rehearsal), with the P1 items scheduled for the first weeks. The code-level blockers found by this audit are fixed, tested and documented; the remaining risks are known, bounded and listed.
 
-**Google Play and App Store: not yet.** There is no native application to submit. With the plan in Deliverable 8 a Capacitor build for both stores is realistic in three to five weeks of focused work, after which the same web code serves browsers, the PWA and the two store apps. If a store presence is needed sooner, a Trusted Web Activity on Google Play can ship within days as a stop-gap for customers, not for riders.
+**Google Play and App Store: the app is built, not yet submittable.** `mobile/` holds the Android and iOS apps with phone sign-in, push notifications and the rider's background location (eleventh to fourteenth addenda). What is left is outside the code: the developer and Firebase accounts and the values they give, signing, the icon and store assets, the store listings and declarations, reviewer accounts, and checks on real phones (the pre-submission checklist above).
 
-Items that need your approval or a product decision before they are done: the push-notification schema for the native apps (MOBILE-3), the audit-log retention period and its trigger exception (SEC-R7), the way out of the three advisories in the migration tooling (the runtime image ships it, they are accepted in `.trivyignore` until 2027-01-31, and Prisma 7 does not remove them, so it is an npm override for `deepmerge-ts`), the pin requirement at the API (DELIV-4) and the area-name fallback for pins outside every community (DELIV-3), the staff lockout design (SEC-3), how much of the customer's phone and street a kitchen sees and when (PRIV-4), uniform answers for register and OTP requests (SEC-11, SEC-R4), the silent default community (FE-20), foreground-only or background rider tracking (MOBILE-9), the choice among the three logo options (FE-21), the legal review (MOBILE-5), and the provider accounts.
+Decisions still open: the audit-log retention period and its trigger exception (SEC-R7); the Prisma 7 upgrade that removes the three migration-tooling advisories (accepted in `.trivyignore` until 2027-01-31); the running total that would bound the kitchen balance (PERF-1, a schema change); the logo among the three options in `public/` (FE-21); and the legal review (MOBILE-5). The other decisions this audit raised were taken in the fifth to fourteenth addenda.
 
 ## Addendum: independent judge pass and consolidation
 
