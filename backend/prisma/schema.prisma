@@ -1064,9 +1064,13 @@ model PromotionUsage {
 model PushSubscription {
   id         String    @id @default(uuid())
   userId     String    @map("user_id")
+  /// "web" (a browser's push service), "android" (FCM) or "ios" (APNs)
+  platform   String    @default("web")
+  /// web: the push service URL; android and ios: the device token
   endpoint   String    @unique
-  p256dh     String
-  auth       String
+  /// The browser's encryption keys (web only)
+  p256dh     String?
+  auth       String?
   userAgent  String?   @map("user_agent")
   createdAt  DateTime  @default(now()) @map("created_at")
   lastUsedAt DateTime? @map("last_used_at")

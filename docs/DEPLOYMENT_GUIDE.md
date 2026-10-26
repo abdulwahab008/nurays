@@ -17,6 +17,7 @@ Every backend setting is documented in [`backend/.env.example`](../backend/.env.
 | Twilio | Required for phone OTP, unless `SMS_PROVIDER=none`. |
 | Safepay | Optional. Without keys, online payment and wallet top-ups are not offered. |
 | VAPID keys | Optional. Without them there is no web push. |
+| Firebase service account, APNs key | Optional. Without them the Android or iPhone app gets no push (`docs/MOBILE_APP.md`). |
 | Sentry (or GlitchTip) | Optional error tracking, backend and browser. |
 
 Put TLS in front of both services and send `Strict-Transport-Security: max-age=31536000; includeSubDomains` from
@@ -97,6 +98,9 @@ payment receipts, seller and rider documents, chat media) are never public; the 
 | Variable | Required | Notes |
 |---|---|---|
 | `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT` | optional, as a pair | Setting only one of the keys stops startup. `npx web-push generate-vapid-keys`. |
+| `FCM_SERVICE_ACCOUNT` | optional | Push to the Android app. The Firebase service account's JSON key (as it is, or base64); one that is not a service account key stops startup. Secret. |
+| `APNS_KEY_ID`, `APNS_TEAM_ID`, `APNS_PRIVATE_KEY` | optional, all three | Push to the iPhone app. A key from Apple Developer with Apple Push Notifications service; the `.p8` text may use `\n` for line breaks. Some but not all, or a key that is not a `.p8`, stops startup. Secret. |
+| `APNS_BUNDLE_ID`, `APNS_SANDBOX` | no | Default `pk.nuray.app` and `false`; `true` only for builds run from Xcode. |
 | `RIDER_CASH_LIMIT` | no | Rs, default 10000; must be above 0 if set. |
 | `ORDER_ACCEPT_TIMEOUT_MINUTES` (30), `ORDER_PAYMENT_TIMEOUT_MINUTES` (60), `PAYMENT_CONFIRM_ESCALATE_HOURS` (6) | no | Used by the stale-order sweep. |
 | `BANK_API_URL`, `BANK_MERCHANT_ID`, `BANK_API_KEY`, `BANK_RETURN_URL`, `BANK_REQUEST_TIMEOUT_MS` | no | Placeholder for a bank gateway that is not implemented. Leave empty. (The timeout, default 15000 ms, is how long a call to the bank API may take.) See [PAYMENT_GATEWAY_INTEGRATION.md](PAYMENT_GATEWAY_INTEGRATION.md). |
@@ -155,9 +159,10 @@ else. It prints every problem and exits with code 1. In production (any `NODE_EN
 - `STORAGE_DRIVER=s3` without bucket, `ASSET_BASE_URL`, access key and secret; `STORAGE_DRIVER=local` without
   `UPLOADS_DIR`; or a driver other than `local`/`s3`.
 
-In every mode it refuses a missing `DATABASE_URL`/`JWT_SECRET`, a short `JWT_SECRET`, a half-set VAPID pair, and a
-`RIDER_CASH_LIMIT` that is not above 0. Non-fatal warnings are printed for a missing or unrecognised `NODE_ENV`, no
-VAPID keys, and local storage in production.
+In every mode it refuses a missing `DATABASE_URL`/`JWT_SECRET`, a short `JWT_SECRET`, a half-set VAPID pair, an unusable
+`FCM_SERVICE_ACCOUNT`, a half-set or unusable APNs key, and a `RIDER_CASH_LIMIT` that is not above 0. Non-fatal
+warnings are printed for a missing or unrecognised `NODE_ENV`, each kind of push left off, and local storage in
+production.
 
 Note that `docker-compose.yml` sets `FRONTEND_URL: http://frontend:3000` for the backend container. That is for local
 use; production (`https://` required) must override it.
@@ -356,7 +361,7 @@ screens.
       receipt link work.
 - [ ] Test email (registration verification) and test phone OTP both arrive.
 - [ ] Safepay: `SAFEPAY_SANDBOX=false`, live keys, webhook registered; one real small payment completes the order.
-- [ ] VAPID keys set if you want push; Sentry DSNs set if you want error tracking.
+- [ ] VAPID keys set if you want push in browsers, `FCM_SERVICE_ACCOUNT` and the `APNS_*` key for the apps; Sentry DSNs set if you want error tracking.
 - [ ] `NEXT_PUBLIC_SUPPORT_EMAIL` and `NEXT_PUBLIC_LEGAL_REVIEWED=true` set as repository variables (a release tag is refused without them; company name and address optional) and in the frontend build; `NEXT_PUBLIC_ENABLE_DEMO_LOGIN` not `true`.
 - [ ] First admin created; communities, delivery prices (admin, Settings) and kitchens/riders approved.
 - [ ] Database and file backups running, and a restore tested.

@@ -10,6 +10,9 @@
  * including a typo or none at all in a container, is treated as production.
  */
 
+import { fcmServiceAccount } from '../utils/fcm';
+import { apnsConfig } from '../utils/apns';
+
 export type RuntimeMode = 'development' | 'test' | 'production';
 
 export function runtimeMode(env: NodeJS.ProcessEnv = process.env): RuntimeMode {
@@ -69,6 +72,13 @@ export function configProblems(env: NodeJS.ProcessEnv = process.env): string[] {
 
   if (!!(env.VAPID_PUBLIC_KEY || '').trim() !== !!(env.VAPID_PRIVATE_KEY || '').trim()) {
     problems.push('Web push needs both VAPID_PUBLIC_KEY and VAPID_PRIVATE_KEY (generate them with `npx web-push generate-vapid-keys`), or neither.');
+  }
+  for (const check of [() => fcmServiceAccount(env), () => apnsConfig(env)]) {
+    try {
+      check();
+    } catch (err) {
+      problems.push((err as Error).message);
+    }
   }
 
   const cashLimit = (env.RIDER_CASH_LIMIT || '').trim();
@@ -133,8 +143,13 @@ export function configWarnings(env: NodeJS.ProcessEnv = process.env): string[] {
     warnings.push(`NODE_ENV="${env.NODE_ENV}" is not recognised: running with production rules.`);
   }
   if (mode !== 'production' && smsProvider(env) === 'console') warnings.push('SMS codes are printed to this console (development only).');
-  if (mode === 'production' && !(env.VAPID_PUBLIC_KEY || '').trim()) {
-    warnings.push('Push notifications are off (no VAPID keys). Kitchens and customers only get in-app, email and SMS alerts.');
+  if (mode === 'production') {
+    const off = [
+      !(env.VAPID_PUBLIC_KEY || '').trim() && 'browsers (no VAPID keys)',
+      !(env.FCM_SERVICE_ACCOUNT || '').trim() && 'the Android app (no FCM_SERVICE_ACCOUNT)',
+      !(env.APNS_KEY_ID || '').trim() && 'the iPhone app (no APNS_* settings)',
+    ].filter(Boolean);
+    if (off.length) warnings.push(`Push notifications are off for ${off.join(', ')}: those devices only get in-app, email and SMS alerts.`);
   }
   if (mode === 'production' && (env.STORAGE_DRIVER || 'local').toLowerCase() === 'local') {
     warnings.push('Uploads are stored on this server\'s disk (UPLOADS_DIR). Make sure it is a persistent, backed-up volume; S3-compatible storage is recommended.');

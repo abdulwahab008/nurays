@@ -1,6 +1,6 @@
 import { Request, Response } from 'express';
 import { getPreferences, updatePreferences } from '../services/notify.service';
-import { vapidPublicKey, saveSubscription, removeSubscription } from '../services/push.service';
+import { vapidPublicKey, pushPlatforms, saveSubscription, removeSubscription } from '../services/push.service';
 import notificationService from '../services/notification.service';
 import { AppError } from '../middleware/errorHandler';
 
@@ -82,7 +82,8 @@ export const updateNotificationPreferences = async (req: Request, res: Response)
 };
 
 export const getPushPublicKey = async (_req: Request, res: Response) => {
-  res.status(200).json({ success: true, data: { publicKey: vapidPublicKey() } });
+  // publicKey: for browsers (null when web push is off); platforms: which kinds of device this server can reach.
+  res.status(200).json({ success: true, data: { publicKey: vapidPublicKey(), platforms: pushPlatforms() } });
 };
 
 export const subscribePush = async (req: Request, res: Response) => {
@@ -91,6 +92,6 @@ export const subscribePush = async (req: Request, res: Response) => {
 };
 
 export const unsubscribePush = async (req: Request, res: Response) => {
-  await removeSubscription(uid(req), req.body.endpoint);
+  await removeSubscription(uid(req), req.body.endpoint ?? req.body.token);
   res.status(200).json({ success: true, message: 'Notifications are off for this device' });
 };

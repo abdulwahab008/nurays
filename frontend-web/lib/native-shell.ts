@@ -24,6 +24,7 @@ export interface NativePlugins {
   StatusBar?: { setStyle(options: { style: 'LIGHT' | 'DARK' | 'DEFAULT' }): Promise<void> };
   SplashScreen?: { hide(): Promise<void> };
   SocialLogin?: SocialLoginPlugin;
+  PushNotifications?: PushNotificationsPlugin;
 }
 
 /** The secure storage plugin's native methods (@aparajita/capacitor-secure-storage: Keychain on iOS, Keystore on Android). */
@@ -211,4 +212,53 @@ export function proofFromLogin(provider: 'google' | 'apple', result: SocialLogin
   // Apple gives the name only at the first sign-in, and never in the token: it names a new account.
   const name = [result.profile?.givenName, result.profile?.familyName].map((part) => part?.trim()).filter(Boolean).join(' ');
   return name ? { provider: 'apple', identityToken: token, fullName: name.slice(0, 100) } : { provider: 'apple', identityToken: token };
+}
+
+/** Capacitor's push plugin (@capacitor/push-notifications): FCM on Android, APNs on iOS. */
+export interface PushNotificationsPlugin {
+  checkPermissions(): Promise<{ receive: string }>;
+  requestPermissions(): Promise<{ receive: string }>;
+  register(): Promise<void>;
+  addListener(event: 'registration', cb: (token: { value: string }) => void): Promise<ListenerHandle>;
+  addListener(event: 'registrationError', cb: (error: { error: string }) => void): Promise<ListenerHandle>;
+  addListener(event: 'pushNotificationActionPerformed', cb: (action: { notification: { data?: Record<string, unknown> } }) => void): Promise<ListenerHandle>;
+}
+
+/**
+ * Ask the phone for its push token: `register()` answers through the 'registration' event (or 'registrationError').
+ * Rejects after `timeoutMs` when neither comes, which is what a phone without Google Play services does.
+ */
+export async function nativePushToken(plugin: PushNotificationsPlugin, timeoutMs = 15_000): Promise<string> {
+  const handles: Array<Promise<ListenerHandle>> = [];
+  try {
+    return await new Promise<string>((resolve, reject) => {
+      const timer = setTimeout(() => reject(new Error('The phone gave no push token')), timeoutMs);
+      handles.push(
+        plugin.addListener('registration', ({ value }) => {
+          clearTimeout(timer);
+          if (value) resolve(value);
+          else reject(new Error('The phone gave an empty push token'));
+        })
+      );
+      handles.push(
+        plugin.addListener('registrationError', ({ error }) => {
+          clearTimeout(timer);
+          reject(new Error(error || 'Push registration failed'));
+        })
+      );
+      plugin.register().catch((err) => {
+        clearTimeout(timer);
+        reject(err);
+      });
+    });
+  } finally {
+    for (const handle of handles) void handle.then((h) => h.remove()).catch(() => undefined);
+  }
+}
+
+/** The page a tapped notification opens: its `url` when that is a path on this site, else null. */
+export function notificationPath(data: Record<string, unknown> | undefined): string | null {
+  const url = data?.url;
+  if (typeof url !== 'string' || !url.startsWith('/') || url.startsWith('//') || url.includes('\\')) return null;
+  return url;
 }

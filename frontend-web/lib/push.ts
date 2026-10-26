@@ -1,16 +1,72 @@
 'use client';
 
 import { apiClient } from './api-client';
+import { nativePlatform, nativePlugins, nativePushToken, type NativeWindow, type PushNotificationsPlugin } from './native-shell';
 
 /**
- * Web push on this device: register the service worker, ask permission, subscribe with the
- * server's public key and tell the server. Everything here is per device and browser.
+ * Push on this device. In a browser: register the service worker, ask permission, subscribe with the server's public
+ * key and tell the server. In the store app: ask the phone's permission, get its push token (FCM on Android, APNs on
+ * iOS) and tell the server. Everything here is per device and browser.
  */
 
 export type PushState = 'unsupported' | 'unavailable' | 'denied' | 'off' | 'on';
 
-export function pushSupported(): boolean {
+/** The store app's push plugin and platform, or null in a browser (or an app build without the plugin). */
+function nativePush(): { plugin: PushNotificationsPlugin; platform: 'android' | 'ios' } | null {
+  if (typeof window === 'undefined') return null;
+  const win = window as unknown as NativeWindow;
+  const platform = nativePlatform(win);
+  const plugin = nativePlugins(win)?.PushNotifications;
+  return platform && plugin ? { plugin, platform } : null;
+}
+
+function browserPushSupported(): boolean {
   return typeof window !== 'undefined' && 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window;
+}
+
+export function pushSupported(): boolean {
+  return nativePush() !== null || browserPushSupported();
+}
+
+// The app's push token, once push was turned on in it (it is the app's address for the server, nothing secret).
+const TOKEN_KEY = 'nuray-push-token';
+const storedToken = (): string | null => {
+  try {
+    return localStorage.getItem(TOKEN_KEY);
+  } catch {
+    return null;
+  }
+};
+const storeToken = (token: string | null) => {
+  try {
+    if (token) localStorage.setItem(TOKEN_KEY, token);
+    else localStorage.removeItem(TOKEN_KEY);
+  } catch {
+    // Private storage: push still works, the next page load just asks the phone again.
+  }
+};
+
+/** Whether this server can reach this kind of app (it says so with its public key). */
+async function serverReaches(platform: 'android' | 'ios'): Promise<boolean> {
+  const res = await apiClient.get('/notifications/push/public-key');
+  return res.data?.data?.platforms?.[platform] === true;
+}
+
+async function nativeState({ plugin, platform }: NonNullable<ReturnType<typeof nativePush>>): Promise<PushState> {
+  if (!(await serverReaches(platform).catch(() => false))) return 'unavailable';
+  const { receive } = await plugin.checkPermissions();
+  if (receive === 'denied') return 'denied';
+  return receive === 'granted' && storedToken() ? 'on' : 'off';
+}
+
+async function nativeEnable({ plugin, platform }: NonNullable<ReturnType<typeof nativePush>>): Promise<PushState> {
+  if (!(await serverReaches(platform))) return 'unavailable';
+  const { receive } = await plugin.requestPermissions();
+  if (receive !== 'granted') return receive === 'denied' ? 'denied' : 'off';
+  const token = await nativePushToken(plugin);
+  await apiClient.post('/notifications/push/subscriptions', { platform, token });
+  storeToken(token);
+  return 'on';
 }
 
 function urlBase64ToUint8Array(base64: string): Uint8Array {
@@ -30,7 +86,9 @@ async function registration() {
 
 /** Where push stands on this device right now. */
 export async function getPushState(): Promise<PushState> {
-  if (!pushSupported()) return 'unsupported';
+  const native = nativePush();
+  if (native) return nativeState(native);
+  if (!browserPushSupported()) return 'unsupported';
   if (Notification.permission === 'denied') return 'denied';
   const key = await publicKey().catch(() => null);
   if (!key) return 'unavailable';
@@ -41,7 +99,9 @@ export async function getPushState(): Promise<PushState> {
 
 /** Turn push on for this device (asks the browser's permission). */
 export async function enablePush(): Promise<PushState> {
-  if (!pushSupported()) return 'unsupported';
+  const native = nativePush();
+  if (native) return nativeEnable(native);
+  if (!browserPushSupported()) return 'unsupported';
   const key = await publicKey();
   if (!key) return 'unavailable';
   const permission = await Notification.requestPermission();
@@ -61,9 +121,10 @@ async function currentSubscription(): Promise<PushSubscription | null> {
   return reg ? await reg.pushManager.getSubscription() : null;
 }
 
-/** The address this browser receives push notifications at, or null (none, or push not supported). Never throws. */
+/** The address this browser (or the app's token) receives push notifications at, or null (none, or push not supported). Never throws. */
 export async function pushEndpointHere(): Promise<string | null> {
-  if (!pushSupported()) return null;
+  if (nativePush()) return storedToken();
+  if (!browserPushSupported()) return null;
   try {
     return (await currentSubscription())?.endpoint ?? null;
   } catch {
@@ -77,7 +138,12 @@ export async function pushEndpointHere(): Promise<string | null> {
  * other devices keep theirs.) Never throws.
  */
 export async function dropPushSubscription(): Promise<void> {
-  if (!pushSupported()) return;
+  if (nativePush()) {
+    // The phone keeps its token; the server forgot it at sign-out, and push is turned on again by whoever signs in.
+    storeToken(null);
+    return;
+  }
+  if (!browserPushSupported()) return;
   try {
     await (await currentSubscription())?.unsubscribe();
   } catch {
@@ -91,7 +157,23 @@ export async function dropPushSubscription(): Promise<void> {
  * person signs in again). Does nothing where push was never turned on or the permission was withdrawn. Never throws.
  */
 export async function claimPushSubscription(): Promise<void> {
-  if (!pushSupported() || Notification.permission !== 'granted') return;
+  const native = nativePush();
+  if (native) {
+    // Asking the phone again also picks up a token it replaced since (FCM and APNs both do that now and then).
+    const previous = storedToken();
+    if (!previous) return;
+    try {
+      if ((await native.plugin.checkPermissions()).receive !== 'granted') return;
+      const token = await nativePushToken(native.plugin);
+      await apiClient.post('/notifications/push/subscriptions', { platform: native.platform, token });
+      storeToken(token);
+      if (token !== previous) await apiClient.delete('/notifications/push/subscriptions', { data: { token: previous } }).catch(() => undefined);
+    } catch {
+      // Tried again at the next sign-in or page load.
+    }
+    return;
+  }
+  if (!browserPushSupported() || Notification.permission !== 'granted') return;
   try {
     const sub = await currentSubscription();
     if (!sub) return;
@@ -104,7 +186,13 @@ export async function claimPushSubscription(): Promise<void> {
 
 /** Turn push off for this device. */
 export async function disablePush(): Promise<PushState> {
-  if (!pushSupported()) return 'unsupported';
+  if (nativePush()) {
+    const token = storedToken();
+    if (token) await apiClient.delete('/notifications/push/subscriptions', { data: { token } }).catch(() => undefined);
+    storeToken(null);
+    return 'off';
+  }
+  if (!browserPushSupported()) return 'unsupported';
   const reg = await navigator.serviceWorker.getRegistration('/');
   const sub = reg ? await reg.pushManager.getSubscription() : null;
   if (sub) {

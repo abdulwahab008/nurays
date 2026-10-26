@@ -2,7 +2,7 @@
 
 import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { mirroredTokenStore, nativePlugins, secureKV, syncTokens, appPathFromUrl, type NativeWindow } from '@/lib/native-shell';
+import { mirroredTokenStore, nativePlugins, notificationPath, secureKV, syncTokens, appPathFromUrl, type NativeWindow } from '@/lib/native-shell';
 import { setTokenStore, tokenStore } from '@/lib/token-store';
 import { apiClient, type ApiResponse } from '@/lib/api-client';
 import { useAuthStore, type User } from '@/lib/store/auth-store';
@@ -13,6 +13,7 @@ import { useAuthStore, type User } from '@/lib/store/auth-store';
  *   account is loaded again.
  * - A link to the site or the app's scheme (an order, the payment return) opens its page in the app.
  * - Android's back button goes back, and closes the app on the first page.
+ * - A tapped notification opens the page it is about.
  * - Dark status bar text on the light pages; the splash screen is hidden once the site has started.
  */
 export function NativeBridge() {
@@ -51,6 +52,14 @@ export function NativeBridge() {
         App.addListener('backButton', ({ canGoBack }) => {
           if (canGoBack) window.history.back();
           else void App.exitApp();
+        })
+      );
+    }
+    if (plugins.PushNotifications) {
+      listeners.push(
+        plugins.PushNotifications.addListener('pushNotificationActionPerformed', ({ notification }) => {
+          const path = notificationPath(notification?.data);
+          if (path) router.push(path);
         })
       );
     }

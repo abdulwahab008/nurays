@@ -31,6 +31,10 @@ const config: CapacitorConfig = {
       providers: { google: true, apple: true, facebook: false, twitter: false },
       logLevel: 1,
     },
+    // A notification that arrives while the app is open still shows (iOS; Android hands it to the page).
+    PushNotifications: {
+      presentationOptions: ['badge', 'sound', 'alert'],
+    },
     SplashScreen: {
       launchShowDuration: 1500,
       backgroundColor: '#FAFAFA',

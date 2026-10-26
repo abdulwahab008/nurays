@@ -98,6 +98,13 @@ describe('startup configuration', () => {
     expect(configProblems({ ...goodProd, RIDER_CASH_LIMIT: '15000' })).toEqual([]);
   });
 
+  it('says what is wrong with a phone push setting, and accepts none', () => {
+    expect(configProblems({ ...goodProd, FCM_SERVICE_ACCOUNT: 'not json' }).join(' ')).toMatch(/FCM_SERVICE_ACCOUNT/);
+    expect(configProblems({ ...goodProd, APNS_KEY_ID: 'K' }).join(' ')).toMatch(/APNS_KEY_ID, APNS_TEAM_ID and APNS_PRIVATE_KEY together/);
+    expect(configProblems({ ...goodProd, APNS_KEY_ID: 'K', APNS_TEAM_ID: 'T', APNS_PRIVATE_KEY: 'x' }).join(' ')).toMatch(/\.p8 key/);
+    expect(configProblems(goodProd)).toEqual([]);
+  });
+
   it('needs both VAPID keys for web push, or neither', () => {
     expect(configProblems({ ...goodProd, VAPID_PUBLIC_KEY: 'BPub' }).join(' ')).toMatch(/VAPID/);
     expect(configProblems({ ...goodProd, VAPID_PUBLIC_KEY: 'BPub', VAPID_PRIVATE_KEY: 'priv' })).toEqual([]);
