@@ -7,6 +7,7 @@ import { landingAfterLogin } from '@/lib/auth-redirect';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
+import type { SocialProof } from '@/lib/native-shell';
 import { GoogleSignInButton } from '@/components/GoogleSignInButton';
 import { useToast } from '@/components/ui/toast';
 import { authService } from '@/lib/services/auth.service';
@@ -43,12 +44,12 @@ export default function LoginPage() {
   // A staff account's password was right and its second step is next (SEC-3).
   const [staffStep, setStaffStep] = useState<{ mode: 'code' | 'setup'; challengeToken: string } | null>(null);
 
-  const handleGoogleSuccess = async (accessToken: string) => {
+  const handleGoogleSuccess = async (proof: SocialProof) => {
     setLoading(true);
     setError('');
     
     try {
-      const response = await authService.loginWithGoogle(accessToken);
+      const response = await authService.loginWithSocial(proof);
       
       if (response && response.data) {
         if (response.data.tokens) {
@@ -59,7 +60,7 @@ export default function LoginPage() {
           setUser(response.data.user);
         }
         
-        showToast(t('googleSuccess'), 'success');
+        showToast(t(proof.provider === 'apple' ? 'appleSuccess' : 'googleSuccess'), 'success');
         
         if (response.data.requiresEmailVerification && !response.data.user?.emailVerified) {
           router.push('/verify-email-pending');
@@ -69,7 +70,7 @@ export default function LoginPage() {
         }
       }
     } catch (err) {
-      const errorMessage = requestError(err, t('googleFailed'));
+      const errorMessage = requestError(err, t(proof.provider === 'apple' ? 'appleFailed' : 'googleFailed'));
       setError(errorMessage);
     } finally {
       setLoading(false);

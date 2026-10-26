@@ -1,3 +1,4 @@
+import type { SocialProof } from '@/lib/native-shell';
 import { apiClient, ApiResponse } from '../api-client';
 import type { User } from '../store/auth-store';
 
@@ -85,6 +86,13 @@ export const authService = {
       '/auth/google',
       { accessToken }
     );
+    return response.data;
+  },
+
+  /** Google (the web button's access token, or the app's ID token) or Apple (the app's identity token). */
+  loginWithSocial: async (proof: SocialProof) => {
+    const { provider, ...body } = proof;
+    const response = await apiClient.post<ApiResponse<AuthResponse>>(provider === 'apple' ? '/auth/apple' : '/auth/google', body);
     return response.data;
   },
 

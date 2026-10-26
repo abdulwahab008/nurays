@@ -1,10 +1,8 @@
-import prisma from '../config/database';
 import { isProduction } from '../config/env';
-import { tokenTtlSeconds } from '../utils/jwt';
-import { startSession } from './session.service';
 import { AppError } from '../middleware/errorHandler';
 import { GoogleIdTokenError, verifyGoogleIdToken } from '../utils/google-id-token';
 import { logger } from '../utils/logger';
+import { signInVerifiedEmail } from './verified-email-sign-in.service';
 
 /** How long a Google call may take before sign-in gives up (Google is normally well under a second). */
 const GOOGLE_TIMEOUT_MS = 10_000;
@@ -73,7 +71,7 @@ export class GoogleAuthService {
         throw new AppError('Email not provided by Google', 400, 'GOOGLE_EMAIL_MISSING');
       }
 
-      return await this.signInVerifiedProfile({ email, name, picture });
+      return await signInVerifiedEmail({ email, name, picture });
     } catch (error) {
       throw mapGoogleError(error);
     }
@@ -102,127 +100,9 @@ export class GoogleAuthService {
         if (err.reason === 'no_email') throw new AppError('Email not provided by Google', 400, 'GOOGLE_EMAIL_MISSING');
         throw new AppError('Invalid Google ID token', 401, 'INVALID_GOOGLE_TOKEN');
       }
-      return await this.signInVerifiedProfile({ email: identity.email, name: identity.name, picture: identity.picture });
+      return await signInVerifiedEmail({ email: identity.email, name: identity.name, picture: identity.picture });
     } catch (error) {
       throw mapGoogleError(error);
-    }
-  }
-
-  /** A person Google has vouched for, with a verified e-mail: sign in the account that has it, or make one. */
-  private async signInVerifiedProfile({ email, name, picture }: { email: string; name: string; picture: string | null }) {
-    // Check if user exists by email
-    let user = await prisma.user.findFirst({
-      where: { email },
-      include: { profile: true },
-    });
-
-    if (user) {
-      // A suspended/banned account must not get fresh tokens from a Google login.
-      if (user.status !== 'active') {
-        throw new AppError('Account is not active', 403, 'ACCOUNT_NOT_ACTIVE');
-      }
-      if (user.userType === 'admin') {
-        throw new AppError('Admin accounts sign in with email and password.', 403, 'ADMIN_PASSWORD_ONLY');
-      }
-      // User exists, log them in
-      // Since they're logging in with Google, their email is verified by Google
-      // Update email verification status and last login
-      const updatedUser = await prisma.user.update({
-        where: { id: user.id },
-        data: { 
-          lastLoginAt: new Date(),
-          emailVerified: true, // Google emails are pre-verified
-          // If this email was never verified, whoever set its password may have
-          // registered it before the real owner (pre-hijack). Google has now
-          // proven ownership, so drop that password; the owner signs in via Google.
-          // Also void every session already issued for it: the person who set that password (and holds a
-          // 30-day refresh token from signup) must not stay logged in to the real owner's account.
-          ...(user.emailVerified ? {} : { passwordHash: null, tokensValidAfter: new Date() }),
-        },
-        include: {
-          profile: true,
-        },
-      });
-
-      const { accessToken, refreshToken } = await startSession(updatedUser);
-
-      return {
-        user: {
-          id: updatedUser.id,
-          phone: updatedUser.phone,
-          email: updatedUser.email,
-          userType: updatedUser.userType,
-          emailVerified: true, // Always true for Google OAuth
-          profile: updatedUser.profile
-            ? {
-                fullName: updatedUser.profile.fullName,
-                avatarUrl: updatedUser.profile.avatarUrl || picture,
-                city: updatedUser.profile.city,
-                area: updatedUser.profile.area,
-              }
-            : undefined,
-        },
-        tokens: {
-          access_token: accessToken,
-          refresh_token: refreshToken,
-          expires_in: tokenTtlSeconds(accessToken),
-        },
-        requiresEmailVerification: false, // Google emails are always verified
-      };
-    } else {
-      // New user, create account
-      // Generate temporary phone number
-      const emailHash = Buffer.from(email).toString('base64').slice(0, 8);
-      const timestamp = Date.now().toString().slice(-8);
-      const random = Math.random().toString(36).substring(2, 6);
-      const formattedPhone = `+999${emailHash}${timestamp}${random}`;
-
-      // Create user
-      user = await prisma.user.create({
-        data: {
-          email,
-          phone: formattedPhone,
-          userType: 'customer',
-          emailVerified: true, // Google emails are pre-verified
-          phoneVerified: false,
-          status: 'active',
-          profile: {
-            create: {
-              fullName: name,
-              avatarUrl: picture,
-            },
-          },
-        },
-        include: {
-          profile: true,
-        },
-      });
-
-      const { accessToken, refreshToken } = await startSession(user);
-
-      return {
-        user: {
-          id: user.id,
-          phone: user.phone,
-          email: user.email,
-          userType: user.userType,
-          emailVerified: user.emailVerified,
-          profile: user.profile
-            ? {
-                fullName: user.profile.fullName,
-                avatarUrl: user.profile.avatarUrl,
-                city: user.profile.city,
-                area: user.profile.area,
-              }
-            : undefined,
-        },
-        tokens: {
-          access_token: accessToken,
-          refresh_token: refreshToken,
-          expires_in: tokenTtlSeconds(accessToken),
-        },
-        requiresEmailVerification: false, // Google emails are pre-verified
-      };
     }
   }
 }

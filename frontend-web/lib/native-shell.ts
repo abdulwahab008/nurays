@@ -23,6 +23,7 @@ export interface NativePlugins {
   SecureStorage?: SecureStoragePlugin;
   StatusBar?: { setStyle(options: { style: 'LIGHT' | 'DARK' | 'DEFAULT' }): Promise<void> };
   SplashScreen?: { hide(): Promise<void> };
+  SocialLogin?: SocialLoginPlugin;
 }
 
 /** The secure storage plugin's native methods (@aparajita/capacitor-secure-storage: Keychain on iOS, Keystore on Android). */
@@ -33,7 +34,14 @@ export interface SecureStoragePlugin {
 }
 
 export interface NativeWindow {
-  Capacitor?: { isNativePlatform?: () => boolean; Plugins?: NativePlugins };
+  Capacitor?: { isNativePlatform?: () => boolean; getPlatform?: () => string; Plugins?: NativePlugins };
+}
+
+/** 'ios' or 'android' inside the app, null in a browser. */
+export function nativePlatform(win: NativeWindow | undefined): 'ios' | 'android' | null {
+  if (!win?.Capacitor?.isNativePlatform?.()) return null;
+  const platform = win.Capacitor.getPlatform?.();
+  return platform === 'ios' || platform === 'android' ? platform : null;
 }
 
 export const nativePlugins = (win: NativeWindow | undefined): NativePlugins | null =>
@@ -142,4 +150,65 @@ export async function syncTokens(base: TokenStoreLike, secure: SecureKV): Promis
   if (!savedRefresh) return 'none';
   base.savePair(savedAccess ?? '', savedRefresh);
   return 'restored';
+}
+
+/**
+ * Native sign-in (@capgo/capacitor-social-login): Google on both phones (Android's Credential Manager, Google's iOS SDK),
+ * Apple on iPhones (required there because Google is offered: App Store guideline 4.8). The app gets a signed ID token,
+ * which the API checks against Google's or Apple's keys (POST /auth/google with idToken, POST /auth/apple).
+ */
+export interface SocialLoginPlugin {
+  initialize(options: SocialLoginInit): Promise<void>;
+  login(options: { provider: 'google' | 'apple'; options: { scopes: string[] } }): Promise<{ provider: string; result: SocialLoginResult }>;
+}
+
+export interface SocialLoginResult {
+  idToken?: string | null;
+  profile?: { givenName?: string | null; familyName?: string | null; name?: string | null };
+}
+
+export interface SocialLoginInit {
+  google?: { webClientId?: string; iOSClientId?: string; iOSServerClientId?: string; mode: 'online' };
+  apple?: { clientId: string; redirectUrl?: string };
+}
+
+/** What signs a person in with Google or Apple, sent to the API. */
+export type SocialProof =
+  | { provider: 'google'; accessToken: string }
+  | { provider: 'google'; idToken: string }
+  | { provider: 'apple'; identityToken: string; fullName?: string };
+
+export interface GoogleClientIds {
+  /** The web client id (NEXT_PUBLIC_GOOGLE_CLIENT_ID): Android's Credential Manager asks for it. */
+  web?: string;
+  /** The iOS client id (NEXT_PUBLIC_GOOGLE_IOS_CLIENT_ID). */
+  ios?: string;
+}
+
+/** Which buttons the app shows: Google where its client id is set, Apple on iPhones. */
+export function nativeProviders(platform: 'ios' | 'android', ids: GoogleClientIds): { google: boolean; apple: boolean } {
+  return { google: platform === 'ios' ? Boolean(ids.ios && ids.web) : Boolean(ids.web), apple: platform === 'ios' };
+}
+
+/** The plugin's settings for this phone. */
+export function socialLoginInit(platform: 'ios' | 'android', ids: GoogleClientIds, bundleId = 'pk.nuray.app'): SocialLoginInit {
+  const providers = nativeProviders(platform, ids);
+  const init: SocialLoginInit = {};
+  if (providers.google) {
+    init.google =
+      platform === 'ios' ? { iOSClientId: ids.ios, iOSServerClientId: ids.web, mode: 'online' } : { webClientId: ids.web, mode: 'online' };
+  }
+  // On iOS the client id only names the provider for the plugin; Apple's own sheet signs in (no redirect).
+  if (providers.apple) init.apple = { clientId: bundleId, redirectUrl: '' };
+  return init;
+}
+
+/** The proof to send for the plugin's answer, or null when it carried no token. */
+export function proofFromLogin(provider: 'google' | 'apple', result: SocialLoginResult): SocialProof | null {
+  const token = result.idToken?.trim();
+  if (!token) return null;
+  if (provider === 'google') return { provider: 'google', idToken: token };
+  // Apple gives the name only at the first sign-in, and never in the token: it names a new account.
+  const name = [result.profile?.givenName, result.profile?.familyName].map((part) => part?.trim()).filter(Boolean).join(' ');
+  return name ? { provider: 'apple', identityToken: token, fullName: name.slice(0, 100) } : { provider: 'apple', identityToken: token };
 }

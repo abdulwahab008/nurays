@@ -4,8 +4,10 @@ import { newCustomer } from './support/customer';
 // The website inside the Nuray store app (mobile/): a stand-in for the app's shell gives the page isNativePlatform and
 // the plugins it uses, recording every call (components/NativeBridge.tsx, lib/native-shell.ts).
 
-async function asTheApp(page: Page, vault: Record<string, string> = {}) {
-  await page.addInitScript((initialVault: Record<string, string>) => {
+type Shell = { platform?: 'android' | 'ios'; signIn?: Record<string, unknown> };
+
+async function asTheApp(page: Page, vault: Record<string, string> = {}, shell: Shell = {}) {
+  await page.addInitScript(([initialVault, { platform, signIn }]: [Record<string, string>, Shell]) => {
     const w = window as unknown as Record<string, unknown>;
     const calls: string[] = [];
     const listeners: Record<string, (e: unknown) => void> = {};
@@ -17,7 +19,16 @@ async function asTheApp(page: Page, vault: Record<string, string> = {}) {
     w.__listeners = listeners;
     w.Capacitor = {
       isNativePlatform: () => true,
+      getPlatform: () => platform ?? 'android',
       Plugins: {
+        // The phone's sign-in sheet, answering with `signIn` (Sign in with Apple's answer, say).
+        SocialLogin: {
+          initialize: async (o: unknown) => void calls.push(`social init ${JSON.stringify(o)}`),
+          login: async (o: { provider: string }) => {
+            calls.push(`social login ${o.provider}`);
+            return { provider: o.provider, result: signIn ?? {} };
+          },
+        },
         App: {
           addListener: async (event: string, cb: (e: unknown) => void) => {
             calls.push(`listen ${event}`);
@@ -42,7 +53,7 @@ async function asTheApp(page: Page, vault: Record<string, string> = {}) {
         },
       },
     };
-  }, vault);
+  }, [vault, shell] as [Record<string, string>, Shell]);
 }
 
 const calls = (page: Page) => page.evaluate(() => (window as unknown as { __calls: string[] }).__calls);
@@ -72,6 +83,41 @@ test.describe('the website inside the store app', () => {
     await page.goto('/login');
     await expect(page.getByRole('heading').first()).toBeVisible();
     await expect(page.getByRole('button', { name: /Google/ })).toHaveCount(0);
+  });
+
+  test('an Android phone with no Google client set up shows no phone sign-in buttons', async ({ page }) => {
+    test.skip(!!process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID, 'this build has a Google client id');
+    await asTheApp(page, {}, { platform: 'android' });
+    await page.goto('/login');
+    await expect(page.getByRole('heading').first()).toBeVisible();
+    await page.waitForTimeout(500);
+    await expect(page.getByTestId('native-sign-in')).toHaveCount(0);
+  });
+
+  test('on an iPhone, Sign in with Apple sends the identity token and name and signs the person in', async ({ page }) => {
+    const customer = await newCustomer();
+    test.skip(!customer.jwt, 'the API is not running');
+    // A real Apple token cannot be made here, so the API's answer stands in: the tokens of a real customer.
+    const login = await page.request.post(`${process.env.API_BASE ?? 'http://localhost:3001/api/v1'}/auth/login`, {
+      data: { phoneOrEmail: customer.email, otpCodeOrPassword: 'Lantern-Quartz-71!', loginMethod: 'email' },
+    });
+    const signedIn = (await login.json()).data as { user: { email: string }; tokens: { access_token: string; refresh_token: string } };
+    let sent: Record<string, unknown> | null = null;
+    await page.route('**/auth/apple', async (route) => {
+      sent = route.request().postDataJSON();
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ success: true, data: { ...signedIn, requiresEmailVerification: false } }) });
+    });
+
+    await asTheApp(page, {}, { platform: 'ios', signIn: { idToken: 'header.payload.signature', profile: { givenName: 'Ayesha', familyName: 'Khan' } } });
+    await page.goto('/login');
+    await page.getByRole('button', { name: /Apple/ }).click();
+
+    await expect.poll(() => sent).toEqual({ identityToken: 'header.payload.signature', fullName: 'Ayesha Khan' });
+    expect(await calls(page)).toEqual(expect.arrayContaining(['social login apple']));
+    expect((await calls(page)).find((c) => c.startsWith('social init'))).toContain('"apple":{"clientId":"pk.nuray.app"');
+    await expect(page).not.toHaveURL(/\/login/);
+    await expect.poll(() => page.evaluate(() => localStorage.getItem('refresh_token'))).toBe(signedIn.tokens.refresh_token);
+    await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('auth-storage') ?? '{}')?.state?.user?.email ?? null)).toBe(customer.email);
   });
 
   test('a page that lost its sign-in gets it back from secure storage', async ({ page }) => {

@@ -102,3 +102,42 @@ test('at start a signed-in page is mirrored, a page that lost its tokens gets th
 
   assert.equal(await syncTokens(pageStore(), secureMemory()), 'none');
 });
+
+test('the platform is read only inside the app', async () => {
+  const { nativePlatform } = await import('../../lib/native-shell.ts');
+  assert.equal(nativePlatform({ Capacitor: { isNativePlatform: () => true, getPlatform: () => 'ios' } }), 'ios');
+  assert.equal(nativePlatform({ Capacitor: { isNativePlatform: () => true, getPlatform: () => 'android' } }), 'android');
+  assert.equal(nativePlatform({ Capacitor: { isNativePlatform: () => false, getPlatform: () => 'web' } }), null);
+  assert.equal(nativePlatform(undefined), null);
+});
+
+test('buttons: Google where its client id is set, Apple on iPhones only', async () => {
+  const { nativeProviders } = await import('../../lib/native-shell.ts');
+  assert.deepEqual(nativeProviders('android', { web: 'w' }), { google: true, apple: false });
+  assert.deepEqual(nativeProviders('android', {}), { google: false, apple: false });
+  assert.deepEqual(nativeProviders('ios', { web: 'w' }), { google: false, apple: true });
+  assert.deepEqual(nativeProviders('ios', { web: 'w', ios: 'i' }), { google: true, apple: true });
+});
+
+test("the plugin's settings follow the phone", async () => {
+  const { socialLoginInit } = await import('../../lib/native-shell.ts');
+  assert.deepEqual(socialLoginInit('android', { web: 'w', ios: 'i' }), { google: { webClientId: 'w', mode: 'online' } });
+  assert.deepEqual(socialLoginInit('ios', { web: 'w', ios: 'i' }), {
+    google: { iOSClientId: 'i', iOSServerClientId: 'w', mode: 'online' },
+    apple: { clientId: 'pk.nuray.app', redirectUrl: '' },
+  });
+  assert.deepEqual(socialLoginInit('ios', {}), { apple: { clientId: 'pk.nuray.app', redirectUrl: '' } });
+});
+
+test('the proof carries the ID token, and the name Apple gives at the first sign-in', async () => {
+  const { proofFromLogin } = await import('../../lib/native-shell.ts');
+  assert.deepEqual(proofFromLogin('google', { idToken: ' g.t.k ' }), { provider: 'google', idToken: 'g.t.k' });
+  assert.deepEqual(proofFromLogin('apple', { idToken: 'a.t.k', profile: { givenName: ' Ayesha ', familyName: 'Khan' } }), {
+    provider: 'apple',
+    identityToken: 'a.t.k',
+    fullName: 'Ayesha Khan',
+  });
+  assert.deepEqual(proofFromLogin('apple', { idToken: 'a.t.k', profile: { givenName: null, familyName: null } }), { provider: 'apple', identityToken: 'a.t.k' });
+  assert.equal(proofFromLogin('google', { idToken: null }), null);
+  assert.equal(proofFromLogin('apple', {}), null);
+});

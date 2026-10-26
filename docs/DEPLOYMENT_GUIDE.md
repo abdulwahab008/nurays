@@ -46,6 +46,7 @@ Required means the server will not start in production without it (see "Startup 
 | `JWT_EXPIRES_IN`, `JWT_REFRESH_EXPIRES_IN` | no | Defaults: `1h` (the app renews it with the refresh token) and `30d`. |
 | `GOOGLE_CLIENT_ID` | no | Google sign-in; see [GOOGLE_OAUTH_SETUP.md](GOOGLE_OAUTH_SETUP.md). |
 | `GOOGLE_NATIVE_CLIENT_IDS` | no | Comma-separated Android and iOS OAuth client IDs, for a native app's Google sign-in (ID tokens). Leave empty until the apps exist. |
+| `APPLE_CLIENT_IDS` | for the iOS app | Comma-separated audiences Sign in with Apple tokens may carry: the app's bundle id, `pk.nuray.app`. Empty turns `POST /auth/apple` off (503 `APPLE_NOT_CONFIGURED`). |
 | `FRONTEND_URL` | yes (production) | Must be `https://`. Used in email links. |
 | `CORS_ORIGIN` | yes | The one browser origin allowed for HTTP and Socket.IO, an https:// origin (normally the same as `FRONTEND_URL`). Production refuses to start without it. |
 | `BASE_URL` | yes | The API's public `https://` URL. The links to photos in API answers are built from it (it defaults to `http://localhost:3001`, which no visitor can open), and Safepay sends customers back to it after paying. |
@@ -118,7 +119,8 @@ All `NEXT_PUBLIC_*` values are inlined into the JavaScript at build time. Changi
 | `NEXT_PUBLIC_WS_URL` | no | Socket.IO origin when it is not the API's origin. |
 | `NEXT_PUBLIC_SITE_URL` | production | Build time. The address the site is served from, the origin only (`https://nuray.pk`). It gives a shared dish or kitchen link its canonical address and picture, and opens the public pages to search engines (`/robots.txt`, `/sitemap.xml`). While it is empty (development, staging) every page is marked `noindex` and `robots.txt` disallows everything, so a test site never turns up in a search. |
 | `API_INTERNAL_URL` | in Docker | Server-side, runtime (no rebuild). The API's address as the web server sees it (`http://backend:3001/api/v1` in the compose file), when the browser's `NEXT_PUBLIC_API_URL` is not reachable from inside the container. The web server reads a dish or kitchen from it for its page title and link preview; when it cannot, the page is served with the site's own title. |
-| `NEXT_PUBLIC_GOOGLE_CLIENT_ID` | no | Same client ID as the backend's `GOOGLE_CLIENT_ID`. |
+| `NEXT_PUBLIC_GOOGLE_CLIENT_ID` | no | Same client ID as the backend's `GOOGLE_CLIENT_ID`. The Android app's native Google sign-in uses it too. |
+| `NEXT_PUBLIC_GOOGLE_IOS_CLIENT_ID` | for the iOS app | The iOS app's Google client ID (also in the backend's `GOOGLE_NATIVE_CLIENT_IDS`, and its reversed form as a URL scheme in the iOS project). Google sign-in shows in the iOS app once it is set. |
 | `NEXT_PUBLIC_SENTRY_DSN`, `NEXT_PUBLIC_SENTRY_ENVIRONMENT`, `NEXT_PUBLIC_SENTRY_RELEASE` | no | Browser error tracking; nothing loads when empty. Build time, like every `NEXT_PUBLIC_*`: the publish workflow passes them as build args (the release defaults to the commit). |
 | `NEXT_PUBLIC_SUPPORT_EMAIL` | set before launch | The contact e-mail on the Terms, Privacy, Refund, Help and Delete-account pages. Until it is set they point to the support page only. |
 | `NEXT_PUBLIC_LEGAL_COMPANY_NAME`, `NEXT_PUBLIC_LEGAL_ADDRESS` | no | Who runs Nuray ("Nuray, run by …"), once there is a registered business name or an address to publish. Left out when empty. |

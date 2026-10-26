@@ -26,6 +26,11 @@ const config: CapacitorConfig = {
     contentInset: 'automatic',
   },
   plugins: {
+    // Native sign-in: Google and Apple only (no other provider SDK is bundled).
+    SocialLogin: {
+      providers: { google: true, apple: true, facebook: false, twitter: false },
+      logLevel: 1,
+    },
     SplashScreen: {
       launchShowDuration: 1500,
       backgroundColor: '#FAFAFA',

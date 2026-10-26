@@ -4,6 +4,7 @@ import {
   register,
   login,
   loginWithGoogle,
+  loginWithApple,
   verifyEmail,
   resendVerificationEmail,
   refreshToken,
@@ -36,6 +37,7 @@ import {
   resetPasswordSchema,
   changePasswordSchema,
   googleLoginSchema,
+  appleLoginSchema,
 } from '../validators/auth.validator';
 import { authenticate, optionalAuthenticate } from '../middleware/auth.middleware';
 import {
@@ -57,6 +59,7 @@ router.post('/otp/request', otpIpLimiter, otpTargetLimiter, validate(requestOTPS
 router.post('/register', registerLimiter, validate(registerSchema), register);
 router.post('/login', loginAddressLimiter, loginLimiter, validate(loginSchema), login);
 router.post('/google', loginAddressLimiter, loginLimiter, validate(googleLoginSchema), loginWithGoogle);
+router.post('/apple', loginAddressLimiter, loginLimiter, validate(appleLoginSchema), loginWithApple);
 router.post('/verify-email', validate(verifyEmailSchema), verifyEmail);
 router.post('/forgot-password', forgotIpLimiter, forgotTargetLimiter, validate(forgotPasswordSchema), forgotPassword);
 router.post('/reset-password', loginLimiter, validate(resetPasswordSchema), resetPassword);
