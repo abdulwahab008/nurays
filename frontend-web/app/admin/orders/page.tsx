@@ -193,7 +193,7 @@ function AdminOrdersContent() {
                     {orders.map((order) => (
                       <tr key={order.id} className="hover:bg-gray-50">
                         <td className="px-6 py-4 whitespace-nowrap">
-                          <Link href={`/admin/orders/${order.id}`} className="text-green-600 hover:text-green-700 font-medium">
+                          <Link href={`/admin/orders/${order.id}`} className="text-brand-ink hover:underline font-medium">
                             #{order.orderNumber}
                           </Link>
                         </td>

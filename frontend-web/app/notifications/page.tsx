@@ -253,7 +253,7 @@ export default function NotificationsPage() {
                       {!notification.isRead && (
                         <button
                           onClick={() => markAsRead(notification.id)}
-                          className="text-xs text-green-600 hover:text-green-700 font-medium"
+                          className="text-xs text-brand-ink hover:underline font-medium"
                         >
                           {t('markRead')}
                         </button>
@@ -271,7 +271,7 @@ export default function NotificationsPage() {
                   {notification.link && (
                     <Link
                       href={notification.link}
-                      className="inline-flex items-center gap-1 mt-3 text-sm text-green-600 hover:text-green-700 font-medium"
+                      className="inline-flex items-center gap-1 mt-3 text-sm text-brand-ink hover:underline font-medium"
                     >
                       <span>{t('viewDetails')}</span>
                       <ArrowRight className="rtl:-scale-x-100 w-4 h-4" />

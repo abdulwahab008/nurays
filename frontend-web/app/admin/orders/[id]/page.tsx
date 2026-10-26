@@ -283,7 +283,7 @@ export default function AdminOrderDetailPage() {
         <div className="mb-6">
           <Link
             href="/admin/orders"
-            className="text-green-600 hover:text-green-700 text-sm font-medium inline-block"
+            className="text-brand-ink hover:underline text-sm font-medium inline-block"
           >
             ← Back to Orders
           </Link>
