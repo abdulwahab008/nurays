@@ -26,6 +26,14 @@ describe('auditWrites', () => {
     expect(data.requestData).toEqual({ reason: 'duplicate', password: '[redacted]' });
   });
 
+  it('keeps the first 200 characters of free text', async () => {
+    run(auditWrites('admin'), { user: { userId: 'a1', userType: 'admin' }, body: { note: 'x'.repeat(201), reason: 'y'.repeat(200) } }, 200);
+    await settle();
+    const { note, reason } = mockCreate.mock.calls[0][0].data.requestData;
+    expect(note).toBe(`${'x'.repeat(200)}…`);
+    expect(reason).toBe('y'.repeat(200));
+  });
+
   it('records refused attempts too', async () => {
     run(auditWrites('admin'), { user: { userId: 'a1', userType: 'admin' } }, 400);
     await settle();

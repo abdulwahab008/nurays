@@ -33,6 +33,7 @@ import { requestId, httpLogger } from './middleware/requestContext';
 import { isProduction } from './config/env';
 import { logOpsSnapshot } from './services/ops-snapshot.service';
 import { sweepStaleOrders, purgeExpiredSecrets } from './services/order-maintenance.service';
+import { purgeOldAuditLogs } from './services/audit-retention.service';
 import { expireAbandonedAttempts } from './services/online-payment.service';
 import { errorHandler } from './middleware/errorHandler';
 import { notFoundHandler } from './middleware/notFoundHandler';
@@ -171,6 +172,8 @@ httpServer.listen(PORT, () => {
   scheduleJob('stale-orders', 2 * 60 * 1000, () => sweepStaleOrders());
   // Old one-time codes and used / expired reset tokens.
   scheduleJob('purge-expired-secrets', 6 * 60 * 60 * 1000, () => purgeExpiredSecrets());
+  // Audit log rows older than two years (the retention period; the database refuses anything newer).
+  scheduleJob('audit-retention', 24 * 60 * 60 * 1000, () => purgeOldAuditLogs());
   // Refresh tokens nobody can use any more (expired, or in a session that ended a day ago).
   // Monday's kitchen payouts (from 06:00 Pakistan time; hourly, so a missed hour catches up). Off on test servers.
   if (process.env.WEEKLY_PAYOUTS_ENABLED !== 'false') scheduleJob('weekly-payouts', 60 * 60 * 1000, () => runWeeklyPayouts());

@@ -84,5 +84,8 @@
     "twilio": "^5.3.4",
     "web-push": "^3.6.7",
     "zod": "^4.6.5"
+  },
+  "overrides": {
+    "deepmerge-ts": "8.0.2"
   }
 }

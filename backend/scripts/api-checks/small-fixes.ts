@@ -4,6 +4,7 @@
  * the session, and the audit trail can be exported without a cell that a spreadsheet would run.
  */
 import { API, call, login, makeKitchen, makeUser, ok, prisma, Reply, sleep, unique } from './lib';
+import { purgeOldAuditLogs } from '../../src/services/audit-retention.service';
 
 /** A CSV text as rows of cells (every exported cell is quoted, a quote inside it is doubled). */
 function parseCsv(text: string): string[][] {
@@ -126,4 +127,21 @@ export default async function smallFixes() {
   const rows = parseCsv(await mine.text());
   const row = rows[1] ?? [];
   ok('the row with formula-like text is in the export, each of those cells with a leading apostrophe', rows.length === 2 && JSON.stringify([row[1], row[2], row[3], row[4], row[6]]) === JSON.stringify([`'${email}`, `'${action}`, "'+cmd", "'-2+3", "'@SUM(1,1)"]), row);
+
+  // 5. the audit log is kept two years (SEC-R7): the daily job deletes older rows, and nothing can delete newer ones
+  const yearsAgo = (years: number, days = 0) => new Date(Date.now() - (years * 365 + days) * 24 * 60 * 60 * 1000);
+  const stale = await prisma.auditLog.create({ data: { action: `retention-old-${marker}`, createdAt: yearsAgo(2, 30) } });
+  const kept = await prisma.auditLog.create({ data: { action: `retention-kept-${marker}`, createdAt: yearsAgo(1, 330) } });
+  const plainDelete = await prisma.auditLog.delete({ where: { id: stale.id } }).then(() => 'deleted', () => 'refused');
+  ok('a row older than two years still cannot be deleted directly', plainDelete === 'refused', plainDelete);
+  const purged = await purgeOldAuditLogs();
+  const left = await prisma.auditLog.findMany({ where: { id: { in: [stale.id, kept.id] } }, select: { id: true } });
+  ok('the retention job deletes it, and keeps a row just under two years old', purged >= 1 && left.length === 1 && left[0].id === kept.id, `${purged} deleted, left ${JSON.stringify(left)}`);
+  const forced = await prisma
+    .$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT set_config('nuray.audit_purge', 'on', true)`;
+      return tx.$executeRaw`DELETE FROM "audit_logs" WHERE "id" = ${kept.id}`;
+    })
+    .then(() => 'deleted', () => 'refused');
+  ok("even with the job's switch on, the database refuses to delete a row younger than two years", forced === 'refused', forced);
 }

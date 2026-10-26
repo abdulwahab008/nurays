@@ -126,7 +126,7 @@ Order of middleware in `index.ts`:
    - `authorize(...roles)`; sellers also pass `blockSuspendedSeller` (and `requireSeller` where approval is required).
    - `validate(schema)` / `validateQuery(schema)` (Zod). Failures become `400 VALIDATION_ERROR` with field details.
    - Controller, then service.
-   - Admin routers also pass `auditWrites('admin')`: every non-GET request is written to `audit_logs` after the response (who, action, entity, sanitized body with secrets redacted, status).
+   - Admin routers also pass `auditWrites('admin')`: every non-GET request is written to `audit_logs` after the response (who, action, entity, sanitized body with secrets redacted and free text cut to 200 characters, status). Rows are kept two years: the append-only trigger lets the daily retention job delete older ones and nothing else.
 8. `notFoundHandler`, then `errorHandler`.
 
 ### Auth
