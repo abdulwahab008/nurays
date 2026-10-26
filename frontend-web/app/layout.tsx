@@ -4,6 +4,7 @@ import { cookies } from "next/headers";
 import { GoogleOAuthProvider } from "@react-oauth/google";
 import { ToastProvider } from "@/components/ui/toast";
 import { DialogProvider } from "@/components/ui/Dialogs";
+import { NativeBridge } from "@/components/NativeBridge";
 import { AuthProvider } from "@/components/AuthProvider";
 import { RoleNotifications } from "@/components/RoleNotifications";
 import { LocaleProvider } from "@/lib/i18n";
@@ -63,6 +64,7 @@ export default async function RootLayout({
           <AuthProvider>
             <DialogProvider>
               <ImageFallback />
+              <NativeBridge />
               <RoleNotifications />
               {googleClientId ? (
                 <GoogleOAuthProvider clientId={googleClientId}>

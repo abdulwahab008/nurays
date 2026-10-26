@@ -4,6 +4,7 @@ import { useGoogleLogin } from '@react-oauth/google';
 import { Button } from './ui/button';
 import { useT } from '@/lib/i18n';
 import { authMessages } from '@/lib/i18n/messages/auth';
+import { useNativeShell } from '@/lib/hooks/use-native-shell';
 
 interface GoogleSignInButtonProps {
   onSuccess: (token: string) => void;
@@ -11,6 +12,9 @@ interface GoogleSignInButtonProps {
 }
 
 export function GoogleSignInButton(props: GoogleSignInButtonProps) {
+  // Google refuses its web sign-in inside an app's WebView, so the store app offers it only through its native sign-in.
+  const native = useNativeShell();
+  if (native) return null;
   // The sign-in hook only works inside the Google provider, which exists only when a client id is configured,
   // so the choice is made between two components rather than around a hook call.
   return process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID ? <ConfiguredGoogleButton {...props} /> : <UnconfiguredGoogleButton {...props} />;
