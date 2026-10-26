@@ -1,0 +1,32 @@
+{
+  "name": "nuray-mobile",
+  "version": "1.0.0",
+  "private": true,
+  "description": "The Nuray store apps (Android and iOS): a Capacitor shell that opens the Nuray website.",
+  "scripts": {
+    "prepare:www": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --experimental-strip-types scripts/prepare-www.ts",
+    "sync": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --experimental-strip-types scripts/prepare-www.ts && cap sync",
+    "sync:android": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --experimental-strip-types scripts/prepare-www.ts && cap sync android",
+    "sync:ios": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --experimental-strip-types scripts/prepare-www.ts && cap sync ios",
+    "open:android": "cap open android",
+    "open:ios": "cap open ios",
+    "build:android:debug": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --experimental-strip-types scripts/prepare-www.ts && cap sync android && cd android && ./gradlew assembleDebug",
+    "build:android:release": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --experimental-strip-types scripts/prepare-www.ts --release && cap sync android && cd android && ./gradlew bundleRelease",
+    "test": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --test --experimental-strip-types tests/*.test.ts"
+  },
+  "dependencies": {
+    "@aparajita/capacitor-secure-storage": "8.0.1",
+    "@capacitor/android": "8.5.3",
+    "@capacitor/app": "8.1.2",
+    "@capacitor/app-launcher": "8.0.1",
+    "@capacitor/browser": "8.0.5",
+    "@capacitor/core": "8.5.3",
+    "@capacitor/ios": "8.5.3",
+    "@capacitor/splash-screen": "8.0.2",
+    "@capacitor/status-bar": "8.0.4"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "8.5.3",
+    "typescript": "5.9.3"
+  }
+}

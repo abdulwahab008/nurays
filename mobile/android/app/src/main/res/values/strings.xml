@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Nuray</string>
+    <string name="title_activity_main">Nuray</string>
+    <string name="package_name">pk.nuray.app</string>
+    <string name="custom_url_scheme">pk.nuray.app</string>
+</resources>

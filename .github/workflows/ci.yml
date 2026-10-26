@@ -223,7 +223,7 @@ jobs:
           ANDROID_APP_PACKAGE: pk.nuray.app
           ANDROID_SHA256_CERT_FINGERPRINTS: "14:6D:E9:83:C5:73:06:50:D8:EE:B9:95:2F:34:FC:64:16:A0:83:42:E6:1D:BE:A8:8A:04:96:B2:3F:CF:44:E5"
           IOS_APP_IDS: ABCDE12345.pk.nuray.app
-        run: npx playwright test tests/e2e/smoke.spec.ts tests/e2e/rider-navigation.spec.ts tests/e2e/rider-location-resume.spec.ts tests/e2e/csp.spec.ts tests/e2e/geocode-proxy.spec.ts tests/e2e/public-pages.spec.ts tests/e2e/mobile.spec.ts tests/e2e/account-closure.spec.ts tests/e2e/load-failures.spec.ts --project=chromium --project=mobile
+        run: npx playwright test tests/e2e/smoke.spec.ts tests/e2e/rider-navigation.spec.ts tests/e2e/rider-location-resume.spec.ts tests/e2e/csp.spec.ts tests/e2e/geocode-proxy.spec.ts tests/e2e/public-pages.spec.ts tests/e2e/mobile.spec.ts tests/e2e/account-closure.spec.ts tests/e2e/load-failures.spec.ts tests/e2e/native-shell.spec.ts --project=chromium --project=mobile
 
       - name: Upload Playwright report
         if: ${{ !cancelled() }}
@@ -242,6 +242,41 @@ jobs:
         env:
           API_URL: http://localhost:3001/api/v1
         run: npm run api-checks
+
+  android-app:
+    name: Android app (debug build)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: mobile
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: mobile/package-lock.json
+
+      - name: Install
+        run: npm ci
+
+      - name: Unit tests
+        run: npm test
+
+      - name: Build the debug app
+        # The runner already has the Android SDK and Java 21. The placeholder website address is fine for a build check;
+        # a store build sets NURAY_APP_URL (npm run build:android:release refuses the placeholder).
+        run: |
+          export JAVA_HOME="$JAVA_HOME_21_X64"
+          npm run build:android:debug
+
+      - name: Keep the debug app
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: nuray-android-debug
+          path: mobile/android/app/build/outputs/apk/debug/*.apk
+          retention-days: 7
 
   money-flows:
     name: Money flows (real database)
@@ -457,6 +492,10 @@ jobs:
 
       - name: Frontend dependency audit
         working-directory: frontend-web
+        run: npm audit --omit=dev --audit-level=high
+
+      - name: Mobile app dependency audit
+        working-directory: mobile
         run: npm audit --omit=dev --audit-level=high
 
       - name: Secret scan (gitleaks)
