@@ -122,8 +122,8 @@ Business-rule errors use specific codes defined next to the check in the service
 | Limiter | Limit | Key | Applied to |
 |---|---|---|---|
 | api | 1200 / minute | IP | everything under `/api` except `/health` |
-| login | 10 failures / 15 min | IP + account | `POST /auth/login`, `/auth/google`, `/auth/reset-password`, `/auth/phone/verify` |
-| login-ip | 100 failures / 15 min | IP | `POST /auth/login`, `/auth/google` |
+| login | 10 failures / 15 min | IP + account | `POST /auth/login`, `/auth/google`, `/auth/apple`, `/auth/reset-password`, `/auth/phone/verify` |
+| login-ip | 100 failures / 15 min | IP | `POST /auth/login`, `/auth/google`, `/auth/apple` |
 | otp-ip | 30 / 15 min | IP | `POST /auth/otp/request` |
 | otp-phone | 3 / 15 min | phone number | `POST /auth/otp/request`, `/auth/phone/request` |
 | phone-request | 5 / hour | user | `POST /auth/phone/request` |
@@ -162,6 +162,7 @@ Uploaded public images are served from the storage layer's public URL. Private f
 | `POST /auth/register` | public, register limit | `email`, `password` (8-200 characters; a common password, or one built from the person's own name, phone or e-mail, is refused with 400 `WEAK_PASSWORD` and `details.reason`; one that is too short is refused by the request schema as 400 `VALIDATION_ERROR`), `user_type`: `customer` \| `seller` \| `rider`, `full_name` (2-255); optional `phone`, `phone_otp` (6 digits, from `/otp/request` with purpose `registration`; without it the phone is saved unverified), `city`, `area`, `business_name` (required for sellers, else 400 `BUSINESS_NAME_REQUIRED`) | 201 `{ user, seller?, tokens, requiresEmailVerification: true, emailSendFailed }`; seller and rider accounts start pending approval |
 | `POST /auth/login` | public, login limit | `loginMethod`: `email` (default) or `otp`; `phoneOrEmail`; `otpCodeOrPassword` (password min 6, or 6-digit OTP). Email login needs a valid email, OTP login a phone of 10-15 chars | `{ user, tokens, requiresEmailVerification }`. An unverified email does not block login |
 | `POST /auth/google` | public, login limit | exactly one of `accessToken` (the web button's Google access token) or `idToken` (a native app's Google ID token, a signed JWT verified against Google's keys); both or neither is 400 `VALIDATION_ERROR` | same shape as login. 401 `INVALID_GOOGLE_TOKEN`, 401 `GOOGLE_EMAIL_UNVERIFIED`, 503 `GOOGLE_NOT_CONFIGURED` / `GOOGLE_UNAVAILABLE` |
+| `POST /auth/apple` | public, login limit | `identityToken` (Sign in with Apple's identity token, a signed JWT verified against Apple's keys; audience in `APPLE_CLIENT_IDS`) and, at a first sign-in only, `fullName` (the name Apple shared, max 100) | same shape as login; the account with the verified e-mail (possibly an `@privaterelay.appleid.com` address) signs in, or a customer account is made, by the same rules as Google. 401 `INVALID_APPLE_TOKEN`, 401 `APPLE_EMAIL_UNVERIFIED`, 400 `APPLE_EMAIL_MISSING`, 403 `ACCOUNT_NOT_ACTIVE` / `ADMIN_PASSWORD_ONLY`, 503 `APPLE_NOT_CONFIGURED` / `APPLE_UNAVAILABLE` |
 | `POST /auth/verify-email` | public | `token` | message only |
 | `POST /auth/forgot-password` | public, otp limit | `email` | always the same message, whether or not the account exists; emails a reset link |
 | `POST /auth/reset-password` | public, login limit | `token` (20-200 chars), `password` (the same rules as sign-up; a staff member needs 12 characters, refused with 400 `WEAK_PASSWORD` and `details.minLength`) | message; revokes older sessions |

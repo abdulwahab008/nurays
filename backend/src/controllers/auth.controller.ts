@@ -1,3 +1,4 @@
+import { signInWithApple } from '../services/apple-auth.service';
 import { Request, Response } from 'express';
 import authService from '../services/auth.service';
 import googleAuthService from '../services/google-auth.service';
@@ -231,6 +232,13 @@ export const loginWithGoogle = async (req: Request, res: Response) => {
       : 'Login successful',
     data: result,
   });
+};
+
+/** Sign in with Apple, from the iOS app: Apple's identity token, and the name Apple gave the app at a first sign-in. */
+export const loginWithApple = async (req: Request, res: Response) => {
+  const { identityToken, fullName } = req.body;
+  const result = await signInWithApple(identityToken, fullName);
+  res.status(200).json({ success: true, message: 'Login successful', data: result });
 };
 
 export const changePassword = async (req: Request, res: Response) => {

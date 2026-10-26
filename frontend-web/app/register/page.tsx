@@ -4,6 +4,7 @@ import { useState, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
+import type { SocialProof } from '@/lib/native-shell';
 import { GoogleSignInButton } from '@/components/GoogleSignInButton';
 import { useToast } from '@/components/ui/toast';
 import { authService } from '@/lib/services/auth.service';
@@ -50,12 +51,12 @@ function RegisterForm() {
     }
   }, [searchParams]);
 
-  const handleGoogleSuccess = async (accessToken: string) => {
+  const handleGoogleSuccess = async (proof: SocialProof) => {
     setLoading(true);
     setError('');
     
     try {
-      const response = await authService.loginWithGoogle(accessToken);
+      const response = await authService.loginWithSocial(proof);
       
       if (response && response.data) {
         if (response.data.tokens) {
@@ -66,7 +67,7 @@ function RegisterForm() {
           setUser(response.data.user);
         }
         
-        showToast(t('googleSuccess'), 'success');
+        showToast(t(proof.provider === 'apple' ? 'appleSuccess' : 'googleSuccess'), 'success');
         
         // Google OAuth users are always email verified, so skip email verification page
         // Only redirect to email verification if explicitly required AND not a Google OAuth user
@@ -86,7 +87,7 @@ function RegisterForm() {
         }
       }
     } catch (err) {
-      const errorMessage = requestError(err, t('googleFailed'));
+      const errorMessage = requestError(err, t(proof.provider === 'apple' ? 'appleFailed' : 'googleFailed'));
       setError(errorMessage);
     } finally {
       setLoading(false);

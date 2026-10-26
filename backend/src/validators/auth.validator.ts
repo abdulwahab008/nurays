@@ -94,6 +94,12 @@ export const resetPasswordSchema = z.object({
   password: z.string().min(8, 'Password must be at least 8 characters').max(200),
 });
 
+// Sign in with Apple: Apple's identity token (a signed JWT) and, at a first sign-in only, the name Apple shared.
+export const appleLoginSchema = z.object({
+  identityToken: z.string().min(10).max(8192),
+  fullName: z.string().trim().max(100).optional(),
+});
+
 // Exactly one proof of who is signing in: the web button's access token, or a native app's ID token (a signed JWT).
 export const googleLoginSchema = z
   .object({

@@ -5,16 +5,19 @@ import { Button } from './ui/button';
 import { useT } from '@/lib/i18n';
 import { authMessages } from '@/lib/i18n/messages/auth';
 import { useNativeShell } from '@/lib/hooks/use-native-shell';
+import { NativeSignInButtons } from './NativeSignInButtons';
+import type { SocialProof } from '@/lib/native-shell';
 
 interface GoogleSignInButtonProps {
-  onSuccess: (token: string) => void;
+  /** The web button gives a Google access token; inside the store app the native sign-in gives an ID token (Google or Apple). */
+  onSuccess: (proof: SocialProof) => void;
   text?: string;
 }
 
 export function GoogleSignInButton(props: GoogleSignInButtonProps) {
-  // Google refuses its web sign-in inside an app's WebView, so the store app offers it only through its native sign-in.
+  // Google refuses its web sign-in inside an app's WebView, so the store app offers the phone's own sign-in instead.
   const native = useNativeShell();
-  if (native) return null;
+  if (native) return <NativeSignInButtons onSuccess={props.onSuccess} googleText={props.text} />;
   // The sign-in hook only works inside the Google provider, which exists only when a client id is configured,
   // so the choice is made between two components rather than around a hook call.
   return process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID ? <ConfiguredGoogleButton {...props} /> : <UnconfiguredGoogleButton {...props} />;
@@ -61,7 +64,7 @@ function ConfiguredGoogleButton({ onSuccess, text: textProp }: GoogleSignInButto
   const login = useGoogleLogin({
     onSuccess: (tokenResponse) => {
       // Send the access token to our backend
-      onSuccess(tokenResponse.access_token);
+      onSuccess({ provider: 'google', accessToken: tokenResponse.access_token });
     },
     onError: () => {
       console.error('Google login failed');

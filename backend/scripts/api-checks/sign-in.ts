@@ -159,6 +159,16 @@ export default async function signIn() {
     ok(`an ID token that is ${what} signs nobody in`, (r.status === 401 || r.status === 503) && !r.body?.data?.tokens, said(r));
   }
 
+  // 7b. Sign in with Apple (the iPhone app) takes an identity token, checked the same way
+  const noAppleToken = await call(null, 'POST', '/auth/apple', { fullName: 'Ayesha Khan' });
+  ok('Sign in with Apple without an identity token is refused', noAppleToken.status === 400 && noAppleToken.code === 'VALIDATION_ERROR', said(noAppleToken));
+  const appleTooLong = await call(null, 'POST', '/auth/apple', { identityToken: 'x'.repeat(9000) });
+  ok('and with one beyond any real size', appleTooLong.status === 400 && appleTooLong.code === 'VALIDATION_ERROR', said(appleTooLong));
+  const unsignedApple = `${Buffer.from('{"alg":"none","typ":"JWT"}').toString('base64url')}.${Buffer.from('{"iss":"https://appleid.apple.com","email":"victim@example.com","email_verified":true}').toString('base64url')}.`;
+  const forgedApple = await call(null, 'POST', '/auth/apple', { identityToken: unsignedApple });
+  // 401 when an Apple client is configured; 503 APPLE_NOT_CONFIGURED while none is (as in CI), and the token is never looked at
+  ok('an unsigned Apple token that claims a verified e-mail signs nobody in', (forgedApple.status === 401 || (forgedApple.status === 503 && forgedApple.code === 'APPLE_NOT_CONFIGURED')) && !forgedApple.body?.data?.tokens, said(forgedApple));
+
   // 8. changing the password while signed in
   const changePassword = (who: Actor, currentPassword: string, newPassword: string) => who.as('POST', '/auth/change-password', { currentPassword, newPassword });
   const refreshWith = (refreshToken: string) => call(null, 'POST', '/auth/refresh', { refreshToken });
