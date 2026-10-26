@@ -33,7 +33,7 @@ export function CoverImage({ src, alt, label, size = 'md', className = '', eager
     <div
       role="img"
       aria-label={alt}
-      className={`flex items-center justify-center bg-gradient-to-br from-orange-100 via-amber-50 to-slate-100 text-orange-300 font-black select-none ${className}`}
+      className={`flex items-center justify-center bg-gradient-to-br from-brand-100 via-amber-50 to-slate-100 text-brand-300 font-black select-none ${className}`}
     >
       <span className={size === 'sm' ? 'text-base' : size === 'md' ? 'text-3xl' : 'text-5xl'}>{initial}</span>
     </div>

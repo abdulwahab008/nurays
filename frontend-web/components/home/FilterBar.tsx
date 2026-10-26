@@ -73,7 +73,7 @@ export default function FilterBar({
 
           <Link
             href="/products"
-            className="hidden sm:inline-flex items-center gap-1 text-xs font-bold text-[#FF5500] hover:text-[#e04400] whitespace-nowrap"
+            className="hidden sm:inline-flex items-center gap-1 text-xs font-bold text-brand-ink hover:text-brand-800 whitespace-nowrap"
           >
             <span>{t('browseAllMenus')}</span>
             <ChevronRight className="rtl:-scale-x-100 w-3.5 h-3.5" />

@@ -163,7 +163,7 @@ export default function FavoritesPage() {
                 <div className="p-4 flex-1 flex flex-col justify-between">
                   <div>
                     <div className="flex items-start justify-between gap-2">
-                      <h3 className="font-bold text-neutral-900 text-base leading-snug group-hover:text-[#FF5500] transition">
+                      <h3 className="font-bold text-neutral-900 text-base leading-snug group-hover:text-brand-ink transition">
                         {fav.businessName}
                       </h3>
                       <div className="flex items-center gap-1 bg-amber-50 px-2 py-0.5 rounded-md border border-amber-200/60 shrink-0">

@@ -7,8 +7,9 @@ test.describe('Nuray smoke', () => {
     await page.goto('/');
     await expect(page).toHaveTitle(/Nuray/i);
     await expect(page.locator('text=NURAY').first()).toBeVisible();
-    await expect(page.locator('a[href="/products"]').first()).toBeVisible();
-    await expect(page.locator('a[href="/login"]').first()).toBeVisible();
+    // :visible: the header keeps some links for wider screens, hidden on a phone.
+    await expect(page.locator('a[href="/products"]:visible').first()).toBeVisible();
+    await expect(page.locator('a[href="/login"]:visible').first()).toBeVisible();
   });
 
   // A first visit has no area chosen: the Kitchens tab asks for one, and the Dishes tab

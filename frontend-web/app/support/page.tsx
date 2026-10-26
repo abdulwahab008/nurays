@@ -207,7 +207,7 @@ export default function SupportPage() {
           onClick={() => setActiveTab('faq')}
           className={`px-3 sm:px-6 py-2.5 rounded-xl font-bold text-xs transition-all cursor-pointer flex items-center gap-2 ${
             activeTab === 'faq'
-              ? 'bg-[#FF5500] text-white shadow-sm'
+              ? 'bg-brand text-on-brand shadow-sm'
               : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
           }`}
         >
@@ -217,7 +217,7 @@ export default function SupportPage() {
           onClick={() => setActiveTab('contact')}
           className={`px-3 sm:px-6 py-2.5 rounded-xl font-bold text-xs transition-all cursor-pointer flex items-center gap-2 ${
             activeTab === 'contact'
-              ? 'bg-[#FF5500] text-white shadow-sm'
+              ? 'bg-brand text-on-brand shadow-sm'
               : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
           }`}
         >
@@ -227,7 +227,7 @@ export default function SupportPage() {
           onClick={() => setActiveTab('tickets')}
           className={`px-3 sm:px-6 py-2.5 rounded-xl font-bold text-xs transition-all cursor-pointer flex items-center gap-2 ${
             activeTab === 'tickets'
-              ? 'bg-[#FF5500] text-white shadow-sm'
+              ? 'bg-brand text-on-brand shadow-sm'
               : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
           }`}
         >
@@ -247,7 +247,7 @@ export default function SupportPage() {
               <div key={catIndex} className="bg-white rounded-2xl border border-gray-100 overflow-hidden">
                 <div className="bg-gray-50 px-6 py-4 border-b border-gray-100">
                   <h3 className="font-semibold text-gray-900 flex items-center gap-2.5">
-                    <CategoryIcon className="w-5 h-5 text-[#FF5500]" />
+                    <CategoryIcon className="w-5 h-5 text-brand-ink" />
                     {category.category}
                   </h3>
                 </div>
@@ -264,12 +264,12 @@ export default function SupportPage() {
                           <span className="font-medium text-gray-900">{faq.q}</span>
                           <ChevronDown
                             className={`w-4 h-4 text-gray-500 transition-transform ${
-                              isExpanded ? 'rotate-180 text-[#FF5500]' : ''
+                              isExpanded ? 'rotate-180 text-brand-ink' : ''
                             }`}
                           />
                         </button>
                         {isExpanded && (
-                          <div className="px-6 pb-4 text-gray-600 bg-orange-50/30 text-sm leading-relaxed">
+                          <div className="px-6 pb-4 text-gray-600 bg-brand-50/30 text-sm leading-relaxed">
                             {faq.a}
                           </div>
                         )}
@@ -293,7 +293,7 @@ export default function SupportPage() {
               <select
                 value={formData.category}
                 onChange={(e) => setFormData({ ...formData, category: e.target.value })}
-                className="w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#FF5500] focus:border-transparent text-sm"
+                className="w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-brand focus:border-transparent text-sm"
               >
                 <option value="general">{t('ticketCat.general')}</option>
                 <option value="order">{t('ticketCat.order')}</option>
@@ -311,7 +311,7 @@ export default function SupportPage() {
                 value={formData.subject}
                 onChange={(e) => setFormData({ ...formData, subject: e.target.value })}
                 placeholder={t('subjectPlaceholder')}
-                className="w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#FF5500] focus:border-transparent text-sm"
+                className="w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-brand focus:border-transparent text-sm"
               />
             </div>
 
@@ -322,12 +322,12 @@ export default function SupportPage() {
                 onChange={(e) => setFormData({ ...formData, message: e.target.value })}
                 placeholder={t('messagePlaceholder')}
                 rows={5}
-                className="w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-[#FF5500] focus:border-transparent resize-none text-sm"
+                className="w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-brand focus:border-transparent resize-none text-sm"
               />
             </div>
 
             <div className="flex gap-3 pt-2">
-              <Button type="submit" className="bg-[#FF5500] hover:bg-[#e04b00] text-white font-bold" disabled={submitting}>
+              <Button type="submit" className="bg-brand hover:bg-brand-500 text-on-brand font-bold" disabled={submitting}>
                 <Send className="w-4 h-4 me-2" /> {submitting ? t('sendingDots') : t('sendMessage')}
               </Button>
               <Button type="button" variant="outline" onClick={() => setFormData({ subject: '', message: '', category: 'general' })}>
@@ -340,7 +340,7 @@ export default function SupportPage() {
 
       {/* Additional Help */}
       <div className="mt-8 rounded-3xl p-6 sm:p-8 bg-[#0C1016] text-white border border-white/10 shadow-lg relative overflow-hidden">
-        <div className="absolute -top-24 -end-24 w-64 h-64 rounded-full pointer-events-none bg-[#FF5500]/20 blur-2xl" />
+        <div className="absolute -top-24 -end-24 w-64 h-64 rounded-full pointer-events-none bg-brand/20 blur-2xl" />
         <div className="flex items-center justify-between flex-wrap gap-4 relative z-10">
           <div>
             <h3 className="text-xl font-black tracking-tight mb-1">{t('stillNeedHelp')}</h3>

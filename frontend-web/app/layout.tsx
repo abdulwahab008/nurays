@@ -5,11 +5,14 @@ import { GoogleOAuthProvider } from "@react-oauth/google";
 import { ToastProvider } from "@/components/ui/toast";
 import { DialogProvider } from "@/components/ui/Dialogs";
 import { NativeBridge } from "@/components/NativeBridge";
+import { CustomerTabBar } from "@/components/layout/CustomerTabBar";
+import { ThemeSync } from "@/components/ThemeSync";
 import { AuthProvider } from "@/components/AuthProvider";
 import { RoleNotifications } from "@/components/RoleNotifications";
 import { LocaleProvider } from "@/lib/i18n";
 import { siteUrl } from "@/lib/site";
 import { DEFAULT_LOCALE, dirFor, isLocale, LOCALE_COOKIE } from "@/lib/i18n/config";
+import { THEME_BOOT_SCRIPT, THEME_COLOURS } from "@/lib/theme";
 import "./fonts/fonts.css";
 import "./globals.css";
 
@@ -19,7 +22,8 @@ export const viewport: Viewport = {
   width: 'device-width',
   initialScale: 1,
   viewportFit: 'cover',
-  themeColor: '#FF5500',
+  // The page background, so the browser bar blends in; the app's own theme choice updates it (lib/hooks/use-theme.ts).
+  themeColor: THEME_COLOURS.light,
 };
 
 const SITE_TITLE = "Nuray | Home-cooked food from kitchens in your community";
@@ -55,16 +59,20 @@ export default async function RootLayout({
   const locale = isLocale(saved) ? saved : DEFAULT_LOCALE;
 
   return (
-    <html lang={locale} dir={dirFor(locale)} className="scroll-smooth">
-      <body
-        className="font-sans antialiased bg-[#FAFAFA] text-[#0F172A] selection:bg-[#FF5500] selection:text-white"
-      >
+    // suppressHydrationWarning: the theme script below may add data-theme before React starts.
+    <html lang={locale} dir={dirFor(locale)} className="scroll-smooth" suppressHydrationWarning>
+      <head>
+        {/* Before the page paints, so a dark page never flashes white first (lib/theme.ts). */}
+        <script dangerouslySetInnerHTML={{ __html: THEME_BOOT_SCRIPT }} />
+      </head>
+      <body className="font-sans antialiased bg-page text-ink">
         <LocaleProvider initialLocale={locale}>
         <ToastProvider>
           <AuthProvider>
             <DialogProvider>
               <ImageFallback />
               <NativeBridge />
+              <ThemeSync />
               <RoleNotifications />
               {googleClientId ? (
                 <GoogleOAuthProvider clientId={googleClientId}>
@@ -73,6 +81,7 @@ export default async function RootLayout({
               ) : (
                 children
               )}
+              <CustomerTabBar />
             </DialogProvider>
           </AuthProvider>
         </ToastProvider>

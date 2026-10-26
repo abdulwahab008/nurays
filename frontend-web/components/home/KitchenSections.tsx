@@ -20,7 +20,7 @@ export function TrendingKitchens({ kitchens: trendingKitchens }: { kitchens: Hom
     <section className="max-w-[1440px] mx-auto px-4 sm:px-8 pt-6" data-testid="trending-kitchens">
       <div className="mb-3">
         <h3 className="text-lg sm:text-xl font-bold text-slate-900 tracking-tight flex items-center gap-1.5">
-          <Flame className="w-5 h-5 text-[#FF5500]" />
+          <Flame className="w-5 h-5 text-brand-ink" />
           {t('trendingKitchens')}
         </h3>
         <p className="text-xs text-slate-500 font-medium mt-0.5">{t('trendingKitchensSub')}</p>
@@ -30,14 +30,14 @@ export function TrendingKitchens({ kitchens: trendingKitchens }: { kitchens: Hom
           <Link
             key={k.id}
             href={k.href}
-            className="flex-shrink-0 w-56 flex items-center gap-3 p-2.5 rounded-2xl bg-white border border-slate-200/80 hover:border-[#FF5500] shadow-2xs transition-colors group"
+            className="flex-shrink-0 w-56 flex items-center gap-3 p-2.5 rounded-2xl bg-white border border-slate-200/80 hover:border-brand shadow-2xs transition-colors group"
           >
-            <span className="w-6 text-center text-lg font-black text-[#FF5500]">{i + 1}</span>
+            <span className="w-6 text-center text-lg font-black text-brand-ink">{i + 1}</span>
             <div className="relative w-12 h-12 rounded-full overflow-hidden border border-slate-200 flex-shrink-0">
               <CoverImage src={k.avatar || k.coverPhoto} alt={k.name} label={k.name} size="sm" className="w-full h-full" />
             </div>
             <div className="min-w-0">
-              <span className="block text-sm font-bold text-slate-900 truncate group-hover:text-[#FF5500]">{k.name}</span>
+              <span className="block text-sm font-bold text-slate-900 truncate group-hover:text-brand-ink">{k.name}</span>
               <span className="block text-[11px] text-slate-500 truncate">
                 {[k.rating ? `★ ${k.rating}` : null, k.statusLabel].filter(Boolean).join(' · ')}
               </span>
@@ -60,7 +60,7 @@ export function KitchenAvatarRow({ kitchens, state }: { kitchens: HomeKitchen[];
           <h3 className="text-lg sm:text-xl font-bold text-slate-900 tracking-tight">{t('kitchensOnNuray')}</h3>
           <p className="text-xs text-slate-500 font-medium mt-0.5">{t('kitchensOnNuraySub')}</p>
         </div>
-        <Link href="/kitchens" className="text-xs font-bold text-[#FF5500] hover:underline flex items-center gap-1">
+        <Link href="/kitchens" className="text-xs font-bold text-brand-ink hover:underline flex items-center gap-1">
           <span>{t('seeAll')}</span>
           <ChevronRight className="rtl:-scale-x-100 w-3.5 h-3.5" />
         </Link>
@@ -74,7 +74,7 @@ export function KitchenAvatarRow({ kitchens, state }: { kitchens: HomeKitchen[];
               const caption = kitchenCaption(t, k);
               return (
                 <Link key={k.id} href={k.href} className="flex-shrink-0 flex flex-col items-center gap-1.5 group text-center">
-                  <div className="relative w-14 h-14 sm:w-16 sm:h-16 rounded-full overflow-hidden border border-slate-200 group-hover:border-[#FF5500] transition-all shadow-2xs">
+                  <div className="relative w-14 h-14 sm:w-16 sm:h-16 rounded-full overflow-hidden border border-slate-200 group-hover:border-brand transition-all shadow-2xs">
                     <CoverImage
                       src={k.avatar || k.coverPhoto}
                       alt={k.name}
@@ -92,7 +92,7 @@ export function KitchenAvatarRow({ kitchens, state }: { kitchens: HomeKitchen[];
                     )}
                   </div>
                   <div>
-                    <span className="block text-xs font-semibold text-slate-900 group-hover:text-[#FF5500] max-w-[85px] sm:max-w-[95px] truncate">
+                    <span className="block text-xs font-semibold text-slate-900 group-hover:text-brand-ink max-w-[85px] sm:max-w-[95px] truncate">
                       {k.name}
                     </span>
                     {caption && <span className="block text-[11px] text-slate-500 font-medium">{caption}</span>}
@@ -133,7 +133,7 @@ export function KitchenCard({
 
         {/* Deal Tag — only when one of its dishes is really discounted */}
         {kitchen.deal && (
-          <span className="absolute top-3 start-3 px-2.5 py-1 rounded-md text-white text-[11px] font-bold bg-[#FF5500] shadow-xs uppercase tracking-wider">
+          <span className="absolute top-3 start-3 px-2.5 py-1 rounded-md text-on-brand text-[11px] font-bold bg-brand shadow-xs uppercase tracking-wider">
             {kitchen.deal}
           </span>
         )}
@@ -176,7 +176,7 @@ export function KitchenCard({
                 className="w-9 h-9 rounded-xl border border-slate-200 flex-shrink-0"
               />
               <div className="min-w-0">
-                <h3 className="text-sm font-bold text-slate-900 group-hover:text-[#FF5500] truncate transition-colors">{kitchen.name}</h3>
+                <h3 className="text-sm font-bold text-slate-900 group-hover:text-brand-ink truncate transition-colors">{kitchen.name}</h3>
                 {(kitchen.chef || kitchen.area) && (
                   <p className="text-[11px] text-slate-500 font-medium truncate flex items-center gap-1">
                     {kitchen.chef && <span>{kitchen.chef}</span>}
@@ -278,13 +278,13 @@ export function KitchenGrid({
     <section className="max-w-[1440px] mx-auto px-4 sm:px-8 py-6">
       <div className="flex items-center justify-between mb-5">
         <div>
-          <div className="inline-flex items-center gap-1 text-[11px] font-bold uppercase tracking-wider text-[#FF5500] mb-0.5">
+          <div className="inline-flex items-center gap-1 text-[11px] font-bold uppercase tracking-wider text-brand-ink mb-0.5">
             <Sparkles className="w-3.5 h-3.5" />
             <span>{t('verifiedKitchens')}</span>
           </div>
           <h2 className="text-xl sm:text-2xl font-bold text-slate-900 tracking-tight">{t('browseHomeKitchens')}</h2>
         </div>
-        <Link href="/kitchens" className="text-xs font-bold text-[#FF5500] hover:underline flex items-center gap-1">
+        <Link href="/kitchens" className="text-xs font-bold text-brand-ink hover:underline flex items-center gap-1">
           <span>{t('viewAll')}</span>
           <ChevronRight className="rtl:-scale-x-100 w-3.5 h-3.5" />
         </Link>

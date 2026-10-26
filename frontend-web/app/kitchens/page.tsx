@@ -2,6 +2,7 @@
 
 import { useState, useMemo, useEffect } from 'react';
 import Link from 'next/link';
+import { SiteHeader } from '@/components/layout/SiteHeader';
 import {
   Search,
   Star,
@@ -14,17 +15,13 @@ import {
   ChefHat,
   ChevronRight,
   ArrowUpDown,
-  ShoppingBag,
 } from 'lucide-react';
-import { BrandLockup } from '@/components/ui/Mark';
 import { CoverImage } from '@/components/ui/CoverImage';
 import { apiClient, ApiResponse } from '@/lib/api-client';
 import type { PublicSeller, PublicSellerAvailability } from '@/lib/services/seller.service';
 import { displayRating, formatPrice } from '@/lib/utils';
 import { useAuthStore } from '@/lib/store/auth-store';
-import { useCartStore } from '@/lib/store/cart-store';
 import { DashboardLayout, CUSTOMER_SIDEBAR_ITEMS } from '@/components/layout/DashboardShell';
-import { CommunitySelector } from '@/components/community/CommunitySelector';
 import { useT } from '@/lib/i18n';
 import { browseMessages, businessTypeKey, type BrowseT } from '@/lib/i18n/messages/browse';
 import { kitchenMessages, kitchenKey, type KitchenT } from '@/lib/i18n/messages/kitchen';
@@ -174,7 +171,6 @@ function toKitchen(s: PublicSeller): Kitchen {
 
 export default function KitchensDirectoryPage() {
   const { isAuthenticated } = useAuthStore(useShallow((s) => ({ isAuthenticated: s.isAuthenticated })));
-  const { items: cartItems } = useCartStore(useShallow((s) => ({ items: s.items })));
   const tb = useT(browseMessages);
   const tk = useT(kitchenMessages);
   const [search, setSearch] = useState('');
@@ -273,7 +269,7 @@ export default function KitchensDirectoryPage() {
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           placeholder={tk('searchPlaceholder')}
-          className="w-full h-10 ps-10 pe-4 rounded-xl bg-slate-50 hover:bg-slate-100 focus:bg-white text-xs font-medium text-slate-900 placeholder:text-slate-400 border border-slate-200 focus:border-[#FF5500] focus:ring-2 focus:ring-orange-500/10 outline-none transition-all"
+          className="w-full h-10 ps-10 pe-4 rounded-xl bg-slate-50 hover:bg-slate-100 focus:bg-white text-xs font-medium text-slate-900 placeholder:text-slate-400 border border-slate-200 focus:border-brand focus:ring-2 focus:ring-brand/10 outline-none transition-all"
         />
         {search && (
           <button
@@ -377,7 +373,7 @@ export default function KitchensDirectoryPage() {
           {selectedFilter !== 'all' && (
             <button
               onClick={() => setSelectedFilter('all')}
-              className="text-xs font-semibold text-[#FF5500] hover:underline"
+              className="text-xs font-semibold text-brand-ink hover:underline"
             >
               {tk('resetFilters')}
             </button>
@@ -392,7 +388,7 @@ export default function KitchensDirectoryPage() {
           role="alert"
           className="bg-white rounded-2xl border border-slate-200 p-12 text-center max-w-md mx-auto my-12"
         >
-          <div className="w-12 h-12 rounded-2xl bg-orange-50 text-[#FF5500] flex items-center justify-center mx-auto mb-3">
+          <div className="w-12 h-12 rounded-2xl bg-brand-50 text-brand-ink flex items-center justify-center mx-auto mb-3">
             <ChefHat className="w-6 h-6" />
           </div>
           <h3 className="text-base font-bold text-slate-900 mb-1">{tk('loadError')}</h3>
@@ -408,7 +404,7 @@ export default function KitchensDirectoryPage() {
         </div>
       ) : kitchens.length === 0 ? (
         <div className="bg-white rounded-2xl border border-slate-200 p-12 text-center max-w-md mx-auto my-12">
-          <div className="w-12 h-12 rounded-2xl bg-orange-50 text-[#FF5500] flex items-center justify-center mx-auto mb-3">
+          <div className="w-12 h-12 rounded-2xl bg-brand-50 text-brand-ink flex items-center justify-center mx-auto mb-3">
             <ChefHat className="w-6 h-6" />
           </div>
           <h3 className="text-base font-bold text-slate-900 mb-1">{tk('noneListed')}</h3>
@@ -418,7 +414,7 @@ export default function KitchensDirectoryPage() {
         </div>
       ) : filteredKitchens.length === 0 ? (
         <div className="bg-white rounded-2xl border border-slate-200 p-12 text-center max-w-md mx-auto my-12">
-          <div className="w-12 h-12 rounded-2xl bg-orange-50 text-[#FF5500] flex items-center justify-center mx-auto mb-3">
+          <div className="w-12 h-12 rounded-2xl bg-brand-50 text-brand-ink flex items-center justify-center mx-auto mb-3">
             <ChefHat className="w-6 h-6" />
           </div>
           <h3 className="text-base font-bold text-slate-900 mb-1">{tk('noMatch')}</h3>
@@ -460,7 +456,7 @@ export default function KitchensDirectoryPage() {
 
                   {/* Discount Ribbon — only when a dish really is discounted */}
                   {kitchen.hasDiscount && (
-                    <span className="absolute top-3 start-3 px-2.5 py-1 rounded-md text-white text-[11px] font-bold bg-[#FF5500] shadow-xs uppercase tracking-wider">
+                    <span className="absolute top-3 start-3 px-2.5 py-1 rounded-md text-on-brand text-[11px] font-bold bg-brand shadow-xs uppercase tracking-wider">
                       {tk('discounted')}
                     </span>
                   )}
@@ -509,7 +505,7 @@ export default function KitchensDirectoryPage() {
                           className="w-9 h-9 rounded-xl border border-slate-200 flex-shrink-0"
                         />
                         <div className="min-w-0">
-                          <h2 className="text-sm font-bold text-slate-900 group-hover:text-[#FF5500] truncate transition-colors">
+                          <h2 className="text-sm font-bold text-slate-900 group-hover:text-brand-ink truncate transition-colors">
                             {kitchen.name}
                           </h2>
                           <p className="text-[11px] text-slate-500 font-medium truncate flex items-center gap-1">
@@ -596,7 +592,7 @@ export default function KitchensDirectoryPage() {
           <div className="flex items-center justify-between pb-1">
             <Link
               href="/products"
-              className="inline-flex items-center gap-1.5 text-xs font-bold text-slate-600 hover:text-[#FF5500] transition-colors py-1.5 px-3 rounded-xl bg-white border border-slate-200 shadow-2xs hover:border-slate-300"
+              className="inline-flex items-center gap-1.5 text-xs font-bold text-slate-600 hover:text-brand-ink transition-colors py-1.5 px-3 rounded-xl bg-white border border-slate-200 shadow-2xs hover:border-slate-300"
             >
               <ChevronRight className="rtl:-scale-x-100 w-3.5 h-3.5 rotate-180" />
               <span>{tk('browseAllDishes')}</span>
@@ -619,7 +615,7 @@ export default function KitchensDirectoryPage() {
               <div className="flex items-center gap-3 flex-wrap">
                 {isReady && (
                   <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-50 border border-slate-200 text-xs font-semibold text-slate-700">
-                    <ChefHat className="w-3.5 h-3.5 text-[#FF5500]" />
+                    <ChefHat className="w-3.5 h-3.5 text-brand-ink" />
                     {tk(kitchens.length === 1 ? 'verifiedCountOne' : 'verifiedCountMany', { count: kitchens.length })}
                   </span>
                 )}
@@ -636,60 +632,15 @@ export default function KitchensDirectoryPage() {
 
   // Public visitor: Render with top marketplace header
   return (
-    <div className="min-h-screen bg-[#FAFAFA] text-slate-900 pb-24">
-      {/* Header Bar */}
-      <header className="sticky top-0 z-40 pt-(--safe-top) bg-white/95 backdrop-blur-md border-b border-slate-200/80 shadow-xs">
-        <div className="max-w-[1400px] mx-auto px-4 sm:px-6 h-16 flex items-center justify-between gap-4">
-          <div className="flex items-center gap-4">
-            <Link href="/" className="hover:opacity-90 transition-opacity">
-              <BrandLockup markSize={30} wordSize={20} />
-            </Link>
-            <div className="hidden sm:block">
-              <CommunitySelector variant="navbar" />
-            </div>
-          </div>
-
-          <div className="flex items-center gap-3">
-            <Link
-              href="/products"
-              className="hidden sm:inline-block text-xs font-semibold text-slate-700 hover:text-[#FF5500] transition-colors px-3 py-1.5 rounded-lg hover:bg-slate-100"
-            >
-              {tk('browseAllDishes')}
-            </Link>
-            <Link
-              href="/cart"
-              className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-slate-900 hover:bg-black text-white text-xs font-semibold transition-colors"
-            >
-              <ShoppingBag className="w-3.5 h-3.5" />
-              <span>{tk('tray')}</span>
-              {cartItems.length > 0 && (
-                <span className="w-4 h-4 rounded-full bg-[#FF5500] text-white flex items-center justify-center text-[11px] font-bold">
-                  {cartItems.length}
-                </span>
-              )}
-            </Link>
-            <Link
-              href="/login"
-              className="hidden sm:inline-block text-xs font-semibold text-slate-700 hover:text-[#FF5500] px-2 py-1.5"
-            >
-              {tk('signIn')}
-            </Link>
-            <Link
-              href="/register"
-              className="px-3.5 py-1.5 rounded-xl bg-[#FF5500] hover:bg-[#e04400] text-white text-xs font-bold transition-colors shadow-2xs"
-            >
-              {tk('join')}
-            </Link>
-          </div>
-        </div>
-      </header>
+    <div className="min-h-screen bg-page text-slate-900 pb-24">
+      <SiteHeader />
 
       {/* Hero Header */}
       <section className="bg-white border-b border-slate-200/80 py-8">
         <div className="max-w-[1400px] mx-auto px-4 sm:px-6">
           <div className="flex flex-col md:flex-row md:items-end justify-between gap-6">
             <div>
-              <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-orange-50 border border-orange-200 text-[#FF5500] text-xs font-bold uppercase tracking-wider mb-2.5">
+              <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-brand-50 border border-brand-200 text-brand-ink text-xs font-bold uppercase tracking-wider mb-2.5">
                 <ChefHat className="w-3.5 h-3.5" />
                 <span>{tk('heroBadge')}</span>
               </div>

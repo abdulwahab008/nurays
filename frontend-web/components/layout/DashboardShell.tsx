@@ -164,7 +164,7 @@ export function DashboardShell({
   }, [open]);
 
   return (
-    <div className="min-h-screen bg-[#FAFAFA] text-[#0F172A]">
+    <div className="min-h-screen bg-page text-ink">
       <DashboardNavbar
         title={title}
         subtitle={subtitle}
@@ -194,7 +194,7 @@ export function DashboardShell({
         <StackedTables />
 
         <main
-          className="lg:ms-64 px-4 sm:px-6 lg:px-10 py-6 lg:py-10 min-h-[calc(100vh-var(--header-offset))] bg-[#FAFAFA]"
+          className="lg:ms-64 px-4 sm:px-6 lg:px-10 py-6 lg:py-10 min-h-[calc(100vh-var(--header-offset))] bg-page"
         >
           {title && (
             <div className="mb-6 sm:mb-8">

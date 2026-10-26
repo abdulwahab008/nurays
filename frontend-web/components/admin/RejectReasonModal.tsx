@@ -97,7 +97,7 @@ function RejectReasonForm({ title, description, suggestions = [], confirmLabel =
           maxLength={1000}
           aria-invalid={touched && !valid}
           aria-describedby="reject-reason-help"
-          className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-orange-400"
+          className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-brand"
           placeholder="For example: the photos of the CNIC are too blurry to read"
         />
         <p id="reject-reason-help" className={`mt-1 text-xs ${touched && !valid ? 'text-red-700' : 'text-slate-600'}`}>

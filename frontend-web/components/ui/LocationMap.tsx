@@ -97,8 +97,8 @@ L.tileLayer(MAP_TILE_URL, { attribution: MAP_ATTRIBUTION, maxZoom: MAP_MAX_ZOOM 
             className: 'custom-pin',
             html: `
               <div style="position: relative; width: 34px; height: 34px; display: flex; align-items: center; justify-content: center;">
-                <div style="position: absolute; width: 34px; height: 34px; background: rgba(255, 85, 0, 0.2); border-radius: 50%; animation: ping 2s cubic-bezier(0, 0, 0.2, 1) infinite;"></div>
-                <div style="width: 28px; height: 28px; background: #FF5500; border: 2.5px solid white; border-radius: 50% 50% 50% 0; transform: rotate(-45deg); box-shadow: 0 4px 10px rgba(0,0,0,0.3); display: flex; align-items: center; justify-content: center;">
+                <div style="position: absolute; width: 34px; height: 34px; background: rgba(65, 218, 199, 0.2); border-radius: 50%; animation: ping 2s cubic-bezier(0, 0, 0.2, 1) infinite;"></div>
+                <div style="width: 28px; height: 28px; background: #0A7A6E; border: 2.5px solid white; border-radius: 50% 50% 50% 0; transform: rotate(-45deg); box-shadow: 0 4px 10px rgba(0,0,0,0.3); display: flex; align-items: center; justify-content: center;">
                   <div style="width: 8px; height: 8px; background: white; border-radius: 50%; transform: rotate(45deg);"></div>
                 </div>
               </div>
@@ -309,7 +309,7 @@ L.tileLayer(MAP_TILE_URL, { attribution: MAP_ATTRIBUTION, maxZoom: MAP_MAX_ZOOM 
               }
             }}
             placeholder={t('mapSearchPlaceholder')}
-            className="w-full ps-8 pe-16 py-1.5 text-xs rounded-xl border border-slate-200 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-[#FF5500] outline-none transition-all"
+            className="w-full ps-8 pe-16 py-1.5 text-xs rounded-xl border border-slate-200 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-brand outline-none transition-all"
           />
           <Search className="w-3.5 h-3.5 text-slate-500 absolute start-2.5 top-2.5 pointer-events-none" />
           <button
@@ -339,7 +339,7 @@ L.tileLayer(MAP_TILE_URL, { attribution: MAP_ATTRIBUTION, maxZoom: MAP_MAX_ZOOM 
             onClick={handleLocateMe}
             disabled={locating}
             title={t('detectMyLocation')}
-            className="p-1.5 rounded-lg bg-orange-50 hover:bg-orange-100 text-[#FF5500] text-xs font-bold transition-colors shrink-0 cursor-pointer ms-auto flex items-center gap-1"
+            className="p-1.5 rounded-lg bg-brand-50 hover:bg-brand-100 text-brand-ink text-xs font-bold transition-colors shrink-0 cursor-pointer ms-auto flex items-center gap-1"
           >
             {locating ? (
               <Loader2 className="w-3.5 h-3.5 animate-spin" />
@@ -358,7 +358,7 @@ L.tileLayer(MAP_TILE_URL, { attribution: MAP_ATTRIBUTION, maxZoom: MAP_MAX_ZOOM 
       {!isLoaded && (
         <div className="absolute inset-0 bg-slate-50 flex items-center justify-center z-10">
           <div className="flex items-center gap-2 text-xs font-semibold text-slate-500">
-            <Loader2 className="w-4 h-4 animate-spin text-[#FF5500]" />
+            <Loader2 className="w-4 h-4 animate-spin text-brand-ink" />
             <span>{t('loadingMap')}</span>
           </div>
         </div>
@@ -367,7 +367,7 @@ L.tileLayer(MAP_TILE_URL, { attribution: MAP_ATTRIBUTION, maxZoom: MAP_MAX_ZOOM 
       {/* Bottom Coordinates & Hint */}
       <div className="px-3 py-1.5 bg-white/95 backdrop-blur-xs border-t border-slate-100 flex items-center justify-between text-[11px] text-slate-500">
         <span className="flex items-center gap-1 text-slate-600">
-          <MapPin className="w-3 h-3 text-[#FF5500]" />
+          <MapPin className="w-3 h-3 text-brand-ink" />
           <span role={locateFailed ? 'status' : undefined}>{locateFailed ? t('locateFailed') : t('mapHint')}</span>
         </span>
         {currentCoords && (

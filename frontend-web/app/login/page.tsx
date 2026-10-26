@@ -171,7 +171,7 @@ export default function LoginPage() {
   };
 
   const tabBase = 'flex-1 h-11 rounded-full font-bold transition-all';
-  const tabActive: React.CSSProperties = { background: 'linear-gradient(135deg, #FF5500 0%, #FF2A00 100%)', color: '#FFFFFF', fontSize: 13 };
+  const tabActive: React.CSSProperties = { background: '#41DAC7', color: '#06302B', fontSize: 13 };
   const tabInactive: React.CSSProperties = { background: 'transparent', color: '#64748B', fontSize: 13 };
   const inputClass = 'nuray-input';
   const inputStyle: React.CSSProperties = {};
@@ -201,7 +201,7 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen py-10 px-4 bg-gradient-to-br from-slate-50 via-orange-50/20 to-slate-100 flex flex-col items-center justify-center">
+    <div className="min-h-screen py-10 px-4 bg-gradient-to-br from-slate-50 via-brand-50/20 to-slate-100 flex flex-col items-center justify-center">
       <div className="w-full max-w-5xl bg-white rounded-3xl p-6 sm:p-10 border border-slate-200/90 shadow-2xl">
         
         {/* Top Header */}
@@ -331,7 +331,7 @@ export default function LoginPage() {
                   <button
                     type="button"
                     onClick={() => setStep('input')}
-                    className="w-full mt-3 text-xs font-semibold text-orange-600 hover:text-orange-700"
+                    className="w-full mt-3 text-xs font-semibold text-brand-ink hover:text-brand-ink"
                   >
                     {t('changePhone')}
                   </button>
@@ -400,7 +400,7 @@ export default function LoginPage() {
             <div className="mt-6 text-center">
               <p className="text-xs text-slate-500">
                 {t('noAccount')}{' '}
-                <Link href="/register" className="font-bold text-orange-600 hover:text-orange-700">
+                <Link href="/register" className="font-bold text-brand-ink hover:text-brand-ink">
                   {t('signUpLink')}
                 </Link>
               </p>

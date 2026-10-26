@@ -22,7 +22,7 @@ export default function RouteError({ error, reset }: { error: Error & { digest?:
           <button
             type="button"
             onClick={reset}
-            className="px-4 py-2 rounded-xl bg-[#FF5500] text-white text-sm font-semibold hover:bg-[#e04400]"
+            className="px-4 py-2 rounded-xl bg-brand text-on-brand text-sm font-semibold hover:bg-brand-500"
           >
             Try again
           </button>

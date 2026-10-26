@@ -22,7 +22,7 @@ import { useLocale, useT } from '@/lib/i18n';
 import { homeMessages } from '@/lib/i18n/messages/home';
 import { toHomeDish, toHomeKitchen } from '@/lib/home-feed';
 import { filterKitchens, isKitchenFilter, type HomeDish, type KitchenFilter } from '@/lib/home-filters';
-import HomeHeader from '@/components/home/HomeHeader';
+import { SiteHeader } from '@/components/layout/SiteHeader';
 import FilterBar from '@/components/home/FilterBar';
 import PromoBanners from '@/components/home/PromoBanners';
 import { KitchenAvatarRow, KitchenGrid, TrendingKitchens } from '@/components/home/KitchenSections';
@@ -202,7 +202,7 @@ export default function Home() {
   };
 
   return (
-    <div className="min-h-screen bg-[#FAFAFA] text-[#0F172A]">
+    <div className="min-h-screen bg-page text-ink">
       <SlideOverCartDrawer isOpen={isCartOpen} onClose={() => setIsCartOpen(false)} />
       <UberLeftSidebar
         isOpen={isSidebarOpen}
@@ -213,13 +213,11 @@ export default function Home() {
         }}
       />
 
-      <HomeHeader
-        stats={stats}
-        searchQuery={searchQuery}
-        onSearch={setSearchQuery}
+      <SiteHeader
+        search={{ query: searchQuery, onChange: setSearchQuery }}
         onOpenNav={() => setIsSidebarOpen(true)}
         onOpenTray={() => setIsCartOpen(true)}
-        onFrozenHub={() => setSelectedFilter('frozen')}
+        onFrozen={() => setSelectedFilter('frozen')}
       />
       <FilterBar
         selectedCuisine={selectedCuisine}

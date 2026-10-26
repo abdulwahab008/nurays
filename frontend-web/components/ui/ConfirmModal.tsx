@@ -110,7 +110,7 @@ export function ConfirmModal({
             className={`rounded-xl px-5 text-xs font-bold text-white transition-all cursor-pointer ${
               isDanger
                 ? 'bg-rose-600 hover:bg-rose-700 shadow-xs'
-                : 'bg-[#FF5500] hover:bg-[#e04400] shadow-xs'
+                : 'bg-brand hover:bg-brand-500 shadow-xs'
             }`}
           >
             {loading ? (

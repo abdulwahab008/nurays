@@ -474,7 +474,7 @@ export default function SellerSettingsPage() {
                   type="text"
                   value={formData.businessName}
                   onChange={(e) => setFormData({ ...formData, businessName: e.target.value })}
-                  className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-[#FF5500]"
+                  className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-brand"
                   required
                 />
               </div>
@@ -488,7 +488,7 @@ export default function SellerSettingsPage() {
                   value={formData.businessNameUrdu}
                   onChange={(e) => setFormData({ ...formData, businessNameUrdu: e.target.value })}
                   placeholder="مثلاً: فاطمہ کچن"
-                  className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-[#FF5500]"
+                  className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-brand"
                 />
               </div>
             </div>
@@ -500,7 +500,7 @@ export default function SellerSettingsPage() {
                 onChange={(e) => setFormData({ ...formData, description: e.target.value })}
                 rows={3}
                 placeholder="Tell customers about your kitchen and specialty dishes..."
-                className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-[#FF5500]"
+                className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-brand"
               />
             </div>
 
@@ -510,7 +510,7 @@ export default function SellerSettingsPage() {
                 <select
                   value={formData.businessType}
                   onChange={(e) => setFormData({ ...formData, businessType: e.target.value })}
-                  className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-[#FF5500] bg-white"
+                  className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-brand bg-white"
                 >
                   {BUSINESS_TYPES.map((t) => (
                     <option key={t.value} value={t.value}>
@@ -527,7 +527,7 @@ export default function SellerSettingsPage() {
                   value={formData.storeNotice}
                   onChange={(e) => setFormData({ ...formData, storeNotice: e.target.value })}
                   placeholder="e.g. Special weekend Biryani available"
-                  className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-[#FF5500]"
+                  className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-brand"
                 />
               </div>
             </div>
@@ -575,7 +575,7 @@ export default function SellerSettingsPage() {
               </div>
               <Link
                 href="/sellers/delivery"
-                className="inline-flex items-center gap-1.5 text-xs font-bold text-[#FF5500] hover:text-[#e04400]"
+                className="inline-flex items-center gap-1.5 text-xs font-bold text-brand-ink hover:text-brand-800"
               >
                 <span>Full Delivery Console</span>
                 <ArrowRight className="rtl:-scale-x-100 w-3.5 h-3.5" />
@@ -625,7 +625,7 @@ export default function SellerSettingsPage() {
                             deliveryFeeFixed: e.target.value === '' ? null : parseInt(e.target.value, 10),
                           })
                         }
-                        className="w-full ps-3 pe-10 py-1.5 text-xs font-bold border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-[#FF5500]"
+                        className="w-full ps-3 pe-10 py-1.5 text-xs font-bold border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-brand"
                       />
                       <span className="absolute end-3 top-2 text-[11px] text-slate-500 font-medium">PKR</span>
                     </div>
@@ -645,7 +645,7 @@ export default function SellerSettingsPage() {
                             freeDeliveryRadiusKm: e.target.value === '' ? null : parseFloat(e.target.value),
                           })
                         }
-                        className="w-full ps-3 pe-8 py-1.5 text-xs font-bold border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-[#FF5500]"
+                        className="w-full ps-3 pe-8 py-1.5 text-xs font-bold border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-brand"
                       />
                       <span className="absolute end-3 top-2 text-[11px] text-slate-500 font-medium">KM</span>
                     </div>
@@ -661,7 +661,7 @@ export default function SellerSettingsPage() {
                       value={newAreaInput}
                       onChange={(e) => setNewAreaInput(e.target.value)}
                       placeholder="Add area (e.g. Askari 11)..."
-                      className="flex-1 px-3 py-1.5 text-xs border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-[#FF5500]"
+                      className="flex-1 px-3 py-1.5 text-xs border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-brand"
                     />
                     <Button
                       type="button"
@@ -708,7 +708,7 @@ export default function SellerSettingsPage() {
                 <select
                   value={formData.availabilityOverride}
                   onChange={(e) => setFormData({ ...formData, availabilityOverride: e.target.value })}
-                  className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-[#FF5500] bg-white"
+                  className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-brand bg-white"
                 >
                   {AVAILABILITY_OVERRIDES.map((o) => (
                     <option key={o.value} value={o.value}>
@@ -738,7 +738,7 @@ export default function SellerSettingsPage() {
                   type="time"
                   value={formData.fixedDailyOpen}
                   onChange={(e) => setFormData({ ...formData, fixedDailyOpen: e.target.value })}
-                  className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-[#FF5500]"
+                  className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-brand"
                 />
               </div>
 
@@ -748,7 +748,7 @@ export default function SellerSettingsPage() {
                   type="time"
                   value={formData.fixedDailyClose}
                   onChange={(e) => setFormData({ ...formData, fixedDailyClose: e.target.value })}
-                  className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-[#FF5500]"
+                  className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-brand"
                 />
               </div>
             </div>
@@ -760,7 +760,7 @@ export default function SellerSettingsPage() {
                   type="time"
                   value={formData.orderCutoffTime}
                   onChange={(e) => setFormData({ ...formData, orderCutoffTime: e.target.value })}
-                  className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-[#FF5500]"
+                  className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-brand"
                 />
               </div>
 
@@ -777,7 +777,7 @@ export default function SellerSettingsPage() {
                       maxDailyOrders: e.target.value === '' ? null : parseInt(e.target.value, 10),
                     })
                   }
-                  className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-[#FF5500]"
+                  className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-brand"
                 />
               </div>
             </div>
@@ -811,7 +811,7 @@ export default function SellerSettingsPage() {
                       clearPayoutError('jazzcashNumber');
                     }}
                     aria-invalid={Boolean(payoutErrors.jazzcashNumber)}
-                    className={`w-full px-3 py-2 text-xs border rounded-lg outline-none focus:ring-2 focus:ring-[#FF5500] bg-white ${payoutErrors.jazzcashNumber ? 'border-red-500' : 'border-slate-300'}`}
+                    className={`w-full px-3 py-2 text-xs border rounded-lg outline-none focus:ring-2 focus:ring-brand bg-white ${payoutErrors.jazzcashNumber ? 'border-red-500' : 'border-slate-300'}`}
                   />
                   {payoutErrors.jazzcashNumber && <p role="alert" className="text-[11px] text-red-700 mt-1">{payoutErrors.jazzcashNumber}</p>}
                 </div>
@@ -822,7 +822,7 @@ export default function SellerSettingsPage() {
                     placeholder="e.g. Bareera Zarish"
                     value={formData.jazzcashAccountTitle}
                     onChange={(e) => setFormData({ ...formData, jazzcashAccountTitle: e.target.value })}
-                    className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-[#FF5500] bg-white"
+                    className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-brand bg-white"
                   />
                 </div>
               </div>
@@ -847,7 +847,7 @@ export default function SellerSettingsPage() {
                       clearPayoutError('easypaisaNumber');
                     }}
                     aria-invalid={Boolean(payoutErrors.easypaisaNumber)}
-                    className={`w-full px-3 py-2 text-xs border rounded-lg outline-none focus:ring-2 focus:ring-[#FF5500] bg-white ${payoutErrors.easypaisaNumber ? 'border-red-500' : 'border-slate-300'}`}
+                    className={`w-full px-3 py-2 text-xs border rounded-lg outline-none focus:ring-2 focus:ring-brand bg-white ${payoutErrors.easypaisaNumber ? 'border-red-500' : 'border-slate-300'}`}
                   />
                   {payoutErrors.easypaisaNumber && <p role="alert" className="text-[11px] text-red-700 mt-1">{payoutErrors.easypaisaNumber}</p>}
                 </div>
@@ -858,7 +858,7 @@ export default function SellerSettingsPage() {
                     placeholder="e.g. Bareera Zarish"
                     value={formData.easypaisaAccountTitle}
                     onChange={(e) => setFormData({ ...formData, easypaisaAccountTitle: e.target.value })}
-                    className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-[#FF5500] bg-white"
+                    className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-brand bg-white"
                   />
                 </div>
               </div>
@@ -878,7 +878,7 @@ export default function SellerSettingsPage() {
                     placeholder="e.g. Bank Alfalah / Meezan Bank"
                     value={formData.bankName}
                     onChange={(e) => setFormData({ ...formData, bankName: e.target.value })}
-                    className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-[#FF5500] bg-white"
+                    className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-brand bg-white"
                   />
                 </div>
                 <div>
@@ -888,7 +888,7 @@ export default function SellerSettingsPage() {
                     placeholder="Account Holder Name"
                     value={formData.bankAccountName}
                     onChange={(e) => setFormData({ ...formData, bankAccountName: e.target.value })}
-                    className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-[#FF5500] bg-white"
+                    className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-brand bg-white"
                   />
                 </div>
                 <div>
@@ -903,7 +903,7 @@ export default function SellerSettingsPage() {
                       clearPayoutError('bankAccountNumber');
                     }}
                     aria-invalid={Boolean(payoutErrors.bankAccountNumber)}
-                    className={`w-full px-3 py-2 text-xs border rounded-lg outline-none focus:ring-2 focus:ring-[#FF5500] bg-white ${payoutErrors.bankAccountNumber ? 'border-red-500' : 'border-slate-300'}`}
+                    className={`w-full px-3 py-2 text-xs border rounded-lg outline-none focus:ring-2 focus:ring-brand bg-white ${payoutErrors.bankAccountNumber ? 'border-red-500' : 'border-slate-300'}`}
                   />
                   {payoutErrors.bankAccountNumber && <p role="alert" className="text-[11px] text-red-700 mt-1">{payoutErrors.bankAccountNumber}</p>}
                 </div>
@@ -924,7 +924,7 @@ export default function SellerSettingsPage() {
                 min={1}
                 value={formData.lowStockThreshold}
                 onChange={(e) => setFormData({ ...formData, lowStockThreshold: parseInt(e.target.value, 10) || 5 })}
-                className="w-16 px-2.5 py-1 text-xs font-bold border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-[#FF5500]"
+                className="w-16 px-2.5 py-1 text-xs font-bold border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-brand"
               />
             </div>
           </div>
@@ -934,7 +934,7 @@ export default function SellerSettingsPage() {
             <Button
               type="submit"
               disabled={loading}
-              className="bg-[#FF5500] hover:bg-[#e04400] text-white px-7 py-2.5 rounded-xl font-bold text-xs shadow-sm transition-all"
+              className="bg-brand hover:bg-brand-500 text-on-brand px-7 py-2.5 rounded-xl font-bold text-xs shadow-sm transition-all"
             >
               {loading ? 'Saving...' : 'Save Settings'}
             </Button>

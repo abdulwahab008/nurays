@@ -14,7 +14,7 @@ import { useAuthStore, type User } from '@/lib/store/auth-store';
  * - A link to the site or the app's scheme (an order, the payment return) opens its page in the app.
  * - Android's back button goes back, and closes the app on the first page.
  * - A tapped notification opens the page it is about.
- * - Dark status bar text on the light pages; the splash screen is hidden once the site has started.
+ * - Status bar text that suits the theme; the splash screen is hidden once the site has started.
  */
 export function NativeBridge() {
   const router = useRouter();
@@ -63,7 +63,9 @@ export function NativeBridge() {
         })
       );
     }
-    void plugins.StatusBar?.setStyle({ style: 'LIGHT' }).catch(() => undefined);
+    // Capacitor's DARK style is light text, for the dark theme (lib/hooks/use-theme.ts changes it when the theme does).
+    const dark = document.documentElement.getAttribute('data-theme') === 'dark';
+    void plugins.StatusBar?.setStyle({ style: dark ? 'DARK' : 'LIGHT' }).catch(() => undefined);
     void plugins.SplashScreen?.hide().catch(() => undefined);
 
     return () => {

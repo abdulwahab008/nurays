@@ -197,10 +197,10 @@ export default function TriPartiteReviewModal({
             </p>
 
             {/* 1. Food Rating */}
-            <div className="p-3.5 bg-orange-50/60 border border-orange-100 rounded-2xl space-y-1.5">
+            <div className="p-3.5 bg-brand-50/60 border border-brand-100 rounded-2xl space-y-1.5">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  <Utensils className="w-4 h-4 text-[#FF5500]" />
+                  <Utensils className="w-4 h-4 text-brand-ink" />
                   <span className="font-black text-xs text-slate-900">{t('review.food')}</span>
                 </div>
               </div>
@@ -248,7 +248,7 @@ export default function TriPartiteReviewModal({
                 onChange={(e) => setComment(e.target.value)}
                 rows={3}
                 placeholder={t('review.commentPlaceholder')}
-                className="w-full px-3.5 py-2.5 border border-slate-200 rounded-2xl text-xs font-medium focus:ring-2 focus:ring-[#FF5500] focus:border-transparent bg-slate-50 focus:bg-white resize-none"
+                className="w-full px-3.5 py-2.5 border border-slate-200 rounded-2xl text-xs font-medium focus:ring-2 focus:ring-brand focus:border-transparent bg-slate-50 focus:bg-white resize-none"
               />
             </div>
 
@@ -263,7 +263,7 @@ export default function TriPartiteReviewModal({
               <button
                 type="submit"
                 disabled={submitting}
-                className="flex-1 py-3 px-4 rounded-2xl font-black text-xs text-white bg-[#FF5500] hover:bg-[#e04400] disabled:opacity-50 transition-all shadow-md"
+                className="flex-1 py-3 px-4 rounded-2xl font-black text-xs text-on-brand bg-brand hover:bg-brand-500 disabled:opacity-50 transition-all shadow-md"
               >
                 {submitting ? t('review.submitting') : t('review.submit')}
               </button>

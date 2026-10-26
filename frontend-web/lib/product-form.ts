@@ -71,7 +71,7 @@ export const MAX_IMAGES = 4;
 export const PRODUCT_TYPE_OPTIONS: Array<{ value: ProductType; label: string; icon: string; description: string; selected: string }> = [
   { value: 'frozen', label: 'Frozen', icon: '❄️', description: 'Stored frozen, long shelf life', selected: 'bg-blue-50 border-blue-500' },
   { value: 'fresh', label: 'Fresh', icon: '🥬', description: 'Made fresh daily, same-day delivery', selected: 'bg-green-50 border-green-500' },
-  { value: 'ready_to_eat', label: 'Ready to Eat', icon: '🍽️', description: 'Ready to eat immediately', selected: 'bg-orange-50 border-orange-500' },
+  { value: 'ready_to_eat', label: 'Ready to Eat', icon: '🍽️', description: 'Ready to eat immediately', selected: 'bg-brand-50 border-brand' },
   { value: 'ready_to_cook', label: 'Ready to Cook', icon: '🍳', description: 'Prepared, needs cooking', selected: 'bg-purple-50 border-purple-500' },
 ];
 

@@ -83,7 +83,7 @@ export function SlideOverCartDrawer({ isOpen, onClose }: SlideOverCartDrawerProp
           {/* Header */}
           <div className="p-4 border-b border-slate-200 flex items-center justify-between bg-slate-50/70">
             <div className="flex items-center gap-2.5">
-              <div className="w-8 h-8 rounded-xl bg-orange-50 text-[#FF5500] border border-orange-200/60 flex items-center justify-center font-bold">
+              <div className="w-8 h-8 rounded-xl bg-brand-50 text-brand-ink border border-brand-200/60 flex items-center justify-center font-bold">
                 <ShoppingBag className="w-4 h-4" />
               </div>
               <div>
@@ -104,8 +104,8 @@ export function SlideOverCartDrawer({ isOpen, onClose }: SlideOverCartDrawerProp
           </div>
 
           {/* Free Delivery Progress Bar */}
-          <div className="px-4 py-2.5 bg-orange-50/70 border-b border-orange-100">
-            <div className="flex items-center justify-between text-xs font-semibold text-orange-950 mb-1">
+          <div className="px-4 py-2.5 bg-brand-50/70 border-b border-brand-100">
+            <div className="flex items-center justify-between text-xs font-semibold text-brand-950 mb-1">
               <span>
                 {amountNeededForFreeDelivery === 0 ? (
                   <span className="text-emerald-700 flex items-center gap-1">
@@ -115,16 +115,16 @@ export function SlideOverCartDrawer({ isOpen, onClose }: SlideOverCartDrawerProp
                 ) : (
                   <>
                     {addMoreBefore}
-                    <span className="text-[#FF5500] font-bold">{formatPrice(amountNeededForFreeDelivery)}</span>
+                    <span className="text-brand-ink font-bold">{formatPrice(amountNeededForFreeDelivery)}</span>
                     {addMoreAfter}
                   </>
                 )}
               </span>
-              <span className="text-[11px] text-orange-800/80 font-bold">{progressPercent}%</span>
+              <span className="text-[11px] text-brand-800/80 font-bold">{progressPercent}%</span>
             </div>
-            <div className="w-full h-1.5 bg-orange-200/70 rounded-full overflow-hidden">
+            <div className="w-full h-1.5 bg-brand-200/70 rounded-full overflow-hidden">
               <div
-                className="h-full bg-[#FF5500] rounded-full transition-all duration-300"
+                className="h-full bg-brand rounded-full transition-all duration-300"
                 style={{ width: `${progressPercent}%` }}
               />
             </div>
@@ -245,7 +245,7 @@ export function SlideOverCartDrawer({ isOpen, onClose }: SlideOverCartDrawerProp
                 </div>
                 <div className="pt-2 border-t border-slate-200 flex items-center justify-between text-sm font-bold text-slate-950">
                   <span>{tc('total')}</span>
-                  <span className="text-[#FF5500] text-base">{formatPrice(total + deliveryFee)}</span>
+                  <span className="text-brand-ink text-base">{formatPrice(total + deliveryFee)}</span>
                 </div>
               </div>
 
@@ -261,7 +261,7 @@ export function SlideOverCartDrawer({ isOpen, onClose }: SlideOverCartDrawerProp
                 <Link
                   href="/checkout"
                   onClick={onClose}
-                  className="flex-1 py-2.5 px-4 rounded-xl text-xs font-bold bg-[#FF5500] hover:bg-[#E04400] text-white flex items-center justify-center gap-2 transition-all shadow-xs"
+                  className="flex-1 py-2.5 px-4 rounded-xl text-xs font-bold bg-brand hover:bg-brand-500 text-on-brand flex items-center justify-center gap-2 transition-all shadow-xs"
                 >
                   <span>{t('goCheckout')}</span>
                   <ArrowRight className="rtl:-scale-x-100 w-3.5 h-3.5" />

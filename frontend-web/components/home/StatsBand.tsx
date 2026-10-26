@@ -15,7 +15,7 @@ export default function StatsBand({ stats }: { stats: PublicStats | null }) {
           {
             key: 'kitchens',
             icon: ChefHat,
-            iconClass: 'text-orange-400',
+            iconClass: 'text-brand-400',
             valueClass: 'text-white',
             value: formatCount(stats.kitchens),
             label: stats.kitchens === 1 ? t('statKitchen') : t('statKitchens'),

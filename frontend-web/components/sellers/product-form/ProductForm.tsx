@@ -454,7 +454,7 @@ export default function ProductForm(props: Props) {
           </div>
 
           {mode === 'create' ? (
-            <div className="mt-6 bg-gradient-to-br from-amber-50 to-orange-50 rounded-2xl p-5 border-2 border-amber-200 shadow-sm">
+            <div className="mt-6 bg-gradient-to-br from-amber-50 to-brand-50 rounded-2xl p-5 border-2 border-amber-200 shadow-sm">
               <h3 className="font-bold text-amber-900 mb-3 flex items-center gap-2 text-lg">
                 <span className="text-2xl">💡</span> Pro Tips for Better Sales
               </h3>

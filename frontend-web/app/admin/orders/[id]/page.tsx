@@ -245,7 +245,7 @@ export default function AdminOrderDetailPage() {
       confirmed: 'bg-blue-100 text-blue-800',
       preparing: 'bg-purple-100 text-purple-800',
       ready: 'bg-indigo-100 text-indigo-800',
-      in_transit: 'bg-orange-100 text-orange-800',
+      in_transit: 'bg-brand-100 text-brand-800',
       delivered: 'bg-green-100 text-green-800',
       completed: 'bg-green-100 text-green-800',
       cancelled: 'bg-red-100 text-red-800',
@@ -266,7 +266,7 @@ export default function AdminOrderDetailPage() {
     preparing: { label: 'Preparing', color: 'bg-purple-500 hover:bg-purple-600' },
     ready: { label: 'Ready', color: 'bg-indigo-500 hover:bg-indigo-600' },
     dispatched: { label: 'Dispatched', color: 'bg-pink-500 hover:bg-pink-600' },
-    in_transit: { label: 'In Transit', color: 'bg-orange-500 hover:bg-orange-600' },
+    in_transit: { label: 'In Transit', color: 'bg-brand-700 hover:bg-brand-800' },
     delivered: { label: 'Delivered', color: 'bg-green-500 hover:bg-green-600' },
   };
   const currentIndex = order ? ORDER_FORWARD_SEQUENCE.indexOf(order.orderStatus) : -1;

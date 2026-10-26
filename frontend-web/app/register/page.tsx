@@ -215,7 +215,7 @@ function RegisterForm() {
   const helperStyle = {} as const;
 
   return (
-    <div className="min-h-screen flex items-center justify-center py-12 px-4 bg-[#FAFAFA]">
+    <div className="min-h-screen flex items-center justify-center py-12 px-4 bg-page">
       <div className="nuray-w-card-md bg-white rounded-3xl p-8 sm:p-10 border border-slate-200/80 shadow-xl">
         <div className="text-center mb-8">
           <Link href="/" className="inline-block">
@@ -238,7 +238,7 @@ function RegisterForm() {
               onClick={() => setFormData({ ...formData, user_type: 'customer' })}
               className={`flex-1 h-11 rounded-full font-bold transition-all text-xs ${
                 formData.user_type === 'customer'
-                  ? 'bg-gradient-to-r from-[#FF5500] to-[#FF2A00] text-white shadow-sm'
+                  ? 'bg-gradient-to-r from-brand to-brand text-on-brand shadow-sm'
                   : 'text-slate-600 hover:text-slate-900'
               }`}
             >
@@ -497,16 +497,16 @@ function RegisterForm() {
                 id="termsAccepted"
                 checked={formData.termsAccepted}
                 onChange={(e) => setFormData({ ...formData, termsAccepted: e.target.checked })}
-                className="mt-1 h-4 w-4 rounded border-gray-300 text-[#FF5500] focus:ring-[#FF5500]"
+                className="mt-1 h-4 w-4 rounded border-gray-300 text-brand-ink focus:ring-brand"
                 required
               />
               <span className="text-xs text-slate-600 leading-relaxed">
                 {t('agreeTo')}{' '}
-                <Link href="/terms" className="text-[#FF5500] font-semibold hover:underline">
+                <Link href="/terms" className="text-brand-ink font-semibold hover:underline">
                   {t('termsOfService')}
                 </Link>
                 {t('comma')}{' '}
-                <Link href="/privacy" className="text-[#FF5500] font-semibold hover:underline">
+                <Link href="/privacy" className="text-brand-ink font-semibold hover:underline">
                   {t('privacyPolicy')}
                 </Link>
                 {t('andWord')}{' '}

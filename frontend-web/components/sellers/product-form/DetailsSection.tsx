@@ -74,12 +74,12 @@ export default function DetailsSection({
 
       {categoryPicker}
 
-      <div className="mb-6 p-5 bg-gradient-to-r from-orange-50 to-amber-50 border border-orange-200 rounded-2xl">
+      <div className="mb-6 p-5 bg-gradient-to-r from-brand-50 to-amber-50 border border-brand-200 rounded-2xl">
         <div className="flex items-center justify-between mb-3">
-          <h3 className="text-sm font-bold text-orange-900 flex items-center gap-2">
+          <h3 className="text-sm font-bold text-brand-900 flex items-center gap-2">
             <span>⏱️</span> Kitchen Preparation Time (Important)
           </h3>
-          <span className="text-xs font-medium text-orange-700 bg-orange-100 px-2.5 py-1 rounded-full">Used by Delivery Engine for JIT Dispatch</span>
+          <span className="text-xs font-medium text-brand-ink bg-brand-100 px-2.5 py-1 rounded-full">Used by Delivery Engine for JIT Dispatch</span>
         </div>
         <p className="text-xs text-slate-600 mb-3">Estimated minutes required to cook and package this dish after order acceptance.</p>
 
@@ -92,8 +92,8 @@ export default function DetailsSection({
               onClick={() => update({ preparationTime: String(preset.mins) })}
               className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
                 form.preparationTime === String(preset.mins)
-                  ? 'bg-[#FF5500] text-white shadow-sm shadow-orange-200'
-                  : 'bg-white border border-orange-200 text-slate-700 hover:bg-orange-100'
+                  ? 'bg-brand text-on-brand shadow-sm shadow-brand-200'
+                  : 'bg-white border border-brand-200 text-slate-700 hover:bg-brand-100'
               }`}
             >
               {preset.label} ({preset.mins}m)
@@ -104,7 +104,7 @@ export default function DetailsSection({
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
             <label htmlFor="product-prep-time-input" className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
-              Preparation Time (minutes) <span className="text-orange-600">*</span>
+              Preparation Time (minutes) <span className="text-brand-ink">*</span>
             </label>
             <input
               type="number"
@@ -113,7 +113,7 @@ export default function DetailsSection({
               onChange={(e) => update({ preparationTime: e.target.value })}
               placeholder="e.g., 30"
               min="1"
-              className="w-full px-4 py-2.5 border border-orange-200 rounded-xl focus:ring-2 focus:ring-orange-500 bg-white text-slate-900 font-bold text-sm"
+              className="w-full px-4 py-2.5 border border-brand-200 rounded-xl focus:ring-2 focus:ring-brand bg-white text-slate-900 font-bold text-sm"
             />
             <p className="text-xs text-slate-500 mt-1">Order ready estimate for riders</p>
           </div>
@@ -128,7 +128,7 @@ export default function DetailsSection({
               onChange={(e) => update({ shelfLifeHours: e.target.value })}
               placeholder="e.g., 24"
               min="1"
-              className="w-full px-4 py-2.5 border border-orange-200 rounded-xl focus:ring-2 focus:ring-orange-500 bg-white text-slate-900 font-medium text-sm"
+              className="w-full px-4 py-2.5 border border-brand-200 rounded-xl focus:ring-2 focus:ring-brand bg-white text-slate-900 font-medium text-sm"
             />
             <p className="text-xs text-slate-500 mt-1">Freshness window</p>
           </div>

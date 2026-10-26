@@ -62,9 +62,9 @@ export default function PushPrompt({ text }: { text: string }) {
   };
 
   return (
-    <div className="mb-6 rounded-2xl border border-orange-200 bg-orange-50 p-4 flex flex-col sm:flex-row sm:items-center gap-3" data-testid="push-prompt">
+    <div className="mb-6 rounded-2xl border border-brand-200 bg-brand-50 p-4 flex flex-col sm:flex-row sm:items-center gap-3" data-testid="push-prompt">
       <div className="flex items-start gap-3 flex-1">
-        <div className="w-9 h-9 rounded-xl bg-[#FF5500] text-white flex items-center justify-center shrink-0">
+        <div className="w-9 h-9 rounded-xl bg-brand text-on-brand flex items-center justify-center shrink-0">
           <Bell className="w-4 h-4" />
         </div>
         <p className="text-sm text-slate-800">
@@ -75,7 +75,7 @@ export default function PushPrompt({ text }: { text: string }) {
         </p>
       </div>
       <div className="flex gap-2">
-        <button type="button" disabled={busy} onClick={turnOn} className="px-4 py-2 rounded-xl bg-[#FF5500] text-white text-sm font-bold disabled:opacity-50">
+        <button type="button" disabled={busy} onClick={turnOn} className="px-4 py-2 rounded-xl bg-brand text-on-brand text-sm font-bold disabled:opacity-50">
           {busy ? t('push.oneMoment') : t('push.turnOn')}
         </button>
         <button type="button" onClick={dismiss} className="px-3 py-2 rounded-xl text-sm text-slate-600 hover:text-slate-900">

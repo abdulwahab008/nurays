@@ -108,8 +108,9 @@ export function DashboardNavbar({ title, subtitle, userType = 'customer', onMenu
     return '/dashboard';
   };
 
-  // Theme accents — ink for seller, emerald for rider, forest for customer/admin
+  // Theme accents — ink for seller, emerald for rider, turquoise for customer/admin (dark words on turquoise)
   const accentBg = isRider ? '#059669' : isSeller ? 'var(--ink-900)' : 'var(--forest-500)';
+  const accentFg = isRider ? '#FFFFFF' : isSeller ? 'var(--fg-inverse)' : '#06302B';
 
   // Fetch notification unread count so we only show the red dot when there are unread
   useEffect(() => {
@@ -346,7 +347,7 @@ export function DashboardNavbar({ title, subtitle, userType = 'customer', onMenu
               <button
                 type="submit"
                 className="absolute end-1.5 top-1/2 -translate-y-1/2 px-4 py-1.5 text-sm font-medium rounded-full transition-colors"
-                style={{ background: 'var(--ink-900)', color: 'var(--cream-50)' }}
+                style={{ background: 'var(--ink-900)', color: 'var(--fg-inverse)' }}
               >
                 {t('search')}
               </button>
@@ -371,14 +372,14 @@ export function DashboardNavbar({ title, subtitle, userType = 'customer', onMenu
 
           {/* Community Selector - Only for customers */}
           {isCustomer && (
-            <div className="flex items-center min-w-0 max-w-[34vw] sm:max-w-none">
+            <div className="flex items-center min-w-0 overflow-hidden">
               <CommunitySelector variant="navbar" />
             </div>
           )}
 
-          {/* Cart - Only for customers */}
+          {/* Cart - Only for customers; on a phone it is in the tab bar */}
           {isCustomer && (
-            <Link href="/cart" className="relative">
+            <Link href="/cart" className="relative hidden md:block">
               <button className="w-10 h-10 rounded-lg hover:bg-gray-50 flex items-center justify-center transition-colors" aria-label={t('cart')} title={t('cart')}>
                 <svg className="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M2.25 3h1.386c.51 0 .955.343 1.087.835l.383 1.437M7.5 14.25a3 3 0 00-3 3h15.75m-12.75-3h11.218c1.121-2.3 2.1-4.684 2.924-7.138a60.114 60.114 0 00-16.536-1.84M7.5 14.25L5.106 5.272M6 20.25a.75.75 0 11-1.5 0 .75.75 0 011.5 0zm12.75 0a.75.75 0 11-1.5 0 .75.75 0 011.5 0z" />
@@ -419,7 +420,8 @@ export function DashboardNavbar({ title, subtitle, userType = 'customer', onMenu
             </>
           )}
 
-          <LanguageSwitcher className="px-2 max-[420px]:[&>span]:hidden" />
+          {/* A customer's phone has the language under Profile; the bar keeps room for the area */}
+          <LanguageSwitcher className={isCustomer ? 'hidden sm:inline-flex px-2' : 'px-2 max-[420px]:[&>span]:hidden'} />
 
           {/* Notifications Panel */}
           <div className="relative" ref={notificationRef}>
@@ -538,7 +540,7 @@ export function DashboardNavbar({ title, subtitle, userType = 'customer', onMenu
             <div className="flex items-center gap-2 ms-2">
               <Link
                 href="/login"
-                className="px-4 py-2 rounded-xl text-xs font-bold text-white shadow-xs transition-transform active:scale-95 bg-[#FF5500] hover:bg-[#e04400]"
+                className="px-4 py-2 rounded-xl text-xs font-bold text-on-brand shadow-xs transition-transform active:scale-95 bg-brand hover:bg-brand-500"
               >
                 {t('signIn')}
               </Link>
@@ -552,7 +554,7 @@ export function DashboardNavbar({ title, subtitle, userType = 'customer', onMenu
               >
                 <div
                   className="w-9 h-9 rounded-full flex items-center justify-center shadow-2xs"
-                  style={{ background: accentBg, color: 'var(--cream-50)' }}
+                  style={{ background: accentBg, color: accentFg }}
                 >
                   <span className="font-semibold text-sm">
                     {user?.profile?.fullName?.charAt(0).toUpperCase() || user?.email?.charAt(0).toUpperCase() || 'U'}

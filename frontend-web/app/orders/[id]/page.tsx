@@ -251,7 +251,7 @@ export default function OrderDetailPage() {
   return (
     <Suspense
       fallback={
-        <div className="min-h-screen bg-[#F8FAFC] flex items-center justify-center">
+        <div className="min-h-screen bg-page flex items-center justify-center">
           <div className="w-10 h-10 border-3 border-emerald-600 border-t-transparent rounded-full animate-spin" />
         </div>
       }
@@ -596,7 +596,7 @@ function OrderDetailContent() {
           {(effectiveStatus === 'delivered' || effectiveStatus === 'completed') && (
             <button
               onClick={() => setShowReviewModal(true)}
-              className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-[#FF5500] hover:bg-[#e04400] text-white text-xs font-black transition-all shadow-xs"
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-brand hover:bg-brand-500 text-on-brand text-xs font-black transition-all shadow-xs"
             >
               <span>⭐</span>
               <span>{t('detail.rateExperience')}</span>
@@ -719,7 +719,7 @@ function OrderDetailContent() {
 
               {/* Doorstep Handover PIN Card */}
               {order.delivery?.otp && !['delivered', 'completed', 'cancelled', 'refunded'].includes(effectiveStatus) && (
-                <div className="bg-gradient-to-r from-amber-50 to-orange-50 border-2 border-amber-500/50 rounded-xl p-4 shadow-sm">
+                <div className="bg-gradient-to-r from-amber-50 to-brand-50 border-2 border-amber-500/50 rounded-xl p-4 shadow-sm">
                   <div className="flex items-center justify-between flex-wrap gap-3">
                     <div>
                       <div className="flex items-center gap-2">
