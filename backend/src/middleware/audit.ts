@@ -11,7 +11,8 @@ import { logger } from '../utils/logger';
  */
 
 const SECRET_FIELD = /^(password|newPassword|currentPassword|otp|otpCode|token|refreshToken|secret|handoverCode)$/i;
-const MAX_STRING = 500;
+// Free text (a reason, a note) keeps its first 200 characters: enough to say why, without storing whole messages (SEC-R7).
+const MAX_STRING = 200;
 const MAX_KEYS = 50;
 
 function sanitize(value: unknown, depth = 0): unknown {

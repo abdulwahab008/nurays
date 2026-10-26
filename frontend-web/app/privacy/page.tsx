@@ -55,7 +55,8 @@ export default function PrivacyPage() {
       <p>
         We keep account information while your account is open. Order, payment and accounting records are kept as long as
         Pakistani tax law requires (currently up to six years), then deleted or anonymised. One-time verification codes are
-        deleted within a day.
+        deleted within a day. Records of actions taken in the service (kept for security, such as who changed an order or a
+        setting) are deleted after two years.
       </p>
 
       <h2>Your choices</h2>

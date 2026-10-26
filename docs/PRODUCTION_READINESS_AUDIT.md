@@ -202,7 +202,7 @@ Legend. *Severity* is the technical severity the lens assigned. *Priority*: P0 m
 | FE-18 | Low | P2 | Two parallel button components (components/ui/button.tsx and NurayButton.tsx) | `frontend-web/components/ui/NurayButton.tsx`:25 | **Fixed** | `NurayButton` is folded into `Button` as its `primary` variant (the same gradient class); the six sign-in pages use `Button` and `NurayButton.tsx` is deleted. Was: One button component. Lens evidence: components/ui/button.tsx (56 importers) styles variants with inline CSSProperties objects (default/dark/outline/ghost/destructive at :9-35); components/ui/NurayButton.tsx (6 importers) implements the same five variants as CSS classes nuray-btn-* (:11-23) defin… |
 | FE-19 | Low | P2 | FileUploadField creates object URLs for previews and never revokes them | `frontend-web/components/ui/FileUploadField.tsx`:39 | **Fixed** | Object URLs released. Lens evidence: components/ui/FileUploadField.tsx:39 `const [preview, setPreview] = useState<string \| null>(null)`; the change handler sets `URL.createObjectURL(file)` and :89 renders `<img src={preview}>`; grep revokeObjectURL in the file: none (the only revoke in the app i… |
 | FE-20 | Low | P2 | Community store silently selects 'askari-11' or the first community when GPS is denied, contradicting its own no-default rule | `frontend-web/lib/store/community-store.ts`:118 | **Fixed** | No area is chosen on the buyer's behalf any more: a device that does not share its position, or a position outside every area, picks nothing, and the area picker stays open with a message that says which ("Could not access GPS" or "We don't deliver where you are yet"). The customer dashboard no longer shows Askari 11's details when no area is chosen. Lens evidence: lib/store/community-store.ts:49-50 comment: 'No community is picked on the buyer's behalf: until they choose one (or GPS finds one), pages ask them to choose'; but detectCommunityFromGPS at :84 falls back to `list.find((c) => c.slug === 'askari-11') \ |\| list[… |
-| FE-21 | Low | P2 | Unreferenced files in public/ (Next.js scaffold SVGs and alternate logo options) | `frontend-web/public/next.svg`:1 | **Fixed** | Scaffold SVGs removed; the three logo options kept for the brand decision. Lens evidence: Reference scan of app/, components/, lib/, manifest and sw.js: 0 references for public/next.svg (1375B), vercel.svg (128B), file.svg (391B), globe.svg (1035B), window.svg (385B), brand/logo-option-1-wordmark.svg, logo-option-2-crest.svg, logo-option-3-sprig.sv… |
+| FE-21 | Low | P2 | Unreferenced files in public/ (Next.js scaffold SVGs and alternate logo options) | `frontend-web/public/next.svg`:1 | **Fixed** | Scaffold SVGs removed; the current logo was chosen and the three alternatives removed (fifteenth addendum). Lens evidence: Reference scan of app/, components/, lib/, manifest and sw.js: 0 references for public/next.svg (1375B), vercel.svg (128B), file.svg (391B), globe.svg (1035B), window.svg (385B), brand/logo-option-1-wordmark.svg, logo-option-2-crest.svg, logo-option-3-sprig.sv… |
 
 ### Backend code health
 
@@ -313,7 +313,7 @@ Every statement below was checked against the code on this branch and, where the
 - The rider's position is stored only on the active delivery and shown only while the food is on its way.
 
 **Dependencies**
-- Backend runtime: `npm audit --omit=dev` reports no critical or high advisories; 3 high advisories remain in the Prisma CLI (`prisma`, `@prisma/config` and `deepmerge-ts` below 8: the CLI ships in the runtime image because `migrate deploy` runs from it, so they are production dependencies; they are accepted in `.trivyignore` until 2027-01-31; Prisma 7 is inside the affected range and does not remove them, so the way out is an npm override for `deepmerge-ts`). With dev dependencies the full audit also lists a critical (`handlebars` through `ts-jest`) and 34 high advisories in `jest` and `nodemon`, and the web app 11 high in `eslint-config-next` and `typescript-eslint`: none of them is in a shipped image. Frontend: no high advisories in production dependencies after the `proxy-addr` and `source-map-js` lockfile bumps (`--omit=dev`). Node 22 LTS in the images and CI (Node 20 reached end of life in April 2026); Dependabot watches npm, GitHub Actions and now the Docker base images.
+- Backend runtime: `npm audit --omit=dev` reports no critical or high advisories; the 3 high advisories that were in the Prisma CLI (`deepmerge-ts` below 8, inside `@prisma/config`) are gone: `deepmerge-ts` is pinned to its fixed version 8 with an npm override (fifteenth addendum), and `.trivyignore` accepts nothing. With dev dependencies the full audit also lists a critical (`handlebars` through `ts-jest`) and 34 high advisories in `jest` and `nodemon`, and the web app 11 high in `eslint-config-next` and `typescript-eslint`: none of them is in a shipped image. Frontend: no high advisories in production dependencies after the `proxy-addr` and `source-map-js` lockfile bumps (`--omit=dev`). Node 22 LTS in the images and CI (Node 20 reached end of life in April 2026); Dependabot watches npm, GitHub Actions and now the Docker base images.
 - Unused packages removed from both apps (`react-hook-form`, `@hookform/resolvers`, `zod` (frontend), `react-leaflet`, the deprecated npm `crypto` stub, `google-auth-library`).
 
 ### Remaining risks (owner decisions or follow-up work)
@@ -326,7 +326,7 @@ Every statement below was checked against the code on this branch and, where the
 | SEC-R4 | Account existence is revealed by register (409) and OTP request (404) | P2 | Uniform "if this number is registered…" answers; keep explicit sign-up errors if the product prefers |
 | SEC-R5 | ~~The open job pool shows exact drop-off pins and street text to every approved rider before a claim~~ **Fixed** (`rider.service.ts`): an unclaimed job shows area and city, the distance and the fee; the customer, door details and Maps link appear only while the rider holds the job, and the realtime payload carries ids only. What remains visible is the distance from the kitchen | — | — |
 | SEC-R6 | Idempotency key replay ignores the request body | P2 | Store a request fingerprint with the key; needs a column or small table (approval) |
-| SEC-R7 | Audit log request bodies hold free text typed by staff and users | P2 | Redact long free-text fields in `requestData`; set a retention period |
+| SEC-R7 | ~~Audit log request bodies hold free text typed by staff and users~~ **Done** (fifteenth addendum): free text is cut to 200 characters, and rows are kept two years, then deleted by a daily job; the database refuses to delete anything younger | — | — |
 | SEC-R8 | IP geolocation fallback calls ip-api.com over plain HTTP | P2 | Drop the fallback (centre the map on the chosen community) or move to an HTTPS provider with a server-side key |
 | SEC-R9 | ~~Web app ESLint is red (271 errors and 188 warnings: 237 `no-explicit-any`, 108 unused variables, 53 hook dependency warnings, 13 hook-rule errors)~~ **Fixed** (FE-6): no errors, and CI fails on more than 433 warnings, as the backend does (BE-1) | P2 | Lower the cap as the warnings are cleaned up |
 
@@ -561,7 +561,7 @@ Run on the head of the branch after the last change in this report, on the local
 | Playwright in the repository (`smoke`, `rider-navigation`, `rider-location-resume`, `csp`, `geocode-proxy`), on a database seeded with `seed:e2e` | 30 of 31 here; the other one needs what CI has and this sandbox lacks (below) |
 | Admin API suites run during the audit by scripts that are not in the repository: staff roles 54/54, approvals 24/24, admin flows 69/69 | all passing; the permission table and the approval rules are covered by `tests/permissions.test.ts` and the money-flow check |
 | Browser suites (Playwright-driven scripts run during the audit and not kept in the repository): admin screens 13/13, role-aware UI 15/15, rider Start navigation, every role's pages at phone width, security headers / map assets / account closure surfaces 13/13; map picker: Leaflet stylesheet and code served from `/_next/static/chunks/node_modules_leaflet_*`, 10 tiles from the configured tile server, one marker, zero requests to unpkg.com | all passing when they were run |
-| `npm audit --omit=dev` | web app: 0; API: 3 high in the Prisma CLI (build and migration time only; accepted in `.trivyignore` until 2027-01-31) |
+| `npm audit --omit=dev` | web app: 0; API: 0 (the Prisma CLI's `deepmerge-ts` pinned to version 8, fifteenth addendum) |
 | GitHub Actions on PR #38 | every job passed on the earlier commits of this branch (typecheck and build, unit tests, migration drift check, Playwright, image builds, `npm audit`, Trivy, gitleaks). The pipeline now also runs the lint gate, the API checks and the money-flow check on a fresh database, and the two new Playwright specs; their results are on the pull request |
 
 The Playwright test that fails in this sandbox fails for a reason that does not exist in CI. "No console errors across smoke pages" sees `ERR_TUNNEL_CONNECTION_FAILED` for the product photos on `images.unsplash.com` that the local development data points at (the sandbox's egress proxy refuses them; the fonts are no longer a cause, they are served from the app). The rider dashboard test needs the rider that `backend/prisma/seed-e2e.ts` creates, and passes once the database is seeded.
@@ -635,7 +635,7 @@ P0 findings still carrying work (the exploitable part of each code finding is fi
 - [ ] **DELIV-7** (partly fixed): Watch restarted and a fix sent on return from Maps, screen wake lock, and in the app background location during a job (MOBILE-9). Left: the device check on a real phone.
 - [ ] **MOBILE-7** (partly fixed): The Digital Asset Links and Apple App Site Association files are served from `ANDROID_APP_PACKAGE`, `ANDROID_SHA256_CERT_FINGERPRINTS` and `IOS_APP_IDS` (404 while unset). Left: set them once the signing certificates exist, and add Associated Domains in Xcode.
 - [ ] **MOBILE-9** (partly fixed, fourteenth addendum): The app shares the rider's location in the background during a job, after the rider agrees to an in-app disclosure (English and Urdu). Left: the store declarations and a full ride on a locked phone.
-- [ ] **PERF-1** (partly fixed): Dashboard counts and sums in one SQL aggregate; the balance reads one summed row per order (about 4x faster on 20,000 orders). Bounding it to unsettled orders needs an approved schema change (a running total or settlement snapshot); it matters only once kitchens have very many orders.
+- [ ] **PERF-1** (partly fixed): Dashboard counts and sums in one SQL aggregate; the balance reads one summed row per order (about 4x faster on 20,000 orders). A stored running total is not built for now (decided, fifteenth addendum): it would be a second copy of the money to keep right. A balance slower than one second is logged, which is the signal to build it.
 - [x] **PRIV-4** (fixed): A kitchen reads its orders through an explicit allow-list, and sees the customer's phone and door only when it hands the order over itself, until a day after delivery (`utils/kitchenOrderView.ts`).
 - [x] **SEC-3** (fixed, eighth addendum): A stranger can no longer lock the administrator out (wrong passwords counted per account and address), and staff sign in in two steps (an authenticator code or a backup code).
 - [ ] **SEC-7** (partly fixed): Security headers on, CSP in report-only mode with a violation collector (`/api/csp-report`) and a build switch (`CSP_ENFORCE=true`). Left: run the report-only build on staging or the soft launch for a week, read the `csp-violation` log lines, then enforce (SEC-R2). HSTS at the TLS terminator (documented).
@@ -668,7 +668,7 @@ P0 findings still carrying work (the exploitable part of each code finding is fi
 
 **Google Play and App Store: the app is built, not yet submittable.** `mobile/` holds the Android and iOS apps with phone sign-in, push notifications and the rider's background location (eleventh to fourteenth addenda). What is left is outside the code: the developer and Firebase accounts and the values they give, signing, the icon and store assets, the store listings and declarations, reviewer accounts, and checks on real phones (the pre-submission checklist above).
 
-Decisions still open: the audit-log retention period and its trigger exception (SEC-R7); the Prisma 7 upgrade that removes the three migration-tooling advisories (accepted in `.trivyignore` until 2027-01-31); the running total that would bound the kitchen balance (PERF-1, a schema change); the logo among the three options in `public/` (FE-21); and the legal review (MOBILE-5). The other decisions this audit raised were taken in the fifth to fourteenth addenda.
+Decisions: all taken (fifteenth addendum: audit log kept two years; the Prisma advisory fixed by pinning `deepmerge-ts`, with Prisma 7 left for its own change; the kitchen running total not built until a balance is measured over a second; the current logo kept). What is left is the legal review (MOBILE-5) and the operational lists above.
 
 ## Addendum: independent judge pass and consolidation
 
@@ -927,3 +927,30 @@ That makes 129 fixed, 10 partly fixed and 1 open.
     for App Store review, and a full ride on a locked phone.
 
 That makes 129 fixed, 11 partly fixed and 0 open.
+
+## Fifteenth addendum: the last four decisions
+
+Taken on 26 October 2026.
+
+- **SEC-R7, audit log retention: two years.**
+  - A migration lets the append-only trigger delete a row only when it is older than two years and only inside the
+    daily `audit-retention` job's transaction.
+  - Nothing can edit a row, and nothing can delete a younger one: the age check is in the database, not the app.
+  - Free text in the recorded request is cut to its first 200 characters.
+  - The privacy policy and `docs/OPERATIONS_AND_LOGGING.md` state the period.
+  - Checked against a real database (`api-checks/small-fixes`, section 5) and in `tests/audit.test.ts`.
+- **The Prisma CLI advisory: pinned, not upgraded.**
+  - `deepmerge-ts` is overridden to its fixed version 8 inside Prisma 6.19.3.
+  - Every migration applies on a fresh database and `prisma migrate diff` finds no difference.
+  - `npm audit --omit=dev` reports nothing (`nodemailer` and `ip-address` updated with it), and `.trivyignore` accepts
+    nothing.
+  - Prisma 7 changes how the client connects (a new generator, a driver adapter, a config file), so it is left for a
+    change of its own, when there is a reason.
+- **PERF-1, the kitchen running total: not now.**
+  - It would be a second copy of the money, updated by every order, refund, payout and netting, with a check for drift.
+  - Today a balance takes about 0.36 s at 20,000 orders. A balance slower than one second is logged with the kitchen
+    and its order count, which is the signal to build it (`tests/seller-balance-timing.test.ts`).
+  - PERF-1 stays partly fixed.
+- **FE-21, the logo: the current one stays.** The three alternative logo files are removed from `public/brand`.
+
+The finding counts do not change: 129 fixed, 11 partly fixed, 0 open.

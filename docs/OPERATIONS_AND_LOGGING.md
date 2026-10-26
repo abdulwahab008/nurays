@@ -9,7 +9,7 @@ Written from a DevOps and log-analysis audit of the code. Companion to `DEPLOYME
 | Kind | Where it lives | Answers | Keep |
 |---|---|---|---|
 | **Application log** | stdout, one JSON line each (pino) | "What did the server do and fail at?" | 30 days hot, 90 days cheap storage |
-| **Audit trail** | `audit_logs` table (append-only, trigger blocks edit and delete) | "Who changed what, when, from where?" | **2 years minimum** (see 5) |
+| **Audit trail** | `audit_logs` table (append-only, trigger blocks edit and delete) | "Who changed what, when, from where?" | **2 years**, then deleted by the daily retention job (see 5) |
 | **Business ledger** | `ledger_entries`, `order_status_history`, `refunds`, `seller_payouts`, rider ledger, `payment_attempts` | "Where did every rupee go; what happened to this order?" | **7 years** (accounting and tax) |
 | **Error tracking** | Sentry (set `SENTRY_DSN`) | "What crashed, how often, since which release?" | Per plan, 90 days |
 | **Infrastructure** | Your host and load balancer, Postgres, Redis | "Was it up, was it slow, was disk full?" | 30 to 90 days |
@@ -38,7 +38,8 @@ never the same thing as the application log.
 **Audit trail** (`audit_logs`)
 - Every admin write (done or refused), every refused attempt at the admin area, admin and customer sign-ins, failed
   and locked sign-ins, logouts, audit exports, **password resets** and **kitchen payout requests**.
-- Fields: who, action, record, the fields sent (secrets redacted), IP, browser, result. Reads are not logged.
+- Fields: who, action, record, the fields sent (secrets redacted, free text cut to its first 200 characters), IP,
+  browser, result. Reads are not logged.
 
 **Business records**: order status history, ledger entries for every money movement, refunds, payouts, payment
 attempts, rider cash and settlements, notifications sent.
@@ -83,10 +84,10 @@ enforces this for the above; keep it that way in new code (log ids, not people).
 
 ## 5. Retention and the audit trail
 
-- `audit_logs` is append-only by a database trigger, so it **cannot be trimmed with DELETE**. Plan for growth:
-  admin and sign-in events are small (well under a million rows a year at launch scale). When it matters, export
-  old months with the admin CSV export (or a scheduled `pg_dump` of the table) to cold storage, then keep the
-  database copy for at least the last 12 months.
+- `audit_logs` is kept for **two years** (decided 26 October 2026). It stays append-only: no row can be edited, and a
+  row younger than two years cannot be deleted by anyone, because the database trigger checks the age itself. The one
+  way out is the daily `audit-retention` job (`services/audit-retention.service.ts`), which deletes rows older than two
+  years. To keep older history anyway (an open dispute, say), export those months with the admin CSV export first.
 - Delete or archive application logs on your collector's schedule (section 1), not in the app.
 - OTP and password-reset secrets are already purged after 24 hours by the app. Read notifications older than 90 days
   can be pruned by a DBA when the table grows.

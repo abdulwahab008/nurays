@@ -2,6 +2,7 @@ import prisma from '../config/database';
 import { selfDeliveryFeeFor, sellerPaidDeliveryFor } from '../utils/deliveryEarnings';
 import { collectorOf } from '../utils/paymentCustody';
 import { roundMoney } from '../utils/pricing';
+import { logger } from '../utils/logger';
 
 type Tx = Parameters<Parameters<typeof prisma.$transaction>[0]>[0];
 type Client = typeof prisma | Tx;
@@ -217,8 +218,16 @@ export interface BalanceLine {
   effect: number;
 }
 
+/**
+ * The balance reads every order the kitchen has had (PERF-1): about 0.36 s at 20,000 orders. A stored running total
+ * would bound it, at the cost of a second copy of the money to keep right, so it waits until a real kitchen needs it
+ * (decided 26 October 2026). This is how we will know: a balance that takes longer than this is logged.
+ */
+export const SLOW_BALANCE_MS = 1_000;
+
 /** Every order's part in the kitchen's balance, with the totals computeSellerBalance reports. */
 export async function sellerBalanceLines(client: Client, sellerId: string) {
+  const started = Date.now();
   const orders = await balanceOrders(client, sellerId);
 
   const cashByRider = orders
@@ -275,6 +284,11 @@ export async function sellerBalanceLines(client: Client, sellerId: string) {
     const owed = collected - entitlement - keptRefunds;
     sellerOwesPlatform += owed;
     lines.push({ ...line, kind: 'kitchen_collected', effect: roundMoney(-owed) });
+  }
+
+  const ms = Date.now() - started;
+  if (ms > SLOW_BALANCE_MS) {
+    logger.warn({ sellerId, orders: orders.length, ms }, 'Kitchen balance took over a second: time to build the running total (PERF-1)');
   }
 
   return { lines, totalEarnings, deliveryEarned, deliveryPaid, awaitingRiderCash, platformOwesSeller, sellerOwesPlatform };
