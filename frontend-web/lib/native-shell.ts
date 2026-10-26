@@ -128,7 +128,7 @@ export function mirroredTokenStore(base: TokenStoreLike, secure: SecureKV): Toke
 
 /**
  * At start: a page that is signed in copies its tokens to secure storage ('mirrored'); a page that lost them takes
- * them back from there ('restored': reload so everything starts signed in); otherwise nothing ('none').
+ * them back from there ('restored': the caller then loads the account again); otherwise nothing ('none').
  */
 export async function syncTokens(base: TokenStoreLike, secure: SecureKV): Promise<'restored' | 'mirrored' | 'none'> {
   const refresh = base.refresh();

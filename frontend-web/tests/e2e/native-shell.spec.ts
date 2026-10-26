@@ -83,6 +83,14 @@ test.describe('the website inside the store app', () => {
     const tokens = (await login.json()).data.tokens as { access_token: string; refresh_token: string };
     await asTheApp(page, { nuray_access: tokens.access_token, nuray_refresh: tokens.refresh_token });
     await page.goto('/terms');
-    await expect.poll(() => page.evaluate(() => localStorage.getItem('refresh_token'))).toBe(tokens.refresh_token);
+    const pageRefreshToken = () => page.evaluate(() => localStorage.getItem('refresh_token'));
+    await expect.poll(pageRefreshToken).toBe(tokens.refresh_token);
+    // The account is loaded again (the auth store keeps it), and nothing reloads the page or drops the tokens after.
+    await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('auth-storage') ?? '{}')?.state?.user?.email ?? null)).toBe(customer.email);
+    let loads = 0;
+    page.on('load', () => loads++);
+    await page.waitForTimeout(1500);
+    expect(loads).toBe(0);
+    expect(await pageRefreshToken()).toBe(tokens.refresh_token);
   });
 });
