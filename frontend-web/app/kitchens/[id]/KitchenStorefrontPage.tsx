@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useMemo, type ReactNode } from 'react';
+import { useState, useEffect, useMemo, useRef, type ReactNode } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import { isAxiosError } from 'axios';
@@ -238,16 +238,22 @@ function toKitchenProfile(s: PublicSeller, tb: BrowseT, tk: KitchenT): KitchenPr
   };
 }
 
-export default function KitchenStorefrontPage() {
+/**
+ * `initial` is the server's copy of the kitchen (the same public read its link preview uses): with it the page is
+ * rendered with the kitchen and its menu on the server, and the browser then refreshes it.
+ */
+export default function KitchenStorefrontPage({ initial }: { initial?: PublicSeller }) {
   const params = useParams();
   const { showToast } = useToast();
   const { isAuthenticated } = useAuthStore(useShallow((s) => ({ isAuthenticated: s.isAuthenticated })));
   const tb = useT(browseMessages);
   const tk = useT(kitchenMessages);
   // The API's seller; the page's text is built from it in the current language.
-  const [seller, setSeller] = useState<PublicSeller | null>(null);
+  const [seller, setSeller] = useState<PublicSeller | null>(initial ?? null);
   const kitchen = useMemo(() => (seller ? toKitchenProfile(seller, tb, tk) : null), [seller, tb, tk]);
-  const [loadState, setLoadState] = useState<LoadState>('loading');
+  const [loadState, setLoadState] = useState<LoadState>(initial ? 'ready' : 'loading');
+  // A kitchen on screen stays there if a refresh cannot reach the API (a 404 still says it is gone).
+  const shownRef = useRef(Boolean(initial));
   const [reloadKey, setReloadKey] = useState(0);
   const [activeCategory, setActiveCategory] = useState('all');
   const [addedItems, setAddedItems] = useState<Record<string, number>>({});
@@ -279,6 +285,7 @@ export default function KitchenStorefrontPage() {
         if (cancelled) return;
         const sellerData = res.data?.data;
         if (sellerData) {
+          shownRef.current = true;
           setSeller(sellerData);
           setLoadState('ready');
         } else {
@@ -288,8 +295,11 @@ export default function KitchenStorefrontPage() {
       })
       .catch((err: unknown) => {
         if (cancelled) return;
+        const gone = isAxiosError(err) && apiErrorStatus(err) === 404;
+        if (!gone && shownRef.current) return;
+        shownRef.current = false;
         setSeller(null);
-        if (isAxiosError(err) && apiErrorStatus(err) === 404) {
+        if (gone) {
           setLoadState('not_found');
         } else {
           console.error('Failed to load seller storefront:', err);
