@@ -728,7 +728,7 @@ export default function ProductDetailPage({ initial }: { initial?: RawProduct })
         <div className="py-4 border-y border-gray-100 space-y-2">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-2xl bg-orange-100 text-[#FF5500] flex items-center justify-center font-black text-sm">
+              <div className="w-10 h-10 rounded-2xl bg-brand-100 text-brand-ink flex items-center justify-center font-black text-sm">
                 👩‍🍳
               </div>
               <div>
@@ -780,7 +780,7 @@ export default function ProductDetailPage({ initial }: { initial?: RawProduct })
                   <span>🏡</span> {t('inYourCommunity')}
                 </span>
               ) : product.communityBadge ? (
-                <span className="px-2.5 py-1 rounded-lg bg-orange-100 text-orange-800 text-xs font-black flex items-center gap-1.5">
+                <span className="px-2.5 py-1 rounded-lg bg-brand-100 text-brand-800 text-xs font-black flex items-center gap-1.5">
                   <span>📍</span> {product.communityBadge}
                 </span>
               ) : (
@@ -1004,7 +1004,7 @@ export default function ProductDetailPage({ initial }: { initial?: RawProduct })
               value={specialInstructions}
               onChange={(e) => setSpecialInstructions(e.target.value)}
               placeholder={t('specialPlaceholder')}
-              className="w-full text-xs p-3 rounded-xl border border-gray-200 focus:border-[#FF5500] focus:ring-1 focus:ring-[#FF5500] outline-none transition-all resize-none bg-white"
+              className="w-full text-xs p-3 rounded-xl border border-gray-200 focus:border-brand focus:ring-1 focus:ring-brand outline-none transition-all resize-none bg-white"
             />
           </div>
 
@@ -1026,7 +1026,7 @@ export default function ProductDetailPage({ initial }: { initial?: RawProduct })
               </Button>
               <Button
                 onClick={handleBuyNow}
-                className="w-full h-12 text-sm font-bold bg-gradient-to-r from-[#FF5500] to-[#FF2A00] hover:brightness-110 text-white shadow-sm rounded-xl"
+                className="w-full h-12 text-sm font-bold bg-gradient-to-r from-brand to-brand hover:brightness-110 text-on-brand shadow-sm rounded-xl"
                 disabled={maxQty < quantity || addToCartLoading || product.availableToday === false}
               >
                 {t('buyNow')}

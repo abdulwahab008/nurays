@@ -151,14 +151,14 @@ function DevLoginContent() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-orange-50/20 to-slate-100 text-slate-900 py-12 px-4 sm:px-6 lg:px-8">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-brand-50/20 to-slate-100 text-slate-900 py-12 px-4 sm:px-6 lg:px-8">
       <div className="max-w-5xl mx-auto">
         {/* Header */}
         <div className="text-center mb-10">
           <div className="flex justify-center mb-4">
             <BrandLockup markSize={36} />
           </div>
-          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-orange-100 text-orange-800 text-xs font-bold uppercase tracking-wider mb-3">
+          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-brand-100 text-brand-800 text-xs font-bold uppercase tracking-wider mb-3">
             ⚡ Multi-User Concurrent Testing Hub
           </div>
           <h1 className="text-3xl sm:text-4xl font-black text-slate-950 tracking-tight">
@@ -172,7 +172,7 @@ function DevLoginContent() {
           <div className="mt-6 flex flex-wrap justify-center gap-4">
             <button
               onClick={openAllRolesInTabs}
-              className="inline-flex items-center gap-2.5 px-6 py-3.5 rounded-2xl bg-gradient-to-r from-orange-600 via-orange-500 to-amber-500 text-white font-extrabold text-sm shadow-xl shadow-orange-500/25 hover:shadow-orange-500/40 hover:scale-[1.02] active:scale-[0.98] transition-all"
+              className="inline-flex items-center gap-2.5 px-6 py-3.5 rounded-2xl bg-gradient-to-r from-brand-500 via-brand to-amber-500 text-white font-extrabold text-sm shadow-xl shadow-brand/25 hover:shadow-brand/40 hover:scale-[1.02] active:scale-[0.98] transition-all"
             >
               <span>🚀 Open All 4 Roles in Separate Tabs</span>
               <span className="text-xs bg-white/20 px-2 py-0.5 rounded-full font-bold">1-Click</span>
@@ -186,7 +186,7 @@ function DevLoginContent() {
           </div>
 
           {statusMessage && (
-            <div className="mt-4 inline-block px-4 py-2 rounded-xl bg-orange-50 border border-orange-200 text-orange-800 text-sm font-semibold animate-pulse">
+            <div className="mt-4 inline-block px-4 py-2 rounded-xl bg-brand-50 border border-brand-200 text-brand-800 text-sm font-semibold animate-pulse">
               {statusMessage}
             </div>
           )}
@@ -199,7 +199,7 @@ function DevLoginContent() {
             return (
               <div
                 key={role.id}
-                className="bg-white rounded-3xl p-6 border border-slate-200/80 shadow-sm hover:shadow-md hover:border-orange-200 transition-all flex flex-col justify-between"
+                className="bg-white rounded-3xl p-6 border border-slate-200/80 shadow-sm hover:shadow-md hover:border-brand-200 transition-all flex flex-col justify-between"
               >
                 <div>
                   <div className="flex items-start justify-between gap-3 mb-4">
@@ -236,7 +236,7 @@ function DevLoginContent() {
                     </div>
                     <div className="flex items-center justify-between text-xs">
                       <span className="text-slate-500 font-medium">Landing Page:</span>
-                      <code className="text-orange-700 font-bold">{role.targetUrl}</code>
+                      <code className="text-brand-ink font-bold">{role.targetUrl}</code>
                     </div>
                   </div>
                 </div>
@@ -244,7 +244,7 @@ function DevLoginContent() {
                 <div className="flex items-center gap-3 pt-2">
                   <button
                     onClick={() => openSingleRoleInTab(role.id)}
-                    className="flex-1 py-2.5 px-4 rounded-xl bg-orange-50 hover:bg-orange-100 text-orange-700 font-black text-xs border border-orange-200 transition-all flex items-center justify-center gap-1.5 shadow-sm"
+                    className="flex-1 py-2.5 px-4 rounded-xl bg-brand-50 hover:bg-brand-100 text-brand-ink font-black text-xs border border-brand-200 transition-all flex items-center justify-center gap-1.5 shadow-sm"
                   >
                     <span>↗ Open in New Tab</span>
                   </button>
@@ -269,7 +269,7 @@ function DevLoginContent() {
               Click <strong>&quot;Open All 4 Roles in Separate Tabs&quot;</strong> above to spawn 4 independent tabs.
             </li>
             <li>
-              <strong>Tab 1 (Customer)</strong>: Go to <Link href="/products" className="text-orange-600 underline font-bold">/products</Link>, add an item to tray, and complete checkout. Note your <strong>Doorstep Handover PIN</strong>!
+              <strong>Tab 1 (Customer)</strong>: Go to <Link href="/products" className="text-brand-ink underline font-bold">/products</Link>, add an item to tray, and complete checkout. Note your <strong>Doorstep Handover PIN</strong>!
             </li>
             <li>
               <strong>Tab 2 (Seller)</strong>: Go to <strong>/sellers/orders</strong>, click <em>Confirm</em>, then <em>Start Preparing</em> to trigger the predictive JIT dispatch!

@@ -20,7 +20,7 @@ interface Props {
 }
 
 const riderIconHtml = `
-  <div style="width:36px;height:36px;border-radius:50%;background:#FF5500;border:3px solid white;box-shadow:0 4px 10px rgba(0,0,0,.3);display:flex;align-items:center;justify-content:center;font-size:18px;">🛵</div>`;
+  <div style="width:36px;height:36px;border-radius:50%;background:#0A7A6E;border:3px solid white;box-shadow:0 4px 10px rgba(0,0,0,.3);display:flex;align-items:center;justify-content:center;font-size:18px;">🛵</div>`;
 const homeIconHtml = `
   <div style="width:30px;height:30px;border-radius:50%;background:#0f172a;border:3px solid white;box-shadow:0 4px 10px rgba(0,0,0,.25);display:flex;align-items:center;justify-content:center;font-size:14px;">🏠</div>`;
 

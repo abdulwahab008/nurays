@@ -189,7 +189,7 @@ test.describe('Customer Module E2E - All Tabs & Visual Polish', () => {
           expect(
             styleAttr,
             `Sidebar item "${itemName}" should be active on ${page.url()}`,
-          ).toContain('rgb(255, 85, 0)'); // #FF5500 accent
+          ).toContain('var(--brand-soft)'); // the turquoise tint of the active item
         } else {
           expect(
             styleAttr,

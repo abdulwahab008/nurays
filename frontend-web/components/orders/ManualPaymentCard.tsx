@@ -298,7 +298,7 @@ export default function ManualPaymentCard({
               </div>
               <div className="text-xs">
                 <span className="font-bold text-slate-800 block">{t('screenshotAttached')}</span>
-                <ExternalLink href={proofToDisplay} className="text-[#FF5500] hover:underline font-bold text-[11px]">
+                <ExternalLink href={proofToDisplay} className="text-brand-ink hover:underline font-bold text-[11px]">
                   {t('viewReceipt')}
                 </ExternalLink>
               </div>
@@ -311,11 +311,11 @@ export default function ManualPaymentCard({
 
   // Payment is pending: show direct kitchen payment details and redesigned submit button
   return (
-    <div className="bg-white rounded-3xl border-2 border-orange-200 shadow-sm p-6 space-y-5">
+    <div className="bg-white rounded-3xl border-2 border-brand-200 shadow-sm p-6 space-y-5">
       {/* Header */}
       <div className="flex items-start justify-between gap-4">
         <div>
-          <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-orange-100 text-[#FF5500] text-[11px] font-black uppercase tracking-wider mb-1.5">
+          <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-brand-100 text-brand-ink text-[11px] font-black uppercase tracking-wider mb-1.5">
             {t('directBadge')}
           </div>
           <h3 className="text-lg font-black text-slate-900">
@@ -326,7 +326,7 @@ export default function ManualPaymentCard({
           </p>
         </div>
 
-        <div className="w-11 h-11 rounded-2xl bg-gradient-to-br from-[#FF5500] to-amber-500 text-white flex items-center justify-center text-xl shadow-md flex-shrink-0">
+        <div className="w-11 h-11 rounded-2xl bg-gradient-to-br from-brand to-amber-500 text-on-brand flex items-center justify-center text-xl shadow-md flex-shrink-0">
           💸
         </div>
       </div>
@@ -334,7 +334,7 @@ export default function ManualPaymentCard({
       {/* Account Info Cards */}
       {loading ? (
         <div className="p-8 text-center text-slate-500">
-          <div className="w-6 h-6 border-2 border-[#FF5500] border-t-transparent rounded-full animate-spin mx-auto mb-2" />
+          <div className="w-6 h-6 border-2 border-brand border-t-transparent rounded-full animate-spin mx-auto mb-2" />
           <span className="text-xs font-bold">{t('fetchingAccounts')}</span>
         </div>
       ) : loadError && !details ? (
@@ -346,7 +346,7 @@ export default function ManualPaymentCard({
             return (
               <div
                 key={idx}
-                className="bg-slate-50 rounded-2xl p-4 border border-slate-200/80 flex items-center justify-between gap-3 hover:border-orange-300 transition-colors"
+                className="bg-slate-50 rounded-2xl p-4 border border-slate-200/80 flex items-center justify-between gap-3 hover:border-brand-300 transition-colors"
               >
                 <div className="space-y-1 min-w-0">
                   <div className="flex items-center gap-2">
@@ -397,7 +397,7 @@ export default function ManualPaymentCard({
       {/* Quick Action Button */}
       <button
         onClick={() => setShowSubmitModal(true)}
-        className="w-full py-3.5 px-4 rounded-2xl font-black text-xs text-white bg-[#FF5500] hover:bg-[#e04400] active:scale-[0.98] transition-all shadow-md flex items-center justify-center gap-2"
+        className="w-full py-3.5 px-4 rounded-2xl font-black text-xs text-on-brand bg-brand hover:bg-brand-500 active:scale-[0.98] transition-all shadow-md flex items-center justify-center gap-2"
       >
         <span>{t('iHavePaid')}</span>
       </button>
@@ -431,7 +431,7 @@ export default function ManualPaymentCard({
               {/* Account Selection */}
               <div>
                 <label className="block text-xs font-black text-slate-900 mb-2">
-                  {t('whichAccount')} <span className="text-[#FF5500]">*</span>
+                  {t('whichAccount')} <span className="text-brand-ink">*</span>
                 </label>
                 {details?.accounts && details.accounts.length > 0 ? (
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
@@ -445,7 +445,7 @@ export default function ManualPaymentCard({
                           onClick={() => setSelectedProvider(acc.provider)}
                           className={`p-3 rounded-2xl border text-start transition-all flex items-center gap-2.5 ${
                             isSelected
-                              ? 'border-[#FF5500] bg-orange-50/50 shadow-xs ring-1 ring-[#FF5500]'
+                              ? 'border-brand bg-brand-50/50 shadow-xs ring-1 ring-brand'
                               : 'border-slate-200 bg-white hover:bg-slate-50 text-slate-700'
                           }`}
                         >
@@ -459,7 +459,7 @@ export default function ManualPaymentCard({
                             </span>
                           </div>
                           {isSelected && (
-                            <span className="w-5 h-5 rounded-full bg-[#FF5500] text-white flex items-center justify-center text-xs font-bold">
+                            <span className="w-5 h-5 rounded-full bg-brand text-on-brand flex items-center justify-center text-xs font-bold">
                               ✓
                             </span>
                           )}
@@ -494,13 +494,13 @@ export default function ManualPaymentCard({
                 {!screenshotPreview ? (
                   <div
                     onClick={() => fileInputRef.current?.click()}
-                    className="border-2 border-dashed border-slate-300 hover:border-[#FF5500] bg-slate-50 hover:bg-orange-50/30 rounded-2xl p-5 text-center cursor-pointer transition-all space-y-2 group"
+                    className="border-2 border-dashed border-slate-300 hover:border-brand bg-slate-50 hover:bg-brand-50/30 rounded-2xl p-5 text-center cursor-pointer transition-all space-y-2 group"
                   >
-                    <div className="w-10 h-10 rounded-2xl bg-white group-hover:bg-[#FF5500] group-hover:text-white text-slate-500 flex items-center justify-center mx-auto transition-colors shadow-2xs border border-slate-200">
+                    <div className="w-10 h-10 rounded-2xl bg-white group-hover:bg-brand group-hover:text-on-brand text-slate-500 flex items-center justify-center mx-auto transition-colors shadow-2xs border border-slate-200">
                       <UploadCloud className="w-5 h-5" />
                     </div>
                     <div>
-                      <p className="text-xs font-black text-slate-800 group-hover:text-[#FF5500] transition-colors">
+                      <p className="text-xs font-black text-slate-800 group-hover:text-brand-ink transition-colors">
                         {t('tapToUpload')}
                       </p>
                       <p className="text-[11px] text-slate-500 mt-0.5">
@@ -558,7 +558,7 @@ export default function ManualPaymentCard({
                   onChange={(e) => setTransactionId(e.target.value)}
                   placeholder={t('tidPlaceholder')}
                   dir="ltr"
-                  className="w-full px-4 py-2.5 border border-slate-200 rounded-xl text-xs font-bold font-mono focus:ring-2 focus:ring-[#FF5500] focus:border-transparent bg-slate-50 focus:bg-white"
+                  className="w-full px-4 py-2.5 border border-slate-200 rounded-xl text-xs font-bold font-mono focus:ring-2 focus:ring-brand focus:border-transparent bg-slate-50 focus:bg-white"
                 />
               </div>
 
@@ -573,7 +573,7 @@ export default function ManualPaymentCard({
                     value={senderName}
                     onChange={(e) => setSenderName(e.target.value)}
                     placeholder={t('senderNamePlaceholder')}
-                    className="w-full px-3 py-2 border border-slate-200 rounded-xl text-xs font-semibold focus:ring-2 focus:ring-[#FF5500] bg-slate-50 focus:bg-white"
+                    className="w-full px-3 py-2 border border-slate-200 rounded-xl text-xs font-semibold focus:ring-2 focus:ring-brand bg-slate-50 focus:bg-white"
                   />
                 </div>
                 <div>
@@ -586,7 +586,7 @@ export default function ManualPaymentCard({
                     onChange={(e) => setSenderAccount(e.target.value)}
                     placeholder={t('senderMobilePlaceholder')}
                     dir="ltr"
-                    className="w-full px-3 py-2 border border-slate-200 rounded-xl text-xs font-semibold focus:ring-2 focus:ring-[#FF5500] bg-slate-50 focus:bg-white"
+                    className="w-full px-3 py-2 border border-slate-200 rounded-xl text-xs font-semibold focus:ring-2 focus:ring-brand bg-slate-50 focus:bg-white"
                   />
                 </div>
               </div>
@@ -596,7 +596,7 @@ export default function ManualPaymentCard({
                 <button
                   type="submit"
                   disabled={submitting || uploadingImage || (!transactionId.trim() && !uploadedProofUrl)}
-                  className="flex-1 py-3 px-4 rounded-2xl font-black text-xs text-white bg-[#FF5500] hover:bg-[#e04400] disabled:opacity-50 transition-all shadow-md flex items-center justify-center gap-1.5"
+                  className="flex-1 py-3 px-4 rounded-2xl font-black text-xs text-on-brand bg-brand hover:bg-brand-500 disabled:opacity-50 transition-all shadow-md flex items-center justify-center gap-1.5"
                 >
                   {submitting ? (
                     <>

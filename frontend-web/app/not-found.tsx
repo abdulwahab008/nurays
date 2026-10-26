@@ -15,13 +15,13 @@ export default function NotFound() {
       </header>
       <div className="flex-1 flex items-center justify-center px-4 py-12">
         <div className="max-w-md w-full text-center bg-white border border-slate-200 rounded-2xl p-8 shadow-sm">
-          <p className="text-sm font-bold text-orange-700">404</p>
+          <p className="text-sm font-bold text-brand-ink">404</p>
           <h1 className="mt-1 text-2xl font-bold text-slate-900">This page could not be found</h1>
           <p className="mt-2 text-sm text-slate-600">
             The address may have a typo, or the dish, the kitchen or the page may have been taken down.
           </p>
           <div className="mt-6 flex flex-wrap justify-center gap-3">
-            <Link href="/" className="px-4 py-2 rounded-xl bg-[#FF5500] text-white text-sm font-semibold hover:bg-[#e04400]">
+            <Link href="/" className="px-4 py-2 rounded-xl bg-brand text-on-brand text-sm font-semibold hover:bg-brand-500">
               Home
             </Link>
             <Link href="/products" className="px-4 py-2 rounded-xl border border-slate-300 text-sm font-semibold text-slate-700 hover:bg-slate-50">

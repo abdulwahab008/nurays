@@ -196,7 +196,7 @@ function AskDialog({ options, onAnswer }: { options: AskOptions; onAnswer: (answ
           aria-invalid={touched && !!problem}
           aria-describedby="ask-dialog-help"
           dir="auto"
-          className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-orange-400"
+          className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-brand"
         />
         <p id="ask-dialog-help" className={`mt-1 text-xs ${touched && problem ? 'text-red-700' : 'text-slate-600'}`} role={touched && problem ? 'alert' : undefined}>
           {touched && problem ? problem : ' '}
@@ -206,7 +206,7 @@ function AskDialog({ options, onAnswer }: { options: AskOptions; onAnswer: (answ
           <Button type="button" variant="outline" size="sm" onClick={() => onAnswer(null)} className="rounded-xl px-4 text-xs font-semibold">
             {options.cancelText ?? tc('cancel')}
           </Button>
-          <Button type="submit" size="sm" className="rounded-xl px-5 text-xs font-bold text-white bg-[#FF5500] hover:bg-[#e04400]">
+          <Button type="submit" size="sm" className="rounded-xl px-5 text-xs font-bold text-on-brand bg-brand hover:bg-brand-500">
             {options.confirmText ?? tc('confirm')}
           </Button>
         </div>

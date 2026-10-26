@@ -105,7 +105,7 @@ export function ClosedKitchenModal({
         {/* Scheduled Timeline & Pre-Order Explainer */}
         <div className="bg-slate-50 rounded-2xl p-4 border border-slate-200/70 mb-5 space-y-2.5">
           <div className="flex items-center gap-2 text-xs font-bold text-slate-800">
-            <Clock className="w-4 h-4 text-[#FF5500]" />
+            <Clock className="w-4 h-4 text-brand-ink" />
             <span>{t('availabilityTitle')}</span>
           </div>
 
@@ -113,7 +113,7 @@ export function ClosedKitchenModal({
             <p className="text-xs text-slate-600 leading-relaxed">
               {fillSlots(t('preorderText'), {
                 strong: <strong className="text-slate-900 font-semibold">{t('preorderStrong')}</strong>,
-                time: <span className="text-[#FF5500] font-bold">{opensAt}</span>,
+                time: <span className="text-brand-ink font-bold">{opensAt}</span>,
               })}
             </p>
           ) : (
@@ -138,7 +138,7 @@ export function ClosedKitchenModal({
             <button
               type="button"
               onClick={handleViewMenu}
-              className="w-full flex items-center justify-center gap-2 py-3 px-4 rounded-xl bg-[#FF5500] hover:bg-[#e04400] text-white font-bold text-xs sm:text-sm transition-all shadow-md active:scale-98 cursor-pointer"
+              className="w-full flex items-center justify-center gap-2 py-3 px-4 rounded-xl bg-brand hover:bg-brand-500 text-on-brand font-bold text-xs sm:text-sm transition-all shadow-md active:scale-98 cursor-pointer"
             >
               <span>{t('browsePreorder', { time: opensAt })}</span>
               <ArrowRight className="rtl:-scale-x-100 w-4 h-4" />

@@ -402,7 +402,7 @@ function SellerDashboardContent() {
 
               {dashboard.primaryCommunityName && (
                 <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-50 border border-slate-200 text-slate-700 text-xs font-medium">
-                  <span className="text-[#FF5500]">📍</span>
+                  <span className="text-brand-ink">📍</span>
                   <span>{dashboard.primaryCommunityName}</span>
                 </div>
               )}
@@ -410,7 +410,7 @@ function SellerDashboardContent() {
 
             <div className="flex items-center gap-2">
               <Link href="/sellers/products/new">
-                <Button className="bg-[#FF5500] hover:bg-[#e04400] text-white font-bold text-xs rounded-xl px-4 py-2 shadow-xs">
+                <Button className="bg-brand hover:bg-brand-500 text-on-brand font-bold text-xs rounded-xl px-4 py-2 shadow-xs">
                   {t('dash.addFoodItem')}
                 </Button>
               </Link>
@@ -434,7 +434,7 @@ function SellerDashboardContent() {
                 <p className="text-xl sm:text-2xl font-black text-slate-900">{formatPrice(dashboard.overview.todayEarnings ?? 0)}</p>
                 <p className="text-[11px] text-slate-500 mt-1">{t('dash.ordersToday', { count: dashboard.overview.todayOrders ?? 0 })}</p>
               </div>
-              <div className="w-10 h-10 bg-orange-50 text-orange-600 rounded-xl flex items-center justify-center font-bold text-base">
+              <div className="w-10 h-10 bg-brand-50 text-brand-ink rounded-xl flex items-center justify-center font-bold text-base">
                 ₨
               </div>
             </div>

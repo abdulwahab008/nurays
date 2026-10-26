@@ -3,8 +3,8 @@
 import { useState, useEffect, useMemo, useRef, type ReactNode } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
+import { SiteHeader } from '@/components/layout/SiteHeader';
 import { isAxiosError } from 'axios';
-import { BrandLockup } from '@/components/ui/Mark';
 import { CoverImage } from '@/components/ui/CoverImage';
 import { useAuthStore } from '@/lib/store/auth-store';
 import { useToast } from '@/components/ui/toast';
@@ -15,7 +15,6 @@ import { cartService } from '@/lib/services/cart.service';
 import { useCartStore } from '@/lib/store/cart-store';
 import { ConfirmModal } from '@/components/ui/ConfirmModal';
 import { DashboardLayout, CUSTOMER_SIDEBAR_ITEMS } from '@/components/layout/DashboardShell';
-import { CommunitySelector } from '@/components/community/CommunitySelector';
 import { useT } from '@/lib/i18n';
 import { browseMessages, businessTypeKey, productTypeKey, type BrowseT } from '@/lib/i18n/messages/browse';
 import { kitchenMessages, kitchenKey, type KitchenT } from '@/lib/i18n/messages/kitchen';
@@ -29,7 +28,6 @@ import {
   UtensilsCrossed,
   Flame,
   Snowflake,
-  ShoppingBag,
   ChevronRight,
   ArrowLeft,
   Check,
@@ -456,53 +454,7 @@ export default function KitchenStorefrontPage({ initial }: { initial?: PublicSel
     }
   };
 
-  const renderPublicHeader = () => (
-    <header className="sticky top-0 z-40 pt-(--safe-top) bg-white/95 backdrop-blur-md border-b border-slate-200/80 shadow-2xs">
-      <div className="max-w-[1360px] mx-auto px-4 sm:px-8 h-16 flex items-center justify-between gap-4">
-        <div className="flex items-center gap-4">
-          <Link href="/" className="hover:opacity-90 transition-opacity">
-            <BrandLockup markSize={30} wordSize={20} />
-          </Link>
-          <div className="hidden sm:block">
-            <CommunitySelector variant="navbar" />
-          </div>
-        </div>
-
-        <div className="flex items-center gap-3">
-          <Link
-            href="/products"
-            className="hidden sm:inline-block text-xs font-semibold text-slate-700 hover:text-[#FF5500] px-3 py-1.5"
-          >
-            {tk('browseMarketplace')}
-          </Link>
-          <Link
-            href="/cart"
-            className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-xl bg-[#0C1016] text-white text-xs font-bold shadow-xs hover:bg-black transition-colors"
-          >
-            <ShoppingBag className="w-3.5 h-3.5" />
-            <span>{tk('cart')}</span>
-            {cartCount > 0 && (
-              <span className="w-4 h-4 rounded-full bg-[#FF5500] text-white flex items-center justify-center text-[11px] font-bold">
-                {cartCount}
-              </span>
-            )}
-          </Link>
-          <Link
-            href="/login"
-            className="hidden sm:inline-block text-xs font-semibold text-slate-700 hover:text-[#FF5500] px-2 py-1.5"
-          >
-            {tk('signIn')}
-          </Link>
-          <Link
-            href="/register"
-            className="px-3.5 py-1.5 rounded-xl bg-[#FF5500] hover:bg-[#e04400] text-white text-xs font-bold transition-colors shadow-2xs"
-          >
-            {tk('join')}
-          </Link>
-        </div>
-      </div>
-    </header>
-  );
+  const renderPublicHeader = () => <SiteHeader />;
 
   // Not-found / error pages, in the same shell as the storefront.
   const renderStatePage = (title: string, subtitle: string, body: ReactNode) => {
@@ -514,7 +466,7 @@ export default function KitchenStorefrontPage({ initial }: { initial?: PublicSel
       );
     }
     return (
-      <div className="min-h-screen bg-[#F8FAFC] text-slate-900 pb-32">
+      <div className="min-h-screen bg-page text-slate-900 pb-32">
         {renderPublicHeader()}
         {body}
       </div>
@@ -528,7 +480,7 @@ export default function KitchenStorefrontPage({ initial }: { initial?: PublicSel
       tk('notFound'),
       tk('notFoundSub'),
       <div className="text-center py-14 px-6 bg-white rounded-3xl border border-slate-200 shadow-xs max-w-md mx-auto my-12">
-        <div className="w-12 h-12 rounded-2xl bg-orange-50 text-[#FF5500] flex items-center justify-center mx-auto mb-4">
+        <div className="w-12 h-12 rounded-2xl bg-brand-50 text-brand-ink flex items-center justify-center mx-auto mb-4">
           <ChefHat className="w-6 h-6" />
         </div>
         <h1 className="font-bold text-slate-900 text-base">{tk('notFound')}</h1>
@@ -554,7 +506,7 @@ export default function KitchenStorefrontPage({ initial }: { initial?: PublicSel
         role="alert"
         className="text-center py-14 px-6 bg-white rounded-3xl border border-slate-200 shadow-xs max-w-md mx-auto my-12"
       >
-        <div className="w-12 h-12 rounded-2xl bg-orange-50 text-[#FF5500] flex items-center justify-center mx-auto mb-4">
+        <div className="w-12 h-12 rounded-2xl bg-brand-50 text-brand-ink flex items-center justify-center mx-auto mb-4">
           <ChefHat className="w-6 h-6" />
         </div>
         <h1 className="font-bold text-slate-900 text-base">{tk('errorHeading')}</h1>
@@ -589,7 +541,7 @@ export default function KitchenStorefrontPage({ initial }: { initial?: PublicSel
           userType="customer"
         >
           <div className="text-center py-20 bg-white rounded-3xl border border-slate-200 shadow-xs max-w-md mx-auto my-8">
-            <div className="w-12 h-12 border-3 border-[#FF5500] border-t-transparent rounded-full animate-spin mx-auto mb-4" />
+            <div className="w-12 h-12 border-3 border-brand border-t-transparent rounded-full animate-spin mx-auto mb-4" />
             <p className="font-bold text-slate-800 text-sm">{tk('loadingStorefront')}</p>
             <p className="text-xs text-slate-500 mt-1">{tk('fetchingMenu')}</p>
           </div>
@@ -597,9 +549,9 @@ export default function KitchenStorefrontPage({ initial }: { initial?: PublicSel
       );
     }
     return (
-      <div className="min-h-screen bg-[#F8FAFC] text-slate-900 flex items-center justify-center">
+      <div className="min-h-screen bg-page text-slate-900 flex items-center justify-center">
         <div className="text-center p-8 bg-white rounded-3xl border border-slate-200 shadow-sm max-w-sm">
-          <div className="w-12 h-12 border-3 border-[#FF5500] border-t-transparent rounded-full animate-spin mx-auto mb-4" />
+          <div className="w-12 h-12 border-3 border-brand border-t-transparent rounded-full animate-spin mx-auto mb-4" />
           <p className="font-bold text-slate-800 text-sm">{tk('loadingStorefront')}</p>
           <p className="text-xs text-slate-500 mt-1">{tk('fetchingMenu')}</p>
         </div>
@@ -646,7 +598,7 @@ export default function KitchenStorefrontPage({ initial }: { initial?: PublicSel
                   eager
                   className="w-16 h-16 sm:w-20 sm:h-20 rounded-2xl ring-3 ring-white shadow-md"
                 />
-                <div className="absolute -bottom-1.5 -end-1.5 bg-[#FF5500] text-white text-xs font-bold p-1 rounded-full shadow-xs">
+                <div className="absolute -bottom-1.5 -end-1.5 bg-brand text-on-brand text-xs font-bold p-1 rounded-full shadow-xs">
                   <Check className="w-3 h-3 text-white" />
                 </div>
               </div>
@@ -671,12 +623,12 @@ export default function KitchenStorefrontPage({ initial }: { initial?: PublicSel
                     </span>
                   )}
                   {kitchen.hoursText && (
-                    <span className="px-2.5 py-0.5 rounded-full bg-orange-100 text-[#FF5500] text-[11px] font-bold">
+                    <span className="px-2.5 py-0.5 rounded-full bg-brand-100 text-brand-ink text-[11px] font-bold">
                       {kitchen.hoursText}
                     </span>
                   )}
                   {kitchen.preOrderOnly && kitchen.availability?.status !== 'preorder_only' && (
-                    <span className="px-2.5 py-0.5 rounded-full bg-orange-100 text-[#FF5500] text-[11px] font-bold">
+                    <span className="px-2.5 py-0.5 rounded-full bg-brand-100 text-brand-ink text-[11px] font-bold">
                       {tb('preOrdersOnly')}
                     </span>
                   )}
@@ -685,12 +637,12 @@ export default function KitchenStorefrontPage({ initial }: { initial?: PublicSel
                 <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-slate-950">
                   {kitchen.name}
                 </h1>
-                <p className="text-xs font-bold text-[#FF5500] mt-0.5">
+                <p className="text-xs font-bold text-brand-ink mt-0.5">
                   {tk('operatedBy', { name: kitchen.chefName })}
                 </p>
                 {kitchen.area && (
                   <p className="text-xs text-slate-500 mt-1 flex items-center gap-1">
-                    <MapPin className="w-3 h-3 text-[#FF5500]" />
+                    <MapPin className="w-3 h-3 text-brand-ink" />
                     <span>{kitchen.area}</span>
                   </p>
                 )}
@@ -743,7 +695,7 @@ export default function KitchenStorefrontPage({ initial }: { initial?: PublicSel
       <div className="max-w-[1360px] mx-auto px-4 sm:px-8 mt-5">
         <div className="flex items-center gap-2 overflow-x-auto pb-2 no-scrollbar">
           <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-white border border-slate-200/80 text-xs font-semibold text-slate-700 shadow-2xs whitespace-nowrap">
-            <ShieldCheck className="w-3.5 h-3.5 text-[#FF5500]" />
+            <ShieldCheck className="w-3.5 h-3.5 text-brand-ink" />
             <span>{kitchen.verifiedLabel}</span>
           </span>
         </div>
@@ -820,7 +772,7 @@ export default function KitchenStorefrontPage({ initial }: { initial?: PublicSel
 
       {/* Menu Categories Bar */}
       {kitchen.dishes.length > 0 && (
-        <div className="sticky top-(--header-offset) z-30 bg-[#F8FAFC]/95 backdrop-blur-md border-b border-slate-200/80 py-3 mt-4">
+        <div className="sticky top-(--header-offset) z-30 bg-page/95 backdrop-blur-md border-b border-slate-200/80 py-3 mt-4">
           <div className="max-w-[1360px] mx-auto px-4 sm:px-8 flex items-center gap-2.5 overflow-x-auto no-scrollbar">
             <button
               onClick={() => setActiveCategory('all')}
@@ -837,7 +789,7 @@ export default function KitchenStorefrontPage({ initial }: { initial?: PublicSel
               onClick={() => setActiveCategory('fresh')}
               className={`inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${
                 activeCategory === 'fresh'
-                  ? 'bg-[#FF5500] text-white shadow-xs'
+                  ? 'bg-brand text-on-brand shadow-xs'
                   : 'bg-white text-slate-700 hover:bg-slate-100 border border-slate-200/80'
               }`}
             >
@@ -925,7 +877,7 @@ export default function KitchenStorefrontPage({ initial }: { initial?: PublicSel
                           className={`absolute bottom-2 start-2 px-2 py-0.5 rounded-md text-[11px] font-bold flex items-center gap-1 ${
                             dish.isFrozen
                               ? 'bg-cyan-600 text-white'
-                              : 'bg-[#FF5500] text-white'
+                              : 'bg-brand text-on-brand'
                           }`}
                         >
                           {dish.isFrozen ? <Snowflake className="w-3 h-3" /> : <Flame className="w-3 h-3" />}
@@ -941,7 +893,7 @@ export default function KitchenStorefrontPage({ initial }: { initial?: PublicSel
                             </h3>
                           </div>
                           {dish.nameUrdu && (
-                            <p className="text-xs text-[#FF5500] font-medium mt-0.5 font-urdu">
+                            <p className="text-xs text-brand-ink font-medium mt-0.5 font-urdu">
                               {dish.nameUrdu}
                             </p>
                           )}
@@ -978,10 +930,10 @@ export default function KitchenStorefrontPage({ initial }: { initial?: PublicSel
                           ) : count === 0 ? (
                             <button
                               onClick={() => handleAddToCart(dish)}
-                              className={`px-3.5 py-1.5 rounded-xl text-white text-xs font-bold shadow-2xs transition-all active:scale-95 ${
+                              className={`px-3.5 py-1.5 rounded-xl text-xs font-bold shadow-2xs transition-all active:scale-95 ${
                                 kitchen.preOrderOnly
-                                  ? 'bg-amber-600 hover:bg-amber-700 flex items-center gap-1.5'
-                                  : 'bg-[#FF5500] hover:bg-[#e04400]'
+                                  ? 'bg-amber-700 hover:bg-amber-800 text-white flex items-center gap-1.5'
+                                  : 'bg-brand hover:bg-brand-500 text-on-brand'
                               }`}
                             >
                               {kitchen.preOrderOnly ? (
@@ -1006,7 +958,7 @@ export default function KitchenStorefrontPage({ initial }: { initial?: PublicSel
                               </span>
                               <button
                                 onClick={() => handleAddToCart(dish)}
-                                className="w-6 h-6 rounded-lg bg-[#FF5500] text-white font-bold hover:bg-[#e04400] transition-colors flex items-center justify-center text-xs shadow-2xs"
+                                className="w-6 h-6 rounded-lg bg-brand text-on-brand font-bold hover:bg-brand-500 transition-colors flex items-center justify-center text-xs shadow-2xs"
                               >
                                 +
                               </button>
@@ -1076,7 +1028,7 @@ export default function KitchenStorefrontPage({ initial }: { initial?: PublicSel
                     <div>
                       <div className="flex items-center justify-between mb-2">
                         <div className="flex items-center gap-2.5">
-                          <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-[#FF5500] to-amber-500 flex items-center justify-center text-white font-bold text-xs shadow-2xs">
+                          <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-brand to-amber-500 flex items-center justify-center text-on-brand font-bold text-xs shadow-2xs">
                             {rev.author.charAt(0).toUpperCase()}
                           </div>
                           <div>
@@ -1138,10 +1090,10 @@ export default function KitchenStorefrontPage({ initial }: { initial?: PublicSel
 
       {/* Floating Kitchen Cart Pill (Foodpanda/DoorDash style) */}
       {cartCount > 0 && (
-        <div className="fixed bottom-[calc(1.5rem+var(--safe-bottom))] inset-x-0 z-50 flex justify-center px-4">
+        <div className="fixed bottom-[calc(1.5rem+var(--safe-bottom)+var(--tabbar-offset))] inset-x-0 z-50 flex justify-center px-4">
           <div className="bg-[#0C1016] text-white p-3 rounded-2xl shadow-xl border border-white/10 flex items-center justify-between gap-5 max-w-lg w-full">
             <div className="flex items-center gap-3">
-              <div className="w-9 h-9 rounded-xl bg-[#FF5500] flex items-center justify-center text-white font-bold text-xs">
+              <div className="w-9 h-9 rounded-xl bg-brand flex items-center justify-center text-on-brand font-bold text-xs">
                 {cartCount}
               </div>
               <div>
@@ -1164,7 +1116,7 @@ export default function KitchenStorefrontPage({ initial }: { initial?: PublicSel
               ) : (
                 <Link
                   href="/cart"
-                  className="inline-flex items-center gap-1 px-4 py-2 rounded-xl bg-[#FF5500] hover:bg-[#ff6a1a] text-white text-xs font-bold transition-colors shadow-sm"
+                  className="inline-flex items-center gap-1 px-4 py-2 rounded-xl bg-brand hover:bg-brand text-on-brand text-xs font-bold transition-colors shadow-sm"
                 >
                   <span>{kitchen.preOrderOnly ? tk('schedulePreOrder') : tk('reviewCheckout')}</span>
                   <ChevronRight className="rtl:-scale-x-100 w-3.5 h-3.5" />
@@ -1203,14 +1155,14 @@ export default function KitchenStorefrontPage({ initial }: { initial?: PublicSel
           <div className="flex items-center justify-between pb-1">
             <Link
               href="/products"
-              className="inline-flex items-center gap-1.5 text-xs font-bold text-slate-600 hover:text-[#FF5500] transition-colors py-1.5 px-3 rounded-xl bg-white border border-slate-200 shadow-2xs hover:border-slate-300"
+              className="inline-flex items-center gap-1.5 text-xs font-bold text-slate-600 hover:text-brand-ink transition-colors py-1.5 px-3 rounded-xl bg-white border border-slate-200 shadow-2xs hover:border-slate-300"
             >
               <ArrowLeft className="rtl:-scale-x-100 w-3.5 h-3.5" />
               <span>{tk('backToKitchensMenus')}</span>
             </Link>
             <Link
               href="/kitchens"
-              className="text-xs font-semibold text-slate-500 hover:text-[#FF5500] transition-colors"
+              className="text-xs font-semibold text-slate-500 hover:text-brand-ink transition-colors"
             >
               {tk('viewDirectory')}
             </Link>
@@ -1224,7 +1176,7 @@ export default function KitchenStorefrontPage({ initial }: { initial?: PublicSel
 
   // Public visitor: Render with top marketplace header
   return (
-    <div className="min-h-screen bg-[#F8FAFC] text-slate-900 pb-32">
+    <div className="min-h-screen bg-page text-slate-900 pb-32">
       {renderPublicHeader()}
 
       {renderStorefrontBody(true)}

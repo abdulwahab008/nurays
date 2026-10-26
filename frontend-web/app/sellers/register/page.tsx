@@ -259,7 +259,7 @@ export default function SellerRegisterPage() {
     return (
       <div className="min-h-screen bg-slate-50 py-10 px-4 sm:px-6 lg:px-8">
         <div className="max-w-xl mx-auto space-y-6">
-          <Link href="/dashboard" className="text-sm font-semibold text-orange-600 hover:text-orange-700 flex items-center gap-1">
+          <Link href="/dashboard" className="text-sm font-semibold text-brand-ink hover:text-brand-ink flex items-center gap-1">
             {t('reg.back')}
           </Link>
           <LoadError error={loadError} onRetry={loadSellerInfo} />
@@ -273,10 +273,10 @@ export default function SellerRegisterPage() {
       <div className="max-w-4xl mx-auto">
         {/* Navigation & Header */}
         <div className="flex items-center justify-between mb-8">
-          <Link href="/dashboard" className="text-sm font-semibold text-orange-600 hover:text-orange-700 flex items-center gap-1">
+          <Link href="/dashboard" className="text-sm font-semibold text-brand-ink hover:text-brand-ink flex items-center gap-1">
             {t('reg.back')}
           </Link>
-          <span className="text-xs font-bold uppercase tracking-wider px-3 py-1 bg-orange-100 text-orange-800 rounded-full">
+          <span className="text-xs font-bold uppercase tracking-wider px-3 py-1 bg-brand-100 text-brand-800 rounded-full">
             {t('reg.portalBadge')}
           </span>
         </div>
@@ -382,7 +382,7 @@ export default function SellerRegisterPage() {
             {/* Section 1: Business Identity & Type */}
             <div className="space-y-4 pt-4 border-t border-slate-100">
               <h2 className="text-base font-bold text-slate-900 flex items-center gap-2">
-                <span className="w-6 h-6 rounded-full bg-orange-100 text-orange-600 flex items-center justify-center text-xs">1</span>
+                <span className="w-6 h-6 rounded-full bg-brand-100 text-brand-ink flex items-center justify-center text-xs">1</span>
                 {t('reg.s1')}
               </h2>
 
@@ -398,7 +398,7 @@ export default function SellerRegisterPage() {
                     value={formData.businessName}
                     onChange={handleInputChange}
                     placeholder={t('reg.nameEnPh')}
-                    className={`w-full px-4 py-3 rounded-xl border bg-slate-50 text-slate-900 font-medium text-sm focus:outline-none focus:ring-2 focus:ring-orange-500 transition-all ${
+                    className={`w-full px-4 py-3 rounded-xl border bg-slate-50 text-slate-900 font-medium text-sm focus:outline-none focus:ring-2 focus:ring-brand transition-all ${
                       errors.businessName ? 'border-rose-400 bg-rose-50' : 'border-slate-200'
                     }`}
                   />
@@ -416,7 +416,7 @@ export default function SellerRegisterPage() {
                     value={formData.businessNameUrdu}
                     onChange={handleInputChange}
                     placeholder="مثال: دیسی ہانڈی و کچن"
-                    className="w-full px-4 py-3 rounded-xl border border-slate-200 bg-slate-50 text-slate-900 font-medium text-sm focus:outline-none focus:ring-2 focus:ring-orange-500 transition-all"
+                    className="w-full px-4 py-3 rounded-xl border border-slate-200 bg-slate-50 text-slate-900 font-medium text-sm focus:outline-none focus:ring-2 focus:ring-brand transition-all"
                   />
                 </div>
               </div>
@@ -433,11 +433,11 @@ export default function SellerRegisterPage() {
                       onClick={() => setFormData(prev => ({ ...prev, businessType: bt.id }))}
                       className={`p-3.5 rounded-2xl border text-start transition-all ${
                         formData.businessType === bt.id
-                          ? 'border-orange-500 bg-orange-50/50 shadow-sm'
+                          ? 'border-brand bg-brand-50/50 shadow-sm'
                           : 'border-slate-200 hover:border-slate-300 bg-white'
                       }`}
                     >
-                      <p className={`font-bold text-sm ${formData.businessType === bt.id ? 'text-orange-950' : 'text-slate-900'}`}>
+                      <p className={`font-bold text-sm ${formData.businessType === bt.id ? 'text-brand-950' : 'text-slate-900'}`}>
                         {t(bt.title)}
                       </p>
                       <p className="text-xs text-slate-500 mt-1 leading-snug">{t(bt.desc)}</p>
@@ -456,7 +456,7 @@ export default function SellerRegisterPage() {
                   onChange={handleInputChange}
                   rows={3}
                   placeholder={t('reg.bioPh')}
-                  className="w-full px-4 py-3 rounded-xl border border-slate-200 bg-slate-50 text-slate-900 font-medium text-sm focus:outline-none focus:ring-2 focus:ring-orange-500 transition-all"
+                  className="w-full px-4 py-3 rounded-xl border border-slate-200 bg-slate-50 text-slate-900 font-medium text-sm focus:outline-none focus:ring-2 focus:ring-brand transition-all"
                 />
               </div>
             </div>
@@ -464,7 +464,7 @@ export default function SellerRegisterPage() {
             {/* Section 2: Location, Community & GPS */}
             <div className="space-y-4 pt-4 border-t border-slate-100">
               <h2 className="text-base font-bold text-slate-900 flex items-center gap-2">
-                <span className="w-6 h-6 rounded-full bg-orange-100 text-orange-600 flex items-center justify-center text-xs">2</span>
+                <span className="w-6 h-6 rounded-full bg-brand-100 text-brand-ink flex items-center justify-center text-xs">2</span>
                 {t('reg.s2')}
               </h2>
 
@@ -486,7 +486,7 @@ export default function SellerRegisterPage() {
                         return n;
                       });
                     }}
-                    className="w-full px-4 py-3 rounded-xl border border-slate-200 bg-slate-50 text-slate-900 font-medium text-sm focus:outline-none focus:ring-2 focus:ring-orange-500 transition-all"
+                    className="w-full px-4 py-3 rounded-xl border border-slate-200 bg-slate-50 text-slate-900 font-medium text-sm focus:outline-none focus:ring-2 focus:ring-brand transition-all"
                   >
                     <option value="">{communities.length ? t('reg.chooseCommunity') : t('reg.loadingCommunities')}</option>
                     {communities.map((c) => (
@@ -509,7 +509,7 @@ export default function SellerRegisterPage() {
                     value={formData.houseOrUnitNumber}
                     onChange={handleInputChange}
                     placeholder={t('reg.housePh')}
-                    className="w-full px-4 py-3 rounded-xl border border-slate-200 bg-slate-50 text-slate-900 font-medium text-sm focus:outline-none focus:ring-2 focus:ring-orange-500 transition-all"
+                    className="w-full px-4 py-3 rounded-xl border border-slate-200 bg-slate-50 text-slate-900 font-medium text-sm focus:outline-none focus:ring-2 focus:ring-brand transition-all"
                   />
                 </div>
               </div>
@@ -557,7 +557,7 @@ export default function SellerRegisterPage() {
             {/* Section 3: Food Categories & Menus */}
             <div className="space-y-4 pt-4 border-t border-slate-100">
               <h2 className="text-base font-bold text-slate-900 flex items-center gap-2">
-                <span className="w-6 h-6 rounded-full bg-orange-100 text-orange-600 flex items-center justify-center text-xs">3</span>
+                <span className="w-6 h-6 rounded-full bg-brand-100 text-brand-ink flex items-center justify-center text-xs">3</span>
                 {t('reg.s3')}
               </h2>
 
@@ -571,7 +571,7 @@ export default function SellerRegisterPage() {
                       onClick={() => toggleCategory(cat)}
                       className={`px-4 py-2 rounded-xl text-xs font-bold transition-all ${
                         selected
-                          ? 'bg-[#FF5500] text-white shadow-sm shadow-orange-200'
+                          ? 'bg-brand text-on-brand shadow-sm shadow-brand-200'
                           : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
                       }`}
                     >
@@ -586,7 +586,7 @@ export default function SellerRegisterPage() {
             {/* Section 4: Bank & Digital Wallets */}
             <div className="space-y-4 pt-4 border-t border-slate-100">
               <h2 className="text-base font-bold text-slate-900 flex items-center gap-2">
-                <span className="w-6 h-6 rounded-full bg-orange-100 text-orange-600 flex items-center justify-center text-xs">4</span>
+                <span className="w-6 h-6 rounded-full bg-brand-100 text-brand-ink flex items-center justify-center text-xs">4</span>
                 {t('reg.s4')}
               </h2>
 
@@ -602,7 +602,7 @@ export default function SellerRegisterPage() {
                     value={formData.bankName}
                     onChange={handleInputChange}
                     placeholder={t('reg.bankNamePh')}
-                    className="w-full px-4 py-3 rounded-xl border border-slate-200 bg-slate-50 text-slate-900 font-medium text-sm focus:outline-none focus:ring-2 focus:ring-orange-500 transition-all"
+                    className="w-full px-4 py-3 rounded-xl border border-slate-200 bg-slate-50 text-slate-900 font-medium text-sm focus:outline-none focus:ring-2 focus:ring-brand transition-all"
                   />
                 </div>
 
@@ -617,7 +617,7 @@ export default function SellerRegisterPage() {
                     value={formData.bankAccountName}
                     onChange={handleInputChange}
                     placeholder={t('reg.accountTitlePh')}
-                    className="w-full px-4 py-3 rounded-xl border border-slate-200 bg-slate-50 text-slate-900 font-medium text-sm focus:outline-none focus:ring-2 focus:ring-orange-500 transition-all"
+                    className="w-full px-4 py-3 rounded-xl border border-slate-200 bg-slate-50 text-slate-900 font-medium text-sm focus:outline-none focus:ring-2 focus:ring-brand transition-all"
                   />
                 </div>
 
@@ -634,7 +634,7 @@ export default function SellerRegisterPage() {
                     onChange={handleInputChange}
                     placeholder="PK36SCBL0000001123456702"
                     aria-invalid={Boolean(errors.bankAccountNumber)}
-                    className={`w-full px-4 py-3 rounded-xl border bg-slate-50 text-slate-900 font-medium text-sm focus:outline-none focus:ring-2 focus:ring-orange-500 transition-all ${errors.bankAccountNumber ? 'border-rose-400 bg-rose-50' : 'border-slate-200'}`}
+                    className={`w-full px-4 py-3 rounded-xl border bg-slate-50 text-slate-900 font-medium text-sm focus:outline-none focus:ring-2 focus:ring-brand transition-all ${errors.bankAccountNumber ? 'border-rose-400 bg-rose-50' : 'border-slate-200'}`}
                   />
                   {errors.bankAccountNumber && <p role="alert" className="text-rose-500 text-xs mt-1 font-medium">{errors.bankAccountNumber}</p>}
                 </div>
@@ -654,7 +654,7 @@ export default function SellerRegisterPage() {
                     onChange={handleInputChange}
                     placeholder="03001234567"
                     aria-invalid={Boolean(errors.jazzcashNumber)}
-                    className={`w-full px-4 py-3 rounded-xl border bg-slate-50 text-slate-900 font-medium text-sm focus:outline-none focus:ring-2 focus:ring-orange-500 transition-all ${errors.jazzcashNumber ? 'border-rose-400 bg-rose-50' : 'border-slate-200'}`}
+                    className={`w-full px-4 py-3 rounded-xl border bg-slate-50 text-slate-900 font-medium text-sm focus:outline-none focus:ring-2 focus:ring-brand transition-all ${errors.jazzcashNumber ? 'border-rose-400 bg-rose-50' : 'border-slate-200'}`}
                   />
                   {errors.jazzcashNumber && <p role="alert" className="text-rose-500 text-xs mt-1 font-medium">{errors.jazzcashNumber}</p>}
                 </div>
@@ -672,7 +672,7 @@ export default function SellerRegisterPage() {
                     onChange={handleInputChange}
                     placeholder="03451234567"
                     aria-invalid={Boolean(errors.easypaisaNumber)}
-                    className={`w-full px-4 py-3 rounded-xl border bg-slate-50 text-slate-900 font-medium text-sm focus:outline-none focus:ring-2 focus:ring-orange-500 transition-all ${errors.easypaisaNumber ? 'border-rose-400 bg-rose-50' : 'border-slate-200'}`}
+                    className={`w-full px-4 py-3 rounded-xl border bg-slate-50 text-slate-900 font-medium text-sm focus:outline-none focus:ring-2 focus:ring-brand transition-all ${errors.easypaisaNumber ? 'border-rose-400 bg-rose-50' : 'border-slate-200'}`}
                   />
                   {errors.easypaisaNumber && <p role="alert" className="text-rose-500 text-xs mt-1 font-medium">{errors.easypaisaNumber}</p>}
                 </div>
@@ -682,7 +682,7 @@ export default function SellerRegisterPage() {
             {/* Section 5: Documents & Media Verification */}
             <div className="space-y-4 pt-4 border-t border-slate-100">
               <h2 className="text-base font-bold text-slate-900 flex items-center gap-2">
-                <span className="w-6 h-6 rounded-full bg-orange-100 text-orange-600 flex items-center justify-center text-xs">5</span>
+                <span className="w-6 h-6 rounded-full bg-brand-100 text-brand-ink flex items-center justify-center text-xs">5</span>
                 {t('reg.s5')}
               </h2>
 
@@ -745,7 +745,7 @@ export default function SellerRegisterPage() {
                   name="agreeToTerms"
                   checked={formData.agreeToTerms}
                   onChange={(e) => setFormData(prev => ({ ...prev, agreeToTerms: e.target.checked }))}
-                  className="mt-1 w-5 h-5 rounded text-orange-500 focus:ring-orange-400 border-slate-300"
+                  className="mt-1 w-5 h-5 rounded text-brand-ink focus:ring-brand border-slate-300"
                 />
                 <span className="text-xs text-slate-600 leading-relaxed">
                   {t('reg.terms1')}<span className="font-bold text-slate-900">{t('reg.termsBold')}</span>{t('reg.terms2')}
@@ -758,7 +758,7 @@ export default function SellerRegisterPage() {
                   id="submit-registration-btn"
                   type="submit"
                   disabled={loading}
-                  className="w-full py-4 bg-[#FF5500] hover:bg-[#e04400] text-white font-black text-base rounded-2xl shadow-lg shadow-orange-200 transition-all duration-200"
+                  className="w-full py-4 bg-brand hover:bg-brand-500 text-on-brand font-black text-base rounded-2xl shadow-lg shadow-brand-200 transition-all duration-200"
                 >
                   {loading 
                     ? t('reg.submitting')

@@ -315,7 +315,7 @@ export default function SellerAnalyticsPage() {
                   <span className="text-xs font-black uppercase tracking-wider text-slate-500">
                     Dishes Sold ({selectedPeriod})
                   </span>
-                  <div className="w-10 h-10 rounded-2xl bg-orange-50 text-orange-600 flex items-center justify-center font-bold text-base shadow-sm">
+                  <div className="w-10 h-10 rounded-2xl bg-brand-50 text-brand-ink flex items-center justify-center font-bold text-base shadow-sm">
                     🍽️
                   </div>
                 </div>
@@ -793,7 +793,7 @@ export default function SellerAnalyticsPage() {
                                       : idx === 1
                                       ? 'bg-slate-300 text-slate-800'
                                       : idx === 2
-                                      ? 'bg-orange-300 text-orange-950'
+                                      ? 'bg-brand-300 text-brand-950'
                                       : 'bg-slate-200 text-slate-600'
                                   }`}
                                 >
@@ -836,7 +836,7 @@ export default function SellerAnalyticsPage() {
             <div className="bg-slate-900 text-white rounded-3xl p-6 sm:p-8 shadow-md">
               <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
                 <div>
-                  <span className="px-3 py-1 rounded-full bg-[#FF5500] text-white font-bold text-[11px] uppercase tracking-wider">
+                  <span className="px-3 py-1 rounded-full bg-brand text-on-brand font-bold text-[11px] uppercase tracking-wider">
                     Seller Studio Shortcuts
                   </span>
                   <h3 className="text-lg sm:text-xl font-black mt-2 tracking-tight">
@@ -849,7 +849,7 @@ export default function SellerAnalyticsPage() {
 
                 <div className="flex flex-wrap items-center gap-3 w-full md:w-auto">
                   <Link href="/sellers/products/new">
-                    <Button className="bg-[#FF5500] hover:bg-[#e04400] text-white font-bold text-xs rounded-xl px-4 py-2.5">
+                    <Button className="bg-brand hover:bg-brand-500 text-on-brand font-bold text-xs rounded-xl px-4 py-2.5">
                       + Add New Dish
                     </Button>
                   </Link>

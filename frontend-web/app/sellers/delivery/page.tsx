@@ -439,7 +439,7 @@ export default function SellerDeliveryPage() {
                 type="checkbox"
                 checked={allowCrossCommunity}
                 onChange={(e) => setAllowCrossCommunity(e.target.checked)}
-                className="w-4 h-4 text-[#FF5500] rounded border-slate-300 focus:ring-[#FF5500] cursor-pointer"
+                className="w-4 h-4 text-brand-ink rounded border-slate-300 focus:ring-brand cursor-pointer"
               />
             </label>
 
@@ -473,7 +473,7 @@ export default function SellerDeliveryPage() {
                                 fee: e.target.checked && d.fee === '' ? String(c.suggestedFee) : d.fee,
                               })
                             }
-                            className="w-4 h-4 text-[#FF5500] rounded border-slate-300 focus:ring-[#FF5500]"
+                            className="w-4 h-4 text-brand-ink rounded border-slate-300 focus:ring-brand"
                           />
                           <span className="text-xs font-bold text-slate-900">{c.name}</span>
                           <span className="text-[11px] text-slate-500">{c.city}</span>
@@ -510,7 +510,7 @@ export default function SellerDeliveryPage() {
                                 placeholder="optional"
                                 value={d.minOrder}
                                 onChange={(e) => setDraft({ minOrder: e.target.value })}
-                                className="w-full px-2.5 py-1.5 text-xs font-semibold border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-[#FF5500]"
+                                className="w-full px-2.5 py-1.5 text-xs font-semibold border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-brand"
                               />
                             </div>
                           </div>
@@ -526,7 +526,7 @@ export default function SellerDeliveryPage() {
                                 step={10}
                                 value={d.fee}
                                 onChange={(e) => setDraft({ fee: e.target.value })}
-                                className="w-full px-2.5 py-1.5 text-xs font-semibold border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-[#FF5500]"
+                                className="w-full px-2.5 py-1.5 text-xs font-semibold border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-brand"
                               />
                             </div>
                             <div>
@@ -538,7 +538,7 @@ export default function SellerDeliveryPage() {
                                 placeholder="optional"
                                 value={d.freeAbove}
                                 onChange={(e) => setDraft({ freeAbove: e.target.value })}
-                                className="w-full px-2.5 py-1.5 text-xs font-semibold border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-[#FF5500]"
+                                className="w-full px-2.5 py-1.5 text-xs font-semibold border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-brand"
                               />
                             </div>
                             <div>
@@ -550,7 +550,7 @@ export default function SellerDeliveryPage() {
                                 placeholder="optional"
                                 value={d.minOrder}
                                 onChange={(e) => setDraft({ minOrder: e.target.value })}
-                                className="w-full px-2.5 py-1.5 text-xs font-semibold border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-[#FF5500]"
+                                className="w-full px-2.5 py-1.5 text-xs font-semibold border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-brand"
                               />
                             </div>
                           </div>
@@ -586,7 +586,7 @@ export default function SellerDeliveryPage() {
                   <label
                     className={`flex items-center gap-2.5 p-3 rounded-xl border cursor-pointer transition-colors ${
                       formData.deliveryFeeType === 'fixed'
-                        ? 'border-[#FF5500] bg-orange-50/20 text-slate-900 font-semibold'
+                        ? 'border-brand bg-brand-50/20 text-slate-900 font-semibold'
                         : 'border-slate-200 text-slate-600'
                     }`}
                   >
@@ -595,7 +595,7 @@ export default function SellerDeliveryPage() {
                       name="deliveryFeeType"
                       checked={formData.deliveryFeeType === 'fixed'}
                       onChange={() => setFormData({ ...formData, deliveryFeeType: 'fixed' })}
-                      className="text-[#FF5500] focus:ring-[#FF5500]"
+                      className="text-brand-ink focus:ring-brand"
                     />
                     <span className="text-xs">Fixed Fee</span>
                   </label>
@@ -603,7 +603,7 @@ export default function SellerDeliveryPage() {
                   <label
                     className={`flex items-center gap-2.5 p-3 rounded-xl border cursor-pointer transition-colors ${
                       formData.deliveryFeeType === 'distance'
-                        ? 'border-[#FF5500] bg-orange-50/20 text-slate-900 font-semibold'
+                        ? 'border-brand bg-brand-50/20 text-slate-900 font-semibold'
                         : 'border-slate-200 text-slate-600'
                     }`}
                   >
@@ -612,7 +612,7 @@ export default function SellerDeliveryPage() {
                       name="deliveryFeeType"
                       checked={formData.deliveryFeeType === 'distance'}
                       onChange={() => setFormData({ ...formData, deliveryFeeType: 'distance' })}
-                      className="text-[#FF5500] focus:ring-[#FF5500]"
+                      className="text-brand-ink focus:ring-brand"
                     />
                     <span className="text-xs">Distance-Based (Per Km)</span>
                   </label>
@@ -634,7 +634,7 @@ export default function SellerDeliveryPage() {
                             deliveryFeeFixed: e.target.value === '' ? null : parseInt(e.target.value, 10),
                           })
                         }
-                        className="w-full ps-3 pe-9 py-2 text-xs font-bold border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-[#FF5500]"
+                        className="w-full ps-3 pe-9 py-2 text-xs font-bold border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-brand"
                       />
                       <span className="absolute end-3 top-2 text-[11px] text-slate-500 font-medium">PKR</span>
                     </div>
@@ -658,7 +658,7 @@ export default function SellerDeliveryPage() {
                               deliveryFeeBase: e.target.value === '' ? null : parseInt(e.target.value, 10),
                             })
                           }
-                          className="w-full ps-3 pe-9 py-2 text-xs font-bold border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-[#FF5500]"
+                          className="w-full ps-3 pe-9 py-2 text-xs font-bold border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-brand"
                         />
                         <span className="absolute end-3 top-2 text-[11px] text-slate-500 font-medium">PKR</span>
                       </div>
@@ -678,7 +678,7 @@ export default function SellerDeliveryPage() {
                               deliveryFeePerKm: e.target.value === '' ? null : parseFloat(e.target.value),
                             })
                           }
-                          className="w-full ps-3 pe-11 py-2 text-xs font-bold border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-[#FF5500]"
+                          className="w-full ps-3 pe-11 py-2 text-xs font-bold border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-brand"
                         />
                         <span className="absolute end-3 top-2 text-[11px] text-slate-500 font-medium">Rs/km</span>
                       </div>
@@ -703,7 +703,7 @@ export default function SellerDeliveryPage() {
                       onClick={() => handleQuickAddSociety(comm)}
                       className="px-2 py-0.5 rounded-md bg-slate-100 hover:bg-slate-200 text-slate-600 text-[11px] transition-colors flex items-center gap-1"
                     >
-                      <Plus className="w-2.5 h-2.5 text-[#FF5500]" />
+                      <Plus className="w-2.5 h-2.5 text-brand-ink" />
                       <span>{comm}</span>
                     </button>
                   ))}
@@ -722,7 +722,7 @@ export default function SellerDeliveryPage() {
                       }
                     }}
                     placeholder="Add area or society name..."
-                    className="flex-1 px-3 py-1.5 text-xs border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-[#FF5500]"
+                    className="flex-1 px-3 py-1.5 text-xs border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-brand"
                   />
                   <Button
                     type="button"
@@ -773,7 +773,7 @@ export default function SellerDeliveryPage() {
                         freeDeliveryRadiusKm: e.target.value === '' ? null : parseFloat(e.target.value),
                       })
                     }
-                    className="w-full px-2.5 py-1.5 text-xs font-semibold border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-[#FF5500]"
+                    className="w-full px-2.5 py-1.5 text-xs font-semibold border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-brand"
                   />
                 </div>
                 <div>
@@ -790,7 +790,7 @@ export default function SellerDeliveryPage() {
                         freeDeliveryThreshold: e.target.value === '' ? null : parseInt(e.target.value, 10),
                       })
                     }
-                    className="w-full px-2.5 py-1.5 text-xs font-semibold border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-[#FF5500]"
+                    className="w-full px-2.5 py-1.5 text-xs font-semibold border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-brand"
                   />
                 </div>
                 <div>
@@ -807,7 +807,7 @@ export default function SellerDeliveryPage() {
                         maxDeliveryDistanceKm: e.target.value === '' ? null : parseFloat(e.target.value),
                       })
                     }
-                    className="w-full px-2.5 py-1.5 text-xs font-semibold border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-[#FF5500]"
+                    className="w-full px-2.5 py-1.5 text-xs font-semibold border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-brand"
                   />
                 </div>
                 <div>
@@ -824,7 +824,7 @@ export default function SellerDeliveryPage() {
                         minOrderAmountForDelivery: e.target.value === '' ? null : parseInt(e.target.value, 10),
                       })
                     }
-                    className="w-full px-2.5 py-1.5 text-xs font-semibold border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-[#FF5500]"
+                    className="w-full px-2.5 py-1.5 text-xs font-semibold border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-brand"
                   />
                 </div>
               </div>
@@ -839,7 +839,7 @@ export default function SellerDeliveryPage() {
                   id="allowPickup"
                   checked={formData.allowPickup}
                   onChange={(e) => setFormData({ ...formData, allowPickup: e.target.checked })}
-                  className="w-4 h-4 text-[#FF5500] rounded border-slate-300 focus:ring-[#FF5500] cursor-pointer"
+                  className="w-4 h-4 text-brand-ink rounded border-slate-300 focus:ring-brand cursor-pointer"
                 />
               </div>
 
@@ -875,7 +875,7 @@ export default function SellerDeliveryPage() {
             <Button
               type="submit"
               disabled={saving}
-              className="bg-[#FF5500] hover:bg-[#e04400] text-white px-6 py-2.5 rounded-xl font-bold text-xs shadow-sm transition-all"
+              className="bg-brand hover:bg-brand-500 text-on-brand px-6 py-2.5 rounded-xl font-bold text-xs shadow-sm transition-all"
             >
               {saving ? 'Saving...' : 'Save Settings'}
             </Button>

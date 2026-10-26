@@ -211,8 +211,8 @@ export default function OrderChatModal({
 
   const isSellerRole = currentRole === 'seller';
   const targetName = isSellerRole ? customerName || t('chat.customer') : sellerName || t('chat.homeKitchen');
-  const primaryThemeColor = isSellerRole ? 'bg-emerald-600 hover:bg-emerald-700' : 'bg-[#FF5500] hover:bg-[#e04400]';
-  const activeFocusRing = isSellerRole ? 'focus:ring-emerald-500' : 'focus:ring-[#FF5500]';
+  const primaryThemeColor = isSellerRole ? 'bg-emerald-600 hover:bg-emerald-700' : 'bg-brand hover:bg-brand-500';
+  const activeFocusRing = isSellerRole ? 'focus:ring-emerald-500' : 'focus:ring-brand';
 
   // Quick Communication Template Chips
   const quickChips = isSellerRole
@@ -405,7 +405,7 @@ export default function OrderChatModal({
           <div className="flex items-center gap-3">
             <div
               className={`w-10 h-10 rounded-2xl ${
-                isSellerRole ? 'bg-emerald-600' : 'bg-[#FF5500]'
+                isSellerRole ? 'bg-emerald-600' : 'bg-brand-700'
               } text-white flex items-center justify-center font-black text-sm shadow-md shrink-0`}
             >
               💬
@@ -440,11 +440,11 @@ export default function OrderChatModal({
           className={`px-4 py-2 border-b flex items-center gap-2 text-[11px] font-medium ${
             isSellerRole
               ? 'bg-emerald-50/80 border-emerald-100 text-emerald-950'
-              : 'bg-orange-50/80 border-orange-100 text-orange-950'
+              : 'bg-brand-50/80 border-brand-100 text-brand-950'
           }`}
         >
           <ShieldCheck
-            className={`w-3.5 h-3.5 flex-shrink-0 ${isSellerRole ? 'text-emerald-600' : 'text-[#FF5500]'}`}
+            className={`w-3.5 h-3.5 flex-shrink-0 ${isSellerRole ? 'text-emerald-600' : 'text-brand-ink'}`}
           />
           <span className="truncate">
             {isSellerRole
@@ -477,7 +477,7 @@ export default function OrderChatModal({
             <div className="h-full flex flex-col items-center justify-center text-slate-500 gap-2">
               <div
                 className={`w-6 h-6 border-2 ${
-                  isSellerRole ? 'border-emerald-600' : 'border-[#FF5500]'
+                  isSellerRole ? 'border-emerald-600' : 'border-brand'
                 } border-t-transparent rounded-full animate-spin`}
               />
               <span className="text-xs font-bold">{t('chat.loading')}</span>
@@ -533,7 +533,7 @@ export default function OrderChatModal({
                       isMe
                         ? isSellerRole
                           ? 'bg-emerald-600 text-white rounded-se-xs'
-                          : 'bg-[#FF5500] text-white rounded-se-xs'
+                          : 'bg-brand text-on-brand rounded-se-xs'
                         : 'bg-white text-slate-900 border border-slate-200/80 rounded-ss-xs'
                     }`}
                   >

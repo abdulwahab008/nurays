@@ -61,7 +61,7 @@ const Icons = {
     </svg>
   ),
   fire: (
-    <svg className="w-4 h-4 text-orange-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+    <svg className="w-4 h-4 text-brand-ink" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
       <path strokeLinecap="round" strokeLinejoin="round" d="M15.362 5.214A8.252 8.252 0 0112 21 8.25 8.25 0 016.038 7.048 8.287 8.287 0 009 9.6a8.983 8.983 0 013.361-6.867 8.21 8.21 0 003 2.48z" />
       <path strokeLinecap="round" strokeLinejoin="round" d="M12 18a3.75 3.75 0 00.495-7.467 5.99 5.99 0 00-1.925 3.546 5.974 5.974 0 01-2.133-1A3.75 3.75 0 0012 18z" />
     </svg>
@@ -82,7 +82,7 @@ const Icons = {
     </svg>
   ),
   percent: (
-    <svg className="w-5 h-5 text-orange-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+    <svg className="w-5 h-5 text-brand-ink" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
       <path strokeLinecap="round" strokeLinejoin="round" d="M9 14.25l6-6m4.5 1.5a2.25 2.25 0 11-4.5 0 2.25 2.25 0 014.5 0zm-11 6a2.25 2.25 0 11-4.5 0 2.25 2.25 0 014.5 0z" />
     </svg>
   ),
@@ -294,7 +294,7 @@ function PromotionForm({
         <div className="p-6 border-b border-slate-100 flex items-center justify-between">
           <div>
             <h2 className="text-xl font-black text-slate-900 tracking-tight flex items-center gap-2">
-              <span className="text-orange-500">{Icons.discounts}</span>
+              <span className="text-brand-ink">{Icons.discounts}</span>
               <span>{isEditMode ? 'Edit Promotion Campaign' : 'Create Special Deal & Discount'}</span>
             </h2>
             <p className="text-xs text-slate-500 mt-0.5">
@@ -320,7 +320,7 @@ function PromotionForm({
               value={formData.name}
               onChange={(e) => setFormData({ ...formData, name: e.target.value })}
               placeholder="e.g. Weekend Flash Feast / Eid Mubarak Offer"
-              className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold text-slate-900 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:bg-white transition-all"
+              className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold text-slate-900 focus:outline-none focus:ring-2 focus:ring-brand focus:bg-white transition-all"
               required
             />
           </div>
@@ -343,7 +343,7 @@ function PromotionForm({
                   onClick={() => setFormData({ ...formData, type: type.value })}
                   className={`p-3.5 rounded-2xl border text-start transition-all ${
                     formData.type === type.value
-                      ? 'border-orange-500 bg-orange-50/60 ring-1 ring-orange-400 shadow-xs'
+                      ? 'border-brand bg-brand-50/60 ring-1 ring-brand shadow-xs'
                       : 'border-slate-200 hover:border-slate-300 bg-white'
                   }`}
                 >
@@ -372,7 +372,7 @@ function PromotionForm({
                   value={formData.discountValue}
                   onChange={(e) => setFormData({ ...formData, discountValue: e.target.value })}
                   placeholder={formData.type === 'percentage' ? '20' : '200'}
-                  className={`w-full py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:bg-white transition-all ${
+                  className={`w-full py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-brand focus:bg-white transition-all ${
                     formData.type === 'fixed' ? 'ps-9 pe-4' : 'px-4'
                   }`}
                   required
@@ -392,7 +392,7 @@ function PromotionForm({
                 value={formData.code}
                 onChange={(e) => setFormData({ ...formData, code: e.target.value.toUpperCase() })}
                 placeholder="e.g. NURAYFEAST"
-                className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-mono font-bold text-slate-900 uppercase focus:outline-none focus:ring-2 focus:ring-orange-500 focus:bg-white transition-all"
+                className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-mono font-bold text-slate-900 uppercase focus:outline-none focus:ring-2 focus:ring-brand focus:bg-white transition-all"
               />
             </div>
           </div>
@@ -407,7 +407,7 @@ function PromotionForm({
                 type="datetime-local"
                 value={formData.startDate}
                 onChange={(e) => setFormData({ ...formData, startDate: e.target.value })}
-                className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:bg-white transition-all"
+                className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-brand focus:bg-white transition-all"
                 required
               />
             </div>
@@ -419,7 +419,7 @@ function PromotionForm({
                 type="datetime-local"
                 value={formData.endDate}
                 onChange={(e) => setFormData({ ...formData, endDate: e.target.value })}
-                className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:bg-white transition-all"
+                className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-brand focus:bg-white transition-all"
                 required
               />
             </div>
@@ -438,7 +438,7 @@ function PromotionForm({
                   value={formData.minOrderValue}
                   onChange={(e) => setFormData({ ...formData, minOrderValue: e.target.value })}
                   placeholder="0 (no minimum)"
-                  className="w-full ps-9 pe-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:bg-white transition-all"
+                  className="w-full ps-9 pe-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-brand focus:bg-white transition-all"
                 />
               </div>
             </div>
@@ -451,7 +451,7 @@ function PromotionForm({
                 value={formData.maxUsage}
                 onChange={(e) => setFormData({ ...formData, maxUsage: e.target.value })}
                 placeholder="Leave blank for unlimited"
-                className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:bg-white transition-all"
+                className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-brand focus:bg-white transition-all"
               />
             </div>
           </div>
@@ -467,7 +467,7 @@ function PromotionForm({
                   <button
                     type="button"
                     onClick={() => setSelectedProductIds(products.map((p) => p.id))}
-                    className="text-orange-600 hover:text-orange-700"
+                    className="text-brand-ink hover:text-brand-ink"
                   >
                     Select All
                   </button>
@@ -490,7 +490,7 @@ function PromotionForm({
                   value={productSearch}
                   onChange={(e) => setProductSearch(e.target.value)}
                   placeholder="Filter dishes by name..."
-                  className="w-full px-3 py-1.5 border border-slate-200 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-orange-500 bg-white"
+                  className="w-full px-3 py-1.5 border border-slate-200 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-brand bg-white"
                 />
               )}
 
@@ -501,7 +501,7 @@ function PromotionForm({
                     <button
                       type="button"
                       onClick={loadProductsForPromotion}
-                      className="mt-2 px-3 py-1 bg-[#FF5500] text-white text-xs font-bold rounded-lg"
+                      className="mt-2 px-3 py-1 bg-brand text-on-brand text-xs font-bold rounded-lg"
                     >
                       Retry
                     </button>
@@ -524,7 +524,7 @@ function PromotionForm({
                         key={product.id}
                         className={`flex items-center gap-3 p-2.5 rounded-xl border transition-all cursor-pointer ${
                           isChecked
-                            ? 'bg-orange-50/70 border-orange-300'
+                            ? 'bg-brand-50/70 border-brand-300'
                             : 'bg-white border-slate-200 hover:border-slate-300'
                         }`}
                       >
@@ -532,7 +532,7 @@ function PromotionForm({
                           type="checkbox"
                           checked={isChecked}
                           onChange={() => toggleProduct(product.id)}
-                          className="rounded text-orange-500 focus:ring-orange-500 w-4 h-4"
+                          className="rounded text-brand-ink focus:ring-brand w-4 h-4"
                         />
                         <span className="flex-1 text-xs font-bold text-slate-900 truncate">
                           {product.name}
@@ -567,7 +567,7 @@ function PromotionForm({
             <Button
               type="submit"
               disabled={selectedProductIds.length === 0}
-              className="flex-1 bg-[#FF5500] hover:bg-[#e04400] text-white rounded-xl font-bold text-xs shadow-md shadow-orange-500/20 disabled:opacity-50"
+              className="flex-1 bg-brand hover:bg-brand-500 text-on-brand rounded-xl font-bold text-xs shadow-md shadow-brand/20 disabled:opacity-50"
             >
               {isEditMode ? 'Update Campaign' : 'Launch Campaign'}
             </Button>
@@ -842,7 +842,7 @@ export default function SellerPromotionsPage() {
                 href={tab.href}
                 className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs sm:text-sm font-bold transition-all duration-200 whitespace-nowrap ${
                   tab.isActive
-                    ? 'bg-[#FF5500] text-white shadow-sm'
+                    ? 'bg-brand text-on-brand shadow-sm'
                     : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
                 }`}
               >
@@ -867,7 +867,7 @@ export default function SellerPromotionsPage() {
                 setEditingPromo(null);
                 setShowCreateModal(true);
               }}
-              className="bg-[#FF5500] hover:bg-[#e04400] text-white font-bold text-xs sm:text-sm rounded-xl shadow-md shadow-orange-500/20 flex items-center gap-2 px-4 py-2"
+              className="bg-brand hover:bg-brand-500 text-on-brand font-bold text-xs sm:text-sm rounded-xl shadow-md shadow-brand/20 flex items-center gap-2 px-4 py-2"
             >
               {Icons.plus}
               Create Deal
@@ -883,19 +883,19 @@ export default function SellerPromotionsPage() {
             {/* ========================================================================= */}
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
               {/* Active Deals */}
-              <div className="bg-white rounded-3xl p-4 sm:p-5 border border-slate-200 shadow-sm relative overflow-hidden group hover:border-orange-200 transition-all">
+              <div className="bg-white rounded-3xl p-4 sm:p-5 border border-slate-200 shadow-sm relative overflow-hidden group hover:border-brand-200 transition-all">
                 <div className="flex items-center justify-between mb-2">
-                  <span className="text-[11px] font-black uppercase tracking-wider text-orange-600">
+                  <span className="text-[11px] font-black uppercase tracking-wider text-brand-ink">
                     Active Campaigns
                   </span>
-                  <div className="w-8 h-8 rounded-xl bg-orange-50 text-orange-600 flex items-center justify-center font-bold text-sm">
+                  <div className="w-8 h-8 rounded-xl bg-brand-50 text-brand-ink flex items-center justify-center font-bold text-sm">
                     {Icons.fire}
                   </div>
                 </div>
                 <div className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight">
                   {activeDeals.length}
                 </div>
-                <div className="mt-2 text-xs font-medium text-orange-600 flex items-center gap-1">
+                <div className="mt-2 text-xs font-medium text-brand-ink flex items-center gap-1">
                   <span>Currently live on storefront</span>
                 </div>
               </div>
@@ -975,7 +975,7 @@ export default function SellerPromotionsPage() {
                   value={searchFilter}
                   onChange={(e) => setSearchFilter(e.target.value)}
                   placeholder="Search promotions by campaign title or promo code..."
-                  className="w-full ps-10 pe-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:bg-white transition-all placeholder:text-slate-400"
+                  className="w-full ps-10 pe-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-brand focus:bg-white transition-all placeholder:text-slate-400"
                 />
               </div>
 
@@ -1031,7 +1031,7 @@ export default function SellerPromotionsPage() {
           <LoadError error={loadError} onRetry={loadPromotions} title="We couldn't load your promotions" className="max-w-2xl mx-auto" />
         ) : filteredPromotions.length === 0 ? (
           <div className="bg-white rounded-3xl shadow-sm border border-slate-200 p-12 sm:p-16 text-center max-w-2xl mx-auto">
-            <div className="w-16 h-16 bg-orange-50 rounded-2xl flex items-center justify-center mx-auto mb-5 text-orange-500 shadow-inner">
+            <div className="w-16 h-16 bg-brand-50 rounded-2xl flex items-center justify-center mx-auto mb-5 text-brand-ink shadow-inner">
               <svg className="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M9.568 3H5.25A2.25 2.25 0 003 5.25v4.318c0 .597.237 1.17.659 1.591l9.581 9.581c.699.699 1.78.872 2.607.386a11.175 11.175 0 004.914-4.914c.486-.827.313-1.908-.386-2.607L11.159 3.659A2.25 2.25 0 009.568 3z" />
                 <path strokeLinecap="round" strokeLinejoin="round" d="M6 6h.008v.008H6V6z" />
@@ -1048,7 +1048,7 @@ export default function SellerPromotionsPage() {
                 setEditingPromo(null);
                 setShowCreateModal(true);
               }}
-              className="bg-[#FF5500] hover:bg-[#e04400] text-white font-bold rounded-2xl shadow-lg shadow-orange-500/20 px-6 py-2.5"
+              className="bg-brand hover:bg-brand-500 text-on-brand font-bold rounded-2xl shadow-lg shadow-brand/20 px-6 py-2.5"
             >
               Create Your First Deal
             </Button>
@@ -1068,14 +1068,14 @@ export default function SellerPromotionsPage() {
                 >
                   <div className="flex flex-col lg:flex-row items-stretch">
                     {/* Left Voucher Coupon Badge */}
-                    <div className="lg:w-52 bg-gradient-to-br from-orange-500 to-amber-600 p-5 text-white flex flex-col justify-between relative overflow-hidden shrink-0">
+                    <div className="lg:w-52 bg-gradient-to-br from-brand to-amber-600 p-5 text-on-brand flex flex-col justify-between relative overflow-hidden shrink-0">
                       {/* Decorative background watermark */}
                       <div className="absolute -end-3 -bottom-3 w-20 h-20 opacity-15 select-none pointer-events-none text-white">
                         {getTypeIcon(promo.type)}
                       </div>
 
                       <div>
-                        <span className="text-[11px] font-black uppercase tracking-widest text-orange-200">
+                        <span className="text-[11px] font-black uppercase tracking-widest text-brand-200">
                           {promo.type === 'percentage'
                             ? 'DISCOUNT VOUCHER'
                             : promo.type === 'fixed'
@@ -1109,7 +1109,7 @@ export default function SellerPromotionsPage() {
                     <div className="p-5 sm:p-6 flex-1 flex flex-col justify-between space-y-4">
                       <div>
                         <div className="flex flex-wrap items-center gap-2 mb-1.5">
-                          <h3 className="text-lg font-bold text-slate-900 group-hover:text-orange-600 transition-colors">
+                          <h3 className="text-lg font-bold text-slate-900 group-hover:text-brand-ink transition-colors">
                             {promo.name}
                           </h3>
                           <span
@@ -1156,7 +1156,7 @@ export default function SellerPromotionsPage() {
                           </div>
                           <div className="w-full h-2 bg-slate-100 rounded-full overflow-hidden">
                             <div
-                              className="h-full bg-orange-500 rounded-full transition-all duration-300"
+                              className="h-full bg-brand rounded-full transition-all duration-300"
                               style={{ width: `${usagePercent}%` }}
                             />
                           </div>
@@ -1218,9 +1218,9 @@ export default function SellerPromotionsPage() {
         {/* ========================================================================= */}
         {/* Pro Marketing & Pricing Advisory with SVG Icons */}
         {/* ========================================================================= */}
-        <div className="bg-gradient-to-r from-orange-50 via-amber-50 to-orange-50 rounded-3xl p-6 border border-orange-200/80 shadow-xs">
+        <div className="bg-gradient-to-r from-brand-50 via-amber-50 to-brand-50 rounded-3xl p-6 border border-brand-200/80 shadow-xs">
           <div className="flex items-start gap-4">
-            <div className="w-10 h-10 rounded-2xl bg-[#FF5500] text-white flex items-center justify-center shadow-sm shrink-0">
+            <div className="w-10 h-10 rounded-2xl bg-brand text-on-brand flex items-center justify-center shadow-sm shrink-0">
               <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M12 18v-5.25m0 0a6.01 6.01 0 001.5-.189m-1.5.189a6.01 6.01 0 01-1.5-.189m3.75 7.5h-4.5a.75.75 0 01-.75-.75v-.75a.75.75 0 01.75-.75h4.5a.75.75 0 01.75.75v.75a.75.75 0 01-.75.75zm-6-8.25a6 6 0 1112 0c0 2.26-1.25 4.228-3.09 5.25H9.09A5.986 5.986 0 016 11.25z" />
               </svg>
@@ -1233,22 +1233,22 @@ export default function SellerPromotionsPage() {
                 Strategic discounting protects your kitchen margins while dramatically increasing order volume and customer repeat frequency.
               </p>
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs font-semibold text-slate-700">
-                <div className="bg-white/80 rounded-2xl p-3 border border-orange-100">
-                  <div className="flex items-center gap-1.5 font-bold text-orange-700 mb-1">
+                <div className="bg-white/80 rounded-2xl p-3 border border-brand-100">
+                  <div className="flex items-center gap-1.5 font-bold text-brand-ink mb-1">
                     {Icons.clock}
                     <span>Limited-Time Windows</span>
                   </div>
                   Create 48-hour weekend specials to induce immediate purchase action.
                 </div>
-                <div className="bg-white/80 rounded-2xl p-3 border border-orange-100">
-                  <div className="flex items-center gap-1.5 font-bold text-orange-700 mb-1">
+                <div className="bg-white/80 rounded-2xl p-3 border border-brand-100">
+                  <div className="flex items-center gap-1.5 font-bold text-brand-ink mb-1">
                     {Icons.bundle}
                     <span>Bundle Pairings</span>
                   </div>
                   Pair slow-moving sides with high-margin signature curries & frozen packs.
                 </div>
-                <div className="bg-white/80 rounded-2xl p-3 border border-orange-100">
-                  <div className="flex items-center gap-1.5 font-bold text-orange-700 mb-1">
+                <div className="bg-white/80 rounded-2xl p-3 border border-brand-100">
+                  <div className="flex items-center gap-1.5 font-bold text-brand-ink mb-1">
                     {Icons.discounts}
                     <span>Minimum Baskets</span>
                   </div>
@@ -1297,7 +1297,7 @@ export default function SellerPromotionsPage() {
               )}
               <div>
                 <p className="text-xs font-bold uppercase tracking-wider text-slate-500">Discount Offered</p>
-                <p className="font-black text-orange-600 text-base">
+                <p className="font-black text-brand-ink text-base">
                   {detailPromo.type === 'percentage' && `${detailPromo.discountValue}% OFF`}
                   {detailPromo.type === 'fixed' && `${formatPrice(detailPromo.discountValue)} OFF`}
                   {detailPromo.type === 'buy_x_get_y' && 'Buy X Get Y'}
@@ -1334,7 +1334,7 @@ export default function SellerPromotionsPage() {
                 </Button>
                 <Button
                   type="button"
-                  className="flex-1 bg-[#FF5500] hover:bg-[#e04400] text-white rounded-xl font-bold text-xs"
+                  className="flex-1 bg-brand hover:bg-brand-500 text-on-brand rounded-xl font-bold text-xs"
                   onClick={() => {
                     setEditingPromo(detailPromo);
                     setDetailPromo(null);

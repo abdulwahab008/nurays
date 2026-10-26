@@ -132,7 +132,7 @@ function DealBadge({ dish }: { dish: DashboardDish }) {
   const percentOff = Math.round((1 - dish.price / dish.originalPrice) * 100);
   if (percentOff <= 0) return null;
   return (
-    <span className="absolute top-2.5 start-2.5 px-2 py-0.5 rounded-lg text-white text-[11px] font-bold bg-[#FF5500] shadow-xs uppercase tracking-wider flex items-center gap-1">
+    <span className="absolute top-2.5 start-2.5 px-2 py-0.5 rounded-lg text-on-brand text-[11px] font-bold bg-brand shadow-xs uppercase tracking-wider flex items-center gap-1">
       <Tag className="w-3 h-3" />
       <span>{t('percentOff', { percent: percentOff })}</span>
     </span>
@@ -491,9 +491,9 @@ export default function CustomerDashboardPage() {
         {/* ── ACTIVE ORDER LIVE TRACKER ── */}
         {activeOrder && (
           <Link href={`/orders/${activeOrder.id}`} className="block">
-            <div className="rounded-2xl p-4 sm:p-5 bg-white border border-[#FF5500]/40 shadow-xs hover:shadow-md transition-all flex items-center justify-between gap-4">
+            <div className="rounded-2xl p-4 sm:p-5 bg-white border border-brand/40 shadow-xs hover:shadow-md transition-all flex items-center justify-between gap-4">
               <div className="flex items-center gap-3.5">
-                <div className="w-10 h-10 rounded-xl bg-orange-100 text-[#FF5500] flex items-center justify-center font-bold shrink-0">
+                <div className="w-10 h-10 rounded-xl bg-brand-100 text-brand-ink flex items-center justify-center font-bold shrink-0">
                   <Bike className="w-5 h-5" />
                 </div>
                 <div>
@@ -509,7 +509,7 @@ export default function CustomerDashboardPage() {
               </div>
               <div className="text-end">
                 <p className="text-base font-bold text-slate-900">{formatPrice(activeOrder.totalAmount)}</p>
-                <span className="text-xs font-bold text-[#FF5500] inline-flex items-center gap-1 mt-0.5">
+                <span className="text-xs font-bold text-brand-ink inline-flex items-center gap-1 mt-0.5">
                   <span>{t('liveTrack')}</span>
                   <ChevronRight className="rtl:-scale-x-100 w-3.5 h-3.5" />
                 </span>
@@ -522,8 +522,8 @@ export default function CustomerDashboardPage() {
         <div className="bg-white rounded-2xl border border-slate-200/90 p-4 sm:p-5 shadow-2xs">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
             <div>
-              <div className="inline-flex items-center gap-1.5 text-[11px] font-bold text-orange-600 uppercase tracking-wider mb-0.5">
-                <ChefHat className="w-3.5 h-3.5 text-[#FF5500]" />
+              <div className="inline-flex items-center gap-1.5 text-[11px] font-bold text-brand-ink uppercase tracking-wider mb-0.5">
+                <ChefHat className="w-3.5 h-3.5 text-brand-ink" />
                 <span>{t('handcrafted')}</span>
               </div>
               <h2 className="text-lg font-bold text-slate-900 tracking-tight">{t('exploreByCuisine')}</h2>
@@ -556,7 +556,7 @@ export default function CustomerDashboardPage() {
                 onClick={() => { setViewMode('top10'); setSelectedCuisine(''); }}
                 className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 ${
                   viewMode === 'top10' && !selectedCuisine
-                    ? 'bg-[#FF5500] text-white shadow-xs'
+                    ? 'bg-brand text-on-brand shadow-xs'
                     : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
                 }`}
               >
@@ -629,7 +629,7 @@ export default function CustomerDashboardPage() {
               <div className="flex items-center justify-between mb-3">
                 <div>
                   <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-slate-100 text-slate-700 text-[11px] font-bold uppercase tracking-wider mb-1">
-                    <ChefHat className="w-3.5 h-3.5 text-[#FF5500]" />
+                    <ChefHat className="w-3.5 h-3.5 text-brand-ink" />
                     <span>{t('verifiedDomesticCooks')}</span>
                   </div>
                   <h2 className="text-xl font-black text-slate-900 tracking-tight">
@@ -701,7 +701,7 @@ export default function CustomerDashboardPage() {
                               className="w-8 h-8 rounded-xl border border-slate-200 shrink-0"
                             />
                             <div className="min-w-0">
-                              <h3 className="text-sm font-bold text-slate-900 group-hover:text-[#FF5500] transition-colors truncate">
+                              <h3 className="text-sm font-bold text-slate-900 group-hover:text-brand-ink transition-colors truncate">
                                 {k.businessName}
                               </h3>
                               <p className="text-[11px] text-slate-500 truncate">
@@ -727,7 +727,7 @@ export default function CustomerDashboardPage() {
                           <span className="text-[11px] font-semibold text-slate-500 truncate">
                             {k.mealCategories?.[0] || t('homeCooked')}
                           </span>
-                          <span className="font-bold text-[#FF5500] inline-flex items-center gap-0.5 group-hover:translate-x-0.5 transition-transform shrink-0">
+                          <span className="font-bold text-brand-ink inline-flex items-center gap-0.5 group-hover:translate-x-0.5 transition-transform shrink-0">
                             <span>{t('viewMenu')}</span>
                             <ChevronRight className="rtl:-scale-x-100 w-3.5 h-3.5" />
                           </span>
@@ -743,8 +743,8 @@ export default function CustomerDashboardPage() {
             <section>
               <div className="flex items-center justify-between mb-3">
                 <div>
-                  <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-orange-100 text-[#FF5500] text-[11px] font-bold uppercase tracking-wider mb-1">
-                    <Flame className="w-3.5 h-3.5 text-[#FF5500]" />
+                  <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-brand-100 text-brand-ink text-[11px] font-bold uppercase tracking-wider mb-1">
+                    <Flame className="w-3.5 h-3.5 text-brand-ink" />
                     <span>{t('popularDishes')}</span>
                   </div>
                   <h2 className="text-xl font-black text-slate-900 tracking-tight">
@@ -785,7 +785,7 @@ export default function CustomerDashboardPage() {
                 )}
                 {displayDishes.map((dish) => (
                   <div key={dish.id} className="w-[240px] sm:w-[270px] shrink-0">
-                    <div className="group bg-white rounded-2xl border border-slate-200/90 shadow-2xs hover:shadow-lg hover:border-orange-300 transition-all overflow-hidden flex flex-col justify-between h-full">
+                    <div className="group bg-white rounded-2xl border border-slate-200/90 shadow-2xs hover:shadow-lg hover:border-brand-300 transition-all overflow-hidden flex flex-col justify-between h-full">
                       <div className="relative aspect-[16/10] w-full overflow-hidden bg-slate-100">
                         <CoverImage
                           src={dish.photo}
@@ -804,7 +804,7 @@ export default function CustomerDashboardPage() {
 
                       <div className="p-3.5 flex-1 flex flex-col justify-between">
                         <div>
-                          <h3 className="text-sm font-bold text-slate-900 group-hover:text-[#FF5500] transition-colors leading-snug line-clamp-1">
+                          <h3 className="text-sm font-bold text-slate-900 group-hover:text-brand-ink transition-colors leading-snug line-clamp-1">
                             {dish.name}
                           </h3>
                           {dish.nameUrdu && (
@@ -821,7 +821,7 @@ export default function CustomerDashboardPage() {
                           <button
                             type="button"
                             onClick={() => handleAddToCart(dish)}
-                            className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl bg-slate-900 hover:bg-[#FF5500] text-white text-xs font-bold transition-colors shadow-2xs active:scale-95"
+                            className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl bg-slate-900 hover:bg-brand hover:text-on-brand text-white text-xs font-bold transition-colors shadow-2xs active:scale-95"
                           >
                             <Plus className="w-3.5 h-3.5 stroke-[3]" />
                             <span>{t('add')}</span>
@@ -844,7 +844,7 @@ export default function CustomerDashboardPage() {
                 <div className="flex items-center justify-between mb-3">
                   <div>
                     <div className="flex items-center gap-2 mb-1">
-                      <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-gradient-to-r from-amber-500 to-[#FF5500] text-white text-[11px] font-black uppercase tracking-wider shadow-xs">
+                      <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-gradient-to-r from-amber-500 to-brand text-white text-[11px] font-black uppercase tracking-wider shadow-xs">
                         <Trophy className="w-3 h-3" />
                         <span>{t('top10Badge')}</span>
                       </div>
@@ -906,7 +906,7 @@ export default function CustomerDashboardPage() {
                       {/* Giant Netflix Rank Numeral */}
                       <span
                         aria-hidden="true"
-                        className="text-8xl sm:text-9xl font-black italic tracking-tighter leading-none select-none text-slate-100 group-hover:text-orange-500/25 transition-all me-[-28px] sm:me-[-36px] z-0 drop-shadow-sm pointer-events-none"
+                        className="text-8xl sm:text-9xl font-black italic tracking-tighter leading-none select-none text-slate-100 group-hover:text-brand-ink/25 transition-all me-[-28px] sm:me-[-36px] z-0 drop-shadow-sm pointer-events-none"
                         style={{
                           WebkitTextStroke: '3px #cbd5e1',
                           fontFamily: 'system-ui, -apple-system, sans-serif',
@@ -916,7 +916,7 @@ export default function CustomerDashboardPage() {
                       </span>
 
                       {/* Food Poster Card (slightly overlaps the number) */}
-                      <div className="relative z-10 w-[230px] sm:w-[260px] bg-white rounded-2xl border border-slate-200/90 shadow-2xs hover:shadow-xl hover:border-orange-300 transition-all overflow-hidden flex flex-col justify-between shrink-0">
+                      <div className="relative z-10 w-[230px] sm:w-[260px] bg-white rounded-2xl border border-slate-200/90 shadow-2xs hover:shadow-xl hover:border-brand-300 transition-all overflow-hidden flex flex-col justify-between shrink-0">
                         <div className="relative aspect-[16/10] w-full overflow-hidden bg-slate-100">
                           <CoverImage
                             src={dish.photo}
@@ -953,7 +953,7 @@ export default function CustomerDashboardPage() {
 
                         <div className="p-3.5 flex-1 flex flex-col justify-between">
                           <div>
-                            <h3 className="text-sm font-bold text-slate-900 group-hover:text-[#FF5500] transition-colors leading-snug line-clamp-1">
+                            <h3 className="text-sm font-bold text-slate-900 group-hover:text-brand-ink transition-colors leading-snug line-clamp-1">
                               {dish.name}
                             </h3>
                             {dish.nameUrdu && (
@@ -979,7 +979,7 @@ export default function CustomerDashboardPage() {
                             <button
                               type="button"
                               onClick={() => handleAddToCart(dish)}
-                              className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl bg-slate-900 hover:bg-[#FF5500] text-white text-xs font-bold transition-colors shadow-2xs active:scale-95"
+                              className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl bg-slate-900 hover:bg-brand hover:text-on-brand text-white text-xs font-bold transition-colors shadow-2xs active:scale-95"
                             >
                               <Plus className="w-3.5 h-3.5 stroke-[3]" />
                               <span>{t('add')}</span>
@@ -999,7 +999,7 @@ export default function CustomerDashboardPage() {
                 <div className="flex items-center justify-between mb-3">
                   <div>
                     <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-slate-100 text-slate-700 text-[11px] font-bold uppercase tracking-wider mb-1">
-                      <ChefHat className="w-3.5 h-3.5 text-[#FF5500]" />
+                      <ChefHat className="w-3.5 h-3.5 text-brand-ink" />
                       <span>{t('verifiedHomeCooks')}</span>
                     </div>
                     <h2 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight">
@@ -1015,7 +1015,7 @@ export default function CustomerDashboardPage() {
                   <div className="flex items-center gap-2">
                     <Link
                       href="/kitchens"
-                      className="hidden sm:inline-flex text-xs font-bold text-[#FF5500] hover:underline me-2"
+                      className="hidden sm:inline-flex text-xs font-bold text-brand-ink hover:underline me-2"
                     >
                       {t('viewAllKitchens')}
                     </Link>
@@ -1078,7 +1078,7 @@ export default function CustomerDashboardPage() {
                                 className="w-8 h-8 rounded-xl border border-slate-200 shrink-0"
                               />
                               <div className="min-w-0">
-                                <h3 className="text-sm font-bold text-slate-900 group-hover:text-[#FF5500] transition-colors truncate">
+                                <h3 className="text-sm font-bold text-slate-900 group-hover:text-brand-ink transition-colors truncate">
                                   {k.businessName}
                                 </h3>
                                 <p className="text-[11px] text-slate-500 truncate">
@@ -1104,7 +1104,7 @@ export default function CustomerDashboardPage() {
                             <span className="text-[11px] font-semibold text-slate-500 truncate">
                               {k.mealCategories?.[0] || t('homeCooked')}
                             </span>
-                            <span className="font-bold text-[#FF5500] inline-flex items-center gap-0.5 group-hover:translate-x-0.5 transition-transform shrink-0">
+                            <span className="font-bold text-brand-ink inline-flex items-center gap-0.5 group-hover:translate-x-0.5 transition-transform shrink-0">
                               <span>{t('viewMenu')}</span>
                               <ChevronRight className="rtl:-scale-x-100 w-3.5 h-3.5" />
                             </span>
@@ -1123,7 +1123,7 @@ export default function CustomerDashboardPage() {
                 <div className="flex items-center justify-between mb-3">
                   <div>
                     <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-amber-100 text-amber-800 text-[11px] font-bold uppercase tracking-wider mb-1">
-                      <Sparkles className="w-3.5 h-3.5 text-[#FF5500]" />
+                      <Sparkles className="w-3.5 h-3.5 text-brand-ink" />
                       <span>{t('generationalRecipes')}</span>
                     </div>
                     <h2 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight">
@@ -1160,7 +1160,7 @@ export default function CustomerDashboardPage() {
                 >
                   {biryaniDishes.map((dish) => (
                     <div key={dish.id} className="w-[240px] sm:w-[270px] shrink-0">
-                      <div className="group bg-white rounded-2xl border border-slate-200/90 shadow-2xs hover:shadow-lg hover:border-orange-300 transition-all overflow-hidden flex flex-col justify-between h-full">
+                      <div className="group bg-white rounded-2xl border border-slate-200/90 shadow-2xs hover:shadow-lg hover:border-brand-300 transition-all overflow-hidden flex flex-col justify-between h-full">
                         <div className="relative aspect-[16/10] w-full overflow-hidden bg-slate-100">
                           <CoverImage
                             src={dish.photo}
@@ -1179,7 +1179,7 @@ export default function CustomerDashboardPage() {
 
                         <div className="p-3.5 flex-1 flex flex-col justify-between">
                           <div>
-                            <h3 className="text-sm font-bold text-slate-900 group-hover:text-[#FF5500] transition-colors leading-snug line-clamp-1">
+                            <h3 className="text-sm font-bold text-slate-900 group-hover:text-brand-ink transition-colors leading-snug line-clamp-1">
                               {dish.name}
                             </h3>
                             {dish.nameUrdu && (
@@ -1196,7 +1196,7 @@ export default function CustomerDashboardPage() {
                             <button
                               type="button"
                               onClick={() => handleAddToCart(dish)}
-                              className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl bg-slate-900 hover:bg-[#FF5500] text-white text-xs font-bold transition-colors shadow-2xs active:scale-95"
+                              className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl bg-slate-900 hover:bg-brand hover:text-on-brand text-white text-xs font-bold transition-colors shadow-2xs active:scale-95"
                             >
                               <Plus className="w-3.5 h-3.5 stroke-[3]" />
                               <span>{t('add')}</span>
@@ -1253,7 +1253,7 @@ export default function CustomerDashboardPage() {
                 >
                   {slowPotDishes.map((dish) => (
                     <div key={dish.id} className="w-[240px] sm:w-[270px] shrink-0">
-                      <div className="group bg-white rounded-2xl border border-slate-200/90 shadow-2xs hover:shadow-lg hover:border-orange-300 transition-all overflow-hidden flex flex-col justify-between h-full">
+                      <div className="group bg-white rounded-2xl border border-slate-200/90 shadow-2xs hover:shadow-lg hover:border-brand-300 transition-all overflow-hidden flex flex-col justify-between h-full">
                         <div className="relative aspect-[16/10] w-full overflow-hidden bg-slate-100">
                           <CoverImage
                             src={dish.photo}
@@ -1272,7 +1272,7 @@ export default function CustomerDashboardPage() {
 
                         <div className="p-3.5 flex-1 flex flex-col justify-between">
                           <div>
-                            <h3 className="text-sm font-bold text-slate-900 group-hover:text-[#FF5500] transition-colors leading-snug line-clamp-1">
+                            <h3 className="text-sm font-bold text-slate-900 group-hover:text-brand-ink transition-colors leading-snug line-clamp-1">
                               {dish.name}
                             </h3>
                             {dish.nameUrdu && (
@@ -1289,7 +1289,7 @@ export default function CustomerDashboardPage() {
                             <button
                               type="button"
                               onClick={() => handleAddToCart(dish)}
-                              className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl bg-slate-900 hover:bg-[#FF5500] text-white text-xs font-bold transition-colors shadow-2xs active:scale-95"
+                              className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl bg-slate-900 hover:bg-brand hover:text-on-brand text-white text-xs font-bold transition-colors shadow-2xs active:scale-95"
                             >
                               <Plus className="w-3.5 h-3.5 stroke-[3]" />
                               <span>{t('add')}</span>
@@ -1372,7 +1372,7 @@ export default function CustomerDashboardPage() {
 
                         <div className="p-3.5 flex-1 flex flex-col justify-between">
                           <div>
-                            <h3 className="text-sm font-bold text-slate-900 group-hover:text-[#FF5500] transition-colors leading-snug line-clamp-1">
+                            <h3 className="text-sm font-bold text-slate-900 group-hover:text-brand-ink transition-colors leading-snug line-clamp-1">
                               {dish.name}
                             </h3>
                             {dish.nameUrdu && (
@@ -1389,7 +1389,7 @@ export default function CustomerDashboardPage() {
                             <button
                               type="button"
                               onClick={() => handleAddToCart(dish)}
-                              className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl bg-slate-900 hover:bg-[#FF5500] text-white text-xs font-bold transition-colors shadow-2xs active:scale-95"
+                              className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl bg-slate-900 hover:bg-brand hover:text-on-brand text-white text-xs font-bold transition-colors shadow-2xs active:scale-95"
                             >
                               <Plus className="w-3.5 h-3.5 stroke-[3]" />
                               <span>{t('add')}</span>

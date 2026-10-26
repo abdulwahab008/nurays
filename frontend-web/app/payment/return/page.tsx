@@ -75,7 +75,7 @@ function PaymentReturnContent() {
               type="button"
               disabled={opening}
               onClick={retry}
-              className="w-full py-2.5 rounded-xl bg-[#FF5500] text-white text-sm font-bold hover:bg-[#e04400] disabled:opacity-50"
+              className="w-full py-2.5 rounded-xl bg-brand text-on-brand text-sm font-bold hover:bg-brand-500 disabled:opacity-50"
             >
               {opening ? t('openingPayPage') : t('tryPayAgain')}
             </button>

@@ -29,7 +29,7 @@ const LocationMap = dynamic(() => import('@/components/ui/LocationMap'), {
   loading: () => (
     <div className="bg-gray-100 rounded-xl flex items-center justify-center h-[300px]">
       <div className="text-center">
-        <div className="w-12 h-12 border-4 border-orange-500 border-t-transparent rounded-full animate-spin mx-auto mb-3"></div>
+        <div className="w-12 h-12 border-4 border-brand border-t-transparent rounded-full animate-spin mx-auto mb-3"></div>
         <MapLoading />
       </div>
     </div>
@@ -357,7 +357,7 @@ export default function AddressesPage() {
       >
         <div className="flex items-center justify-center h-64">
           <div className="text-center">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-orange-500 mx-auto mb-4"></div>
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-brand mx-auto mb-4"></div>
             <p className="text-gray-600">{t('loadingAddresses')}</p>
           </div>
         </div>
@@ -403,7 +403,7 @@ export default function AddressesPage() {
           </div>
         </div>
         
-        <div className="bg-gradient-to-r from-orange-500 to-red-500 rounded-2xl p-5 shadow-lg">
+        <div className="bg-gradient-to-r from-brand to-red-500 rounded-2xl p-5 shadow-lg">
           <div className="flex items-center justify-between">
             <div className="text-white">
               <p className="font-bold text-lg">{t('addNewAddress')}</p>
@@ -424,7 +424,7 @@ export default function AddressesPage() {
       {showAddForm && (
         <div className="bg-white rounded-2xl shadow-lg border border-gray-100 mb-6 overflow-hidden">
           {/* Form Header */}
-          <div className="bg-gradient-to-r from-orange-500 to-red-500 px-6 py-4">
+          <div className="bg-gradient-to-r from-brand to-red-500 px-6 py-4">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 bg-white/20 rounded-xl flex items-center justify-center text-white">
@@ -449,7 +449,7 @@ export default function AddressesPage() {
             {/* Quick Location Options */}
             <div className="mb-6">
               <p className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-1.5">
-                <Navigation className="w-4 h-4 text-[#FF5500]" />
+                <Navigation className="w-4 h-4 text-brand-ink" />
                 {t('quickLocationOptions')}
               </p>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -511,7 +511,7 @@ export default function AddressesPage() {
                 />
                 <div className="mt-3 flex items-center justify-between bg-gray-50 rounded-xl p-3">
                   <div className="flex items-center gap-2 text-sm text-gray-600">
-                    <MapPin className="w-4 h-4 text-[#FF5500]" />
+                    <MapPin className="w-4 h-4 text-brand-ink" />
                     {formData.latitude ? (
                       <span>{t('selectedLabel')} <span data-ltr>{parseFloat(formData.latitude).toFixed(4)}, {parseFloat(formData.longitude).toFixed(4)}</span></span>
                     ) : (
@@ -521,7 +521,7 @@ export default function AddressesPage() {
                   <button
                     type="button"
                     onClick={() => setShowMap(false)}
-                    className="text-sm text-orange-600 font-semibold hover:text-orange-700 flex items-center gap-1"
+                    className="text-sm text-brand-ink font-semibold hover:text-brand-ink flex items-center gap-1"
                   >
                     <Check className="w-4 h-4" /> {t('confirmLocation')}
                   </button>
@@ -532,7 +532,7 @@ export default function AddressesPage() {
             {/* Address Type Selection */}
             <div className="mb-6">
               <p className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-1.5">
-                <Tag className="w-4 h-4 text-[#FF5500]" /> {t('addressType')}
+                <Tag className="w-4 h-4 text-brand-ink" /> {t('addressType')}
               </p>
               <div className="flex gap-3">
                 {addressTypes.map((type) => {
@@ -544,7 +544,7 @@ export default function AddressesPage() {
                       onClick={() => setFormData({ ...formData, label: type.id })}
                       className={`flex-1 p-4 rounded-xl border-2 transition-all ${
                         formData.label === type.id
-                          ? `border-orange-500 bg-orange-50`
+                          ? `border-brand bg-brand-50`
                           : 'border-gray-200 hover:border-gray-300 bg-white'
                       }`}
                     >
@@ -552,7 +552,7 @@ export default function AddressesPage() {
                         <TypeIcon className="w-5 h-5" />
                       </div>
                       <p className={`font-semibold text-sm ${
-                        formData.label === type.id ? 'text-orange-700' : 'text-gray-700'
+                        formData.label === type.id ? 'text-brand-ink' : 'text-gray-700'
                       }`}>{t(type.labelKey)}</p>
                     </button>
                   );
@@ -575,7 +575,7 @@ export default function AddressesPage() {
                     value={formData.city}
                     onChange={(e) => setFormData({ ...formData, city: e.target.value })}
                     placeholder={t('cityPlaceholder')}
-                    className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all bg-white"
+                    className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-brand focus:border-brand transition-all bg-white"
                   />
                   <datalist id="address-cities">
                     {CITIES.map(city => (
@@ -596,7 +596,7 @@ export default function AddressesPage() {
                     onBlur={() => setTimeout(() => setShowSuggestions(false), 200)}
                     placeholder={t('areaLocalityPlaceholder')}
                     required
-                    className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all"
+                    className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-brand focus:border-brand transition-all"
                   />
                   {/* Area Suggestions Dropdown */}
                   {showSuggestions && (
@@ -606,7 +606,7 @@ export default function AddressesPage() {
                           key={area}
                           type="button"
                           onClick={() => selectArea(area)}
-                          className="w-full px-4 py-3 text-start hover:bg-orange-50 transition-colors flex items-center gap-2"
+                          className="w-full px-4 py-3 text-start hover:bg-brand-50 transition-colors flex items-center gap-2"
                         >
                           <MapPin className="w-4 h-4 text-gray-500 shrink-0" />
                           <span className="text-gray-700">{area}</span>
@@ -628,7 +628,7 @@ export default function AddressesPage() {
                   onChange={(e) => setFormData({ ...formData, addressLine1: e.target.value })}
                   placeholder={t('streetAddressPlaceholder')}
                   required
-                  className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all"
+                  className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-brand focus:border-brand transition-all"
                 />
               </div>
 
@@ -644,7 +644,7 @@ export default function AddressesPage() {
                     onChange={(e) => setFormData({ ...formData, houseNumber: e.target.value })}
                     placeholder={t('houseNumberPlaceholder')}
                     maxLength={50}
-                    className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all"
+                    className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-brand focus:border-brand transition-all"
                   />
                 </div>
                 <div>
@@ -656,7 +656,7 @@ export default function AddressesPage() {
                     value={formData.addressLine2}
                     onChange={(e) => setFormData({ ...formData, addressLine2: e.target.value })}
                     placeholder={t('flatFloorPlaceholder')}
-                    className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all"
+                    className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-brand focus:border-brand transition-all"
                   />
                 </div>
               </div>
@@ -672,7 +672,7 @@ export default function AddressesPage() {
                     value={formData.landmark}
                     onChange={(e) => setFormData({ ...formData, landmark: e.target.value })}
                     placeholder={t('landmarkPlaceholder')}
-                    className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all"
+                    className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-brand focus:border-brand transition-all"
                   />
                 </div>
                 <div>
@@ -684,7 +684,7 @@ export default function AddressesPage() {
                     value={formData.postalCode}
                     onChange={(e) => setFormData({ ...formData, postalCode: e.target.value })}
                     placeholder={t('postalCodePlaceholder')}
-                    className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all"
+                    className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-brand focus:border-brand transition-all"
                   />
                 </div>
               </div>
@@ -700,18 +700,18 @@ export default function AddressesPage() {
                   onChange={(e) => setFormData({ ...formData, deliveryInstructions: e.target.value })}
                   placeholder={t('deliveryInstructionsPlaceholder')}
                   rows={3}
-                  className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all resize-none"
+                  className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-brand focus:border-brand transition-all resize-none"
                 />
               </div>
 
               {/* Set as Default */}
-              <div className="flex items-center p-4 bg-gradient-to-r from-orange-50 to-red-50 rounded-xl border border-orange-100">
+              <div className="flex items-center p-4 bg-gradient-to-r from-brand-50 to-red-50 rounded-xl border border-brand-100">
                 <input
                   type="checkbox"
                   id="isDefault"
                   checked={formData.isDefault}
                   onChange={(e) => setFormData({ ...formData, isDefault: e.target.checked })}
-                  className="w-5 h-5 text-orange-500 rounded border-gray-300 focus:ring-orange-500 cursor-pointer"
+                  className="w-5 h-5 text-brand-ink rounded border-gray-300 focus:ring-brand cursor-pointer"
                 />
                 <label htmlFor="isDefault" className="ms-3 cursor-pointer">
                   <span className="font-semibold text-gray-800">{t('setDefaultDelivery')}</span>
@@ -730,7 +730,7 @@ export default function AddressesPage() {
                 </Button>
                 <Button 
                   type="submit" 
-                  className="flex-1 bg-gradient-to-r from-orange-500 to-red-500 hover:from-orange-600 hover:to-red-600 text-white py-3 shadow-lg shadow-orange-500/30 flex items-center justify-center gap-2"
+                  className="flex-1 bg-gradient-to-r from-brand to-red-500 hover:from-brand-500 hover:to-red-600 text-on-brand py-3 shadow-lg shadow-brand/30 flex items-center justify-center gap-2"
                 >
                   {editingAddress ? <Check className="w-4 h-4" /> : <Plus className="w-4 h-4" />}
                   {editingAddress ? t('updateAddress') : t('saveAddress')}
@@ -746,7 +746,7 @@ export default function AddressesPage() {
         <LoadError error={loadError} onRetry={loadAddresses} title={t('addressesLoadFailed')} />
       ) : addresses.length === 0 ? (
         <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-12 text-center">
-          <div className="w-24 h-24 bg-gradient-to-br from-orange-100 to-red-100 rounded-full flex items-center justify-center mx-auto mb-6 text-[#FF5500]">
+          <div className="w-24 h-24 bg-gradient-to-br from-brand-100 to-red-100 rounded-full flex items-center justify-center mx-auto mb-6 text-brand-ink">
             <MapPin className="w-12 h-12" />
           </div>
           <h2 className="text-2xl font-bold text-gray-900 mb-2">{t('noAddresses')}</h2>
@@ -755,7 +755,7 @@ export default function AddressesPage() {
           </p>
           <Button 
             onClick={() => setShowAddForm(true)} 
-            className="bg-gradient-to-r from-orange-500 to-red-500 hover:from-orange-600 hover:from-red-600 shadow-lg shadow-orange-500/30 flex items-center gap-2 mx-auto"
+            className="bg-gradient-to-r from-brand to-red-500 hover:from-brand-500 hover:from-red-600 shadow-lg shadow-brand/30 flex items-center gap-2 mx-auto"
           >
             <Plus className="w-4 h-4" /> {t('addFirstAddress')}
           </Button>
@@ -774,12 +774,12 @@ export default function AddressesPage() {
                 <div
                   key={address.id}
                   className={`bg-white rounded-2xl shadow-sm overflow-hidden border-2 transition-all hover:shadow-lg group ${
-                    address.isDefault ? 'border-orange-400 ring-2 ring-orange-100' : 'border-gray-100 hover:border-gray-200'
+                    address.isDefault ? 'border-brand ring-2 ring-brand-100' : 'border-gray-100 hover:border-gray-200'
                   }`}
                 >
                   {/* Card Header */}
                   <div className={`px-5 py-3 flex items-center justify-between ${
-                    address.isDefault ? 'bg-gradient-to-r from-orange-50 to-red-50' : 'bg-gray-50'
+                    address.isDefault ? 'bg-gradient-to-r from-brand-50 to-red-50' : 'bg-gray-50'
                   }`}>
                     <div className="flex items-center gap-3">
                       <div className={`w-10 h-10 bg-gradient-to-br ${typeInfo.color} rounded-xl flex items-center justify-center shadow-sm text-white`}>
@@ -788,7 +788,7 @@ export default function AddressesPage() {
                       <div>
                         <h4 className="font-bold text-gray-900 capitalize">{addressLabel(address.label) || t('address')}</h4>
                         {address.isDefault && (
-                          <span className="text-xs bg-orange-100 text-orange-700 px-2 py-0.5 rounded-full font-medium flex items-center gap-1 mt-0.5">
+                          <span className="text-xs bg-brand-100 text-brand-ink px-2 py-0.5 rounded-full font-medium flex items-center gap-1 mt-0.5">
                             <Check className="w-3 h-3" /> {t('default')}
                           </span>
                         )}
@@ -803,7 +803,7 @@ export default function AddressesPage() {
                       {!address.isDefault && (
                         <button 
                           onClick={() => handleSetDefault(address.id)}
-                          className="p-2 text-gray-500 hover:text-orange-600 hover:bg-orange-50 rounded-lg transition-colors"
+                          className="p-2 text-gray-500 hover:text-brand-ink hover:bg-brand-50 rounded-lg transition-colors"
                           title={t('setAsDefault')}
                         >
                           <Star className="w-4 h-4 text-amber-500" />

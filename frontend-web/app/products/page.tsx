@@ -5,6 +5,7 @@ import { loginUrlHere } from '@/lib/auth-redirect';
 import { getStackedDiscountedPrice } from '@/lib/pricing';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
+import { SiteHeader } from '@/components/layout/SiteHeader';
 import { productService, Product, ProductFilters } from '@/lib/services/product.service';
 import { addressService } from '@/lib/services/address.service';
 import { displayRating, formatPrice, imageVariant } from '@/lib/utils';
@@ -12,13 +13,10 @@ import { Button } from '@/components/ui/button';
 import { CoverImage } from '@/components/ui/CoverImage';
 import { useToast } from '@/components/ui/toast';
 import { useAuthStore } from '@/lib/store/auth-store';
-import { useCartStore } from '@/lib/store/cart-store';
 import { apiClient, apiErrorCode, apiErrorStatus, apiErrorDetails, errorMessage, type CartConflictDetails } from '@/lib/api-client';
 import { DashboardLayout, CUSTOMER_SIDEBAR_ITEMS } from '@/components/layout/DashboardShell';
-import { BrandLockup } from '@/components/ui/Mark';
 import { useCommunityStore } from '@/lib/store/community-store';
 import { useHydrated } from '@/lib/hooks/use-hydrated';
-import { CommunitySelector } from '@/components/community/CommunitySelector';
 import { communityService, CommunityDetail, CommunityKitchen } from '@/lib/services/community.service';
 import { favoriteService } from '@/lib/services/favorite.service';
 import { cartService } from '@/lib/services/cart.service';
@@ -29,7 +27,6 @@ import {
   Search,
   MapPin,
   Bike,
-  ShoppingBag,
   Snowflake,
   Star,
   Clock,
@@ -97,9 +94,9 @@ const maxDistanceOptions = [
 // Labels come from browseMessages (`type.<productType>`).
 const PRODUCT_TYPE_BADGES: Record<string, { icon: typeof Flame; className: string }> = {
   frozen: { icon: Snowflake, className: 'bg-sky-600/95 shadow-sky-600/30' },
-  fresh: { icon: Flame, className: 'bg-[#FF5500]/95 shadow-orange-500/30' },
-  ready_to_eat: { icon: Clock, className: 'bg-[#FF5500]/95 shadow-orange-500/30' },
-  ready_to_cook: { icon: UtensilsCrossed, className: 'bg-[#FF5500]/95 shadow-orange-500/30' },
+  fresh: { icon: Flame, className: 'bg-brand/95 shadow-brand/30' },
+  ready_to_eat: { icon: Clock, className: 'bg-brand/95 shadow-brand/30' },
+  ready_to_cook: { icon: UtensilsCrossed, className: 'bg-brand/95 shadow-brand/30' },
 };
 
 /** The API's delivery-time estimate, shown only when this kitchen actually delivers to the buyer. */
@@ -126,7 +123,6 @@ function ProductsContent() {
   const searchParams = useSearchParams();
   const { isAuthenticated, user, logout } = useAuthStore(useShallow((s) => ({ isAuthenticated: s.isAuthenticated, user: s.user, logout: s.logout })));
   const { showToast } = useToast();
-  const { items: cartItems } = useCartStore(useShallow((s) => ({ items: s.items })));
   const t = useT(browseMessages);
   const tc = useT(commonMessages);
 
@@ -494,9 +490,9 @@ function ProductsContent() {
             <button
               type="button"
               onClick={openSelectorModal}
-              className="font-bold text-[#FF5500] hover:underline inline-flex items-center gap-1 cursor-pointer"
+              className="font-bold text-brand-ink hover:underline inline-flex items-center gap-1 cursor-pointer"
             >
-              <MapPin className="w-3 h-3 text-[#FF5500]" />
+              <MapPin className="w-3 h-3 text-brand-ink" />
               <span>{selectedCommunity?.name || t('selectArea')}</span>
             </button>
             {selectedCommunity?.city && (
@@ -573,7 +569,7 @@ function ProductsContent() {
               onClick={() => setViewMode('dishes')}
               className={`flex items-center gap-1.5 px-3.5 py-1 rounded-lg text-xs font-bold transition-all h-full cursor-pointer ${
                 viewMode === 'dishes'
-                  ? 'bg-[#FF5500] text-white shadow-2xs'
+                  ? 'bg-brand text-on-brand shadow-2xs'
                   : 'text-slate-500 hover:text-slate-800'
               }`}
             >
@@ -709,8 +705,8 @@ function ProductsContent() {
         if (communitiesLoading || !communityListReady) return kitchenSkeleton;
         return (
           <div className="bg-white rounded-2xl border border-slate-200 p-8 sm:p-10 text-center shadow-xs">
-            <div className="w-14 h-14 rounded-2xl bg-orange-100 text-[#FF5500] flex items-center justify-center mx-auto mb-4">
-              <MapPin className="w-7 h-7 text-[#FF5500]" />
+            <div className="w-14 h-14 rounded-2xl bg-brand-100 text-brand-ink flex items-center justify-center mx-auto mb-4">
+              <MapPin className="w-7 h-7 text-brand-ink" />
             </div>
             <h3 className="text-lg font-bold text-slate-900 mb-2">
               {communitiesError ? t('areasLoadError') : t('chooseYourArea')}
@@ -741,8 +737,8 @@ function ProductsContent() {
         <div>
           <div className="flex items-center justify-between mb-5 flex-wrap gap-3">
             <div>
-              <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-orange-100 text-orange-800 text-[11px] font-bold uppercase tracking-wider mb-1">
-                <MapPin className="w-3 h-3 text-[#FF5500]" />
+              <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-brand-100 text-brand-800 text-[11px] font-bold uppercase tracking-wider mb-1">
+                <MapPin className="w-3 h-3 text-brand-ink" />
                 <span>{t('hyperlocal', { name: communityName })}</span>
               </div>
               <h2 className="text-xl font-bold text-slate-900 tracking-tight">
@@ -775,8 +771,8 @@ function ProductsContent() {
             </div>
           ) : kitchens.length === 0 ? (
             <div className="bg-white rounded-2xl border border-slate-200 p-8 sm:p-10 text-center shadow-xs">
-              <div className="w-14 h-14 rounded-2xl bg-orange-100 text-[#FF5500] flex items-center justify-center mx-auto mb-4">
-                <Store className="w-7 h-7 text-[#FF5500]" />
+              <div className="w-14 h-14 rounded-2xl bg-brand-100 text-brand-ink flex items-center justify-center mx-auto mb-4">
+                <Store className="w-7 h-7 text-brand-ink" />
               </div>
               <h3 className="text-lg font-bold text-slate-900 mb-2">
                 {allKitchens.length > 0
@@ -803,7 +799,7 @@ function ProductsContent() {
                           const comm = useCommunityStore.getState().communities.find((c) => c.id === n.id);
                           if (comm) useCommunityStore.getState().setSelectedCommunity(comm);
                         }}
-                        className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl bg-orange-50 hover:bg-orange-100 text-[#FF5500] text-xs font-bold border border-orange-200 transition-colors shadow-2xs"
+                        className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl bg-brand-50 hover:bg-brand-100 text-brand-ink text-xs font-bold border border-brand-200 transition-colors shadow-2xs"
                       >
                         <span>{t('browseNamedKitchens', { name: n.name })}</span>
                         <ChevronRight className="rtl:-scale-x-100 w-3.5 h-3.5" />
@@ -872,7 +868,7 @@ function ProductsContent() {
                         </span>
                       ) : (
                         <span className="absolute top-3 start-3 px-2.5 py-1 rounded-full text-white text-[11px] font-bold bg-black/50 backdrop-blur-md inline-flex items-center gap-1 shadow-2xs">
-                          <ChefHat className="w-3 h-3 text-[#FF5500]" />
+                          <ChefHat className="w-3 h-3 text-brand-ink" />
                           <span>{t('homeKitchen')}</span>
                         </span>
                       )}
@@ -927,7 +923,7 @@ function ProductsContent() {
                         <div className="flex items-start justify-between gap-2.5 mb-1.5">
                           <div className="min-w-0 flex-1">
                             <div className="flex items-center gap-1.5">
-                              <h3 className="font-extrabold text-slate-900 text-base group-hover:text-[#FF5500] transition-colors leading-tight truncate">
+                              <h3 className="font-extrabold text-slate-900 text-base group-hover:text-brand-ink transition-colors leading-tight truncate">
                                 {k.businessName}
                               </h3>
                               <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" />
@@ -980,7 +976,7 @@ function ProductsContent() {
                         >
                           {isClosed ? (k.acceptsPreOrders ? t('preOrderSlot') : t('kitchenClosed')) : t('domesticKitchen')}
                         </span>
-                        <span className="font-bold text-[#FF5500] inline-flex items-center gap-1 group-hover:translate-x-1 transition-transform">
+                        <span className="font-bold text-brand-ink inline-flex items-center gap-1 group-hover:translate-x-1 transition-transform">
                           <span>{isClosed ? (k.acceptsPreOrders ? t('checkPreOrder') : t('viewSchedule')) : t('viewMenu')}</span>
                           <ChevronRight className="rtl:-scale-x-100 w-3.5 h-3.5" />
                         </span>
@@ -1011,7 +1007,7 @@ function ProductsContent() {
     if (loading) {
       return (
         <div className="text-center py-16">
-          <div className="w-10 h-10 border-3 border-[#FF5500] border-t-transparent rounded-full animate-spin mx-auto mb-3" />
+          <div className="w-10 h-10 border-3 border-brand border-t-transparent rounded-full animate-spin mx-auto mb-3" />
           <p className="text-slate-500 font-semibold text-xs">
             {selectedCommunity ? t('loadingDishesIn', { area: selectedCommunity.name }) : t('loadingDishes')}
           </p>
@@ -1078,7 +1074,7 @@ function ProductsContent() {
               <Link
                 key={product.id}
                 href={`/products/${product.id}`}
-                className="group flex flex-col justify-between bg-white rounded-2xl border border-slate-200/80 hover:border-[#FF5500]/50 hover:shadow-xl hover:-translate-y-1 transition-all duration-300 overflow-hidden"
+                className="group flex flex-col justify-between bg-white rounded-2xl border border-slate-200/80 hover:border-brand/50 hover:shadow-xl hover:-translate-y-1 transition-all duration-300 overflow-hidden"
               >
                 <div className="aspect-[16/11] bg-slate-100 relative overflow-hidden">
                   <CoverImage
@@ -1130,7 +1126,7 @@ function ProductsContent() {
                     {/* Clean Chef & Community Row */}
                     <div className="flex items-center justify-between gap-1.5 mb-1.5">
                       <div className="flex items-center gap-1.5 min-w-0">
-                        <ChefHat className="w-3.5 h-3.5 text-[#FF5500] shrink-0" />
+                        <ChefHat className="w-3.5 h-3.5 text-brand-ink shrink-0" />
                         <span className="text-[11px] font-bold text-slate-700 truncate">
                           {product.seller?.businessName || t('homeKitchen')}
                         </span>
@@ -1148,7 +1144,7 @@ function ProductsContent() {
                       ) : null}
                     </div>
 
-                    <h3 className="font-bold text-slate-900 text-sm leading-snug line-clamp-1 group-hover:text-[#FF5500] transition-colors">
+                    <h3 className="font-bold text-slate-900 text-sm leading-snug line-clamp-1 group-hover:text-brand-ink transition-colors">
                       {product.name}
                     </h3>
 
@@ -1201,7 +1197,7 @@ function ProductsContent() {
                       onClick={(e) => handleQuickAddToCart(e, product)}
                       disabled={addingProductId === product.id}
                       title={t('addToCart')}
-                      className="flex items-center gap-1 px-3 py-1.5 rounded-xl bg-orange-50 hover:bg-[#FF5500] text-[#FF5500] hover:text-white border border-orange-200/80 hover:border-transparent font-bold text-xs transition-all active:scale-95 shadow-2xs cursor-pointer"
+                      className="flex items-center gap-1 px-3 py-1.5 rounded-xl bg-brand-50 hover:bg-brand text-brand-ink hover:text-on-brand border border-brand-200/80 hover:border-transparent font-bold text-xs transition-all active:scale-95 shadow-2xs cursor-pointer"
                     >
                       {addingProductId === product.id ? (
                         <div className="w-3.5 h-3.5 border-2 border-current border-t-transparent rounded-full animate-spin" />
@@ -1289,49 +1285,14 @@ function ProductsContent() {
   }
 
   return (
-    <div className="min-h-screen bg-[#F8FAFC] text-[#0F172A] pb-24">
-      {/* Dedicated Public Catalog Header */}
-      <header className="sticky top-0 z-40 pt-(--safe-top) bg-white/95 backdrop-blur-md border-b border-slate-200/80 shadow-2xs">
-        <div className="max-w-[1440px] mx-auto px-3 sm:px-8 h-16 flex items-center justify-between gap-2 sm:gap-4">
-          <div className="flex items-center gap-6 min-w-0">
-            <Link href="/" className="hover:opacity-95 transition-opacity shrink-0">
-              <BrandLockup markSize={32} wordSize={22} />
-            </Link>
-            <div className="hidden sm:block">
-              <CommunitySelector variant="navbar" />
-            </div>
-          </div>
-
-          <div className="flex items-center gap-1 sm:gap-2.5 shrink-0">
-            <Link
-              href="/cart"
-              className="relative flex items-center justify-center w-9 h-9 rounded-xl bg-slate-100 hover:bg-slate-200/80 border border-slate-200/80 transition-colors"
-            >
-              <ShoppingBag className="w-4 h-4 text-slate-700" />
-              {cartItems.length > 0 && (
-                <span className="absolute -top-1 -end-1 w-4 h-4 bg-[#FF5500] text-white rounded-full text-[11px] font-bold flex items-center justify-center shadow-xs">
-                  {cartItems.length}
-                </span>
-              )}
-            </Link>
-            <Link
-              href="/login"
-              className="h-9 inline-flex items-center px-2 sm:px-3.5 rounded-xl text-xs font-semibold text-slate-700 hover:bg-slate-100 transition-colors"
-            >
-              {t('signInCaps')}
-            </Link>
-            <Link href="/register">
-              <span className="flame-btn h-9 px-3 sm:px-4 text-xs font-bold rounded-xl">{t('joinNuray')}</span>
-            </Link>
-          </div>
-        </div>
-      </header>
+    <div className="min-h-screen bg-page text-ink pb-24">
+      <SiteHeader />
 
       {/* Main Multi-Vendor Marketplace Container */}
       <div className="max-w-[1440px] mx-auto px-4 sm:px-8 py-6 md:py-8">
         <div className="mb-6">
-          <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-orange-100 text-orange-800 text-[11px] font-bold uppercase tracking-wider mb-2">
-            <ChefHat className="w-3 h-3 text-[#FF5500]" />
+          <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-brand-100 text-brand-800 text-[11px] font-bold uppercase tracking-wider mb-2">
+            <ChefHat className="w-3 h-3 text-brand-ink" />
             <span>{t('catalogBadge')}</span>
           </div>
           <h1 className="text-2xl sm:text-3xl font-bold text-slate-900 tracking-tight">
@@ -1379,9 +1340,9 @@ export default function ProductsPage() {
   return (
     <Suspense
       fallback={
-        <div className="min-h-screen bg-[#F8FAFC] flex items-center justify-center">
+        <div className="min-h-screen bg-page flex items-center justify-center">
           <div className="text-center">
-            <div className="w-10 h-10 border-3 border-[#FF5500] border-t-transparent rounded-full animate-spin mx-auto mb-3" />
+            <div className="w-10 h-10 border-3 border-brand border-t-transparent rounded-full animate-spin mx-auto mb-3" />
             <p className="text-xs font-black text-slate-700">{t('loadingFallback')}</p>
           </div>
         </div>

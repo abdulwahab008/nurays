@@ -284,7 +284,7 @@ export default function SellerOrdersPage() {
         return { bg: 'bg-indigo-100 text-indigo-900 border-indigo-300', dot: 'bg-indigo-500', label: t('badge.ready') };
       case 'dispatched':
       case 'in_transit':
-        return { bg: 'bg-orange-100 text-orange-900 border-orange-300', dot: 'bg-orange-500', label: t('badge.onTheWay') };
+        return { bg: 'bg-brand-100 text-brand-900 border-brand-300', dot: 'bg-brand', label: t('badge.onTheWay') };
       case 'delivered':
       case 'completed':
         return { bg: 'bg-emerald-100 text-emerald-900 border-emerald-300', dot: 'bg-emerald-500', label: t('badge.completed') };
@@ -644,11 +644,11 @@ export default function SellerOrdersPage() {
 
                     {/* State: Dispatched or In Transit (with a Nuray rider) */}
                     {(ord.orderStatus === 'dispatched' || ord.orderStatus === 'in_transit') && !ord.sellerHandsOver && (
-                      <div className="p-4 bg-orange-50 rounded-2xl border border-orange-200 text-center">
-                        <p className="text-sm font-bold text-orange-900 mb-1 flex items-center justify-center gap-2">
+                      <div className="p-4 bg-brand-50 rounded-2xl border border-brand-200 text-center">
+                        <p className="text-sm font-bold text-brand-900 mb-1 flex items-center justify-center gap-2">
                           <span>🛵</span> {t('list.riderOnWay')}
                         </p>
-                        <p className="text-xs text-orange-700">
+                        <p className="text-xs text-brand-ink">
                           {t('list.enRoute')}
                         </p>
                       </div>

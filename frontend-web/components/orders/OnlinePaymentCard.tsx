@@ -64,9 +64,9 @@ export default function OnlinePaymentCard({ orderId, totalAmount }: Props) {
   };
 
   return (
-    <div className="rounded-2xl border-2 border-[#FF5500]/40 bg-orange-50/40 p-5">
+    <div className="rounded-2xl border-2 border-brand/40 bg-brand-50/40 p-5">
       <div className="flex items-start gap-3">
-        <div className="w-10 h-10 rounded-xl bg-[#FF5500] text-white flex items-center justify-center shrink-0">
+        <div className="w-10 h-10 rounded-xl bg-brand text-on-brand flex items-center justify-center shrink-0">
           <CreditCard className="w-5 h-5" />
         </div>
         <div className="flex-1">
@@ -84,7 +84,7 @@ export default function OnlinePaymentCard({ orderId, totalAmount }: Props) {
               type="button"
               disabled={opening}
               onClick={pay}
-              className="mt-3 px-5 py-2.5 rounded-xl bg-[#FF5500] text-white text-sm font-bold hover:bg-[#e04400] disabled:opacity-50"
+              className="mt-3 px-5 py-2.5 rounded-xl bg-brand text-on-brand text-sm font-bold hover:bg-brand-500 disabled:opacity-50"
             >
               {opening ? t('openingPayPage') : recentAttempt ? t('openAgain') : t('payNow')}
             </button>

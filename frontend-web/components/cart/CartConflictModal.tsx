@@ -75,19 +75,19 @@ export default function CartConflictModal({
           </div>
 
           <div className="flex items-center justify-center my-1 text-slate-500">
-            <ArrowRight className="rtl:-scale-x-100 w-4 h-4 rotate-90 text-[#FF5500]" />
+            <ArrowRight className="rtl:-scale-x-100 w-4 h-4 rotate-90 text-brand-ink" />
           </div>
 
           <div className="flex items-center justify-between text-xs">
-            <span className="font-bold text-[#FF5500] uppercase tracking-wider text-[11px]">
+            <span className="font-bold text-brand-ink uppercase tracking-wider text-[11px]">
               {t('newKitchen')}
             </span>
-            <span className="px-2 py-0.5 rounded bg-orange-100 text-[#FF5500] font-black text-[11px]">
+            <span className="px-2 py-0.5 rounded bg-brand-100 text-brand-ink font-black text-[11px]">
               {t('newOrder')}
             </span>
           </div>
           <div className="flex items-center gap-2.5">
-            <div className="w-5 h-5 rounded-md bg-[#FF5500] text-white flex items-center justify-center text-[11px] font-black flex-shrink-0">
+            <div className="w-5 h-5 rounded-md bg-brand text-on-brand flex items-center justify-center text-[11px] font-black flex-shrink-0">
               👩‍🍳
             </div>
             <span className="font-black text-slate-950 text-sm truncate">
@@ -101,7 +101,7 @@ export default function CartConflictModal({
           <button
             onClick={conflict.onConfirmClearAndAdd}
             disabled={loading}
-            className="w-full py-3.5 px-4 rounded-2xl font-black text-xs text-white bg-[#FF5500] hover:bg-[#e04400] active:scale-[0.98] transition-all shadow-md flex items-center justify-center gap-2"
+            className="w-full py-3.5 px-4 rounded-2xl font-black text-xs text-on-brand bg-brand hover:bg-brand-500 active:scale-[0.98] transition-all shadow-md flex items-center justify-center gap-2"
           >
             {loading ? (
               <>

@@ -6,7 +6,8 @@ import { join } from 'node:path';
 // White text on a light, saturated colour cannot be read: white on amber-500 is 2.1:1, on green-500 2.3:1, on emerald-500 2.5:1, on orange-500
 // 2.8:1 (the minimum is 3:1 for large text and for icons, 4.5:1 for small text). The refund, payout and "Add Photo" buttons were made this way.
 // The shades from 600 up are dark enough for a badge or an icon; a button with words uses 700.
-const LIGHT_SATURATED = /^bg-(amber|yellow|lime|orange|emerald|green|teal|cyan|sky)-(50|100|200|300|400|500)$/;
+// The brand turquoise and the accent yellow are light too: words on them use text-on-brand / text-on-accent.
+const LIGHT_SATURATED = /^bg-(?:(?:amber|yellow|lime|orange|emerald|green|teal|cyan|sky|brand|accent)-(?:50|100|200|300|400|500)|brand|accent)$/;
 
 function sources(dir: string): string[] {
   return readdirSync(dir).flatMap((name) => {
@@ -32,11 +33,11 @@ test('no element is white text on a light saturated background (use the 600 shad
 });
 
 test('the guard does catch the combinations it is about', () => {
-  for (const line of ['<button className="bg-amber-500 text-white">', "cond ? 'bg-emerald-500 text-white' : 'bg-white text-gray-400'", '<span className="text-white bg-green-400 px-2">']) {
+  for (const line of ['<button className="bg-brand text-white">', '<span className="bg-accent text-white">', '<button className="bg-amber-500 text-white">', "cond ? 'bg-emerald-500 text-white' : 'bg-white text-gray-400'", '<span className="text-white bg-green-400 px-2">']) {
     const tokens = line.split(/[\s"'`{}()]+/);
     assert.ok(tokens.includes('text-white') && tokens.some((token) => LIGHT_SATURATED.test(token)), line);
   }
-  for (const line of ['<button className="bg-amber-700 text-white">', '<div className="bg-emerald-500/10 text-white">', '<a className="hover:bg-emerald-500 text-white bg-slate-900">']) {
+  for (const line of ['<button className="bg-brand text-on-brand">', '<a className="bg-brand-700 text-white">', '<button className="bg-amber-700 text-white">', '<div className="bg-emerald-500/10 text-white">', '<a className="hover:bg-emerald-500 text-white bg-slate-900">']) {
     const tokens = line.split(/[\s"'`{}()]+/);
     assert.ok(!(tokens.includes('text-white') && tokens.some((token) => LIGHT_SATURATED.test(token))), line);
   }

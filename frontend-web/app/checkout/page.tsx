@@ -416,7 +416,7 @@ export default function CheckoutPage() {
     return (
       <DashboardLayout title={t('checkoutTitle')} subtitle={t('checkoutSubtitle')} sidebarItems={sidebarItems} userType="customer">
         <div className="max-w-5xl mx-auto py-12 flex flex-col items-center justify-center gap-3">
-          <div className="w-8 h-8 border-3 border-[#FF5500] border-t-transparent rounded-full animate-spin" />
+          <div className="w-8 h-8 border-3 border-brand border-t-transparent rounded-full animate-spin" />
           <p className="text-xs font-semibold text-slate-500">{t('preparingSummary')}</p>
         </div>
       </DashboardLayout>
@@ -437,13 +437,13 @@ export default function CheckoutPage() {
     return (
       <DashboardLayout title={t('checkoutTitle')} subtitle={t('checkoutSubtitle')} sidebarItems={sidebarItems} userType="customer">
         <div className="max-w-md mx-auto my-12 bg-white rounded-3xl p-8 border border-slate-200/90 shadow-xs text-center">
-          <div className="w-16 h-16 bg-orange-50 rounded-2xl flex items-center justify-center mx-auto mb-4 text-[#FF5500]">
+          <div className="w-16 h-16 bg-brand-50 rounded-2xl flex items-center justify-center mx-auto mb-4 text-brand-ink">
             <ShoppingBag className="w-8 h-8" />
           </div>
           <h2 className="text-xl font-bold text-slate-900 tracking-tight mb-1.5">{t('trayEmptyTitle')}</h2>
           <p className="text-xs text-slate-500 mb-6">{t('trayEmptyText')}</p>
           <Link href="/kitchens">
-            <Button className="w-full bg-[#FF5500] hover:bg-[#e04400] text-white font-bold py-2.5 rounded-xl">
+            <Button className="w-full bg-brand hover:bg-brand-500 text-on-brand font-bold py-2.5 rounded-xl">
               {t('browseKitchens')}
             </Button>
           </Link>
@@ -486,7 +486,7 @@ export default function CheckoutPage() {
         {/* Kitchen Origin Header Banner */}
         <div className="mb-6 p-4 rounded-2xl bg-white border border-slate-200/90 shadow-2xs flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-orange-50 border border-orange-100 flex items-center justify-center text-[#FF5500]">
+            <div className="w-10 h-10 rounded-xl bg-brand-50 border border-brand-100 flex items-center justify-center text-brand-ink">
               <Store className="w-5 h-5" />
             </div>
             <div>
@@ -512,7 +512,7 @@ export default function CheckoutPage() {
             </button>
             <Link
               href="/cart"
-              className="text-xs font-bold text-[#FF5500] hover:text-[#e04400] inline-flex items-center gap-1"
+              className="text-xs font-bold text-brand-ink hover:text-brand-800 inline-flex items-center gap-1"
             >
               <span>{t('editTray', { count: cart.summary.totalItems })}</span>
               <ChevronRight className="rtl:-scale-x-100 w-3.5 h-3.5" />
@@ -537,7 +537,7 @@ export default function CheckoutPage() {
                 </div>
                 <Link
                   href="/profile/addresses"
-                  className="text-xs font-semibold text-[#FF5500] hover:underline inline-flex items-center gap-1"
+                  className="text-xs font-semibold text-brand-ink hover:underline inline-flex items-center gap-1"
                 >
                   <Plus className="w-3.5 h-3.5" />
                   <span>{t('addAddress')}</span>
@@ -550,7 +550,7 @@ export default function CheckoutPage() {
                   <p className="text-xs font-semibold text-slate-700 mb-1">{t('noAddress')}</p>
                   <p className="text-[11px] text-slate-500 mb-3">{t('noAddressHint')}</p>
                   <Link href="/profile/addresses">
-                    <Button size="sm" className="bg-[#FF5500] hover:bg-[#e04400] text-xs font-bold text-white rounded-xl">
+                    <Button size="sm" className="bg-brand hover:bg-brand-500 text-xs font-bold text-on-brand rounded-xl">
                       {t('addAddressPlus')}
                     </Button>
                   </Link>
@@ -564,7 +564,7 @@ export default function CheckoutPage() {
                         key={address.id}
                         className={`flex items-start gap-3 p-3.5 rounded-2xl border-2 cursor-pointer transition-all ${
                           isSelected
-                            ? 'border-[#FF5500] bg-orange-50/20 shadow-2xs'
+                            ? 'border-brand bg-brand-50/20 shadow-2xs'
                             : 'border-slate-200/80 hover:border-slate-300 bg-white'
                         }`}
                       >
@@ -574,7 +574,7 @@ export default function CheckoutPage() {
                           value={address.id}
                           checked={isSelected}
                           onChange={(e) => setSelectedAddress(e.target.value)}
-                          className="mt-1 accent-[#FF5500] w-4 h-4 cursor-pointer"
+                          className="mt-1 accent-brand w-4 h-4 cursor-pointer"
                         />
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2 mb-0.5">
@@ -597,7 +597,7 @@ export default function CheckoutPage() {
                           </p>
                         </div>
                         {isSelected && (
-                          <div className="w-5 h-5 rounded-full bg-[#FF5500] text-white flex items-center justify-center shrink-0 text-xs">
+                          <div className="w-5 h-5 rounded-full bg-brand text-on-brand flex items-center justify-center shrink-0 text-xs">
                             <Check className="w-3 h-3 stroke-[3]" />
                           </div>
                         )}
@@ -640,7 +640,7 @@ export default function CheckoutPage() {
                         time: e.target.value as 'morning' | 'afternoon' | 'evening',
                       })
                     }
-                    className="w-full px-3 py-2 text-xs font-medium border border-slate-300 rounded-xl bg-white outline-none focus:ring-2 focus:ring-[#FF5500]"
+                    className="w-full px-3 py-2 text-xs font-medium border border-slate-300 rounded-xl bg-white outline-none focus:ring-2 focus:ring-brand"
                   >
                     <option value="morning">{t('slot.morning')}</option>
                     <option value="afternoon">{t('slot.afternoon')}</option>
@@ -658,7 +658,7 @@ export default function CheckoutPage() {
                   value={deliveryInstructions}
                   onChange={(e) => setDeliveryInstructions(e.target.value)}
                   placeholder={t('riderPlaceholder')}
-                  className="w-full px-3 py-2 text-xs border border-slate-300 rounded-xl outline-none focus:ring-2 focus:ring-[#FF5500]"
+                  className="w-full px-3 py-2 text-xs border border-slate-300 rounded-xl outline-none focus:ring-2 focus:ring-brand"
                 />
               </div>
             </div>
@@ -686,7 +686,7 @@ export default function CheckoutPage() {
                 <label
                   className={`block p-4 rounded-2xl border-2 cursor-pointer transition-all ${
                     paymentMethod === 'cod'
-                      ? 'border-[#FF5500] bg-orange-50/20 shadow-2xs'
+                      ? 'border-brand bg-brand-50/20 shadow-2xs'
                       : 'border-slate-200/80 hover:border-slate-300 bg-white'
                   }`}
                 >
@@ -697,7 +697,7 @@ export default function CheckoutPage() {
                       value="cod"
                       checked={paymentMethod === 'cod'}
                       onChange={() => setPaymentMethod('cod')}
-                      className="accent-[#FF5500] w-4 h-4 cursor-pointer"
+                      className="accent-brand w-4 h-4 cursor-pointer"
                     />
                     <div className="w-8 h-8 rounded-xl bg-amber-50 text-amber-700 flex items-center justify-center shrink-0">
                       <Banknote className="w-4 h-4" />
@@ -726,7 +726,7 @@ export default function CheckoutPage() {
                   <label
                     className={`block p-4 rounded-2xl border-2 cursor-pointer transition-all ${
                       paymentMethod === 'safepay'
-                        ? 'border-[#FF5500] bg-orange-50/20 shadow-2xs'
+                        ? 'border-brand bg-brand-50/20 shadow-2xs'
                         : 'border-slate-200/80 hover:border-slate-300 bg-white'
                     }`}
                   >
@@ -737,7 +737,7 @@ export default function CheckoutPage() {
                         value="safepay"
                         checked={paymentMethod === 'safepay'}
                         onChange={() => setPaymentMethod('safepay')}
-                        className="accent-[#FF5500] w-4 h-4 cursor-pointer"
+                        className="accent-brand w-4 h-4 cursor-pointer"
                       />
                       <div className="w-8 h-8 rounded-xl bg-emerald-50 text-emerald-700 flex items-center justify-center shrink-0">
                         <Smartphone className="w-4 h-4" />
@@ -763,7 +763,7 @@ export default function CheckoutPage() {
                       walletBalance < totalPayable
                         ? 'border-slate-200/80 bg-slate-50 cursor-not-allowed opacity-70'
                         : paymentMethod === 'wallet'
-                        ? 'border-[#FF5500] bg-orange-50/20 shadow-2xs cursor-pointer'
+                        ? 'border-brand bg-brand-50/20 shadow-2xs cursor-pointer'
                         : 'border-slate-200/80 hover:border-slate-300 bg-white cursor-pointer'
                     }`}
                   >
@@ -775,7 +775,7 @@ export default function CheckoutPage() {
                         disabled={walletBalance < totalPayable}
                         checked={paymentMethod === 'wallet'}
                         onChange={() => setPaymentMethod('wallet')}
-                        className="accent-[#FF5500] w-4 h-4 cursor-pointer disabled:cursor-not-allowed"
+                        className="accent-brand w-4 h-4 cursor-pointer disabled:cursor-not-allowed"
                       />
                       <div className="w-8 h-8 rounded-xl bg-slate-100 text-slate-700 flex items-center justify-center shrink-0">
                         <Banknote className="w-4 h-4" />
@@ -802,7 +802,7 @@ export default function CheckoutPage() {
                 <label
                   className={`block p-4 rounded-2xl border-2 cursor-pointer transition-all ${
                     paymentMethod === 'bank'
-                      ? 'border-[#FF5500] bg-orange-50/20 shadow-2xs'
+                      ? 'border-brand bg-brand-50/20 shadow-2xs'
                       : 'border-slate-200/80 hover:border-slate-300 bg-white'
                   }`}
                 >
@@ -813,7 +813,7 @@ export default function CheckoutPage() {
                       value="bank"
                       checked={paymentMethod === 'bank'}
                       onChange={() => setPaymentMethod('bank')}
-                      className="accent-[#FF5500] w-4 h-4 cursor-pointer"
+                      className="accent-brand w-4 h-4 cursor-pointer"
                     />
                     <div className="w-8 h-8 rounded-xl bg-indigo-50 text-indigo-700 flex items-center justify-center shrink-0">
                       <Building2 className="w-4 h-4" />
@@ -887,7 +887,7 @@ export default function CheckoutPage() {
                           value={transactionRef}
                           onChange={(e) => setTransactionRef(e.target.value)}
                           placeholder={t('txnRefPlaceholder')}
-                          className="w-full px-3 py-1.5 text-xs border border-slate-300 rounded-xl outline-none focus:ring-2 focus:ring-[#FF5500] bg-white"
+                          className="w-full px-3 py-1.5 text-xs border border-slate-300 rounded-xl outline-none focus:ring-2 focus:ring-brand bg-white"
                         />
                         <p className="text-[11px] text-slate-500 mt-1">
                           {t('uploadLater')}
@@ -901,7 +901,7 @@ export default function CheckoutPage() {
                 <label
                   className={`block p-4 rounded-2xl border-2 cursor-pointer transition-all ${
                     paymentMethod === 'jazzcash'
-                      ? 'border-[#FF5500] bg-orange-50/20 shadow-2xs'
+                      ? 'border-brand bg-brand-50/20 shadow-2xs'
                       : 'border-slate-200/80 hover:border-slate-300 bg-white'
                   }`}
                 >
@@ -912,7 +912,7 @@ export default function CheckoutPage() {
                       value="jazzcash"
                       checked={paymentMethod === 'jazzcash'}
                       onChange={() => setPaymentMethod('jazzcash')}
-                      className="accent-[#FF5500] w-4 h-4 cursor-pointer"
+                      className="accent-brand w-4 h-4 cursor-pointer"
                     />
                     <div className="w-8 h-8 rounded-xl bg-red-50 text-red-700 flex items-center justify-center shrink-0">
                       <Smartphone className="w-4 h-4" />
@@ -980,7 +980,7 @@ export default function CheckoutPage() {
                           onChange={(e) => setTransactionRef(e.target.value)}
                           placeholder={t('jazzTidPlaceholder')}
                           dir="ltr"
-                          className="w-full px-3 py-1.5 text-xs border border-slate-300 rounded-xl outline-none focus:ring-2 focus:ring-[#FF5500] bg-white"
+                          className="w-full px-3 py-1.5 text-xs border border-slate-300 rounded-xl outline-none focus:ring-2 focus:ring-brand bg-white"
                         />
                       </div>
                     </div>
@@ -991,7 +991,7 @@ export default function CheckoutPage() {
                 <label
                   className={`block p-4 rounded-2xl border-2 cursor-pointer transition-all ${
                     paymentMethod === 'easypaisa'
-                      ? 'border-[#FF5500] bg-orange-50/20 shadow-2xs'
+                      ? 'border-brand bg-brand-50/20 shadow-2xs'
                       : 'border-slate-200/80 hover:border-slate-300 bg-white'
                   }`}
                 >
@@ -1002,7 +1002,7 @@ export default function CheckoutPage() {
                       value="easypaisa"
                       checked={paymentMethod === 'easypaisa'}
                       onChange={() => setPaymentMethod('easypaisa')}
-                      className="accent-[#FF5500] w-4 h-4 cursor-pointer"
+                      className="accent-brand w-4 h-4 cursor-pointer"
                     />
                     <div className="w-8 h-8 rounded-xl bg-emerald-50 text-emerald-700 flex items-center justify-center shrink-0">
                       <Smartphone className="w-4 h-4" />
@@ -1070,7 +1070,7 @@ export default function CheckoutPage() {
                           onChange={(e) => setTransactionRef(e.target.value)}
                           placeholder={t('easyTidPlaceholder')}
                           dir="ltr"
-                          className="w-full px-3 py-1.5 text-xs border border-slate-300 rounded-xl outline-none focus:ring-2 focus:ring-[#FF5500] bg-white"
+                          className="w-full px-3 py-1.5 text-xs border border-slate-300 rounded-xl outline-none focus:ring-2 focus:ring-brand bg-white"
                         />
                       </div>
                     </div>
@@ -1157,7 +1157,7 @@ export default function CheckoutPage() {
                             type="button"
                             disabled={updatingItemId === item.id}
                             onClick={() => handleUpdateItemQuantity(item.id, item.quantity + 1)}
-                            className="w-5 h-5 rounded-lg bg-[#FF5500] hover:bg-[#e04400] text-white font-bold flex items-center justify-center text-xs transition-colors disabled:opacity-50"
+                            className="w-5 h-5 rounded-lg bg-brand hover:bg-brand-500 text-on-brand font-bold flex items-center justify-center text-xs transition-colors disabled:opacity-50"
                             title={t('increasePortion')}
                           >
                             <Plus className="w-3 h-3" />
@@ -1182,7 +1182,7 @@ export default function CheckoutPage() {
                     placeholder={t('voucherPlaceholder')}
                     dir="ltr"
                     disabled={!!appliedPromo}
-                    className="flex-1 px-3 py-1.5 text-xs font-semibold uppercase tracking-wider border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-[#FF5500] bg-slate-50"
+                    className="flex-1 px-3 py-1.5 text-xs font-semibold uppercase tracking-wider border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-brand bg-slate-50"
                   />
                   {appliedPromo ? (
                     <Button
@@ -1296,7 +1296,7 @@ export default function CheckoutPage() {
                     <span className="text-sm font-black text-slate-900 block">{deliveryKnown ? t('totalPayable') : t('totalBeforeDelivery')}</span>
                     <span className="text-[11px] text-slate-500">{deliveryKnown ? t('includesDeliveryTax') : t('deliveryAddedWhenPlaced')}</span>
                   </div>
-                  <span className="text-xl font-black text-[#FF5500]">{formatPrice(totalPayable)}</span>
+                  <span className="text-xl font-black text-brand-ink">{formatPrice(totalPayable)}</span>
                 </div>
               </div>
 
@@ -1305,7 +1305,7 @@ export default function CheckoutPage() {
                 type="button"
                 disabled={processing || !selectedAddress || notDeliverable || (estimatePending && !deliveryEstimate)}
                 onClick={handleCreateOrder}
-                className="w-full py-3.5 bg-[#FF5500] hover:bg-[#e04400] text-white font-black text-sm rounded-2xl shadow-md transition-all active:scale-[0.99] flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+                className="w-full py-3.5 bg-brand hover:bg-brand-500 text-on-brand font-black text-sm rounded-2xl shadow-md transition-all active:scale-[0.99] flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
               >
                 {processing ? (
                   <>
@@ -1323,12 +1323,12 @@ export default function CheckoutPage() {
               <p className="text-center text-[11px] leading-relaxed text-slate-500">
                 {richText(t('agreeTerms'), {
                   terms: (
-                    <ExternalLink href="/terms" className="font-semibold text-slate-700 underline hover:text-[#FF5500]">
+                    <ExternalLink href="/terms" className="font-semibold text-slate-700 underline hover:text-brand-ink">
                       {t('terms')}
                     </ExternalLink>
                   ),
                   refund: (
-                    <ExternalLink href="/refund-policy" className="font-semibold text-slate-700 underline hover:text-[#FF5500]">
+                    <ExternalLink href="/refund-policy" className="font-semibold text-slate-700 underline hover:text-brand-ink">
                       {t('refundPolicy')}
                     </ExternalLink>
                   ),

@@ -2,6 +2,7 @@
 
 import { Languages } from 'lucide-react';
 import { LOCALE_NAMES, useLocale } from '@/lib/i18n';
+import { cn } from '@/lib/utils';
 
 /** One tap between English and Urdu; shows the language you'd switch to, in that language. */
 export function LanguageSwitcher({ className = '' }: { className?: string }) {
@@ -12,7 +13,7 @@ export function LanguageSwitcher({ className = '' }: { className?: string }) {
       type="button"
       onClick={() => setLocale(other)}
       lang={other}
-      className={`inline-flex items-center gap-1.5 h-10 px-3 rounded-lg text-sm font-semibold text-slate-700 hover:bg-slate-100 transition-colors ${className}`}
+      className={cn('inline-flex items-center gap-1.5 h-10 px-3 rounded-lg text-sm font-semibold text-ink hover:bg-raised transition-colors', className)}
       aria-label={other === 'ur' ? 'اردو میں دیکھیں' : 'View in English'}
       data-testid="language-switcher"
     >

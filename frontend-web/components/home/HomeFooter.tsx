@@ -18,22 +18,22 @@ export default function HomeFooter() {
           </div>
 
           <div className="flex flex-wrap items-center justify-center gap-x-5 gap-y-2 text-xs font-medium text-slate-600">
-            <Link href="/kitchens" className="hover:text-[#FF5500]">
+            <Link href="/kitchens" className="hover:text-brand-ink">
               {t('allKitchens')}
             </Link>
-            <Link href="/products" className="hover:text-[#FF5500]">
+            <Link href="/products" className="hover:text-brand-ink">
               {t('dishesPacks')}
             </Link>
-            <Link href="/products?productType=frozen" className="hover:text-[#FF5500]">
+            <Link href="/products?productType=frozen" className="hover:text-brand-ink">
               {t('frozenPantry')}
             </Link>
-            <Link href="/sellers/register" className="hover:text-[#FF5500]">
+            <Link href="/sellers/register" className="hover:text-brand-ink">
               {t('openKitchen')}
             </Link>
-            <Link href="/riders/dashboard" className="hover:text-[#FF5500]">
+            <Link href="/riders/dashboard" className="hover:text-brand-ink">
               {t('riderPortal')}
             </Link>
-            <Link href="/help" className="hover:text-[#FF5500]">
+            <Link href="/help" className="hover:text-brand-ink">
               {t('help')}
             </Link>
           </div>
@@ -42,13 +42,13 @@ export default function HomeFooter() {
         <div className="mt-6 pt-6 border-t border-slate-100 flex flex-col sm:flex-row items-center justify-between text-[11px] text-slate-500 font-normal gap-2">
           <p>{t('rights', { year: new Date().getFullYear() })}</p>
           <nav aria-label={t('legal')} className="flex flex-wrap items-center justify-center gap-x-4 gap-y-1">
-            <Link href="/terms" className="hover:text-[#FF5500]">
+            <Link href="/terms" className="hover:text-brand-ink">
               {t('terms')}
             </Link>
-            <Link href="/privacy" className="hover:text-[#FF5500]">
+            <Link href="/privacy" className="hover:text-brand-ink">
               {t('privacy')}
             </Link>
-            <Link href="/refund-policy" className="hover:text-[#FF5500]">
+            <Link href="/refund-policy" className="hover:text-brand-ink">
               {t('refund')}
             </Link>
           </nav>

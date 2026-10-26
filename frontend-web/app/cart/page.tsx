@@ -410,7 +410,7 @@ export default function CartPage() {
       >
         <div className="flex items-center justify-center min-h-[400px]">
           <div className="text-center p-8 bg-white rounded-3xl border border-slate-200/80 shadow-xs max-w-sm">
-            <div className="w-10 h-10 border-3 border-[#FF5500] border-t-transparent rounded-full animate-spin mx-auto mb-3" />
+            <div className="w-10 h-10 border-3 border-brand border-t-transparent rounded-full animate-spin mx-auto mb-3" />
             <p className="text-sm font-bold text-slate-900">{t('loadingTray')}</p>
             <p className="text-xs text-slate-500 mt-1">{t('loadingTrayHint')}</p>
           </div>
@@ -442,11 +442,11 @@ export default function CartPage() {
         <div className="max-w-2xl mx-auto my-6">
           <div className="relative overflow-hidden rounded-3xl bg-gradient-to-b from-white to-slate-50/80 border border-slate-200/90 shadow-sm p-8 sm:p-12 text-center">
             {/* Background glowing halo */}
-            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-72 h-72 bg-gradient-to-tr from-orange-400/10 to-amber-300/15 rounded-full blur-3xl pointer-events-none" />
+            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-72 h-72 bg-gradient-to-tr from-brand/10 to-amber-300/15 rounded-full blur-3xl pointer-events-none" />
 
             {/* Tray Icon */}
-            <div className="relative inline-flex items-center justify-center w-24 h-24 rounded-3xl bg-gradient-to-tr from-amber-100 to-orange-100 border border-orange-200/80 shadow-inner mb-5">
-              <ShoppingBag className="w-12 h-12 text-[#FF5500]" />
+            <div className="relative inline-flex items-center justify-center w-24 h-24 rounded-3xl bg-gradient-to-tr from-amber-100 to-brand-100 border border-brand-200/80 shadow-inner mb-5">
+              <ShoppingBag className="w-12 h-12 text-brand-ink" />
               <span className="absolute -bottom-1.5 -end-1.5 px-2 py-0.5 rounded-full bg-slate-900 text-white text-[11px] font-black uppercase tracking-wider shadow-xs">
                 {t('zeroItems')}
               </span>
@@ -467,13 +467,13 @@ export default function CartPage() {
               <div className="flex flex-wrap items-center justify-center gap-2 max-w-lg mx-auto">
                 <Link
                   href="/products?category=biryani"
-                  className="px-3 py-1.5 rounded-xl bg-white border border-slate-200 text-xs font-semibold text-slate-700 hover:border-[#FF5500] hover:text-[#FF5500] transition-colors shadow-2xs"
+                  className="px-3 py-1.5 rounded-xl bg-white border border-slate-200 text-xs font-semibold text-slate-700 hover:border-brand hover:text-brand-ink transition-colors shadow-2xs"
                 >
                   🍛 {t('pill.biryani')}
                 </Link>
                 <Link
                   href="/products?category=paratha"
-                  className="px-3 py-1.5 rounded-xl bg-white border border-slate-200 text-xs font-semibold text-slate-700 hover:border-[#FF5500] hover:text-[#FF5500] transition-colors shadow-2xs"
+                  className="px-3 py-1.5 rounded-xl bg-white border border-slate-200 text-xs font-semibold text-slate-700 hover:border-brand hover:text-brand-ink transition-colors shadow-2xs"
                 >
                   🫓 {t('pill.paratha')}
                 </Link>
@@ -485,7 +485,7 @@ export default function CartPage() {
                 </Link>
                 <Link
                   href="/products?category=bbq"
-                  className="px-3 py-1.5 rounded-xl bg-white border border-slate-200 text-xs font-semibold text-slate-700 hover:border-[#FF5500] hover:text-[#FF5500] transition-colors shadow-2xs"
+                  className="px-3 py-1.5 rounded-xl bg-white border border-slate-200 text-xs font-semibold text-slate-700 hover:border-brand hover:text-brand-ink transition-colors shadow-2xs"
                 >
                   🔥 {t('pill.kebab')}
                 </Link>
@@ -501,7 +501,7 @@ export default function CartPage() {
             {/* Primary Action Button */}
             <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
               <Link href="/products" className="w-full sm:w-auto">
-                <span className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-8 py-3.5 rounded-2xl bg-gradient-to-r from-[#FF5500] to-[#FF3300] hover:from-[#e04400] hover:to-[#d02800] text-white text-sm font-bold shadow-md hover:shadow-lg transition-all active:scale-95 cursor-pointer">
+                <span className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-8 py-3.5 rounded-2xl bg-gradient-to-r from-brand to-brand hover:from-brand-500 hover:to-brand-500 text-on-brand text-sm font-bold shadow-md hover:shadow-lg transition-all active:scale-95 cursor-pointer">
                   <Sparkles className="w-4 h-4 text-amber-200" />
                   <span>{t('discoverDishes')}</span>
                   <ArrowRight className="rtl:-scale-x-100 w-4 h-4" />
@@ -533,9 +533,9 @@ export default function CartPage() {
       <div className="space-y-6 pb-12">
         {/* Single Kitchen Context Banner */}
         {activeSeller && (
-          <div className="bg-gradient-to-r from-orange-500/10 via-amber-500/10 to-transparent rounded-3xl border border-orange-200 p-4 sm:p-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shadow-2xs">
+          <div className="bg-gradient-to-r from-brand/10 via-amber-500/10 to-transparent rounded-3xl border border-brand-200 p-4 sm:p-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shadow-2xs">
             <div className="flex items-center gap-3.5">
-              <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-[#FF5500] to-amber-500 text-white flex items-center justify-center font-bold text-lg shadow-xs shrink-0">
+              <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-brand to-amber-500 text-on-brand flex items-center justify-center font-bold text-lg shadow-xs shrink-0">
                 <ChefHat className="w-6 h-6 text-white" />
               </div>
               <div>
@@ -545,7 +545,7 @@ export default function CartPage() {
                   </h3>
                   {activeSeller.community?.name && (
                     <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-white text-slate-700 border border-slate-200 shadow-2xs">
-                      <MapPin className="w-3 h-3 text-[#FF5500]" />
+                      <MapPin className="w-3 h-3 text-brand-ink" />
                       <span>{activeSeller.community.name}</span>
                     </span>
                   )}
@@ -563,7 +563,7 @@ export default function CartPage() {
             <div className="flex items-center gap-2 self-end sm:self-center">
               <Link
                 href={`/kitchens/${activeSeller.id}`}
-                className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-white border border-slate-200 hover:border-orange-300 text-xs font-bold text-[#FF5500] shadow-2xs hover:shadow-xs transition-all"
+                className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-white border border-slate-200 hover:border-brand-300 text-xs font-bold text-brand-ink shadow-2xs hover:shadow-xs transition-all"
               >
                 <span>{t('addMoreDishes')}</span>
                 <ChevronRight className="rtl:-scale-x-100 w-3.5 h-3.5" />
@@ -580,14 +580,14 @@ export default function CartPage() {
           >
             <div className="flex items-center justify-between gap-3 text-xs mb-2">
               <span className="font-bold text-slate-800 flex items-center gap-1.5">
-                <Truck className="w-4 h-4 text-[#FF5500]" />
+                <Truck className="w-4 h-4 text-brand-ink" />
                 {isFreeDelivery ? (
                   <span className="text-emerald-700 font-extrabold">{t('unlockedFree')}</span>
                 ) : (
                   <span>
                     {richText(t('addMoreForFree'), {
                       amount: <strong className="text-slate-950 font-black">{formatPrice(freeDeliveryRemaining)}</strong>,
-                      free: <span className="text-[#FF5500] font-bold">{t('freeDelivery')}</span>,
+                      free: <span className="text-brand-ink font-bold">{t('freeDelivery')}</span>,
                     })}
                   </span>
                 )}
@@ -599,7 +599,7 @@ export default function CartPage() {
                 className={`h-full rounded-full transition-all duration-500 ${
                   isFreeDelivery
                     ? 'bg-gradient-to-r from-emerald-500 to-teal-500'
-                    : 'bg-gradient-to-r from-amber-400 to-[#FF5500]'
+                    : 'bg-gradient-to-r from-amber-400 to-brand'
                 }`}
                 style={{ width: `${freeDeliveryProgress}%` }}
               />
@@ -613,7 +613,7 @@ export default function CartPage() {
           <div className="lg:col-span-2 space-y-4">
             <div className="bg-white rounded-2xl border border-slate-200/80 p-4 flex items-center justify-between shadow-2xs">
               <div className="flex items-center gap-2.5">
-                <div className="w-8 h-8 rounded-xl bg-orange-100 text-[#FF5500] flex items-center justify-center">
+                <div className="w-8 h-8 rounded-xl bg-brand-100 text-brand-ink flex items-center justify-center">
                   <ShoppingCart className="w-4 h-4" />
                 </div>
                 <div>
@@ -670,7 +670,7 @@ export default function CartPage() {
                         )}
                         <span
                           className={`absolute bottom-1.5 start-1.5 px-2 py-0.5 rounded-md text-[11px] font-bold text-white shadow-xs flex items-center gap-1 ${
-                            item.stockType === 'hub' ? 'bg-cyan-600' : 'bg-[#FF5500]'
+                            item.stockType === 'hub' ? 'bg-cyan-600' : 'bg-brand-700'
                           }`}
                         >
                           {item.stockType === 'hub' ? (
@@ -692,7 +692,7 @@ export default function CartPage() {
                         <div className="flex items-start justify-between gap-2">
                           <div>
                             <Link href={`/products/${item.product.id}`}>
-                              <h3 className="text-sm sm:text-base font-bold text-slate-900 hover:text-[#FF5500] transition-colors leading-snug">
+                              <h3 className="text-sm sm:text-base font-bold text-slate-900 hover:text-brand-ink transition-colors leading-snug">
                                 {item.product.name}
                               </h3>
                             </Link>
@@ -736,7 +736,7 @@ export default function CartPage() {
                             <button
                               type="button"
                               onClick={() => handleUpdateQuantity(item.id, item.quantity + 1)}
-                              className="w-7 h-7 rounded-lg bg-[#FF5500] text-white font-bold hover:bg-[#e04400] flex items-center justify-center text-xs shadow-2xs transition-colors"
+                              className="w-7 h-7 rounded-lg bg-brand text-on-brand font-bold hover:bg-brand-500 flex items-center justify-center text-xs shadow-2xs transition-colors"
                               title={t('increase')}
                             >
                               +
@@ -853,14 +853,14 @@ export default function CartPage() {
                         onChange={(e) => setCartPromoInput(e.target.value.toUpperCase())}
                         placeholder={t('promoPlaceholder')}
                         dir="ltr"
-                        className="flex-1 px-3 py-1.5 text-xs border border-slate-200 rounded-xl focus:ring-1 focus:ring-orange-500 focus:outline-none bg-white font-mono uppercase"
+                        className="flex-1 px-3 py-1.5 text-xs border border-slate-200 rounded-xl focus:ring-1 focus:ring-brand focus:outline-none bg-white font-mono uppercase"
                       />
                       <Button
                         type="button"
                         size="sm"
                         disabled={!cartPromoInput.trim() || promoValidating}
                         onClick={handleApplyPromoInCart}
-                        className="text-xs font-bold bg-slate-900 hover:bg-[#FF5500] text-white px-3 rounded-xl transition-colors"
+                        className="text-xs font-bold bg-slate-900 hover:bg-brand hover:text-on-brand text-white px-3 rounded-xl transition-colors"
                       >
                         {promoValidating ? '...' : t('apply')}
                       </Button>
@@ -885,7 +885,7 @@ export default function CartPage() {
                 <Link href="/checkout" className="block pt-1">
                   <button
                     type="button"
-                    className="w-full py-4 rounded-2xl bg-gradient-to-r from-[#FF5500] to-[#FF3300] hover:from-[#e04400] hover:to-[#d02800] text-white text-base font-black shadow-md hover:shadow-lg transition-all active:scale-98 flex items-center justify-center gap-2 cursor-pointer"
+                    className="w-full py-4 rounded-2xl bg-gradient-to-r from-brand to-brand hover:from-brand-500 hover:to-brand-500 text-on-brand text-base font-black shadow-md hover:shadow-lg transition-all active:scale-98 flex items-center justify-center gap-2 cursor-pointer"
                   >
                     <ShoppingBag className="w-5 h-5 text-white" />
                     <span>{t('proceedCheckout')}</span>
@@ -896,7 +896,7 @@ export default function CartPage() {
                 <Link href="/login?redirect=/checkout" className="block pt-1">
                   <button
                     type="button"
-                    className="w-full py-4 rounded-2xl bg-gradient-to-r from-[#FF5500] to-[#FF3300] hover:from-[#e04400] hover:to-[#d02800] text-white text-base font-black shadow-md hover:shadow-lg transition-all active:scale-98 flex items-center justify-center gap-2 cursor-pointer"
+                    className="w-full py-4 rounded-2xl bg-gradient-to-r from-brand to-brand hover:from-brand-500 hover:to-brand-500 text-on-brand text-base font-black shadow-md hover:shadow-lg transition-all active:scale-98 flex items-center justify-center gap-2 cursor-pointer"
                   >
                     <span>{t('signInToComplete')}</span>
                     <ArrowRight className="rtl:-scale-x-100 w-4 h-4 ms-1" />

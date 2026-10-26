@@ -25,7 +25,7 @@ function Faq({ question, children }: { question: string; children: ReactNode }) 
 export default function HelpPage() {
   return (
     <LegalPage title="Help & contact" updated="10 October 2026" legalText={false}>
-      <section aria-labelledby="contact" className="rounded-2xl border border-orange-200 bg-orange-50/60 p-5">
+      <section aria-labelledby="contact" className="rounded-2xl border border-brand-200 bg-brand-50/60 p-5">
         <h2 id="contact" className="!mt-0">Talk to us</h2>
         <ul className="mt-2">
           {supportEmailIsSet && (

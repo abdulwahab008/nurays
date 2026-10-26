@@ -161,7 +161,7 @@ function WalletContent() {
                           setCustom('');
                         }}
                         className={`px-4 py-2 rounded-xl border text-sm font-semibold ${
-                          !custom && amount === p ? 'border-[#FF5500] bg-orange-50 text-[#FF5500]' : 'border-slate-200 text-slate-700 hover:border-slate-300'
+                          !custom && amount === p ? 'border-brand bg-brand-50 text-brand-ink' : 'border-slate-200 text-slate-700 hover:border-slate-300'
                         }`}
                       >
                         {formatPrice(p)}
@@ -184,7 +184,7 @@ function WalletContent() {
                     type="button"
                     disabled={!validAmount || starting}
                     onClick={startTopUp}
-                    className="mt-4 inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-[#FF5500] text-white text-sm font-bold hover:bg-[#e04400] disabled:opacity-50"
+                    className="mt-4 inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-brand text-on-brand text-sm font-bold hover:bg-brand-500 disabled:opacity-50"
                   >
                     <Plus className="w-4 h-4" />
                     {starting ? t('openingPayPage') : t('topUpButton', { amount: validAmount ? formatPrice(chosen) : '' })}
@@ -240,7 +240,7 @@ function WalletContent() {
               )}
               {page < totalPages && (
                 <div className="p-4 text-center border-t border-slate-100">
-                  <button type="button" onClick={loadMore} className="text-sm font-semibold text-[#FF5500] hover:underline">
+                  <button type="button" onClick={loadMore} className="text-sm font-semibold text-brand-ink hover:underline">
                     {t('showOlder')}
                   </button>
                 </div>

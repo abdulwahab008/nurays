@@ -66,7 +66,7 @@ const Icons = {
     </svg>
   ),
   plate: (
-    <svg className="w-3.5 h-3.5 text-orange-600 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+    <svg className="w-3.5 h-3.5 text-brand-ink shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
       <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" />
     </svg>
   ),
@@ -112,7 +112,7 @@ const Icons = {
 const productTypeInfo: Record<string, { label: string; icon: ReactNode; color: string; border: string }> = {
   frozen: { label: 'Sub-Zero Frozen', icon: Icons.snowflake, color: 'bg-cyan-50 text-cyan-700', border: 'border-cyan-200' },
   fresh: { label: 'Fresh Market', icon: Icons.leaf, color: 'bg-emerald-50 text-emerald-700', border: 'border-emerald-200' },
-  ready_to_eat: { label: 'Ready to Eat', icon: Icons.plate, color: 'bg-orange-50 text-orange-700', border: 'border-orange-200' },
+  ready_to_eat: { label: 'Ready to Eat', icon: Icons.plate, color: 'bg-brand-50 text-brand-ink', border: 'border-brand-200' },
   ready_to_cook: { label: 'Ready to Cook', icon: Icons.pan, color: 'bg-purple-50 text-purple-700', border: 'border-purple-200' },
 };
 

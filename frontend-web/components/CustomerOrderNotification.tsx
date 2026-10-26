@@ -91,7 +91,7 @@ const STATUS_CONFIG: Record<string, { labelKey: keyof typeof ordersMessages.en; 
   preparing: {
     labelKey: 'notif.preparing',
     emoji: '🍳',
-    headerClass: 'from-amber-500 to-orange-500',
+    headerClass: 'from-amber-500 to-brand',
     dotClass: 'bg-white',
   },
   ready: {

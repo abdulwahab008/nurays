@@ -42,7 +42,7 @@ export default function OrdersPage() {
     <React.Suspense
       fallback={
         <div className="min-h-screen flex items-center justify-center bg-slate-50">
-          <div className="w-10 h-10 border-3 border-[#FF5500] border-t-transparent rounded-full animate-spin" />
+          <div className="w-10 h-10 border-3 border-brand border-t-transparent rounded-full animate-spin" />
         </div>
       }
     >
@@ -316,8 +316,8 @@ function OrdersContent() {
       case 'in_transit':
         return {
           label: t('list.badge.onTheWay'),
-          color: 'bg-orange-50 text-orange-800 border-orange-200/80',
-          dotColor: 'bg-[#FF5500]',
+          color: 'bg-brand-50 text-brand-800 border-brand-200/80',
+          dotColor: 'bg-brand',
           icon: <Truck className="w-3.5 h-3.5" />,
         };
       case 'delivered':
@@ -425,26 +425,26 @@ function OrdersContent() {
           </div>
 
           {/* 3. On the Way */}
-          <div className="relative overflow-hidden rounded-2xl sm:rounded-3xl bg-gradient-to-br from-orange-500/10 via-orange-50/30 to-white border border-orange-200/80 p-4 sm:p-5 shadow-2xs hover:shadow-xs transition-all">
+          <div className="relative overflow-hidden rounded-2xl sm:rounded-3xl bg-gradient-to-br from-brand/10 via-brand-50/30 to-white border border-brand-200/80 p-4 sm:p-5 shadow-2xs hover:shadow-xs transition-all">
             <div className="flex items-center justify-between mb-3">
-              <div className="w-10 h-10 rounded-xl sm:rounded-2xl bg-orange-100/80 flex items-center justify-center text-[#FF5500] shadow-inner">
+              <div className="w-10 h-10 rounded-xl sm:rounded-2xl bg-brand-100/80 flex items-center justify-center text-brand-ink shadow-inner">
                 <Truck className="w-5 h-5" />
               </div>
               {onTheWayCount > 0 ? (
-                <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-orange-100 text-orange-800 text-[11px] font-bold">
-                  <span className="w-1.5 h-1.5 rounded-full bg-[#FF5500] animate-ping" />
+                <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-brand-100 text-brand-800 text-[11px] font-bold">
+                  <span className="w-1.5 h-1.5 rounded-full bg-brand animate-ping" />
                   {t('list.riderDispatched')}
                 </span>
               ) : (
-                <span className="text-[11px] font-bold text-orange-700 uppercase tracking-wider">
+                <span className="text-[11px] font-bold text-brand-ink uppercase tracking-wider">
                   {t('list.transit')}
                 </span>
               )}
             </div>
-            <div className="text-2xl sm:text-3xl font-black text-[#FF5500] tracking-tight">
+            <div className="text-2xl sm:text-3xl font-black text-brand-ink tracking-tight">
               {onTheWayCount}
             </div>
-            <div className="text-xs sm:text-sm font-semibold text-orange-700/80 mt-0.5">
+            <div className="text-xs sm:text-sm font-semibold text-brand-ink/80 mt-0.5">
               {t('list.onTheWay')}
             </div>
           </div>
@@ -493,14 +493,14 @@ function OrdersContent() {
                   onClick={() => setFilter(tab.id)}
                   className={`inline-flex items-center gap-2 px-3.5 sm:px-4 py-2 rounded-xl sm:rounded-2xl text-xs sm:text-sm font-bold whitespace-nowrap transition-all duration-150 cursor-pointer ${
                     active
-                      ? 'bg-[#FF5500] text-white shadow-xs'
+                      ? 'bg-brand text-on-brand shadow-xs'
                       : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100/80'
                   }`}
                 >
                   {tab.hasDot && (
                     <span
                       className={`w-2 h-2 rounded-full ${
-                        active ? 'bg-white' : 'bg-[#FF5500] animate-pulse'
+                        active ? 'bg-white' : 'bg-brand animate-pulse'
                       }`}
                     />
                   )}
@@ -528,7 +528,7 @@ function OrdersContent() {
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder={t('list.searchPlaceholder')}
               aria-label={t('list.searchPlaceholder')}
-              className="w-full ps-9 pe-3.5 py-2 rounded-xl text-xs sm:text-sm bg-slate-50 border border-slate-200/90 text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-[#FF5500]/20 focus:border-[#FF5500] transition-all"
+              className="w-full ps-9 pe-3.5 py-2 rounded-xl text-xs sm:text-sm bg-slate-50 border border-slate-200/90 text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-brand/20 focus:border-brand transition-all"
             />
             {searchQuery && (
               <button
@@ -547,14 +547,14 @@ function OrdersContent() {
         {/* ============================================================ */}
         {loading ? (
           <div className="bg-white rounded-3xl p-12 text-center border border-slate-200/80 shadow-xs">
-            <div className="w-10 h-10 border-3 border-[#FF5500] border-t-transparent rounded-full animate-spin mx-auto mb-3" />
+            <div className="w-10 h-10 border-3 border-brand border-t-transparent rounded-full animate-spin mx-auto mb-3" />
             <p className="text-sm font-bold text-slate-800">{t('list.loadingTitle')}</p>
             <p className="text-xs text-slate-500 mt-1">{t('list.loadingSub')}</p>
           </div>
         ) : filteredOrders.length === 0 ? (
           /* Empty State */
           <div className="bg-gradient-to-b from-white to-slate-50/60 rounded-3xl p-8 sm:p-14 text-center border border-slate-200/90 shadow-2xs">
-            <div className="w-20 h-20 rounded-3xl bg-orange-50 border border-orange-200/70 flex items-center justify-center mx-auto mb-4 text-[#FF5500] shadow-inner">
+            <div className="w-20 h-20 rounded-3xl bg-brand-50 border border-brand-200/70 flex items-center justify-center mx-auto mb-4 text-brand-ink shadow-inner">
               <Package className="w-10 h-10" />
             </div>
             <h3 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight mb-2">
@@ -573,7 +573,7 @@ function OrdersContent() {
             </p>
             <div className="flex items-center justify-center gap-3">
               <Link href="/dashboard">
-                <Button className="bg-[#FF5500] hover:bg-[#e04b00] text-white font-bold px-6 py-2.5 rounded-2xl shadow-sm">
+                <Button className="bg-brand hover:bg-brand-500 text-on-brand font-bold px-6 py-2.5 rounded-2xl shadow-sm">
                   <ShoppingBag className="w-4 h-4 me-2" /> {t('list.exploreKitchens')}
                 </Button>
               </Link>
@@ -599,11 +599,11 @@ function OrdersContent() {
               return (
                 <div
                   key={order.id}
-                  className="group relative bg-white rounded-3xl border border-slate-200/90 hover:border-[#FF5500]/60 shadow-2xs hover:shadow-md transition-all duration-200 overflow-hidden"
+                  className="group relative bg-white rounded-3xl border border-slate-200/90 hover:border-brand/60 shadow-2xs hover:shadow-md transition-all duration-200 overflow-hidden"
                 >
                   {/* Subtle top accent bar for active orders */}
                   {isActive && (
-                    <div className="h-1 w-full bg-gradient-to-r from-amber-400 via-[#FF5500] to-orange-500" />
+                    <div className="h-1 w-full bg-gradient-to-r from-amber-400 via-brand to-brand" />
                   )}
 
                   <div className="p-4 sm:p-6 space-y-4">
@@ -612,7 +612,7 @@ function OrdersContent() {
                       <div className="flex flex-wrap items-center gap-2.5">
                         <Link
                           href={`/orders/${order.id}`}
-                          className="text-base sm:text-lg font-black text-slate-900 hover:text-[#FF5500] transition-colors flex items-center gap-1.5"
+                          className="text-base sm:text-lg font-black text-slate-900 hover:text-brand-ink transition-colors flex items-center gap-1.5"
                         >
                           <span>{t('list.orderNumber', { number: order.orderNumber })}</span>
                           <ExternalLink className="w-3.5 h-3.5 opacity-0 group-hover:opacity-100 transition-opacity text-slate-500" />
@@ -648,9 +648,9 @@ function OrdersContent() {
 
                     {/* Active Order Stepper Progress Tracker */}
                     {isActive && (
-                      <div className="bg-gradient-to-r from-slate-50/80 to-orange-50/40 rounded-2xl p-3.5 border border-slate-100">
+                      <div className="bg-gradient-to-r from-slate-50/80 to-brand-50/40 rounded-2xl p-3.5 border border-slate-100">
                         <div className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-2 flex items-center gap-1.5">
-                          <Flame className="w-3.5 h-3.5 text-[#FF5500]" />
+                          <Flame className="w-3.5 h-3.5 text-brand-ink" />
                           {t('list.liveTracking')}
                         </div>
                         <div className="grid grid-cols-4 gap-2 relative">
@@ -668,7 +668,7 @@ function OrdersContent() {
                                 <div
                                   className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold transition-all ${
                                     isCurrent
-                                      ? 'bg-[#FF5500] text-white shadow-xs ring-4 ring-orange-100 animate-pulse'
+                                      ? 'bg-brand text-on-brand shadow-xs ring-4 ring-brand-100 animate-pulse'
                                       : isDone
                                       ? 'bg-emerald-600 text-white'
                                       : 'bg-slate-200 text-slate-400'
@@ -679,7 +679,7 @@ function OrdersContent() {
                                 <span
                                   className={`text-[11px] font-bold mt-1.5 ${
                                     isCurrent
-                                      ? 'text-[#FF5500]'
+                                      ? 'text-brand-ink'
                                       : isDone
                                       ? 'text-slate-800'
                                       : 'text-slate-400'
@@ -704,7 +704,7 @@ function OrdersContent() {
                                 key={it.id ?? iIdx}
                                 className="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl bg-slate-50 border border-slate-200/70 text-xs font-bold text-slate-800"
                               >
-                                <span className="w-5 h-5 rounded-md bg-white border border-slate-200 flex items-center justify-center text-[11px] font-black text-[#FF5500]">
+                                <span className="w-5 h-5 rounded-md bg-white border border-slate-200 flex items-center justify-center text-[11px] font-black text-brand-ink">
                                   {it.quantity || 1}×
                                 </span>
                                 <span className="truncate max-w-[180px] sm:max-w-[240px]">
@@ -737,7 +737,7 @@ function OrdersContent() {
                               type="button"
                               onClick={(e) => handleReorder(e, order)}
                               disabled={reorderingId === order.id}
-                              className="inline-flex items-center gap-1.5 px-3 sm:px-3.5 py-2 rounded-xl text-xs font-bold text-[#FF5500] bg-orange-50 hover:bg-[#FF5500] hover:text-white border border-orange-200/80 transition-all cursor-pointer shadow-2xs"
+                              className="inline-flex items-center gap-1.5 px-3 sm:px-3.5 py-2 rounded-xl text-xs font-bold text-brand-ink bg-brand-50 hover:bg-brand hover:text-on-brand border border-brand-200/80 transition-all cursor-pointer shadow-2xs"
                               title={t('list.reorderTitle')}
                             >
                               <RotateCcw className={`w-3.5 h-3.5 ${reorderingId === order.id ? 'animate-spin' : ''}`} />

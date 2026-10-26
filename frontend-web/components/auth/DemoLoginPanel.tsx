@@ -101,7 +101,7 @@ export function DemoDevLink() {
   return (
     <Link
       href="/dev-login"
-      className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-orange-50 hover:bg-orange-100 border border-orange-200 text-orange-800 text-xs font-bold transition-all shadow-2xs"
+      className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-brand-50 hover:bg-brand-100 border border-brand-200 text-brand-800 text-xs font-bold transition-all shadow-2xs"
     >
       <Layers className="w-3.5 h-3.5" />
       <span>Multi-Tab Isolator</span>
@@ -151,11 +151,11 @@ export function DemoLoginPanel({ onAutofill, onError, busy }: { onAutofill: (ema
     <div className="lg:col-span-7 bg-slate-50/80 rounded-2xl p-5 sm:p-6 border border-slate-200/70">
       <div className="flex items-center justify-between mb-4">
         <div>
-          <span className="text-[11px] font-bold tracking-wider text-[#FF5500] bg-orange-100/80 px-2.5 py-0.5 rounded-full uppercase">
+          <span className="text-[11px] font-bold tracking-wider text-brand-ink bg-brand-100/80 px-2.5 py-0.5 rounded-full uppercase">
             Instant Access
           </span>
           <h2 className="text-lg font-bold text-slate-900 mt-2 flex items-center gap-2">
-            <Sparkles className="w-4 h-4 text-[#FF5500]" />
+            <Sparkles className="w-4 h-4 text-brand-ink" />
             <span>Quick Login via Role</span>
           </h2>
           <p className="text-xs text-slate-500 mt-0.5">
@@ -173,7 +173,7 @@ export function DemoLoginPanel({ onAutofill, onError, busy }: { onAutofill: (ema
           return (
             <div
               key={acc.id}
-              className="bg-white rounded-2xl p-4 border border-slate-200 shadow-2xs hover:shadow-xs hover:border-orange-300 transition-all flex flex-col justify-between"
+              className="bg-white rounded-2xl p-4 border border-slate-200 shadow-2xs hover:shadow-xs hover:border-brand-300 transition-all flex flex-col justify-between"
             >
               <div>
                 <div className="flex items-start justify-between gap-2 mb-2">
@@ -202,7 +202,7 @@ export function DemoLoginPanel({ onAutofill, onError, busy }: { onAutofill: (ema
                   type="button"
                   onClick={() => quickLogin(acc)}
                   disabled={isCurrentLoading || busy}
-                  className="flex-1 py-2 px-3 rounded-xl bg-slate-900 hover:bg-[#FF5500] text-white text-xs font-bold transition-all flex items-center justify-center gap-1.5 shadow-xs active:scale-95 disabled:opacity-50"
+                  className="flex-1 py-2 px-3 rounded-xl bg-slate-900 hover:bg-brand hover:text-on-brand text-white text-xs font-bold transition-all flex items-center justify-center gap-1.5 shadow-xs active:scale-95 disabled:opacity-50"
                 >
                   {isCurrentLoading ? (
                     <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
@@ -234,7 +234,7 @@ export function DemoLoginPanel({ onAutofill, onError, busy }: { onAutofill: (ema
         </span>
         <Link
           href="/dev-login"
-          className="font-bold text-[#FF5500] hover:underline ms-2 flex-shrink-0"
+          className="font-bold text-brand-ink hover:underline ms-2 flex-shrink-0"
         >
           Open Tab Isolator →
         </Link>

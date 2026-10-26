@@ -283,7 +283,7 @@ export default function ProfilePage() {
                   profile?.userType === 'seller'
                     ? 'bg-purple-100 text-purple-800'
                     : profile?.userType === 'rider'
-                    ? 'bg-orange-100 text-orange-800'
+                    ? 'bg-brand-100 text-brand-800'
                     : 'bg-green-100 text-green-800'
                 }`}>
                   {profile?.userType === 'seller' ? <Store className="w-3.5 h-3.5" /> : profile?.userType === 'rider' ? <Bike className="w-3.5 h-3.5" /> : <ShoppingCart className="w-3.5 h-3.5" />}
@@ -318,7 +318,7 @@ export default function ProfilePage() {
                 <ArrowRight className="rtl:-scale-x-100 w-4 h-4 text-gray-500 group-hover:translate-x-1 transition-transform" />
               </Link>
               <Link href="/orders" className="flex items-center gap-3 p-3 rounded-xl hover:bg-gray-50 transition-colors group">
-                <div className="w-10 h-10 bg-orange-100 rounded-lg flex items-center justify-center text-orange-600">
+                <div className="w-10 h-10 bg-brand-100 rounded-lg flex items-center justify-center text-brand-ink">
                   <Package className="w-5 h-5" />
                 </div>
                 <div className="flex-1">
@@ -362,7 +362,7 @@ export default function ProfilePage() {
             <div className="flex items-center justify-between mb-6">
               <div>
                 <h2 className="text-lg font-bold text-gray-900 flex items-center gap-2">
-                  <User className="w-5 h-5 text-[#FF5500]" /> {t('personalInfo')}
+                  <User className="w-5 h-5 text-brand-ink" /> {t('personalInfo')}
                 </h2>
                 <p className="text-sm text-gray-500">{t('personalInfoDesc')}</p>
               </div>
@@ -476,7 +476,7 @@ export default function ProfilePage() {
                         setVerifyingPhone(true);
                         setPhoneInput(hasRealPhone ? profile!.phone : '');
                       }}
-                      className="mt-2 text-xs font-bold text-[#FF5500] hover:underline"
+                      className="mt-2 text-xs font-bold text-brand-ink hover:underline"
                     >
                       {hasRealPhone ? t('verifyThisNumber') : t('addVerifyPhone')}
                     </button>
@@ -551,7 +551,7 @@ export default function ProfilePage() {
                 <div className="p-4 bg-gray-50 rounded-xl">
                   <p className="text-xs text-gray-500 uppercase tracking-wide mb-1">{t('accountType')}</p>
                   <p className="font-semibold text-gray-900 flex items-center gap-2">
-                    {profile?.userType === 'seller' ? <Store className="w-4 h-4 text-purple-600" /> : profile?.userType === 'rider' ? <Bike className="w-4 h-4 text-orange-600" /> : <ShoppingCart className="w-4 h-4 text-green-600" />}
+                    {profile?.userType === 'seller' ? <Store className="w-4 h-4 text-purple-600" /> : profile?.userType === 'rider' ? <Bike className="w-4 h-4 text-brand-ink" /> : <ShoppingCart className="w-4 h-4 text-green-600" />}
                     <span className="capitalize">{roleLabel(profile?.userType)}</span>
                   </p>
                 </div>
@@ -586,12 +586,12 @@ export default function ProfilePage() {
                     data-testid={`language-option-${code}`}
                     className={`flex items-center justify-between gap-2 p-4 rounded-xl border-2 text-start font-semibold transition-colors ${
                       selected
-                        ? 'border-[#FF5500] bg-orange-50 text-gray-900'
+                        ? 'border-brand bg-brand-50 text-gray-900'
                         : 'border-gray-200 bg-white text-gray-700 hover:border-gray-300'
                     }`}
                   >
                     <span>{LOCALE_NAMES[code]}</span>
-                    {selected && <Check className="w-4 h-4 text-[#FF5500]" />}
+                    {selected && <Check className="w-4 h-4 text-brand-ink" />}
                   </button>
                 );
               })}

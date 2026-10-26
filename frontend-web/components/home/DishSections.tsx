@@ -45,7 +45,7 @@ export function DishCard({ dish, onAdd, note }: { dish: HomeDish; onAdd: AddDish
         {dish.typeLabel && (
           <span
             className={`absolute top-2 start-2 px-1.5 py-0.5 rounded-md text-white text-[11px] font-bold flex items-center gap-0.5 ${
-              dish.isFrozen ? 'bg-cyan-600' : 'bg-[#FF5500]'
+              dish.isFrozen ? 'bg-cyan-600' : 'bg-brand-700'
             }`}
           >
             {dish.isFrozen ? <Snowflake className="w-2.5 h-2.5" /> : <Flame className="w-2.5 h-2.5" />}
@@ -56,7 +56,7 @@ export function DishCard({ dish, onAdd, note }: { dish: HomeDish; onAdd: AddDish
         {/* Direct Add to Cart Button */}
         <button
           onClick={(e) => onAdd(dish, e)}
-          className="absolute bottom-2 end-2 w-8 h-8 rounded-full bg-[#FF5500] hover:bg-[#e04400] text-white shadow-md flex items-center justify-center font-bold text-sm transition-transform active:scale-95"
+          className="absolute bottom-2 end-2 w-8 h-8 rounded-full bg-brand hover:bg-brand-500 text-on-brand shadow-md flex items-center justify-center font-bold text-sm transition-transform active:scale-95"
           title={t('addToTray')}
           aria-label={t('addNameToTray', { name: dish.name })}
         >
@@ -67,12 +67,12 @@ export function DishCard({ dish, onAdd, note }: { dish: HomeDish; onAdd: AddDish
       {/* Dish Info */}
       <div className="p-3 flex-1 flex flex-col justify-between">
         <div>
-          {note && <p className="text-[11px] font-bold text-[#FF5500] truncate mb-0.5">{note}</p>}
+          {note && <p className="text-[11px] font-bold text-brand-ink truncate mb-0.5">{note}</p>}
           <p className="text-[11px] font-semibold text-slate-500 truncate flex items-center gap-1">
             <ChefHat className="w-3 h-3 text-slate-400" />
             <span>{dish.kitchenName}</span>
           </p>
-          <h4 className="text-xs font-bold text-slate-900 leading-snug line-clamp-2 mt-0.5 group-hover:text-[#FF5500] transition-colors">
+          <h4 className="text-xs font-bold text-slate-900 leading-snug line-clamp-2 mt-0.5 group-hover:text-brand-ink transition-colors">
             {dish.name}
           </h4>
         </div>
@@ -151,14 +151,14 @@ export function PopularDishes({
     <section className="max-w-[1440px] mx-auto px-4 sm:px-8 py-8">
       <div className="flex items-center justify-between mb-5">
         <div>
-          <div className="inline-flex items-center gap-1 text-[11px] font-bold uppercase tracking-wider text-[#FF5500] mb-0.5">
+          <div className="inline-flex items-center gap-1 text-[11px] font-bold uppercase tracking-wider text-brand-ink mb-0.5">
             <UtensilsCrossed className="w-3.5 h-3.5" />
             <span>{t('fromHomeKitchens')}</span>
           </div>
           <h2 className="text-xl sm:text-2xl font-bold text-slate-900 tracking-tight">{t('popularDishes')}</h2>
           <p className="text-xs text-slate-500 font-medium mt-0.5">{t('popularDishesSub')}</p>
         </div>
-        <Link href="/products" className="text-xs font-bold text-[#FF5500] hover:underline flex items-center gap-1">
+        <Link href="/products" className="text-xs font-bold text-brand-ink hover:underline flex items-center gap-1">
           <span>{t('exploreAllDishes')}</span>
           <ChevronRight className="rtl:-scale-x-100 w-3.5 h-3.5" />
         </Link>

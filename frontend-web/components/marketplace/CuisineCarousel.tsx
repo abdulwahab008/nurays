@@ -123,7 +123,7 @@ export function CuisineCarousel({ selectedCuisine, onSelectCuisine }: CuisineCar
               }}
               className={`flex-shrink-0 flex flex-col items-center gap-1.5 group/card px-2 py-1.5 rounded-xl transition-all ${
                 isSelected
-                  ? 'bg-orange-50/80 scale-102'
+                  ? 'bg-brand-50/80 scale-102'
                   : 'hover:bg-slate-50'
               }`}
             >
@@ -131,7 +131,7 @@ export function CuisineCarousel({ selectedCuisine, onSelectCuisine }: CuisineCar
               <div
                 className={`relative w-14 h-14 sm:w-16 sm:h-16 rounded-full overflow-hidden border transition-all shadow-2xs ${
                   isSelected
-                    ? 'border-[#FF5500] ring-2 ring-orange-500/20 shadow-xs'
+                    ? 'border-brand ring-2 ring-brand/20 shadow-xs'
                     : 'border-slate-200 group-hover/card:border-slate-300'
                 }`}
               >
@@ -152,7 +152,7 @@ export function CuisineCarousel({ selectedCuisine, onSelectCuisine }: CuisineCar
               {/* Label */}
               <div className="text-center max-w-[84px]">
                 <span className={`block text-xs font-semibold truncate transition-colors ${
-                  isSelected ? 'text-[#FF5500]' : 'text-slate-700 group-hover/card:text-slate-950'
+                  isSelected ? 'text-brand-ink' : 'text-slate-700 group-hover/card:text-slate-950'
                 }`}>
                   {cuisineLabel(item)}
                 </span>

@@ -1113,7 +1113,7 @@ export default function RiderDashboardPage() {
                           <button
                             type="button"
                             onClick={showOlderDeliveries}
-                            className="text-xs font-bold text-[#FF5500] hover:underline"
+                            className="text-xs font-bold text-brand-ink hover:underline"
                           >
                             {t('showOlder')}
                           </button>

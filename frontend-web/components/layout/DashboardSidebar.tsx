@@ -236,11 +236,13 @@ function DashboardSidebarContent({ items: allItems, userType }: DashboardSidebar
     }
   };
 
-  // Flame for customer/admin, dark slate for seller, emerald for rider
-  const accentColor = effectiveUserType === 'seller' ? '#0F172A' : effectiveUserType === 'rider' ? '#059669' : '#FF5500';
-  const accentSoft = effectiveUserType === 'seller' ? '#F1F5F9' : effectiveUserType === 'rider' ? '#ECFDF5' : '#FFF5ED';
-  // Text on the tinted background: the brand orange is only 3:1 there, this is 5:1.
-  const accentText = effectiveUserType === 'seller' ? '#0F172A' : effectiveUserType === 'rider' ? '#065F46' : '#C2410C';
+  // Turquoise for everyone but the kitchen, whose menu is ink. Theme tokens, so the dark theme follows.
+  const seller = effectiveUserType === 'seller';
+  const accentColor = seller ? 'var(--fg-default)' : '#41DAC7';
+  const accentOn = seller ? 'var(--fg-inverse)' : '#06302B';
+  const accentSoft = seller ? 'var(--bg-raised)' : 'var(--brand-soft)';
+  // Words on the tinted background use the dark turquoise: the bright one is 1.8:1 there.
+  const accentText = seller ? 'var(--fg-default)' : 'var(--brand-soft-ink)';
 
   const getIcon = (iconKey: string) => {
     const IconComponent = IconComponents[iconKey] || DefaultIcon;
@@ -276,7 +278,7 @@ function DashboardSidebarContent({ items: allItems, userType }: DashboardSidebar
                     className="group flex-1 flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all duration-200 relative"
                     style={{
                       background: isSelfActive ? accentSoft : 'transparent',
-                      color: isSectionActive ? accentText : 'var(--ink-600)',
+                      color: isSectionActive ? accentText : 'var(--fg-muted)',
                       fontWeight: isSectionActive ? 600 : 400,
                     }}
                   >
@@ -289,7 +291,7 @@ function DashboardSidebarContent({ items: allItems, userType }: DashboardSidebar
                     {item.badge !== undefined && item.badge > 0 && (
                       <span
                         className="text-xs font-medium px-2 py-0.5 rounded-full min-w-[20px] text-center"
-                        style={{ background: accentColor, color: 'var(--cream-50)' }}
+                        style={{ background: accentColor, color: accentOn }}
                       >
                         {item.badge > 99 ? '99+' : item.badge}
                       </span>
@@ -327,7 +329,7 @@ function DashboardSidebarContent({ items: allItems, userType }: DashboardSidebar
                           className="flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-semibold transition-all duration-150 relative group/sub"
                           style={{
                             background: isSubActive ? accentSoft : 'transparent',
-                            color: isSubActive ? accentText : '#64748B',
+                            color: isSubActive ? accentText : 'var(--fg-muted)',
                             fontWeight: isSubActive ? 700 : 500,
                           }}
                         >
@@ -347,7 +349,7 @@ function DashboardSidebarContent({ items: allItems, userType }: DashboardSidebar
                           {sub.badge !== undefined && sub.badge > 0 && (
                             <span
                               className="text-[11px] font-bold px-1.5 py-0.5 rounded-full"
-                              style={{ background: accentColor, color: '#FFFFFF' }}
+                              style={{ background: accentColor, color: accentOn }}
                             >
                               {sub.badge}
                             </span>
