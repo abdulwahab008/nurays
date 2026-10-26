@@ -3,6 +3,7 @@
  * of one order, who may read a kitchen's raw variants, what logging out ends, what changing an
  * e-mail address needs, and where a password-reset link is not sent.
  */
+import { randomBytes } from 'crypto';
 import { call, deepKeys, login, makeKitchen, makeProduct, makeRider, makeUser, ok, PASSWORD, placeHomeOrder, acceptOrder, claimJob, prisma, sleep, unique } from './lib';
 
 const claims = (token: string) => JSON.parse(Buffer.from(token.split('.')[1], 'base64url').toString());
@@ -72,6 +73,37 @@ export default async function security() {
   ok('"sign out everywhere" answers 200', everywhere.status === 200, everywhere.code);
   ok('and ends every session and forgets every push subscription of the account', (await call(leaverPhone.access, 'GET', '/auth/me')).status === 401 && (await call(null, 'POST', '/auth/refresh', { refreshToken: leaverPhone.refresh })).status === 401 && (await prisma.pushSubscription.count({ where: { userId: leaver.id } })) === 0 && (await prisma.pushSubscription.count({ where: { userId: staying.id } })) === 1);
   ok('"sign out everywhere" leaves a trail', (await prisma.auditLog.count({ where: { userId: leaver.id, action: 'auth:LOGOUT_ALL' } })) === 1);
+
+  // 4a. the store apps subscribe with their device token (an FCM token on Android, an APNs token on an iPhone)
+  const appUser = await makeUser('customer');
+  const appPhone = await login(appUser.email);
+  const fcmToken = `fcm-${appUser.id}-0123456789abcdefghijklmnopqrstuvwxyz:APA91b`;
+  const apnsToken = randomBytes(32).toString('hex');
+  const appSubscribed = [
+    await appUser.as('POST', '/notifications/push/subscriptions', { platform: 'android', token: fcmToken }),
+    await call(appPhone.access, 'POST', '/notifications/push/subscriptions', { platform: 'ios', token: apnsToken }),
+  ];
+  const appRows = await prisma.pushSubscription.findMany({ where: { userId: appUser.id }, select: { platform: true, endpoint: true, p256dh: true, auth: true }, orderBy: { platform: 'asc' } });
+  ok(
+    'an Android and an iPhone app subscribe with their tokens, kept with their platform and no web keys',
+    appSubscribed.every((r) => r.status === 201) && JSON.stringify(appRows) === JSON.stringify([{ platform: 'android', endpoint: fcmToken, p256dh: null, auth: null }, { platform: 'ios', endpoint: apnsToken, p256dh: null, auth: null }]),
+    `${appSubscribed.map((r) => r.status).join()} ${JSON.stringify(appRows)}`
+  );
+  const refusedDevices = [
+    await appUser.as('POST', '/notifications/push/subscriptions', { platform: 'android', token: 'short' }),
+    await appUser.as('POST', '/notifications/push/subscriptions', { platform: 'ios', token: `${'a'.repeat(40)}<script>` }),
+    await appUser.as('POST', '/notifications/push/subscriptions', { platform: 'windows', token: fcmToken }),
+    await appUser.as('POST', '/notifications/push/subscriptions', { platform: 'web', endpoint: 'https://push.example.test/no-keys' }),
+  ];
+  ok('a token too short or with odd characters, an unknown platform, and a browser without its keys are refused (400)', refusedDevices.every((r) => r.status === 400 && r.code === 'VALIDATION_ERROR'), refusedDevices.map((r) => `${r.status} ${r.code}`).join(' | '));
+  const keyless = await prisma.$executeRawUnsafe(`INSERT INTO push_subscriptions (id, user_id, endpoint, platform) VALUES (gen_random_uuid()::text, $1, 'https://push.example.test/keyless', 'web')`, appUser.id).then(() => 'stored', () => 'refused');
+  ok('and the database itself refuses a browser subscription without keys', keyless === 'refused', keyless);
+  const keysOut = await appUser.as('GET', '/notifications/push/public-key');
+  ok('the public-key answer says which kinds of device this server can reach', typeof keysOut.body.data?.platforms?.android === 'boolean' && typeof keysOut.body.data?.platforms?.ios === 'boolean', JSON.stringify(keysOut.body.data));
+  const appOff = await call(appPhone.access, 'DELETE', '/notifications/push/subscriptions', { token: apnsToken });
+  ok('the iPhone app turns push off by its token', appOff.status === 200 && (await prisma.pushSubscription.count({ where: { endpoint: apnsToken } })) === 0, `${appOff.status} ${appOff.code}`);
+  const appOut = await appUser.as('POST', '/auth/logout', { pushEndpoint: fcmToken });
+  ok('and the Android app signing out forgets its token', appOut.status === 200 && (await prisma.pushSubscription.count({ where: { userId: appUser.id } })) === 0, `${appOut.status} ${appOut.code}`);
 
   // 4b. refresh tokens rotate: each works once, and a copied one that comes back ends its session (SEC-2)
   const rotator = await makeUser('customer');

@@ -141,3 +141,41 @@ test('the proof carries the ID token, and the name Apple gives at the first sign
   assert.equal(proofFromLogin('google', { idToken: null }), null);
   assert.equal(proofFromLogin('apple', {}), null);
 });
+
+test('the push token comes from the registration event, and a failure or silence rejects', async () => {
+  const { nativePushToken } = await import('../../lib/native-shell.ts');
+  type Cb = (e: unknown) => void;
+  const phone = (answer: (listeners: Record<string, Cb>) => void) => {
+    const listeners: Record<string, Cb> = {};
+    let removed = 0;
+    const plugin = {
+      checkPermissions: async () => ({ receive: 'granted' }),
+      requestPermissions: async () => ({ receive: 'granted' }),
+      register: async () => answer(listeners),
+      addListener: async (event: string, cb: Cb) => {
+        listeners[event] = cb;
+        return { remove: async () => void removed++ };
+      },
+    };
+    return { plugin: plugin as unknown as Parameters<typeof nativePushToken>[0], removed: () => removed };
+  };
+
+  const ok = phone((l) => l.registration({ value: 'fcm-token-1' }));
+  assert.equal(await nativePushToken(ok.plugin), 'fcm-token-1');
+  await new Promise((r) => setTimeout(r, 0));
+  assert.equal(ok.removed(), 2, 'both listeners are removed afterwards');
+
+  await assert.rejects(nativePushToken(phone((l) => l.registrationError({ error: 'no Play services' })).plugin), /no Play services/);
+  await assert.rejects(nativePushToken(phone((l) => l.registration({ value: '' })).plugin), /empty/);
+  await assert.rejects(nativePushToken(phone(() => undefined).plugin, 20), /no push token/);
+});
+
+test('a tapped notification opens only a path on this site', async () => {
+  const { notificationPath } = await import('../../lib/native-shell.ts');
+  assert.equal(notificationPath({ url: '/seller/orders/12' }), '/seller/orders/12');
+  assert.equal(notificationPath({ url: 'https://evil.example/x' }), null);
+  assert.equal(notificationPath({ url: '//evil.example/x' }), null);
+  assert.equal(notificationPath({ url: '/\\evil.example' }), null);
+  assert.equal(notificationPath({ url: 42 }), null);
+  assert.equal(notificationPath(undefined), null);
+});

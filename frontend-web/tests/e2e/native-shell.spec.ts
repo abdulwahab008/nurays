@@ -1,5 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
-import { newCustomer } from './support/customer';
+import { dbQuery, newCustomer, signIn } from './support/customer';
 
 // The website inside the Nuray store app (mobile/): a stand-in for the app's shell gives the page isNativePlatform and
 // the plugins it uses, recording every call (components/NativeBridge.tsx, lib/native-shell.ts).
@@ -39,6 +39,23 @@ async function asTheApp(page: Page, vault: Record<string, string> = {}, shell: S
         },
         StatusBar: { setStyle: async (o: { style: string }) => void calls.push(`status ${o.style}`) },
         SplashScreen: { hide: async () => void calls.push('splash hidden') },
+        // The phone's push: permission granted when asked, and a token from FCM once registered.
+        PushNotifications: {
+          checkPermissions: async () => ({ receive: sessionStorage.getItem('__push') ?? 'prompt' }),
+          requestPermissions: async () => {
+            calls.push('push permission asked');
+            sessionStorage.setItem('__push', 'granted');
+            return { receive: 'granted' };
+          },
+          register: async () => {
+            calls.push('push register');
+            setTimeout(() => listeners.registration?.({ value: 'fcm-token-e2e-0123456789abcdefghijklmnop' }), 10);
+          },
+          addListener: async (event: string, cb: (e: unknown) => void) => {
+            listeners[event] = cb;
+            return { remove: async () => undefined };
+          },
+        },
         SecureStorage: {
           internalGetItem: async ({ prefixedKey }: { prefixedKey: string }) => ({ data: vaultNow[prefixedKey] ?? null }),
           internalSetItem: async ({ prefixedKey, data }: { prefixedKey: string; data: string }) => {
@@ -138,5 +155,39 @@ test.describe('the website inside the store app', () => {
     await page.waitForTimeout(1500);
     expect(loads).toBe(0);
     expect(await pageRefreshToken()).toBe(tokens.refresh_token);
+  });
+
+  test('push in the Android app: turned on with the phone token, a tap opens its page, turned off again', async ({ page }) => {
+    const customer = await newCustomer();
+    test.skip(!customer.jwt, 'the API is not running');
+    const token = 'fcm-token-e2e-0123456789abcdefghijklmnop';
+    dbQuery(`DELETE FROM push_subscriptions WHERE endpoint = '${token}'`);
+    // CI's server has no Firebase key, so its answer stands in for one that has (saving the token is real).
+    await page.route('**/notifications/push/public-key', (route) =>
+      route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ success: true, data: { publicKey: null, platforms: { web: false, android: true, ios: false } } }) })
+    );
+    await signIn(page, customer);
+    await asTheApp(page, {}, { platform: 'android' });
+    await page.goto('/notifications/settings');
+
+    const saved = page.waitForRequest((r) => r.url().endsWith('/notifications/push/subscriptions') && r.method() === 'POST');
+    await page.getByTestId('push-toggle').click();
+    expect((await saved).postDataJSON()).toEqual({ platform: 'android', token });
+    await expect(page.getByTestId('push-toggle')).toHaveText(/off/i);
+    expect(await calls(page)).toEqual(expect.arrayContaining(['push permission asked', 'push register']));
+    expect(dbQuery(`SELECT platform || ':' || (p256dh IS NULL) FROM push_subscriptions WHERE endpoint = '${token}' AND user_id = '${customer.id}'`)).toBe('android:true');
+
+    await fire(page, 'pushNotificationActionPerformed', { notification: { data: { url: '/orders' } } });
+    await expect(page).toHaveURL(/\/orders$/);
+    await fire(page, 'pushNotificationActionPerformed', { notification: { data: { url: 'https://evil.example/' } } });
+    await page.waitForTimeout(300);
+    await expect(page).toHaveURL(/\/orders$/);
+
+    await page.goto('/notifications/settings');
+    await expect(page.getByTestId('push-toggle')).toHaveText(/off/i);
+    const removed = page.waitForResponse((r) => r.url().endsWith('/notifications/push/subscriptions') && r.request().method() === 'DELETE');
+    await page.getByTestId('push-toggle').click();
+    expect((await removed).status()).toBe(200);
+    expect(dbQuery(`SELECT count(*) FROM push_subscriptions WHERE endpoint = '${token}'`)).toBe('0');
   });
 });
