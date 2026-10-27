@@ -156,7 +156,7 @@ export default function AdminSellerDetailPage() {
         <div className="mb-6">
           <Link
             href="/admin/sellers"
-            className="text-green-600 hover:text-green-700 text-sm font-medium mb-2 inline-block"
+            className="text-brand-ink hover:underline text-sm font-medium mb-2 inline-block"
           >
             ← Back to All Sellers
           </Link>

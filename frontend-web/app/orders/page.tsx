@@ -508,7 +508,7 @@ function OrdersContent() {
                   <span
                     className={`px-1.5 py-0.2 rounded-md text-[11px] font-extrabold ${
                       active
-                        ? 'bg-black/20 text-white'
+                        ? 'bg-on-brand text-brand'
                         : 'bg-slate-100 text-slate-500'
                     }`}
                   >

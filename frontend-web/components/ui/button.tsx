@@ -14,7 +14,8 @@ const variantClass: Record<NonNullable<ButtonProps['variant']>, string> = {
   default: 'bg-brand text-on-brand hover:bg-brand-500',
   primary: 'bg-brand text-on-brand hover:bg-brand-500 font-bold',
   dark: 'bg-ink text-page hover:opacity-90',
-  outline: 'bg-surface text-ink border border-line-strong hover:bg-raised',
+  // See-through, as before the redesign: an outline button on a dark bar keeps the bar's colour behind its light words.
+  outline: 'bg-transparent text-ink border border-line-strong hover:bg-raised',
   ghost: 'bg-transparent text-brand-ink hover:bg-brand-soft',
   destructive: 'bg-red-700 text-white hover:bg-red-800',
 };
