@@ -14,6 +14,8 @@ Food photos carry the colour everywhere else.
 | `text-brand-ink` | #0A7A6E | #6FE5D5 | A link or a turquoise word on the page. |
 | `bg-brand-soft` / `text-brand-soft-ink` | #DDF8F4 / #06594F | #123C38 / #8AEBDD | A tag, a selected row. |
 | `bg-accent` / `text-on-accent` | #FFC83D / #2B2100 | same | A deal, a count. Never yellow words on white. |
+| `bg-accent-soft` / `text-accent-soft-ink` | #FFF3CC / #5C4500 | #3A3010 / #FFD873 | A notice, a "New" tag, a rating box. |
+| `bg-frozen-soft` / `text-frozen-ink` | #E6ECFF / #2A47A8 | #1C2747 / #A9BCFF | A frozen dish tag. `bg-frozen` (#2A47A8) is the same blue in both themes and carries white words. |
 | `bg-page` | #F5F8F7 | #091614 | The page. |
 | `bg-surface` | #FFFFFF | #10201E | Cards, bars, sheets. |
 | `bg-raised` | #EAF2F0 | #172C29 | A field, a quiet button, a hover. |
@@ -22,6 +24,10 @@ Food photos carry the colour everywhere else.
 
 `brand-50` … `brand-950` and `accent-50` … `accent-900` are the full scales. `bg-brand-700` (#0A7A6E) is dark enough for
 white words when a turquoise block must carry them.
+
+Panels with their own colours (the yellow, night-teal and blue home cards, the numbers panel, the kitchen page's tray bar) keep
+them in both themes. Inside them use fixed colours (`text-white`, `bg-[#FFFFFF]`): the dark theme repaints `bg-white` and the grey
+classes as page colours, which would put light words on a light button.
 
 All of it is in `frontend-web/app/globals.css`: the values once for light (`:root`) and once for dark
 (`:root[data-theme="dark"]`), and the Tailwind names in `@theme`.

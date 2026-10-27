@@ -263,18 +263,20 @@ export default function KitchensDirectoryPage() {
   const renderToolbar = () => (
     <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4">
       <div className="relative flex-1 max-w-md">
-        <Search className="w-4 h-4 text-slate-500 absolute start-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+        <Search className="w-4 h-4 text-muted absolute start-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
         <input
           type="text"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           placeholder={tk('searchPlaceholder')}
-          className="w-full h-10 ps-10 pe-4 rounded-xl bg-slate-50 hover:bg-slate-100 focus:bg-white text-xs font-medium text-slate-900 placeholder:text-slate-400 border border-slate-200 focus:border-brand focus:ring-2 focus:ring-brand/10 outline-none transition-all"
+          aria-label={tk('searchPlaceholder')}
+          className="w-full h-12 ps-10 pe-10 rounded-[14px] bg-raised focus:bg-surface text-[15px] font-semibold text-ink placeholder:text-muted placeholder:font-medium border border-transparent focus:border-brand focus:ring-2 focus:ring-brand/20 outline-none transition-all"
         />
         {search && (
           <button
             onClick={() => setSearch('')}
-            className="absolute end-3 top-1/2 -translate-y-1/2 text-xs text-slate-500 hover:text-slate-600"
+            aria-label={tk('clearSearch')}
+            className="absolute end-2 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full text-sm text-muted hover:text-ink hover:bg-line"
           >
             ✕
           </button>
@@ -295,10 +297,9 @@ export default function KitchensDirectoryPage() {
             <button
               key={chip.id}
               onClick={() => setSelectedFilter(chip.id)}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition-all ${
-                isActive
-                  ? 'bg-slate-900 text-white shadow-xs'
-                  : 'bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200'
+              aria-pressed={isActive}
+              className={`flex-shrink-0 flex items-center gap-1.5 h-10 px-4 rounded-full text-sm font-bold whitespace-nowrap transition-colors ${
+                isActive ? 'bg-ink text-page' : 'bg-surface hover:bg-raised text-ink border border-line'
               }`}
             >
               <Icon className="w-3.5 h-3.5" />
@@ -307,14 +308,15 @@ export default function KitchensDirectoryPage() {
           );
         })}
 
-        <div className="h-4 w-px bg-slate-200 mx-1 hidden lg:block" />
+        <div className="h-4 w-px bg-line mx-1 hidden lg:block" />
 
-        <div className="hidden lg:flex items-center gap-1 text-xs text-slate-500">
+        <div className="hidden lg:flex flex-shrink-0 items-center gap-1 text-sm text-muted">
           <ArrowUpDown className="w-3.5 h-3.5" />
           <select
             value={sortBy}
             onChange={(e) => setSortBy(e.target.value as SortOption)}
-            className="bg-transparent text-xs font-semibold text-slate-700 outline-none cursor-pointer"
+            aria-label={tk('sortLabel')}
+            className="bg-transparent text-sm font-bold text-ink outline-none cursor-pointer"
           >
             <option value="rating">{tk('sortRating')}</option>
             <option value="reviews">{tk('sortReviews')}</option>
@@ -326,28 +328,28 @@ export default function KitchensDirectoryPage() {
 
   const renderLoadingSkeleton = () => (
     <div
-      className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-3 gap-6"
+      className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6"
       aria-busy="true"
       aria-label={tk('loadingKitchens')}
     >
       {Array.from({ length: 6 }).map((_, i) => (
         <div
           key={i}
-          className="bg-white rounded-2xl border border-slate-200/90 shadow-xs overflow-hidden animate-pulse"
+          className="bg-surface rounded-[20px] border border-line overflow-hidden animate-pulse"
         >
-          <div className="aspect-[16/10] w-full bg-slate-100" />
+          <div className="aspect-[16/10] w-full bg-raised" />
           <div className="p-4 space-y-3">
             <div className="flex items-center gap-2.5">
-              <div className="w-9 h-9 rounded-xl bg-slate-100 flex-shrink-0" />
+              <div className="w-9 h-9 rounded-xl bg-raised flex-shrink-0" />
               <div className="flex-1 space-y-1.5">
-                <div className="h-3.5 w-2/3 rounded bg-slate-100" />
-                <div className="h-2.5 w-1/2 rounded bg-slate-100" />
+                <div className="h-3.5 w-2/3 rounded bg-raised" />
+                <div className="h-2.5 w-1/2 rounded bg-raised" />
               </div>
             </div>
-            <div className="h-3 w-3/4 rounded bg-slate-100" />
-            <div className="pt-2.5 border-t border-slate-100 flex gap-1">
-              <div className="h-4 w-16 rounded-md bg-slate-100" />
-              <div className="h-4 w-12 rounded-md bg-slate-100" />
+            <div className="h-3 w-3/4 rounded bg-raised" />
+            <div className="pt-2.5 border-t border-line flex gap-1">
+              <div className="h-4 w-16 rounded-md bg-raised" />
+              <div className="h-4 w-12 rounded-md bg-raised" />
             </div>
           </div>
         </div>
@@ -356,15 +358,15 @@ export default function KitchensDirectoryPage() {
   );
 
   const renderKitchensGrid = (isPublic: boolean) => (
-    <div className={isPublic ? 'max-w-[1400px] mx-auto px-4 sm:px-6 py-8' : 'py-2'}>
+    <div className={isPublic ? 'max-w-[1280px] mx-auto px-4 sm:px-8 py-8' : 'py-2'}>
       {isReady && kitchens.length > 0 && (
         <div className="flex items-center justify-between mb-6">
-          <p className="text-xs font-semibold text-slate-500">
+          <p className="text-xs font-semibold text-muted">
             {tk(filteredKitchens.length === 1 ? 'showingVerifiedOne' : 'showingVerifiedMany')
               .split(/(\{count\})/)
               .map((part, i) =>
                 part === '{count}' ? (
-                  <span key={i} className="font-bold text-slate-900">{filteredKitchens.length}</span>
+                  <span key={i} className="font-bold text-ink">{filteredKitchens.length}</span>
                 ) : (
                   part
                 ),
@@ -386,39 +388,39 @@ export default function KitchensDirectoryPage() {
       ) : status === 'error' ? (
         <div
           role="alert"
-          className="bg-white rounded-2xl border border-slate-200 p-12 text-center max-w-md mx-auto my-12"
+          className="bg-surface rounded-[20px] border border-dashed border-line-strong p-10 text-center max-w-md mx-auto my-12"
         >
-          <div className="w-12 h-12 rounded-2xl bg-brand-50 text-brand-ink flex items-center justify-center mx-auto mb-3">
+          <div className="w-12 h-12 rounded-2xl bg-brand-soft text-brand-soft-ink flex items-center justify-center mx-auto mb-3">
             <ChefHat className="w-6 h-6" />
           </div>
-          <h3 className="text-base font-bold text-slate-900 mb-1">{tk('loadError')}</h3>
-          <p className="text-xs text-slate-500 mb-5">
+          <h3 className="text-base font-bold text-ink mb-1">{tk('loadError')}</h3>
+          <p className="text-xs text-muted mb-5">
             {tk('loadErrorBody')}
           </p>
           <button
             onClick={retry}
-            className="px-4 py-2 rounded-xl bg-slate-900 text-white text-xs font-semibold hover:bg-black transition-colors"
+            className="h-11 px-5 rounded-xl bg-brand text-on-brand text-sm font-extrabold hover:bg-brand-500 transition-colors"
           >
             {tk('tryAgain')}
           </button>
         </div>
       ) : kitchens.length === 0 ? (
-        <div className="bg-white rounded-2xl border border-slate-200 p-12 text-center max-w-md mx-auto my-12">
-          <div className="w-12 h-12 rounded-2xl bg-brand-50 text-brand-ink flex items-center justify-center mx-auto mb-3">
+        <div className="bg-surface rounded-[20px] border border-dashed border-line-strong p-10 text-center max-w-md mx-auto my-12">
+          <div className="w-12 h-12 rounded-2xl bg-brand-soft text-brand-soft-ink flex items-center justify-center mx-auto mb-3">
             <ChefHat className="w-6 h-6" />
           </div>
-          <h3 className="text-base font-bold text-slate-900 mb-1">{tk('noneListed')}</h3>
-          <p className="text-xs text-slate-500">
+          <h3 className="text-base font-bold text-ink mb-1">{tk('noneListed')}</h3>
+          <p className="text-xs text-muted">
             {tk('noneListedBody')}
           </p>
         </div>
       ) : filteredKitchens.length === 0 ? (
-        <div className="bg-white rounded-2xl border border-slate-200 p-12 text-center max-w-md mx-auto my-12">
-          <div className="w-12 h-12 rounded-2xl bg-brand-50 text-brand-ink flex items-center justify-center mx-auto mb-3">
+        <div className="bg-surface rounded-[20px] border border-dashed border-line-strong p-10 text-center max-w-md mx-auto my-12">
+          <div className="w-12 h-12 rounded-2xl bg-brand-soft text-brand-soft-ink flex items-center justify-center mx-auto mb-3">
             <ChefHat className="w-6 h-6" />
           </div>
-          <h3 className="text-base font-bold text-slate-900 mb-1">{tk('noMatch')}</h3>
-          <p className="text-xs text-slate-500 mb-5">
+          <h3 className="text-base font-bold text-ink mb-1">{tk('noMatch')}</h3>
+          <p className="text-xs text-muted mb-5">
             {tk('noMatchBody')}
           </p>
           <button
@@ -426,13 +428,13 @@ export default function KitchensDirectoryPage() {
               setSearch('');
               setSelectedFilter('all');
             }}
-            className="px-4 py-2 rounded-xl bg-slate-900 text-white text-xs font-semibold hover:bg-black transition-colors"
+            className="h-11 px-5 rounded-xl bg-brand text-on-brand text-sm font-extrabold hover:bg-brand-500 transition-colors"
           >
             {tk('viewAll')}
           </button>
         </div>
       ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
           {filteredKitchens.map((kitchen) => {
             const isFav = favorites.has(kitchen.id);
             const open = describeOpenState(kitchen.availability, tk);
@@ -441,135 +443,103 @@ export default function KitchensDirectoryPage() {
               <Link
                 key={kitchen.id}
                 href={kitchen.href}
-                className="group flex flex-col justify-between bg-white rounded-2xl border border-slate-200/90 shadow-xs hover:shadow-md hover:border-slate-300 transition-all duration-200 overflow-hidden"
+                className="group flex flex-col bg-surface rounded-[20px] border border-line hover:border-line-strong hover:shadow-[var(--shadow-card)] transition-all duration-200 overflow-hidden"
               >
-                {/* Photo Container */}
-                <div className="relative aspect-[16/10] w-full overflow-hidden bg-slate-100">
+                <div className="relative aspect-[16/10] w-full overflow-hidden bg-raised">
                   <CoverImage
                     src={kitchen.coverPhoto}
                     alt={kitchen.name}
                     label={kitchen.name}
                     size="md"
-                    className="w-full h-full transition-transform duration-500 group-hover:scale-105"
+                    className="w-full h-full transition-transform duration-500 group-hover:scale-[1.03]"
                   />
-                  <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-black/10" />
 
-                  {/* Discount Ribbon — only when a dish really is discounted */}
+                  {/* Only when a dish really is discounted */}
                   {kitchen.hasDiscount && (
-                    <span className="absolute top-3 start-3 px-2.5 py-1 rounded-md text-on-brand text-[11px] font-bold bg-brand shadow-xs uppercase tracking-wider">
+                    <span className="absolute top-3 start-3 px-2.5 py-1 rounded-full bg-accent text-on-accent text-[11px] font-extrabold">
                       {tk('discounted')}
                     </span>
                   )}
 
-                  {/* Heart Favorite Button */}
                   <button
                     onClick={(e) => toggleFavorite(kitchen.id, e)}
-                    className="absolute top-3 end-3 w-8 h-8 rounded-full bg-white/90 backdrop-blur-xs flex items-center justify-center text-slate-700 hover:scale-110 transition-transform shadow-xs"
+                    className="absolute top-3 end-3 w-9 h-9 rounded-full bg-surface/95 flex items-center justify-center text-ink hover:scale-105 transition-transform shadow-xs"
                     aria-label={tk('saveFav')}
+                    aria-pressed={isFav}
                   >
                     <Heart
                       className={`w-4 h-4 transition-colors ${
-                        isFav ? 'fill-red-500 text-red-500' : 'text-slate-600 hover:text-red-500'
+                        isFav ? 'fill-red-500 text-red-500' : 'text-muted hover:text-red-500'
                       }`}
                     />
                   </button>
-
-                  {/* Opening State Pill (from the API's availability) */}
-                  {open.label && (
-                    <span
-                      title={open.detail ?? undefined}
-                      className="absolute bottom-3 end-3 px-2.5 py-1 rounded-lg bg-black/75 backdrop-blur-xs text-white text-[11px] font-bold flex items-center gap-1 whitespace-nowrap"
-                    >
-                      <Clock className="w-3 h-3" />
-                      <span>{open.label}</span>
-                    </span>
-                  )}
-
-                  {/* Verified Kitchen Badge */}
-                  <span className="absolute bottom-3 start-3 px-2 py-0.5 rounded-md bg-emerald-600/90 backdrop-blur-xs text-white text-[11px] font-bold flex items-center gap-1">
-                    <ShieldCheck className="w-3 h-3" />
-                    <span>{verifiedBadge(kitchen.businessType, tb, tk)}</span>
-                  </span>
                 </div>
 
-                {/* Body Content */}
-                <div className="p-4 flex-1 flex flex-col justify-between">
-                  <div>
-                    <div className="flex items-start justify-between gap-2 mb-2">
-                      <div className="flex items-center gap-2.5 min-w-0">
-                        <CoverImage
-                          src={kitchen.avatar}
-                          alt={kitchen.chef}
-                          label={kitchen.chef}
-                          size="sm"
-                          className="w-9 h-9 rounded-xl border border-slate-200 flex-shrink-0"
-                        />
-                        <div className="min-w-0">
-                          <h2 className="text-sm font-bold text-slate-900 group-hover:text-brand-ink truncate transition-colors">
-                            {kitchen.name}
-                          </h2>
-                          <p className="text-[11px] text-slate-500 font-medium truncate flex items-center gap-1">
-                            <span>{kitchen.chef}</span>
-                            {kitchen.area && (
-                              <>
-                                <span>•</span>
-                                <MapPin className="w-3 h-3 text-slate-500 inline flex-shrink-0" />
-                                <span>{kitchen.area.split(',')[0]}</span>
-                              </>
-                            )}
-                          </p>
-                        </div>
-                      </div>
-
-                      {/* Rating pill — "New" until the kitchen has real reviews */}
-                      <span
-                        title={
-                          kitchen.rating
-                            ? tk(kitchen.reviewsCount === 1 ? 'ratingFromOne' : 'ratingFromMany', {
-                                rating: kitchen.rating,
-                                count: kitchen.reviewsCount,
-                              })
-                            : tk('noReviews')
-                        }
-                        className="flex-shrink-0 bg-amber-50 text-amber-900 px-2 py-0.5 rounded-lg text-xs font-bold border border-amber-200/80 flex items-center gap-1"
-                      >
-                        {kitchen.rating ? (
+                <div className="p-4 flex-1 flex flex-col gap-2">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <h2 className="text-base font-extrabold text-ink truncate">{kitchen.name}</h2>
+                      <p className="text-[13px] text-muted truncate flex items-center gap-1">
+                        <span>{kitchen.chef}</span>
+                        {kitchen.area && (
                           <>
-                            <Star className="w-3 h-3 fill-amber-500 text-amber-500" />
-                            <span>{kitchen.rating}</span>
+                            <span aria-hidden>·</span>
+                            <MapPin className="w-3 h-3 inline flex-shrink-0" aria-hidden />
+                            <span>{kitchen.area.split(',')[0]}</span>
                           </>
-                        ) : (
-                          <span>{tk('new')}</span>
                         )}
-                      </span>
+                      </p>
                     </div>
 
-                    {/* Delivery Line */}
-                    <div className="mt-2 text-xs text-slate-600 font-medium flex items-center gap-2">
-                      <span className="flex items-center gap-1 text-slate-700">
-                        <Bike className="w-3.5 h-3.5 text-slate-500" />
-                        {deliveryFee ?? tk('feeAtCheckout')}
+                    {/* "New" until the kitchen has real reviews */}
+                    {kitchen.rating ? (
+                      <span
+                        title={tk(kitchen.reviewsCount === 1 ? 'ratingFromOne' : 'ratingFromMany', {
+                          rating: kitchen.rating,
+                          count: kitchen.reviewsCount,
+                        })}
+                        className="flex-shrink-0 flex items-center gap-1 text-sm font-extrabold text-ink"
+                      >
+                        <Star className="w-4 h-4 fill-accent text-accent" aria-hidden />
+                        <span>{kitchen.rating}</span>
                       </span>
-                      <span className="text-slate-300">•</span>
-                      <span className="text-[11px] text-slate-500">
-                        {kitchen.minOrder != null ? tk('minAmount', { amount: formatPrice(kitchen.minOrder) }) : tk('noMin')}
+                    ) : (
+                      <span
+                        title={tk('noReviews')}
+                        className="flex-shrink-0 px-2 py-0.5 rounded-full bg-accent-soft text-accent-soft-ink text-[11px] font-extrabold"
+                      >
+                        {tk('new')}
                       </span>
-                    </div>
+                    )}
                   </div>
 
-                  {/* Cuisines */}
-                  {kitchen.cuisine.length > 0 && (
-                    <div className="mt-3 pt-2.5 border-t border-slate-100 flex flex-wrap gap-1">
-                      {kitchen.cuisine.map((c) => (
-                        <span
-                          key={c}
-                          className="px-2 py-0.5 rounded-md bg-slate-50 text-[11px] font-semibold text-slate-600 border border-slate-100"
-                        >
-                          {c}
-                        </span>
-                      ))}
-                    </div>
-                  )}
+                  {kitchen.cuisine.length > 0 && <p className="text-[13px] text-muted truncate">{kitchen.cuisine.join(' · ')}</p>}
+
+                  <div className="mt-auto pt-1 flex flex-wrap items-center gap-x-3 gap-y-1.5 text-xs font-semibold text-muted">
+                    {/* From the API's availability */}
+                    {open.label && (
+                      <span
+                        title={open.detail ?? undefined}
+                        className={`px-2 py-0.5 rounded-full font-extrabold ${
+                          kitchen.isOpen ? 'bg-brand-soft text-brand-soft-ink' : 'bg-raised text-muted'
+                        }`}
+                      >
+                        {open.label}
+                      </span>
+                    )}
+                    <span className="flex items-center gap-1">
+                      <Bike className="w-3.5 h-3.5" aria-hidden />
+                      {deliveryFee ?? tk('feeAtCheckout')}
+                    </span>
+                    <span>
+                      {kitchen.minOrder != null ? tk('minAmount', { amount: formatPrice(kitchen.minOrder) }) : tk('noMin')}
+                    </span>
+                  </div>
+
+                  <span className="flex items-center gap-1 text-[11px] font-bold text-brand-ink">
+                    <ShieldCheck className="w-3.5 h-3.5" aria-hidden />
+                    <span>{verifiedBadge(kitchen.businessType, tb, tk)}</span>
+                  </span>
                 </div>
               </Link>
             );
@@ -592,29 +562,29 @@ export default function KitchensDirectoryPage() {
           <div className="flex items-center justify-between pb-1">
             <Link
               href="/products"
-              className="inline-flex items-center gap-1.5 text-xs font-bold text-slate-600 hover:text-brand-ink transition-colors py-1.5 px-3 rounded-xl bg-white border border-slate-200 shadow-2xs hover:border-slate-300"
+              className="inline-flex items-center gap-1.5 text-xs font-bold text-muted hover:text-brand-ink transition-colors py-1.5 px-3 rounded-xl bg-surface border border-line shadow-2xs hover:border-line-strong"
             >
               <ChevronRight className="rtl:-scale-x-100 w-3.5 h-3.5 rotate-180" />
               <span>{tk('browseAllDishes')}</span>
             </Link>
             {isReady && (
-              <span className="text-xs font-medium text-slate-500">
+              <span className="text-xs font-medium text-muted">
                 {tk(filteredKitchens.length === 1 ? 'showingOne' : 'showingMany', { count: filteredKitchens.length })}
               </span>
             )}
           </div>
 
-          <div className="bg-white rounded-2xl border border-slate-200/80 p-5 shadow-xs">
+          <div className="bg-surface rounded-2xl border border-line p-5 shadow-xs">
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-5">
               <div>
-                <h2 className="text-base font-bold text-slate-900">{tk('communityVerified')}</h2>
-                <p className="text-xs text-slate-500">
+                <h2 className="text-base font-bold text-ink">{tk('communityVerified')}</h2>
+                <p className="text-xs text-muted">
                   {tk('orderDirect')}
                 </p>
               </div>
               <div className="flex items-center gap-3 flex-wrap">
                 {isReady && (
-                  <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-50 border border-slate-200 text-xs font-semibold text-slate-700">
+                  <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-raised border border-line text-xs font-semibold text-ink">
                     <ChefHat className="w-3.5 h-3.5 text-brand-ink" />
                     {tk(kitchens.length === 1 ? 'verifiedCountOne' : 'verifiedCountMany', { count: kitchens.length })}
                   </span>
@@ -632,40 +602,40 @@ export default function KitchensDirectoryPage() {
 
   // Public visitor: Render with top marketplace header
   return (
-    <div className="min-h-screen bg-page text-slate-900 pb-24">
+    <div className="min-h-screen bg-page text-ink pb-24">
       <SiteHeader />
 
       {/* Hero Header */}
-      <section className="bg-white border-b border-slate-200/80 py-8">
-        <div className="max-w-[1400px] mx-auto px-4 sm:px-6">
+      <section className="pt-6 sm:pt-10 pb-2">
+        <div className="max-w-[1280px] mx-auto px-4 sm:px-8">
           <div className="flex flex-col md:flex-row md:items-end justify-between gap-6">
             <div>
-              <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-brand-50 border border-brand-200 text-brand-ink text-xs font-bold uppercase tracking-wider mb-2.5">
+              <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-accent-soft text-accent-soft-ink text-xs sm:text-[13px] font-extrabold mb-3">
                 <ChefHat className="w-3.5 h-3.5" />
                 <span>{tk('heroBadge')}</span>
               </div>
-              <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-slate-900">
+              <h1 className="text-[28px] sm:text-[40px] leading-tight font-extrabold tracking-tight text-ink">
                 {tk('dashTitle')}
               </h1>
-              <p className="text-xs sm:text-sm text-slate-500 font-medium mt-1 max-w-2xl leading-relaxed">
+              <p className="text-[15px] sm:text-base text-muted mt-2 max-w-2xl leading-relaxed">
                 {tk('heroBody')}
               </p>
             </div>
 
             {/* Quick Metrics Pills — real counts, "—" while loading */}
             <div className="flex items-center gap-3 flex-wrap">
-              <div className="px-3.5 py-2 rounded-xl bg-slate-50 border border-slate-200 text-start">
-                <div className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">{tk('dashTitle')}</div>
-                <div className="text-sm font-bold text-slate-900">{isReady ? kitchenCountLabel : '—'}</div>
+              <div className="px-4 py-2.5 rounded-2xl bg-surface border border-line text-start">
+                <div className="text-xs font-semibold text-muted">{tk('dashTitle')}</div>
+                <div className="text-base font-extrabold text-ink">{isReady ? kitchenCountLabel : '—'}</div>
               </div>
-              <div className="px-3.5 py-2 rounded-xl bg-slate-50 border border-slate-200 text-start">
-                <div className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">{tk('averageRating')}</div>
-                <div className="text-sm font-bold text-amber-700 flex items-center gap-1">
+              <div className="px-4 py-2.5 rounded-2xl bg-surface border border-line text-start">
+                <div className="text-xs font-semibold text-muted">{tk('averageRating')}</div>
+                <div className="text-base font-extrabold text-ink flex items-center gap-1">
                   {!isReady ? (
                     <span>—</span>
                   ) : averageRating ? (
                     <>
-                      <Star className="w-3.5 h-3.5 fill-amber-500 text-amber-500" />
+                      <Star className="w-3.5 h-3.5 fill-accent text-accent" />
                       <span>{averageRating} / 5.0</span>
                     </>
                   ) : (
@@ -677,7 +647,7 @@ export default function KitchensDirectoryPage() {
           </div>
 
           {/* Search & Filter Toolbar */}
-          <div className="mt-8 pt-6 border-t border-slate-100">
+          <div className="mt-6">
             {renderToolbar()}
           </div>
         </div>

@@ -17,28 +17,28 @@ export function TrendingKitchens({ kitchens: trendingKitchens }: { kitchens: Hom
   const t = useT(homeMessages);
   if (trendingKitchens.length === 0) return null;
   return (
-    <section className="max-w-[1440px] mx-auto px-4 sm:px-8 pt-6" data-testid="trending-kitchens">
+    <section className="max-w-[1280px] mx-auto px-4 sm:px-8 pt-6" data-testid="trending-kitchens">
       <div className="mb-3">
-        <h3 className="text-lg sm:text-xl font-bold text-slate-900 tracking-tight flex items-center gap-1.5">
+        <h3 className="text-lg sm:text-[22px] font-extrabold text-ink tracking-tight flex items-center gap-1.5">
           <Flame className="w-5 h-5 text-brand-ink" />
           {t('trendingKitchens')}
         </h3>
-        <p className="text-xs text-slate-500 font-medium mt-0.5">{t('trendingKitchensSub')}</p>
+        <p className="text-xs text-muted font-medium mt-0.5">{t('trendingKitchensSub')}</p>
       </div>
       <div className="flex items-stretch gap-3 overflow-x-auto scrollbar-none py-1 px-0.5">
         {trendingKitchens.map((k, i) => (
           <Link
             key={k.id}
             href={k.href}
-            className="flex-shrink-0 w-56 flex items-center gap-3 p-2.5 rounded-2xl bg-white border border-slate-200/80 hover:border-brand shadow-2xs transition-colors group"
+            className="flex-shrink-0 w-56 flex items-center gap-3 p-2.5 rounded-2xl bg-surface border border-line hover:border-line-strong transition-colors group"
           >
             <span className="w-6 text-center text-lg font-black text-brand-ink">{i + 1}</span>
-            <div className="relative w-12 h-12 rounded-full overflow-hidden border border-slate-200 flex-shrink-0">
+            <div className="relative w-12 h-12 rounded-full overflow-hidden border border-line flex-shrink-0">
               <CoverImage src={k.avatar || k.coverPhoto} alt={k.name} label={k.name} size="sm" className="w-full h-full" />
             </div>
             <div className="min-w-0">
-              <span className="block text-sm font-bold text-slate-900 truncate group-hover:text-brand-ink">{k.name}</span>
-              <span className="block text-[11px] text-slate-500 truncate">
+              <span className="block text-sm font-bold text-ink truncate group-hover:text-brand-ink">{k.name}</span>
+              <span className="block text-[11px] text-muted truncate">
                 {[k.rating ? `★ ${k.rating}` : null, k.statusLabel].filter(Boolean).join(' · ')}
               </span>
             </div>
@@ -54,11 +54,11 @@ export function KitchenAvatarRow({ kitchens, state }: { kitchens: HomeKitchen[];
   const t = useT(homeMessages);
   if (!(state === 'loading' || (state === 'ready' && kitchens.length > 0))) return null;
   return (
-    <section className="max-w-[1440px] mx-auto px-4 sm:px-8 py-6">
+    <section className="max-w-[1280px] mx-auto px-4 sm:px-8 py-6">
       <div className="flex items-center justify-between mb-4">
         <div>
-          <h3 className="text-lg sm:text-xl font-bold text-slate-900 tracking-tight">{t('kitchensOnNuray')}</h3>
-          <p className="text-xs text-slate-500 font-medium mt-0.5">{t('kitchensOnNuraySub')}</p>
+          <h3 className="text-lg sm:text-[22px] font-extrabold text-ink tracking-tight">{t('kitchensOnNuray')}</h3>
+          <p className="text-xs text-muted font-medium mt-0.5">{t('kitchensOnNuraySub')}</p>
         </div>
         <Link href="/kitchens" className="text-xs font-bold text-brand-ink hover:underline flex items-center gap-1">
           <span>{t('seeAll')}</span>
@@ -74,7 +74,7 @@ export function KitchenAvatarRow({ kitchens, state }: { kitchens: HomeKitchen[];
               const caption = kitchenCaption(t, k);
               return (
                 <Link key={k.id} href={k.href} className="flex-shrink-0 flex flex-col items-center gap-1.5 group text-center">
-                  <div className="relative w-14 h-14 sm:w-16 sm:h-16 rounded-full overflow-hidden border border-slate-200 group-hover:border-brand transition-all shadow-2xs">
+                  <div className="relative w-14 h-14 sm:w-16 sm:h-16 rounded-full overflow-hidden border border-line group-hover:border-brand transition-all shadow-2xs">
                     <CoverImage
                       src={k.avatar || k.coverPhoto}
                       alt={k.name}
@@ -84,18 +84,18 @@ export function KitchenAvatarRow({ kitchens, state }: { kitchens: HomeKitchen[];
                     />
                     {k.statusLabel && (
                       <span
-                        className={`absolute bottom-0.5 end-0.5 w-3 h-3 rounded-full border border-white ${
-                          k.isOpen ? 'bg-emerald-500' : 'bg-slate-400'
+                        className={`absolute bottom-0.5 end-0.5 w-3 h-3 rounded-full border-2 border-page ${
+                          k.isOpen ? 'bg-brand' : 'bg-line-strong'
                         }`}
                         title={k.statusLabel}
                       />
                     )}
                   </div>
                   <div>
-                    <span className="block text-xs font-semibold text-slate-900 group-hover:text-brand-ink max-w-[85px] sm:max-w-[95px] truncate">
+                    <span className="block text-xs font-semibold text-ink group-hover:text-brand-ink max-w-[85px] sm:max-w-[95px] truncate">
                       {k.name}
                     </span>
-                    {caption && <span className="block text-[11px] text-slate-500 font-medium">{caption}</span>}
+                    {caption && <span className="block text-[11px] text-muted font-medium">{caption}</span>}
                   </div>
                 </Link>
               );
@@ -118,136 +118,108 @@ export function KitchenCard({
   return (
     <Link
       href={kitchen.href}
-      className="group flex flex-col justify-between bg-white rounded-2xl border border-slate-200/90 shadow-xs hover:shadow-md hover:border-slate-300 transition-all duration-200 overflow-hidden"
+      className="group flex flex-col bg-surface rounded-[20px] border border-line hover:border-line-strong hover:shadow-[var(--shadow-card)] transition-all duration-200 overflow-hidden"
     >
-      {/* Cover Image */}
-      <div className="relative aspect-[16/10] w-full overflow-hidden bg-slate-100">
+      {/* The kitchen's own cover photo, nothing laid over it but the deal and the heart */}
+      <div className="relative aspect-[16/10] w-full overflow-hidden bg-raised">
         <CoverImage
           src={kitchen.coverPhoto}
           alt={kitchen.name}
           label={kitchen.name}
           size="md"
-          className="w-full h-full transition-transform duration-500 group-hover:scale-105"
+          className="w-full h-full transition-transform duration-500 group-hover:scale-[1.03]"
         />
-        <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-black/10" />
 
-        {/* Deal Tag — only when one of its dishes is really discounted */}
+        {/* Deal: only when one of its dishes is really discounted */}
         {kitchen.deal && (
-          <span className="absolute top-3 start-3 px-2.5 py-1 rounded-md text-on-brand text-[11px] font-bold bg-brand shadow-xs uppercase tracking-wider">
+          <span className="absolute top-3 start-3 px-2.5 py-1 rounded-full bg-accent text-on-accent text-[11px] font-extrabold">
             {kitchen.deal}
           </span>
         )}
 
-        {/* Heart Button */}
         <button
           onClick={(e) => onToggleFavorite(kitchen.id, e)}
-          className="absolute top-3 end-3 w-8 h-8 rounded-full bg-white/90 backdrop-blur-xs flex items-center justify-center text-slate-700 hover:scale-110 transition-transform shadow-xs"
+          className="absolute top-3 end-3 w-9 h-9 rounded-full bg-surface/95 flex items-center justify-center text-ink hover:scale-105 transition-transform shadow-xs"
           aria-label={isFav ? t('removeSaved') : t('saveFav')}
           aria-pressed={isFav}
         >
-          <Heart className={`w-4 h-4 transition-colors ${isFav ? 'fill-red-500 text-red-500' : 'text-slate-600 hover:text-red-500'}`} />
+          <Heart className={`w-4 h-4 transition-colors ${isFav ? 'fill-red-500 text-red-500' : 'text-muted hover:text-red-500'}`} />
         </button>
-
-        {/* Prep Time Pill (the kitchen's own minimum prep time) */}
-        {kitchen.prepMinutes != null && (
-          <span className="absolute bottom-3 end-3 px-2.5 py-1 rounded-lg bg-black/75 backdrop-blur-xs text-white text-[11px] font-bold flex items-center gap-1">
-            <Clock className="w-3 h-3" />
-            <span>{t('minPrep', { n: kitchen.prepMinutes })}</span>
-          </span>
-        )}
-
-        {/* Kitchen Type Badge (every listed kitchen is verified) */}
-        <span className="absolute bottom-3 start-3 px-2 py-0.5 rounded-md bg-emerald-600/90 backdrop-blur-xs text-white text-[11px] font-bold flex items-center gap-1">
-          <ShieldCheck className="w-3 h-3" />
-          <span>{kitchen.badge}</span>
-        </span>
       </div>
 
-      {/* Card Body */}
-      <div className="p-4 flex-1 flex flex-col justify-between">
-        <div>
-          <div className="flex items-start justify-between gap-2 mb-2">
-            <div className="flex items-center gap-2.5 min-w-0">
-              <CoverImage
-                src={kitchen.avatar}
-                alt={kitchen.chef || kitchen.name}
-                label={kitchen.chef || kitchen.name}
-                size="sm"
-                className="w-9 h-9 rounded-xl border border-slate-200 flex-shrink-0"
-              />
-              <div className="min-w-0">
-                <h3 className="text-sm font-bold text-slate-900 group-hover:text-brand-ink truncate transition-colors">{kitchen.name}</h3>
-                {(kitchen.chef || kitchen.area) && (
-                  <p className="text-[11px] text-slate-500 font-medium truncate flex items-center gap-1">
-                    {kitchen.chef && <span>{kitchen.chef}</span>}
-                    {kitchen.chef && kitchen.area && <span>•</span>}
-                    {kitchen.area && (
-                      <>
-                        <MapPin className="w-3 h-3 text-slate-500 inline flex-shrink-0" />
-                        <span>{kitchen.area}</span>
-                      </>
-                    )}
-                  </p>
+      <div className="p-4 flex-1 flex flex-col gap-2">
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <h3 className="text-base font-extrabold text-ink truncate">{kitchen.name}</h3>
+            {(kitchen.chef || kitchen.area) && (
+              <p className="text-[13px] text-muted truncate flex items-center gap-1">
+                {kitchen.chef && <span>{kitchen.chef}</span>}
+                {kitchen.chef && kitchen.area && <span aria-hidden>·</span>}
+                {kitchen.area && (
+                  <>
+                    <MapPin className="w-3 h-3 inline flex-shrink-0" aria-hidden />
+                    <span>{kitchen.area}</span>
+                  </>
                 )}
-              </div>
-            </div>
-
-            {/* Rating pill: the real rating, or "New" before any reviews */}
-            {kitchen.rating ? (
-              <span
-                className="flex-shrink-0 bg-amber-50 text-amber-900 px-2 py-0.5 rounded-lg text-xs font-bold border border-amber-200/80 flex items-center gap-1"
-                title={countLabel(t, kitchen.reviewsCount, 'reviewsOne', 'reviewsMany')}
-              >
-                <Star className="w-3 h-3 fill-amber-500 text-amber-500" />
-                <span>{kitchen.rating}</span>
-                <span className="font-medium text-amber-700/80">({formatCount(kitchen.reviewsCount)})</span>
-              </span>
-            ) : (
-              <span className="flex-shrink-0 bg-slate-50 text-slate-600 px-2 py-0.5 rounded-lg text-xs font-bold border border-slate-200">
-                {t('newBadge')}
-              </span>
+              </p>
             )}
           </div>
 
-          {/* Open / closed, from the kitchen's real schedule */}
-          {kitchen.statusLabel && (
-            <div className="mt-2 text-[11px] font-semibold flex items-center gap-1.5">
-              <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${kitchen.isOpen ? 'bg-emerald-500' : 'bg-slate-400'}`} />
-              <span className={kitchen.isOpen ? 'text-emerald-700' : 'text-slate-500'}>{kitchen.statusLabel}</span>
-              {kitchen.isOpen && kitchen.closesAt && (
-                <span className="font-medium text-slate-500">{t('closesAt', { time: kitchen.closesAt })}</span>
-              )}
-              {!kitchen.isOpen && kitchen.opensAt && (
-                <span className="font-medium text-slate-500">{t('opensAt', { time: kitchen.opensAt })}</span>
-              )}
-            </div>
-          )}
-
-          {/* Delivery terms — only what the kitchen has set */}
-          {(kitchen.deliveryFee || kitchen.minOrder) && (
-            <div className="mt-2 text-xs text-slate-600 font-medium flex items-center gap-2">
-              {kitchen.deliveryFee && (
-                <span className="flex items-center gap-1 text-slate-700">
-                  <Bike className="w-3.5 h-3.5 text-slate-500" />
-                  <span>{kitchen.deliveryFee}</span>
-                </span>
-              )}
-              {kitchen.deliveryFee && kitchen.minOrder && <span className="text-slate-300">•</span>}
-              {kitchen.minOrder && <span className="text-[11px] text-slate-500">{t('minOrder', { amount: kitchen.minOrder })}</span>}
-            </div>
+          {/* The real rating, or "New" before any reviews */}
+          {kitchen.rating ? (
+            <span
+              className="flex-shrink-0 flex items-center gap-1 text-sm font-extrabold text-ink"
+              title={countLabel(t, kitchen.reviewsCount, 'reviewsOne', 'reviewsMany')}
+            >
+              <Star className="w-4 h-4 fill-accent text-accent" aria-hidden />
+              <span>{kitchen.rating}</span>
+              <span className="text-xs font-semibold text-muted">({formatCount(kitchen.reviewsCount)})</span>
+            </span>
+          ) : (
+            <span className="flex-shrink-0 px-2 py-0.5 rounded-full bg-accent-soft text-accent-soft-ink text-[11px] font-extrabold">
+              {t('newBadge')}
+            </span>
           )}
         </div>
 
-        {/* Meal categories the kitchen chose */}
-        {kitchen.cuisine.length > 0 && (
-          <div className="mt-3 pt-2.5 border-t border-slate-100 flex flex-wrap gap-1">
-            {kitchen.cuisine.map((c) => (
-              <span key={c} className="px-2 py-0.5 rounded-md bg-slate-50 text-[11px] font-semibold text-slate-600 border border-slate-100">
-                {c}
+        {/* The meal categories the kitchen chose */}
+        {kitchen.cuisine.length > 0 && <p className="text-[13px] text-muted truncate">{kitchen.cuisine.join(' · ')}</p>}
+
+        <div className="mt-auto pt-1 flex flex-wrap items-center gap-x-3 gap-y-1.5 text-xs font-semibold">
+          {/* Open or closed, from the kitchen's real schedule */}
+          {kitchen.statusLabel && (
+            <span className="flex items-center gap-1.5">
+              <span
+                className={`px-2 py-0.5 rounded-full font-extrabold ${
+                  kitchen.isOpen ? 'bg-brand-soft text-brand-soft-ink' : 'bg-raised text-muted'
+                }`}
+              >
+                {kitchen.statusLabel}
               </span>
-            ))}
-          </div>
-        )}
+              {kitchen.isOpen && kitchen.closesAt && <span className="text-muted">{t('closesAt', { time: kitchen.closesAt })}</span>}
+              {!kitchen.isOpen && kitchen.opensAt && <span className="text-muted">{t('opensAt', { time: kitchen.opensAt })}</span>}
+            </span>
+          )}
+          {kitchen.prepMinutes != null && (
+            <span className="flex items-center gap-1 text-muted">
+              <Clock className="w-3.5 h-3.5" aria-hidden />
+              <span>{t('minPrep', { n: kitchen.prepMinutes })}</span>
+            </span>
+          )}
+          {kitchen.deliveryFee && (
+            <span className="flex items-center gap-1 text-muted">
+              <Bike className="w-3.5 h-3.5" aria-hidden />
+              <span>{kitchen.deliveryFee}</span>
+            </span>
+          )}
+          {kitchen.minOrder && <span className="text-muted">{t('minOrder', { amount: kitchen.minOrder })}</span>}
+        </div>
+
+        {/* Every listed kitchen is verified */}
+        <span className="flex items-center gap-1 text-[11px] font-bold text-brand-ink">
+          <ShieldCheck className="w-3.5 h-3.5" aria-hidden />
+          <span>{kitchen.badge}</span>
+        </span>
       </div>
     </Link>
   );
@@ -275,14 +247,14 @@ export function KitchenGrid({
 }) {
   const t = useT(homeMessages);
   return (
-    <section className="max-w-[1440px] mx-auto px-4 sm:px-8 py-6">
-      <div className="flex items-center justify-between mb-5">
+    <section id="kitchens" className="max-w-[1280px] mx-auto px-4 sm:px-8 py-6 scroll-mt-[calc(var(--header-offset)+4.5rem)]">
+      <div className="flex items-end justify-between mb-5">
         <div>
           <div className="inline-flex items-center gap-1 text-[11px] font-bold uppercase tracking-wider text-brand-ink mb-0.5">
             <Sparkles className="w-3.5 h-3.5" />
             <span>{t('verifiedKitchens')}</span>
           </div>
-          <h2 className="text-xl sm:text-2xl font-bold text-slate-900 tracking-tight">{t('browseHomeKitchens')}</h2>
+          <h2 className="text-[22px] sm:text-[28px] font-extrabold text-ink tracking-tight">{t('browseHomeKitchens')}</h2>
         </div>
         <Link href="/kitchens" className="text-xs font-bold text-brand-ink hover:underline flex items-center gap-1">
           <span>{t('viewAll')}</span>
@@ -291,7 +263,7 @@ export function KitchenGrid({
       </div>
 
       {state === 'loading' ? (
-        <div role="status" className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-3 gap-5">
+        <div role="status" className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
           <span className="sr-only">{t('loadingKitchens')}</span>
           {Array.from({ length: 6 }, (_, i) => (
             <KitchenCardSkeleton key={i} />
@@ -306,7 +278,7 @@ export function KitchenGrid({
           action={
             <Link
               href="/sellers/register"
-              className="inline-flex items-center gap-1.5 bg-slate-950 hover:bg-black text-white px-3.5 py-2 rounded-xl text-xs font-semibold transition-colors shadow-sm"
+              className="inline-flex items-center gap-1.5 bg-ink hover:bg-ink/90 text-page px-3.5 py-2 rounded-xl text-xs font-semibold transition-colors shadow-sm"
             >
               <ChefHat className="w-3.5 h-3.5" />
               <span>{t('openHomeKitchen')}</span>
@@ -321,7 +293,7 @@ export function KitchenGrid({
             <button
               type="button"
               onClick={onClearFilters}
-              className="inline-flex items-center gap-1.5 bg-slate-950 hover:bg-black text-white px-3.5 py-2 rounded-xl text-xs font-semibold transition-colors shadow-sm"
+              className="inline-flex items-center gap-1.5 bg-ink hover:bg-ink/90 text-page px-3.5 py-2 rounded-xl text-xs font-semibold transition-colors shadow-sm"
             >
               {t('clearFilters')}
             </button>
@@ -329,7 +301,7 @@ export function KitchenGrid({
         />
       ) : (
         /* Responsive Grid */
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-3 gap-5">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
           {filteredKitchens.map((kitchen) => (
             <KitchenCard
               key={kitchen.id}

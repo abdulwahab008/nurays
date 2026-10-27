@@ -1,78 +1,90 @@
 'use client';
 
-/** The three banners under the filters: home food, open a home kitchen, the frozen pantry. */
+/** The three cards under the filters: home food, open a home kitchen, the frozen pantry. Flat colours, no gradients. */
 import Link from 'next/link';
-import { Flame, ChefHat, Snowflake, ChevronRight } from 'lucide-react';
+import { Flame, ChefHat, Snowflake, ChevronRight, type LucideIcon } from 'lucide-react';
 import { useT } from '@/lib/i18n';
 import { homeMessages } from '@/lib/i18n/messages/home';
 
+type Card = {
+  key: string;
+  href: string;
+  icon: LucideIcon;
+  tag: string;
+  title: string;
+  body: string;
+  cta: string;
+  /** The same in both themes: each card is a coloured block with its own words. */
+  box: string;
+  tagBox: string;
+  bodyText: string;
+  button: string;
+};
+
 export default function PromoBanners() {
   const t = useT(homeMessages);
+  const cards: Card[] = [
+    {
+      key: 'fresh',
+      href: '/products',
+      icon: Flame,
+      tag: t('b1Tag'),
+      title: t('b1Title'),
+      body: t('b1Body'),
+      cta: t('b1Cta'),
+      box: 'bg-accent text-on-accent',
+      tagBox: 'bg-on-accent/10',
+      bodyText: 'text-on-accent/80',
+      button: 'bg-on-accent text-accent-100 hover:opacity-90',
+    },
+    {
+      key: 'cook',
+      href: '/sellers/register',
+      icon: ChefHat,
+      tag: t('b2Tag'),
+      title: t('b2Title'),
+      body: t('b2Body'),
+      cta: t('b2Cta'),
+      box: 'bg-[#0D2624] text-white',
+      tagBox: 'bg-white/10',
+      bodyText: 'text-[#A3BCB7]',
+      button: 'bg-brand text-on-brand hover:bg-brand-500',
+    },
+    {
+      key: 'frozen',
+      href: '/products?productType=frozen',
+      icon: Snowflake,
+      tag: t('b3Tag'),
+      title: t('b3Title'),
+      body: t('b3Body'),
+      cta: t('b3Cta'),
+      box: 'bg-frozen text-white',
+      tagBox: 'bg-white/15',
+      bodyText: 'text-[#D5DEFF]',
+      // A fixed white: the dark theme repaints bg-white as a surface colour.
+      button: 'bg-[#FFFFFF] text-frozen hover:bg-[#E6ECFF]',
+    },
+  ];
+
   return (
-    <section className="max-w-[1440px] mx-auto px-4 sm:px-8 pt-6 pb-2">
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 sm:gap-5">
-        {/* Banner 1: Authentic Home Food */}
-        <div className="relative rounded-2xl p-5 sm:p-6 overflow-hidden bg-brand-700 text-white shadow-md flex flex-col justify-between min-h-[155px] group">
-          <div className="relative z-10">
-            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-black/25 text-[11px] font-bold uppercase tracking-wider mb-2">
-              <Flame className="w-3 h-3 text-brand-200" />
-              <span>{t('b1Tag')}</span>
-            </span>
-            <h2 className="text-xl sm:text-2xl font-bold tracking-tight leading-tight text-white">{t('b1Title')}</h2>
-            <p className="text-xs text-brand-100 mt-1 max-w-[260px] font-normal leading-relaxed">{t('b1Body')}</p>
-          </div>
-          <div className="relative z-10 pt-3">
-            <Link
-              href="/products"
-              className="inline-flex items-center gap-1.5 bg-slate-950 hover:bg-black text-white px-3.5 py-2 rounded-xl text-xs font-semibold transition-colors shadow-sm"
-            >
-              <span>{t('b1Cta')}</span>
-              <ChevronRight className="rtl:-scale-x-100 w-3.5 h-3.5" />
+    <section className="max-w-[1280px] mx-auto px-4 sm:px-8 pt-6 pb-2">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        {cards.map(({ key, href, icon: Icon, tag, title, body, cta, box, tagBox, bodyText, button }) => (
+          <div key={key} className={`rounded-[20px] p-5 sm:p-6 flex flex-col justify-between gap-4 min-h-[170px] ${box}`}>
+            <div>
+              <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-extrabold uppercase tracking-wider mb-3 ${tagBox}`}>
+                <Icon className="w-3.5 h-3.5" aria-hidden />
+                <span>{tag}</span>
+              </span>
+              <h2 className="text-xl sm:text-[22px] font-extrabold tracking-tight leading-tight">{title}</h2>
+              <p className={`text-sm mt-1.5 max-w-[300px] leading-relaxed ${bodyText}`}>{body}</p>
+            </div>
+            <Link href={href} className={`self-start inline-flex items-center gap-1.5 h-11 px-4 rounded-xl text-sm font-extrabold transition-colors ${button}`}>
+              <span>{cta}</span>
+              <ChevronRight className="rtl:-scale-x-100 w-4 h-4" aria-hidden />
             </Link>
           </div>
-        </div>
-
-        {/* Banner 2: Open a home kitchen */}
-        <div className="relative rounded-2xl p-5 sm:p-6 overflow-hidden bg-[#0D2624] text-white shadow-md flex flex-col justify-between min-h-[155px] group">
-          <div className="relative z-10">
-            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-black/30 text-[11px] font-bold uppercase tracking-wider mb-2">
-              <ChefHat className="w-3 h-3 text-amber-200" />
-              <span>{t('b2Tag')}</span>
-            </span>
-            <h2 className="text-xl sm:text-2xl font-bold tracking-tight leading-tight text-white">{t('b2Title')}</h2>
-            <p className="text-xs text-amber-100 mt-1 max-w-[260px] font-normal leading-relaxed">{t('b2Body')}</p>
-          </div>
-          <div className="relative z-10 pt-3">
-            <Link
-              href="/sellers/register"
-              className="inline-flex items-center gap-1.5 bg-slate-950 hover:bg-black text-white px-3.5 py-2 rounded-xl text-xs font-semibold transition-colors shadow-sm"
-            >
-              <span>{t('b2Cta')}</span>
-              <ChevronRight className="rtl:-scale-x-100 w-3.5 h-3.5" />
-            </Link>
-          </div>
-        </div>
-
-        {/* Banner 3: Frozen pantry */}
-        <div className="relative rounded-2xl p-5 sm:p-6 overflow-hidden bg-[#2A47A8] text-white shadow-md flex flex-col justify-between min-h-[155px] group">
-          <div className="relative z-10">
-            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-black/30 text-[11px] font-bold uppercase tracking-wider mb-2">
-              <Snowflake className="w-3 h-3 text-cyan-200" />
-              <span>{t('b3Tag')}</span>
-            </span>
-            <h2 className="text-xl sm:text-2xl font-bold tracking-tight leading-tight text-white">{t('b3Title')}</h2>
-            <p className="text-xs text-cyan-100 mt-1 max-w-[260px] font-normal leading-relaxed">{t('b3Body')}</p>
-          </div>
-          <div className="relative z-10 pt-3">
-            <Link
-              href="/products?productType=frozen"
-              className="inline-flex items-center gap-1.5 bg-slate-950 hover:bg-black text-white px-3.5 py-2 rounded-xl text-xs font-semibold transition-colors shadow-sm"
-            >
-              <span>{t('b3Cta')}</span>
-              <ChevronRight className="rtl:-scale-x-100 w-3.5 h-3.5" />
-            </Link>
-          </div>
-        </div>
+        ))}
       </div>
     </section>
   );

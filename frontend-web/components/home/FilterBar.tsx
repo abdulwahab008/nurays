@@ -34,8 +34,8 @@ export default function FilterBar({
       {/* ============================================================
         CUISINES & CRAVINGS CAROUSEL
         ============================================================ */}
-      <section className="bg-white border-b border-slate-200/80 py-3">
-        <div className="max-w-[1440px] mx-auto px-4 sm:px-8">
+      <section className="pt-4 pb-1">
+        <div className="max-w-[1280px] mx-auto px-4 sm:px-8">
           <CuisineCarousel
             selectedCuisine={selectedCuisine}
             onSelectCuisine={(q) => {
@@ -48,8 +48,8 @@ export default function FilterBar({
       {/* ============================================================
         QUICK FILTER CHIPS BAR
         ============================================================ */}
-      <section className="bg-white/90 backdrop-blur-md border-b border-slate-200/70 py-2.5 sticky top-(--header-offset) z-30">
-        <div className="max-w-[1440px] mx-auto px-4 sm:px-8 flex items-center justify-between gap-3">
+      <section className="bg-page/95 backdrop-blur-md py-3 sticky top-(--header-offset) z-30">
+        <div className="max-w-[1280px] mx-auto px-4 sm:px-8 flex items-center justify-between gap-3">
           <div className="flex items-center gap-2 overflow-x-auto scrollbar-none pb-0.5">
             {filterChips.map((chip) => {
               const Icon = chip.icon;
@@ -58,13 +58,12 @@ export default function FilterBar({
                 <button
                   key={chip.id}
                   onClick={() => onSelectFilter(chip.id)}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition-all ${
-                    isActive
-                      ? 'bg-slate-900 text-white shadow-xs'
-                      : 'bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200'
+                  aria-pressed={isActive}
+                  className={`flex items-center gap-1.5 h-10 px-4 rounded-full text-sm font-semibold whitespace-nowrap transition-colors ${
+                    isActive ? 'bg-ink text-page' : 'bg-surface hover:bg-raised text-ink border border-line'
                   }`}
                 >
-                  <Icon className="w-3.5 h-3.5" />
+                  <Icon className="w-4 h-4" aria-hidden />
                   <span>{chip.label}</span>
                 </button>
               );
@@ -73,7 +72,7 @@ export default function FilterBar({
 
           <Link
             href="/products"
-            className="hidden sm:inline-flex items-center gap-1 text-xs font-bold text-brand-ink hover:text-brand-800 whitespace-nowrap"
+            className="hidden sm:inline-flex items-center gap-1 text-sm font-bold text-brand-ink hover:underline whitespace-nowrap"
           >
             <span>{t('browseAllMenus')}</span>
             <ChevronRight className="rtl:-scale-x-100 w-3.5 h-3.5" />

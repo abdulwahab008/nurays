@@ -12,14 +12,14 @@ function StarPicker({ value, onChange, label }: { value: number; onChange: (n: n
   const t = useT(browseMessages);
   return (
     <div className="flex items-center gap-3">
-      <span className="text-sm text-gray-600 w-24">{label}</span>
+      <span className="text-sm text-muted w-24">{label}</span>
       <div className="flex gap-1">
         {[1, 2, 3, 4, 5].map((n) => (
           <button
             key={n}
             type="button"
             onClick={() => onChange(n)}
-            className={`text-2xl leading-none ${n <= value ? 'text-amber-500' : 'text-gray-300'}`}
+            className={`text-2xl leading-none ${n <= value ? 'text-accent' : 'text-gray-300'}`}
             aria-label={t(n > 1 ? 'starMany' : 'starOne', { n })}
           >
             ★
@@ -81,7 +81,7 @@ export default function WriteReviewForm({ orderId, orderItemId, productName }: W
     return (
       <button
         onClick={() => setOpen(true)}
-        className="text-xs font-medium text-gray-700 underline hover:no-underline mt-1"
+        className="text-xs font-medium text-ink underline hover:no-underline mt-1"
       >
         {t('writeReview')}
       </button>
@@ -89,8 +89,8 @@ export default function WriteReviewForm({ orderId, orderItemId, productName }: W
   }
 
   return (
-    <div className="mt-3 p-4 bg-gray-50 rounded-xl space-y-3">
-      <p className="text-sm font-medium text-gray-900">{t('reviewProduct', { name: productName })}</p>
+    <div className="mt-3 p-4 bg-raised rounded-xl space-y-3">
+      <p className="text-sm font-medium text-ink">{t('reviewProduct', { name: productName })}</p>
       <StarPicker value={productRating} onChange={setProductRating} label={t('ratingProduct')} />
       <StarPicker value={sellerRating} onChange={setSellerRating} label={t('ratingSeller')} />
       <textarea
@@ -98,7 +98,7 @@ export default function WriteReviewForm({ orderId, orderItemId, productName }: W
         onChange={(e) => setComment(e.target.value)}
         rows={2}
         placeholder={t('reviewPlaceholder')}
-        className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-gray-400"
+        className="w-full px-3 py-2 border border-line rounded-lg text-sm focus:ring-2 focus:ring-gray-400"
       />
       <div className="flex gap-2">
         <Button size="sm" onClick={handleSubmit} disabled={submitting}>

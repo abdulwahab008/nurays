@@ -15,7 +15,7 @@ export default function StatsBand({ stats }: { stats: PublicStats | null }) {
           {
             key: 'kitchens',
             icon: ChefHat,
-            iconClass: 'text-brand-400',
+            iconClass: 'text-brand',
             valueClass: 'text-white',
             value: formatCount(stats.kitchens),
             label: stats.kitchens === 1 ? t('statKitchen') : t('statKitchens'),
@@ -23,7 +23,7 @@ export default function StatsBand({ stats }: { stats: PublicStats | null }) {
           {
             key: 'communities',
             icon: MapPin,
-            iconClass: 'text-emerald-400',
+            iconClass: 'text-brand',
             valueClass: 'text-white',
             value: formatCount(stats.communities),
             label: stats.communities === 1 ? t('statCommunity') : t('statCommunities'),
@@ -31,7 +31,7 @@ export default function StatsBand({ stats }: { stats: PublicStats | null }) {
           {
             key: 'dishes',
             icon: UtensilsCrossed,
-            iconClass: 'text-cyan-400',
+            iconClass: 'text-[#A9BCFF]',
             valueClass: 'text-white',
             value: formatCount(stats.dishes),
             label: stats.dishes === 1 ? t('statDish') : t('statDishes'),
@@ -41,8 +41,8 @@ export default function StatsBand({ stats }: { stats: PublicStats | null }) {
                 {
                   key: 'rating',
                   icon: Star,
-                  iconClass: 'text-amber-400',
-                  valueClass: 'text-amber-400',
+                  iconClass: 'text-accent',
+                  valueClass: 'text-white',
                   value: `${stats.averageRating.toFixed(1)} / 5`,
                   label: t('statAvg', { reviews: countLabel(t, stats.reviews, 'reviewsOne', 'reviewsMany') }),
                 },
@@ -52,24 +52,25 @@ export default function StatsBand({ stats }: { stats: PublicStats | null }) {
       : [];
   if (cards.length === 0) return null;
 
+  // A night-teal panel in both themes, like the "open a home kitchen" card: its own colours, not the page's.
   return (
-    <section className="bg-slate-900 text-white py-12 border-t border-slate-800">
-      <div className="max-w-[1440px] mx-auto px-4 sm:px-8 text-center">
-        <h3 className="text-xl sm:text-2xl font-bold tracking-tight text-white">{t('statsTitle')}</h3>
-        <p className="text-slate-400 text-xs sm:text-sm mt-1.5 max-w-xl mx-auto font-normal">{t('statsBody')}</p>
+    <section className="max-w-[1280px] mx-auto px-4 sm:px-8 py-8">
+      <div className="rounded-[24px] bg-[#0D2624] text-white px-5 py-10 sm:px-10 text-center">
+        <h3 className="text-[22px] sm:text-[28px] font-extrabold tracking-tight">{t('statsTitle')}</h3>
+        <p className="text-[#A3BCB7] text-sm sm:text-base mt-2 max-w-xl mx-auto">{t('statsBody')}</p>
 
         <div
-          className={`mt-8 grid gap-4 max-w-3xl mx-auto ${
+          className={`mt-8 grid gap-3 sm:gap-4 max-w-3xl mx-auto ${
             cards.length === 4 ? 'grid-cols-2 md:grid-cols-4' : 'grid-cols-1 sm:grid-cols-3'
           }`}
         >
           {cards.map((card) => {
             const Icon = card.icon;
             return (
-              <div key={card.key} className="p-4 rounded-xl bg-white/5 border border-white/10">
-                <Icon className={`w-5 h-5 mx-auto ${card.iconClass}`} />
-                <div className={`text-xl font-bold mt-2 ${card.valueClass}`}>{card.value}</div>
-                <div className="text-[11px] font-medium text-slate-500 uppercase tracking-wider mt-0.5">{card.label}</div>
+              <div key={card.key} className="p-4 rounded-2xl bg-white/[0.06] border border-white/10">
+                <Icon className={`w-5 h-5 mx-auto ${card.iconClass}`} aria-hidden />
+                <div className={`text-2xl font-extrabold mt-2 ${card.valueClass}`}>{card.value}</div>
+                <div className="text-xs font-semibold text-[#A3BCB7] mt-0.5">{card.label}</div>
               </div>
             );
           })}

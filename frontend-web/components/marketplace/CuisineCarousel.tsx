@@ -97,7 +97,7 @@ export function CuisineCarousel({ selectedCuisine, onSelectCuisine }: CuisineCar
       {/* Scroll Left Button */}
       <button
         onClick={() => scroll('left')}
-        className="hidden md:flex absolute -start-3.5 top-1/2 -translate-y-1/2 z-10 w-8 h-8 rounded-full bg-white shadow-md border border-slate-200 items-center justify-center text-slate-700 hover:bg-slate-50 transition-all opacity-0 group-hover:opacity-100"
+        className="hidden md:flex absolute -start-3.5 top-1/2 -translate-y-1/2 z-10 w-8 h-8 rounded-full bg-surface shadow-md border border-line items-center justify-center text-ink hover:bg-raised transition-all opacity-0 group-hover:opacity-100"
         aria-label={t('scrollLeft')}
       >
         <ChevronLeft className="rtl:-scale-x-100 w-4 h-4" />
@@ -121,29 +121,23 @@ export function CuisineCarousel({ selectedCuisine, onSelectCuisine }: CuisineCar
                   onSelectCuisine(item.query);
                 }
               }}
-              className={`flex-shrink-0 flex flex-col items-center gap-1.5 group/card px-2 py-1.5 rounded-xl transition-all ${
-                isSelected
-                  ? 'bg-brand-50/80 scale-102'
-                  : 'hover:bg-slate-50'
-              }`}
+              aria-current={isSelected ? 'true' : undefined}
+              className="flex-shrink-0 flex flex-col items-center gap-2 group/card px-1 py-1.5 rounded-xl"
             >
               {/* Compact Circular Frame */}
               <div
-                className={`relative w-14 h-14 sm:w-16 sm:h-16 rounded-full overflow-hidden border transition-all shadow-2xs ${
-                  isSelected
-                    ? 'border-brand ring-2 ring-brand/20 shadow-xs'
-                    : 'border-slate-200 group-hover/card:border-slate-300'
+                className={`relative w-16 h-16 sm:w-[72px] sm:h-[72px] rounded-[20px] overflow-hidden bg-raised transition-all ${
+                  isSelected ? 'ring-[3px] ring-brand ring-offset-2 ring-offset-page' : 'group-hover/card:ring-2 group-hover/card:ring-line-strong'
                 }`}
               >
                 <img
                   src={item.image}
                   alt={cuisineLabel(item)}
-                  className="w-full h-full object-cover group-hover/card:scale-108 transition-transform duration-300"
+                  className="w-full h-full object-cover group-hover/card:scale-105 transition-transform duration-300"
                 />
-                <div className="absolute inset-0 bg-black/5 group-hover/card:bg-transparent transition-colors" />
 
                 {item.isColdChain && (
-                  <span className="absolute bottom-0.5 end-0.5 w-4 h-4 rounded-full bg-cyan-600 text-white flex items-center justify-center shadow-xs">
+                  <span className="absolute bottom-0.5 end-0.5 w-4 h-4 rounded-full bg-frozen text-white flex items-center justify-center shadow-xs">
                     <Snowflake className="w-2.5 h-2.5" />
                   </span>
                 )}
@@ -151,13 +145,11 @@ export function CuisineCarousel({ selectedCuisine, onSelectCuisine }: CuisineCar
 
               {/* Label */}
               <div className="text-center max-w-[84px]">
-                <span className={`block text-xs font-semibold truncate transition-colors ${
-                  isSelected ? 'text-brand-ink' : 'text-slate-700 group-hover/card:text-slate-950'
-                }`}>
+                <span className={`block text-xs truncate ${isSelected ? 'font-extrabold text-ink' : 'font-semibold text-ink'}`}>
                   {cuisineLabel(item)}
                 </span>
                 {item.badge && (
-                  <span className="inline-block text-[11px] font-semibold uppercase tracking-wider text-slate-500 bg-slate-100 px-1.5 py-0.2 rounded">
+                  <span className="inline-block mt-0.5 text-[11px] font-bold text-frozen-ink bg-frozen-soft px-1.5 py-0.5 rounded-full">
                     {t('badgeFrozen')}
                   </span>
                 )}
@@ -170,7 +162,7 @@ export function CuisineCarousel({ selectedCuisine, onSelectCuisine }: CuisineCar
       {/* Scroll Right Button */}
       <button
         onClick={() => scroll('right')}
-        className="hidden md:flex absolute -end-3.5 top-1/2 -translate-y-1/2 z-10 w-8 h-8 rounded-full bg-white shadow-md border border-slate-200 items-center justify-center text-slate-700 hover:bg-slate-50 transition-all opacity-0 group-hover:opacity-100"
+        className="hidden md:flex absolute -end-3.5 top-1/2 -translate-y-1/2 z-10 w-8 h-8 rounded-full bg-surface shadow-md border border-line items-center justify-center text-ink hover:bg-raised transition-all opacity-0 group-hover:opacity-100"
         aria-label={t('scrollRight')}
       >
         <ChevronRight className="rtl:-scale-x-100 w-4 h-4" />

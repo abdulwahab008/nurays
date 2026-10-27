@@ -23,6 +23,7 @@ import { homeMessages } from '@/lib/i18n/messages/home';
 import { toHomeDish, toHomeKitchen } from '@/lib/home-feed';
 import { filterKitchens, isKitchenFilter, type HomeDish, type KitchenFilter } from '@/lib/home-filters';
 import { SiteHeader } from '@/components/layout/SiteHeader';
+import HomeHero from '@/components/home/HomeHero';
 import FilterBar from '@/components/home/FilterBar';
 import PromoBanners from '@/components/home/PromoBanners';
 import { KitchenAvatarRow, KitchenGrid, TrendingKitchens } from '@/components/home/KitchenSections';
@@ -219,6 +220,7 @@ export default function Home() {
         onOpenTray={() => setIsCartOpen(true)}
         onFrozen={() => setSelectedFilter('frozen')}
       />
+      <HomeHero dishes={dishes} />
       <FilterBar
         selectedCuisine={selectedCuisine}
         onSelectCuisine={setSelectedCuisine}
