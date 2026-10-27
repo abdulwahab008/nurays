@@ -84,15 +84,15 @@ export function TwoFactorCard() {
   };
 
   return (
-    <div className="p-4 bg-gray-50 rounded-xl space-y-3" data-testid="two-factor-card">
+    <div className="p-4 bg-raised rounded-xl space-y-3" data-testid="two-factor-card">
       <div className="flex items-center justify-between gap-3">
         <div className="flex items-center gap-3 min-w-0">
-          <div className="w-10 h-10 shrink-0 bg-emerald-100 rounded-lg flex items-center justify-center text-emerald-700">
+          <div className="w-10 h-10 shrink-0 bg-brand-soft rounded-lg flex items-center justify-center text-brand-soft-ink">
             <ShieldCheck className="w-5 h-5" />
           </div>
           <div className="min-w-0">
-            <p className="font-medium text-gray-900">Two-step sign-in</p>
-            <p className="text-xs text-gray-600">
+            <p className="font-medium text-ink">Two-step sign-in</p>
+            <p className="text-xs text-muted">
               {status == null
                 ? 'A code from an authenticator app at every sign-in.'
                 : status.enabled
@@ -114,15 +114,15 @@ export function TwoFactorCard() {
       {Boolean(error) && <LoadError compact error={error} onRetry={load} title="We couldn't load your two-step sign-in" />}
 
       {setup && (
-        <form onSubmit={confirm} className="space-y-2 text-sm text-gray-700">
+        <form onSubmit={confirm} className="space-y-2 text-sm text-ink">
           <p>
             Add an account in your authenticator app ({' '}
-            <a href={setup.otpauthUrl} className="text-emerald-700 underline">open it in the app</a> on your phone), or type this key:
+            <a href={setup.otpauthUrl} className="text-brand-soft-ink underline">open it in the app</a> on your phone), or type this key:
           </p>
-          <p className="rounded-lg bg-white border border-gray-200 px-3 py-2 font-mono break-all" dir="ltr">{setup.secret.replace(/(.{4})/g, '$1 ').trim()}</p>
-          <label htmlFor="two-factor-code" className="block text-xs font-medium text-gray-700">Code from the app</label>
+          <p className="rounded-lg bg-surface border border-line px-3 py-2 font-mono break-all" dir="ltr">{setup.secret.replace(/(.{4})/g, '$1 ').trim()}</p>
+          <label htmlFor="two-factor-code" className="block text-xs font-medium text-ink">Code from the app</label>
           <div className="flex gap-2">
-            <input id="two-factor-code" value={code} onChange={(e) => setCode(e.target.value)} inputMode="numeric" maxLength={6} dir="ltr" className="w-32 px-3 py-2 border border-gray-200 rounded-xl" />
+            <input id="two-factor-code" value={code} onChange={(e) => setCode(e.target.value)} inputMode="numeric" maxLength={6} dir="ltr" className="w-32 px-3 py-2 border border-line rounded-xl" />
             <Button type="submit" size="sm" disabled={busy || code.trim().length !== 6}>Turn on</Button>
           </div>
         </form>
@@ -130,9 +130,9 @@ export function TwoFactorCard() {
 
       {codes && (
         <div className="space-y-2" data-testid="two-factor-backup-codes">
-          <p className="text-sm text-gray-800 font-medium">Your backup codes, shown only now. Each signs you in once if you lose your phone.</p>
+          <p className="text-sm text-ink font-medium">Your backup codes, shown only now. Each signs you in once if you lose your phone.</p>
           <ul className="grid grid-cols-2 sm:grid-cols-5 gap-2 font-mono text-xs" dir="ltr">
-            {codes.map((c) => <li key={c} className="rounded-lg bg-white border border-gray-200 px-2 py-1 text-center">{c}</li>)}
+            {codes.map((c) => <li key={c} className="rounded-lg bg-surface border border-line px-2 py-1 text-center">{c}</li>)}
           </ul>
           <Button size="sm" variant="outline" onClick={() => setCodes(null)}>I have saved them</Button>
         </div>

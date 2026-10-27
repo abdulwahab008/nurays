@@ -80,11 +80,11 @@ export function SessionsCard() {
   };
 
   return (
-    <div className="p-4 bg-gray-50 rounded-xl" data-testid="sessions-card">
+    <div className="p-4 bg-raised rounded-xl" data-testid="sessions-card">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <p className="font-medium text-gray-900">{t('devicesTitle')}</p>
-          <p className="text-xs text-gray-500">{t('devicesDesc')}</p>
+          <p className="font-medium text-ink">{t('devicesTitle')}</p>
+          <p className="text-xs text-muted">{t('devicesDesc')}</p>
         </div>
         <Button variant="outline" size="sm" className="shrink-0" onClick={() => setConfirmAll(true)} data-testid="sessions-sign-out-all">
           {t('devicesSignOutAll')}
@@ -94,22 +94,22 @@ export function SessionsCard() {
       {Boolean(error) && <LoadError compact className="mt-3" error={error} onRetry={load} title={t('devicesLoadFailed')} />}
 
       {devices && (
-        <ul className="mt-3 divide-y divide-gray-200" data-testid="sessions-list">
+        <ul className="mt-3 divide-y divide-line" data-testid="sessions-list">
           {devices.map((d) => {
             const mobile = /iPhone|Android|iPad/.test(d.userAgent ?? '');
             const Icon = mobile ? Smartphone : Laptop;
             return (
               <li key={d.id} className="flex items-center justify-between gap-3 py-3" data-testid="session-row">
                 <div className="flex items-center gap-3 min-w-0">
-                  <Icon className="w-5 h-5 shrink-0 text-slate-500" aria-hidden />
+                  <Icon className="w-5 h-5 shrink-0 text-muted" aria-hidden />
                   <div className="min-w-0">
-                    <p className="text-sm font-medium text-gray-900 truncate">
+                    <p className="text-sm font-medium text-ink truncate">
                       {name(d)}
                       {d.current && (
-                        <span className="ms-2 inline-block rounded-full bg-green-100 px-2 py-0.5 text-xs font-semibold text-green-800">{t('deviceThis')}</span>
+                        <span className="ms-2 inline-block rounded-full bg-brand-soft px-2 py-0.5 text-xs font-bold text-brand-soft-ink">{t('deviceThis')}</span>
                       )}
                     </p>
-                    <p className="text-xs text-gray-600">
+                    <p className="text-xs text-muted">
                       {t('deviceLastActive', { when: when(d.lastActiveAt) })}
                       {d.ipAddress ? <span dir="ltr"> · {d.ipAddress}</span> : null}
                     </p>
@@ -123,7 +123,7 @@ export function SessionsCard() {
               </li>
             );
           })}
-          {devices.every((d) => d.current) && <li className="py-3 text-xs text-gray-600">{t('devicesNone')}</li>}
+          {devices.every((d) => d.current) && <li className="py-3 text-xs text-muted">{t('devicesNone')}</li>}
         </ul>
       )}
 

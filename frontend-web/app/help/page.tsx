@@ -11,12 +11,12 @@ export const metadata: Metadata = {
 /** A question that opens to its answer; plain HTML, so it works before (and without) any script. */
 function Faq({ question, children }: { question: string; children: ReactNode }) {
   return (
-    <details className="group rounded-xl border border-slate-200 bg-white open:bg-slate-50/60">
-      <summary className="cursor-pointer list-none px-4 py-3 font-medium text-slate-900 flex items-center justify-between gap-3 [&::-webkit-details-marker]:hidden">
+    <details className="group rounded-xl border border-line bg-surface open:bg-raised/60">
+      <summary className="cursor-pointer list-none px-4 py-3 font-medium text-ink flex items-center justify-between gap-3 [&::-webkit-details-marker]:hidden">
         <span>{question}</span>
-        <span aria-hidden="true" className="text-slate-500 transition-transform group-open:rotate-45">+</span>
+        <span aria-hidden="true" className="text-muted transition-transform group-open:rotate-45">+</span>
       </summary>
-      <div className="px-4 pb-4 text-[15px] leading-7 text-slate-700 space-y-2">{children}</div>
+      <div className="px-4 pb-4 text-[15px] leading-7 text-ink space-y-2">{children}</div>
     </details>
   );
 }
@@ -25,7 +25,7 @@ function Faq({ question, children }: { question: string; children: ReactNode }) 
 export default function HelpPage() {
   return (
     <LegalPage title="Help & contact" updated="10 October 2026" legalText={false}>
-      <section aria-labelledby="contact" className="rounded-2xl border border-brand-200 bg-brand-50/60 p-5">
+      <section aria-labelledby="contact" className="rounded-2xl bg-brand-soft p-5">
         <h2 id="contact" className="!mt-0">Talk to us</h2>
         <ul className="mt-2">
           {supportEmailIsSet && (

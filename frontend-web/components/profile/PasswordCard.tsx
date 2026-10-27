@@ -15,7 +15,7 @@ import { weakPasswordMessage } from '@/lib/password-errors';
 const apiCode = (err: unknown) => (err as { response?: { data?: { error?: { code?: string } } } })?.response?.data?.error?.code;
 
 const inputClass =
-  'w-full px-3 py-2 text-sm border border-gray-200 rounded-xl bg-white focus:ring-2 focus:ring-brand focus:outline-none';
+  'w-full px-3 py-2 text-sm border border-line rounded-xl bg-surface focus:ring-2 focus:ring-brand focus:outline-none';
 
 /**
  * The password row of the profile's security card. A person who has a password changes it here (the current one,
@@ -81,15 +81,15 @@ export function PasswordCard({ hasPassword, email, emailVerified }: { hasPasswor
   };
 
   return (
-    <div className="p-4 bg-gray-50 rounded-xl" data-testid="password-card">
+    <div className="p-4 bg-raised rounded-xl" data-testid="password-card">
       <div className="flex items-center justify-between gap-3">
         <div className="flex items-center gap-3 min-w-0">
-          <div className="w-10 h-10 shrink-0 bg-green-100 rounded-lg flex items-center justify-center text-green-600">
+          <div className="w-10 h-10 shrink-0 bg-brand-soft rounded-xl flex items-center justify-center text-brand-soft-ink">
             <Key className="w-5 h-5" />
           </div>
           <div className="min-w-0">
-            <p className="font-medium text-gray-900">{t('password')}</p>
-            <p className="text-xs text-gray-500">{hasPassword ? t('passwordDesc') : t('passwordGoogleOnly')}</p>
+            <p className="font-medium text-ink">{t('password')}</p>
+            <p className="text-xs text-muted">{hasPassword ? t('passwordDesc') : t('passwordGoogleOnly')}</p>
           </div>
         </div>
         {hasPassword && !open && (
@@ -103,20 +103,20 @@ export function PasswordCard({ hasPassword, email, emailVerified }: { hasPasswor
           </Button>
         )}
       </div>
-      {!hasPassword && !(email && emailVerified) && <p className="text-xs text-gray-500 mt-3">{t('verifyEmailFirst')}</p>}
+      {!hasPassword && !(email && emailVerified) && <p className="text-xs text-muted mt-3">{t('verifyEmailFirst')}</p>}
 
       {hasPassword && open && (
         <form onSubmit={submit} className="mt-4 space-y-3" data-testid="change-password-form">
           <div>
-            <label htmlFor="current-password" className="block text-xs font-medium text-gray-700 mb-1">{t('currentPassword')}</label>
+            <label htmlFor="current-password" className="block text-xs font-medium text-ink mb-1">{t('currentPassword')}</label>
             <input id="current-password" type="password" autoComplete="current-password" required dir="ltr" value={current} onChange={(e) => setCurrent(e.target.value)} className={inputClass} />
           </div>
           <div>
-            <label htmlFor="new-password" className="block text-xs font-medium text-gray-700 mb-1">{ta('newPassword')}</label>
+            <label htmlFor="new-password" className="block text-xs font-medium text-ink mb-1">{ta('newPassword')}</label>
             <input id="new-password" type="password" autoComplete="new-password" required dir="ltr" value={next} onChange={(e) => setNext(e.target.value)} className={inputClass} />
           </div>
           <div>
-            <label htmlFor="confirm-password" className="block text-xs font-medium text-gray-700 mb-1">{t('confirmNewPassword')}</label>
+            <label htmlFor="confirm-password" className="block text-xs font-medium text-ink mb-1">{t('confirmNewPassword')}</label>
             <input id="confirm-password" type="password" autoComplete="new-password" required dir="ltr" value={again} onChange={(e) => setAgain(e.target.value)} className={inputClass} />
           </div>
           {problem && (

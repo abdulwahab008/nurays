@@ -37,21 +37,21 @@ export function ContactUs() {
  */
 export function LegalPage({ title, updated, children, legalText = true }: { title: string; updated: string; children: ReactNode; legalText?: boolean }) {
   return (
-    <div className="min-h-screen bg-slate-50 py-10 px-4">
-      <article className="max-w-3xl mx-auto bg-white rounded-2xl border border-slate-200 shadow-sm p-6 sm:p-10">
-        <Link href="/" className="text-sm text-slate-500 hover:underline">← Nuray</Link>
-        <h1 className="mt-4 text-2xl sm:text-3xl font-bold text-slate-900">{title}</h1>
-        <p className="mt-1 text-sm text-slate-500">Last updated: {updated}</p>
+    <div className="min-h-screen bg-page py-8 sm:py-12 px-4">
+      <article className="max-w-3xl mx-auto bg-surface rounded-[24px] border border-line p-6 sm:p-10">
+        <Link href="/" className="text-sm font-bold text-brand-ink hover:underline">← Nuray</Link>
+        <h1 className="mt-4 text-[28px] sm:text-[36px] leading-tight font-extrabold tracking-tight text-ink">{title}</h1>
+        <p className="mt-1 text-sm text-muted">Last updated: {updated}</p>
         {legalText && !LEGAL.reviewed && (
-          <p className="mt-4 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
+          <p className="mt-4 rounded-2xl bg-accent-soft p-3 text-sm text-accent-soft-ink">
             This text describes how Nuray works today. It has not yet been reviewed by a lawyer; if anything is
             unclear, contact us before you order.
           </p>
         )}
-        <div className="mt-6 space-y-6 text-[15px] leading-7 text-slate-700 [&_h2]:text-lg [&_h2]:font-semibold [&_h2]:text-slate-900 [&_h2]:mt-8 [&_ul]:list-disc [&_ul]:ps-6 [&_ul]:space-y-1">
+        <div className="mt-6 space-y-6 text-[15px] leading-7 text-ink [&_h2]:text-xl [&_h2]:font-extrabold [&_h2]:text-ink [&_h2]:mt-8 [&_ul]:list-disc [&_ul]:ps-6 [&_ul]:space-y-1">
           {children}
         </div>
-        <nav className="mt-10 pt-6 border-t border-slate-100 flex flex-wrap gap-4 text-sm text-slate-600">
+        <nav className="mt-10 pt-6 border-t border-line flex flex-wrap gap-4 text-sm font-semibold text-brand-ink">
           <Link href="/terms" className="hover:underline">Terms of Service</Link>
           <Link href="/privacy" className="hover:underline">Privacy Policy</Link>
           <Link href="/refund-policy" className="hover:underline">Refund &amp; Cancellation Policy</Link>

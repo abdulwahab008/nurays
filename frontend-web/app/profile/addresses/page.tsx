@@ -20,14 +20,14 @@ import { reverseGeocode, GeocodedPlace } from '@/lib/geocode';
 
 function MapLoading() {
   const t = useT(accountMessages);
-  return <p className="text-gray-600 font-medium">{t('loadingMap')}</p>;
+  return <p className="text-muted font-medium">{t('loadingMap')}</p>;
 }
 
 // Dynamically import the map component (no SSR)
 const LocationMap = dynamic(() => import('@/components/ui/LocationMap'), {
   ssr: false,
   loading: () => (
-    <div className="bg-gray-100 rounded-xl flex items-center justify-center h-[300px]">
+    <div className="bg-raised rounded-xl flex items-center justify-center h-[300px]">
       <div className="text-center">
         <div className="w-12 h-12 border-4 border-brand border-t-transparent rounded-full animate-spin mx-auto mb-3"></div>
         <MapLoading />
@@ -59,9 +59,9 @@ import { useShallow } from 'zustand/react/shallow';
 
 // Address type labels with icons (label is what the API stores; labelKey is what we show)
 const addressTypes = [
-  { id: 'home', label: 'Home', labelKey: 'type.home', icon: Home, color: 'from-blue-500 to-blue-600' },
-  { id: 'work', label: 'Work', labelKey: 'type.work', icon: Briefcase, color: 'from-purple-500 to-purple-600' },
-  { id: 'other', label: 'Other', labelKey: 'type.other', icon: MapPin, color: 'from-gray-500 to-gray-600' },
+  { id: 'home', label: 'Home', labelKey: 'type.home', icon: Home, color: 'bg-brand-soft text-brand-soft-ink' },
+  { id: 'work', label: 'Work', labelKey: 'type.work', icon: Briefcase, color: 'bg-accent-soft text-accent-soft-ink' },
+  { id: 'other', label: 'Other', labelKey: 'type.other', icon: MapPin, color: 'bg-raised text-ink' },
 ] as const;
 
 // Popular areas by city for quick selection
@@ -358,7 +358,7 @@ export default function AddressesPage() {
         <div className="flex items-center justify-center h-64">
           <div className="text-center">
             <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-brand mx-auto mb-4"></div>
-            <p className="text-gray-600">{t('loadingAddresses')}</p>
+            <p className="text-muted">{t('loadingAddresses')}</p>
           </div>
         </div>
       </DashboardLayout>
@@ -377,42 +377,42 @@ export default function AddressesPage() {
     >
       {/* Header with Stats */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-        <div className="bg-white rounded-2xl p-5 border border-gray-100 shadow-sm">
+        <div className="bg-surface rounded-[20px] p-5 border border-line">
           <div className="flex items-center gap-4">
-            <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-blue-600 rounded-xl flex items-center justify-center shadow-lg shadow-blue-500/30 text-white">
+            <div className="w-12 h-12 bg-brand-soft text-brand-soft-ink rounded-xl flex items-center justify-center">
               <MapPin className="w-6 h-6" />
             </div>
             <div>
-              <p className="text-2xl font-bold text-gray-900">{couldNotRead ? '–' : addresses.length}</p>
-              <p className="text-sm text-gray-500">{t('savedAddresses')}</p>
+              <p className="text-2xl font-extrabold text-ink">{couldNotRead ? '–' : addresses.length}</p>
+              <p className="text-sm text-muted">{t('savedAddresses')}</p>
             </div>
           </div>
         </div>
         
-        <div className="bg-white rounded-2xl p-5 border border-gray-100 shadow-sm">
+        <div className="bg-surface rounded-[20px] p-5 border border-line">
           <div className="flex items-center gap-4">
-            <div className="w-12 h-12 bg-gradient-to-br from-green-500 to-green-600 rounded-xl flex items-center justify-center shadow-lg shadow-green-500/30 text-white">
+            <div className="w-12 h-12 bg-accent-soft text-accent-soft-ink rounded-xl flex items-center justify-center">
               <Check className="w-6 h-6" />
             </div>
             <div>
-              <p className="text-2xl font-bold text-gray-900">
+              <p className="text-2xl font-extrabold text-ink">
                 {couldNotRead ? '–' : addressLabel(addresses.find(a => a.isDefault)?.label) || t('none')}
               </p>
-              <p className="text-sm text-gray-500">{t('defaultAddress')}</p>
+              <p className="text-sm text-muted">{t('defaultAddress')}</p>
             </div>
           </div>
         </div>
         
-        <div className="bg-gradient-to-r from-brand to-red-500 rounded-2xl p-5 shadow-lg">
+        <div className="bg-brand rounded-[20px] p-5">
           <div className="flex items-center justify-between">
-            <div className="text-white">
+            <div className="text-on-brand">
               <p className="font-bold text-lg">{t('addNewAddress')}</p>
-              <p className="text-sm text-white/80">{t('gpsOrManual')}</p>
+              <p className="text-sm text-on-brand/80">{t('gpsOrManual')}</p>
             </div>
             <button
               onClick={() => { resetForm(); setShowAddForm(true); }}
               aria-label={t('addNewAddress')}
-              className="w-12 h-12 bg-white/10 hover:bg-white/20 rounded-xl flex items-center justify-center transition-all hover:scale-105 text-white"
+              className="w-12 h-12 bg-on-brand text-brand hover:opacity-90 rounded-xl flex items-center justify-center transition-all hover:scale-105"
             >
               <Plus className="w-6 h-6" />
             </button>
@@ -422,23 +422,23 @@ export default function AddressesPage() {
 
       {/* Add/Edit Address Form */}
       {showAddForm && (
-        <div className="bg-white rounded-2xl shadow-lg border border-gray-100 mb-6 overflow-hidden">
+        <div className="bg-surface rounded-[20px] border border-line mb-6 overflow-hidden">
           {/* Form Header */}
-          <div className="bg-gradient-to-r from-brand to-red-500 px-6 py-4">
+          <div className="border-b border-line px-5 sm:px-6 py-4">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 bg-white/20 rounded-xl flex items-center justify-center text-white">
+                <div className="w-10 h-10 bg-brand-soft text-brand-soft-ink rounded-xl flex items-center justify-center">
                   {editingAddress ? <Pencil className="w-5 h-5" /> : <MapPin className="w-5 h-5" />}
                 </div>
-                <div className="text-white">
-                  <h2 className="font-bold text-lg">{editingAddress ? t('editAddress') : t('addNewAddress')}</h2>
-                  <p className="text-sm text-white/80">{t('fillLocationDetails')}</p>
+                <div>
+                  <h2 className="font-extrabold text-lg text-ink">{editingAddress ? t('editAddress') : t('addNewAddress')}</h2>
+                  <p className="text-sm text-muted">{t('fillLocationDetails')}</p>
                 </div>
               </div>
               <button
                 onClick={resetForm}
                 aria-label={tc('close')}
-                className="w-10 h-10 bg-white/10 hover:bg-white/20 rounded-xl flex items-center justify-center transition-all text-white"
+                className="w-10 h-10 bg-raised hover:bg-line text-ink rounded-xl flex items-center justify-center transition-all"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -448,7 +448,7 @@ export default function AddressesPage() {
           <div className="p-6">
             {/* Quick Location Options */}
             <div className="mb-6">
-              <p className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-1.5">
+              <p className="text-sm font-semibold text-ink mb-3 flex items-center gap-1.5">
                 <Navigation className="w-4 h-4 text-brand-ink" />
                 {t('quickLocationOptions')}
               </p>
@@ -457,9 +457,9 @@ export default function AddressesPage() {
                   type="button"
                   onClick={detectCurrentLocation}
                   disabled={detectingLocation}
-                  className="flex items-center gap-3 p-4 bg-gradient-to-r from-blue-50 to-blue-100 border-2 border-blue-200 rounded-xl hover:border-blue-400 transition-all group"
+                  className="flex items-center gap-3 p-4 bg-surface border border-line rounded-2xl hover:border-brand hover:bg-brand-soft/40 transition-all group"
                 >
-                  <div className="w-10 h-10 bg-blue-500 rounded-xl flex items-center justify-center group-hover:scale-110 transition-transform text-white">
+                  <div className="w-10 h-10 bg-brand text-on-brand rounded-xl flex items-center justify-center">
                     {detectingLocation ? (
                       <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
                     ) : (
@@ -467,22 +467,22 @@ export default function AddressesPage() {
                     )}
                   </div>
                   <div className="text-start">
-                    <p className="font-semibold text-blue-800">{t('useCurrentLocation')}</p>
-                    <p className="text-xs text-blue-600">{t('autoDetectGps')}</p>
+                    <p className="font-bold text-ink">{t('useCurrentLocation')}</p>
+                    <p className="text-xs text-muted">{t('autoDetectGps')}</p>
                   </div>
                 </button>
 
                 <button
                   type="button"
                   onClick={() => setShowMap(!showMap)}
-                  className="flex items-center gap-3 p-4 bg-gradient-to-r from-green-50 to-green-100 border-2 border-green-200 rounded-xl hover:border-green-400 transition-all group"
+                  className="flex items-center gap-3 p-4 bg-surface border border-line rounded-2xl hover:border-brand hover:bg-brand-soft/40 transition-all group"
                 >
-                  <div className="w-10 h-10 bg-green-600 rounded-xl flex items-center justify-center group-hover:scale-110 transition-transform text-white">
+                  <div className="w-10 h-10 bg-brand-soft text-brand-soft-ink rounded-xl flex items-center justify-center">
                     <MapIcon className="w-5 h-5" />
                   </div>
                   <div className="text-start">
-                    <p className="font-semibold text-green-800">{t('pickFromMap')}</p>
-                    <p className="text-xs text-green-600">{t('selectVisually')}</p>
+                    <p className="font-bold text-ink">{t('pickFromMap')}</p>
+                    <p className="text-xs text-muted">{t('selectVisually')}</p>
                   </div>
                 </button>
               </div>
@@ -509,8 +509,8 @@ export default function AddressesPage() {
                   height="300px"
                   draggable={true}
                 />
-                <div className="mt-3 flex items-center justify-between bg-gray-50 rounded-xl p-3">
-                  <div className="flex items-center gap-2 text-sm text-gray-600">
+                <div className="mt-3 flex items-center justify-between bg-raised rounded-xl p-3">
+                  <div className="flex items-center gap-2 text-sm text-muted">
                     <MapPin className="w-4 h-4 text-brand-ink" />
                     {formData.latitude ? (
                       <span>{t('selectedLabel')} <span data-ltr>{parseFloat(formData.latitude).toFixed(4)}, {parseFloat(formData.longitude).toFixed(4)}</span></span>
@@ -531,7 +531,7 @@ export default function AddressesPage() {
 
             {/* Address Type Selection */}
             <div className="mb-6">
-              <p className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-1.5">
+              <p className="text-sm font-semibold text-ink mb-3 flex items-center gap-1.5">
                 <Tag className="w-4 h-4 text-brand-ink" /> {t('addressType')}
               </p>
               <div className="flex gap-3">
@@ -545,14 +545,14 @@ export default function AddressesPage() {
                       className={`flex-1 p-4 rounded-xl border-2 transition-all ${
                         formData.label === type.id
                           ? `border-brand bg-brand-50`
-                          : 'border-gray-200 hover:border-gray-300 bg-white'
+                          : 'border-line hover:border-line-strong bg-surface'
                       }`}
                     >
-                      <div className={`w-10 h-10 bg-gradient-to-br ${type.color} rounded-lg flex items-center justify-center mx-auto mb-2 text-white`}>
+                      <div className={`w-10 h-10 ${type.color} rounded-xl flex items-center justify-center mx-auto mb-2`}>
                         <TypeIcon className="w-5 h-5" />
                       </div>
                       <p className={`font-semibold text-sm ${
-                        formData.label === type.id ? 'text-brand-ink' : 'text-gray-700'
+                        formData.label === type.id ? 'text-brand-ink' : 'text-ink'
                       }`}>{t(type.labelKey)}</p>
                     </button>
                   );
@@ -564,7 +564,7 @@ export default function AddressesPage() {
               {/* City & Area */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">
+                  <label className="block text-sm font-semibold text-ink mb-2">
                     {t('city')} <span className="text-red-500">*</span>
                   </label>
                   <input
@@ -575,7 +575,7 @@ export default function AddressesPage() {
                     value={formData.city}
                     onChange={(e) => setFormData({ ...formData, city: e.target.value })}
                     placeholder={t('cityPlaceholder')}
-                    className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-brand focus:border-brand transition-all bg-white"
+                    className="w-full px-4 py-3 border border-line rounded-xl focus:ring-2 focus:ring-brand focus:border-brand transition-all bg-surface"
                   />
                   <datalist id="address-cities">
                     {CITIES.map(city => (
@@ -585,7 +585,7 @@ export default function AddressesPage() {
                 </div>
                 
                 <div className="relative">
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">
+                  <label className="block text-sm font-semibold text-ink mb-2">
                     {t('areaLocality')} <span className="text-red-500">*</span>
                   </label>
                   <input
@@ -596,11 +596,11 @@ export default function AddressesPage() {
                     onBlur={() => setTimeout(() => setShowSuggestions(false), 200)}
                     placeholder={t('areaLocalityPlaceholder')}
                     required
-                    className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-brand focus:border-brand transition-all"
+                    className="w-full px-4 py-3 border border-line rounded-xl focus:ring-2 focus:ring-brand focus:border-brand transition-all"
                   />
                   {/* Area Suggestions Dropdown */}
                   {showSuggestions && (
-                    <div className="absolute z-10 w-full mt-1 bg-white border border-gray-200 rounded-xl shadow-lg max-h-48 overflow-auto">
+                    <div className="absolute z-10 w-full mt-1 bg-surface border border-line rounded-xl shadow-lg max-h-48 overflow-auto">
                       {searchSuggestions.map((area) => (
                         <button
                           key={area}
@@ -608,8 +608,8 @@ export default function AddressesPage() {
                           onClick={() => selectArea(area)}
                           className="w-full px-4 py-3 text-start hover:bg-brand-50 transition-colors flex items-center gap-2"
                         >
-                          <MapPin className="w-4 h-4 text-gray-500 shrink-0" />
-                          <span className="text-gray-700">{area}</span>
+                          <MapPin className="w-4 h-4 text-muted shrink-0" />
+                          <span className="text-ink">{area}</span>
                         </button>
                       ))}
                     </div>
@@ -619,7 +619,7 @@ export default function AddressesPage() {
 
               {/* Street Address */}
               <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">
+                <label className="block text-sm font-semibold text-ink mb-2">
                   {t('streetAddress')} <span className="text-red-500">*</span>
                 </label>
                 <input
@@ -628,14 +628,14 @@ export default function AddressesPage() {
                   onChange={(e) => setFormData({ ...formData, addressLine1: e.target.value })}
                   placeholder={t('streetAddressPlaceholder')}
                   required
-                  className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-brand focus:border-brand transition-all"
+                  className="w-full px-4 py-3 border border-line rounded-xl focus:ring-2 focus:ring-brand focus:border-brand transition-all"
                 />
               </div>
 
               {/* House number & Flat/Floor */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">
+                  <label className="block text-sm font-semibold text-ink mb-2">
                     {t('houseNumber')}
                   </label>
                   <input
@@ -644,11 +644,11 @@ export default function AddressesPage() {
                     onChange={(e) => setFormData({ ...formData, houseNumber: e.target.value })}
                     placeholder={t('houseNumberPlaceholder')}
                     maxLength={50}
-                    className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-brand focus:border-brand transition-all"
+                    className="w-full px-4 py-3 border border-line rounded-xl focus:ring-2 focus:ring-brand focus:border-brand transition-all"
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">
+                  <label className="block text-sm font-semibold text-ink mb-2">
                     {t('flatFloor')}
                   </label>
                   <input
@@ -656,7 +656,7 @@ export default function AddressesPage() {
                     value={formData.addressLine2}
                     onChange={(e) => setFormData({ ...formData, addressLine2: e.target.value })}
                     placeholder={t('flatFloorPlaceholder')}
-                    className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-brand focus:border-brand transition-all"
+                    className="w-full px-4 py-3 border border-line rounded-xl focus:ring-2 focus:ring-brand focus:border-brand transition-all"
                   />
                 </div>
               </div>
@@ -664,7 +664,7 @@ export default function AddressesPage() {
               {/* Landmark & Postal Code */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">
+                  <label className="block text-sm font-semibold text-ink mb-2">
                     {t('nearbyLandmark')}
                   </label>
                   <input
@@ -672,11 +672,11 @@ export default function AddressesPage() {
                     value={formData.landmark}
                     onChange={(e) => setFormData({ ...formData, landmark: e.target.value })}
                     placeholder={t('landmarkPlaceholder')}
-                    className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-brand focus:border-brand transition-all"
+                    className="w-full px-4 py-3 border border-line rounded-xl focus:ring-2 focus:ring-brand focus:border-brand transition-all"
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">
+                  <label className="block text-sm font-semibold text-ink mb-2">
                     {t('postalCode')}
                   </label>
                   <input
@@ -684,15 +684,15 @@ export default function AddressesPage() {
                     value={formData.postalCode}
                     onChange={(e) => setFormData({ ...formData, postalCode: e.target.value })}
                     placeholder={t('postalCodePlaceholder')}
-                    className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-brand focus:border-brand transition-all"
+                    className="w-full px-4 py-3 border border-line rounded-xl focus:ring-2 focus:ring-brand focus:border-brand transition-all"
                   />
                 </div>
               </div>
 
               {/* Delivery Instructions */}
               <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2 flex items-center gap-1.5">
-                  <Truck className="w-4 h-4 text-slate-500" />
+                <label className="block text-sm font-semibold text-ink mb-2 flex items-center gap-1.5">
+                  <Truck className="w-4 h-4 text-muted" />
                   {t('deliveryInstructions')}
                 </label>
                 <textarea
@@ -700,22 +700,22 @@ export default function AddressesPage() {
                   onChange={(e) => setFormData({ ...formData, deliveryInstructions: e.target.value })}
                   placeholder={t('deliveryInstructionsPlaceholder')}
                   rows={3}
-                  className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-brand focus:border-brand transition-all resize-none"
+                  className="w-full px-4 py-3 border border-line rounded-xl focus:ring-2 focus:ring-brand focus:border-brand transition-all resize-none"
                 />
               </div>
 
               {/* Set as Default */}
-              <div className="flex items-center p-4 bg-gradient-to-r from-brand-50 to-red-50 rounded-xl border border-brand-100">
+              <div className="flex items-center p-4 bg-raised rounded-2xl">
                 <input
                   type="checkbox"
                   id="isDefault"
                   checked={formData.isDefault}
                   onChange={(e) => setFormData({ ...formData, isDefault: e.target.checked })}
-                  className="w-5 h-5 text-brand-ink rounded border-gray-300 focus:ring-brand cursor-pointer"
+                  className="w-5 h-5 text-brand-ink rounded border-line-strong focus:ring-brand cursor-pointer"
                 />
                 <label htmlFor="isDefault" className="ms-3 cursor-pointer">
-                  <span className="font-semibold text-gray-800">{t('setDefaultDelivery')}</span>
-                  <p className="text-gray-500 text-sm">{t('autoSelectedCheckout')}</p>
+                  <span className="font-semibold text-ink">{t('setDefaultDelivery')}</span>
+                  <p className="text-muted text-sm">{t('autoSelectedCheckout')}</p>
                 </label>
               </div>
 
@@ -724,13 +724,13 @@ export default function AddressesPage() {
                 <Button
                   type="button"
                   onClick={resetForm}
-                  className="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-700 py-3"
+                  className="flex-1 bg-surface border border-line-strong hover:bg-raised text-ink h-12 font-bold"
                 >
                   {tc('cancel')}
                 </Button>
                 <Button 
                   type="submit" 
-                  className="flex-1 bg-gradient-to-r from-brand to-red-500 hover:from-brand-500 hover:to-red-600 text-on-brand py-3 shadow-lg shadow-brand/30 flex items-center justify-center gap-2"
+                  className="flex-1 bg-brand hover:bg-brand-500 text-on-brand h-12 font-extrabold flex items-center justify-center gap-2"
                 >
                   {editingAddress ? <Check className="w-4 h-4" /> : <Plus className="w-4 h-4" />}
                   {editingAddress ? t('updateAddress') : t('saveAddress')}
@@ -745,17 +745,17 @@ export default function AddressesPage() {
       {loadError && addresses.length === 0 ? (
         <LoadError error={loadError} onRetry={loadAddresses} title={t('addressesLoadFailed')} />
       ) : addresses.length === 0 ? (
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-12 text-center">
-          <div className="w-24 h-24 bg-gradient-to-br from-brand-100 to-red-100 rounded-full flex items-center justify-center mx-auto mb-6 text-brand-ink">
-            <MapPin className="w-12 h-12" />
+        <div className="bg-surface rounded-[24px] border border-dashed border-line-strong p-10 sm:p-12 text-center">
+          <div className="w-20 h-20 bg-brand-soft rounded-3xl flex items-center justify-center mx-auto mb-5 text-brand-soft-ink">
+            <MapPin className="w-10 h-10" />
           </div>
-          <h2 className="text-2xl font-bold text-gray-900 mb-2">{t('noAddresses')}</h2>
-          <p className="text-gray-500 mb-6 max-w-md mx-auto">
+          <h2 className="text-2xl font-extrabold text-ink mb-2">{t('noAddresses')}</h2>
+          <p className="text-muted mb-6 max-w-md mx-auto">
             {t('noAddressesDesc')}
           </p>
           <Button 
             onClick={() => setShowAddForm(true)} 
-            className="bg-gradient-to-r from-brand to-red-500 hover:from-brand-500 hover:from-red-600 shadow-lg shadow-brand/30 flex items-center gap-2 mx-auto"
+            className="bg-brand hover:bg-brand-500 text-on-brand h-12 px-6 font-extrabold flex items-center gap-2 mx-auto"
           >
             <Plus className="w-4 h-4" /> {t('addFirstAddress')}
           </Button>
@@ -763,7 +763,7 @@ export default function AddressesPage() {
       ) : (
         <div className="space-y-4">
           <div className="flex items-center justify-between mb-2">
-            <h3 className="font-bold text-gray-900">{t('savedAddressesCount', { count: addresses.length })}</h3>
+            <h3 className="font-bold text-ink">{t('savedAddressesCount', { count: addresses.length })}</h3>
           </div>
           
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
@@ -773,22 +773,22 @@ export default function AddressesPage() {
               return (
                 <div
                   key={address.id}
-                  className={`bg-white rounded-2xl shadow-sm overflow-hidden border-2 transition-all hover:shadow-lg group ${
-                    address.isDefault ? 'border-brand ring-2 ring-brand-100' : 'border-gray-100 hover:border-gray-200'
+                  className={`bg-surface rounded-[20px] overflow-hidden border transition-colors group ${
+                    address.isDefault ? 'border-brand' : 'border-line hover:border-line-strong'
                   }`}
                 >
                   {/* Card Header */}
                   <div className={`px-5 py-3 flex items-center justify-between ${
-                    address.isDefault ? 'bg-gradient-to-r from-brand-50 to-red-50' : 'bg-gray-50'
+                    address.isDefault ? 'bg-brand-soft/50' : 'bg-raised'
                   }`}>
                     <div className="flex items-center gap-3">
-                      <div className={`w-10 h-10 bg-gradient-to-br ${typeInfo.color} rounded-xl flex items-center justify-center shadow-sm text-white`}>
+                      <div className={`w-10 h-10 ${typeInfo.color} rounded-xl flex items-center justify-center`}>
                         <TypeIcon className="w-5 h-5" />
                       </div>
                       <div>
-                        <h4 className="font-bold text-gray-900 capitalize">{addressLabel(address.label) || t('address')}</h4>
+                        <h4 className="font-bold text-ink capitalize">{addressLabel(address.label) || t('address')}</h4>
                         {address.isDefault && (
-                          <span className="text-xs bg-brand-100 text-brand-ink px-2 py-0.5 rounded-full font-medium flex items-center gap-1 mt-0.5">
+                          <span className="text-xs bg-brand text-on-brand px-2 py-0.5 rounded-full font-bold flex items-center gap-1 mt-0.5">
                             <Check className="w-3 h-3" /> {t('default')}
                           </span>
                         )}
@@ -796,54 +796,54 @@ export default function AddressesPage() {
                     </div>
                     
                     {!address.coordinates && (
-                      <span className="text-[11px] bg-amber-100 text-amber-800 px-2 py-0.5 rounded-full font-semibold" data-testid="address-no-pin">{t('noPinBadge')}</span>
+                      <span className="text-[11px] bg-accent-soft text-accent-soft-ink px-2 py-0.5 rounded-full font-semibold" data-testid="address-no-pin">{t('noPinBadge')}</span>
                     )}
                     {/* Action Buttons */}
                     <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                       {!address.isDefault && (
                         <button 
                           onClick={() => handleSetDefault(address.id)}
-                          className="p-2 text-gray-500 hover:text-brand-ink hover:bg-brand-50 rounded-lg transition-colors"
+                          className="p-2 text-muted hover:text-brand-ink hover:bg-brand-50 rounded-lg transition-colors"
                           title={t('setAsDefault')}
                         >
-                          <Star className="w-4 h-4 text-amber-500" />
+                          <Star className="w-4 h-4 text-accent" />
                         </button>
                       )}
                       <button 
                         onClick={() => handleEditAddress(address)}
-                        className="p-2 text-gray-500 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                        className="w-10 h-10 flex items-center justify-center text-muted hover:text-ink hover:bg-raised rounded-xl transition-colors"
                         title={tc('edit')}
                       >
-                        <Pencil className="w-4 h-4 text-slate-600" />
+                        <Pencil className="w-4 h-4 text-muted" />
                       </button>
                       <button 
                         onClick={() => handleDeleteAddress(address.id)}
-                        className="p-2 text-gray-500 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                        className="p-2 text-muted hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
                         title={tc('delete')}
                       >
-                        <Trash2 className="w-4 h-4 text-rose-500" />
+                        <Trash2 className="w-4 h-4 text-red-600" />
                       </button>
                     </div>
                   </div>
                   
                   {/* Card Body */}
                   <div className="p-5">
-                    <div className="space-y-1 text-gray-700">
+                    <div className="space-y-1 text-ink">
                       <p className="font-medium">{[address.houseNumber, address.addressLine1].filter(Boolean).join(', ')}</p>
-                      {address.addressLine2 && <p className="text-gray-500">{address.addressLine2}</p>}
-                      <p className="text-gray-500">{address.area}, {address.city}</p>
+                      {address.addressLine2 && <p className="text-muted">{address.addressLine2}</p>}
+                      <p className="text-muted">{address.area}, {address.city}</p>
                     </div>
                     
                     {(address.landmark || address.postalCode) && (
-                      <div className="mt-4 pt-4 border-t border-gray-100 flex flex-wrap gap-2">
+                      <div className="mt-4 pt-4 border-t border-line flex flex-wrap gap-2">
                         {address.landmark && (
-                          <span className="inline-flex items-center gap-1.5 text-xs bg-gray-100 text-gray-600 px-3 py-1.5 rounded-lg">
-                            <MapPin className="w-3.5 h-3.5 text-slate-500 shrink-0" /> {address.landmark}
+                          <span className="inline-flex items-center gap-1.5 text-xs bg-raised text-muted px-3 py-1.5 rounded-lg">
+                            <MapPin className="w-3.5 h-3.5 text-muted shrink-0" /> {address.landmark}
                           </span>
                         )}
                         {address.postalCode && (
-                          <span className="inline-flex items-center gap-1.5 text-xs bg-gray-100 text-gray-600 px-3 py-1.5 rounded-lg">
-                            <Mail className="w-3.5 h-3.5 text-slate-500 shrink-0" /> {address.postalCode}
+                          <span className="inline-flex items-center gap-1.5 text-xs bg-raised text-muted px-3 py-1.5 rounded-lg">
+                            <Mail className="w-3.5 h-3.5 text-muted shrink-0" /> {address.postalCode}
                           </span>
                         )}
                       </div>
@@ -857,36 +857,36 @@ export default function AddressesPage() {
       )}
 
       {/* Tips Section */}
-      <div className="mt-8 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-2xl p-6 border border-blue-100">
-        <h3 className="font-bold text-blue-900 mb-4 flex items-center gap-2">
-          <Lightbulb className="w-5 h-5 text-amber-500" /> {t('tipsTitle')}
+      <div className="mt-8 bg-surface rounded-[20px] p-5 sm:p-6 border border-line">
+        <h3 className="font-extrabold text-ink mb-4 flex items-center gap-2">
+          <Lightbulb className="w-5 h-5 text-accent" /> {t('tipsTitle')}
         </h3>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <div className="flex items-start gap-3">
-            <div className="w-8 h-8 bg-blue-100 rounded-lg flex items-center justify-center flex-shrink-0 text-blue-600">
+            <div className="w-9 h-9 bg-brand-soft rounded-xl flex items-center justify-center flex-shrink-0 text-brand-soft-ink">
               <MapPin className="w-4 h-4" />
             </div>
             <div>
-              <p className="font-medium text-blue-800 text-sm">{t('tipLandmarks')}</p>
-              <p className="text-xs text-blue-600">{t('tipLandmarksDesc')}</p>
+              <p className="font-bold text-ink text-sm">{t('tipLandmarks')}</p>
+              <p className="text-xs text-muted">{t('tipLandmarksDesc')}</p>
             </div>
           </div>
           <div className="flex items-start gap-3">
-            <div className="w-8 h-8 bg-blue-100 rounded-lg flex items-center justify-center flex-shrink-0 text-blue-600">
+            <div className="w-9 h-9 bg-brand-soft rounded-xl flex items-center justify-center flex-shrink-0 text-brand-soft-ink">
               <Bell className="w-4 h-4" />
             </div>
             <div>
-              <p className="font-medium text-blue-800 text-sm">{t('tipPhone')}</p>
-              <p className="text-xs text-blue-600">{t('tipPhoneDesc')}</p>
+              <p className="font-bold text-ink text-sm">{t('tipPhone')}</p>
+              <p className="text-xs text-muted">{t('tipPhoneDesc')}</p>
             </div>
           </div>
           <div className="flex items-start gap-3">
-            <div className="w-8 h-8 bg-blue-100 rounded-lg flex items-center justify-center flex-shrink-0 text-blue-600">
+            <div className="w-9 h-9 bg-brand-soft rounded-xl flex items-center justify-center flex-shrink-0 text-brand-soft-ink">
               <FileText className="w-4 h-4" />
             </div>
             <div>
-              <p className="font-medium text-blue-800 text-sm">{t('tipInstructions')}</p>
-              <p className="text-xs text-blue-600">{t('tipInstructionsDesc')}</p>
+              <p className="font-bold text-ink text-sm">{t('tipInstructions')}</p>
+              <p className="text-xs text-muted">{t('tipInstructionsDesc')}</p>
             </div>
           </div>
         </div>

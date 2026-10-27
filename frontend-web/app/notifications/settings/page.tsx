@@ -141,16 +141,16 @@ export default function NotificationSettingsPage() {
   return (
     <DashboardLayout title={t('notificationSettings')} subtitle={t('notificationSettingsSub')} sidebarItems={sidebar} userType={layoutRole}>
       <div className="max-w-3xl mx-auto space-y-5 pb-16">
-        <div className="rounded-3xl border border-slate-200 bg-white p-5 sm:p-6" data-testid="push-device">
+        <div className="rounded-[24px] border border-line bg-surface p-5 sm:p-6" data-testid="push-device">
           <div className="flex items-start gap-3">
             <div className="w-10 h-10 rounded-xl bg-brand-50 text-brand-ink flex items-center justify-center shrink-0">
               <Bell className="w-5 h-5" />
             </div>
             <div className="flex-1">
-              <h2 className="text-sm font-bold text-slate-900">{t('pushOnDevice')}</h2>
-              <p className="text-xs text-slate-500 mt-1">{pushState ? t(PUSH_TEXT[pushState]) : t('checking')}</p>
+              <h2 className="text-sm font-bold text-ink">{t('pushOnDevice')}</h2>
+              <p className="text-xs text-muted mt-1">{pushState ? t(PUSH_TEXT[pushState]) : t('checking')}</p>
               {role === 'seller' && pushState === 'off' && (
-                <p className="text-xs text-amber-700 mt-1">{t('sellerPushHint')}</p>
+                <p className="text-xs text-accent-soft-ink mt-1">{t('sellerPushHint')}</p>
               )}
             </div>
             {(pushState === 'off' || pushState === 'on') && (
@@ -158,7 +158,7 @@ export default function NotificationSettingsPage() {
                 type="button"
                 disabled={busy}
                 onClick={() => changePush(pushState !== 'on')}
-                className={`px-4 py-2 rounded-xl text-sm font-bold disabled:opacity-50 ${pushState === 'on' ? 'border border-slate-300 text-slate-700' : 'bg-brand text-on-brand'}`}
+                className={`px-4 py-2 rounded-xl text-sm font-bold disabled:opacity-50 ${pushState === 'on' ? 'border border-line-strong text-ink' : 'bg-brand text-on-brand'}`}
                 data-testid="push-toggle"
               >
                 {busy ? t('oneMoment') : pushState === 'on' ? t('turnOff') : t('turnOn')}
@@ -168,12 +168,12 @@ export default function NotificationSettingsPage() {
         </div>
 
         {!settings ? (
-          loadError ? <LoadError error={loadError} onRetry={load} title={t('loadSettingsFailed')} /> : <div className="h-48 rounded-3xl bg-slate-100 animate-pulse" />
+          loadError ? <LoadError error={loadError} onRetry={load} title={t('loadSettingsFailed')} /> : <div className="h-48 rounded-[24px] bg-raised animate-pulse" />
         ) : (
-          <div className="rounded-3xl border border-slate-200 bg-white overflow-hidden" data-testid="notification-preferences">
+          <div className="rounded-[24px] border border-line bg-surface overflow-hidden" data-testid="notification-preferences">
             <div className="px-5 sm:px-6 pt-5">
-              <h2 className="text-sm font-bold text-slate-900">{t('whatYouHear')}</h2>
-              <p className="text-xs text-slate-500 mt-1">
+              <h2 className="text-sm font-bold text-ink">{t('whatYouHear')}</h2>
+              <p className="text-xs text-muted mt-1">
                 {t('everythingAppearsUnder')}{' '}
                 <Link href={role === 'seller' ? '/sellers/notifications' : '/notifications'} className="underline">
                   {t('notifications')}
@@ -182,7 +182,7 @@ export default function NotificationSettingsPage() {
               </p>
             </div>
             <table className="w-full text-sm mt-4">
-              <thead className="bg-slate-50 text-xs text-slate-500">
+              <thead className="bg-raised text-xs text-muted">
                 <tr>
                   <th className="px-5 sm:px-6 py-2 text-start font-semibold">{t('kind')}</th>
                   {CHANNELS.map((c) => (
@@ -195,12 +195,12 @@ export default function NotificationSettingsPage() {
                   ))}
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100">
+              <tbody className="divide-y divide-line">
                 {settings.categories.map((category) => (
                   <tr key={category}>
                     <td className="px-5 sm:px-6 py-4">
-                      <p className="font-semibold text-slate-900">{t(copy[category].title)}</p>
-                      <p className="text-xs text-slate-500">{copy[category].text ? t(copy[category].text) : ''}</p>
+                      <p className="font-semibold text-ink">{t(copy[category].title)}</p>
+                      <p className="text-xs text-muted">{copy[category].text ? t(copy[category].text) : ''}</p>
                     </td>
                     {CHANNELS.map((c) => {
                       const available = settings.channels[c.id].available;
@@ -215,9 +215,9 @@ export default function NotificationSettingsPage() {
                             disabled={!available}
                             title={settings.channels[c.id].reason ?? undefined}
                             onClick={() => toggle(category, c.id)}
-                            className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors disabled:opacity-40 ${on && available ? 'bg-emerald-500' : 'bg-slate-300'}`}
+                            className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors disabled:opacity-40 ${on && available ? 'bg-brand' : 'bg-line-strong'}`}
                           >
-                            <span className={`inline-block h-5 w-5 transform rounded-full bg-white shadow transition-transform ${on && available ? 'translate-x-5' : 'translate-x-0.5'}`} />
+                            <span className={`inline-block h-5 w-5 transform rounded-full bg-surface shadow transition-transform ${on && available ? 'translate-x-5' : 'translate-x-0.5'}`} />
                           </button>
                         </td>
                       );
@@ -227,7 +227,7 @@ export default function NotificationSettingsPage() {
               </tbody>
             </table>
             {CHANNELS.some((c) => !settings.channels[c.id].available) && (
-              <ul className="px-5 sm:px-6 py-4 border-t border-slate-100 text-xs text-slate-500 space-y-1">
+              <ul className="px-5 sm:px-6 py-4 border-t border-line text-xs text-muted space-y-1">
                 {CHANNELS.filter((c) => !settings.channels[c.id].available).map((c) => (
                   <li key={c.id}>
                     {t(c.labelKey)}: {settings.channels[c.id].reason}

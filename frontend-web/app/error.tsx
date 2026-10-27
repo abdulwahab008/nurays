@@ -12,21 +12,21 @@ export default function RouteError({ error, reset }: { error: Error & { digest?:
 
   return (
     <div className="min-h-[60vh] flex items-center justify-center px-4">
-      <div className="max-w-md w-full text-center bg-white border border-slate-200 rounded-2xl p-8 shadow-sm">
-        <h1 className="text-xl font-bold text-slate-900">Something went wrong on this page</h1>
-        <p className="mt-2 text-sm text-slate-600">
+      <div className="max-w-md w-full text-center bg-surface border border-line rounded-[24px] p-8 sm:p-10">
+        <h1 className="text-2xl leading-tight font-extrabold tracking-tight text-ink">Something went wrong on this page</h1>
+        <p className="mt-2 text-sm text-muted">
           It has been reported. You can try again, or go back to the home page.
         </p>
-        {error.digest && <p className="mt-3 text-xs text-slate-500">Reference: {error.digest}</p>}
+        {error.digest && <p className="mt-3 text-xs text-muted">Reference: {error.digest}</p>}
         <div className="mt-6 flex justify-center gap-3">
           <button
             type="button"
             onClick={reset}
-            className="px-4 py-2 rounded-xl bg-brand text-on-brand text-sm font-semibold hover:bg-brand-500"
+            className="inline-flex items-center h-11 px-5 rounded-xl bg-brand text-on-brand text-sm font-extrabold hover:bg-brand-500"
           >
             Try again
           </button>
-          <Link href="/" className="px-4 py-2 rounded-xl border border-slate-300 text-sm font-semibold text-slate-700 hover:bg-slate-50">
+          <Link href="/" className="inline-flex items-center h-11 px-4 rounded-xl border border-line-strong text-sm font-bold text-ink hover:bg-raised">
             Home
           </Link>
         </div>

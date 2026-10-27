@@ -108,10 +108,10 @@ function WalletContent() {
             role="status"
             className={`rounded-2xl border px-4 py-3 text-sm font-medium ${
               topupResult.tone === 'success'
-                ? 'bg-emerald-50 border-emerald-200 text-emerald-800'
+                ? 'bg-brand-soft border-brand/40 text-brand-soft-ink'
                 : topupResult.tone === 'error'
                 ? 'bg-red-50 border-red-200 text-red-800'
-                : 'bg-slate-50 border-slate-200 text-slate-700'
+                : 'bg-raised border-line text-ink'
             }`}
           >
             {t(topupResult.text)}
@@ -119,9 +119,9 @@ function WalletContent() {
         )}
 
         {loading ? (
-          <div className="h-40 rounded-3xl bg-slate-100 animate-pulse" />
+          <div className="h-40 rounded-[24px] bg-raised animate-pulse" />
         ) : loadError || !wallet ? (
-          <div className="rounded-3xl border border-red-200 bg-red-50 p-6 text-center">
+          <div className="rounded-[24px] border border-red-200 bg-red-50 p-6 text-center">
             <p className="text-sm font-semibold text-red-800">{t('walletLoadError')}</p>
             <button type="button" onClick={load} className="mt-3 px-4 py-2 rounded-xl border border-red-300 text-sm text-red-700">
               {t('retry')}
@@ -129,26 +129,26 @@ function WalletContent() {
           </div>
         ) : (
           <>
-            <div className="rounded-3xl bg-gradient-to-br from-slate-900 to-slate-800 text-white p-6 sm:p-8">
-              <div className="flex items-center gap-2 text-slate-300 text-xs font-semibold uppercase tracking-wider">
+            <div className="rounded-[24px] bg-[#0D2624] text-white p-6 sm:p-8">
+              <div className="flex items-center gap-2 text-[#A3BCB7] text-sm font-semibold">
                 <Wallet className="w-4 h-4" /> {t('balance')}
               </div>
-              <div className="mt-2 text-4xl font-black">{formatPrice(wallet.balance)}</div>
+              <div className="mt-2 text-4xl font-extrabold">{formatPrice(wallet.balance)}</div>
               {wallet.isLocked && (
-                <p className="mt-3 flex items-center gap-2 text-sm text-amber-300">
+                <p className="mt-3 flex items-center gap-2 text-sm text-accent">
                   <Lock className="w-4 h-4" /> {t('walletLocked')}
                 </p>
               )}
-              <p className="mt-3 text-xs text-slate-400 max-w-md">
+              <p className="mt-3 text-xs text-[#A3BCB7] max-w-md">
                 {t('walletInfo')}
               </p>
             </div>
 
-            <div className="rounded-3xl border border-slate-200 bg-white p-5 sm:p-6">
-              <h2 className="text-sm font-bold text-slate-900">{t('topUpHeading')}</h2>
+            <div className="rounded-[24px] border border-line bg-surface p-5 sm:p-6">
+              <h2 className="text-sm font-bold text-ink">{t('topUpHeading')}</h2>
               {wallet.topUp.available && !wallet.isLocked ? (
                 <>
-                  <p className="mt-1 text-xs text-slate-500">
+                  <p className="mt-1 text-xs text-muted">
                     {t('topUpHint', { min: formatPrice(min), max: formatPrice(max) })}
                   </p>
                   <div className="mt-4 flex flex-wrap gap-2">
@@ -161,7 +161,7 @@ function WalletContent() {
                           setCustom('');
                         }}
                         className={`px-4 py-2 rounded-xl border text-sm font-semibold ${
-                          !custom && amount === p ? 'border-brand bg-brand-50 text-brand-ink' : 'border-slate-200 text-slate-700 hover:border-slate-300'
+                          !custom && amount === p ? 'border-brand bg-brand-50 text-brand-ink' : 'border-line text-ink hover:border-line-strong'
                         }`}
                       >
                         {formatPrice(p)}
@@ -176,7 +176,7 @@ function WalletContent() {
                       dir="ltr"
                       value={custom}
                       onChange={(e) => setCustom(e.target.value)}
-                      className="w-36 px-3 py-2 rounded-xl border border-slate-200 text-sm"
+                      className="w-36 px-3 py-2 rounded-xl border border-line text-sm"
                       aria-label={t('otherAmountAria')}
                     />
                   </div>
@@ -191,30 +191,30 @@ function WalletContent() {
                   </button>
                 </>
               ) : (
-                <p className="mt-1 text-xs text-slate-500">
+                <p className="mt-1 text-xs text-muted">
                   {wallet.isLocked ? t('topUpPaused') : t('topUpUnavailable')}
                 </p>
               )}
             </div>
 
-            <div className="rounded-3xl border border-slate-200 bg-white overflow-hidden">
-              <h2 className="px-5 sm:px-6 pt-5 text-sm font-bold text-slate-900">{t('history')}</h2>
+            <div className="rounded-[24px] border border-line bg-surface overflow-hidden">
+              <h2 className="px-5 sm:px-6 pt-5 text-sm font-bold text-ink">{t('history')}</h2>
               {transactions.length === 0 ? (
-                <p className="px-5 sm:px-6 py-8 text-sm text-slate-500">{t('noActivity')}</p>
+                <p className="px-5 sm:px-6 py-8 text-sm text-muted">{t('noActivity')}</p>
               ) : (
-                <ul className="mt-3 divide-y divide-slate-100">
+                <ul className="mt-3 divide-y divide-line">
                   {transactions.map((tx) => {
                     const incoming = tx.type !== 'debit';
                     return (
                       <li key={tx.id} className="px-5 sm:px-6 py-3.5 flex items-center gap-3">
-                        <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${incoming ? 'bg-emerald-50 text-emerald-600' : 'bg-slate-100 text-slate-600'}`}>
+                        <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${incoming ? 'bg-brand-soft text-brand-soft-ink' : 'bg-raised text-muted'}`}>
                           {incoming ? <ArrowDownLeft className="w-4 h-4" /> : <ArrowUpRight className="w-4 h-4" />}
                         </div>
                         <div className="flex-1 min-w-0">
-                          <p className="text-sm font-semibold text-slate-900 truncate">
+                          <p className="text-sm font-semibold text-ink truncate">
                             {tx.description || (tx.type === 'topup' ? t('tx.topup') : incoming ? t('tx.credit') : t('tx.payment'))}
                           </p>
-                          <p className="text-xs text-slate-500">
+                          <p className="text-xs text-muted">
                             {formatDateTime(tx.createdAt)}
                             {tx.orderId && (
                               <>
@@ -227,11 +227,11 @@ function WalletContent() {
                           </p>
                         </div>
                         <div className="text-end">
-                          <p className={`text-sm font-bold ${incoming ? 'text-emerald-600' : 'text-slate-900'}`}>
+                          <p className={`text-sm font-bold ${incoming ? 'text-brand-soft-ink' : 'text-ink'}`}>
                             {incoming ? '+' : '−'}
                             {formatPrice(tx.amount)}
                           </p>
-                          <p className="text-[11px] text-slate-500">{t('balanceAfter', { amount: formatPrice(tx.balanceAfter) })}</p>
+                          <p className="text-[11px] text-muted">{t('balanceAfter', { amount: formatPrice(tx.balanceAfter) })}</p>
                         </div>
                       </li>
                     );
@@ -239,7 +239,7 @@ function WalletContent() {
                 </ul>
               )}
               {page < totalPages && (
-                <div className="p-4 text-center border-t border-slate-100">
+                <div className="p-4 text-center border-t border-line">
                   <button type="button" onClick={loadMore} className="text-sm font-semibold text-brand-ink hover:underline">
                     {t('showOlder')}
                   </button>
