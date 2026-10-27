@@ -73,9 +73,9 @@ export function UberLeftSidebar({
 
       {/* Drawer */}
       <div className="fixed inset-y-0 start-0 max-w-full flex pe-10">
-        <aside className="w-80 max-w-full pt-(--safe-top) pb-(--safe-bottom) ps-(--safe-start) bg-white shadow-2xl flex flex-col transform transition-transform ease-out duration-300 animate-in slide-in-from-left">
+        <aside className="w-80 max-w-full pt-(--safe-top) pb-(--safe-bottom) ps-(--safe-start) bg-surface shadow-2xl flex flex-col transform transition-transform ease-out duration-300 animate-in slide-in-from-left">
           {/* Header */}
-          <div className="p-4 border-b border-slate-200 flex items-center justify-between bg-slate-50/70">
+          <div className="p-4 border-b border-line flex items-center justify-between bg-raised/70">
             <Link
               href="/"
               onClick={onClose}
@@ -86,7 +86,7 @@ export function UberLeftSidebar({
 
             <button
               onClick={onClose}
-              className="w-8 h-8 rounded-lg flex items-center justify-center text-slate-500 hover:text-slate-700 hover:bg-slate-200/60 transition-colors"
+              className="w-8 h-8 rounded-lg flex items-center justify-center text-muted hover:text-ink hover:bg-line/60 transition-colors"
               aria-label={t('closeNav')}
             >
               <X className="w-4 h-4" />
@@ -100,10 +100,10 @@ export function UberLeftSidebar({
                 {(user.profile?.fullName?.[0] || user.email?.[0] || 'U').toUpperCase()}
               </div>
               <div className="flex-1 min-w-0">
-                <p className="text-xs font-bold text-slate-900 truncate">
+                <p className="text-xs font-bold text-ink truncate">
                   {user.profile?.fullName || t('customer')}
                 </p>
-                <p className="text-[11px] text-slate-500 font-medium truncate" data-ltr>
+                <p className="text-[11px] text-muted font-medium truncate" data-ltr>
                   {user.email}
                 </p>
               </div>
@@ -114,7 +114,7 @@ export function UberLeftSidebar({
           <div className="flex-1 overflow-y-auto p-3 space-y-5">
             {/* Primary Platform Feeds */}
             <div className="space-y-0.5">
-              <p className="px-2.5 text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-1.5">
+              <p className="px-2.5 text-[11px] font-bold uppercase tracking-wider text-muted mb-1.5">
                 {t('discover')}
               </p>
               {mainNavItems.map((item) => {
@@ -127,8 +127,8 @@ export function UberLeftSidebar({
                     onClick={onClose}
                     className={`flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-semibold transition-all ${
                       isActive
-                        ? 'bg-slate-900 text-white shadow-xs'
-                        : 'text-slate-700 hover:bg-slate-100 hover:text-slate-950'
+                        ? 'bg-ink text-page shadow-xs'
+                        : 'text-ink hover:bg-raised hover:text-ink'
                     }`}
                   >
                     <Icon className="w-4 h-4 flex-shrink-0" />
@@ -140,7 +140,7 @@ export function UberLeftSidebar({
 
             {/* Quick Cuisines */}
             <div className="space-y-1">
-              <p className="px-2.5 text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-1.5">
+              <p className="px-2.5 text-[11px] font-bold uppercase tracking-wider text-muted mb-1.5">
                 {t('popularSearches')}
               </p>
               <div className="grid grid-cols-2 gap-1 px-0.5">
@@ -149,7 +149,7 @@ export function UberLeftSidebar({
                     key={c.query}
                     href={`/products?search=${c.query}`}
                     onClick={onClose}
-                    className="flex items-center gap-1.5 p-2 rounded-lg bg-slate-50 hover:bg-brand-50 border border-slate-200/60 hover:border-brand-200 text-xs font-medium text-slate-700 hover:text-brand-ink transition-colors"
+                    className="flex items-center gap-1.5 p-2 rounded-lg bg-raised hover:bg-brand-50 border border-line hover:border-brand-200 text-xs font-medium text-ink hover:text-brand-ink transition-colors"
                   >
                     <Sparkles className="w-3 h-3 text-brand-ink flex-shrink-0" />
                     <span className="truncate">{t(c.label)}</span>
@@ -159,8 +159,8 @@ export function UberLeftSidebar({
             </div>
 
             {/* Customer Account & Orders */}
-            <div className="space-y-0.5 pt-3 border-t border-slate-100">
-              <p className="px-2.5 text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-1.5">
+            <div className="space-y-0.5 pt-3 border-t border-line">
+              <p className="px-2.5 text-[11px] font-bold uppercase tracking-wider text-muted mb-1.5">
                 {t('account')}
               </p>
               {isAuthenticated ? (
@@ -168,38 +168,38 @@ export function UberLeftSidebar({
                   <Link
                     href="/orders"
                     onClick={onClose}
-                    className="flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-medium text-slate-700 hover:bg-slate-100"
+                    className="flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-medium text-ink hover:bg-raised"
                   >
-                    <Package className="w-4 h-4 text-slate-500" />
+                    <Package className="w-4 h-4 text-muted" />
                     <span>{t('myFoodOrders')}</span>
                   </Link>
                   <Link
                     href="/dashboard"
                     onClick={onClose}
-                    className="flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-medium text-slate-700 hover:bg-slate-100"
+                    className="flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-medium text-ink hover:bg-raised"
                   >
-                    <LayoutDashboard className="w-4 h-4 text-slate-500" />
+                    <LayoutDashboard className="w-4 h-4 text-muted" />
                     <span>{t('customerDashboard')}</span>
                   </Link>
                   <Link
                     href="/profile/addresses"
                     onClick={onClose}
-                    className="flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-medium text-slate-700 hover:bg-slate-100"
+                    className="flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-medium text-ink hover:bg-raised"
                   >
-                    <MapPin className="w-4 h-4 text-slate-500" />
+                    <MapPin className="w-4 h-4 text-muted" />
                     <span>{t('savedAddresses')}</span>
                   </Link>
                 </>
               ) : (
-                <div className="p-3 rounded-xl bg-slate-50 border border-slate-200 space-y-2">
-                  <p className="text-xs font-medium text-slate-600">
+                <div className="p-3 rounded-xl bg-raised border border-line space-y-2">
+                  <p className="text-xs font-medium text-muted">
                     {t('signInPitch')}
                   </p>
                   <div className="flex gap-2">
                     <Link
                       href="/login"
                       onClick={onClose}
-                      className="flex-1 text-center py-1.5 rounded-lg text-xs font-bold bg-white border border-slate-200 text-slate-800 hover:bg-slate-100 transition-colors"
+                      className="flex-1 text-center py-1.5 rounded-lg text-xs font-bold bg-surface border border-line text-ink hover:bg-raised transition-colors"
                     >
                       {t('signIn')}
                     </Link>
@@ -216,8 +216,8 @@ export function UberLeftSidebar({
             </div>
 
             {/* Portals */}
-            <div className="pt-3 border-t border-slate-100 space-y-0.5">
-              <p className="px-2.5 text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-1.5">
+            <div className="pt-3 border-t border-line space-y-0.5">
+              <p className="px-2.5 text-[11px] font-bold uppercase tracking-wider text-muted mb-1.5">
                 {t('portals')}
               </p>
               <Link
@@ -231,7 +231,7 @@ export function UberLeftSidebar({
               <Link
                 href="/riders/dashboard"
                 onClick={onClose}
-                className="flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-medium text-slate-600 hover:bg-slate-100 transition-colors"
+                className="flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-medium text-muted hover:bg-raised transition-colors"
               >
                 <Bike className="w-4 h-4" />
                 <span>{t('coldChainRiderPortal')}</span>
@@ -241,7 +241,7 @@ export function UberLeftSidebar({
 
           {/* Footer */}
           {isAuthenticated && (
-            <div className="p-3 border-t border-slate-200 bg-slate-50/70">
+            <div className="p-3 border-t border-line bg-raised/70">
               <button
                 onClick={() => {
                   onClose();

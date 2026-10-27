@@ -27,66 +27,55 @@ const reasonNote = (t: HomeT, reason?: string) =>
 export function DishCard({ dish, onAdd, note }: { dish: HomeDish; onAdd: AddDish; note?: string }) {
   const t = useT(homeMessages);
   return (
-    <div
-      key={dish.id}
-      className="group bg-white rounded-2xl border border-slate-200/80 shadow-2xs hover:shadow-md hover:border-slate-300 transition-all flex flex-col justify-between overflow-hidden"
-    >
-      {/* Dish Photo */}
-      <div className="relative aspect-square overflow-hidden bg-slate-100">
+    <div className="group bg-surface rounded-[20px] border border-line hover:border-line-strong hover:shadow-[var(--shadow-card)] transition-all flex flex-col overflow-hidden">
+      <div className="relative aspect-square overflow-hidden bg-raised">
         <CoverImage
           src={dish.photo}
           alt={dish.name}
           label={dish.name}
           size="md"
-          className="w-full h-full group-hover:scale-105 transition-transform duration-300"
+          className="w-full h-full group-hover:scale-[1.03] transition-transform duration-300"
         />
 
-        {/* Product Type Tag (as set by the kitchen) */}
+        {/* Fresh or frozen, as set by the kitchen */}
         {dish.typeLabel && (
           <span
-            className={`absolute top-2 start-2 px-1.5 py-0.5 rounded-md text-white text-[11px] font-bold flex items-center gap-0.5 ${
-              dish.isFrozen ? 'bg-cyan-600' : 'bg-brand-700'
+            className={`absolute top-2 start-2 px-2 py-0.5 rounded-full text-[11px] font-extrabold flex items-center gap-1 ${
+              dish.isFrozen ? 'bg-frozen-soft text-frozen-ink' : 'bg-surface/95 text-ink'
             }`}
           >
-            {dish.isFrozen ? <Snowflake className="w-2.5 h-2.5" /> : <Flame className="w-2.5 h-2.5" />}
+            {dish.isFrozen ? <Snowflake className="w-3 h-3" aria-hidden /> : <Flame className="w-3 h-3 text-brand-ink" aria-hidden />}
             <span>{dish.typeLabel}</span>
           </span>
         )}
 
-        {/* Direct Add to Cart Button */}
         <button
           onClick={(e) => onAdd(dish, e)}
-          className="absolute bottom-2 end-2 w-8 h-8 rounded-full bg-brand hover:bg-brand-500 text-on-brand shadow-md flex items-center justify-center font-bold text-sm transition-transform active:scale-95"
+          className="absolute bottom-2 end-2 w-9 h-9 rounded-full bg-brand hover:bg-brand-500 text-on-brand shadow-md flex items-center justify-center transition-transform active:scale-95"
           title={t('addToTray')}
           aria-label={t('addNameToTray', { name: dish.name })}
         >
-          <Plus className="w-4 h-4" />
+          <Plus className="w-4 h-4" strokeWidth={3} />
         </button>
       </div>
 
-      {/* Dish Info */}
-      <div className="p-3 flex-1 flex flex-col justify-between">
-        <div>
-          {note && <p className="text-[11px] font-bold text-brand-ink truncate mb-0.5">{note}</p>}
-          <p className="text-[11px] font-semibold text-slate-500 truncate flex items-center gap-1">
-            <ChefHat className="w-3 h-3 text-slate-400" />
-            <span>{dish.kitchenName}</span>
-          </p>
-          <h4 className="text-xs font-bold text-slate-900 leading-snug line-clamp-2 mt-0.5 group-hover:text-brand-ink transition-colors">
-            {dish.name}
-          </h4>
-        </div>
-
-        <div className="mt-2.5 pt-2 border-t border-slate-100 flex items-center justify-between">
-          <div>
-            <span className="text-xs font-bold text-slate-950 block">{formatPrice(dish.price)}</span>
+      <div className="p-3 flex-1 flex flex-col gap-1">
+        {note && <p className="text-[11px] font-bold text-brand-ink truncate">{note}</p>}
+        <h4 className="text-sm font-extrabold text-ink leading-snug line-clamp-2">{dish.name}</h4>
+        <p className="text-xs text-muted truncate flex items-center gap-1">
+          <ChefHat className="w-3 h-3 flex-shrink-0" aria-hidden />
+          <span>{dish.kitchenName}</span>
+        </p>
+        <div className="mt-auto pt-1.5 flex items-center justify-between gap-2">
+          <div className="flex items-baseline gap-1.5 min-w-0">
+            <span className="text-sm font-extrabold text-ink">{formatPrice(dish.price)}</span>
             {dish.originalPrice != null && (
-              <span className="text-[11px] text-slate-500 line-through">{formatPrice(dish.originalPrice)}</span>
+              <span className="text-[11px] text-muted line-through truncate">{formatPrice(dish.originalPrice)}</span>
             )}
           </div>
           {dish.rating && (
-            <span className="text-[11px] font-bold bg-amber-50 text-amber-800 px-1.5 py-0.5 rounded flex items-center gap-0.5 border border-amber-200/60">
-              <Star className="w-2.5 h-2.5 fill-amber-500 text-amber-500" />
+            <span className="text-xs font-extrabold text-ink flex items-center gap-0.5 flex-shrink-0">
+              <Star className="w-3.5 h-3.5 fill-accent text-accent" aria-hidden />
               <span>{dish.rating}</span>
             </span>
           )}
@@ -110,9 +99,9 @@ export function PersonalDishes({
   return (
     <>
       {orderAgainDishes.length > 0 && (
-        <section className="max-w-[1440px] mx-auto px-4 sm:px-8 pt-8" data-testid="order-again">
-          <h2 className="text-xl sm:text-2xl font-bold text-slate-900 tracking-tight mb-4">{t('orderAgain')}</h2>
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3.5 sm:gap-4">
+        <section className="max-w-[1280px] mx-auto px-4 sm:px-8 pt-8" data-testid="order-again">
+          <h2 className="text-[22px] sm:text-[28px] font-extrabold text-ink tracking-tight mb-4">{t('orderAgain')}</h2>
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 sm:gap-4">
             {orderAgainDishes.map((dish) => (
               <DishCard key={dish.id} dish={dish} onAdd={onAdd} />
             ))}
@@ -120,10 +109,10 @@ export function PersonalDishes({
         </section>
       )}
       {recommendedDishes.length > 0 && (
-        <section className="max-w-[1440px] mx-auto px-4 sm:px-8 pt-8" data-testid="recommended">
-          <h2 className="text-xl sm:text-2xl font-bold text-slate-900 tracking-tight">{t('recommendedForYou')}</h2>
-          <p className="text-xs text-slate-500 font-medium mt-0.5 mb-4">{t('recommendedForYouSub')}</p>
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3.5 sm:gap-4">
+        <section className="max-w-[1280px] mx-auto px-4 sm:px-8 pt-8" data-testid="recommended">
+          <h2 className="text-[22px] sm:text-[28px] font-extrabold text-ink tracking-tight">{t('recommendedForYou')}</h2>
+          <p className="text-xs text-muted font-medium mt-0.5 mb-4">{t('recommendedForYouSub')}</p>
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 sm:gap-4">
             {recommendedDishes.map(({ dish, reason }) => (
               <DishCard key={dish.id} dish={dish} onAdd={onAdd} note={reasonNote(t, reason)} />
             ))}
@@ -148,15 +137,15 @@ export function PopularDishes({
 }) {
   const t = useT(homeMessages);
   return (
-    <section className="max-w-[1440px] mx-auto px-4 sm:px-8 py-8">
-      <div className="flex items-center justify-between mb-5">
+    <section className="max-w-[1280px] mx-auto px-4 sm:px-8 py-8">
+      <div className="flex items-end justify-between gap-4 mb-5">
         <div>
           <div className="inline-flex items-center gap-1 text-[11px] font-bold uppercase tracking-wider text-brand-ink mb-0.5">
             <UtensilsCrossed className="w-3.5 h-3.5" />
             <span>{t('fromHomeKitchens')}</span>
           </div>
-          <h2 className="text-xl sm:text-2xl font-bold text-slate-900 tracking-tight">{t('popularDishes')}</h2>
-          <p className="text-xs text-slate-500 font-medium mt-0.5">{t('popularDishesSub')}</p>
+          <h2 className="text-[22px] sm:text-[28px] font-extrabold text-ink tracking-tight">{t('popularDishes')}</h2>
+          <p className="text-xs text-muted font-medium mt-0.5">{t('popularDishesSub')}</p>
         </div>
         <Link href="/products" className="text-xs font-bold text-brand-ink hover:underline flex items-center gap-1">
           <span>{t('exploreAllDishes')}</span>
@@ -165,7 +154,7 @@ export function PopularDishes({
       </div>
 
       {state === 'loading' ? (
-        <div role="status" className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3.5 sm:gap-4">
+        <div role="status" className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 sm:gap-4">
           <span className="sr-only">{t('loadingDishes')}</span>
           {Array.from({ length: 6 }, (_, i) => (
             <DishCardSkeleton key={i} />
@@ -177,7 +166,7 @@ export function PopularDishes({
         <SectionNotice title={t('noDishes')} message={t('noDishesBody')} />
       ) : (
         /* Dishes Grid */
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3.5 sm:gap-4">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 sm:gap-4">
           {dishes.map((dish) => (
             <DishCard key={dish.id} dish={dish} onAdd={onAdd} />
           ))}

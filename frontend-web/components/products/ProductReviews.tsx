@@ -62,49 +62,49 @@ export default function ProductReviews({ productId }: { productId: string }) {
   }, [productId, page, key]);
 
   if (loading && !data) {
-    return <div className="text-sm text-gray-500 py-6">{t('loadingReviews')}</div>;
+    return <div className="text-sm text-muted py-6">{t('loadingReviews')}</div>;
   }
 
   if (!data || data.summary.totalReviews === 0) {
     return (
-      <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-8 text-center">
-        <h3 className="font-semibold text-gray-900 mb-1">{t('noReviews')}</h3>
-        <p className="text-sm text-gray-500">{t('beFirst')}</p>
+      <div className="bg-surface rounded-2xl shadow-sm border border-line p-8 text-center">
+        <h3 className="font-semibold text-ink mb-1">{t('noReviews')}</h3>
+        <p className="text-sm text-muted">{t('beFirst')}</p>
       </div>
     );
   }
 
   return (
-    <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
+    <div className="bg-surface rounded-2xl shadow-sm border border-line p-6">
       <div className="flex items-center gap-4 mb-6">
         <div>
-          <div className="text-3xl font-bold text-gray-900">{data.summary.averageRating.toFixed(1)}</div>
+          <div className="text-3xl font-bold text-ink">{data.summary.averageRating.toFixed(1)}</div>
           <Stars rating={data.summary.averageRating} />
         </div>
-        <div className="text-sm text-gray-500">
+        <div className="text-sm text-muted">
           {t(data.summary.totalReviews === 1 ? 'basedOnOne' : 'basedOnMany', { count: data.summary.totalReviews })}
         </div>
       </div>
 
       <div className="space-y-5">
         {data.reviews.map((review) => (
-          <div key={review.id} className="border-t border-gray-100 pt-5 first:border-t-0 first:pt-0">
+          <div key={review.id} className="border-t border-line pt-5 first:border-t-0 first:pt-0">
             <div className="flex items-center gap-2 mb-1">
-              <span className="font-medium text-gray-900">{review.customerName}</span>
+              <span className="font-medium text-ink">{review.customerName}</span>
               {review.isVerifiedPurchase && (
                 <span className="text-xs bg-green-50 text-green-700 px-2 py-0.5 rounded-full">{t('verifiedPurchase')}</span>
               )}
             </div>
             <Stars rating={review.productRating} />
-            {review.comment && <p className="text-sm text-gray-700 mt-2">{review.comment}</p>}
+            {review.comment && <p className="text-sm text-ink mt-2">{review.comment}</p>}
             {review.sellerResponse && (
-              <div className="mt-2 bg-gray-50 rounded-lg p-3 text-sm text-gray-600">
-                <span className="font-medium text-gray-800">{t('sellerReply')}</span>
+              <div className="mt-2 bg-raised rounded-lg p-3 text-sm text-muted">
+                <span className="font-medium text-ink">{t('sellerReply')}</span>
                 {review.sellerResponse}
               </div>
             )}
             <div className="flex flex-wrap items-center gap-x-3 mt-1">
-              <p className="text-xs text-gray-500">{formatDate(review.createdAt)}</p>
+              <p className="text-xs text-muted">{formatDate(review.createdAt)}</p>
               <ReportReview reviewId={review.id} />
             </div>
           </div>
@@ -118,7 +118,7 @@ export default function ProductReviews({ productId }: { productId: string }) {
               key={p}
               onClick={() => setPage(p)}
               className={`w-8 h-8 rounded-lg text-sm font-medium ${
-                p === page ? 'bg-gray-900 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                p === page ? 'bg-ink text-page' : 'bg-raised text-muted hover:bg-line'
               }`}
             >
               {p}

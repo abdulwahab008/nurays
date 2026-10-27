@@ -14,6 +14,8 @@ import { useToast } from '@/components/ui/toast';
 import { useCartStore } from '@/lib/store/cart-store';
 import { useAuthStore } from '@/lib/store/auth-store';
 import { DashboardLayout, CUSTOMER_SIDEBAR_ITEMS } from '@/components/layout/DashboardShell';
+import { SiteHeader } from '@/components/layout/SiteHeader';
+import { CoverImage } from '@/components/ui/CoverImage';
 import { apiClient, apiErrorCode, apiErrorStatus, apiErrorDetails, errorMessage, type CartConflictDetails } from '@/lib/api-client';
 import { LoadError } from '@/components/ui/LoadError';
 import ProductReviews from '@/components/products/ProductReviews';
@@ -481,18 +483,18 @@ export default function ProductDetailPage({ initial }: { initial?: RawProduct })
         >
           <div className="flex items-center justify-center h-64">
             <div className="text-center">
-              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-gray-600 mx-auto mb-4"></div>
-              <p className="text-gray-600">{t('loadingProduct')}</p>
+              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-brand mx-auto mb-4"></div>
+              <p className="text-muted">{t('loadingProduct')}</p>
             </div>
           </div>
         </DashboardLayout>
       );
     }
     return (
-      <div className="min-h-screen flex items-center justify-center" style={{ background: "var(--cream-50)" }}>
+      <div className="min-h-screen bg-page flex items-center justify-center">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-gray-600 mx-auto mb-4"></div>
-          <p className="text-gray-600">{t('loadingProduct')}</p>
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-brand mx-auto mb-4"></div>
+          <p className="text-muted">{t('loadingProduct')}</p>
         </div>
       </div>
     );
@@ -505,7 +507,7 @@ export default function ProductDetailPage({ initial }: { initial?: RawProduct })
         {failed}
       </DashboardLayout>
     ) : (
-      <div className="min-h-screen flex items-center justify-center p-6" style={{ background: 'var(--cream-50)' }}>
+      <div className="min-h-screen bg-page flex items-center justify-center p-6">
         <div className="w-full max-w-lg">{failed}</div>
       </div>
     );
@@ -520,14 +522,14 @@ export default function ProductDetailPage({ initial }: { initial?: RawProduct })
           sidebarItems={sidebarItems}
           userType="customer"
         >
-          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-12 text-center">
-            <div className="w-20 h-20 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-6">
+          <div className="bg-surface rounded-[20px] border border-dashed border-line-strong p-12 text-center">
+            <div className="w-20 h-20 bg-raised rounded-full flex items-center justify-center mx-auto mb-6">
               <span className="text-4xl">🔍</span>
             </div>
-            <h2 className="text-2xl font-bold text-gray-900 mb-3">{t('notFoundTitle')}</h2>
-            <p className="text-gray-500 mb-6">{t('notFoundBody')}</p>
+            <h2 className="text-2xl font-bold text-ink mb-3">{t('notFoundTitle')}</h2>
+            <p className="text-muted mb-6">{t('notFoundBody')}</p>
             <Link href="/products">
-              <Button className="bg-gray-700 hover:bg-gray-800">
+              <Button>
                 <span className="me-2">🛍️</span> {t('browseProducts')}
               </Button>
             </Link>
@@ -536,11 +538,11 @@ export default function ProductDetailPage({ initial }: { initial?: RawProduct })
       );
     }
     return (
-      <div className="min-h-screen flex items-center justify-center" style={{ background: "var(--cream-50)" }}>
+      <div className="min-h-screen bg-page flex items-center justify-center">
         <div className="text-center">
-          <p className="text-gray-600 mb-4">{t('notFoundShort')}</p>
+          <p className="text-muted mb-4">{t('notFoundShort')}</p>
           <Link href="/products">
-            <Button className="bg-gray-700 hover:bg-gray-800">{t('backToProducts')}</Button>
+            <Button>{t('backToProducts')}</Button>
           </Link>
         </div>
       </div>
@@ -562,31 +564,29 @@ export default function ProductDetailPage({ initial }: { initial?: RawProduct })
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 lg:gap-12">
       {/* Product Images - left column */}
       <div className="lg:sticky lg:top-[calc(6rem+var(--safe-top))] self-start">
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
-          <div className="aspect-square max-h-[480px] bg-gray-50 flex items-center justify-center overflow-hidden">
+        <div className="bg-surface rounded-[24px] border border-line overflow-hidden">
+          <div className="aspect-[4/3] lg:aspect-square lg:max-h-[520px] bg-raised flex items-center justify-center overflow-hidden">
             {product.images[selectedImage]?.url ? (
               <img
                 src={product.images[selectedImage].url}
                 alt={product.name}
-                className="w-full h-full object-contain"
+                className="w-full h-full object-cover"
               />
             ) : (
-              <div className="text-gray-500 text-sm text-center px-4 py-8">
-                {t('noImages')}
-              </div>
+              <CoverImage alt={t('noImages')} label={product.name} size="lg" className="w-full h-full" />
             )}
           </div>
           {product.images.length > 1 && (
-            <div className="p-4 pt-0 flex gap-2 overflow-x-auto">
+            <div className="p-3 flex gap-2 overflow-x-auto">
               {product.images.slice(0, 6).map((image, index) => (
                 <button
                   key={index}
                   type="button"
                   onClick={() => setSelectedImage(index)}
-                  className={`flex-shrink-0 w-14 h-14 rounded-lg overflow-hidden border-2 transition-all ${
-                    selectedImage === index
-                      ? 'border-gray-700 ring-2 ring-gray-200'
-                      : 'border-transparent hover:border-gray-300'
+                  aria-label={t('showPhoto', { n: index + 1 })}
+                  aria-pressed={selectedImage === index}
+                  className={`flex-shrink-0 w-16 h-16 rounded-xl overflow-hidden transition-all ${
+                    selectedImage === index ? 'ring-[3px] ring-brand ring-offset-2 ring-offset-surface' : 'opacity-80 hover:opacity-100'
                   }`}
                 >
                   <img
@@ -604,30 +604,30 @@ export default function ProductDetailPage({ initial }: { initial?: RawProduct })
       {/* Product Info - right column */}
       <div className="space-y-6 lg:min-w-0">
         {/* Breadcrumb */}
-        <nav className="flex items-center gap-2 text-sm text-gray-500">
-          <Link href="/products" className="hover:text-gray-900 transition-colors">
+        <nav aria-label={t('breadcrumbLabel')} className="flex items-center gap-2 text-sm text-muted">
+          <Link href="/products" className="font-semibold text-brand-ink hover:underline">
             {t('breadcrumbProducts')}
           </Link>
           <span aria-hidden>/</span>
-          <span className="text-gray-900 truncate">{product.name}</span>
+          <span className="text-ink truncate">{product.name}</span>
         </nav>
 
         {/* Title & meta */}
         <div>
-          <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 tracking-tight mb-1">
+          <h1 className="text-[28px] sm:text-[36px] leading-tight font-extrabold text-ink tracking-tight mb-1">
             {product.name}
           </h1>
           {product.nameUrdu && (
-            <p className="text-lg text-gray-600 mb-4">{product.nameUrdu}</p>
+            <p className="text-lg text-muted mb-4">{product.nameUrdu}</p>
           )}
           <div className="flex flex-wrap items-center gap-2">
-            <span className="inline-flex items-center gap-1.5 bg-gray-100 text-gray-700 px-3 py-1.5 rounded-lg text-sm font-medium">
+            <span className="inline-flex items-center gap-1.5 bg-accent-soft text-accent-soft-ink px-3 py-1.5 rounded-full text-sm font-bold">
               {product.totalReviews > 0
                 ? `★ ${product.ratingAverage.toFixed(1)} · ${t('reviewsCount', { count: product.totalReviews })}`
                 : t('new')}
             </span>
             {(product.stock.hub + product.stock.direct) > 0 && (
-              <span className="inline-flex items-center bg-gray-100 text-gray-700 px-3 py-1.5 rounded-lg text-sm font-medium">
+              <span className="inline-flex items-center bg-brand-soft text-brand-soft-ink px-3 py-1.5 rounded-full text-sm font-bold">
                 {t('inStock')}
               </span>
             )}
@@ -635,20 +635,20 @@ export default function ProductDetailPage({ initial }: { initial?: RawProduct })
         </div>
 
         {/* Price block - clear hierarchy */}
-        <div className="rounded-2xl bg-gray-50 border border-gray-100 p-6">
+        <div className="rounded-[20px] bg-raised p-5 sm:p-6">
           <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1">
-            <span className="text-3xl sm:text-4xl font-bold text-gray-900">
+            <span className="text-3xl sm:text-4xl font-extrabold text-ink">
               {formatPrice(catalogPromotions.length > 0 ? unitPrice : Math.round(product.price))}
             </span>
             {(catalogPromotions.length > 0 || (product.originalPrice != null && product.originalPrice > product.price)) && (
-              <span className="text-lg text-gray-500 line-through">
+              <span className="text-lg text-muted line-through">
                 {formatPrice(catalogPromotions.length > 0 ? product.price : Math.round(product.originalPrice ?? 0))}
               </span>
             )}
           </div>
           <div className="mt-2 flex flex-wrap items-center gap-2">
             {catalogPromotions.length > 0 && (
-              <span className="text-sm font-medium text-gray-600 bg-white border border-gray-200 px-2.5 py-1 rounded-lg">
+              <span className="text-sm font-extrabold bg-accent text-on-accent px-2.5 py-1 rounded-full">
                 {catalogPromotions.length === 1
                   ? getPromotionLabel(catalogPromotions[0], t, formatPrice)
                   : catalogPromotions.map((p) => getPromotionLabel(p, t, formatPrice)).join(' + ')}
@@ -657,21 +657,21 @@ export default function ProductDetailPage({ initial }: { initial?: RawProduct })
             {catalogPromotions.length === 0 &&
               product.originalPrice != null &&
               Math.round(product.originalPrice) > Math.round(product.price) && (
-                <span className="text-sm font-medium text-gray-600 bg-white border border-gray-200 px-2.5 py-1 rounded-lg">
+                <span className="text-sm font-extrabold bg-accent text-on-accent px-2.5 py-1 rounded-full">
                   {t('percentOff', { value: Math.round((1 - product.price / product.originalPrice) * 100) })}
                 </span>
               )}
-            <span className="text-gray-500 text-sm">{t('perUnit', { unit: product.unit })}</span>
+            <span className="text-muted text-sm">{t('perUnit', { unit: product.unit })}</span>
           </div>
         </div>
 
         {/* Description */}
         {product.description && (
           <div>
-            <h2 className="text-sm font-semibold text-gray-900 uppercase tracking-wider mb-2">
+            <h2 className="text-base font-extrabold text-ink mb-2">
               {t('description')}
             </h2>
-            <p className="text-gray-700 leading-relaxed">{product.description}</p>
+            <p className="text-ink leading-relaxed">{product.description}</p>
           </div>
         )}
 
@@ -681,13 +681,13 @@ export default function ProductDetailPage({ initial }: { initial?: RawProduct })
           (product.dietaryInfo && product.dietaryInfo.length > 0) ||
           product.ingredients ||
           product.heatingInstructions) && (
-          <div className="space-y-3 rounded-xl border border-amber-200 bg-amber-50 p-4">
+          <div className="space-y-3 rounded-[20px] bg-accent-soft p-4 sm:p-5">
             {product.allergens && (
               <div>
-                <h3 className="text-xs font-semibold text-amber-900 uppercase tracking-wider mb-1">
+                <h3 className="text-xs font-extrabold text-accent-soft-ink uppercase tracking-wider mb-1">
                   {t('allergens')}
                 </h3>
-                <p className="text-sm text-amber-900">{product.allergens}</p>
+                <p className="text-sm text-accent-soft-ink">{product.allergens}</p>
               </div>
             )}
             {product.dietaryInfo && product.dietaryInfo.length > 0 && (
@@ -695,7 +695,7 @@ export default function ProductDetailPage({ initial }: { initial?: RawProduct })
                 {product.dietaryInfo.map((tag) => (
                   <span
                     key={tag}
-                    className="px-2.5 py-1 text-xs font-medium rounded-full bg-green-100 text-green-800"
+                    className="px-2.5 py-1 text-xs font-bold rounded-full bg-surface text-ink"
                   >
                     {tag}
                   </span>
@@ -704,20 +704,20 @@ export default function ProductDetailPage({ initial }: { initial?: RawProduct })
             )}
             {product.ingredients && (
               <div>
-                <h3 className="text-xs font-semibold text-gray-700 uppercase tracking-wider mb-1">
+                <h3 className="text-xs font-extrabold text-accent-soft-ink uppercase tracking-wider mb-1">
                   {t('ingredients')}
                 </h3>
-                <p className="text-sm text-gray-700">{product.ingredients}</p>
+                <p className="text-sm text-accent-soft-ink">{product.ingredients}</p>
               </div>
             )}
             {product.heatingInstructions && (
               <div>
-                <h3 className="text-xs font-semibold text-gray-700 uppercase tracking-wider mb-1">
+                <h3 className="text-xs font-extrabold text-accent-soft-ink uppercase tracking-wider mb-1">
                   {t('heating')}
                 </h3>
-                <p className="text-sm text-gray-700">{product.heatingInstructions}</p>
+                <p className="text-sm text-accent-soft-ink">{product.heatingInstructions}</p>
                 {product.heatingInstructionsUrdu && (
-                  <p className="text-sm text-gray-600 mt-1">{product.heatingInstructionsUrdu}</p>
+                  <p className="text-sm text-accent-soft-ink mt-1">{product.heatingInstructionsUrdu}</p>
                 )}
               </div>
             )}
@@ -725,17 +725,17 @@ export default function ProductDetailPage({ initial }: { initial?: RawProduct })
         )}
 
         {/* Seller & Community Card */}
-        <div className="py-4 border-y border-gray-100 space-y-2">
+        <div className="rounded-[20px] border border-line bg-surface p-4 space-y-2">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-2xl bg-brand-100 text-brand-ink flex items-center justify-center font-black text-sm">
+              <div className="w-11 h-11 rounded-2xl bg-brand-soft text-brand-soft-ink flex items-center justify-center font-black text-base" aria-hidden>
                 👩‍🍳
               </div>
               <div>
-                <p className="text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-0.5">
+                <p className="text-[11px] font-bold text-muted uppercase tracking-wider mb-0.5">
                   {t('homeKitchen')}
                 </p>
-                <p className="font-bold text-gray-900 flex items-center gap-2">
+                <p className="font-bold text-ink flex items-center gap-2">
                   {product.seller?.id ? (
                     <Link href={`/kitchens/${product.seller.id}`} className="hover:underline">
                       {product.seller.businessName}
@@ -744,7 +744,7 @@ export default function ProductDetailPage({ initial }: { initial?: RawProduct })
                     <span>{product.seller?.businessName ?? t('seller')}</span>
                   )}
                   {product.seller?.isVerified && (
-                    <span className="text-[11px] font-bold text-emerald-800 bg-emerald-100 px-1.5 py-0.5 rounded">
+                    <span className="text-[11px] font-extrabold text-brand-soft-ink bg-brand-soft px-2 py-0.5 rounded-full">
                       {t('verifiedChef')}
                     </span>
                   )}
@@ -756,18 +756,20 @@ export default function ProductDetailPage({ initial }: { initial?: RawProduct })
               <button
                 type="button"
                 onClick={handleToggleFavorite}
-                className="p-2.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 transition-colors shadow-2xs"
+                className="w-10 h-10 flex items-center justify-center rounded-full border border-line bg-surface hover:bg-raised transition-colors"
                 title={t('saveKitchenFav')}
+                aria-label={t('saveKitchenFav')}
+                aria-pressed={isFavorite}
               >
                 <Heart
                   className={`w-4 h-4 transition-colors ${
-                    isFavorite ? 'fill-red-500 text-red-500' : 'text-slate-500 hover:text-red-500'
+                    isFavorite ? 'fill-red-500 text-red-500' : 'text-muted hover:text-red-500'
                   }`}
                 />
               </button>
               <div className="text-end">
-                <p className="text-[11px] text-gray-500 font-bold uppercase">{t('rating')}</p>
-                <p className="font-black text-sm text-gray-900">{product.seller?.rating ? `★ ${product.seller.rating.toFixed(1)}` : t('new')}</p>
+                <p className="text-[11px] text-muted font-bold uppercase">{t('rating')}</p>
+                <p className="font-black text-sm text-ink">{product.seller?.rating ? `★ ${product.seller.rating.toFixed(1)}` : t('new')}</p>
               </div>
             </div>
           </div>
@@ -776,15 +778,15 @@ export default function ProductDetailPage({ initial }: { initial?: RawProduct })
           {(product.isSameCommunity || product.communityBadge || product.community?.name) && (
             <div className="pt-2 flex items-center gap-2">
               {product.isSameCommunity ? (
-                <span className="px-2.5 py-1 rounded-lg bg-emerald-100 text-emerald-900 text-xs font-black flex items-center gap-1.5">
+                <span className="px-2.5 py-1 rounded-full bg-brand-soft text-brand-soft-ink text-xs font-extrabold flex items-center gap-1.5">
                   <span>🏡</span> {t('inYourCommunity')}
                 </span>
               ) : product.communityBadge ? (
-                <span className="px-2.5 py-1 rounded-lg bg-brand-100 text-brand-800 text-xs font-black flex items-center gap-1.5">
+                <span className="px-2.5 py-1 rounded-full bg-brand-soft text-brand-soft-ink text-xs font-extrabold flex items-center gap-1.5">
                   <span>📍</span> {product.communityBadge}
                 </span>
               ) : (
-                <span className="px-2.5 py-1 rounded-lg bg-slate-100 text-slate-700 text-xs font-bold flex items-center gap-1.5">
+                <span className="px-2.5 py-1 rounded-full bg-raised text-ink text-xs font-bold flex items-center gap-1.5">
                   <span>📍</span> {product.community?.name}
                 </span>
               )}
@@ -794,11 +796,11 @@ export default function ProductDetailPage({ initial }: { initial?: RawProduct })
 
         {/* Availability */}
         {product.seller?.availability && (
-          <div className={`flex items-center justify-between py-3 px-4 rounded-xl ${
-            product.seller.availability.isOpen ? 'bg-green-50' : 'bg-gray-50'
+          <div className={`flex items-center justify-between py-3 px-4 rounded-2xl ${
+            product.seller.availability.isOpen ? 'bg-brand-soft' : 'bg-raised'
           }`}>
             <div>
-              <p className={`text-sm font-semibold ${product.seller.availability.isOpen ? 'text-green-700' : 'text-gray-600'}`}>
+              <p className={`text-sm font-semibold ${product.seller.availability.isOpen ? 'text-brand-soft-ink' : 'text-muted'}`}>
                 {product.seller.availability.isOpen
                   ? t('openNowLower')
                   : product.seller.availability.status !== 'closed'
@@ -811,24 +813,24 @@ export default function ProductDetailPage({ initial }: { initial?: RawProduct })
                   : t('closed')}
               </p>
               {product.seller.availability.isOpen && product.seller.availability.closesAt && (
-                <p className="text-xs text-gray-500">{t('closesAt', { time: formatClock(product.seller.availability.closesAt) })}</p>
+                <p className="text-xs text-muted">{t('closesAt', { time: formatClock(product.seller.availability.closesAt) })}</p>
               )}
               {!product.seller.availability.isOpen && product.seller.availability.opensAt && (
-                <p className="text-xs text-gray-500">{t('opensAt', { time: formatClock(product.seller.availability.opensAt) })}</p>
+                <p className="text-xs text-muted">{t('opensAt', { time: formatClock(product.seller.availability.opensAt) })}</p>
               )}
               {!product.seller.availability.isOpen && product.seller.availability.reason && (
-                <p className="text-xs text-gray-500">{product.seller.availability.reason}</p>
+                <p className="text-xs text-muted">{product.seller.availability.reason}</p>
               )}
             </div>
             {product.seller.preOrderOnly && (
-              <span className="text-xs font-medium bg-amber-100 text-amber-800 px-2.5 py-1 rounded-full">
+              <span className="text-xs font-medium bg-accent-soft text-accent-soft-ink px-2.5 py-1 rounded-full">
                 {t('preOrdersOnly')}
               </span>
             )}
           </div>
         )}
         {product.seller && (
-          <p className={`text-sm font-medium -mt-2 ${product.seller.isAcceptingOrders ? 'text-green-700' : 'text-red-600'}`}>
+          <p className={`text-sm font-medium -mt-2 ${product.seller.isAcceptingOrders ? 'text-brand-ink' : 'text-red-600'}`}>
             {product.seller.isAcceptingOrders
               ? product.seller.preOrderOnly ? t('acceptingPreOrders') : t('acceptingOrders')
               : product.seller.acceptingOrdersReason || t('notAccepting')}
@@ -837,7 +839,7 @@ export default function ProductDetailPage({ initial }: { initial?: RawProduct })
         {product.seller?.mealCategories && product.seller.mealCategories.length > 0 && (
           <div className="flex flex-wrap gap-2 -mt-2">
             {product.seller.mealCategories.map((c) => (
-              <span key={c} className="text-xs font-medium bg-gray-100 text-gray-700 px-2.5 py-1 rounded-full capitalize">
+              <span key={c} className="text-xs font-medium bg-raised text-ink px-2.5 py-1 rounded-full capitalize">
                 {c.replace('_', ' ')}
               </span>
             ))}
@@ -846,13 +848,13 @@ export default function ProductDetailPage({ initial }: { initial?: RawProduct })
 
         {/* Delivery to you — real fee/distance/ETA once we know an address; an
             honest prompt instead of a guess when we don't. */}
-        <div className="rounded-xl border border-gray-100 bg-gray-50 px-4 py-3">
-          <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">
+        <div className="rounded-2xl bg-raised px-4 py-3">
+          <h3 className="text-xs font-semibold text-muted uppercase tracking-wider mb-1.5">
             {t('deliveryToYou')}
           </h3>
           {product.delivery ? (
             <>
-              <p className="text-sm text-gray-800">
+              <p className="text-sm text-ink">
                 {product.delivery.deliverable
                   ? `${product.delivery.fee === 0 ? t('freeDelivery') : t('deliveryFeeAmount', { amount: formatPrice(product.delivery.fee) })}${
                       product.estimatedDeliveryMinMinutes != null
@@ -862,11 +864,11 @@ export default function ProductDetailPage({ initial }: { initial?: RawProduct })
                   : product.delivery.reason || t('notDeliverable')}
               </p>
               {product.minOrderAmountForDelivery ? (
-                <p className="text-xs text-gray-500 mt-0.5">{t('minOrder', { amount: formatPrice(product.minOrderAmountForDelivery) })}</p>
+                <p className="text-xs text-muted mt-0.5">{t('minOrder', { amount: formatPrice(product.minOrderAmountForDelivery) })}</p>
               ) : null}
             </>
           ) : (
-            <p className="text-sm text-gray-500">
+            <p className="text-sm text-muted">
               {isAuthenticated ? (
                 <>
                   {t('addAddressBefore')}
@@ -881,10 +883,10 @@ export default function ProductDetailPage({ initial }: { initial?: RawProduct })
         </div>
 
         {/* Purchase card - sticky on large screens */}
-        <div className="lg:sticky lg:top-[calc(6rem+var(--safe-top))] bg-white rounded-2xl shadow-sm border border-gray-100 p-6 space-y-6">
+        <div className="lg:sticky lg:top-[calc(6rem+var(--safe-top))] bg-surface rounded-[24px] shadow-[var(--shadow-card)] border border-line p-5 sm:p-6 space-y-6">
           {product.variants.length > 0 && (
             <div>
-              <p className="text-sm font-medium text-gray-700 mb-3">{t('options')}</p>
+              <p className="text-sm font-medium text-ink mb-3">{t('options')}</p>
               <div className="flex flex-wrap gap-2">
                 <button
                   type="button"
@@ -892,8 +894,8 @@ export default function ProductDetailPage({ initial }: { initial?: RawProduct })
                   disabled={product.stockQuantity !== undefined && product.stockQuantity <= 0}
                   className={`px-4 py-2 rounded-xl border-2 text-sm font-medium transition-all disabled:opacity-40 disabled:cursor-not-allowed ${
                     selectedVariantId === null
-                      ? 'border-gray-900 bg-gray-900 text-white'
-                      : 'border-gray-200 text-gray-700 hover:border-gray-400'
+                      ? 'border-ink bg-ink text-page'
+                      : 'border-line text-ink hover:border-line-strong'
                   }`}
                 >
                   {product.name} ({product.unit}) · {formatPrice(product.price)}
@@ -907,8 +909,8 @@ export default function ProductDetailPage({ initial }: { initial?: RawProduct })
                     disabled={v.stockQuantity <= 0}
                     className={`px-4 py-2 rounded-xl border-2 text-sm font-medium transition-all disabled:opacity-40 disabled:cursor-not-allowed ${
                       selectedVariantId === v.id
-                        ? 'border-gray-900 bg-gray-900 text-white'
-                        : 'border-gray-200 text-gray-700 hover:border-gray-400'
+                        ? 'border-ink bg-ink text-page'
+                        : 'border-line text-ink hover:border-line-strong'
                     }`}
                   >
                     {v.name} · {formatPrice(v.price)}
@@ -919,62 +921,62 @@ export default function ProductDetailPage({ initial }: { initial?: RawProduct })
             </div>
           )}
 
-          <h2 className="text-lg font-semibold text-gray-900">{t('deliveryQty')}</h2>
+          <h2 className="text-lg font-extrabold text-ink">{t('deliveryQty')}</h2>
 
           {/* Delivery type */}
           <div>
-            <p className="text-sm font-medium text-gray-700 mb-3">{t('deliveryType')}</p>
+            <p className="text-sm font-medium text-ink mb-3">{t('deliveryType')}</p>
             <div className="grid grid-cols-2 gap-3">
               <button
                 type="button"
                 onClick={() => setStockType('hub')}
                 className={`p-4 rounded-xl border-2 text-start transition-all ${
                   stockType === 'hub'
-                    ? 'border-gray-700 bg-gray-50'
-                    : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50/50'
+                    ? 'border-brand bg-brand-soft'
+                    : 'border-line hover:border-line-strong hover:bg-raised/50'
                 }`}
               >
-                <p className="font-semibold text-gray-900">{t('hubDelivery')}</p>
-                <p className="text-sm text-gray-500 mt-0.5">
+                <p className="font-semibold text-ink">{t('hubDelivery')}</p>
+                <p className="text-sm text-muted mt-0.5">
                   {product.delivery && !product.delivery.deliverable
                     ? t('deliveryNotHere')
                     : product.estimatedDeliveryMinMinutes != null
                       ? t('etaMin', { min: product.estimatedDeliveryMinMinutes, max: product.estimatedDeliveryMaxMinutes })
                       : t('addAddressEta')}
                 </p>
-                <p className="text-xs text-gray-600 mt-1">{t('available', { count: product.stock.hub })}</p>
+                <p className="text-xs text-muted mt-1">{t('available', { count: product.stock.hub })}</p>
               </button>
               <button
                 type="button"
                 onClick={() => setStockType('direct')}
                 className={`p-4 rounded-xl border-2 text-start transition-all ${
                   stockType === 'direct'
-                    ? 'border-gray-700 bg-gray-50'
-                    : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50/50'
+                    ? 'border-brand bg-brand-soft'
+                    : 'border-line hover:border-line-strong hover:bg-raised/50'
                 }`}
               >
-                <p className="font-semibold text-gray-900">{t('direct')}</p>
-                <p className="text-sm text-gray-500 mt-0.5">{t('nextDay')}</p>
-                <p className="text-xs text-gray-600 mt-1">{t('available', { count: product.stock.direct })}</p>
+                <p className="font-semibold text-ink">{t('direct')}</p>
+                <p className="text-sm text-muted mt-0.5">{t('nextDay')}</p>
+                <p className="text-xs text-muted mt-1">{t('available', { count: product.stock.direct })}</p>
               </button>
             </div>
           </div>
 
           {/* Quantity */}
           <div>
-            <p className="text-sm font-medium text-gray-700 mb-3">{t('quantity')}</p>
+            <p className="text-sm font-medium text-ink mb-3">{t('quantity')}</p>
             <div className="flex items-center gap-3">
-              <div className="inline-flex items-center rounded-xl border-2 border-gray-200 bg-gray-50/50 overflow-hidden">
+              <div className="inline-flex items-center gap-1 rounded-[14px] bg-raised p-1">
                 <button
                   type="button"
                   onClick={() => setQuantity((q) => Math.max(1, q - 1))}
-                  className="w-12 h-12 flex items-center justify-center text-gray-700 hover:bg-gray-100 font-medium text-lg transition-colors"
+                  className="w-11 h-11 rounded-[10px] bg-surface shadow-xs flex items-center justify-center text-ink hover:bg-line font-bold text-lg transition-colors"
                   aria-label={t('decreaseQty')}
                 >
                   −
                 </button>
                 <span
-                  className="w-12 h-12 flex items-center justify-center font-bold text-gray-900 text-lg border-x border-gray-200 bg-white"
+                  className="min-w-10 h-11 flex items-center justify-center font-extrabold text-ink text-lg"
                   aria-live="polite"
                 >
                   {quantity}
@@ -983,19 +985,19 @@ export default function ProductDetailPage({ initial }: { initial?: RawProduct })
                   type="button"
                   onClick={() => setQuantity((q) => Math.min(maxQty, q + 1))}
                   disabled={quantity >= maxQty}
-                  className="w-12 h-12 flex items-center justify-center text-gray-700 hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed font-medium text-lg transition-colors"
+                  className="w-11 h-11 rounded-[10px] bg-brand text-on-brand flex items-center justify-center hover:bg-brand-500 disabled:opacity-50 disabled:cursor-not-allowed font-bold text-lg transition-colors"
                   aria-label={t('increaseQty')}
                 >
                   +
                 </button>
               </div>
-              <span className="text-gray-500 text-sm">{product.unit}</span>
+              <span className="text-muted text-sm">{product.unit}</span>
             </div>
           </div>
 
           {/* Special Instructions (Section 9) */}
           <div className="pt-2">
-            <label htmlFor="specialInstructions" className="block text-xs font-bold text-gray-700 mb-1">
+            <label htmlFor="specialInstructions" className="block text-xs font-bold text-ink mb-1">
               {t('specialInstructions')}
             </label>
             <textarea
@@ -1004,37 +1006,37 @@ export default function ProductDetailPage({ initial }: { initial?: RawProduct })
               value={specialInstructions}
               onChange={(e) => setSpecialInstructions(e.target.value)}
               placeholder={t('specialPlaceholder')}
-              className="w-full text-xs p-3 rounded-xl border border-gray-200 focus:border-brand focus:ring-1 focus:ring-brand outline-none transition-all resize-none bg-white"
+              className="w-full text-sm p-3 rounded-xl border border-line focus:border-brand focus:ring-2 focus:ring-brand/20 outline-none transition-all resize-none bg-surface text-ink placeholder:text-muted"
             />
           </div>
 
           {/* Action Buttons: Add to Bag & Buy Now */}
           <div className="pt-2 space-y-2">
             {product.menuLabel && (
-              <p className={`text-sm font-semibold rounded-xl px-3 py-2 ${product.availableToday === false ? 'bg-amber-50 text-amber-800 border border-amber-200' : 'bg-emerald-50 text-emerald-800 border border-emerald-200'}`} data-testid="menu-note">
+              <p className={`text-sm font-semibold rounded-xl px-3 py-2 ${product.availableToday === false ? 'bg-accent-soft text-accent-soft-ink' : 'bg-brand-soft text-brand-soft-ink'}`} data-testid="menu-note">
                 {product.availableToday === false ? t('notOnMenuToday', { days: product.menuLabel }) : t('onMenuNote', { days: product.menuLabel })}
               </p>
             )}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <Button
                 onClick={handleAddToCart}
-                variant="dark"
-                className="w-full h-12 text-sm font-bold bg-[#0C1016] text-white hover:bg-black rounded-xl"
+                className="w-full h-12 text-[15px] font-extrabold bg-brand text-on-brand hover:bg-brand-500 rounded-xl"
                 disabled={maxQty < quantity || addToCartLoading || product.availableToday === false}
               >
                 {addToCartLoading ? t('adding') : t('addToBag', { amount: formatPrice(unitPrice * quantity) })}
               </Button>
               <Button
                 onClick={handleBuyNow}
-                className="w-full h-12 text-sm font-bold bg-gradient-to-r from-brand to-brand hover:brightness-110 text-on-brand shadow-sm rounded-xl"
+                variant="outline"
+                className="w-full h-12 text-[15px] font-extrabold rounded-xl"
                 disabled={maxQty < quantity || addToCartLoading || product.availableToday === false}
               >
                 {t('buyNow')}
               </Button>
             </div>
             {justAddedToCart && (
-              <p className="text-center text-sm text-gray-600">
-                <Link href="/cart" className="font-medium text-gray-900 underline hover:no-underline">
+              <p className="text-center text-sm text-muted">
+                <Link href="/cart" className="font-medium text-ink underline hover:no-underline">
                   {t('viewCart')}
                 </Link>
                 {t('itemSaved')}
@@ -1046,7 +1048,7 @@ export default function ProductDetailPage({ initial }: { initial?: RawProduct })
     </div>
 
     <div className="mt-10">
-      <h2 className="text-xl font-bold text-gray-900 mb-4">{t('reviews')}</h2>
+      <h2 className="text-[22px] sm:text-[28px] font-extrabold tracking-tight text-ink mb-4">{t('reviews')}</h2>
       <ProductReviews productId={product.id} />
     </div>
     </>
@@ -1069,40 +1071,10 @@ export default function ProductDetailPage({ initial }: { initial?: RawProduct })
 
   // For public users, show a simple layout
   return (
-    <div className="min-h-screen" style={{ background: 'var(--cream-50)' }}>
-      <nav
-        className="sticky top-0 z-50 pt-(--safe-top) backdrop-blur-md"
-        style={{ background: 'rgba(251,248,241,0.94)', borderBottom: '1px solid var(--ink-100)' }}
-      >
-        <div className="max-w-[1440px] mx-auto px-6 md:px-12">
-          <div className="flex items-center justify-between h-[72px]">
-            <Link href="/" className="flex items-center gap-3">
-              <span className="brand-mark" style={{ width: 32, height: 32 }} aria-hidden>
-                <span style={{ fontSize: 20, marginTop: 1 }}>N</span>
-              </span>
-              <span
-                className="font-display italic"
-                style={{ fontSize: 26, color: 'var(--ink-900)', fontWeight: 400 }}
-              >
-                nuray
-              </span>
-            </Link>
-            <div className="flex items-center gap-3">
-              <Link href="/products" className="text-[13px] font-medium" style={{ color: 'var(--ink-800)' }}>
-                {t('todaysPlates')}
-              </Link>
-              <Link href="/login" className="text-[13px] font-medium" style={{ color: 'var(--ink-800)' }}>
-                {tc('signIn')}
-              </Link>
-              <Link href="/register">
-                <Button>{t('joinNuray')}</Button>
-              </Link>
-            </div>
-          </div>
-        </div>
-      </nav>
+    <div className="min-h-screen bg-page text-ink pb-24">
+      <SiteHeader />
 
-      <div className="max-w-[1440px] mx-auto px-6 md:px-12 py-10 md:py-14">
+      <div className="max-w-[1280px] mx-auto px-4 sm:px-8 py-6 md:py-10">
         {productContent}
       </div>
       <CartConflictModal isOpen={!!cartConflict} conflict={cartConflict} />

@@ -78,17 +78,17 @@ export function SlideOverCartDrawer({ isOpen, onClose }: SlideOverCartDrawerProp
       <div className="fixed inset-y-0 end-0 max-w-full flex ps-10">
         <div
           ref={drawerRef}
-          className="w-screen max-w-md pt-(--safe-top) pb-(--safe-bottom) pe-(--safe-end) bg-white shadow-2xl flex flex-col transform transition-transform ease-out duration-300 animate-in slide-in-from-right"
+          className="w-screen max-w-md pt-(--safe-top) pb-(--safe-bottom) pe-(--safe-end) bg-surface shadow-2xl flex flex-col transform transition-transform ease-out duration-300 animate-in slide-in-from-right"
         >
           {/* Header */}
-          <div className="p-4 border-b border-slate-200 flex items-center justify-between bg-slate-50/70">
+          <div className="p-4 border-b border-line flex items-center justify-between bg-raised/70">
             <div className="flex items-center gap-2.5">
               <div className="w-8 h-8 rounded-xl bg-brand-50 text-brand-ink border border-brand-200/60 flex items-center justify-center font-bold">
                 <ShoppingBag className="w-4 h-4" />
               </div>
               <div>
-                <h2 className="text-sm font-bold text-slate-900 leading-tight">{t('trayTitle')}</h2>
-                <p className="text-[11px] font-medium text-slate-500">
+                <h2 className="text-sm font-bold text-ink leading-tight">{t('trayTitle')}</h2>
+                <p className="text-[11px] font-medium text-muted">
                   {t(itemCount === 1 ? 'trayCountOne' : 'trayCount', { n: itemCount })}
                 </p>
               </div>
@@ -96,7 +96,7 @@ export function SlideOverCartDrawer({ isOpen, onClose }: SlideOverCartDrawerProp
 
             <button
               onClick={onClose}
-              className="w-8 h-8 rounded-lg flex items-center justify-center text-slate-500 hover:text-slate-700 hover:bg-slate-200/60 transition-colors"
+              className="w-8 h-8 rounded-lg flex items-center justify-center text-muted hover:text-ink hover:bg-line/60 transition-colors"
               aria-label={t('closeCart')}
             >
               <X className="w-4 h-4" />
@@ -108,8 +108,8 @@ export function SlideOverCartDrawer({ isOpen, onClose }: SlideOverCartDrawerProp
             <div className="flex items-center justify-between text-xs font-semibold text-brand-950 mb-1">
               <span>
                 {amountNeededForFreeDelivery === 0 ? (
-                  <span className="text-emerald-700 flex items-center gap-1">
-                    <Check className="w-3.5 h-3.5 text-emerald-600" />
+                  <span className="text-brand-soft-ink flex items-center gap-1">
+                    <Check className="w-3.5 h-3.5 text-brand-soft-ink" />
                     <span>{t('unlockedFree')}</span>
                   </span>
                 ) : (
@@ -131,19 +131,19 @@ export function SlideOverCartDrawer({ isOpen, onClose }: SlideOverCartDrawerProp
           </div>
 
           {/* Cart Items List */}
-          <div className="flex-1 overflow-y-auto p-4 space-y-3 divide-y divide-slate-100">
+          <div className="flex-1 overflow-y-auto p-4 space-y-3 divide-y divide-line">
             {items.length === 0 ? (
               <div className="h-full flex flex-col items-center justify-center text-center py-12">
-                <div className="w-14 h-14 rounded-2xl bg-slate-100 flex items-center justify-center text-slate-400 mb-3 border border-slate-200/60">
+                <div className="w-14 h-14 rounded-2xl bg-raised flex items-center justify-center text-muted mb-3 border border-line">
                   <ShoppingBag className="w-6 h-6" />
                 </div>
-                <h3 className="text-sm font-bold text-slate-900">{t('emptyTray')}</h3>
-                <p className="text-xs text-slate-500 mt-1 max-w-[240px] leading-relaxed font-medium">
+                <h3 className="text-sm font-bold text-ink">{t('emptyTray')}</h3>
+                <p className="text-xs text-muted mt-1 max-w-[240px] leading-relaxed font-medium">
                   {t('emptyTrayBody')}
                 </p>
                 <button
                   onClick={onClose}
-                  className="mt-4 inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-slate-900 hover:bg-black text-white text-xs font-semibold transition-colors"
+                  className="mt-4 inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-ink hover:bg-ink/90 text-page text-xs font-semibold transition-colors"
                 >
                   <span>{t('exploreKitchens')}</span>
                   <ArrowRight className="rtl:-scale-x-100 w-3.5 h-3.5" />
@@ -153,7 +153,7 @@ export function SlideOverCartDrawer({ isOpen, onClose }: SlideOverCartDrawerProp
               items.map((item) => (
                 <div key={item.id} className="pt-3 first:pt-0 flex gap-3 items-start">
                   {/* Item Image */}
-                  <div className="w-14 h-14 rounded-xl bg-slate-100 overflow-hidden flex-shrink-0 border border-slate-200">
+                  <div className="w-14 h-14 rounded-xl bg-raised overflow-hidden flex-shrink-0 border border-line">
                     {item.productImage ? (
                       <img
                         src={item.productImage}
@@ -161,7 +161,7 @@ export function SlideOverCartDrawer({ isOpen, onClose }: SlideOverCartDrawerProp
                         className="w-full h-full object-cover"
                       />
                     ) : (
-                      <div className="w-full h-full flex items-center justify-center text-slate-500">
+                      <div className="w-full h-full flex items-center justify-center text-muted">
                         <ShoppingBag className="w-5 h-5" />
                       </div>
                     )}
@@ -170,12 +170,12 @@ export function SlideOverCartDrawer({ isOpen, onClose }: SlideOverCartDrawerProp
                   {/* Item Details */}
                   <div className="flex-1 min-w-0">
                     <div className="flex items-start justify-between gap-2">
-                      <h4 className="text-xs font-bold text-slate-900 leading-snug line-clamp-1">
+                      <h4 className="text-xs font-bold text-ink leading-snug line-clamp-1">
                         {item.productName}
                       </h4>
                       <button
                         onClick={() => removeItem(item.id)}
-                        className="text-slate-500 hover:text-red-500 text-xs transition-colors p-0.5"
+                        className="text-muted hover:text-red-500 text-xs transition-colors p-0.5"
                         title={t('removeItem')}
                         aria-label={t('removeItem')}
                       >
@@ -183,35 +183,35 @@ export function SlideOverCartDrawer({ isOpen, onClose }: SlideOverCartDrawerProp
                       </button>
                     </div>
 
-                    <p className="text-[11px] text-slate-500 font-medium truncate mt-0.5 flex items-center gap-1">
-                      <ChefHat className="w-3 h-3 text-slate-500" />
+                    <p className="text-[11px] text-muted font-medium truncate mt-0.5 flex items-center gap-1">
+                      <ChefHat className="w-3 h-3 text-muted" />
                       <span>{item.sellerName || t('verifiedHomeKitchen')}</span>
                     </p>
 
                     <div className="mt-2 flex items-center justify-between">
                       {/* Quantity Controls */}
-                      <div className="flex items-center gap-1.5 bg-slate-100 rounded-lg px-1.5 py-0.5 border border-slate-200">
+                      <div className="flex items-center gap-1.5 bg-raised rounded-lg px-1.5 py-0.5 border border-line">
                         <button
                           onClick={() => updateItem(item.id, item.quantity - 1)}
                           aria-label={t('decrease')}
-                          className="w-4 h-4 rounded flex items-center justify-center text-slate-600 hover:bg-white transition-colors"
+                          className="w-4 h-4 rounded flex items-center justify-center text-muted hover:bg-surface transition-colors"
                         >
                           <Minus className="w-3 h-3" />
                         </button>
-                        <span className="text-xs font-bold text-slate-900 min-w-[14px] text-center">
+                        <span className="text-xs font-bold text-ink min-w-[14px] text-center">
                           {item.quantity}
                         </span>
                         <button
                           onClick={() => updateItem(item.id, item.quantity + 1)}
                           aria-label={t('increase')}
-                          className="w-4 h-4 rounded flex items-center justify-center text-slate-600 hover:bg-white transition-colors"
+                          className="w-4 h-4 rounded flex items-center justify-center text-muted hover:bg-surface transition-colors"
                         >
                           <Plus className="w-3 h-3" />
                         </button>
                       </div>
 
                       {/* Price */}
-                      <span className="text-xs font-bold text-slate-950">
+                      <span className="text-xs font-bold text-ink">
                         {formatPrice(item.subtotal)}
                       </span>
                     </div>
@@ -223,27 +223,27 @@ export function SlideOverCartDrawer({ isOpen, onClose }: SlideOverCartDrawerProp
 
           {/* Footer */}
           {items.length > 0 && (
-            <div className="p-4 border-t border-slate-200 bg-slate-50/70 space-y-3">
+            <div className="p-4 border-t border-line bg-raised/70 space-y-3">
               <div className="space-y-1.5 text-xs">
-                <div className="flex items-center justify-between text-slate-600 font-medium">
+                <div className="flex items-center justify-between text-muted font-medium">
                   <span>{tc('subtotal')}</span>
-                  <span className="text-slate-900 font-semibold">{formatPrice(total)}</span>
+                  <span className="text-ink font-semibold">{formatPrice(total)}</span>
                 </div>
-                <div className="flex items-center justify-between text-slate-600 font-medium">
+                <div className="flex items-center justify-between text-muted font-medium">
                   <span className="flex items-center gap-1">
-                    <Bike className="w-3.5 h-3.5 text-slate-500" />
+                    <Bike className="w-3.5 h-3.5 text-muted" />
                     <span>{tc('delivery')}</span>
                     {deliveryFee === 0 && (
-                      <span className="text-[11px] font-bold uppercase text-emerald-700 bg-emerald-100 px-1.5 py-0.2 rounded">
+                      <span className="text-[11px] font-bold uppercase text-brand-soft-ink bg-brand-soft px-1.5 py-0.2 rounded">
                         {t('freeTag')}
                       </span>
                     )}
                   </span>
-                  <span className="text-slate-900 font-semibold">
+                  <span className="text-ink font-semibold">
                     {deliveryFee === 0 ? 'Rs 0' : formatPrice(deliveryFee)}
                   </span>
                 </div>
-                <div className="pt-2 border-t border-slate-200 flex items-center justify-between text-sm font-bold text-slate-950">
+                <div className="pt-2 border-t border-line flex items-center justify-between text-sm font-bold text-ink">
                   <span>{tc('total')}</span>
                   <span className="text-brand-ink text-base">{formatPrice(total + deliveryFee)}</span>
                 </div>
@@ -252,7 +252,7 @@ export function SlideOverCartDrawer({ isOpen, onClose }: SlideOverCartDrawerProp
               <div className="pt-1 flex items-center gap-2">
                 <button
                   onClick={clearCart}
-                  className="px-3 py-2.5 rounded-xl bg-slate-200/70 hover:bg-slate-300 text-slate-700 font-semibold text-xs transition-colors"
+                  className="px-3 py-2.5 rounded-xl bg-line/70 hover:bg-slate-300 text-ink font-semibold text-xs transition-colors"
                   title={t('clearTray')}
                   aria-label={t('clearTray')}
                 >
@@ -268,8 +268,8 @@ export function SlideOverCartDrawer({ isOpen, onClose }: SlideOverCartDrawerProp
                 </Link>
               </div>
 
-              <p className="text-[11px] text-center text-slate-500 font-medium flex items-center justify-center gap-1">
-                <ShieldCheck className="w-3 h-3 text-slate-400 inline" />
+              <p className="text-[11px] text-center text-muted font-medium flex items-center justify-center gap-1">
+                <ShieldCheck className="w-3 h-3 text-muted inline" />
                 <span>{t('protected')}</span>
               </p>
             </div>

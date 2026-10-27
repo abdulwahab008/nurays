@@ -33,7 +33,7 @@ export default function ReportReview({ reviewId }: { reviewId: string }) {
 
   if (sent) {
     return (
-      <span className="text-xs text-gray-500" data-testid="review-reported">
+      <span className="text-xs text-muted" data-testid="review-reported">
         {t('reportThanks')}
       </span>
     );
@@ -45,7 +45,7 @@ export default function ReportReview({ reviewId }: { reviewId: string }) {
         type="button"
         data-testid="report-review"
         onClick={() => (isAuthenticated ? setOpen(true) : router.push(loginUrlHere()))}
-        className="text-xs text-gray-500 hover:text-gray-700 underline"
+        className="text-xs text-muted hover:text-ink underline"
       >
         {t('reportReview')}
       </button>
@@ -72,11 +72,11 @@ export default function ReportReview({ reviewId }: { reviewId: string }) {
   };
 
   return (
-    <div className="basis-full w-full mt-1 rounded-xl border border-gray-200 bg-gray-50 p-3 space-y-2" data-testid="report-panel">
+    <div className="basis-full w-full mt-1 rounded-xl border border-line bg-raised p-3 space-y-2" data-testid="report-panel">
       <fieldset className="space-y-1.5">
-        <legend className="text-sm font-medium text-gray-900 mb-1">{t('reportTitle')}</legend>
+        <legend className="text-sm font-medium text-ink mb-1">{t('reportTitle')}</legend>
         {REASONS.map((r) => (
-          <label key={r} className="flex items-center gap-2 text-sm text-gray-700">
+          <label key={r} className="flex items-center gap-2 text-sm text-ink">
             <input
               type="radio"
               name={groupName}
@@ -98,7 +98,7 @@ export default function ReportReview({ reviewId }: { reviewId: string }) {
         rows={2}
         placeholder={t('reportNote')}
         aria-label={t('reportNote')}
-        className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm"
+        className="w-full rounded-lg border border-line bg-surface px-3 py-2 text-sm"
       />
       {error && (
         <p role="alert" className="text-sm text-red-700">
@@ -111,7 +111,7 @@ export default function ReportReview({ reviewId }: { reviewId: string }) {
           data-testid="report-send"
           disabled={sending}
           onClick={send}
-          className="rounded-lg bg-gray-900 px-3 py-1.5 text-sm font-medium text-white disabled:opacity-50"
+          className="rounded-lg bg-ink px-3 py-1.5 text-sm font-medium text-page disabled:opacity-50"
         >
           {sending ? t('reportSending') : t('reportSend')}
         </button>
@@ -122,7 +122,7 @@ export default function ReportReview({ reviewId }: { reviewId: string }) {
             setOpen(false);
             setError('');
           }}
-          className="rounded-lg bg-white border border-gray-200 px-3 py-1.5 text-sm text-gray-700"
+          className="rounded-lg bg-surface border border-line px-3 py-1.5 text-sm text-ink"
         >
           {tc('cancel')}
         </button>

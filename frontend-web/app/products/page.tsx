@@ -93,10 +93,10 @@ const maxDistanceOptions = [
 
 // Labels come from browseMessages (`type.<productType>`).
 const PRODUCT_TYPE_BADGES: Record<string, { icon: typeof Flame; className: string }> = {
-  frozen: { icon: Snowflake, className: 'bg-sky-600/95 shadow-sky-600/30' },
-  fresh: { icon: Flame, className: 'bg-brand/95 shadow-brand/30' },
-  ready_to_eat: { icon: Clock, className: 'bg-brand/95 shadow-brand/30' },
-  ready_to_cook: { icon: UtensilsCrossed, className: 'bg-brand/95 shadow-brand/30' },
+  frozen: { icon: Snowflake, className: 'bg-frozen-soft text-frozen-ink' },
+  fresh: { icon: Flame, className: 'bg-surface/95 text-ink' },
+  ready_to_eat: { icon: Clock, className: 'bg-surface/95 text-ink' },
+  ready_to_cook: { icon: UtensilsCrossed, className: 'bg-surface/95 text-ink' },
 };
 
 /** The API's delivery-time estimate, shown only when this kitchen actually delivers to the buyer. */
@@ -482,10 +482,10 @@ function ProductsContent() {
       {/* Clean Marketplace Header */}
       <div className="flex items-center justify-between flex-wrap gap-2 pt-1">
         <div>
-          <h1 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight">
+          <h1 className="text-[22px] sm:text-[28px] leading-tight font-extrabold text-ink tracking-tight">
             {viewMode === 'kitchens' ? t('titleKitchens') : t('titleDishes')}
           </h1>
-          <p className="text-xs text-slate-500 font-medium mt-0.5 flex items-center gap-1.5">
+          <p className="text-sm text-muted mt-1 flex items-center gap-1.5 flex-wrap">
             <span>{selectedCommunity ? t('deliveringTo') : t('chooseAreaHint')}</span>
             <button
               type="button"
@@ -497,7 +497,7 @@ function ProductsContent() {
             </button>
             {selectedCommunity?.city && (
               <>
-                <span className="text-slate-300">•</span>
+                <span aria-hidden>·</span>
                 <span>{selectedCommunity.city}</span>
               </>
             )}
@@ -506,18 +506,19 @@ function ProductsContent() {
       </div>
 
       {/* Unified Search & Filters Panel */}
-      <div className="bg-white rounded-2xl border border-slate-200/90 shadow-2xs p-3 sm:p-3.5 space-y-3">
+      <div className="space-y-3">
         {/* Top Row: Search Input + View Mode Switcher + Sort */}
         <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-2.5">
           {/* Clean Search Input */}
           <form onSubmit={handleSearch} className="flex-1 relative flex items-center">
-            <Search className="w-4 h-4 text-slate-500 absolute start-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+            <Search className="w-4 h-4 text-muted absolute start-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
             <input
               type="text"
               placeholder={t('searchPlaceholder')}
               value={searchInput}
               onChange={(e) => setSearchInput(e.target.value)}
-              className="w-full ps-10 pe-20 py-2 border border-slate-200 rounded-xl text-xs sm:text-sm font-medium focus:ring-2 focus:ring-slate-900 focus:border-transparent bg-slate-50/70 focus:bg-white transition-all h-10"
+              aria-label={t('searchPlaceholder')}
+              className="w-full ps-10 pe-24 border border-transparent rounded-[14px] text-[15px] font-semibold text-ink placeholder:text-muted placeholder:font-medium focus:border-brand focus:ring-2 focus:ring-brand/20 outline-none bg-raised focus:bg-surface transition-all h-12"
             />
             {searchInput && (
               <button
@@ -527,37 +528,37 @@ function ProductsContent() {
                   setSearchQuery('');
                   setPage(1);
                 }}
-                className="absolute end-12 top-1/2 -translate-y-1/2 p-1 text-slate-500 hover:text-slate-600 rounded-full cursor-pointer"
+                className="absolute end-[4.5rem] top-1/2 -translate-y-1/2 w-8 h-8 flex items-center justify-center text-muted hover:text-ink hover:bg-line rounded-full cursor-pointer"
                 title={t('clearSearch')}
+                aria-label={t('clearSearch')}
               >
                 <X className="w-3.5 h-3.5" />
               </button>
             )}
             <button
               type="submit"
-              className="absolute end-1.5 top-1/2 -translate-y-1/2 px-3 py-1.5 bg-slate-900 hover:bg-black text-white text-xs font-bold rounded-lg shadow-2xs transition-all active:scale-95 cursor-pointer"
+              className="absolute end-1.5 top-1/2 -translate-y-1/2 h-9 px-3.5 bg-brand hover:bg-brand-500 text-on-brand text-sm font-extrabold rounded-[10px] transition-all active:scale-95 cursor-pointer"
             >
               {tc('search')}
             </button>
           </form>
 
           {/* View Switcher: Kitchens vs Dishes */}
-          <div className="flex items-center gap-1 p-1 bg-slate-100 rounded-xl border border-slate-200/60 h-10 shrink-0">
+          <div className="grid grid-cols-2 gap-1 p-1 bg-raised rounded-xl h-12 shrink-0">
             <button
               type="button"
               onClick={() => setViewMode('kitchens')}
-              className={`flex items-center gap-1.5 px-3.5 py-1 rounded-lg text-xs font-bold transition-all h-full cursor-pointer ${
-                viewMode === 'kitchens'
-                  ? 'bg-white text-slate-900 shadow-2xs'
-                  : 'text-slate-500 hover:text-slate-800'
+              aria-pressed={viewMode === 'kitchens'}
+              className={`flex items-center justify-center gap-1.5 px-4 rounded-[9px] text-sm transition-all h-full cursor-pointer ${
+                viewMode === 'kitchens' ? 'bg-surface text-ink font-extrabold shadow-xs' : 'text-muted font-bold hover:text-ink'
               }`}
             >
               <ChefHat className="w-3.5 h-3.5" />
               <span>{t('viewKitchens')}</span>
               {activeCommunityDetail && (
                 <span
-                  className={`px-1.5 py-0.2 rounded-full text-[11px] font-bold ${
-                    viewMode === 'kitchens' ? 'bg-slate-100 text-slate-900' : 'bg-white/40 text-slate-600'
+                  className={`px-1.5 rounded-full text-[11px] font-extrabold ${
+                    viewMode === 'kitchens' ? 'bg-brand-soft text-brand-soft-ink' : 'bg-line text-muted'
                   }`}
                 >
                   {(activeCommunityDetail.sellers || []).length}
@@ -567,18 +568,17 @@ function ProductsContent() {
             <button
               type="button"
               onClick={() => setViewMode('dishes')}
-              className={`flex items-center gap-1.5 px-3.5 py-1 rounded-lg text-xs font-bold transition-all h-full cursor-pointer ${
-                viewMode === 'dishes'
-                  ? 'bg-brand text-on-brand shadow-2xs'
-                  : 'text-slate-500 hover:text-slate-800'
+              aria-pressed={viewMode === 'dishes'}
+              className={`flex items-center justify-center gap-1.5 px-4 rounded-[9px] text-sm transition-all h-full cursor-pointer ${
+                viewMode === 'dishes' ? 'bg-surface text-ink font-extrabold shadow-xs' : 'text-muted font-bold hover:text-ink'
               }`}
             >
               <UtensilsCrossed className="w-3.5 h-3.5" />
               <span>{t('viewDishes')}</span>
               {!loading && !error && (
                 <span
-                  className={`px-1.5 py-0.2 rounded-full text-[11px] font-bold ${
-                    viewMode === 'dishes' ? 'bg-white/20 text-white' : 'bg-white/40 text-slate-600'
+                  className={`px-1.5 rounded-full text-[11px] font-extrabold ${
+                    viewMode === 'dishes' ? 'bg-brand-soft text-brand-soft-ink' : 'bg-line text-muted'
                   }`}
                 >
                   {totalProducts}
@@ -595,7 +595,8 @@ function ProductsContent() {
                 setSortBy(e.target.value as SortOption);
                 setPage(1);
               }}
-              className="border border-slate-200 rounded-xl px-3 py-1 text-xs font-semibold text-slate-700 bg-white hover:border-slate-300 focus:ring-2 focus:ring-slate-900 h-10 cursor-pointer"
+              aria-label={t('sortLabel')}
+              className="border border-line rounded-xl px-3 text-sm font-bold text-ink bg-surface hover:border-line-strong focus:ring-2 focus:ring-brand/30 h-12 cursor-pointer"
             >
               {sortOptions.map((opt) => (
                 <option key={opt.value} value={opt.value}>
@@ -607,8 +608,8 @@ function ProductsContent() {
         </div>
 
         {/* Filter Chips inside Search Panel */}
-        <div className="flex items-center justify-between gap-2 pt-2.5 border-t border-slate-100 flex-wrap">
-          <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-none py-0.5">
+        <div className="flex items-center justify-between gap-2 flex-wrap">
+          <div className="flex items-center gap-2 overflow-x-auto scrollbar-none py-0.5 -mx-4 px-4 sm:mx-0 sm:px-0">
             {productTypeOptions.map((type) => {
               const isSelected = selectedProductType === type.value;
               return (
@@ -618,10 +619,9 @@ function ProductsContent() {
                     setSelectedProductType(type.value);
                     setPage(1);
                   }}
-                  className={`px-3 py-1.5 rounded-full text-xs font-medium transition-all shrink-0 cursor-pointer ${
-                    isSelected
-                      ? 'bg-slate-900 text-white font-bold shadow-2xs'
-                      : 'bg-slate-100/80 text-slate-600 hover:bg-slate-200 hover:text-slate-900'
+                  aria-pressed={isSelected}
+                  className={`h-10 px-4 rounded-full text-sm font-bold transition-colors shrink-0 cursor-pointer ${
+                    isSelected ? 'bg-ink text-page' : 'bg-surface text-ink border border-line hover:bg-raised'
                   }`}
                 >
                   {t(type.labelKey)}
@@ -629,20 +629,19 @@ function ProductsContent() {
               );
             })}
 
-            <div className="h-4 w-px bg-slate-200 mx-1 shrink-0" />
+            <div className="h-6 w-px bg-line mx-1 shrink-0" />
 
             <button
               onClick={() => {
                 setOpenNow(!openNow);
                 setPage(1);
               }}
-              className={`px-3 py-1.5 rounded-full text-xs font-medium transition-all shrink-0 flex items-center gap-1.5 cursor-pointer ${
-                openNow
-                  ? 'bg-emerald-600 text-white font-bold shadow-2xs'
-                  : 'bg-slate-100/80 text-slate-600 hover:bg-slate-200 hover:text-slate-900'
+              aria-pressed={openNow}
+              className={`h-10 px-4 rounded-full text-sm font-bold transition-colors shrink-0 flex items-center gap-1.5 cursor-pointer ${
+                openNow ? 'bg-brand text-on-brand' : 'bg-surface text-ink border border-line hover:bg-raised'
               }`}
             >
-              <span className={`w-1.5 h-1.5 rounded-full ${openNow ? 'bg-white' : 'bg-emerald-500'}`} />
+              <span className={`w-2 h-2 rounded-full ${openNow ? 'bg-on-brand' : 'bg-brand'}`} />
               <span>{t('openNow')}</span>
             </button>
 
@@ -651,10 +650,9 @@ function ProductsContent() {
                 setFreeDelivery(!freeDelivery);
                 setPage(1);
               }}
-              className={`px-3 py-1.5 rounded-full text-xs font-medium transition-all shrink-0 cursor-pointer ${
-                freeDelivery
-                  ? 'bg-slate-900 text-white font-bold shadow-2xs'
-                  : 'bg-slate-100/80 text-slate-600 hover:bg-slate-200 hover:text-slate-900'
+              aria-pressed={freeDelivery}
+              className={`h-10 px-4 rounded-full text-sm font-bold transition-colors shrink-0 cursor-pointer ${
+                freeDelivery ? 'bg-ink text-page' : 'bg-surface text-ink border border-line hover:bg-raised'
               }`}
             >
               {t('freeDeliveryChip')}
@@ -665,10 +663,9 @@ function ProductsContent() {
                 setFastDeliveryOnly(!fastDeliveryOnly);
                 setPage(1);
               }}
-              className={`px-3 py-1.5 rounded-full text-xs font-medium transition-all shrink-0 cursor-pointer ${
-                fastDeliveryOnly
-                  ? 'bg-slate-900 text-white font-bold shadow-2xs'
-                  : 'bg-slate-100/80 text-slate-600 hover:bg-slate-200 hover:text-slate-900'
+              aria-pressed={fastDeliveryOnly}
+              className={`h-10 px-4 rounded-full text-sm font-bold transition-colors shrink-0 cursor-pointer ${
+                fastDeliveryOnly ? 'bg-ink text-page' : 'bg-surface text-ink border border-line hover:bg-raised'
               }`}
             >
               {t('under45')}
@@ -678,7 +675,7 @@ function ProductsContent() {
           {isAnyFilterActive && (
             <button
               onClick={handleClearAllFilters}
-              className="text-xs font-bold text-red-600 hover:text-red-700 flex items-center gap-1 transition-colors cursor-pointer py-1 px-2"
+              className="text-sm font-bold text-brand-ink hover:underline flex items-center gap-1 transition-colors cursor-pointer h-10 px-2"
             >
               <X className="w-3.5 h-3.5" />
               <span>{t('resetFilters')}</span>
@@ -693,9 +690,9 @@ function ProductsContent() {
   function renderMarketplaceContent() {
     if (viewMode === 'kitchens') {
       const kitchenSkeleton = (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
           {[1, 2, 3, 4, 5, 6].map((idx) => (
-            <div key={idx} className="h-80 rounded-2xl bg-slate-100 animate-pulse border border-slate-200" />
+            <div key={idx} className="h-80 rounded-[20px] bg-raised animate-pulse border border-line" />
           ))}
         </div>
       );
@@ -704,14 +701,14 @@ function ProductsContent() {
       if (!selectedCommunity) {
         if (communitiesLoading || !communityListReady) return kitchenSkeleton;
         return (
-          <div className="bg-white rounded-2xl border border-slate-200 p-8 sm:p-10 text-center shadow-xs">
-            <div className="w-14 h-14 rounded-2xl bg-brand-100 text-brand-ink flex items-center justify-center mx-auto mb-4">
+          <div className="bg-surface rounded-[20px] border border-dashed border-line-strong p-8 sm:p-10 text-center">
+            <div className="w-14 h-14 rounded-2xl bg-brand-soft text-brand-soft-ink flex items-center justify-center mx-auto mb-4">
               <MapPin className="w-7 h-7 text-brand-ink" />
             </div>
-            <h3 className="text-lg font-bold text-slate-900 mb-2">
+            <h3 className="text-lg font-bold text-ink mb-2">
               {communitiesError ? t('areasLoadError') : t('chooseYourArea')}
             </h3>
-            <p className="text-xs sm:text-sm text-slate-500 max-w-md mx-auto mb-5 leading-relaxed">
+            <p className="text-xs sm:text-sm text-muted max-w-md mx-auto mb-5 leading-relaxed">
               {communitiesError
                 ? t('checkConnection')
                 : t('pickCommunity')}
@@ -737,19 +734,19 @@ function ProductsContent() {
         <div>
           <div className="flex items-center justify-between mb-5 flex-wrap gap-3">
             <div>
-              <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-brand-100 text-brand-800 text-[11px] font-bold uppercase tracking-wider mb-1">
-                <MapPin className="w-3 h-3 text-brand-ink" />
+              <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-brand-soft text-brand-soft-ink text-xs font-extrabold mb-2">
+                <MapPin className="w-3 h-3" />
                 <span>{t('hyperlocal', { name: communityName })}</span>
               </div>
-              <h2 className="text-xl font-bold text-slate-900 tracking-tight">
+              <h2 className="text-[22px] font-extrabold text-ink tracking-tight">
                 {t('verifiedDomestic')}
               </h2>
-              <p className="text-xs text-slate-500 mt-0.5">
+              <p className="text-xs text-muted mt-0.5">
                 {t('independentChefs')}
               </p>
             </div>
             {activeCommunityDetail && (
-              <span className="text-xs font-semibold px-3 py-1.5 rounded-xl bg-slate-100 text-slate-700 border border-slate-200">
+              <span className="text-sm font-semibold text-muted">
                 {t(kitchens.length === 1 ? 'showingKitchensOne' : 'showingKitchensMany', { count: kitchens.length, area: communityName })}
               </span>
             )}
@@ -770,16 +767,16 @@ function ProductsContent() {
               </Button>
             </div>
           ) : kitchens.length === 0 ? (
-            <div className="bg-white rounded-2xl border border-slate-200 p-8 sm:p-10 text-center shadow-xs">
-              <div className="w-14 h-14 rounded-2xl bg-brand-100 text-brand-ink flex items-center justify-center mx-auto mb-4">
-                <Store className="w-7 h-7 text-brand-ink" />
+            <div className="bg-surface rounded-[20px] border border-dashed border-line-strong p-8 sm:p-10 text-center">
+              <div className="w-14 h-14 rounded-2xl bg-brand-soft text-brand-soft-ink flex items-center justify-center mx-auto mb-4">
+                <Store className="w-7 h-7" />
               </div>
-              <h3 className="text-lg font-bold text-slate-900 mb-2">
+              <h3 className="text-lg font-bold text-ink mb-2">
                 {allKitchens.length > 0
                   ? t('noneOpenIn', { area: communityName })
                   : t('noneYetIn', { area: communityName })}
               </h3>
-              <p className="text-xs sm:text-sm text-slate-500 max-w-md mx-auto mb-5 leading-relaxed">
+              <p className="text-xs sm:text-sm text-muted max-w-md mx-auto mb-5 leading-relaxed">
                 {allKitchens.length > 0
                   ? t('turnOffOpenNow')
                   : t('noneJoined', { area: communityName })}
@@ -787,7 +784,7 @@ function ProductsContent() {
 
               {activeCommunityDetail?.neighbors && activeCommunityDetail.neighbors.length > 0 && (
                 <div className="flex flex-col items-center gap-2 mb-5">
-                  <span className="text-xs font-bold text-slate-600 uppercase tracking-wider">
+                  <span className="text-xs font-bold text-muted uppercase tracking-wider">
                     {t('nearbyCommunities')}
                   </span>
                   <div className="flex items-center justify-center gap-2 flex-wrap">
@@ -799,7 +796,7 @@ function ProductsContent() {
                           const comm = useCommunityStore.getState().communities.find((c) => c.id === n.id);
                           if (comm) useCommunityStore.getState().setSelectedCommunity(comm);
                         }}
-                        className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl bg-brand-50 hover:bg-brand-100 text-brand-ink text-xs font-bold border border-brand-200 transition-colors shadow-2xs"
+                        className="inline-flex items-center gap-1 h-10 px-4 rounded-full bg-brand-soft hover:bg-brand-100 text-brand-soft-ink text-sm font-bold transition-colors"
                       >
                         <span>{t('browseNamedKitchens', { name: n.name })}</span>
                         <ChevronRight className="rtl:-scale-x-100 w-3.5 h-3.5" />
@@ -814,7 +811,7 @@ function ProductsContent() {
               </Button>
             </div>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
               {kitchens.map((k) => {
                 const isClosed = k.isOpen === false;
                 const rating = displayRating(k.ratingAverage, k.totalReviews);
@@ -835,14 +832,14 @@ function ProductsContent() {
                         setClosedKitchenModalData(k);
                       }
                     }}
-                    className={`group flex flex-col justify-between rounded-2xl border transition-all duration-300 overflow-hidden ${
+                    className={`group flex flex-col justify-between rounded-[20px] border bg-surface transition-all duration-200 overflow-hidden ${
                       isClosed
-                        ? 'bg-slate-50/80 border-slate-300/80 opacity-75 grayscale-[25%] hover:opacity-100 hover:grayscale-0 hover:bg-white hover:border-amber-300 hover:shadow-lg'
-                        : 'bg-white border-slate-200/80 hover:border-slate-300 hover:shadow-xl hover:-translate-y-1'
+                        ? 'border-line opacity-80 hover:opacity-100 hover:border-line-strong'
+                        : 'border-line hover:border-line-strong hover:shadow-[var(--shadow-card)]'
                     }`}
                   >
                     {/* Cover Image with Modern Aspect Ratio & Subtle Overlays */}
-                    <div className="relative aspect-[16/10] overflow-hidden bg-slate-100">
+                    <div className="relative aspect-[16/10] overflow-hidden bg-raised">
                       <CoverImage
                         src={k.coverImageUrl}
                         alt={k.businessName}
@@ -850,12 +847,11 @@ function ProductsContent() {
                         size="md"
                         className="w-full h-full group-hover:scale-105 transition-transform duration-500"
                       />
-                      <div className="absolute inset-0 bg-gradient-to-t from-black/75 via-transparent to-black/15 pointer-events-none" />
 
                       {/* Clean Top Status */}
                       {isClosed ? (
-                        <span className="absolute top-3 start-3 px-2.5 py-1 rounded-full text-white text-[11px] font-bold bg-black/80 backdrop-blur-md inline-flex items-center gap-1.5 shadow-2xs">
-                          <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />
+                        <span className="absolute top-3 start-3 px-2.5 py-1 rounded-full text-ink text-[11px] font-extrabold bg-surface/95 inline-flex items-center gap-1.5 shadow-xs">
+                          <span className="w-2 h-2 rounded-full bg-accent" />
                           <span>
                             {k.acceptsPreOrders
                               ? k.opensAt
@@ -867,7 +863,7 @@ function ProductsContent() {
                           </span>
                         </span>
                       ) : (
-                        <span className="absolute top-3 start-3 px-2.5 py-1 rounded-full text-white text-[11px] font-bold bg-black/50 backdrop-blur-md inline-flex items-center gap-1 shadow-2xs">
+                        <span className="absolute top-3 start-3 px-2.5 py-1 rounded-full text-ink text-[11px] font-extrabold bg-surface/95 inline-flex items-center gap-1 shadow-xs">
                           <ChefHat className="w-3 h-3 text-brand-ink" />
                           <span>{t('homeKitchen')}</span>
                         </span>
@@ -876,14 +872,15 @@ function ProductsContent() {
                       {/* Favorite Button */}
                       <button
                         onClick={(e) => handleToggleFavorite(e, k.id, k.businessName)}
-                        className="absolute top-3 end-3 w-8 h-8 rounded-full bg-white/90 hover:bg-white backdrop-blur-xs flex items-center justify-center text-slate-700 transition-all active:scale-90 shadow-xs z-10"
+                        className="absolute top-3 end-3 w-9 h-9 rounded-full bg-surface/95 hover:bg-surface flex items-center justify-center text-ink transition-all active:scale-90 shadow-xs z-10"
                         title={t('saveFavKitchens')}
+                        aria-label={t('saveFavKitchens')}
                       >
                         <Heart
                           className={`w-4 h-4 transition-colors ${
                             favoriteSellerIds.has(k.id)
                               ? 'fill-red-500 text-red-500'
-                              : 'text-slate-600 hover:text-red-500'
+                              : 'text-muted hover:text-red-500'
                           }`}
                         />
                       </button>
@@ -892,22 +889,22 @@ function ProductsContent() {
                           the kitchen's delivery terms and the buyer's address, so they are shown
                           on the dish cards and menu, not guessed here. */}
                       {k.minPrepTimeMinutes ? (
-                        <div className="absolute bottom-2.5 start-3 flex items-center gap-1.5 text-white text-xs font-semibold drop-shadow-sm">
+                        <div className="absolute bottom-3 start-3 px-2.5 py-1 rounded-full bg-surface/95 text-ink text-xs font-bold shadow-xs">
                           <span className="flex items-center gap-1">
-                            <Clock className="w-3.5 h-3.5 text-amber-300" />
+                            <Clock className="w-3.5 h-3.5 text-muted" />
                             <span>{t('minPrep', { min: k.minPrepTimeMinutes })}</span>
                           </span>
                         </div>
                       ) : null}
 
                       {/* Bottom Right: Star Rating (or "New" until the kitchen has reviews) */}
-                      <span className="absolute bottom-2.5 end-3 px-2 py-0.5 rounded-lg bg-black/65 backdrop-blur-md text-white text-xs font-bold flex items-center gap-1 shadow-2xs">
+                      <span className="absolute bottom-3 end-3 px-2.5 py-1 rounded-full bg-surface/95 text-ink text-xs font-extrabold flex items-center gap-1 shadow-xs">
                         {rating ? (
                           <>
-                            <Star className="w-3 h-3 fill-amber-400 text-amber-400" />
+                            <Star className="w-3 h-3 fill-accent text-accent" />
                             <span>{rating}</span>
                             {k.totalReviews ? (
-                              <span className="text-white/60 text-[11px] font-normal">({k.totalReviews})</span>
+                              <span className="text-muted text-[11px] font-semibold">({k.totalReviews})</span>
                             ) : null}
                           </>
                         ) : (
@@ -923,13 +920,13 @@ function ProductsContent() {
                         <div className="flex items-start justify-between gap-2.5 mb-1.5">
                           <div className="min-w-0 flex-1">
                             <div className="flex items-center gap-1.5">
-                              <h3 className="font-extrabold text-slate-900 text-base group-hover:text-brand-ink transition-colors leading-tight truncate">
+                              <h3 className="font-extrabold text-ink text-base leading-tight truncate">
                                 {k.businessName}
                               </h3>
-                              <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" />
+                              <CheckCircle2 className="w-4 h-4 text-brand-ink shrink-0" />
                             </div>
-                            <p className="text-xs text-slate-500 font-medium truncate mt-0.5">
-                              {displayChef} • {communityName}
+                            <p className="text-[13px] text-muted truncate mt-0.5">
+                              {displayChef} · {communityName}
                             </p>
                           </div>
 
@@ -939,39 +936,39 @@ function ProductsContent() {
                               loading="lazy"
                               decoding="async"
                               alt={k.businessName}
-                              className="w-9 h-9 rounded-full object-cover ring-2 ring-slate-100 shadow-2xs shrink-0"
+                              className="w-9 h-9 rounded-full object-cover ring-2 ring-line shadow-2xs shrink-0"
                             />
                           )}
                         </div>
 
                         {/* Cuisines: Dot-Separated Clean Row */}
                         {k.cuisines && k.cuisines.length > 0 && (
-                          <p className="text-xs text-slate-600 font-medium line-clamp-1 mt-1">
-                            {k.cuisines.slice(0, 4).join(' • ')}
+                          <p className="text-[13px] text-muted line-clamp-1 mt-1">
+                            {k.cuisines.slice(0, 4).join(' · ')}
                           </p>
                         )}
 
                         {/* One dish from the menu (the API returns a few, in no popularity order) */}
                         {k.products && k.products.length > 0 && (
-                          <div className="mt-3 pt-2.5 border-t border-slate-100 flex items-center justify-between text-xs">
-                            <div className="flex items-center gap-1.5 text-slate-600 truncate min-w-0">
-                              <span className="px-1.5 py-0.5 rounded-md bg-amber-50 text-amber-800 font-bold text-[11px] uppercase tracking-wider shrink-0">
+                          <div className="mt-3 pt-2.5 border-t border-line flex items-center justify-between text-xs">
+                            <div className="flex items-center gap-1.5 text-muted truncate min-w-0">
+                              <span className="px-2 py-0.5 rounded-full bg-accent-soft text-accent-soft-ink font-extrabold text-[11px] shrink-0">
                                 {t('onTheMenu')}
                               </span>
-                              <span className="font-semibold text-slate-800 truncate">{k.products[0].name}</span>
+                              <span className="font-semibold text-ink truncate">{k.products[0].name}</span>
                             </div>
-                            <span className="font-black text-slate-900 shrink-0 ms-2">Rs {k.products[0].price}</span>
+                            <span className="font-black text-ink shrink-0 ms-2">Rs {k.products[0].price}</span>
                           </div>
                         )}
                       </div>
 
                       {/* Footer CTA */}
-                      <div className="pt-2 border-t border-slate-100 flex items-center justify-between text-xs">
+                      <div className="pt-2 border-t border-line flex items-center justify-between text-xs">
                         <span
-                          className={`text-[11px] font-semibold px-2 py-0.5 rounded-md ${
+                          className={`text-[11px] font-extrabold px-2 py-0.5 rounded-full ${
                             isClosed
-                              ? 'text-amber-800 bg-amber-50'
-                              : 'text-emerald-700 bg-emerald-50'
+                              ? 'text-accent-soft-ink bg-accent-soft'
+                              : 'text-brand-soft-ink bg-brand-soft'
                           }`}
                         >
                           {isClosed ? (k.acceptsPreOrders ? t('preOrderSlot') : t('kitchenClosed')) : t('domesticKitchen')}
@@ -1008,7 +1005,7 @@ function ProductsContent() {
       return (
         <div className="text-center py-16">
           <div className="w-10 h-10 border-3 border-brand border-t-transparent rounded-full animate-spin mx-auto mb-3" />
-          <p className="text-slate-500 font-semibold text-xs">
+          <p className="text-muted font-semibold text-sm">
             {selectedCommunity ? t('loadingDishesIn', { area: selectedCommunity.name }) : t('loadingDishes')}
           </p>
         </div>
@@ -1018,15 +1015,15 @@ function ProductsContent() {
     if (products.length === 0) {
       const hasFilters = isAnyFilterActive || selectedCategory !== 'all';
       return (
-        <div className="bg-white rounded-2xl border border-slate-200 p-10 text-center shadow-xs">
-          <h2 className="text-xl font-bold text-slate-900 mb-1.5">
+        <div className="bg-surface rounded-[20px] border border-dashed border-line-strong p-10 text-center">
+          <h2 className="text-xl font-extrabold text-ink mb-1.5">
             {hasFilters
               ? t('noDishesMatch')
               : selectedCommunity
               ? t('noDishesListedIn', { area: selectedCommunity.name })
               : t('noDishesListed')}
           </h2>
-          <p className="text-slate-500 text-xs mb-5 max-w-md mx-auto">
+          <p className="text-muted text-xs mb-5 max-w-md mx-auto">
             {hasFilters
               ? t('clearFiltersHint')
               : t('noDishesHint')}
@@ -1055,12 +1052,12 @@ function ProductsContent() {
     return (
       <>
         <div className="flex items-center justify-between mb-4">
-          <p className="text-xs font-semibold text-slate-500">
+          <p className="text-sm font-semibold text-muted">
             {t(totalProducts === 1 ? 'foundDishOne' : 'foundDishMany', { count: totalProducts })}
           </p>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
+        <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 sm:gap-5">
           {products.map((product) => {
             const rating = displayRating(product.ratingAverage, product.totalReviews);
             const eta = deliveryEtaLabel(product, t);
@@ -1074,21 +1071,21 @@ function ProductsContent() {
               <Link
                 key={product.id}
                 href={`/products/${product.id}`}
-                className="group flex flex-col justify-between bg-white rounded-2xl border border-slate-200/80 hover:border-brand/50 hover:shadow-xl hover:-translate-y-1 transition-all duration-300 overflow-hidden"
+                className="group flex flex-col justify-between bg-surface rounded-[20px] border border-line hover:border-line-strong hover:shadow-[var(--shadow-card)] transition-all duration-200 overflow-hidden"
               >
-                <div className="aspect-[16/11] bg-slate-100 relative overflow-hidden">
+                <div className="aspect-[16/11] bg-raised relative overflow-hidden">
                   <CoverImage
                     src={product.primaryImage}
                     alt={product.name}
                     label={product.name}
                     size="md"
-                    className="w-full h-full group-hover:scale-105 transition-transform duration-500"
+                    className="w-full h-full group-hover:scale-[1.03] transition-transform duration-500"
                   />
 
                   {/* Product type tag (Fresh Cook / Frozen / Ready to Eat / Ready to Cook), from the API */}
                   {typeBadge && TypeIcon && typeLabelKey && (
                     <span
-                      className={`absolute top-2.5 start-2.5 px-2.5 py-1 rounded-full text-white text-[11px] font-bold ${typeBadge.className} shadow-xs z-10 flex items-center gap-1 backdrop-blur-xs`}
+                      className={`absolute top-2.5 start-2.5 px-2.5 py-1 rounded-full text-[11px] font-extrabold ${typeBadge.className} shadow-xs z-10 flex items-center gap-1`}
                     >
                       <TypeIcon className="w-3 h-3" />
                       <span>{t(typeLabelKey)}</span>
@@ -1097,8 +1094,8 @@ function ProductsContent() {
 
                   {/* Estimated delivery (API estimate; only when the kitchen delivers to the buyer) */}
                   {eta && (
-                    <span className="absolute bottom-2.5 start-2.5 px-2 py-0.5 rounded-lg bg-black/65 backdrop-blur-md text-white text-[11px] font-semibold flex items-center gap-1 z-10">
-                      <Clock className="w-3 h-3 text-amber-300" />
+                    <span className="absolute bottom-2.5 start-2.5 px-2 py-0.5 rounded-full bg-surface/95 text-ink text-[11px] font-bold flex items-center gap-1 z-10 shadow-xs">
+                      <Clock className="w-3 h-3 text-muted" />
                       <span>{eta}</span>
                     </span>
                   )}
@@ -1107,52 +1104,52 @@ function ProductsContent() {
                   {product.seller?.id && (
                     <button
                       onClick={(e) => handleToggleFavorite(e, product.seller.id, product.seller.businessName)}
-                      className="absolute top-2.5 end-2.5 w-7 h-7 rounded-full bg-white/90 hover:bg-white backdrop-blur-xs flex items-center justify-center text-slate-700 transition-transform active:scale-90 shadow-xs z-10"
+                      className="absolute top-2.5 end-2.5 w-9 h-9 rounded-full bg-surface/95 hover:bg-surface flex items-center justify-center text-ink transition-transform active:scale-90 shadow-xs z-10"
                       title={t('saveFavKitchens')}
+                      aria-label={t('saveFavKitchens')}
                     >
                       <Heart
                         className={`w-3.5 h-3.5 transition-colors ${
                           favoriteSellerIds.has(product.seller.id)
                             ? 'fill-red-500 text-red-500'
-                            : 'text-slate-600 hover:text-red-500'
+                            : 'text-muted hover:text-red-500'
                         }`}
                       />
                     </button>
                   )}
                 </div>
 
-                <div className="p-3.5 flex-1 flex flex-col justify-between">
+                <div className="p-3 sm:p-3.5 flex-1 flex flex-col justify-between">
                   <div>
                     {/* Clean Chef & Community Row */}
-                    <div className="flex items-center justify-between gap-1.5 mb-1.5">
-                      <div className="flex items-center gap-1.5 min-w-0">
-                        <ChefHat className="w-3.5 h-3.5 text-brand-ink shrink-0" />
-                        <span className="text-[11px] font-bold text-slate-700 truncate">
+                    <h3 className="font-extrabold text-ink text-sm sm:text-[15px] leading-snug line-clamp-2">
+                      {product.name}
+                    </h3>
+                    <div className="flex items-center justify-between gap-1.5 mt-1 flex-wrap">
+                      <div className="flex items-center gap-1 min-w-0">
+                        <ChefHat className="w-3.5 h-3.5 text-muted shrink-0" />
+                        <span className="text-xs text-muted truncate">
                           {product.seller?.businessName || t('homeKitchen')}
                         </span>
                       </div>
 
                       {product.isSameCommunity ? (
-                        <span className="shrink-0 px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200/80 text-[11px] font-bold flex items-center gap-1">
+                        <span className="shrink-0 px-2 py-0.5 rounded-full bg-brand-soft text-brand-soft-ink text-[11px] font-extrabold flex items-center gap-1">
                           <Home className="w-2.5 h-2.5" />
                           <span>{t('inYourArea')}</span>
                         </span>
                       ) : distanceLabel ? (
-                        <span className="shrink-0 px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 text-[11px] font-medium">
+                        <span className="shrink-0 px-2 py-0.5 rounded-full bg-raised text-muted text-[11px] font-medium">
                           {distanceLabel}
                         </span>
                       ) : null}
                     </div>
 
-                    <h3 className="font-bold text-slate-900 text-sm leading-snug line-clamp-1 group-hover:text-brand-ink transition-colors">
-                      {product.name}
-                    </h3>
-
                     {(feeLabel || product.unit) && (
-                      <div className="flex items-center gap-1 text-[11px] text-slate-500 mt-1">
+                      <div className="flex items-center gap-1 text-[11px] text-muted mt-1">
                         {feeLabel && (
                           <>
-                            <Bike className="w-3 h-3 text-slate-500 shrink-0" />
+                            <Bike className="w-3 h-3 text-muted shrink-0" />
                             <span title={product.delivery?.reason || undefined}>{feeLabel}</span>
                           </>
                         )}
@@ -1161,33 +1158,33 @@ function ProductsContent() {
                     )}
                   </div>
 
-                  <div className="mt-3 pt-2.5 border-t border-slate-100 flex items-center justify-between">
+                  <div className="mt-3 flex items-end justify-between gap-2">
                     <div>
                       {promotionsByProductId[product.id]?.length ? (
                         <div className="flex items-baseline gap-1.5">
-                          <span className="text-base font-black text-slate-950">
+                          <span className="text-[15px] font-extrabold text-ink">
                             {formatPrice(getStackedDiscountedPrice(product.price, promotionsByProductId[product.id]))}
                           </span>
-                          <span className="text-xs text-slate-500 line-through">
+                          <span className="text-xs text-muted line-through">
                             {formatPrice(product.price)}
                           </span>
                         </div>
                       ) : (
-                        <span className="text-base font-black text-slate-950">
+                        <span className="text-[15px] font-extrabold text-ink">
                           {formatPrice(product.price)}
                         </span>
                       )}
-                      <div className="flex items-center gap-1 mt-0.5 text-[11px] text-amber-600 font-bold">
+                      <div className="flex items-center gap-1 mt-0.5 text-xs text-ink font-extrabold">
                         {rating ? (
                           <>
-                            <Star className="w-3 h-3 fill-amber-400 text-amber-400" />
+                            <Star className="w-3 h-3 fill-accent text-accent" />
                             <span>{rating}</span>
                             {product.totalReviews ? (
-                              <span className="text-slate-500 font-normal">({product.totalReviews})</span>
+                              <span className="text-muted font-normal">({product.totalReviews})</span>
                             ) : null}
                           </>
                         ) : (
-                          <span className="text-slate-500">{t('new')}</span>
+                          <span className="text-muted">{t('new')}</span>
                         )}
                       </div>
                     </div>
@@ -1197,14 +1194,15 @@ function ProductsContent() {
                       onClick={(e) => handleQuickAddToCart(e, product)}
                       disabled={addingProductId === product.id}
                       title={t('addToCart')}
-                      className="flex items-center gap-1 px-3 py-1.5 rounded-xl bg-brand-50 hover:bg-brand text-brand-ink hover:text-on-brand border border-brand-200/80 hover:border-transparent font-bold text-xs transition-all active:scale-95 shadow-2xs cursor-pointer"
+                      aria-label={t('addToCart')}
+                      className="flex items-center justify-center gap-1 h-9 min-w-9 px-2.5 sm:px-3 rounded-[10px] bg-brand hover:bg-brand-500 text-on-brand font-extrabold text-sm transition-all active:scale-95 cursor-pointer"
                     >
                       {addingProductId === product.id ? (
                         <div className="w-3.5 h-3.5 border-2 border-current border-t-transparent rounded-full animate-spin" />
                       ) : (
                         <>
-                          <Plus className="w-3.5 h-3.5" />
-                          <span>{tc('add')}</span>
+                          <Plus className="w-4 h-4" strokeWidth={3} />
+                          <span className="hidden sm:inline">{tc('add')}</span>
                         </>
                       )}
                     </button>
@@ -1227,7 +1225,7 @@ function ProductsContent() {
             >
               {t('prevPage')}
             </Button>
-            <span className="px-3 py-1.5 text-xs font-medium text-slate-600">
+            <span className="px-3 py-1.5 text-xs font-medium text-muted">
               {t('pageOf', { page, total: totalPages })}
             </span>
             <Button
@@ -1289,16 +1287,16 @@ function ProductsContent() {
       <SiteHeader />
 
       {/* Main Multi-Vendor Marketplace Container */}
-      <div className="max-w-[1440px] mx-auto px-4 sm:px-8 py-6 md:py-8">
+      <div className="max-w-[1280px] mx-auto px-4 sm:px-8 py-6 md:py-10">
         <div className="mb-6">
-          <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-brand-100 text-brand-800 text-[11px] font-bold uppercase tracking-wider mb-2">
-            <ChefHat className="w-3 h-3 text-brand-ink" />
+          <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-accent-soft text-accent-soft-ink text-xs sm:text-[13px] font-extrabold mb-3">
+            <ChefHat className="w-3.5 h-3.5" />
             <span>{t('catalogBadge')}</span>
           </div>
-          <h1 className="text-2xl sm:text-3xl font-bold text-slate-900 tracking-tight">
+          <h1 className="text-[28px] sm:text-[40px] leading-tight font-extrabold text-ink tracking-tight">
             {selectedCommunity?.city ? t('publicTitleCity', { city: selectedCommunity.city }) : t('publicTitle')}
           </h1>
-          <p className="mt-1 text-slate-500 text-xs sm:text-sm max-w-2xl">
+          <p className="mt-2 text-muted text-[15px] sm:text-base max-w-2xl leading-relaxed">
             {t('publicSubtitle')}
           </p>
         </div>
@@ -1343,7 +1341,7 @@ export default function ProductsPage() {
         <div className="min-h-screen bg-page flex items-center justify-center">
           <div className="text-center">
             <div className="w-10 h-10 border-3 border-brand border-t-transparent rounded-full animate-spin mx-auto mb-3" />
-            <p className="text-xs font-black text-slate-700">{t('loadingFallback')}</p>
+            <p className="text-sm font-bold text-muted">{t('loadingFallback')}</p>
           </div>
         </div>
       }

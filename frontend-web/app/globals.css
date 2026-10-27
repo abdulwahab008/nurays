@@ -31,6 +31,11 @@
   --brand-soft:     #DDF8F4;
   --brand-soft-ink: #06594F;
   --brand-ring:     rgba(65, 218, 199, 0.35);
+  /* Yellow tint for a deal, a rating or a notice; blue for frozen food */
+  --accent-soft:     #FFF3CC;
+  --accent-soft-ink: #5C4500;
+  --frozen-soft:     #E6ECFF;
+  --frozen-ink:      #2A47A8;
 
   --shadow-card:    0 1px 2px rgba(13, 38, 36, 0.05), 0 8px 24px -12px rgba(13, 38, 36, 0.14);
   --shadow-hover:   0 2px 4px rgba(13, 38, 36, 0.06), 0 16px 36px -14px rgba(13, 38, 36, 0.22);
@@ -67,6 +72,10 @@
   --brand-soft:     #123C38;
   --brand-soft-ink: #8AEBDD;
   --brand-ring:     rgba(65, 218, 199, 0.3);
+  --accent-soft:     #3A3010;
+  --accent-soft-ink: #FFD873;
+  --frozen-soft:     #1C2747;
+  --frozen-ink:      #A9BCFF;
 
   --shadow-card:    0 1px 2px rgba(0, 0, 0, 0.3);
   --shadow-hover:   0 12px 30px -12px rgba(0, 0, 0, 0.6);
@@ -138,6 +147,8 @@
   --color-accent-900: #3D2E00;
   --color-accent:     #FFC83D;
   --color-on-accent:  #2B2100;
+  /* Frozen food: a fill with white words (8:1) */
+  --color-frozen:     #2A47A8;
 
   /* Kept for the few places that still say primary */
   --color-primary: #41DAC7;
@@ -155,6 +166,10 @@
   --color-brand-ink:      var(--brand-ink);
   --color-brand-soft:     var(--brand-soft);
   --color-brand-soft-ink: var(--brand-soft-ink);
+  --color-accent-soft:    var(--accent-soft);
+  --color-accent-soft-ink: var(--accent-soft-ink);
+  --color-frozen-soft:    var(--frozen-soft);
+  --color-frozen-ink:     var(--frozen-ink);
 }
 
 /* ============================================================

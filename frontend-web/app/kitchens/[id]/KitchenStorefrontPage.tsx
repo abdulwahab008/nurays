@@ -466,7 +466,7 @@ export default function KitchenStorefrontPage({ initial }: { initial?: PublicSel
       );
     }
     return (
-      <div className="min-h-screen bg-page text-slate-900 pb-32">
+      <div className="min-h-screen bg-page text-ink pb-32">
         {renderPublicHeader()}
         {body}
       </div>
@@ -479,17 +479,17 @@ export default function KitchenStorefrontPage({ initial }: { initial?: PublicSel
     return renderStatePage(
       tk('notFound'),
       tk('notFoundSub'),
-      <div className="text-center py-14 px-6 bg-white rounded-3xl border border-slate-200 shadow-xs max-w-md mx-auto my-12">
+      <div className="text-center py-14 px-6 bg-surface rounded-3xl border border-line shadow-xs max-w-md mx-auto my-12">
         <div className="w-12 h-12 rounded-2xl bg-brand-50 text-brand-ink flex items-center justify-center mx-auto mb-4">
           <ChefHat className="w-6 h-6" />
         </div>
-        <h1 className="font-bold text-slate-900 text-base">{tk('notFound')}</h1>
-        <p className="text-xs text-slate-500 mt-1.5 leading-relaxed">
+        <h1 className="font-bold text-ink text-base">{tk('notFound')}</h1>
+        <p className="text-xs text-muted mt-1.5 leading-relaxed">
           {tk('notFoundBody')}
         </p>
         <Link
           href="/kitchens"
-          className="inline-flex items-center gap-1.5 mt-5 px-4 py-2 rounded-xl bg-slate-900 text-white text-xs font-semibold hover:bg-black transition-colors"
+          className="inline-flex items-center gap-1.5 mt-5 px-4 py-2 rounded-xl bg-ink text-page text-xs font-semibold hover:bg-ink/90 transition-colors"
         >
           <ArrowLeft className="rtl:-scale-x-100 w-3.5 h-3.5" />
           <span>{tk('browseAllKitchens')}</span>
@@ -504,25 +504,25 @@ export default function KitchenStorefrontPage({ initial }: { initial?: PublicSel
       tk('errorSub'),
       <div
         role="alert"
-        className="text-center py-14 px-6 bg-white rounded-3xl border border-slate-200 shadow-xs max-w-md mx-auto my-12"
+        className="text-center py-14 px-6 bg-surface rounded-3xl border border-line shadow-xs max-w-md mx-auto my-12"
       >
         <div className="w-12 h-12 rounded-2xl bg-brand-50 text-brand-ink flex items-center justify-center mx-auto mb-4">
           <ChefHat className="w-6 h-6" />
         </div>
-        <h1 className="font-bold text-slate-900 text-base">{tk('errorHeading')}</h1>
-        <p className="text-xs text-slate-500 mt-1.5 leading-relaxed">
+        <h1 className="font-bold text-ink text-base">{tk('errorHeading')}</h1>
+        <p className="text-xs text-muted mt-1.5 leading-relaxed">
           {tk('errorBody')}
         </p>
         <div className="mt-5 flex items-center justify-center gap-2">
           <button
             onClick={retryLoad}
-            className="px-4 py-2 rounded-xl bg-slate-900 text-white text-xs font-semibold hover:bg-black transition-colors"
+            className="px-4 py-2 rounded-xl bg-ink text-page text-xs font-semibold hover:bg-ink/90 transition-colors"
           >
             {tk('tryAgain')}
           </button>
           <Link
             href="/kitchens"
-            className="px-4 py-2 rounded-xl bg-white border border-slate-200 text-slate-700 text-xs font-semibold hover:bg-slate-50 transition-colors"
+            className="px-4 py-2 rounded-xl bg-surface border border-line text-ink text-xs font-semibold hover:bg-raised transition-colors"
           >
             {tk('allKitchens')}
           </Link>
@@ -540,20 +540,20 @@ export default function KitchenStorefrontPage({ initial }: { initial?: PublicSel
           sidebarItems={CUSTOMER_SIDEBAR_ITEMS}
           userType="customer"
         >
-          <div className="text-center py-20 bg-white rounded-3xl border border-slate-200 shadow-xs max-w-md mx-auto my-8">
+          <div className="text-center py-20 bg-surface rounded-3xl border border-line shadow-xs max-w-md mx-auto my-8">
             <div className="w-12 h-12 border-3 border-brand border-t-transparent rounded-full animate-spin mx-auto mb-4" />
-            <p className="font-bold text-slate-800 text-sm">{tk('loadingStorefront')}</p>
-            <p className="text-xs text-slate-500 mt-1">{tk('fetchingMenu')}</p>
+            <p className="font-bold text-ink text-sm">{tk('loadingStorefront')}</p>
+            <p className="text-xs text-muted mt-1">{tk('fetchingMenu')}</p>
           </div>
         </DashboardLayout>
       );
     }
     return (
-      <div className="min-h-screen bg-page text-slate-900 flex items-center justify-center">
-        <div className="text-center p-8 bg-white rounded-3xl border border-slate-200 shadow-sm max-w-sm">
+      <div className="min-h-screen bg-page text-ink flex items-center justify-center">
+        <div className="text-center p-8 bg-surface rounded-3xl border border-line shadow-sm max-w-sm">
           <div className="w-12 h-12 border-3 border-brand border-t-transparent rounded-full animate-spin mx-auto mb-4" />
-          <p className="font-bold text-slate-800 text-sm">{tk('loadingStorefront')}</p>
-          <p className="text-xs text-slate-500 mt-1">{tk('fetchingMenu')}</p>
+          <p className="font-bold text-ink text-sm">{tk('loadingStorefront')}</p>
+          <p className="text-xs text-muted mt-1">{tk('fetchingMenu')}</p>
         </div>
       </div>
     );
@@ -572,22 +572,21 @@ export default function KitchenStorefrontPage({ initial }: { initial?: PublicSel
     <>
 
       {/* Kitchen Hero Banner */}
-      <div className="relative bg-[#0C1016] text-white">
-        <div className="h-56 sm:h-64 w-full overflow-hidden relative">
+      <div className="relative">
+        <div className="h-48 sm:h-72 w-full overflow-hidden relative bg-raised">
           <CoverImage
             src={kitchen.coverPhoto}
             alt={kitchen.name}
             label={kitchen.name}
             size="lg"
             eager
-            className="w-full h-full opacity-45"
+            className="w-full h-full"
           />
-          <div className="absolute inset-0 bg-gradient-to-t from-[#0C1016] via-[#0C1016]/60 to-transparent" />
         </div>
 
         {/* Kitchen Info Card overlapping banner */}
-        <div className="max-w-[1360px] mx-auto px-4 sm:px-8 -mt-20 sm:-mt-24 relative z-10">
-          <div className="bg-white rounded-2xl p-5 sm:p-7 shadow-lg border border-slate-200/80 text-slate-900 flex flex-col md:flex-row gap-5 items-start md:items-center justify-between">
+        <div className="max-w-[1280px] mx-auto px-4 sm:px-8 -mt-14 sm:-mt-20 relative z-10">
+          <div className="bg-surface rounded-[24px] p-5 sm:p-7 shadow-[var(--shadow-card)] border border-line text-ink flex flex-col md:flex-row gap-5 items-start md:items-center justify-between">
             <div className="flex items-start gap-4">
               <div className="relative">
                 <CoverImage
@@ -596,10 +595,10 @@ export default function KitchenStorefrontPage({ initial }: { initial?: PublicSel
                   label={kitchen.chefName}
                   size="sm"
                   eager
-                  className="w-16 h-16 sm:w-20 sm:h-20 rounded-2xl ring-3 ring-white shadow-md"
+                  className="w-16 h-16 sm:w-20 sm:h-20 rounded-2xl ring-4 ring-surface shadow-md"
                 />
                 <div className="absolute -bottom-1.5 -end-1.5 bg-brand text-on-brand text-xs font-bold p-1 rounded-full shadow-xs">
-                  <Check className="w-3 h-3 text-white" />
+                  <Check className="w-3 h-3" strokeWidth={3} />
                 </div>
               </div>
 
@@ -608,47 +607,43 @@ export default function KitchenStorefrontPage({ initial }: { initial?: PublicSel
                 <div className="flex flex-wrap items-center gap-2 mb-1">
                   {kitchen.statusText && (
                     <span
-                      className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-bold uppercase tracking-wider ${
-                        isOpenNow
-                          ? 'bg-emerald-100 text-emerald-800'
-                          : 'bg-rose-100 text-rose-800'
+                      className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-extrabold ${
+                        isOpenNow ? 'bg-brand-soft text-brand-soft-ink' : 'bg-accent-soft text-accent-soft-ink'
                       }`}
                     >
                       <span
-                        className={`w-1.5 h-1.5 rounded-full ${
-                          isOpenNow ? 'bg-emerald-600 animate-pulse' : 'bg-rose-600'
-                        }`}
+                        className={`w-2 h-2 rounded-full ${isOpenNow ? 'bg-brand' : 'bg-accent-soft-ink'}`}
                       />
                       <span>{kitchen.statusText}</span>
                     </span>
                   )}
                   {kitchen.hoursText && (
-                    <span className="px-2.5 py-0.5 rounded-full bg-brand-100 text-brand-ink text-[11px] font-bold">
+                    <span className="px-2.5 py-1 rounded-full bg-raised text-ink text-xs font-bold">
                       {kitchen.hoursText}
                     </span>
                   )}
                   {kitchen.preOrderOnly && kitchen.availability?.status !== 'preorder_only' && (
-                    <span className="px-2.5 py-0.5 rounded-full bg-brand-100 text-brand-ink text-[11px] font-bold">
+                    <span className="px-2.5 py-1 rounded-full bg-raised text-ink text-xs font-bold">
                       {tb('preOrdersOnly')}
                     </span>
                   )}
                 </div>
 
-                <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-slate-950">
+                <h1 className="text-[24px] sm:text-[32px] leading-tight font-extrabold tracking-tight text-ink">
                   {kitchen.name}
                 </h1>
-                <p className="text-xs font-bold text-brand-ink mt-0.5">
+                <p className="text-sm font-bold text-brand-ink mt-0.5">
                   {tk('operatedBy', { name: kitchen.chefName })}
                 </p>
                 {kitchen.area && (
-                  <p className="text-xs text-slate-500 mt-1 flex items-center gap-1">
-                    <MapPin className="w-3 h-3 text-brand-ink" />
+                  <p className="text-[13px] text-muted mt-1 flex items-center gap-1">
+                    <MapPin className="w-3.5 h-3.5" />
                     <span>{kitchen.area}</span>
                   </p>
                 )}
 
                 {kitchen.chefBio && (
-                  <p className="text-xs text-slate-600 mt-2 max-w-xl line-clamp-2 leading-relaxed">
+                  <p className="text-sm text-muted mt-2 max-w-xl line-clamp-2 leading-relaxed">
                     {kitchen.chefBio}
                   </p>
                 )}
@@ -656,34 +651,34 @@ export default function KitchenStorefrontPage({ initial }: { initial?: PublicSel
             </div>
 
             {/* Quick Metrics */}
-            <div className="flex flex-wrap md:flex-col gap-2.5 w-full md:w-auto border-t md:border-t-0 md:border-s border-slate-100 pt-3 md:pt-0 md:ps-6">
+            <div className="flex flex-wrap md:flex-col gap-2.5 w-full md:w-auto border-t md:border-t-0 md:border-s border-line pt-3 md:pt-0 md:ps-6">
               <a
                 href="#customer-reviews"
-                className="flex items-center gap-1.5 bg-amber-50 hover:bg-amber-100/80 px-2.5 py-1 rounded-xl border border-amber-200/80 transition-colors cursor-pointer"
+                className="flex items-center gap-1.5 bg-accent-soft hover:bg-accent-200/60 px-3 py-1.5 rounded-xl transition-colors cursor-pointer"
                 title={kitchen.rating ? tk('viewReviews') : tk('noReviews')}
               >
                 {kitchen.rating ? (
                   <>
-                    <Star className="w-3.5 h-3.5 fill-amber-500 text-amber-500" />
-                    <span className="text-amber-800 font-bold text-xs">{kitchen.rating}</span>
-                    <span className="text-[11px] text-amber-700 font-medium">
+                    <Star className="w-3.5 h-3.5 fill-accent text-accent" />
+                    <span className="text-accent-soft-ink font-extrabold text-sm">{kitchen.rating}</span>
+                    <span className="text-[11px] text-accent-soft-ink font-medium">
                       {tk(kitchen.reviewCount === 1 ? 'reviewsParenOne' : 'reviewsParenMany', { count: kitchen.reviewCount })}
                     </span>
                   </>
                 ) : (
                   <>
-                    <span className="text-amber-800 font-bold text-xs">{tk('new')}</span>
-                    <span className="text-[11px] text-amber-700 font-medium">{tk('noReviews')}</span>
+                    <span className="text-accent-soft-ink font-bold text-xs">{tk('new')}</span>
+                    <span className="text-[11px] text-accent-soft-ink font-medium">{tk('noReviews')}</span>
                   </>
                 )}
               </a>
-              <div className="flex items-center gap-2 bg-slate-50 px-2.5 py-1 rounded-xl border border-slate-200/80">
-                <span className="text-xs font-medium text-slate-700 flex items-center gap-1">
-                  <Bike className="w-3 h-3 text-slate-500" />
+              <div className="flex items-center gap-2 bg-raised px-3 py-1.5 rounded-xl">
+                <span className="text-xs font-medium text-ink flex items-center gap-1">
+                  <Bike className="w-3 h-3 text-muted" />
                   <span>{kitchen.deliveryFee}</span>
                 </span>
               </div>
-              <div className="text-[11px] font-semibold text-slate-600 bg-slate-50 px-2.5 py-1 rounded-xl border border-slate-200/60">
+              <div className="text-xs font-semibold text-muted bg-raised px-3 py-1.5 rounded-xl">
                 {kitchen.minOrder != null ? tk('minOrderLabel', { amount: formatPrice(kitchen.minOrder) }) : tk('noMinimum')}
               </div>
             </div>
@@ -692,10 +687,10 @@ export default function KitchenStorefrontPage({ initial }: { initial?: PublicSel
       </div>
 
       {/* Verification badge */}
-      <div className="max-w-[1360px] mx-auto px-4 sm:px-8 mt-5">
+      <div className="max-w-[1280px] mx-auto px-4 sm:px-8 mt-5">
         <div className="flex items-center gap-2 overflow-x-auto pb-2 no-scrollbar">
-          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-white border border-slate-200/80 text-xs font-semibold text-slate-700 shadow-2xs whitespace-nowrap">
-            <ShieldCheck className="w-3.5 h-3.5 text-brand-ink" />
+          <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-brand-soft text-brand-soft-ink text-xs font-bold whitespace-nowrap">
+            <ShieldCheck className="w-3.5 h-3.5" />
             <span>{kitchen.verifiedLabel}</span>
           </span>
         </div>
@@ -703,24 +698,24 @@ export default function KitchenStorefrontPage({ initial }: { initial?: PublicSel
 
       {/* Closed Kitchen / Pre-Order Banner (only when the API says the kitchen is closed) */}
       {kitchen.isClosed && (
-        <div className="max-w-[1360px] mx-auto px-4 sm:px-8 mt-5">
-          <div className="bg-amber-50 border border-amber-200/90 rounded-2xl p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-sm">
+        <div className="max-w-[1280px] mx-auto px-4 sm:px-8 mt-5">
+          <div className="bg-accent-soft rounded-[20px] p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div className="flex items-start gap-3.5">
-              <div className="w-11 h-11 rounded-2xl bg-amber-100 flex items-center justify-center text-amber-700 shrink-0">
-                <Clock className="w-5 h-5 text-amber-700" />
+              <div className="w-11 h-11 rounded-2xl bg-accent flex items-center justify-center text-on-accent shrink-0">
+                <Clock className="w-5 h-5" />
               </div>
               <div>
                 <div className="flex items-center gap-2 flex-wrap mb-1">
-                  <span className="px-2.5 py-0.5 rounded-full bg-red-100 text-red-800 text-[11px] font-bold uppercase tracking-wider">
+                  <span className="px-2.5 py-0.5 rounded-full bg-surface text-ink text-[11px] font-extrabold">
                     {tk('closedInstant')}
                   </span>
                   {kitchen.preOrderOnly && (
-                    <span className="px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-[11px] font-bold uppercase tracking-wider">
+                    <span className="px-2.5 py-0.5 rounded-full bg-brand-soft text-brand-soft-ink text-[11px] font-extrabold">
                       {tk('acceptingPreOrders')}
                     </span>
                   )}
                 </div>
-                <h4 className="font-extrabold text-slate-900 text-sm">
+                <h4 className="font-extrabold text-ink text-sm">
                   {kitchen.preOrderOnly
                     ? tk('takingPreorders', { name: kitchen.name })
                     : (() => {
@@ -728,7 +723,7 @@ export default function KitchenStorefrontPage({ initial }: { initial?: PublicSel
                         return tk(closedKey ?? 'isClosedNow', { name: kitchen.name });
                       })()}
                 </h4>
-                <p className="text-xs text-slate-600 mt-0.5 leading-relaxed max-w-2xl">
+                <p className="text-[13px] text-accent-soft-ink mt-0.5 leading-relaxed max-w-2xl">
                   {kitchen.preOrderOnly
                     ? `${tk('preorderBody')}${kitchen.opensAtText ? tk('preorderOpens', { when: kitchen.opensAtText }) : ''}`
                     : kitchen.opensAtText
@@ -736,7 +731,7 @@ export default function KitchenStorefrontPage({ initial }: { initial?: PublicSel
                     : tk('pausedNoOpen')}
                 </p>
                 {kitchen.availability?.isManualOverride && kitchen.availability.reason && (
-                  <p className="text-xs font-medium text-amber-900 mt-1">
+                  <p className="text-xs font-medium text-accent-soft-ink mt-1">
                     {tk('kitchenNote', { reason: kitchen.availability.reason })}
                   </p>
                 )}
@@ -746,7 +741,7 @@ export default function KitchenStorefrontPage({ initial }: { initial?: PublicSel
             <div className="flex items-center gap-2 shrink-0">
               <Link
                 href="/products?openNow=true&view=kitchens"
-                className="px-4 py-2.5 rounded-xl bg-white border border-slate-300 hover:bg-slate-50 text-slate-800 text-xs font-bold transition-colors shadow-2xs whitespace-nowrap"
+                className="inline-flex items-center h-11 px-4 rounded-xl bg-on-accent text-accent-100 hover:opacity-90 text-sm font-extrabold transition-opacity whitespace-nowrap"
               >
                 {tk('browseOpenNow')}
               </Link>
@@ -757,14 +752,14 @@ export default function KitchenStorefrontPage({ initial }: { initial?: PublicSel
 
       {/* Store Notice banner if set by Chef */}
       {kitchen.storeNotice && (
-        <div className="max-w-[1360px] mx-auto px-4 sm:px-8 mt-4">
-          <div className="bg-amber-50 border border-amber-300/80 rounded-2xl p-4 flex items-start gap-3 shadow-2xs">
-            <div className="p-1.5 rounded-xl bg-amber-200/70 text-amber-800 shrink-0 mt-0.5">
+        <div className="max-w-[1280px] mx-auto px-4 sm:px-8 mt-4">
+          <div className="bg-accent-soft rounded-[20px] p-4 flex items-start gap-3">
+            <div className="p-1.5 rounded-xl bg-accent text-on-accent shrink-0 mt-0.5">
               <Bell className="w-4 h-4" />
             </div>
             <div>
-              <h4 className="text-xs font-bold text-amber-950 uppercase tracking-wider">{tk('noticeFromChef')}</h4>
-              <p className="text-xs font-medium text-amber-900 mt-0.5">{kitchen.storeNotice}</p>
+              <h4 className="text-sm font-extrabold text-accent-soft-ink">{tk('noticeFromChef')}</h4>
+              <p className="text-sm text-accent-soft-ink mt-0.5">{kitchen.storeNotice}</p>
             </div>
           </div>
         </div>
@@ -772,14 +767,14 @@ export default function KitchenStorefrontPage({ initial }: { initial?: PublicSel
 
       {/* Menu Categories Bar */}
       {kitchen.dishes.length > 0 && (
-        <div className="sticky top-(--header-offset) z-30 bg-page/95 backdrop-blur-md border-b border-slate-200/80 py-3 mt-4">
-          <div className="max-w-[1360px] mx-auto px-4 sm:px-8 flex items-center gap-2.5 overflow-x-auto no-scrollbar">
+        <div className="sticky top-(--header-offset) z-30 bg-page/95 backdrop-blur-md border-b border-line py-3 mt-6">
+          <div className="max-w-[1280px] mx-auto px-4 sm:px-8 flex items-center gap-2.5 overflow-x-auto no-scrollbar">
             <button
               onClick={() => setActiveCategory('all')}
-              className={`inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${
+              className={`flex-shrink-0 inline-flex items-center gap-1.5 h-10 px-4 rounded-full text-sm font-bold transition-colors whitespace-nowrap ${
                 activeCategory === 'all'
-                  ? 'bg-[#0C1016] text-white shadow-xs'
-                  : 'bg-white text-slate-700 hover:bg-slate-100 border border-slate-200/80'
+                  ? 'bg-ink text-page'
+                  : 'bg-surface text-ink hover:bg-raised border border-line'
               }`}
             >
               <UtensilsCrossed className="w-3.5 h-3.5" />
@@ -787,10 +782,10 @@ export default function KitchenStorefrontPage({ initial }: { initial?: PublicSel
             </button>
             <button
               onClick={() => setActiveCategory('fresh')}
-              className={`inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${
+              className={`flex-shrink-0 inline-flex items-center gap-1.5 h-10 px-4 rounded-full text-sm font-bold transition-colors whitespace-nowrap ${
                 activeCategory === 'fresh'
-                  ? 'bg-brand text-on-brand shadow-xs'
-                  : 'bg-white text-slate-700 hover:bg-slate-100 border border-slate-200/80'
+                  ? 'bg-brand text-on-brand'
+                  : 'bg-surface text-ink hover:bg-raised border border-line'
               }`}
             >
               <Flame className="w-3.5 h-3.5" />
@@ -798,10 +793,10 @@ export default function KitchenStorefrontPage({ initial }: { initial?: PublicSel
             </button>
             <button
               onClick={() => setActiveCategory('frozen')}
-              className={`inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${
+              className={`flex-shrink-0 inline-flex items-center gap-1.5 h-10 px-4 rounded-full text-sm font-bold transition-colors whitespace-nowrap ${
                 activeCategory === 'frozen'
-                  ? 'bg-[#00B4D8] text-white shadow-xs'
-                  : 'bg-white text-slate-700 hover:bg-slate-100 border border-slate-200/80'
+                  ? 'bg-frozen text-white'
+                  : 'bg-surface text-ink hover:bg-raised border border-line'
               }`}
             >
               <Snowflake className="w-3.5 h-3.5" />
@@ -812,72 +807,70 @@ export default function KitchenStorefrontPage({ initial }: { initial?: PublicSel
       )}
 
       {/* Dishes Menu Grid */}
-      <main className="max-w-[1360px] mx-auto px-4 sm:px-8 mt-8">
+      <main className="max-w-[1280px] mx-auto px-4 sm:px-8 mt-8">
         {kitchen.dishes.length === 0 ? (
-          <div className="text-center py-14 px-6 bg-white rounded-2xl border border-dashed border-slate-200">
-            <UtensilsCrossed className="w-8 h-8 text-slate-300 mx-auto mb-2" />
-            <p className="text-sm font-bold text-slate-700">{tk('noDishes')}</p>
-            <p className="text-xs text-slate-500 mt-1">{tk('noDishesBody')}</p>
+          <div className="text-center py-14 px-6 bg-surface rounded-[20px] border border-dashed border-line-strong">
+            <UtensilsCrossed className="w-8 h-8 text-line-strong mx-auto mb-2" />
+            <p className="text-sm font-bold text-ink">{tk('noDishes')}</p>
+            <p className="text-xs text-muted mt-1">{tk('noDishesBody')}</p>
             <Link
               href="/kitchens"
-              className="inline-flex items-center gap-1.5 mt-4 px-4 py-2 rounded-xl bg-slate-900 text-white text-xs font-semibold hover:bg-black transition-colors"
+              className="inline-flex items-center gap-1.5 mt-4 h-11 px-5 rounded-xl bg-brand text-on-brand text-sm font-extrabold hover:bg-brand-500 transition-colors"
             >
               {tb('browseKitchens')}
             </Link>
           </div>
         ) : (
           <>
-            <div className="mb-6 flex items-center justify-between">
+            <div className="mb-5 flex items-end justify-between gap-4">
               <div>
-                <h2 className="text-xl sm:text-2xl font-black text-slate-950">
+                <h2 className="text-[22px] sm:text-[28px] font-extrabold tracking-tight text-ink">
                   {activeCategory === 'all'
                     ? tk('currentMenu')
                     : activeCategory === 'fresh'
                     ? tk('freshMeals')
                     : tk('frozenPacks')}
                 </h2>
-                <p className="text-xs text-slate-500 mt-0.5">
+                <p className="text-sm text-muted mt-0.5">
                   {tk('preparedBy', { name: kitchen.chefName })}
                 </p>
               </div>
-              <span className="text-xs font-semibold text-slate-500">
+              <span className="text-sm font-semibold text-muted flex-shrink-0">
                 {tk(filteredDishes.length === 1 ? 'dishOne' : 'dishMany', { count: filteredDishes.length })}
               </span>
             </div>
 
             {filteredDishes.length === 0 ? (
-              <p className="text-center text-xs text-slate-500 py-10 bg-white rounded-2xl border border-slate-200/80">
+              <p className="text-center text-sm text-muted py-10 bg-surface rounded-[20px] border border-dashed border-line-strong">
                 {activeCategory === 'frozen'
                   ? tk('noFrozen')
                   : tk('noFresh')}
               </p>
             ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 sm:gap-4">
                 {filteredDishes.map((dish) => {
                   const count = addedItems[dish.id] || 0;
                   return (
                     <div
                       key={dish.id}
-                      className="bg-white rounded-2xl p-4 sm:p-5 border border-slate-200/80 shadow-2xs hover:shadow-sm transition-all flex flex-col sm:flex-row gap-4 items-start"
+                      className="bg-surface rounded-[20px] p-3 sm:p-4 border border-line hover:border-line-strong transition-colors flex gap-3 sm:gap-4 items-stretch"
                     >
-                      <div className="w-full sm:w-36 h-36 rounded-xl overflow-hidden relative flex-shrink-0 bg-slate-100">
+                      <div className="order-last w-28 h-28 sm:w-36 sm:h-36 rounded-2xl overflow-hidden relative flex-shrink-0 bg-raised">
                         <CoverImage
                           src={dish.photo}
                           alt={dish.name}
                           label={dish.name}
                           size="md"
-                          className="w-full h-full group-hover:scale-105 transition-transform"
+                          className="w-full h-full"
                         />
                         {dish.originalPrice != null && (
-                          <span className="absolute top-2 start-2 px-2 py-0.5 rounded-md bg-black/75 text-white text-[11px] font-bold tracking-wide backdrop-blur-xs">
+                          <span className="absolute top-2 start-2 px-2 py-0.5 rounded-full bg-accent text-on-accent text-[11px] font-extrabold">
                             {tk('specialDeal')}
                           </span>
                         )}
                         <span
-                          className={`absolute bottom-2 start-2 px-2 py-0.5 rounded-md text-[11px] font-bold flex items-center gap-1 ${
-                            dish.isFrozen
-                              ? 'bg-cyan-600 text-white'
-                              : 'bg-brand text-on-brand'
+                          className={`absolute bottom-2 start-2 px-2 py-0.5 rounded-full text-[11px] font-extrabold flex items-center gap-1 ${
+                            dish.isFrozen ? 'bg-frozen-soft text-frozen-ink' : 'bg-surface/95 text-ink'
                           }`}
                         >
                           {dish.isFrozen ? <Snowflake className="w-3 h-3" /> : <Flame className="w-3 h-3" />}
@@ -885,10 +878,10 @@ export default function KitchenStorefrontPage({ initial }: { initial?: PublicSel
                         </span>
                       </div>
 
-                      <div className="flex-1 flex flex-col justify-between h-full min-w-0">
+                      <div className="flex-1 flex flex-col justify-between min-w-0">
                         <div>
                           <div className="flex items-center justify-between gap-2">
-                            <h3 className="font-bold text-slate-900 text-sm leading-snug">
+                            <h3 className="font-extrabold text-ink text-[15px] sm:text-base leading-snug">
                               {dish.name}
                             </h3>
                           </div>
@@ -898,42 +891,40 @@ export default function KitchenStorefrontPage({ initial }: { initial?: PublicSel
                             </p>
                           )}
                           {dish.description && (
-                            <p className="text-xs text-slate-500 mt-1.5 line-clamp-2 leading-relaxed">
+                            <p className="text-[13px] text-muted mt-1 line-clamp-2 leading-relaxed">
                               {dish.description}
                             </p>
                           )}
                         </div>
 
-                        <div className="mt-3 pt-2.5 border-t border-slate-100 flex items-center justify-between">
+                        <div className="mt-3 flex items-end justify-between gap-2 flex-wrap">
                           <div>
                             <div className="flex items-baseline gap-1.5">
-                              <span className="text-base font-bold text-slate-950">
+                              <span className="text-base font-extrabold text-ink">
                                 {formatPrice(dish.price)}
                               </span>
                               {dish.originalPrice != null && (
-                                <span className="text-xs text-slate-500 line-through">
+                                <span className="text-xs text-muted line-through">
                                   {formatPrice(dish.originalPrice)}
                                 </span>
                               )}
                             </div>
                             {dish.prepTime && (
-                              <span className="text-[11px] text-slate-500 font-medium block">
+                              <span className="text-[11px] text-muted font-medium block">
                                 {dish.prepTime}
                               </span>
                             )}
                           </div>
 
                           {orderingBlocked ? (
-                            <span className="px-3 py-1.5 rounded-xl bg-slate-100 text-slate-500 text-xs font-semibold border border-slate-200 cursor-not-allowed">
+                            <span className="inline-flex items-center h-9 px-3 rounded-[10px] bg-raised text-muted text-sm font-bold cursor-not-allowed">
                               {tk('closed')}
                             </span>
                           ) : count === 0 ? (
                             <button
                               onClick={() => handleAddToCart(dish)}
-                              className={`px-3.5 py-1.5 rounded-xl text-xs font-bold shadow-2xs transition-all active:scale-95 ${
-                                kitchen.preOrderOnly
-                                  ? 'bg-amber-700 hover:bg-amber-800 text-white flex items-center gap-1.5'
-                                  : 'bg-brand hover:bg-brand-500 text-on-brand'
+                              className={`inline-flex items-center gap-1.5 h-9 px-4 rounded-[10px] text-sm font-extrabold transition-all active:scale-95 ${
+                                kitchen.preOrderOnly ? 'bg-accent hover:bg-accent-300 text-on-accent' : 'bg-brand hover:bg-brand-500 text-on-brand'
                               }`}
                             >
                               {kitchen.preOrderOnly ? (
@@ -946,19 +937,21 @@ export default function KitchenStorefrontPage({ initial }: { initial?: PublicSel
                               )}
                             </button>
                           ) : (
-                            <div className="flex items-center gap-1.5 bg-slate-100 px-2 py-1 rounded-xl border border-slate-200">
+                            <div className="flex items-center gap-1 bg-raised p-1 rounded-[12px]">
                               <button
                                 onClick={() => handleRemoveFromCart(dish)}
-                                className="w-6 h-6 rounded-lg bg-white text-slate-900 font-bold hover:bg-slate-200 transition-colors flex items-center justify-center text-xs shadow-2xs"
+                                aria-label={tk('removeOne', { name: dish.name })}
+                                className="w-8 h-8 rounded-[9px] bg-surface text-ink font-extrabold hover:bg-line transition-colors flex items-center justify-center text-base shadow-xs"
                               >
                                 -
                               </button>
-                              <span className="font-bold text-xs text-slate-900 px-1">
+                              <span className="font-extrabold text-sm text-ink min-w-6 text-center" aria-live="polite">
                                 {count}
                               </span>
                               <button
                                 onClick={() => handleAddToCart(dish)}
-                                className="w-6 h-6 rounded-lg bg-brand text-on-brand font-bold hover:bg-brand-500 transition-colors flex items-center justify-center text-xs shadow-2xs"
+                                aria-label={tk('addOne', { name: dish.name })}
+                                className="w-8 h-8 rounded-[9px] bg-brand text-on-brand font-extrabold hover:bg-brand-500 transition-colors flex items-center justify-center text-base"
                               >
                                 +
                               </button>
@@ -976,24 +969,24 @@ export default function KitchenStorefrontPage({ initial }: { initial?: PublicSel
       </main>
 
       {/* Customer Reviews & Feedback Section */}
-      <section id="customer-reviews" className="max-w-[1360px] mx-auto px-4 sm:px-8 mt-14 mb-10 scroll-mt-24">
-        <div className="bg-white rounded-3xl p-6 sm:p-8 border border-slate-200/90 shadow-2xs">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-6 border-b border-slate-100">
+      <section id="customer-reviews" className="max-w-[1280px] mx-auto px-4 sm:px-8 mt-14 mb-10 scroll-mt-24">
+        <div className="bg-surface rounded-[24px] p-5 sm:p-8 border border-line">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-6 border-b border-line">
             <div>
-              <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-amber-100 text-amber-900 text-[11px] font-bold uppercase tracking-wider mb-1">
-                <MessageSquare className="w-3 h-3 text-amber-600" />
+              <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-accent-soft text-accent-soft-ink text-xs font-extrabold mb-2">
+                <MessageSquare className="w-3.5 h-3.5" />
                 <span>{tk('verifiedFeedback')}</span>
               </div>
-              <h2 className="text-xl sm:text-2xl font-black text-slate-950">
+              <h2 className="text-[22px] sm:text-[28px] font-extrabold tracking-tight text-ink">
                 {tk('reviewsTitle')}
               </h2>
-              <p className="text-xs text-slate-500 mt-0.5">
+              <p className="text-xs text-muted mt-0.5">
                 {tk('reviewsSub', { name: kitchen.chefName })}
               </p>
             </div>
 
-            <div className="flex items-center gap-3 bg-amber-50/70 border border-amber-200/60 rounded-2xl px-4 py-2.5 self-start sm:self-auto">
-              <div className="text-3xl font-black text-amber-900">{kitchen.rating ?? tk('new')}</div>
+            <div className="flex items-center gap-3 bg-accent-soft rounded-2xl px-4 py-3 self-start sm:self-auto">
+              <div className="text-3xl font-black text-accent-soft-ink">{kitchen.rating ?? tk('new')}</div>
               <div>
                 <div className="flex items-center gap-0.5">
                   {[1, 2, 3, 4, 5].map((s) => (
@@ -1001,13 +994,13 @@ export default function KitchenStorefrontPage({ initial }: { initial?: PublicSel
                       key={s}
                       className={`w-3.5 h-3.5 ${
                         s <= Math.round(kitchen.ratingValue)
-                          ? 'fill-amber-500 text-amber-500'
-                          : 'text-slate-300'
+                          ? 'fill-accent text-accent'
+                          : 'text-line-strong'
                       }`}
                     />
                   ))}
                 </div>
-                <span className="text-[11px] text-amber-800 font-semibold mt-0.5 block">
+                <span className="text-[11px] text-accent-soft-ink font-semibold mt-0.5 block">
                   {kitchen.reviewCount > 0
                     ? tk(kitchen.reviewCount === 1 ? 'verifiedReviewsOne' : 'verifiedReviewsMany', { count: kitchen.reviewCount })
                     : tk('noReviews')}
@@ -1023,19 +1016,19 @@ export default function KitchenStorefrontPage({ initial }: { initial?: PublicSel
                 {kitchen.reviews.map((rev) => (
                   <div
                     key={rev.id}
-                    className="p-4 rounded-2xl bg-slate-50/80 border border-slate-200/80 flex flex-col justify-between"
+                    className="p-4 rounded-2xl bg-raised flex flex-col justify-between"
                   >
                     <div>
                       <div className="flex items-center justify-between mb-2">
                         <div className="flex items-center gap-2.5">
-                          <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-brand to-amber-500 flex items-center justify-center text-on-brand font-bold text-xs shadow-2xs">
+                          <div className="w-9 h-9 rounded-full bg-brand-soft flex items-center justify-center text-brand-soft-ink font-extrabold text-sm">
                             {rev.author.charAt(0).toUpperCase()}
                           </div>
                           <div>
-                            <span className="text-xs font-bold text-slate-900 block leading-tight">
+                            <span className="text-xs font-bold text-ink block leading-tight">
                               {rev.author}
                             </span>
-                            <span className="text-[11px] text-emerald-700 font-semibold inline-flex items-center gap-0.5">
+                            <span className="text-[11px] text-brand-soft-ink font-semibold inline-flex items-center gap-0.5">
                               <Check className="w-2.5 h-2.5" />
                               <span>{tk('verifiedCustomer')}</span>
                             </span>
@@ -1048,8 +1041,8 @@ export default function KitchenStorefrontPage({ initial }: { initial?: PublicSel
                               key={s}
                               className={`w-3 h-3 ${
                                 s <= rev.rating
-                                  ? 'fill-amber-500 text-amber-500'
-                                  : 'text-slate-200'
+                                  ? 'fill-accent text-accent'
+                                  : 'text-line-strong'
                               }`}
                             />
                           ))}
@@ -1057,15 +1050,15 @@ export default function KitchenStorefrontPage({ initial }: { initial?: PublicSel
                       </div>
 
                       {rev.comment ? (
-                        <p className="text-xs text-slate-700 leading-relaxed italic mt-2">
+                        <p className="text-sm text-ink leading-relaxed mt-2">
                           &ldquo;{rev.comment}&rdquo;
                         </p>
                       ) : (
-                        <p className="text-xs text-slate-500 mt-2">{tk('noComment')}</p>
+                        <p className="text-xs text-muted mt-2">{tk('noComment')}</p>
                       )}
                     </div>
 
-                    <div className="mt-3 pt-2 border-t border-slate-200/60 text-[11px] text-slate-500">
+                    <div className="mt-3 pt-2 border-t border-line text-[11px] text-muted">
                       {new Date(rev.createdAt).toLocaleDateString('en-US', {
                         month: 'short',
                         day: 'numeric',
@@ -1076,10 +1069,10 @@ export default function KitchenStorefrontPage({ initial }: { initial?: PublicSel
                 ))}
               </div>
             ) : (
-              <div className="text-center py-10 text-slate-500 bg-slate-50/50 rounded-2xl border border-dashed border-slate-200">
-                <ChefHat className="w-8 h-8 text-slate-300 mx-auto mb-2" />
-                <p className="text-sm font-bold text-slate-700">{tk('noReviewsKitchen')}</p>
-                <p className="text-xs text-slate-500 mt-1">
+              <div className="text-center py-10 text-muted bg-raised rounded-2xl border border-dashed border-line-strong">
+                <ChefHat className="w-8 h-8 text-line-strong mx-auto mb-2" />
+                <p className="text-sm font-bold text-ink">{tk('noReviewsKitchen')}</p>
+                <p className="text-xs text-muted mt-1">
                   {tk('beFirstKitchen', { name: kitchen.name })}
                 </p>
               </div>
@@ -1091,16 +1084,16 @@ export default function KitchenStorefrontPage({ initial }: { initial?: PublicSel
       {/* Floating Kitchen Cart Pill (Foodpanda/DoorDash style) */}
       {cartCount > 0 && (
         <div className="fixed bottom-[calc(1.5rem+var(--safe-bottom)+var(--tabbar-offset))] inset-x-0 z-50 flex justify-center px-4">
-          <div className="bg-[#0C1016] text-white p-3 rounded-2xl shadow-xl border border-white/10 flex items-center justify-between gap-5 max-w-lg w-full">
+          <div className="bg-[#0D2624] text-white p-2.5 ps-3 rounded-[18px] shadow-xl flex items-center justify-between gap-4 max-w-lg w-full">
             <div className="flex items-center gap-3">
-              <div className="w-9 h-9 rounded-xl bg-brand flex items-center justify-center text-on-brand font-bold text-xs">
+              <div className="w-10 h-10 rounded-xl bg-brand flex items-center justify-center text-on-brand font-extrabold text-sm">
                 {cartCount}
               </div>
               <div>
-                <div className="text-[11px] text-slate-500 font-medium">
+                <div className="text-xs text-[#A3BCB7] font-semibold">
                   {kitchen.preOrderOnly ? tk('preOrderTotal') : tk('totalOrder')}
                 </div>
-                <div className="text-sm font-bold text-white">{formatPrice(cartTotal)}</div>
+                <div className="text-base font-extrabold text-white">{formatPrice(cartTotal)}</div>
               </div>
             </div>
 
@@ -1109,14 +1102,14 @@ export default function KitchenStorefrontPage({ initial }: { initial?: PublicSel
                 <button
                   type="button"
                   disabled
-                  className="px-4 py-2 rounded-xl bg-slate-800 text-slate-400 text-xs font-bold border border-slate-700 cursor-not-allowed"
+                  className="h-11 px-4 rounded-xl bg-white/10 text-[#A3BCB7] text-sm font-bold cursor-not-allowed"
                 >
                   {tk('checkoutDisabled')}
                 </button>
               ) : (
                 <Link
                   href="/cart"
-                  className="inline-flex items-center gap-1 px-4 py-2 rounded-xl bg-brand hover:bg-brand text-on-brand text-xs font-bold transition-colors shadow-sm"
+                  className="inline-flex items-center gap-1 h-11 px-4 rounded-xl bg-brand hover:bg-brand-500 text-on-brand text-sm font-extrabold transition-colors"
                 >
                   <span>{kitchen.preOrderOnly ? tk('schedulePreOrder') : tk('reviewCheckout')}</span>
                   <ChevronRight className="rtl:-scale-x-100 w-3.5 h-3.5" />
@@ -1155,14 +1148,14 @@ export default function KitchenStorefrontPage({ initial }: { initial?: PublicSel
           <div className="flex items-center justify-between pb-1">
             <Link
               href="/products"
-              className="inline-flex items-center gap-1.5 text-xs font-bold text-slate-600 hover:text-brand-ink transition-colors py-1.5 px-3 rounded-xl bg-white border border-slate-200 shadow-2xs hover:border-slate-300"
+              className="inline-flex items-center gap-1.5 text-xs font-bold text-muted hover:text-brand-ink transition-colors py-1.5 px-3 rounded-xl bg-surface border border-line shadow-2xs hover:border-line-strong"
             >
               <ArrowLeft className="rtl:-scale-x-100 w-3.5 h-3.5" />
               <span>{tk('backToKitchensMenus')}</span>
             </Link>
             <Link
               href="/kitchens"
-              className="text-xs font-semibold text-slate-500 hover:text-brand-ink transition-colors"
+              className="text-xs font-semibold text-muted hover:text-brand-ink transition-colors"
             >
               {tk('viewDirectory')}
             </Link>
@@ -1176,7 +1169,7 @@ export default function KitchenStorefrontPage({ initial }: { initial?: PublicSel
 
   // Public visitor: Render with top marketplace header
   return (
-    <div className="min-h-screen bg-page text-slate-900 pb-32">
+    <div className="min-h-screen bg-page text-ink pb-32">
       {renderPublicHeader()}
 
       {renderStorefrontBody(true)}
