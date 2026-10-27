@@ -252,7 +252,7 @@ export default function OrderDetailPage() {
     <Suspense
       fallback={
         <div className="min-h-screen bg-page flex items-center justify-center">
-          <div className="w-10 h-10 border-3 border-emerald-600 border-t-transparent rounded-full animate-spin" />
+          <div className="w-10 h-10 border-3 border-brand border-t-transparent rounded-full animate-spin" />
         </div>
       }
     >
@@ -446,7 +446,7 @@ function OrderDetailContent() {
         userType="customer"
       >
         <div className="flex items-center justify-center py-16">
-          <p className="text-gray-600">{t('detail.loadingOrder')}</p>
+          <p className="text-muted">{t('detail.loadingOrder')}</p>
         </div>
       </DashboardLayout>
     );
@@ -471,11 +471,11 @@ function OrderDetailContent() {
         userType="customer"
       >
         <div className="max-w-xl mx-auto py-16 px-4 text-center">
-          <div className="w-16 h-16 rounded-full bg-slate-100 text-slate-500 flex items-center justify-center mx-auto mb-4 text-2xl shadow-xs">
+          <div className="w-16 h-16 rounded-full bg-raised text-muted flex items-center justify-center mx-auto mb-4 text-2xl shadow-xs">
             📦
           </div>
-          <h1 className="text-2xl font-black text-gray-900 mb-2">{t('detail.notFound')}</h1>
-          <p className="text-sm text-gray-500 mb-6 leading-relaxed">
+          <h1 className="text-2xl font-extrabold text-ink mb-2">{t('detail.notFound')}</h1>
+          <p className="text-sm text-muted mb-6 leading-relaxed">
             {t('detail.notFoundBody')}
           </p>
           <div className="flex items-center justify-center gap-3">
@@ -524,12 +524,12 @@ function OrderDetailContent() {
       <div className="print-hide space-y-6">
         {/* Back from the payment page */}
         {searchParams.get('payment') === 'paid' && (
-          <div role="status" className="bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-xl p-4 text-sm font-medium">
+          <div role="status" className="bg-brand-soft text-brand-soft-ink rounded-2xl p-4 text-sm font-semibold">
             {t('detail.paymentReceived')}
           </div>
         )}
         {searchParams.get('payment') === 'duplicate' && (
-          <div role="status" className="bg-sky-50 border border-sky-200 text-sky-900 rounded-xl p-4 text-sm font-medium">
+          <div role="status" className="bg-frozen-soft text-frozen-ink rounded-2xl p-4 text-sm font-medium">
             {t('detail.duplicateBefore')}{' '}
             <Link href="/wallet" className="underline font-semibold">
               {t('detail.duplicateLink')}
@@ -540,22 +540,22 @@ function OrderDetailContent() {
 
         {/* Just-placed confirmation banner */}
         {showPlacedBanner && (
-          <div className="bg-green-600 text-white rounded-xl p-4 flex items-center justify-between flex-wrap gap-2">
+          <div role="status" className="bg-brand-soft text-brand-soft-ink rounded-[20px] p-4 sm:p-5 flex items-center justify-between flex-wrap gap-3">
             <div className="flex items-center gap-3">
-              <span className="flex h-10 w-10 items-center justify-center rounded-full bg-white/20">
+              <span className="flex h-11 w-11 items-center justify-center rounded-full bg-brand text-on-brand flex-shrink-0">
                 <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
                 </svg>
               </span>
               <div>
-                <p className="font-semibold text-lg">{t('detail.placedTitle')}</p>
-                <p className="text-white/90 text-sm">{t('detail.placedBody')}</p>
+                <p className="font-extrabold text-lg">{t('detail.placedTitle')}</p>
+                <p className="text-sm">{t('detail.placedBody')}</p>
               </div>
             </div>
             <button
               type="button"
               onClick={() => { setShowPlacedBanner(false); router.replace(`/orders/${params.id}`, { scroll: false }); }}
-              className="text-sm font-medium text-white/90 hover:text-white underline"
+              className="text-sm font-bold underline hover:no-underline"
             >
               {t('detail.dismiss')}
             </button>
@@ -572,7 +572,7 @@ function OrderDetailContent() {
         <div className="flex items-center gap-2 flex-wrap">
           <button
             onClick={() => window.print()}
-            className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl bg-white hover:bg-slate-50 text-slate-800 border border-slate-300 text-xs font-black transition-all shadow-xs active:scale-95"
+            className="inline-flex items-center gap-2 h-10 px-3.5 rounded-xl hover:bg-raised text-ink border border-line-strong text-sm font-bold transition-colors active:scale-95"
             title={t('detail.printTitle')}
           >
             <span>🖨️</span>
@@ -580,7 +580,7 @@ function OrderDetailContent() {
           </button>
           <button
             onClick={() => setShowReceiptPreview(true)}
-            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-extrabold transition-all active:scale-95"
+            className="inline-flex items-center gap-1.5 h-10 px-3.5 rounded-xl hover:bg-raised text-ink border border-line-strong text-sm font-bold transition-colors active:scale-95"
             title={t('detail.previewTitle')}
           >
             <span>🧾</span>
@@ -588,7 +588,7 @@ function OrderDetailContent() {
           </button>
           <button
             onClick={() => setShowChatModal(true)}
-            className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-[#0C1016] hover:bg-slate-800 text-white text-xs font-black transition-all shadow-xs"
+            className="inline-flex items-center gap-2 h-10 px-4 rounded-xl bg-ink hover:bg-ink/90 text-page text-sm font-extrabold transition-colors"
           >
             <span>💬</span>
             <span>{t('detail.chatWith', { name: sellerName })}</span>
@@ -596,7 +596,7 @@ function OrderDetailContent() {
           {(effectiveStatus === 'delivered' || effectiveStatus === 'completed') && (
             <button
               onClick={() => setShowReviewModal(true)}
-              className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-brand hover:bg-brand-500 text-on-brand text-xs font-black transition-all shadow-xs"
+              className="inline-flex items-center gap-2 h-10 px-4 rounded-xl bg-brand hover:bg-brand-500 text-on-brand text-sm font-extrabold transition-colors"
             >
               <span>⭐</span>
               <span>{t('detail.rateExperience')}</span>
@@ -607,43 +607,43 @@ function OrderDetailContent() {
 
       <div>
         <div className="mb-6">
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2.5 flex-wrap">
             <span
-              className={`px-3 py-1 rounded-full text-sm font-medium ${
+              className={`px-3 py-1.5 rounded-full text-sm font-extrabold ${
                 effectiveStatus === 'delivered' || effectiveStatus === 'completed'
-                  ? 'bg-green-100 text-green-800'
+                  ? 'bg-brand-soft text-brand-soft-ink'
                   : effectiveStatus === 'cancelled'
                   ? 'bg-red-100 text-red-800'
                   : effectiveStatus === 'pending'
-                  ? 'bg-yellow-100 text-yellow-800'
-                  : 'bg-blue-100 text-blue-800'
+                  ? 'bg-accent-soft text-accent-soft-ink'
+                  : 'bg-brand text-on-brand'
               }`}
             >
               {statusText(effectiveStatus).toUpperCase()}
             </span>
             <span
-              className={`px-3 py-1 rounded-full text-sm font-medium ${
+              className={`px-3 py-1.5 rounded-full text-sm font-bold ${
                 order.paymentStatus === 'paid'
-                  ? 'bg-green-100 text-green-800'
+                  ? 'bg-brand-soft text-brand-soft-ink'
                   : order.paymentStatus === 'refunded'
-                  ? 'bg-blue-100 text-blue-800'
+                  ? 'bg-frozen-soft text-frozen-ink'
                   : order.paymentStatus === 'refund_pending'
-                  ? 'bg-amber-100 text-amber-800'
-                  : 'bg-gray-100 text-gray-800'
+                  ? 'bg-accent-soft text-accent-soft-ink'
+                  : 'bg-raised text-ink'
               }`}
             >
               {t('detail.paymentBadge', { status: payStatusText(order.paymentStatus ?? 'pending').toUpperCase() })}
             </span>
           </div>
           {effectiveStatus === 'cancelled' && notice && (
-            <div className="mt-4 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-900" role="status">
+            <div className="mt-4 rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-900" role="status">
               <p className="font-semibold">{t(`detail.cancelledBy.${notice.who}`)}</p>
               {notice.reason && <p className="mt-0.5">{t('detail.cancelReasonLine', { reason: notice.reason })}</p>}
             </div>
           )}
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6">
           {/* Order Items */}
           <div className="lg:col-span-2 space-y-4">
             {/* Online payment not finished yet */}
@@ -669,12 +669,12 @@ function OrderDetailContent() {
               />
             )}
 
-            <div className="bg-white rounded-lg shadow-sm p-6">
-              <h2 className="text-xl font-bold text-gray-900 mb-4">{t('detail.orderItems')}</h2>
+            <div className="bg-surface rounded-[20px] border border-line p-4 sm:p-6">
+              <h2 className="text-lg font-extrabold text-ink mb-4">{t('detail.orderItems')}</h2>
               <div className="space-y-4">
                 {order.items.map((item) => (
-                  <div key={item.id} className="flex gap-4 pb-4 border-b last:border-0">
-                    <div className="w-20 h-20 bg-gray-200 rounded-lg overflow-hidden flex-shrink-0">
+                  <div key={item.id} className="flex gap-3 sm:gap-4 pb-4 border-b border-line last:border-0 last:pb-0">
+                    <div className="w-16 h-16 sm:w-20 sm:h-20 bg-raised rounded-2xl overflow-hidden flex-shrink-0">
                       {item.productImage ? (
                         <img
                           src={item.productImage}
@@ -682,27 +682,27 @@ function OrderDetailContent() {
                           className="w-full h-full object-cover"
                         />
                       ) : (
-                        <div className="w-full h-full flex items-center justify-center text-gray-500 text-xs">
+                        <div className="w-full h-full flex items-center justify-center text-muted text-xs">
                           {t('detail.noImage')}
                         </div>
                       )}
                     </div>
                     <div className="flex-1">
-                      <h3 className="font-semibold text-gray-900">{item.productName}</h3>
+                      <h3 className="font-bold text-ink">{item.productName}</h3>
                       {item.variantName && (
-                        <p className="text-sm text-gray-600">{item.variantName}</p>
+                        <p className="text-sm text-muted">{item.variantName}</p>
                       )}
-                      <p className="text-sm text-gray-600">{item.sellerName}</p>
+                      <p className="text-sm text-muted">{item.sellerName}</p>
                       <div className="flex items-center justify-between mt-2">
                         <div>
-                          <p className="text-sm text-gray-600">
+                          <p className="text-sm text-muted">
                             {t('detail.qty', { qty: item.quantity, price: formatPrice(item.unitPrice) })}
                           </p>
-                          <p className="font-semibold text-gray-900">
+                          <p className="font-extrabold text-ink">
                             {formatPrice(item.totalPrice)}
                           </p>
                         </div>
-                        <span className="text-sm text-gray-600 capitalize">{statusText(item.status)}</span>
+                        <span className="text-sm text-muted capitalize">{statusText(item.status)}</span>
                       </div>
                       {(effectiveStatus === 'delivered' || effectiveStatus === 'completed') && item.productId && (
                         <WriteReviewForm orderId={order.id} orderItemId={item.id} productName={item.productName} />
@@ -714,31 +714,31 @@ function OrderDetailContent() {
             </div>
 
             {/* Delivery Information */}
-            <div className="bg-white rounded-lg shadow-sm p-6 space-y-4">
-              <h2 className="text-xl font-bold text-gray-900">{t('detail.deliveryInfo')}</h2>
+            <div className="bg-surface rounded-[20px] border border-line p-4 sm:p-6 space-y-4">
+              <h2 className="text-lg font-extrabold text-ink">{t('detail.deliveryInfo')}</h2>
 
               {/* Doorstep Handover PIN Card */}
               {order.delivery?.otp && !['delivered', 'completed', 'cancelled', 'refunded'].includes(effectiveStatus) && (
-                <div className="bg-gradient-to-r from-amber-50 to-brand-50 border-2 border-amber-500/50 rounded-xl p-4 shadow-sm">
+                <div className="bg-accent-soft rounded-[20px] p-4">
                   <div className="flex items-center justify-between flex-wrap gap-3">
                     <div>
                       <div className="flex items-center gap-2">
-                        <span className="inline-flex h-2.5 w-2.5 rounded-full bg-amber-500 animate-pulse" />
-                        <span className="text-xs uppercase font-bold tracking-wider text-amber-950">{t('detail.pinTitle')}</span>
+                        <span className="inline-flex h-2.5 w-2.5 rounded-full bg-accent-soft-ink animate-pulse" />
+                        <span className="text-sm font-extrabold text-accent-soft-ink">{t('detail.pinTitle')}</span>
                       </div>
-                      <p className="text-xs text-amber-800 mt-1 max-w-sm">
+                      <p className="text-[13px] text-accent-soft-ink mt-1 max-w-sm">
                         {t('detail.pinBody')}
                       </p>
                     </div>
-                    <div className="bg-white border-2 border-amber-500 px-5 py-2 rounded-xl text-center shadow-inner">
-                      <span className="text-[11px] uppercase font-bold text-muted-foreground block">{t('detail.pinLabel')}</span>
-                      <span data-ltr className="text-3xl font-mono font-black tracking-widest text-amber-600">{order.delivery.otp}</span>
+                    <div className="bg-surface border-2 border-accent px-5 py-2 rounded-2xl text-center">
+                      <span className="text-xs font-bold text-muted block">{t('detail.pinLabel')}</span>
+                      <span data-ltr className="text-3xl font-mono font-extrabold tracking-widest text-ink">{order.delivery.otp}</span>
                     </div>
                   </div>
                 </div>
               )}
 
-              <div className="space-y-2 text-gray-700">
+              <div className="space-y-2 text-ink">
                 <p>
                   <span className="font-semibold">{t('detail.address')}</span> {order.delivery?.address ?? '—'}
                 </p>
@@ -755,14 +755,14 @@ function OrderDetailContent() {
                   </p>
                 )}
                 {order.delivery?.rider && (
-                  <div className="mt-4 p-4 bg-gray-50 rounded-lg border border-gray-200">
-                    <p className="font-semibold mb-2 text-gray-900">{t('detail.assignedRider')}</p>
-                    <p className="text-sm"><span className="text-muted-foreground">{t('detail.riderName')}</span> {order.delivery.rider.name || t('detail.yourRider')}</p>
+                  <div className="mt-4 p-4 bg-raised rounded-2xl">
+                    <p className="font-bold mb-2 text-ink">{t('detail.assignedRider')}</p>
+                    <p className="text-sm"><span className="text-muted">{t('detail.riderName')}</span> {order.delivery.rider.name || t('detail.yourRider')}</p>
                     {order.delivery.rider.phone && (
-                      <p className="text-sm"><span className="text-muted-foreground">{t('detail.riderPhone')}</span> <span data-ltr>{order.delivery.rider.phone}</span></p>
+                      <p className="text-sm"><span className="text-muted">{t('detail.riderPhone')}</span> <span data-ltr>{order.delivery.rider.phone}</span></p>
                     )}
                     {order.delivery.rider.vehicle && (
-                      <p className="text-sm"><span className="text-muted-foreground">{t('detail.riderVehicle')}</span> {order.delivery.rider.vehicle}</p>
+                      <p className="text-sm"><span className="text-muted">{t('detail.riderVehicle')}</span> {order.delivery.rider.vehicle}</p>
                     )}
                   </div>
                 )}
@@ -771,14 +771,14 @@ function OrderDetailContent() {
 
             {/* Where the rider is, while the food is on its way */}
             {liveRider && (
-              <div className="bg-white rounded-lg shadow-sm p-6" data-testid="rider-live-tracking">
+              <div className="bg-surface rounded-[20px] border border-line p-4 sm:p-6" data-testid="rider-live-tracking">
                 <div className="flex items-center justify-between gap-3 mb-3 flex-wrap">
-                  <h2 className="text-xl font-bold text-gray-900 flex items-center gap-2">
-                    <span className="inline-flex h-2.5 w-2.5 rounded-full bg-emerald-500 animate-pulse" />
+                  <h2 className="text-lg font-extrabold text-ink flex items-center gap-2">
+                    <span className="inline-flex h-2.5 w-2.5 rounded-full bg-brand animate-pulse" />
                     {t('detail.onItsWay')}
                   </h2>
-                  <p className="text-xs text-gray-500">
-                    {typeof liveRider.distanceKm === 'number' && <span className="font-semibold text-gray-800">{t('detail.kmAway', { km: liveRider.distanceKm.toFixed(1) })}</span>}
+                  <p className="text-xs text-muted">
+                    {typeof liveRider.distanceKm === 'number' && <span className="font-semibold text-ink">{t('detail.kmAway', { km: liveRider.distanceKm.toFixed(1) })}</span>}
                     {liveRider.updatedAt ? <UpdatedAgo iso={liveRider.updatedAt} /> : t('detail.live')}
                   </p>
                 </div>
@@ -790,15 +790,15 @@ function OrderDetailContent() {
             )}
 
             {/* Timeline */}
-            <div className="bg-white rounded-lg shadow-sm p-6">
-              <h2 className="text-xl font-bold text-gray-900 mb-4">{t('detail.timeline')}</h2>
+            <div className="bg-surface rounded-[20px] border border-line p-4 sm:p-6">
+              <h2 className="text-lg font-extrabold text-ink mb-4">{t('detail.timeline')}</h2>
               <div className="space-y-3">
                 {(order.timeline ?? []).map((event, index) => (
                   <div key={index} className="flex items-start gap-3">
-                    <div className="w-2 h-2 rounded-full bg-green-600 mt-2"></div>
+                    <div className="w-2.5 h-2.5 rounded-full bg-brand mt-1.5 ring-4 ring-brand/20 flex-shrink-0"></div>
                     <div>
-                      <p className="font-semibold capitalize">{statusText(event.status ?? '')}</p>
-                      <p className="text-sm text-gray-600">{formatDateTime(event.timestamp)}</p>
+                      <p className="font-bold text-ink capitalize">{statusText(event.status ?? '')}</p>
+                      <p className="text-sm text-muted">{formatDateTime(event.timestamp)}</p>
                     </div>
                   </div>
                 ))}
@@ -808,31 +808,31 @@ function OrderDetailContent() {
 
           {/* Order Summary */}
           <div className="lg:col-span-1">
-            <div className="bg-white rounded-lg shadow-sm p-6 sticky top-4">
-              <h2 className="text-xl font-bold text-gray-900 mb-4">{t('detail.summary')}</h2>
+            <div className="bg-surface rounded-[20px] border border-line p-4 sm:p-6 lg:sticky lg:top-[calc(5rem+var(--safe-top))]">
+              <h2 className="text-lg font-extrabold text-ink mb-4">{t('detail.summary')}</h2>
               <div className="space-y-2 mb-4">
-                <div className="flex justify-between text-gray-600">
+                <div className="flex justify-between text-muted">
                   <span>{tc('subtotal')}</span>
                   <span>{formatPrice(order.pricing?.subtotal ?? 0)}</span>
                 </div>
-                <div className="flex justify-between text-gray-600">
+                <div className="flex justify-between text-muted">
                   <span>{t('detail.deliveryFee')}</span>
                   <span>{formatPrice(order.pricing?.deliveryFee ?? 0)}</span>
                 </div>
                 {(order.pricing?.discount ?? 0) > 0 && (
-                  <div className="flex justify-between text-green-600">
+                  <div className="flex justify-between text-brand-ink font-semibold">
                     <span>{tc('discount')}</span>
                     <span>-{formatPrice(order.pricing?.discount ?? 0)}</span>
                   </div>
                 )}
-                <div className="flex justify-between text-gray-600">
+                <div className="flex justify-between text-muted">
                   <span>{t('detail.gst')}</span>
                   <span>{formatPrice(order.pricing?.tax ?? 0)}</span>
                 </div>
-                <div className="border-t pt-2 mt-2">
-                  <div className="flex justify-between font-bold text-lg">
+                <div className="border-t border-line pt-3 mt-3">
+                  <div className="flex justify-between font-extrabold text-lg text-ink">
                     <span>{tc('total')}</span>
-                    <span className="text-green-600">{formatPrice(order.pricing?.total ?? 0)}</span>
+                    <span>{formatPrice(order.pricing?.total ?? 0)}</span>
                   </div>
                 </div>
               </div>
@@ -847,7 +847,7 @@ function OrderDetailContent() {
               )}
               {(effectiveStatus === 'delivered' || effectiveStatus === 'completed') && (
                 reported ? (
-                  <p className="text-sm text-gray-500 text-center mt-2">
+                  <p className="text-sm text-muted text-center mt-2">
                     {t('detail.reportedNote')}
                   </p>
                 ) : (
@@ -869,12 +869,12 @@ function OrderDetailContent() {
       {/* Report Non-Receipt Modal */}
       {showReportModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden">
+          <div className="bg-surface rounded-2xl shadow-2xl w-full max-w-md overflow-hidden">
             <div className="bg-red-500 px-6 py-4">
               <h2 className="text-white font-bold text-lg">{t('detail.reportTitle')}</h2>
             </div>
             <div className="p-6 space-y-4">
-              <p className="text-sm text-gray-600">
+              <p className="text-sm text-muted">
                 {t('detail.reportBody')}
               </p>
               <textarea
@@ -882,7 +882,7 @@ function OrderDetailContent() {
                 onChange={(e) => setReportDetails(e.target.value)}
                 rows={4}
                 placeholder={t('detail.reportPlaceholder')}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-red-500"
+                className="w-full px-3 py-2 border border-line-strong rounded-lg text-sm focus:ring-2 focus:ring-red-500"
               />
               <div className="flex items-center gap-3">
                 <Button
@@ -894,7 +894,7 @@ function OrderDetailContent() {
                 </Button>
                 <button
                   onClick={() => { setShowReportModal(false); setReportDetails(''); }}
-                  className="text-sm text-gray-500 hover:text-gray-700"
+                  className="text-sm text-muted hover:text-ink"
                 >
                   {tc('cancel')}
                 </button>
@@ -907,7 +907,7 @@ function OrderDetailContent() {
       {/* Cancel Order Modal */}
       {showCancelModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden">
+          <div className="bg-surface rounded-2xl shadow-2xl w-full max-w-md overflow-hidden">
             {/* Header */}
             <div className="bg-red-500 px-6 py-4 flex items-center justify-between">
               <div className="flex items-center gap-2">
@@ -924,12 +924,12 @@ function OrderDetailContent() {
             </div>
             {/* Body */}
             <div className="px-6 py-5">
-              <p className="text-gray-600 text-sm mb-4">
+              <p className="text-muted text-sm mb-4">
                 {t('detail.cancelConfirmBefore')}<strong data-ltr>#{order.orderNumber}</strong>{t('detail.cancelConfirmAfter')}
               </p>
-              <label className="block text-sm font-medium text-gray-700 mb-1">{t('detail.cancelReason')} <span className="text-red-500">*</span></label>
+              <label className="block text-sm font-medium text-ink mb-1">{t('detail.cancelReason')} <span className="text-red-500">*</span></label>
               <textarea
-                className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-red-400 resize-none"
+                className="w-full border border-line rounded-xl px-3 py-2 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-red-400 resize-none"
                 rows={3}
                 placeholder={t('detail.cancelPlaceholder')}
                 value={cancelReason}
@@ -945,7 +945,7 @@ function OrderDetailContent() {
                 </button>
                 <button
                   onClick={() => { setShowCancelModal(false); setCancelReason(''); }}
-                  className="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium py-2.5 rounded-xl text-sm transition-all active:scale-95"
+                  className="flex-1 bg-raised hover:bg-line text-ink font-medium py-2.5 rounded-xl text-sm transition-all active:scale-95"
                 >
                   {t('detail.keepOrder')}
                 </button>
@@ -980,42 +980,42 @@ function OrderDetailContent() {
       />
 
       {/* Official Professional Printable Tax Invoice & Receipt (Displayed cleanly on window.print()) */}
-      <div id="printable-order-receipt" className="hidden print:block font-sans text-slate-900 bg-white p-6 max-w-3xl mx-auto">
+      <div id="printable-order-receipt" className="hidden print:block font-sans text-ink bg-surface p-6 max-w-3xl mx-auto">
         {/* Receipt Header */}
         <div className="flex items-start justify-between border-b-2 border-slate-900 pb-4 mb-5">
           <div>
             <div className="flex items-center gap-2 mb-1">
-              <span className="text-2xl font-black tracking-tight text-slate-950">NURAY FOOD &amp; FROST</span>
-              <span className="text-[11px] font-black bg-emerald-100 text-emerald-900 px-2 py-0.5 rounded-full uppercase">{t('receipt.verifiedKitchen')}</span>
+              <span className="text-2xl font-black tracking-tight text-ink">NURAY FOOD &amp; FROST</span>
+              <span className="text-[11px] font-black bg-brand-soft text-brand-soft-ink px-2 py-0.5 rounded-full uppercase">{t('receipt.verifiedKitchen')}</span>
             </div>
-            <p className="text-xs text-slate-600">{t('receipt.network')}</p>
-            <p className="text-[11px] text-slate-500 font-medium">{t('receipt.officialInvoice')}</p>
+            <p className="text-xs text-muted">{t('receipt.network')}</p>
+            <p className="text-[11px] text-muted font-medium">{t('receipt.officialInvoice')}</p>
           </div>
           <div className="text-end">
-            <h2 className="text-xl font-black text-slate-900 tracking-tight">{t('receipt.heading')}</h2>
-            <p className="text-xs font-mono font-bold text-slate-700">{t('receipt.orderNumber', { number: order.orderNumber })}</p>
-            <p className="text-[11px] text-slate-500 mt-0.5">{t('receipt.date', { date: formatDate(order.createdAt || new Date().toISOString()) })}</p>
+            <h2 className="text-xl font-black text-ink tracking-tight">{t('receipt.heading')}</h2>
+            <p className="text-xs font-mono font-bold text-ink">{t('receipt.orderNumber', { number: order.orderNumber })}</p>
+            <p className="text-[11px] text-muted mt-0.5">{t('receipt.date', { date: formatDate(order.createdAt || new Date().toISOString()) })}</p>
           </div>
         </div>
 
         {/* Kitchen & Customer Credentials */}
-        <div className="grid grid-cols-2 gap-6 border-b border-slate-200 pb-4 mb-5 text-xs">
+        <div className="grid grid-cols-2 gap-6 border-b border-line pb-4 mb-5 text-xs">
           <div>
-            <span className="text-[11px] font-black uppercase text-slate-500 tracking-wider block mb-1">
+            <span className="text-[11px] font-black uppercase text-muted tracking-wider block mb-1">
               {t('receipt.preparedBy')}
             </span>
-            <h4 className="font-extrabold text-sm text-slate-900">{sellerName}</h4>
-            <p className="text-slate-600">{t('receipt.certifiedChef')}</p>
-            <p className="text-slate-500 text-[11px]">{t('receipt.cluster')}</p>
+            <h4 className="font-extrabold text-sm text-ink">{sellerName}</h4>
+            <p className="text-muted">{t('receipt.certifiedChef')}</p>
+            <p className="text-muted text-[11px]">{t('receipt.cluster')}</p>
           </div>
 
           <div>
-            <span className="text-[11px] font-black uppercase text-slate-500 tracking-wider block mb-1">
+            <span className="text-[11px] font-black uppercase text-muted tracking-wider block mb-1">
               {t('receipt.billedTo')}
             </span>
-            <h4 className="font-extrabold text-sm text-slate-900">{customerName}</h4>
-            {order.customerPhone && <p data-ltr className="text-slate-600 font-mono text-[11px]">{order.customerPhone}</p>}
-            <p className="text-slate-600 text-[11px] leading-relaxed mt-0.5">{order.delivery.address}</p>
+            <h4 className="font-extrabold text-sm text-ink">{customerName}</h4>
+            {order.customerPhone && <p data-ltr className="text-muted font-mono text-[11px]">{order.customerPhone}</p>}
+            <p className="text-muted text-[11px] leading-relaxed mt-0.5">{order.delivery.address}</p>
           </div>
         </div>
 
@@ -1023,7 +1023,7 @@ function OrderDetailContent() {
         <div className="mb-5">
           <table className="w-full text-start text-xs border-collapse">
             <thead>
-              <tr className="border-b-2 border-slate-800 text-[11px] uppercase tracking-wider text-slate-600">
+              <tr className="border-b-2 border-slate-800 text-[11px] uppercase tracking-wider text-muted">
                 <th className="py-2 pe-2 font-black">#</th>
                 <th className="py-2 px-2 font-black">{t('receipt.colItem')}</th>
                 <th className="py-2 px-2 font-black text-center">{t('receipt.colQty')}</th>
@@ -1031,19 +1031,19 @@ function OrderDetailContent() {
                 <th className="py-2 ps-2 font-black text-end">{t('receipt.colAmount')}</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-200">
+            <tbody className="divide-y divide-line">
               {order.items.map((item, idx) => (
-                <tr key={item.id} className="text-slate-800">
-                  <td className="py-2.5 pe-2 font-bold text-slate-500">{idx + 1}</td>
+                <tr key={item.id} className="text-ink">
+                  <td className="py-2.5 pe-2 font-bold text-muted">{idx + 1}</td>
                   <td className="py-2.5 px-2 font-semibold">
-                    <span className="font-bold text-slate-900 block">{item.productName}</span>
+                    <span className="font-bold text-ink block">{item.productName}</span>
                     {item.variantName && (
-                      <span className="text-[11px] text-slate-500 font-medium">{item.variantName}</span>
+                      <span className="text-[11px] text-muted font-medium">{item.variantName}</span>
                     )}
                   </td>
                   <td className="py-2.5 px-2 text-center font-bold">{item.quantity}</td>
                   <td className="py-2.5 px-2 text-end font-mono">{formatPrice(item.unitPrice)}</td>
-                  <td className="py-2.5 ps-2 text-end font-mono font-bold text-slate-900">
+                  <td className="py-2.5 ps-2 text-end font-mono font-bold text-ink">
                     {formatPrice(item.totalPrice)}
                   </td>
                 </tr>
@@ -1056,32 +1056,32 @@ function OrderDetailContent() {
         <div className="grid grid-cols-2 gap-6 border-t-2 border-slate-800 pt-4 mb-6 text-xs">
           {/* Payment Method Statement */}
           <div className="space-y-2">
-            <span className="text-[11px] font-black uppercase text-slate-500 tracking-wider block">
+            <span className="text-[11px] font-black uppercase text-muted tracking-wider block">
               {t('receipt.paymentDetails')}
             </span>
-            <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-200 space-y-1.5">
+            <div className="bg-raised p-3.5 rounded-xl border border-line space-y-1.5">
               <div className="flex items-center justify-between">
-                <span className="font-bold text-slate-700">{t('receipt.paymentChannel')}</span>
-                <span className="font-extrabold text-slate-900">
+                <span className="font-bold text-ink">{t('receipt.paymentChannel')}</span>
+                <span className="font-extrabold text-ink">
                   {paymentChannelLabel(t, order.paymentMethod, order.paymentSenderAccount)}
                 </span>
               </div>
               <div className="flex items-center justify-between">
-                <span className="font-bold text-slate-700">{t('receipt.verificationStatus')}</span>
-                <span className="font-extrabold text-emerald-700">
+                <span className="font-bold text-ink">{t('receipt.verificationStatus')}</span>
+                <span className="font-extrabold text-brand-soft-ink">
                   {paymentStatusLabel(t, order.paymentMethod, order.paymentStatus)}
                 </span>
               </div>
               {order.paymentReferenceNumber && (
-                <div className="flex items-center justify-between text-[11px] pt-1 border-t border-slate-200">
-                  <span className="text-slate-500">{t('receipt.reference')}</span>
-                  <span data-ltr className="font-mono font-bold text-slate-800">{order.paymentReferenceNumber}</span>
+                <div className="flex items-center justify-between text-[11px] pt-1 border-t border-line">
+                  <span className="text-muted">{t('receipt.reference')}</span>
+                  <span data-ltr className="font-mono font-bold text-ink">{order.paymentReferenceNumber}</span>
                 </div>
               )}
               {order.paymentProofUrl && (
-                <div className="pt-2 border-t border-slate-200 flex items-center gap-2">
+                <div className="pt-2 border-t border-line flex items-center gap-2">
                   <span className="text-xs">🧾</span>
-                  <span className="text-[11px] text-emerald-800 font-bold">
+                  <span className="text-[11px] text-brand-soft-ink font-bold">
                     {t('receipt.proofArchived')}
                   </span>
                 </div>
@@ -1092,44 +1092,44 @@ function OrderDetailContent() {
           {/* Pricing Totals */}
           <div className="space-y-1.5 text-end font-medium">
             <div className="flex justify-between">
-              <span className="text-slate-500">{t('receipt.subtotal')}</span>
-              <span className="font-mono text-slate-800">{formatPrice(order.pricing.subtotal)}</span>
+              <span className="text-muted">{t('receipt.subtotal')}</span>
+              <span className="font-mono text-ink">{formatPrice(order.pricing.subtotal)}</span>
             </div>
             <div className="flex justify-between">
-              <span className="text-slate-500">{t('receipt.communityDelivery')}</span>
-              <span className="font-mono text-slate-800">{formatPrice(order.pricing.deliveryFee)}</span>
+              <span className="text-muted">{t('receipt.communityDelivery')}</span>
+              <span className="font-mono text-ink">{formatPrice(order.pricing.deliveryFee)}</span>
             </div>
             {order.pricing.tax > 0 && (
               <div className="flex justify-between">
-                <span className="text-slate-500">{t('receipt.salesTax')}</span>
-                <span className="font-mono text-slate-800">{formatPrice(order.pricing.tax)}</span>
+                <span className="text-muted">{t('receipt.salesTax')}</span>
+                <span className="font-mono text-ink">{formatPrice(order.pricing.tax)}</span>
               </div>
             )}
             {order.pricing.discount > 0 && (
-              <div className="flex justify-between text-emerald-600 font-bold">
+              <div className="flex justify-between text-brand-soft-ink font-bold">
                 <span>{t('receipt.promoDiscount')}</span>
                 <span className="font-mono">-{formatPrice(order.pricing.discount)}</span>
               </div>
             )}
-            <div className="flex justify-between border-t-2 border-slate-300 pt-2 text-base font-black text-slate-950">
+            <div className="flex justify-between border-t-2 border-line-strong pt-2 text-base font-black text-ink">
               <span>{t('receipt.grandTotalPkr')}</span>
-              <span className="text-emerald-700 font-mono">{formatPrice(order.pricing.total)}</span>
+              <span className="text-brand-soft-ink font-mono">{formatPrice(order.pricing.total)}</span>
             </div>
           </div>
         </div>
 
         {/* Footer & Watermark */}
-        <div className="border-t border-slate-200 pt-4 text-center text-[11px] text-slate-500 space-y-1">
-          <p className="font-extrabold text-slate-700">{t('receipt.thanks')}</p>
+        <div className="border-t border-line pt-4 text-center text-[11px] text-muted space-y-1">
+          <p className="font-extrabold text-ink">{t('receipt.thanks')}</p>
           <p>{t('receipt.support')}</p>
-          <p className="text-[11px] text-slate-500">{t('receipt.computerGenerated')}</p>
+          <p className="text-[11px] text-muted">{t('receipt.computerGenerated')}</p>
         </div>
       </div>
 
       {/* Interactive Receipt Preview Modal */}
       {showReceiptPreview && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 animate-in fade-in duration-200">
-          <div className="relative w-full max-w-2xl bg-white rounded-3xl shadow-2xl border border-slate-200 overflow-hidden flex flex-col max-h-[92vh]">
+          <div className="relative w-full max-w-2xl bg-surface rounded-3xl shadow-2xl border border-line overflow-hidden flex flex-col max-h-[92vh]">
             <div className="px-6 py-4 bg-[#0C1016] text-white flex items-center justify-between border-b border-slate-800">
               <div className="flex items-center gap-2">
                 <span className="text-xl">🧾</span>
@@ -1141,7 +1141,7 @@ function OrderDetailContent() {
                     setShowReceiptPreview(false);
                     setTimeout(() => window.print(), 150);
                   }}
-                  className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow-xs transition-all flex items-center gap-1.5"
+                  className="px-3.5 py-1.5 bg-brand-700 hover:bg-brand-700 text-white font-bold text-xs rounded-xl shadow-xs transition-all flex items-center gap-1.5"
                 >
                   <span>🖨️</span>
                   <span>{t('receipt.printNow')}</span>
@@ -1156,71 +1156,71 @@ function OrderDetailContent() {
               </div>
             </div>
 
-            <div className="p-6 overflow-y-auto bg-slate-50/50">
-              <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 space-y-5">
+            <div className="p-6 overflow-y-auto bg-raised/50">
+              <div className="bg-surface p-6 rounded-2xl shadow-sm border border-line space-y-5">
                 {/* Header */}
                 <div className="flex items-start justify-between border-b-2 border-slate-900 pb-4">
                   <div>
-                    <span className="text-xl font-black text-slate-950 block">NURAY FOOD &amp; FROST</span>
-                    <span className="text-[11px] text-slate-500 font-medium">{t('receipt.kitchenInvoice')}</span>
+                    <span className="text-xl font-black text-ink block">NURAY FOOD &amp; FROST</span>
+                    <span className="text-[11px] text-muted font-medium">{t('receipt.kitchenInvoice')}</span>
                   </div>
                   <div className="text-end">
-                    <span className="font-mono font-bold text-sm text-slate-900 block"><span data-ltr>#{order.orderNumber}</span></span>
-                    <span className="text-[11px] text-slate-500">{formatDate(order.createdAt || new Date().toISOString())}</span>
+                    <span className="font-mono font-bold text-sm text-ink block"><span data-ltr>#{order.orderNumber}</span></span>
+                    <span className="text-[11px] text-muted">{formatDate(order.createdAt || new Date().toISOString())}</span>
                   </div>
                 </div>
 
                 {/* Details */}
                 <div className="grid grid-cols-2 gap-4 text-xs">
                   <div>
-                    <span className="text-[11px] uppercase font-bold text-slate-500 block">{t('receipt.soldBy')}</span>
-                    <span className="font-bold text-slate-900 block">{sellerName}</span>
-                    <span className="text-slate-500 text-[11px]">{t('receipt.communityKitchen')}</span>
+                    <span className="text-[11px] uppercase font-bold text-muted block">{t('receipt.soldBy')}</span>
+                    <span className="font-bold text-ink block">{sellerName}</span>
+                    <span className="text-muted text-[11px]">{t('receipt.communityKitchen')}</span>
                   </div>
                   <div>
-                    <span className="text-[11px] uppercase font-bold text-slate-500 block">{t('receipt.deliveredTo')}</span>
-                    <span className="font-bold text-slate-900 block">{customerName}</span>
-                    <span className="text-slate-500 text-[11px]">{order.delivery.address}</span>
+                    <span className="text-[11px] uppercase font-bold text-muted block">{t('receipt.deliveredTo')}</span>
+                    <span className="font-bold text-ink block">{customerName}</span>
+                    <span className="text-muted text-[11px]">{order.delivery.address}</span>
                   </div>
                 </div>
 
                 {/* Line Items */}
-                <div className="border rounded-xl overflow-hidden divide-y divide-slate-100 text-xs">
+                <div className="border rounded-xl overflow-hidden divide-y divide-line text-xs">
                   {order.items.map((it, idx) => (
                     <div key={idx} className="p-2.5 flex items-center justify-between">
-                      <span className="font-semibold text-slate-800">{it.quantity} × {it.productName}</span>
-                      <span className="font-mono font-bold text-slate-900">{formatPrice(it.totalPrice)}</span>
+                      <span className="font-semibold text-ink">{it.quantity} × {it.productName}</span>
+                      <span className="font-mono font-bold text-ink">{formatPrice(it.totalPrice)}</span>
                     </div>
                   ))}
                 </div>
 
                 {/* Summary */}
-                <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-2 text-xs">
+                <div className="bg-raised p-4 rounded-xl border border-line space-y-2 text-xs">
                   <div className="flex justify-between">
-                    <span className="font-bold text-slate-700">{t('receipt.paymentChannel')}</span>
-                    <span className="font-extrabold text-slate-900">
+                    <span className="font-bold text-ink">{t('receipt.paymentChannel')}</span>
+                    <span className="font-extrabold text-ink">
                       {paymentChannelLabel(t, order.paymentMethod, order.paymentSenderAccount)}
                     </span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="font-bold text-slate-700">{t('receipt.paymentStatus')}</span>
-                    <span className="font-extrabold text-emerald-700">
+                    <span className="font-bold text-ink">{t('receipt.paymentStatus')}</span>
+                    <span className="font-extrabold text-brand-soft-ink">
                       {paymentStatusLabel(t, order.paymentMethod, order.paymentStatus)}
                     </span>
                   </div>
                   {order.paymentProofUrl && (
-                    <div className="pt-2 border-t border-slate-200 flex items-center gap-3">
-                      <div className="w-12 h-12 rounded-lg border border-slate-200 overflow-hidden flex-shrink-0">
+                    <div className="pt-2 border-t border-line flex items-center gap-3">
+                      <div className="w-12 h-12 rounded-lg border border-line overflow-hidden flex-shrink-0">
                         <img src={order.paymentProofUrl} alt={t('receipt.proofAlt')} className="w-full h-full object-cover" />
                       </div>
-                      <span className="text-[11px] text-emerald-800 font-bold">
+                      <span className="text-[11px] text-brand-soft-ink font-bold">
                         {t('receipt.proofByCustomer')}
                       </span>
                     </div>
                   )}
-                  <div className="flex justify-between border-t border-slate-200 pt-2 text-sm font-black text-slate-950">
+                  <div className="flex justify-between border-t border-line pt-2 text-sm font-black text-ink">
                     <span>{t('receipt.grandTotal')}</span>
-                    <span className="text-emerald-700 font-mono">{formatPrice(order.pricing.total)}</span>
+                    <span className="text-brand-soft-ink font-mono">{formatPrice(order.pricing.total)}</span>
                   </div>
                 </div>
               </div>

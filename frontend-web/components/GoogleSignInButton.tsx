@@ -32,7 +32,7 @@ function UnconfiguredGoogleButton({ text: textProp }: GoogleSignInButtonProps) {
       type="button"
       disabled
       variant="outline"
-      className="w-full flex items-center justify-center gap-2 border-gray-300 opacity-50 cursor-not-allowed"
+      className="w-full flex items-center justify-center gap-2 border-line-strong opacity-50 cursor-not-allowed"
       title={t('googleNotConfiguredTitle')}
     >
       <svg className="w-5 h-5" viewBox="0 0 24 24">
@@ -76,7 +76,7 @@ function ConfiguredGoogleButton({ onSuccess, text: textProp }: GoogleSignInButto
       type="button"
       onClick={() => login()}
       variant="outline"
-      className="w-full flex items-center justify-center gap-2 border-gray-300 hover:bg-gray-50"
+      className="w-full flex items-center justify-center gap-2 border-line-strong hover:bg-raised"
     >
       <svg className="w-5 h-5" viewBox="0 0 24 24">
         <path

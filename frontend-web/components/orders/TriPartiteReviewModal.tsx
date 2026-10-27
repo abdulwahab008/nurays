@@ -149,26 +149,26 @@ export default function TriPartiteReviewModal({
           <Star
             className={`w-6 h-6 ${
               star <= value
-                ? 'fill-amber-400 text-amber-400'
-                : 'text-slate-300 stroke-slate-300'
+                ? 'fill-accent text-accent'
+                : 'text-line-strong stroke-line-strong'
             }`}
           />
         </button>
       ))}
-      <span className="ms-2 text-xs font-black text-slate-700">{value} / 5</span>
+      <span className="ms-2 text-xs font-extrabold text-ink">{value} / 5</span>
     </div>
   );
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 animate-in fade-in duration-200">
-      <div className="relative w-full max-w-md bg-white rounded-3xl shadow-2xl border border-slate-200 overflow-hidden">
+      <div className="relative w-full max-w-md bg-surface rounded-3xl shadow-2xl border border-line overflow-hidden">
         {/* Header */}
         <div className="px-6 py-4 bg-[#0C1016] text-white flex items-center justify-between">
           <div className="flex items-center gap-2.5">
             <span className="text-xl">⭐</span>
             <div>
-              <h3 className="font-black text-sm text-white">{t('review.title')}</h3>
-              <p className="text-[11px] text-slate-400 font-medium">{t('review.orderNumber', { number: orderNumber })}</p>
+              <h3 className="font-extrabold text-sm text-white">{t('review.title')}</h3>
+              <p className="text-[11px] text-muted font-medium">{t('review.orderNumber', { number: orderNumber })}</p>
             </div>
           </div>
           <button
@@ -182,17 +182,17 @@ export default function TriPartiteReviewModal({
 
         {submitted ? (
           <div className="p-10 text-center space-y-3">
-            <div className="w-16 h-16 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center mx-auto shadow-sm">
+            <div className="w-16 h-16 rounded-full bg-brand-soft text-brand-soft-ink flex items-center justify-center mx-auto shadow-sm">
               <CheckCircle2 className="w-10 h-10" />
             </div>
-            <h4 className="text-lg font-black text-slate-900">{t('review.submittedTitle')}</h4>
-            <p className="text-xs text-slate-500 font-medium">
+            <h4 className="text-lg font-extrabold text-ink">{t('review.submittedTitle')}</h4>
+            <p className="text-xs text-muted font-medium">
               {t('review.submittedBody')}
             </p>
           </div>
         ) : (
           <form onSubmit={handleSubmit} className="p-6 space-y-5">
-            <p className="text-xs text-slate-500 font-medium">
+            <p className="text-xs text-muted font-medium">
               {ratesDelivery ? t('review.introWithDelivery') : t('review.introNoDelivery')}
             </p>
 
@@ -201,38 +201,38 @@ export default function TriPartiteReviewModal({
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <Utensils className="w-4 h-4 text-brand-ink" />
-                  <span className="font-black text-xs text-slate-900">{t('review.food')}</span>
+                  <span className="font-extrabold text-xs text-ink">{t('review.food')}</span>
                 </div>
               </div>
               {renderStars(foodRating, setFoodRating)}
               {reviewableItems.length > 0 && (
-                <p className="text-[11px] text-slate-500 font-medium">
+                <p className="text-[11px] text-muted font-medium">
                   {t('review.appliesTo', { items: reviewableItems.map((item) => item.productName).join(', ') })}
                 </p>
               )}
             </div>
 
             {/* 2. Kitchen / Seller Rating */}
-            <div className="p-3.5 bg-slate-50 border border-slate-200/80 rounded-2xl space-y-1.5">
+            <div className="p-3.5 bg-raised border border-line rounded-2xl space-y-1.5">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <Award className="w-4 h-4 text-purple-600" />
-                  <span className="font-black text-xs text-slate-900">{t('review.kitchen')}</span>
+                  <span className="font-extrabold text-xs text-ink">{t('review.kitchen')}</span>
                 </div>
-                <span className="text-[11px] text-slate-500 font-bold">{sellerName}</span>
+                <span className="text-[11px] text-muted font-bold">{sellerName}</span>
               </div>
               {renderStars(sellerRating, setSellerRating)}
             </div>
 
             {/* 3. Rider Rating (home deliveries only) */}
             {ratesDelivery && (
-              <div className="p-3.5 bg-slate-50 border border-slate-200/80 rounded-2xl space-y-1.5">
+              <div className="p-3.5 bg-raised border border-line rounded-2xl space-y-1.5">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
-                    <Bike className="w-4 h-4 text-blue-600" />
-                    <span className="font-black text-xs text-slate-900">{t('review.rider')}</span>
+                    <Bike className="w-4 h-4 text-frozen-ink" />
+                    <span className="font-extrabold text-xs text-ink">{t('review.rider')}</span>
                   </div>
-                  <span className="text-[11px] text-slate-500 font-bold">{riderName}</span>
+                  <span className="text-[11px] text-muted font-bold">{riderName}</span>
                 </div>
                 {renderStars(riderRating, setRiderRating)}
               </div>
@@ -240,7 +240,7 @@ export default function TriPartiteReviewModal({
 
             {/* Comments */}
             <div>
-              <label className="block text-xs font-black text-slate-900 mb-1">
+              <label className="block text-xs font-extrabold text-ink mb-1">
                 {t('review.commentLabel')}
               </label>
               <textarea
@@ -248,7 +248,7 @@ export default function TriPartiteReviewModal({
                 onChange={(e) => setComment(e.target.value)}
                 rows={3}
                 placeholder={t('review.commentPlaceholder')}
-                className="w-full px-3.5 py-2.5 border border-slate-200 rounded-2xl text-xs font-medium focus:ring-2 focus:ring-brand focus:border-transparent bg-slate-50 focus:bg-white resize-none"
+                className="w-full px-3.5 py-2.5 border border-line rounded-2xl text-xs font-medium focus:ring-2 focus:ring-brand focus:border-transparent bg-raised focus:bg-surface resize-none"
               />
             </div>
 
@@ -263,14 +263,14 @@ export default function TriPartiteReviewModal({
               <button
                 type="submit"
                 disabled={submitting}
-                className="flex-1 py-3 px-4 rounded-2xl font-black text-xs text-on-brand bg-brand hover:bg-brand-500 disabled:opacity-50 transition-all shadow-md"
+                className="flex-1 py-3 px-4 rounded-2xl font-extrabold text-xs text-on-brand bg-brand hover:bg-brand-500 disabled:opacity-50 transition-all shadow-md"
               >
                 {submitting ? t('review.submitting') : t('review.submit')}
               </button>
               <button
                 type="button"
                 onClick={handleClose}
-                className="py-3 px-4 rounded-2xl font-extrabold text-xs text-slate-600 bg-slate-100 hover:bg-slate-200 transition-colors"
+                className="py-3 px-4 rounded-2xl font-extrabold text-xs text-muted bg-raised hover:bg-line transition-colors"
               >
                 {tc('cancel')}
               </button>

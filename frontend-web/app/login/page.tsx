@@ -170,17 +170,16 @@ export default function LoginPage() {
     }
   };
 
-  const tabBase = 'flex-1 h-11 rounded-full font-bold transition-all';
-  const tabActive: React.CSSProperties = { background: '#41DAC7', color: '#06302B', fontSize: 13 };
-  const tabInactive: React.CSSProperties = { background: 'transparent', color: '#64748B', fontSize: 13 };
+  const tabClass = (on: boolean) =>
+    `flex-1 h-11 rounded-[11px] text-sm transition-all ${on ? 'bg-surface text-ink font-extrabold shadow-xs' : 'text-muted font-bold hover:text-ink'}`;
   const inputClass = 'nuray-input';
   const inputStyle: React.CSSProperties = {};
-  const labelClass = 'text-xs font-black uppercase tracking-wider text-slate-500 block mb-2';
+  const labelClass = 'text-sm font-bold text-ink block mb-1.5';
 
   if (staffStep) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50 px-4 py-12">
-        <div className="max-w-md w-full bg-white rounded-xl shadow-lg p-8">
+      <div className="min-h-screen flex items-center justify-center bg-raised px-4 py-12">
+        <div className="max-w-md w-full bg-surface rounded-xl shadow-lg p-8">
           <StaffSecondStep
             mode={staffStep.mode}
             challengeToken={staffStep.challengeToken}
@@ -201,19 +200,19 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen py-10 px-4 bg-gradient-to-br from-slate-50 via-brand-50/20 to-slate-100 flex flex-col items-center justify-center">
-      <div className="w-full max-w-5xl bg-white rounded-3xl p-6 sm:p-10 border border-slate-200/90 shadow-2xl">
+    <div className="min-h-screen py-8 sm:py-12 px-4 bg-page flex flex-col items-center justify-center">
+      <div className={`w-full ${SHOW_DEMO_LOGIN ? 'max-w-5xl' : 'max-w-md'} sm:bg-surface sm:rounded-[24px] sm:p-10 sm:border sm:border-line`}>
         
         {/* Top Header */}
-        <div className="flex flex-col sm:flex-row items-center justify-between pb-8 mb-8 border-b border-slate-100 gap-4">
+        <div className="flex items-center justify-between pb-6 mb-6 border-b border-line gap-4">
           <Link href="/" className="inline-block">
-            <BrandLockup markSize={40} wordSize={28} />
+            <BrandLockup markSize={36} wordSize={26} />
           </Link>
           <div className="flex items-center gap-3">
             {demo && <demo.DemoDevLink />}
             <Link
               href="/register"
-              className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-bold transition-all"
+              className="inline-flex items-center gap-1.5 h-10 px-4 rounded-xl border border-line-strong hover:bg-raised text-ink text-sm font-bold transition-colors"
             >
               <span>{t('newAccountSignUp')}</span>
             </Link>
@@ -238,16 +237,16 @@ export default function LoginPage() {
           {/* Right Column: Standard Login Form */}
           <div className={SHOW_DEMO_LOGIN ? 'lg:col-span-5 flex flex-col justify-center' : 'lg:col-span-12 max-w-md mx-auto w-full flex flex-col justify-center'}>
             <div className="mb-6">
-              <h1 className="text-2xl sm:text-3xl font-bold text-slate-900 tracking-tight">
+              <h1 className="text-[28px] sm:text-[32px] leading-tight font-extrabold text-ink tracking-tight">
                 {t('welcomeBack')}
               </h1>
-              <p className="mt-1 text-xs sm:text-sm text-slate-500 font-medium">
+              <p className="mt-1.5 text-[15px] text-muted">
                 {t('loginSubtitle')}
               </p>
             </div>
 
             {/* Login Method Toggle */}
-            <div className="flex gap-1 mb-6 p-1 rounded-full bg-slate-100 border border-slate-200">
+            <div role="group" className="grid grid-cols-2 gap-1 mb-6 p-1 rounded-[14px] bg-raised">
               <button
                 type="button"
                 onClick={() => {
@@ -255,8 +254,8 @@ export default function LoginPage() {
                   setStep('input');
                   setError('');
                 }}
-                className={tabBase}
-                style={loginMethod === 'otp' ? tabActive : tabInactive}
+                aria-pressed={loginMethod === 'otp'}
+                className={tabClass(loginMethod === 'otp')}
               >
                 {t('tabOtp')}
               </button>
@@ -267,15 +266,15 @@ export default function LoginPage() {
                   setStep('input');
                   setError('');
                 }}
-                className={tabBase}
-                style={loginMethod === 'email' ? tabActive : tabInactive}
+                aria-pressed={loginMethod === 'email'}
+                className={tabClass(loginMethod === 'email')}
               >
                 {t('tabEmail')}
               </button>
             </div>
 
             {error && (
-              <div className="mb-4 p-3 rounded-xl text-sm bg-rose-50 border border-rose-200 text-rose-700 font-medium">
+              <div role="alert" className="mb-4 p-3 rounded-xl text-sm bg-red-50 border border-red-200 text-red-700 font-medium">
                 {error}
               </div>
             )}
@@ -299,7 +298,7 @@ export default function LoginPage() {
                       style={inputStyle}
                     />
                   </div>
-                  <Button variant="primary" type="submit" className="w-full h-12 text-sm font-bold shadow-md" disabled={loading}>
+                  <Button variant="primary" type="submit" className="w-full h-12 text-[15px] font-extrabold" disabled={loading}>
                     {loading ? t('sending') : t('sendOtp')}
                   </Button>
                 </form>
@@ -321,17 +320,17 @@ export default function LoginPage() {
                       className={`${inputClass} text-center text-2xl tracking-widest font-mono`}
                       style={inputStyle}
                     />
-                    <p className="text-xs text-slate-500 mt-2">
+                    <p className="text-xs text-muted mt-2">
                       {t('otpSentTo', { phone: '\u2066' + phoneOrEmail + '\u2069' })}
                     </p>
                   </div>
-                  <Button variant="primary" type="submit" className="w-full h-12 text-sm font-bold shadow-md" disabled={loading}>
+                  <Button variant="primary" type="submit" className="w-full h-12 text-[15px] font-extrabold" disabled={loading}>
                     {loading ? t('verifying') : t('verifyAndLogin')}
                   </Button>
                   <button
                     type="button"
                     onClick={() => setStep('input')}
-                    className="w-full mt-3 text-xs font-semibold text-brand-ink hover:text-brand-ink"
+                    className="w-full mt-3 h-10 text-sm font-bold text-brand-ink hover:underline"
                   >
                     {t('changePhone')}
                   </button>
@@ -373,21 +372,21 @@ export default function LoginPage() {
                     style={inputStyle}
                   />
                   <div className="mt-1.5 text-end">
-                    <Link href="/forgot-password" className="text-xs font-semibold text-slate-500 underline hover:text-slate-800">
+                    <Link href="/forgot-password" className="text-sm font-bold text-brand-ink hover:underline">
                       {t('forgotPassword')}
                     </Link>
                   </div>
                 </div>
-                <Button variant="primary" type="submit" className="w-full h-12 text-sm font-bold shadow-md" disabled={loading}>
+                <Button variant="primary" type="submit" className="w-full h-12 text-[15px] font-extrabold" disabled={loading}>
                   {loading ? t('loggingIn') : t('login')}
                 </Button>
 
                 <div className="relative my-6">
                   <div className="absolute inset-0 flex items-center">
-                    <div className="w-full border-t border-slate-200" />
+                    <div className="w-full border-t border-line" />
                   </div>
                   <div className="relative flex justify-center">
-                    <span className="px-3 text-[11px] uppercase tracking-[0.18em] font-bold text-slate-500 bg-white">
+                    <span className="px-3 text-xs font-semibold text-muted bg-page sm:bg-surface">
                       {t('orContinueWith')}
                     </span>
                   </div>
@@ -398,9 +397,9 @@ export default function LoginPage() {
             )}
 
             <div className="mt-6 text-center">
-              <p className="text-xs text-slate-500">
+              <p className="text-sm text-muted">
                 {t('noAccount')}{' '}
-                <Link href="/register" className="font-bold text-brand-ink hover:text-brand-ink">
+                <Link href="/register" className="font-bold text-brand-ink hover:underline">
                   {t('signUpLink')}
                 </Link>
               </p>

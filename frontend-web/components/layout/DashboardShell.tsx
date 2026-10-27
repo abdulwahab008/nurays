@@ -178,7 +178,7 @@ export function DashboardShell({
           aria-hidden={!open}
           className="lg:hidden fixed inset-0 z-40 transition-opacity duration-200"
           style={{
-            background: 'rgba(15,23,42,0.6)',
+            background: 'rgba(6,20,18,0.55)',
             opacity: open ? 1 : 0,
             pointerEvents: open ? 'auto' : 'none',
           }}
@@ -196,21 +196,18 @@ export function DashboardShell({
         <main
           className="lg:ms-64 px-4 sm:px-6 lg:px-10 py-6 lg:py-10 min-h-[calc(100vh-var(--header-offset))] bg-page"
         >
-          {title && (
-            <div className="mb-6 sm:mb-8">
-              <h1
-                className="text-2xl sm:text-3xl lg:text-4xl font-black text-slate-900 tracking-tight"
-              >
-                {title}
-              </h1>
-              {subtitle && (
-                <p className="mt-1 text-sm text-slate-500 font-medium">
-                  {subtitle}
-                </p>
-              )}
-            </div>
-          )}
-          {children}
+          {/* Customers read one column; the staff screens use the whole width for their tables. */}
+          <div className={userType === 'customer' ? 'max-w-[1120px] mx-auto' : undefined}>
+            {title && (
+              <div className="mb-6 sm:mb-8">
+                <h1 className="text-[28px] sm:text-[32px] lg:text-[36px] leading-tight font-extrabold text-ink tracking-tight">
+                  {title}
+                </h1>
+                {subtitle && <p className="mt-1.5 text-sm sm:text-[15px] text-muted">{subtitle}</p>}
+              </div>
+            )}
+            {children}
+          </div>
         </main>
       </div>
     </div>

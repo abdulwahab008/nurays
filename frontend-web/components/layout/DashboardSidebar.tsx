@@ -251,7 +251,7 @@ function DashboardSidebarContent({ items: allItems, userType }: DashboardSidebar
 
   return (
     <aside
-      className="w-64 h-full overflow-y-auto bg-white border-e border-slate-200"
+      className="w-64 h-full overflow-y-auto bg-surface border-e border-line"
     >
       <div className="px-4 py-6">
 
@@ -303,7 +303,7 @@ function DashboardSidebarContent({ items: allItems, userType }: DashboardSidebar
                       type="button"
                       onClick={(e) => toggleExpand(item.name, e)}
                       aria-label={tNav(isExpanded ? 'collapse' : 'expand', { name: label(item.name) })}
-                      className="p-2 me-1 text-slate-500 hover:text-slate-700 hover:bg-slate-100 rounded-lg transition-colors cursor-pointer"
+                      className="p-2 me-1 text-muted hover:text-ink hover:bg-raised rounded-lg transition-colors cursor-pointer"
                     >
                       <svg
                         className={`w-3.5 h-3.5 transition-transform duration-200 ${isExpanded ? 'rotate-180' : ''}`}
@@ -319,7 +319,7 @@ function DashboardSidebarContent({ items: allItems, userType }: DashboardSidebar
                 </div>
 
                 {hasSubItems && isExpanded && (
-                  <div className="ms-5 ps-3.5 py-1 space-y-1 border-s-2 border-slate-200">
+                  <div className="ms-5 ps-3.5 py-1 space-y-1 border-s-2 border-line">
                     {item.subItems!.map((sub) => {
                       const isSubActive = isItemActive(sub.href);
                       return (
@@ -341,7 +341,7 @@ function DashboardSidebarContent({ items: allItems, userType }: DashboardSidebar
                           ) : (
                             <span
                               className={`w-1.5 h-1.5 rounded-full transition-all shrink-0 ${
-                                isSubActive ? 'bg-slate-900 scale-125' : 'bg-slate-300 group-hover/sub:bg-slate-400'
+                                isSubActive ? 'bg-ink scale-125' : 'bg-line-strong group-hover/sub:bg-muted'
                               }`}
                             />
                           )}
@@ -394,7 +394,7 @@ function DashboardSidebarContent({ items: allItems, userType }: DashboardSidebar
 
 function SidebarSkeleton({ items }: { items: SidebarItem[] }) {
   return (
-    <aside className="w-64 h-full overflow-y-auto bg-white border-e border-slate-200">
+    <aside className="w-64 h-full overflow-y-auto bg-surface border-e border-line">
       <div className="px-4 py-6">
         <div className="mb-8 p-4 rounded-2xl bg-slate-50 border border-slate-100 flex items-center gap-3">
           <div className="w-10 h-10 rounded-2xl bg-slate-200 animate-pulse" />
