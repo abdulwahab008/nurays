@@ -41,7 +41,7 @@ export default function OrdersPage() {
   return (
     <React.Suspense
       fallback={
-        <div className="min-h-screen flex items-center justify-center bg-slate-50">
+        <div className="min-h-screen flex items-center justify-center bg-raised">
           <div className="w-10 h-10 border-3 border-brand border-t-transparent rounded-full animate-spin" />
         </div>
       }
@@ -287,59 +287,59 @@ function OrdersContent() {
       case 'pending':
         return {
           label: t('list.badge.pending'),
-          color: 'bg-amber-50 text-amber-800 border-amber-200/80',
-          dotColor: 'bg-amber-500',
+          color: 'bg-accent-soft text-accent-soft-ink border-transparent',
+          dotColor: 'bg-accent-soft-ink',
           icon: <Clock className="w-3.5 h-3.5" />,
         };
       case 'confirmed':
         return {
           label: t('list.badge.confirmed'),
-          color: 'bg-blue-50 text-blue-800 border-blue-200/80',
-          dotColor: 'bg-blue-500',
+          color: 'bg-frozen-soft text-frozen-ink border-transparent',
+          dotColor: 'bg-frozen-ink',
           icon: <Sparkles className="w-3.5 h-3.5" />,
         };
       case 'preparing':
         return {
           label: t('list.badge.preparing'),
-          color: 'bg-purple-50 text-purple-800 border-purple-200/80',
-          dotColor: 'bg-purple-500',
+          color: 'bg-accent text-on-accent border-transparent',
+          dotColor: 'bg-on-accent',
           icon: <ChefHat className="w-3.5 h-3.5" />,
         };
       case 'ready':
         return {
           label: t('list.badge.ready'),
-          color: 'bg-indigo-50 text-indigo-800 border-indigo-200/80',
-          dotColor: 'bg-indigo-500',
+          color: 'bg-brand-soft text-brand-soft-ink border-transparent',
+          dotColor: 'bg-brand-soft-ink',
           icon: <Package className="w-3.5 h-3.5" />,
         };
       case 'dispatched':
       case 'in_transit':
         return {
           label: t('list.badge.onTheWay'),
-          color: 'bg-brand-50 text-brand-800 border-brand-200/80',
-          dotColor: 'bg-brand',
+          color: 'bg-brand text-on-brand border-transparent',
+          dotColor: 'bg-on-brand',
           icon: <Truck className="w-3.5 h-3.5" />,
         };
       case 'delivered':
       case 'completed':
         return {
           label: t('list.badge.delivered'),
-          color: 'bg-emerald-50 text-emerald-800 border-emerald-200/80',
-          dotColor: 'bg-emerald-500',
+          color: 'bg-raised text-ink border-line',
+          dotColor: 'bg-brand',
           icon: <CheckCircle2 className="w-3.5 h-3.5" />,
         };
       case 'cancelled':
         return {
           label: t('list.badge.cancelled'),
-          color: 'bg-rose-50 text-rose-800 border-rose-200/80',
-          dotColor: 'bg-rose-500',
+          color: 'bg-red-50 text-red-800 border-red-200',
+          dotColor: 'bg-red-600',
           icon: <XCircle className="w-3.5 h-3.5" />,
         };
       default:
         return {
           label: statusKey(status) in commonMessages.en ? tc(statusKey(status)) : status.replace(/_/g, ' '),
-          color: 'bg-slate-50 text-slate-800 border-slate-200',
-          dotColor: 'bg-slate-400',
+          color: 'bg-raised text-ink border-line',
+          dotColor: 'bg-muted',
           icon: <Clock className="w-3.5 h-3.5" />,
         };
     }
@@ -382,87 +382,87 @@ function OrdersContent() {
         {/* ============================================================ */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3.5 sm:gap-4">
           {/* 1. Total Orders */}
-          <div className="relative overflow-hidden rounded-2xl sm:rounded-3xl bg-gradient-to-br from-slate-900/5 via-white to-slate-50 border border-slate-200/80 p-4 sm:p-5 shadow-2xs hover:shadow-xs transition-all">
+          <div className="rounded-[20px] bg-surface border border-line p-4 sm:p-5">
             <div className="flex items-center justify-between mb-3">
-              <div className="w-10 h-10 rounded-xl sm:rounded-2xl bg-slate-100 flex items-center justify-center text-slate-700 shadow-inner">
+              <div className="w-10 h-10 rounded-xl bg-raised flex items-center justify-center text-ink">
                 <Receipt className="w-5 h-5" />
               </div>
-              <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+              <span className="text-[11px] font-bold text-muted uppercase tracking-wider">
                 {t('list.lifetime')}
               </span>
             </div>
-            <div className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight">
+            <div className="text-2xl sm:text-3xl font-extrabold text-ink tracking-tight">
               {totalOrdersCount}
             </div>
-            <div className="text-xs sm:text-sm font-semibold text-slate-500 mt-0.5">
+            <div className="text-xs sm:text-sm font-semibold text-muted mt-0.5">
               {t('list.totalPlaced')}
             </div>
           </div>
 
           {/* 2. In Progress */}
-          <div className="relative overflow-hidden rounded-2xl sm:rounded-3xl bg-gradient-to-br from-amber-500/10 via-amber-50/30 to-white border border-amber-200/80 p-4 sm:p-5 shadow-2xs hover:shadow-xs transition-all">
+          <div className="rounded-[20px] bg-surface border border-line p-4 sm:p-5">
             <div className="flex items-center justify-between mb-3">
-              <div className="w-10 h-10 rounded-xl sm:rounded-2xl bg-amber-100/80 flex items-center justify-center text-amber-700 shadow-inner">
+              <div className="w-10 h-10 rounded-xl bg-accent-soft flex items-center justify-center text-accent-soft-ink">
                 <ChefHat className="w-5 h-5" />
               </div>
               {inProgressCount > 0 ? (
-                <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 text-[11px] font-bold">
-                  <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-ping" />
+                <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-accent-soft text-accent-soft-ink text-[11px] font-bold">
+                  <span className="w-1.5 h-1.5 rounded-full bg-accent-soft-ink animate-pulse" />
                   {t('list.liveCooking')}
                 </span>
               ) : (
-                <span className="text-[11px] font-bold text-amber-400 uppercase tracking-wider">
+                <span className="text-[11px] font-bold text-muted uppercase tracking-wider">
                   {t('list.active')}
                 </span>
               )}
             </div>
-            <div className="text-2xl sm:text-3xl font-black text-amber-900 tracking-tight">
+            <div className="text-2xl sm:text-3xl font-extrabold text-ink tracking-tight">
               {inProgressCount}
             </div>
-            <div className="text-xs sm:text-sm font-semibold text-amber-700/80 mt-0.5">
+            <div className="text-xs sm:text-sm font-semibold text-muted mt-0.5">
               {t('list.kitchenPrep')}
             </div>
           </div>
 
           {/* 3. On the Way */}
-          <div className="relative overflow-hidden rounded-2xl sm:rounded-3xl bg-gradient-to-br from-brand/10 via-brand-50/30 to-white border border-brand-200/80 p-4 sm:p-5 shadow-2xs hover:shadow-xs transition-all">
+          <div className="rounded-[20px] bg-surface border border-line p-4 sm:p-5">
             <div className="flex items-center justify-between mb-3">
-              <div className="w-10 h-10 rounded-xl sm:rounded-2xl bg-brand-100/80 flex items-center justify-center text-brand-ink shadow-inner">
+              <div className="w-10 h-10 rounded-xl bg-brand-soft flex items-center justify-center text-brand-soft-ink">
                 <Truck className="w-5 h-5" />
               </div>
               {onTheWayCount > 0 ? (
-                <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-brand-100 text-brand-800 text-[11px] font-bold">
-                  <span className="w-1.5 h-1.5 rounded-full bg-brand animate-ping" />
+                <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-brand-soft text-brand-soft-ink text-[11px] font-bold">
+                  <span className="w-1.5 h-1.5 rounded-full bg-brand animate-pulse" />
                   {t('list.riderDispatched')}
                 </span>
               ) : (
-                <span className="text-[11px] font-bold text-brand-ink uppercase tracking-wider">
+                <span className="text-[11px] font-bold text-muted uppercase tracking-wider">
                   {t('list.transit')}
                 </span>
               )}
             </div>
-            <div className="text-2xl sm:text-3xl font-black text-brand-ink tracking-tight">
+            <div className="text-2xl sm:text-3xl font-extrabold text-ink tracking-tight">
               {onTheWayCount}
             </div>
-            <div className="text-xs sm:text-sm font-semibold text-brand-ink/80 mt-0.5">
+            <div className="text-xs sm:text-sm font-semibold text-muted mt-0.5">
               {t('list.onTheWay')}
             </div>
           </div>
 
           {/* 4. Delivered */}
-          <div className="relative overflow-hidden rounded-2xl sm:rounded-3xl bg-gradient-to-br from-emerald-500/10 via-emerald-50/30 to-white border border-emerald-200/80 p-4 sm:p-5 shadow-2xs hover:shadow-xs transition-all">
+          <div className="rounded-[20px] bg-surface border border-line p-4 sm:p-5">
             <div className="flex items-center justify-between mb-3">
-              <div className="w-10 h-10 rounded-xl sm:rounded-2xl bg-emerald-100/80 flex items-center justify-center text-emerald-700 shadow-inner">
+              <div className="w-10 h-10 rounded-xl bg-brand-soft flex items-center justify-center text-brand-soft-ink">
                 <CheckCircle2 className="w-5 h-5" />
               </div>
-              <span className="text-[11px] font-bold text-emerald-600 uppercase tracking-wider">
+              <span className="text-[11px] font-bold text-muted uppercase tracking-wider">
                 {t('list.fulfilled')}
               </span>
             </div>
-            <div className="text-2xl sm:text-3xl font-black text-emerald-900 tracking-tight">
+            <div className="text-2xl sm:text-3xl font-extrabold text-ink tracking-tight">
               {deliveredCount}
             </div>
-            <div className="text-xs sm:text-sm font-semibold text-emerald-700/80 mt-0.5">
+            <div className="text-xs sm:text-sm font-semibold text-muted mt-0.5">
               {t('list.deliveredMeals')}
             </div>
           </div>
@@ -471,7 +471,7 @@ function OrdersContent() {
         {/* ============================================================ */}
         {/* FILTER BAR & SEARCH (Modern Segmented Pills) */}
         {/* ============================================================ */}
-        <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 p-2 bg-white rounded-2xl sm:rounded-3xl border border-slate-200/80 shadow-2xs">
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
           {/* Segmented Filter Pills */}
           <div className="flex items-center gap-1.5 overflow-x-auto p-1 scrollbar-none">
             {[
@@ -491,25 +491,21 @@ function OrdersContent() {
                   key={tab.id}
                   aria-pressed={active}
                   onClick={() => setFilter(tab.id)}
-                  className={`inline-flex items-center gap-2 px-3.5 sm:px-4 py-2 rounded-xl sm:rounded-2xl text-xs sm:text-sm font-bold whitespace-nowrap transition-all duration-150 cursor-pointer ${
-                    active
-                      ? 'bg-brand text-on-brand shadow-xs'
-                      : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100/80'
+                  className={`flex-shrink-0 inline-flex items-center gap-2 h-10 px-4 rounded-full text-sm font-bold whitespace-nowrap transition-colors cursor-pointer ${
+                    active ? 'bg-ink text-page' : 'bg-surface text-ink border border-line hover:bg-raised'
                   }`}
                 >
                   {tab.hasDot && (
                     <span
                       className={`w-2 h-2 rounded-full ${
-                        active ? 'bg-white' : 'bg-brand animate-pulse'
+                        active ? 'bg-brand' : 'bg-brand animate-pulse'
                       }`}
                     />
                   )}
                   <span>{tab.label}</span>
                   <span
-                    className={`px-1.5 py-0.2 rounded-md text-[11px] font-extrabold ${
-                      active
-                        ? 'bg-on-brand text-brand'
-                        : 'bg-slate-100 text-slate-500'
+                    className={`px-1.5 rounded-full text-[11px] font-extrabold ${
+                      active ? 'bg-page/20 text-page' : 'bg-raised text-muted'
                     }`}
                   >
                     {tab.count}
@@ -521,20 +517,20 @@ function OrdersContent() {
 
           {/* Quick Search */}
           <div className="relative min-w-[220px] sm:min-w-[260px] px-1 sm:px-0">
-            <Search className="absolute start-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+            <Search className="absolute start-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted" />
             <input
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder={t('list.searchPlaceholder')}
               aria-label={t('list.searchPlaceholder')}
-              className="w-full ps-9 pe-3.5 py-2 rounded-xl text-xs sm:text-sm bg-slate-50 border border-slate-200/90 text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-brand/20 focus:border-brand transition-all"
+              className="w-full h-11 ps-9 pe-9 rounded-[14px] text-sm font-semibold bg-raised border border-transparent text-ink placeholder:text-muted placeholder:font-medium focus:outline-none focus:ring-2 focus:ring-brand/20 focus:border-brand focus:bg-surface transition-all"
             />
             {searchQuery && (
               <button
                 onClick={() => setSearchQuery('')}
                 aria-label={t('list.clearSearch')}
-                className="absolute end-3 top-1/2 -translate-y-1/2 text-xs text-slate-500 hover:text-slate-600"
+                className="absolute end-2 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full text-sm text-muted hover:text-ink hover:bg-line"
               >
                 ✕
               </button>
@@ -546,25 +542,25 @@ function OrdersContent() {
         {/* ORDERS LIST */}
         {/* ============================================================ */}
         {loading ? (
-          <div className="bg-white rounded-3xl p-12 text-center border border-slate-200/80 shadow-xs">
+          <div className="bg-surface rounded-[20px] p-12 text-center border border-line">
             <div className="w-10 h-10 border-3 border-brand border-t-transparent rounded-full animate-spin mx-auto mb-3" />
-            <p className="text-sm font-bold text-slate-800">{t('list.loadingTitle')}</p>
-            <p className="text-xs text-slate-500 mt-1">{t('list.loadingSub')}</p>
+            <p className="text-sm font-bold text-ink">{t('list.loadingTitle')}</p>
+            <p className="text-xs text-muted mt-1">{t('list.loadingSub')}</p>
           </div>
         ) : filteredOrders.length === 0 ? (
           /* Empty State */
-          <div className="bg-gradient-to-b from-white to-slate-50/60 rounded-3xl p-8 sm:p-14 text-center border border-slate-200/90 shadow-2xs">
-            <div className="w-20 h-20 rounded-3xl bg-brand-50 border border-brand-200/70 flex items-center justify-center mx-auto mb-4 text-brand-ink shadow-inner">
+          <div className="bg-surface rounded-[24px] p-8 sm:p-14 text-center border border-dashed border-line-strong">
+            <div className="w-20 h-20 rounded-3xl bg-brand-soft flex items-center justify-center mx-auto mb-4 text-brand-soft-ink">
               <Package className="w-10 h-10" />
             </div>
-            <h3 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight mb-2">
+            <h3 className="text-xl sm:text-2xl font-extrabold text-ink tracking-tight mb-2">
               {searchQuery
                 ? t('list.emptySearchTitle')
                 : filter === 'all'
                 ? t('list.emptyAllTitle')
                 : t(`list.emptyTitle.${filter as 'active' | 'past' | 'cancelled'}`)}
             </h3>
-            <p className="text-xs sm:text-sm text-slate-500 max-w-md mx-auto mb-6 leading-relaxed">
+            <p className="text-xs sm:text-sm text-muted max-w-md mx-auto mb-6 leading-relaxed">
               {searchQuery
                 ? t('list.emptySearchBody', { query: searchQuery })
                 : filter === 'all'
@@ -573,7 +569,7 @@ function OrdersContent() {
             </p>
             <div className="flex items-center justify-center gap-3">
               <Link href="/dashboard">
-                <Button className="bg-brand hover:bg-brand-500 text-on-brand font-bold px-6 py-2.5 rounded-2xl shadow-sm">
+                <Button className="bg-brand hover:bg-brand-500 text-on-brand font-extrabold h-12 px-6 rounded-xl">
                   <ShoppingBag className="w-4 h-4 me-2" /> {t('list.exploreKitchens')}
                 </Button>
               </Link>
@@ -599,23 +595,23 @@ function OrdersContent() {
               return (
                 <div
                   key={order.id}
-                  className="group relative bg-white rounded-3xl border border-slate-200/90 hover:border-brand/60 shadow-2xs hover:shadow-md transition-all duration-200 overflow-hidden"
+                  className="group relative bg-surface rounded-[20px] border border-line hover:border-line-strong transition-colors overflow-hidden"
                 >
                   {/* Subtle top accent bar for active orders */}
                   {isActive && (
-                    <div className="h-1 w-full bg-gradient-to-r from-amber-400 via-brand to-brand" />
+                    <div className="h-1 w-full bg-brand" />
                   )}
 
                   <div className="p-4 sm:p-6 space-y-4">
                     {/* Top Row: Order ID, Badges, Date */}
-                    <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-slate-100">
+                    <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-line">
                       <div className="flex flex-wrap items-center gap-2.5">
                         <Link
                           href={`/orders/${order.id}`}
-                          className="text-base sm:text-lg font-black text-slate-900 hover:text-brand-ink transition-colors flex items-center gap-1.5"
+                          className="text-base sm:text-lg font-extrabold text-ink hover:underline flex items-center gap-1.5"
                         >
                           <span>{t('list.orderNumber', { number: order.orderNumber })}</span>
-                          <ExternalLink className="w-3.5 h-3.5 opacity-0 group-hover:opacity-100 transition-opacity text-slate-500" />
+                          <ExternalLink className="w-3.5 h-3.5 opacity-0 group-hover:opacity-100 transition-opacity text-muted" />
                         </Link>
 
                         {/* Status Badge */}
@@ -630,8 +626,8 @@ function OrdersContent() {
                         <span
                           className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold border ${
                             order.paymentStatus === 'paid'
-                              ? 'bg-emerald-50 text-emerald-800 border-emerald-200/80'
-                              : 'bg-amber-50 text-amber-800 border-amber-200/80'
+                              ? 'bg-brand-soft text-brand-soft-ink border-brand/40'
+                              : 'bg-accent-soft text-accent-soft-ink border-accent/50'
                           }`}
                         >
                           <CreditCard className="w-3 h-3" />
@@ -640,16 +636,16 @@ function OrdersContent() {
                       </div>
 
                       {/* Date & Time */}
-                      <div className="flex items-center gap-1.5 text-xs font-semibold text-slate-500">
-                        <Calendar className="w-3.5 h-3.5 text-slate-500" />
+                      <div className="flex items-center gap-1.5 text-xs font-semibold text-muted">
+                        <Calendar className="w-3.5 h-3.5 text-muted" />
                         <span>{formatDate(order.createdAt)}</span>
                       </div>
                     </div>
 
                     {/* Active Order Stepper Progress Tracker */}
                     {isActive && (
-                      <div className="bg-gradient-to-r from-slate-50/80 to-brand-50/40 rounded-2xl p-3.5 border border-slate-100">
-                        <div className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-2 flex items-center gap-1.5">
+                      <div className="bg-raised rounded-2xl p-3.5">
+                        <div className="text-[11px] font-bold text-muted uppercase tracking-wider mb-2 flex items-center gap-1.5">
                           <Flame className="w-3.5 h-3.5 text-brand-ink" />
                           {t('list.liveTracking')}
                         </div>
@@ -668,10 +664,10 @@ function OrdersContent() {
                                 <div
                                   className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold transition-all ${
                                     isCurrent
-                                      ? 'bg-brand text-on-brand shadow-xs ring-4 ring-brand-100 animate-pulse'
+                                      ? 'bg-brand text-on-brand ring-4 ring-brand/25'
                                       : isDone
-                                      ? 'bg-emerald-600 text-white'
-                                      : 'bg-slate-200 text-slate-400'
+                                      ? 'bg-brand-soft text-brand-soft-ink'
+                                      : 'bg-line text-muted'
                                   }`}
                                 >
                                   <IconComponent className="w-3.5 h-3.5" />
@@ -681,8 +677,8 @@ function OrdersContent() {
                                     isCurrent
                                       ? 'text-brand-ink'
                                       : isDone
-                                      ? 'text-slate-800'
-                                      : 'text-slate-400'
+                                      ? 'text-ink'
+                                      : 'text-muted'
                                   }`}
                                 >
                                   {st.name}
@@ -702,9 +698,9 @@ function OrdersContent() {
                             {items.map((it, iIdx) => (
                               <div
                                 key={it.id ?? iIdx}
-                                className="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl bg-slate-50 border border-slate-200/70 text-xs font-bold text-slate-800"
+                                className="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl bg-raised text-sm font-semibold text-ink"
                               >
-                                <span className="w-5 h-5 rounded-md bg-white border border-slate-200 flex items-center justify-center text-[11px] font-black text-brand-ink">
+                                <span className="text-xs font-extrabold text-brand-ink">
                                   {it.quantity || 1}×
                                 </span>
                                 <span className="truncate max-w-[180px] sm:max-w-[240px]">
@@ -714,19 +710,19 @@ function OrdersContent() {
                             ))}
                           </div>
                         ) : (
-                          <div className="text-xs text-slate-500 font-medium">
+                          <div className="text-xs text-muted font-medium">
                             {itemCount !== 1 ? t('list.itemsInOrder', { count: itemCount }) : t('list.oneItemInOrder')}
                           </div>
                         )}
                       </div>
 
                       {/* Amount and CTAs */}
-                      <div className="flex items-center justify-between sm:justify-end gap-3 sm:gap-4 pt-2 sm:pt-0 border-t sm:border-t-0 border-slate-100">
+                      <div className="flex items-center justify-between sm:justify-end gap-3 sm:gap-4 pt-2 sm:pt-0 border-t sm:border-t-0 border-line">
                         <div className="text-start sm:text-end">
-                          <span className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+                          <span className="block text-[11px] font-bold text-muted uppercase tracking-wider">
                             {t('list.orderTotal')}
                           </span>
-                          <span className="text-lg sm:text-2xl font-black text-slate-950 tracking-tight">
+                          <span className="text-lg sm:text-2xl font-extrabold text-ink tracking-tight">
                             {formatPrice(order.totalAmount)}
                           </span>
                         </div>
@@ -737,7 +733,7 @@ function OrdersContent() {
                               type="button"
                               onClick={(e) => handleReorder(e, order)}
                               disabled={reorderingId === order.id}
-                              className="inline-flex items-center gap-1.5 px-3 sm:px-3.5 py-2 rounded-xl text-xs font-bold text-brand-ink bg-brand-50 hover:bg-brand hover:text-on-brand border border-brand-200/80 transition-all cursor-pointer shadow-2xs"
+                              className="inline-flex items-center gap-1.5 h-10 px-3.5 rounded-xl text-sm font-bold text-ink border border-line-strong hover:bg-raised transition-colors cursor-pointer"
                               title={t('list.reorderTitle')}
                             >
                               <RotateCcw className={`w-3.5 h-3.5 ${reorderingId === order.id ? 'animate-spin' : ''}`} />
@@ -747,7 +743,7 @@ function OrdersContent() {
 
                           <Link
                             href={`/orders/${order.id}`}
-                            className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold bg-slate-900 hover:bg-slate-800 text-white transition-all shadow-xs"
+                            className="inline-flex items-center gap-1.5 h-10 px-4 rounded-xl text-sm font-extrabold bg-brand hover:bg-brand-500 text-on-brand transition-colors"
                           >
                             <span>{t('list.details')}</span>
                             <ArrowRight className="rtl:-scale-x-100 w-3.5 h-3.5 group-hover:translate-x-0.5 transition-transform" />
@@ -767,12 +763,12 @@ function OrdersContent() {
             <Button
               onClick={() => loadOrders(page + 1)}
               disabled={loadingMore}
-              className="px-6 py-2.5 rounded-xl text-sm font-bold bg-slate-900 hover:bg-slate-800 text-white"
+              className="h-11 px-6 rounded-xl text-sm font-bold bg-surface border border-line-strong hover:bg-raised text-ink"
             >
               {loadingMore ? tc('loading') : t('list.loadMore', { loaded: orders.length, total: totalOrdersCount })}
             </Button>
             {filter !== 'all' && (
-              <p className="text-xs text-slate-500 mt-2">
+              <p className="text-xs text-muted mt-2">
                 {t('list.filterNote')}
               </p>
             )}

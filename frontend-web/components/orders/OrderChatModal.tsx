@@ -34,7 +34,7 @@ function StatusTicks({ isRead, isMeBubble = false }: { isRead: boolean; isMeBubb
   }
   return (
     <span
-      className={`inline-flex items-center ms-1 ${isMeBubble ? 'text-white/70' : 'text-slate-500'}`}
+      className={`inline-flex items-center ms-1 ${isMeBubble ? 'text-white/70' : 'text-muted'}`}
       title={t('chat.delivered')}
     >
       <CheckCheck className="w-3.5 h-3.5 stroke-[2]" />
@@ -122,7 +122,7 @@ function VoiceNotePlayer({
   return (
     <div
       className={`flex items-center gap-3 p-2.5 rounded-2xl min-w-[240px] max-w-[300px] ${
-        isMeBubble ? 'bg-black/15 text-white' : 'bg-slate-100 text-slate-800'
+        isMeBubble ? 'bg-black/15 text-white' : 'bg-raised text-ink'
       }`}
     >
       <audio
@@ -137,7 +137,7 @@ function VoiceNotePlayer({
       <button
         onClick={togglePlay}
         className={`w-9 h-9 rounded-full flex items-center justify-center transition-transform active:scale-95 shadow-xs shrink-0 ${
-          isMeBubble ? 'bg-white text-emerald-800' : 'bg-slate-900 text-white'
+          isMeBubble ? 'bg-surface text-brand-soft-ink' : 'bg-ink text-page'
         }`}
         title={isPlaying ? t('chat.pauseVoice') : t('chat.playVoice')}
       >
@@ -158,7 +158,7 @@ function VoiceNotePlayer({
         <div className="relative w-full h-2 bg-black/15 rounded-full overflow-hidden">
           <div
             className={`h-full transition-all duration-100 rounded-full ${
-              isMeBubble ? 'bg-white' : 'bg-emerald-600'
+              isMeBubble ? 'bg-surface' : 'bg-brand-700'
             }`}
             style={{ width: `${Math.min(100, Math.max(0, progress))}%` }}
           />
@@ -171,7 +171,7 @@ function VoiceNotePlayer({
         className={`text-[11px] font-black px-1.5 py-0.5 rounded-md border shrink-0 ${
           isMeBubble
             ? 'border-white/30 hover:bg-white/10 text-white'
-            : 'border-slate-300 hover:bg-slate-200 text-slate-700'
+            : 'border-line-strong hover:bg-line text-ink'
         }`}
         title={t('chat.changeSpeed')}
       >
@@ -211,7 +211,7 @@ export default function OrderChatModal({
 
   const isSellerRole = currentRole === 'seller';
   const targetName = isSellerRole ? customerName || t('chat.customer') : sellerName || t('chat.homeKitchen');
-  const primaryThemeColor = isSellerRole ? 'bg-emerald-600 hover:bg-emerald-700' : 'bg-brand hover:bg-brand-500';
+  const primaryThemeColor = isSellerRole ? 'bg-brand-700 hover:bg-brand-700' : 'bg-brand hover:bg-brand-500';
   const activeFocusRing = isSellerRole ? 'focus:ring-emerald-500' : 'focus:ring-brand';
 
   // Quick Communication Template Chips
@@ -399,13 +399,13 @@ export default function OrderChatModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-3 md:p-4 animate-in fade-in duration-200">
-      <div className="relative w-full max-w-lg bg-white rounded-3xl shadow-2xl border border-slate-200 overflow-hidden flex flex-col h-[640px] max-h-[92vh]">
+      <div className="relative w-full max-w-lg bg-surface rounded-3xl shadow-2xl border border-line overflow-hidden flex flex-col h-[640px] max-h-[92vh]">
         {/* Header */}
         <div className="px-5 py-3.5 bg-[#0C1016] text-white flex items-center justify-between border-b border-slate-800">
           <div className="flex items-center gap-3">
             <div
               className={`w-10 h-10 rounded-2xl ${
-                isSellerRole ? 'bg-emerald-600' : 'bg-brand-700'
+                isSellerRole ? 'bg-brand-700' : 'bg-brand-700'
               } text-white flex items-center justify-center font-black text-sm shadow-md shrink-0`}
             >
               💬
@@ -415,11 +415,11 @@ export default function OrderChatModal({
                 <h3 className="font-black text-sm text-white truncate max-w-[200px] md:max-w-[260px]">
                   {t('chat.chatWith', { name: targetName })}
                 </h3>
-                <span className="px-2 py-0.5 rounded-full text-[11px] font-black bg-white/10 text-slate-300" data-ltr>
+                <span className="px-2 py-0.5 rounded-full text-[11px] font-black bg-white/10 text-[#A3BCB7]" data-ltr>
                   #{orderNumber}
                 </span>
               </div>
-              <p className="text-[11px] text-slate-400 font-medium">
+              <p className="text-[11px] text-muted font-medium">
                 {isSellerRole
                   ? t('chat.subtitleSeller')
                   : t('chat.subtitleCustomer')}
@@ -439,12 +439,12 @@ export default function OrderChatModal({
         <div
           className={`px-4 py-2 border-b flex items-center gap-2 text-[11px] font-medium ${
             isSellerRole
-              ? 'bg-emerald-50/80 border-emerald-100 text-emerald-950'
+              ? 'bg-brand-soft border-brand/40 text-brand-soft-ink'
               : 'bg-brand-50/80 border-brand-100 text-brand-950'
           }`}
         >
           <ShieldCheck
-            className={`w-3.5 h-3.5 flex-shrink-0 ${isSellerRole ? 'text-emerald-600' : 'text-brand-ink'}`}
+            className={`w-3.5 h-3.5 flex-shrink-0 ${isSellerRole ? 'text-brand-soft-ink' : 'text-brand-ink'}`}
           />
           <span className="truncate">
             {isSellerRole
@@ -454,9 +454,9 @@ export default function OrderChatModal({
         </div>
 
         {/* Quick Suggestion Chips */}
-        <div className="px-3 py-2 bg-slate-100/70 border-b border-slate-200/60 overflow-x-auto flex items-center gap-1.5 scrollbar-none">
-          <span className="text-[11px] font-black text-slate-500 uppercase tracking-wider shrink-0 flex items-center gap-1 ps-1">
-            <Sparkles className="w-3 h-3 text-amber-500" />
+        <div className="px-3 py-2 bg-raised/70 border-b border-line overflow-x-auto flex items-center gap-1.5 scrollbar-none">
+          <span className="text-[11px] font-black text-muted uppercase tracking-wider shrink-0 flex items-center gap-1 ps-1">
+            <Sparkles className="w-3 h-3 text-accent" />
             {t('chat.quick')}
           </span>
           {quickChips.map((chip, idx) => (
@@ -464,7 +464,7 @@ export default function OrderChatModal({
               key={idx}
               onClick={() => handleSendMessage(undefined, chip)}
               disabled={sending}
-              className="text-[11px] font-semibold bg-white hover:bg-slate-50 border border-slate-200/90 text-slate-700 px-2.5 py-1 rounded-full whitespace-nowrap transition-all shadow-2xs hover:border-slate-300 active:scale-95 disabled:opacity-50"
+              className="text-[11px] font-semibold bg-surface hover:bg-raised border border-line text-ink px-2.5 py-1 rounded-full whitespace-nowrap transition-all shadow-2xs hover:border-line-strong active:scale-95 disabled:opacity-50"
             >
               {chip}
             </button>
@@ -472,9 +472,9 @@ export default function OrderChatModal({
         </div>
 
         {/* Message History */}
-        <div className="flex-1 overflow-y-auto p-4 space-y-3.5 bg-slate-50/50">
+        <div className="flex-1 overflow-y-auto p-4 space-y-3.5 bg-raised/50">
           {loading ? (
-            <div className="h-full flex flex-col items-center justify-center text-slate-500 gap-2">
+            <div className="h-full flex flex-col items-center justify-center text-muted gap-2">
               <div
                 className={`w-6 h-6 border-2 ${
                   isSellerRole ? 'border-emerald-600' : 'border-brand'
@@ -487,12 +487,12 @@ export default function OrderChatModal({
               <LoadError compact error={loadError} onRetry={() => void loadMessages()} title={t('chat.loadFailed')} />
             </div>
           ) : messages.length === 0 ? (
-            <div className="h-full flex flex-col items-center justify-center text-center p-6 text-slate-500">
-              <div className="w-12 h-12 rounded-2xl bg-white border border-slate-200 flex items-center justify-center text-xl mb-2 shadow-xs">
+            <div className="h-full flex flex-col items-center justify-center text-center p-6 text-muted">
+              <div className="w-12 h-12 rounded-2xl bg-surface border border-line flex items-center justify-center text-xl mb-2 shadow-xs">
                 {isSellerRole ? '👤' : '👩‍🍳'}
               </div>
-              <p className="text-xs font-extrabold text-slate-700">{t('chat.empty')}</p>
-              <p className="text-[11px] text-slate-500 mt-1 max-w-xs">
+              <p className="text-xs font-extrabold text-ink">{t('chat.empty')}</p>
+              <p className="text-[11px] text-muted mt-1 max-w-xs">
                 {isSellerRole
                   ? t('chat.emptySeller', { name: targetName })
                   : t('chat.emptyCustomer', { name: targetName })}
@@ -521,8 +521,8 @@ export default function OrderChatModal({
                 <div key={msg.id} className={`flex flex-col ${isMe ? 'items-end' : 'items-start'}`}>
                   {/* Sender Name & Time */}
                   <div className="flex items-center gap-1.5 mb-1 px-1">
-                    <span className="text-[11px] font-extrabold text-slate-500">{senderLabel}</span>
-                    <span className="text-[11px] text-slate-500">
+                    <span className="text-[11px] font-extrabold text-muted">{senderLabel}</span>
+                    <span className="text-[11px] text-muted">
                       {new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                     </span>
                   </div>
@@ -532,9 +532,9 @@ export default function OrderChatModal({
                     className={`max-w-[85%] rounded-2xl p-2.5 text-xs font-medium leading-relaxed shadow-xs ${
                       isMe
                         ? isSellerRole
-                          ? 'bg-emerald-600 text-white rounded-se-xs'
+                          ? 'bg-brand-700 text-white rounded-se-xs'
                           : 'bg-brand text-on-brand rounded-se-xs'
-                        : 'bg-white text-slate-900 border border-slate-200/80 rounded-ss-xs'
+                        : 'bg-surface text-ink border border-line rounded-ss-xs'
                     }`}
                   >
                     {isVoiceNote && msg.mediaUrl ? (
@@ -581,7 +581,7 @@ export default function OrderChatModal({
               {/* Cancel Button */}
               <button
                 onClick={cancelRecording}
-                className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-white hover:bg-red-100 text-red-600 text-xs font-bold border border-red-200 transition-colors shadow-2xs"
+                className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-surface hover:bg-red-100 text-red-600 text-xs font-bold border border-red-200 transition-colors shadow-2xs"
               >
                 <Trash2 className="w-3.5 h-3.5" />
                 <span>{t('chat.cancel')}</span>
@@ -599,16 +599,16 @@ export default function OrderChatModal({
           </div>
         ) : (
           /* Standard Input Bar */
-          <form onSubmit={handleSendMessage} className="p-3 bg-white border-t border-slate-200 flex items-center gap-2">
+          <form onSubmit={handleSendMessage} className="p-3 bg-surface border-t border-line flex items-center gap-2">
             {/* Voice Record Trigger */}
             <button
               type="button"
               onClick={startRecording}
               disabled={sending}
-              className="w-11 h-11 rounded-2xl bg-slate-100 hover:bg-slate-200 text-slate-700 flex items-center justify-center transition-colors shadow-2xs shrink-0 active:scale-95 disabled:opacity-40"
+              className="w-11 h-11 rounded-2xl bg-raised hover:bg-line text-ink flex items-center justify-center transition-colors shadow-2xs shrink-0 active:scale-95 disabled:opacity-40"
               title={t('chat.recordVoice')}
             >
-              <Mic className="w-5 h-5 text-slate-600" />
+              <Mic className="w-5 h-5 text-muted" />
             </button>
 
             {/* Text Input */}
@@ -621,7 +621,7 @@ export default function OrderChatModal({
                   ? t('chat.placeholderSeller', { name: targetName })
                   : t('chat.placeholderCustomer', { name: targetName })
               }
-              className={`flex-1 px-4 py-3 rounded-2xl border border-slate-200 text-xs font-semibold focus:outline-none focus:ring-2 ${activeFocusRing} focus:border-transparent bg-slate-50 focus:bg-white transition-all`}
+              className={`flex-1 px-4 py-3 rounded-2xl border border-line text-xs font-semibold focus:outline-none focus:ring-2 ${activeFocusRing} focus:border-transparent bg-raised focus:bg-surface transition-all`}
               disabled={sending}
             />
 

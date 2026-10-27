@@ -210,24 +210,24 @@ export default function ManualPaymentCard({
       return { label: 'JazzCash', bg: 'bg-red-50 text-red-700 border-red-200', icon: '📱' };
     }
     if (p.includes('easy') || p.includes('paisa')) {
-      return { label: 'EasyPaisa', bg: 'bg-emerald-50 text-emerald-700 border-emerald-200', icon: '🟢' };
+      return { label: 'EasyPaisa', bg: 'bg-brand-soft text-brand-soft-ink border-brand/40', icon: '🟢' };
     }
     if (p.includes('alfalah') || p.includes('bank') || p.includes('raast')) {
-      return { label: provider, bg: 'bg-sky-50 text-sky-800 border-sky-200', icon: '🏛️' };
+      return { label: provider, bg: 'bg-frozen-soft text-frozen-ink border-transparent', icon: '🏛️' };
     }
-    return { label: provider, bg: 'bg-amber-50 text-amber-800 border-amber-200', icon: '💳' };
+    return { label: provider, bg: 'bg-accent-soft text-accent-soft-ink border-accent/50', icon: '💳' };
   };
 
   // If order is already confirmed as paid, show clean verified card
   if (paymentStatus === 'paid') {
     return (
-      <div className="bg-emerald-50 border border-emerald-200 rounded-3xl p-5 flex items-center gap-3.5">
-        <div className="w-10 h-10 rounded-2xl bg-emerald-600 text-white flex items-center justify-center font-black flex-shrink-0 shadow-xs">
+      <div className="bg-brand-soft rounded-[20px] p-5 flex items-center gap-3.5">
+        <div className="w-10 h-10 rounded-2xl bg-brand text-on-brand flex items-center justify-center flex-shrink-0">
           <CheckCircle2 className="w-5 h-5" />
         </div>
         <div>
-          <h4 className="font-black text-sm text-emerald-950">{t('paidTitle')}</h4>
-          <p className="text-xs text-emerald-800 font-medium mt-0.5">
+          <h4 className="font-extrabold text-sm text-brand-soft-ink">{t('paidTitle')}</h4>
+          <p className="text-xs text-brand-soft-ink font-medium mt-0.5">
             {t('paidText', { amount: formatPrice(totalAmount) })}
           </p>
         </div>
@@ -242,34 +242,34 @@ export default function ManualPaymentCard({
     const methodToDisplay = paymentSenderAccount || localMethod;
 
     return (
-      <div className="bg-amber-50/90 border border-amber-200 rounded-3xl p-6 space-y-4">
+      <div className="bg-accent-soft rounded-[20px] p-5 sm:p-6 space-y-4">
         <div className="flex items-start gap-3.5">
-          <div className="w-11 h-11 rounded-2xl bg-amber-600 text-white flex items-center justify-center font-black flex-shrink-0 shadow-md">
+          <div className="w-11 h-11 rounded-2xl bg-accent text-on-accent flex items-center justify-center flex-shrink-0">
             <Clock className="w-6 h-6 animate-pulse" />
           </div>
           <div className="flex-1">
             <div className="flex items-center gap-2 flex-wrap">
-              <h4 className="font-black text-base text-amber-950">
+              <h4 className="font-extrabold text-base text-accent-soft-ink">
                 {t('proofSubmitted')}
               </h4>
-              <span className="px-2.5 py-0.5 rounded-full text-[11px] font-black bg-amber-200 text-amber-900">
+              <span className="px-2.5 py-0.5 rounded-full text-[11px] font-extrabold bg-surface text-ink">
                 {t('awaitingVerification')}
               </span>
             </div>
-            <p className="text-xs text-amber-800 font-medium mt-1 leading-relaxed">
+            <p className="text-xs text-accent-soft-ink font-medium mt-1 leading-relaxed">
               {t('notifiedText')}
             </p>
           </div>
         </div>
 
         {/* Details Card */}
-        <div className="bg-white rounded-2xl border border-amber-200/80 p-4 space-y-3">
+        <div className="bg-surface rounded-2xl border border-accent/50 p-4 space-y-3">
           <div className="flex items-center justify-between flex-wrap gap-2">
             <div>
-              <span className="text-[11px] uppercase font-bold text-slate-500 block tracking-wider">
+              <span className="text-[11px] uppercase font-bold text-muted block tracking-wider">
                 {t('refMethod')}
               </span>
-              <span className="font-semibold text-xs text-slate-800">
+              <span className="font-semibold text-xs text-ink">
                 {tidToDisplay ? <span data-ltr>{tidToDisplay}</span> : methodToDisplay ? t('transferredVia', { method: methodToDisplay }) : t('receiptAttached')}
               </span>
             </div>
@@ -277,18 +277,18 @@ export default function ManualPaymentCard({
             {tidToDisplay && !tidToDisplay.includes('(') && (
               <button
                 onClick={() => copyToClipboard(tidToDisplay, 'tid')}
-                className="p-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 transition-colors text-xs font-bold flex items-center gap-1"
+                className="p-1.5 rounded-lg bg-raised hover:bg-line text-ink transition-colors text-xs font-bold flex items-center gap-1"
                 title={t('copyReference')}
               >
-                {copiedKey === 'tid' ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
+                {copiedKey === 'tid' ? <Check className="w-3.5 h-3.5 text-brand-soft-ink" /> : <Copy className="w-3.5 h-3.5" />}
                 <span>{t('copy')}</span>
               </button>
             )}
           </div>
 
           {proofToDisplay && (
-            <div className="pt-2 border-t border-slate-100 flex items-center gap-3">
-              <div className="w-14 h-14 rounded-xl border border-slate-200 overflow-hidden bg-slate-50 flex items-center justify-center flex-shrink-0">
+            <div className="pt-2 border-t border-line flex items-center gap-3">
+              <div className="w-14 h-14 rounded-xl border border-line overflow-hidden bg-raised flex items-center justify-center flex-shrink-0">
                 <img
                   src={proofToDisplay}
                   alt={t('receiptAlt')}
@@ -297,7 +297,7 @@ export default function ManualPaymentCard({
                 />
               </div>
               <div className="text-xs">
-                <span className="font-bold text-slate-800 block">{t('screenshotAttached')}</span>
+                <span className="font-bold text-ink block">{t('screenshotAttached')}</span>
                 <ExternalLink href={proofToDisplay} className="text-brand-ink hover:underline font-bold text-[11px]">
                   {t('viewReceipt')}
                 </ExternalLink>
@@ -311,29 +311,29 @@ export default function ManualPaymentCard({
 
   // Payment is pending: show direct kitchen payment details and redesigned submit button
   return (
-    <div className="bg-white rounded-3xl border-2 border-brand-200 shadow-sm p-6 space-y-5">
+    <div className="bg-surface rounded-[20px] border-2 border-brand p-5 sm:p-6 space-y-5">
       {/* Header */}
       <div className="flex items-start justify-between gap-4">
         <div>
-          <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-brand-100 text-brand-ink text-[11px] font-black uppercase tracking-wider mb-1.5">
+          <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-brand-soft text-brand-soft-ink text-xs font-extrabold mb-2">
             {t('directBadge')}
           </div>
-          <h3 className="text-lg font-black text-slate-900">
+          <h3 className="text-lg font-extrabold text-ink">
             {t('payDirectlyTo', { name: details?.sellerName || t('kitchen') })}
           </h3>
-          <p className="text-xs text-slate-500 font-medium mt-0.5">
-            {richText(t('transferExact'), { amount: <span className="font-black text-slate-900">{formatPrice(totalAmount)}</span> })}
+          <p className="text-xs text-muted font-medium mt-0.5">
+            {richText(t('transferExact'), { amount: <span className="font-extrabold text-ink">{formatPrice(totalAmount)}</span> })}
           </p>
         </div>
 
-        <div className="w-11 h-11 rounded-2xl bg-gradient-to-br from-brand to-amber-500 text-on-brand flex items-center justify-center text-xl shadow-md flex-shrink-0">
+        <div className="w-11 h-11 rounded-2xl bg-accent-soft flex items-center justify-center text-xl flex-shrink-0" aria-hidden>
           💸
         </div>
       </div>
 
       {/* Account Info Cards */}
       {loading ? (
-        <div className="p-8 text-center text-slate-500">
+        <div className="p-8 text-center text-muted">
           <div className="w-6 h-6 border-2 border-brand border-t-transparent rounded-full animate-spin mx-auto mb-2" />
           <span className="text-xs font-bold">{t('fetchingAccounts')}</span>
         </div>
@@ -346,37 +346,37 @@ export default function ManualPaymentCard({
             return (
               <div
                 key={idx}
-                className="bg-slate-50 rounded-2xl p-4 border border-slate-200/80 flex items-center justify-between gap-3 hover:border-brand-300 transition-colors"
+                className="bg-raised rounded-2xl p-4 border border-line flex items-center justify-between gap-3 hover:border-brand-300 transition-colors"
               >
                 <div className="space-y-1 min-w-0">
                   <div className="flex items-center gap-2">
                     <span className="text-base">{badge.icon}</span>
-                    <span className="font-black text-xs text-slate-900 uppercase tracking-wider">
+                    <span className="font-extrabold text-xs text-ink uppercase tracking-wider">
                       {acc.provider}
                     </span>
                     {acc.accountTitle && (
-                      <span className="text-[11px] font-bold text-slate-500 truncate">
+                      <span className="text-[11px] font-bold text-muted truncate">
                         • {acc.accountTitle}
                       </span>
                     )}
                   </div>
-                  <div className="font-mono font-black text-sm text-slate-900 tracking-wider" data-ltr>
+                  <div className="font-mono font-extrabold text-sm text-ink tracking-wider" data-ltr>
                     {acc.accountNumber}
                   </div>
                 </div>
 
                 <button
                   onClick={() => copyToClipboard(acc.accountNumber, `acc-${idx}`)}
-                  className="flex items-center gap-1 px-3 py-2 rounded-xl bg-white border border-slate-200 hover:bg-slate-100 text-slate-700 text-xs font-extrabold transition-colors flex-shrink-0 shadow-2xs"
+                  className="flex items-center gap-1 px-3 py-2 rounded-xl bg-surface border border-line hover:bg-raised text-ink text-xs font-extrabold transition-colors flex-shrink-0 shadow-2xs"
                 >
                   {copiedKey === `acc-${idx}` ? (
                     <>
-                      <Check className="w-3.5 h-3.5 text-emerald-600" />
-                      <span className="text-emerald-700">{t('copied')}</span>
+                      <Check className="w-3.5 h-3.5 text-brand-soft-ink" />
+                      <span className="text-brand-soft-ink">{t('copied')}</span>
                     </>
                   ) : (
                     <>
-                      <Copy className="w-3.5 h-3.5 text-slate-500" />
+                      <Copy className="w-3.5 h-3.5 text-muted" />
                       <span>{t('copy')}</span>
                     </>
                   )}
@@ -386,9 +386,9 @@ export default function ManualPaymentCard({
           })}
         </div>
       ) : (
-        <div className="bg-slate-50 rounded-2xl p-4 border border-slate-200/80 text-xs text-slate-600">
-          <p className="font-bold text-slate-900">{t('directTransfer')}</p>
-          <p className="text-[11px] text-slate-500 mt-1">
+        <div className="bg-raised rounded-2xl p-4 border border-line text-xs text-muted">
+          <p className="font-bold text-ink">{t('directTransfer')}</p>
+          <p className="text-[11px] text-muted mt-1">
             {t('pleaseTransfer', { amount: formatPrice(totalAmount) })}
           </p>
         </div>
@@ -397,7 +397,7 @@ export default function ManualPaymentCard({
       {/* Quick Action Button */}
       <button
         onClick={() => setShowSubmitModal(true)}
-        className="w-full py-3.5 px-4 rounded-2xl font-black text-xs text-on-brand bg-brand hover:bg-brand-500 active:scale-[0.98] transition-all shadow-md flex items-center justify-center gap-2"
+        className="w-full py-3.5 px-4 rounded-2xl font-extrabold text-sm text-on-brand bg-brand hover:bg-brand-500 active:scale-[0.98] transition-all flex items-center justify-center gap-2"
       >
         <span>{t('iHavePaid')}</span>
       </button>
@@ -405,14 +405,14 @@ export default function ManualPaymentCard({
       {/* Redesigned Submit Payment Proof Modal */}
       {showSubmitModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 animate-in fade-in duration-200">
-          <div className="relative w-full max-w-lg bg-white rounded-3xl shadow-2xl border border-slate-200 overflow-hidden flex flex-col max-h-[92vh]">
+          <div className="relative w-full max-w-lg bg-surface rounded-3xl shadow-2xl border border-line overflow-hidden flex flex-col max-h-[92vh]">
             {/* Modal Header */}
             <div className="px-6 py-4 bg-[#0C1016] text-white flex items-center justify-between border-b border-slate-800">
               <div className="flex items-center gap-2.5">
                 <span className="text-xl">🧾</span>
                 <div>
-                  <h3 className="font-black text-sm">{t('submitProof')}</h3>
-                  <p className="text-[11px] text-slate-400">
+                  <h3 className="font-extrabold text-sm">{t('submitProof')}</h3>
+                  <p className="text-[11px] text-muted">
                     {richText(t('orderTotal'), { amount: <strong className="text-white">{formatPrice(totalAmount)}</strong> })}
                   </p>
                 </div>
@@ -430,7 +430,7 @@ export default function ManualPaymentCard({
             <form onSubmit={handleSubmitPayment} className="p-6 space-y-4 overflow-y-auto">
               {/* Account Selection */}
               <div>
-                <label className="block text-xs font-black text-slate-900 mb-2">
+                <label className="block text-xs font-extrabold text-ink mb-2">
                   {t('whichAccount')} <span className="text-brand-ink">*</span>
                 </label>
                 {details?.accounts && details.accounts.length > 0 ? (
@@ -446,15 +446,15 @@ export default function ManualPaymentCard({
                           className={`p-3 rounded-2xl border text-start transition-all flex items-center gap-2.5 ${
                             isSelected
                               ? 'border-brand bg-brand-50/50 shadow-xs ring-1 ring-brand'
-                              : 'border-slate-200 bg-white hover:bg-slate-50 text-slate-700'
+                              : 'border-line bg-surface hover:bg-raised text-ink'
                           }`}
                         >
                           <span className="text-lg">{badge.icon}</span>
                           <div className="min-w-0 flex-1">
-                            <span className="font-black text-xs text-slate-900 block truncate">
+                            <span className="font-extrabold text-xs text-ink block truncate">
                               {acc.provider}
                             </span>
-                            <span className="text-[11px] text-slate-500 font-mono block truncate" data-ltr>
+                            <span className="text-[11px] text-muted font-mono block truncate" data-ltr>
                               {acc.accountNumber}
                             </span>
                           </div>
@@ -468,7 +468,7 @@ export default function ManualPaymentCard({
                     })}
                   </div>
                 ) : (
-                  <div className="p-3 bg-slate-50 rounded-xl text-xs text-slate-600 font-semibold border border-slate-200">
+                  <div className="p-3 bg-raised rounded-xl text-xs text-muted font-semibold border border-line">
                     {t('transferredTo', { name: details?.sellerName || t('kitchen') })}
                   </div>
                 )}
@@ -476,9 +476,9 @@ export default function ManualPaymentCard({
 
               {/* Screenshot Upload Dropzone */}
               <div>
-                <label className="block text-xs font-black text-slate-900 mb-1.5 flex items-center justify-between">
+                <label className="block text-xs font-extrabold text-ink mb-1.5 flex items-center justify-between">
                   <span>{t('screenshotLabel')}</span>
-                  <span className="text-[11px] font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-md">
+                  <span className="text-[11px] font-bold text-brand-soft-ink bg-brand-soft px-2 py-0.5 rounded-md">
                     {t('recommended')}
                   </span>
                 </label>
@@ -494,23 +494,23 @@ export default function ManualPaymentCard({
                 {!screenshotPreview ? (
                   <div
                     onClick={() => fileInputRef.current?.click()}
-                    className="border-2 border-dashed border-slate-300 hover:border-brand bg-slate-50 hover:bg-brand-50/30 rounded-2xl p-5 text-center cursor-pointer transition-all space-y-2 group"
+                    className="border-2 border-dashed border-line-strong hover:border-brand bg-raised hover:bg-brand-50/30 rounded-2xl p-5 text-center cursor-pointer transition-all space-y-2 group"
                   >
-                    <div className="w-10 h-10 rounded-2xl bg-white group-hover:bg-brand group-hover:text-on-brand text-slate-500 flex items-center justify-center mx-auto transition-colors shadow-2xs border border-slate-200">
+                    <div className="w-10 h-10 rounded-2xl bg-surface group-hover:bg-brand group-hover:text-on-brand text-muted flex items-center justify-center mx-auto transition-colors shadow-2xs border border-line">
                       <UploadCloud className="w-5 h-5" />
                     </div>
                     <div>
-                      <p className="text-xs font-black text-slate-800 group-hover:text-brand-ink transition-colors">
+                      <p className="text-xs font-extrabold text-ink group-hover:text-brand-ink transition-colors">
                         {t('tapToUpload')}
                       </p>
-                      <p className="text-[11px] text-slate-500 mt-0.5">
+                      <p className="text-[11px] text-muted mt-0.5">
                         {t('supportsFormats')}
                       </p>
                     </div>
                   </div>
                 ) : (
-                  <div className="relative rounded-2xl border border-slate-200 bg-slate-50 p-3 flex items-center gap-3">
-                    <div className="w-16 h-16 rounded-xl border border-slate-200 overflow-hidden bg-white flex-shrink-0 flex items-center justify-center">
+                  <div className="relative rounded-2xl border border-line bg-raised p-3 flex items-center gap-3">
+                    <div className="w-16 h-16 rounded-xl border border-line overflow-hidden bg-surface flex-shrink-0 flex items-center justify-center">
                       <img
                         src={screenshotPreview}
                         alt={t('previewAlt')}
@@ -518,13 +518,13 @@ export default function ManualPaymentCard({
                       />
                     </div>
                     <div className="flex-1 min-w-0">
-                      <p className="text-xs font-black text-slate-900 truncate">
+                      <p className="text-xs font-extrabold text-ink truncate">
                         {screenshotFile?.name || 'receipt-screenshot.png'}
                       </p>
-                      <p className="text-[11px] text-emerald-600 font-bold mt-0.5 flex items-center gap-1">
+                      <p className="text-[11px] text-brand-soft-ink font-bold mt-0.5 flex items-center gap-1">
                         {uploadingImage ? (
                           <>
-                            <span className="w-2.5 h-2.5 border-2 border-emerald-600 border-t-transparent rounded-full animate-spin" />
+                            <span className="w-2.5 h-2.5 border-2 border-brand border-t-transparent rounded-full animate-spin" />
                             <span>{t('uploadingScreenshot')}</span>
                           </>
                         ) : (
@@ -538,7 +538,7 @@ export default function ManualPaymentCard({
                     <button
                       type="button"
                       onClick={removeScreenshot}
-                      className="w-7 h-7 rounded-full bg-slate-200 hover:bg-red-100 hover:text-red-600 text-slate-600 flex items-center justify-center text-xs transition-colors flex-shrink-0"
+                      className="w-7 h-7 rounded-full bg-line hover:bg-red-100 hover:text-red-600 text-muted flex items-center justify-center text-xs transition-colors flex-shrink-0"
                       title={t('removeImage')}
                     >
                       ✕
@@ -549,8 +549,8 @@ export default function ManualPaymentCard({
 
               {/* TID / Reference Number (Optional if screenshot is attached) */}
               <div>
-                <label className="block text-xs font-black text-slate-900 mb-1">
-                  {t('tidLabel')} <span className="text-slate-500 font-normal">{t('optionalIfScreenshot')}</span>
+                <label className="block text-xs font-extrabold text-ink mb-1">
+                  {t('tidLabel')} <span className="text-muted font-normal">{t('optionalIfScreenshot')}</span>
                 </label>
                 <input
                   type="text"
@@ -558,27 +558,27 @@ export default function ManualPaymentCard({
                   onChange={(e) => setTransactionId(e.target.value)}
                   placeholder={t('tidPlaceholder')}
                   dir="ltr"
-                  className="w-full px-4 py-2.5 border border-slate-200 rounded-xl text-xs font-bold font-mono focus:ring-2 focus:ring-brand focus:border-transparent bg-slate-50 focus:bg-white"
+                  className="w-full px-4 py-2.5 border border-line rounded-xl text-xs font-bold font-mono focus:ring-2 focus:ring-brand focus:border-transparent bg-raised focus:bg-surface"
                 />
               </div>
 
               {/* Sender Details (Optional) */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-[11px] font-bold text-slate-700 mb-1">
-                    {t('senderName')} <span className="text-slate-500 font-normal">{t('optional')}</span>
+                  <label className="block text-[11px] font-bold text-ink mb-1">
+                    {t('senderName')} <span className="text-muted font-normal">{t('optional')}</span>
                   </label>
                   <input
                     type="text"
                     value={senderName}
                     onChange={(e) => setSenderName(e.target.value)}
                     placeholder={t('senderNamePlaceholder')}
-                    className="w-full px-3 py-2 border border-slate-200 rounded-xl text-xs font-semibold focus:ring-2 focus:ring-brand bg-slate-50 focus:bg-white"
+                    className="w-full px-3 py-2 border border-line rounded-xl text-xs font-semibold focus:ring-2 focus:ring-brand bg-raised focus:bg-surface"
                   />
                 </div>
                 <div>
-                  <label className="block text-[11px] font-bold text-slate-700 mb-1">
-                    {t('senderMobile')} <span className="text-slate-500 font-normal">{t('optional')}</span>
+                  <label className="block text-[11px] font-bold text-ink mb-1">
+                    {t('senderMobile')} <span className="text-muted font-normal">{t('optional')}</span>
                   </label>
                   <input
                     type="text"
@@ -586,7 +586,7 @@ export default function ManualPaymentCard({
                     onChange={(e) => setSenderAccount(e.target.value)}
                     placeholder={t('senderMobilePlaceholder')}
                     dir="ltr"
-                    className="w-full px-3 py-2 border border-slate-200 rounded-xl text-xs font-semibold focus:ring-2 focus:ring-brand bg-slate-50 focus:bg-white"
+                    className="w-full px-3 py-2 border border-line rounded-xl text-xs font-semibold focus:ring-2 focus:ring-brand bg-raised focus:bg-surface"
                   />
                 </div>
               </div>
@@ -596,7 +596,7 @@ export default function ManualPaymentCard({
                 <button
                   type="submit"
                   disabled={submitting || uploadingImage || (!transactionId.trim() && !uploadedProofUrl)}
-                  className="flex-1 py-3 px-4 rounded-2xl font-black text-xs text-on-brand bg-brand hover:bg-brand-500 disabled:opacity-50 transition-all shadow-md flex items-center justify-center gap-1.5"
+                  className="flex-1 py-3 px-4 rounded-2xl font-extrabold text-sm text-on-brand bg-brand hover:bg-brand-500 disabled:opacity-50 transition-all shadow-md flex items-center justify-center gap-1.5"
                 >
                   {submitting ? (
                     <>
@@ -610,7 +610,7 @@ export default function ManualPaymentCard({
                 <button
                   type="button"
                   onClick={() => setShowSubmitModal(false)}
-                  className="py-3 px-4 rounded-2xl font-extrabold text-xs text-slate-600 bg-slate-100 hover:bg-slate-200 transition-colors"
+                  className="py-3 px-4 rounded-2xl font-extrabold text-xs text-muted bg-raised hover:bg-line transition-colors"
                 >
                   {tc('cancel')}
                 </button>

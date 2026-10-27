@@ -70,12 +70,12 @@ export default function OnlinePaymentCard({ orderId, totalAmount }: Props) {
           <CreditCard className="w-5 h-5" />
         </div>
         <div className="flex-1">
-          <h2 className="text-base font-bold text-slate-900">{t('completePayment', { amount: formatPrice(totalAmount) })}</h2>
-          <p className="mt-1 text-sm text-slate-600">
+          <h2 className="text-base font-bold text-ink">{t('completePayment', { amount: formatPrice(totalAmount) })}</h2>
+          <p className="mt-1 text-sm text-muted">
             {t('onlineText')}
           </p>
           {recentAttempt && (
-            <p className="mt-2 text-xs text-slate-500">
+            <p className="mt-2 text-xs text-muted">
               {t('alreadyPaid')}
             </p>
           )}
@@ -89,7 +89,7 @@ export default function OnlinePaymentCard({ orderId, totalAmount }: Props) {
               {opening ? t('openingPayPage') : recentAttempt ? t('openAgain') : t('payNow')}
             </button>
           ) : (
-            <p className="mt-3 text-sm font-medium text-slate-700">{t('onlineUnavailable')}</p>
+            <p className="mt-3 text-sm font-medium text-ink">{t('onlineUnavailable')}</p>
           )}
         </div>
       </div>

@@ -190,20 +190,22 @@ export function CommunitySelector({ variant = 'navbar' }: CommunitySelectorProps
         isOpen &&
         createPortal(
           <div
-            className="fixed inset-0 z-[99999] flex items-center justify-center p-4 sm:p-6 bg-slate-950/40 backdrop-blur-xs animate-in fade-in duration-150"
+            className="fixed inset-0 z-[99999] flex items-center justify-center p-4 sm:p-6 bg-[rgba(6,20,18,0.55)] animate-in fade-in duration-150"
             onClick={handleClose}
           >
             <div
-              className="relative w-full max-w-lg rounded-3xl border border-line bg-surface p-5 sm:p-6 shadow-xl animate-in zoom-in-95 duration-150"
+              role="dialog"
+              aria-modal="true"
+              className="relative w-full max-w-lg rounded-[24px] border border-line bg-surface p-5 sm:p-6 shadow-xl animate-in zoom-in-95 duration-150"
               onClick={(e) => e.stopPropagation()}
             >
               {/* Header */}
               <div className="flex items-center justify-between pb-3.5 border-b border-line">
                 <div>
-                  <h3 className="text-lg sm:text-xl font-bold text-ink">
+                  <h3 className="text-xl font-extrabold text-ink">
                     {t('deliveryLocation')}
                   </h3>
-                  <p className="text-xs text-muted mt-0.5">
+                  <p className="text-sm text-muted mt-0.5">
                     {t('deliveryLocationSub')}
                   </p>
                 </div>
@@ -211,20 +213,20 @@ export function CommunitySelector({ variant = 'navbar' }: CommunitySelectorProps
                   type="button"
                   onClick={handleClose}
                   aria-label={t('closeDialog')}
-                  className="w-8 h-8 rounded-full bg-raised hover:bg-line text-muted hover:text-ink flex items-center justify-center transition-all active:scale-95"
+                  className="w-10 h-10 rounded-full bg-raised hover:bg-line text-muted hover:text-ink flex items-center justify-center transition-all active:scale-95"
                 >
                   <X className="w-4 h-4" />
                 </button>
               </div>
 
               {/* Current Active Location Pill */}
-              <div className="mt-3.5 p-3 rounded-2xl bg-brand-50/70 border border-brand-200/70 flex items-center justify-between gap-3">
+              <div className="mt-4 p-3 rounded-2xl bg-brand-soft flex items-center justify-between gap-3">
                 <div className="flex items-center gap-2.5 min-w-0">
-                  <div className="w-7 h-7 rounded-xl bg-brand text-on-brand flex items-center justify-center shrink-0 shadow-2xs">
+                  <div className="w-9 h-9 rounded-xl bg-brand text-on-brand flex items-center justify-center shrink-0">
                     <MapPin className="w-4 h-4" />
                   </div>
                   <div className="min-w-0">
-                    <p className="text-[11px] font-bold text-brand-800 uppercase tracking-wider">
+                    <p className="text-xs font-bold text-brand-soft-ink">
                       {t('currentLocation')}
                     </p>
                     <p className="text-xs font-bold text-ink truncate">
@@ -232,7 +234,7 @@ export function CommunitySelector({ variant = 'navbar' }: CommunitySelectorProps
                     </p>
                   </div>
                 </div>
-                <span className="text-[11px] font-bold text-brand-soft-ink bg-brand-soft px-2 py-0.5 rounded-full shrink-0">
+                <span className="text-[11px] font-extrabold text-brand-soft-ink bg-surface px-2 py-0.5 rounded-full shrink-0">
                   {t('active')}
                 </span>
               </div>
@@ -242,10 +244,10 @@ export function CommunitySelector({ variant = 'navbar' }: CommunitySelectorProps
                 type="button"
                 onClick={handleGPSDetect}
                 disabled={isDetecting}
-                className="w-full mt-3 p-3 rounded-2xl border border-line hover:border-brand-300 hover:bg-brand-50/40 text-ink font-semibold text-xs transition flex items-center justify-between group"
+                className="w-full mt-3 min-h-12 p-3 rounded-2xl border border-line hover:border-line-strong hover:bg-raised text-ink font-bold text-sm transition flex items-center justify-between group"
               >
                 <div className="flex items-center gap-2.5">
-                  <div className="w-7 h-7 rounded-xl bg-raised group-hover:bg-brand text-muted group-hover:text-on-brand flex items-center justify-center transition-colors">
+                  <div className="w-9 h-9 rounded-xl bg-brand-soft text-brand-soft-ink flex items-center justify-center">
                     {isDetecting ? (
                       <span className="w-3.5 h-3.5 border-2 border-current border-t-transparent rounded-full animate-spin" />
                     ) : (
@@ -267,14 +269,14 @@ export function CommunitySelector({ variant = 'navbar' }: CommunitySelectorProps
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   placeholder={t('searchSociety')}
-                  className="w-full h-10 ps-9 pe-8 rounded-xl bg-raised border border-line text-xs font-medium text-ink placeholder:text-muted focus:bg-surface focus:border-brand focus:ring-1 focus:ring-brand outline-none transition"
+                  className="w-full h-12 ps-10 pe-10 rounded-[14px] bg-raised border border-transparent text-[15px] font-semibold text-ink placeholder:text-muted placeholder:font-medium focus:bg-surface focus:border-brand focus:ring-2 focus:ring-brand/20 outline-none transition"
                 />
                 {searchQuery && (
                   <button
                     type="button"
                     onClick={() => setSearchQuery('')}
                     aria-label={t('clearSearch')}
-                    className="absolute end-3 top-1/2 -translate-y-1/2 text-muted hover:text-muted"
+                    className="absolute end-2 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full flex items-center justify-center text-muted hover:text-ink hover:bg-line"
                   >
                     <X className="w-3.5 h-3.5" />
                   </button>
@@ -285,12 +287,12 @@ export function CommunitySelector({ variant = 'navbar' }: CommunitySelectorProps
               {smartMatch && smartMatch.community && (
                 <div
                   onClick={() => handleSelect(smartMatch.community)}
-                  className="mt-3 p-3 rounded-2xl bg-accent-soft border border-accent/50 text-ink cursor-pointer hover:bg-accent-soft transition flex items-center justify-between shadow-2xs"
+                  className="mt-3 p-3 rounded-2xl bg-accent-soft text-ink cursor-pointer transition flex items-center justify-between"
                 >
                   <div className="flex items-center gap-2.5">
-                    <Sparkles className="w-4 h-4 text-amber-600 shrink-0" />
+                    <Sparkles className="w-4 h-4 text-accent-soft-ink shrink-0" />
                     <div>
-                      <p className="text-[11px] font-bold text-accent-soft-ink uppercase tracking-wider">
+                      <p className="text-xs font-bold text-accent-soft-ink">
                         {t('smartMatch')}
                       </p>
                       <p className="text-xs font-bold text-ink">
@@ -298,7 +300,7 @@ export function CommunitySelector({ variant = 'navbar' }: CommunitySelectorProps
                       </p>
                     </div>
                   </div>
-                  <span className="px-2.5 py-1 rounded-xl bg-brand text-on-brand text-[11px] font-bold">
+                  <span className="px-3 py-1.5 rounded-xl bg-brand text-on-brand text-xs font-extrabold">
                     {t('select')}
                   </span>
                 </div>
@@ -317,7 +319,7 @@ export function CommunitySelector({ variant = 'navbar' }: CommunitySelectorProps
                 ) : (
                   <>
                     <div className="px-1 py-1">
-                      <p className="text-[11px] font-bold text-muted uppercase tracking-wider">
+                      <p className="text-xs font-bold text-muted">
                         {t('lahoreCommunities')}
                       </p>
                     </div>
@@ -329,7 +331,7 @@ export function CommunitySelector({ variant = 'navbar' }: CommunitySelectorProps
                         <button
                           type="button"
                           onClick={() => setShowOtherCities(!showOtherCities)}
-                          className="w-full py-2 text-center text-xs font-semibold text-muted hover:text-ink flex items-center justify-center gap-1 transition"
+                          className="w-full h-10 text-center text-sm font-bold text-muted hover:text-ink flex items-center justify-center gap-1 transition"
                         >
                           <span>{showOtherCities ? t('hideOther') : t('showMore', { count: otherCommunities.length })}</span>
                           <ChevronDown className={`w-3.5 h-3.5 transition-transform ${showOtherCities ? 'rotate-180' : ''}`} />
@@ -359,33 +361,33 @@ export function CommunitySelector({ variant = 'navbar' }: CommunitySelectorProps
         key={comm.id}
         type="button"
         onClick={() => handleSelect(comm)}
-        className={`w-full text-start px-3.5 py-2.5 rounded-xl border transition flex items-center justify-between ${
+        className={`w-full text-start min-h-14 px-3.5 py-2.5 rounded-2xl border transition flex items-center justify-between ${
           isSelected
-            ? 'border-brand bg-brand-50/70 shadow-2xs'
+            ? 'border-brand bg-brand-soft/50'
             : 'border-line hover:border-line-strong hover:bg-raised'
         }`}
       >
         <div className="min-w-0 pe-2">
           <div className="flex items-center gap-2">
-            <span className="text-xs font-bold text-ink truncate">
+            <span className="text-[15px] font-bold text-ink truncate">
               {comm.name}
             </span>
-            <span className="text-[11px] font-medium px-1.5 py-0.2 rounded bg-raised text-muted shrink-0">
+            <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-raised text-muted shrink-0">
               {comm.city}
             </span>
           </div>
-          <p className="text-[11px] text-muted truncate mt-0.5">
+          <p className="text-xs text-muted truncate mt-0.5">
             {comm.areaDescription || t('defaultArea')}
           </p>
         </div>
 
         <div className="shrink-0 flex items-center gap-2">
           {isSelected ? (
-            <span className="w-5 h-5 rounded-full bg-brand text-on-brand flex items-center justify-center">
+            <span className="w-6 h-6 rounded-full bg-brand text-on-brand flex items-center justify-center">
               <Check className="w-3 h-3 stroke-[3]" />
             </span>
           ) : (
-            <span className="text-xs font-bold text-muted hover:text-muted">
+            <span className="text-sm font-bold text-brand-ink">
               {t('select')}
             </span>
           )}

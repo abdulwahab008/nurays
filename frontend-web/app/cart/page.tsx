@@ -18,7 +18,6 @@ import {
   ChefHat,
   MapPin,
   X,
-  Sparkles,
   ShieldCheck,
   Flame,
   Snowflake,
@@ -409,10 +408,10 @@ export default function CartPage() {
         userType="customer"
       >
         <div className="flex items-center justify-center min-h-[400px]">
-          <div className="text-center p-8 bg-white rounded-3xl border border-slate-200/80 shadow-xs max-w-sm">
+          <div className="text-center p-8 bg-surface rounded-3xl border border-line shadow-xs max-w-sm">
             <div className="w-10 h-10 border-3 border-brand border-t-transparent rounded-full animate-spin mx-auto mb-3" />
-            <p className="text-sm font-bold text-slate-900">{t('loadingTray')}</p>
-            <p className="text-xs text-slate-500 mt-1">{t('loadingTrayHint')}</p>
+            <p className="text-sm font-bold text-ink">{t('loadingTray')}</p>
+            <p className="text-xs text-muted mt-1">{t('loadingTrayHint')}</p>
           </div>
         </div>
       </DashboardLayout>
@@ -440,58 +439,56 @@ export default function CartPage() {
         userType="customer"
       >
         <div className="max-w-2xl mx-auto my-6">
-          <div className="relative overflow-hidden rounded-3xl bg-gradient-to-b from-white to-slate-50/80 border border-slate-200/90 shadow-sm p-8 sm:p-12 text-center">
-            {/* Background glowing halo */}
-            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-72 h-72 bg-gradient-to-tr from-brand/10 to-amber-300/15 rounded-full blur-3xl pointer-events-none" />
+          <div className="rounded-[24px] bg-surface border border-line p-8 sm:p-12 text-center">
 
             {/* Tray Icon */}
-            <div className="relative inline-flex items-center justify-center w-24 h-24 rounded-3xl bg-gradient-to-tr from-amber-100 to-brand-100 border border-brand-200/80 shadow-inner mb-5">
-              <ShoppingBag className="w-12 h-12 text-brand-ink" />
-              <span className="absolute -bottom-1.5 -end-1.5 px-2 py-0.5 rounded-full bg-slate-900 text-white text-[11px] font-black uppercase tracking-wider shadow-xs">
+            <div className="relative inline-flex items-center justify-center w-20 h-20 rounded-3xl bg-brand-soft mb-5">
+              <ShoppingBag className="w-10 h-10 text-brand-soft-ink" />
+              <span className="absolute -bottom-1.5 -end-1.5 px-2 py-0.5 rounded-full bg-accent text-on-accent text-[11px] font-extrabold">
                 {t('zeroItems')}
               </span>
             </div>
 
-            <h2 className="text-2xl sm:text-3xl font-black text-slate-950 tracking-tight mb-2">
+            <h2 className="text-2xl sm:text-[28px] font-extrabold text-ink tracking-tight mb-2">
               {t('emptyTitle')}
             </h2>
-            <p className="text-sm text-slate-600 max-w-md mx-auto leading-relaxed mb-6">
+            <p className="text-sm text-muted max-w-md mx-auto leading-relaxed mb-6">
               {t('emptyText')}
             </p>
 
             {/* Quick Cuisine Shortcut Pills */}
             <div className="mb-8">
-              <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block mb-2.5">
+              <span className="text-[11px] font-bold text-muted uppercase tracking-wider block mb-2.5">
                 {t('popularNearby')}
               </span>
               <div className="flex flex-wrap items-center justify-center gap-2 max-w-lg mx-auto">
                 <Link
                   href="/products?category=biryani"
-                  className="px-3 py-1.5 rounded-xl bg-white border border-slate-200 text-xs font-semibold text-slate-700 hover:border-brand hover:text-brand-ink transition-colors shadow-2xs"
+                  className="px-3 py-1.5 rounded-xl bg-surface border border-line text-xs font-semibold text-ink hover:border-brand hover:text-brand-ink transition-colors shadow-2xs"
                 >
                   🍛 {t('pill.biryani')}
                 </Link>
                 <Link
                   href="/products?category=paratha"
-                  className="px-3 py-1.5 rounded-xl bg-white border border-slate-200 text-xs font-semibold text-slate-700 hover:border-brand hover:text-brand-ink transition-colors shadow-2xs"
+                  className="px-3 py-1.5 rounded-xl bg-surface border border-line text-xs font-semibold text-ink hover:border-brand hover:text-brand-ink transition-colors shadow-2xs"
                 >
                   🫓 {t('pill.paratha')}
                 </Link>
                 <Link
                   href="/products?productType=frozen"
-                  className="px-3 py-1.5 rounded-xl bg-white border border-slate-200 text-xs font-semibold text-slate-700 hover:border-cyan-500 hover:text-cyan-600 transition-colors shadow-2xs"
+                  className="px-3 py-1.5 rounded-xl bg-surface border border-line text-xs font-semibold text-ink hover:border-frozen-ink hover:text-frozen-ink transition-colors shadow-2xs"
                 >
                   ❄️ {t('pill.frozen')}
                 </Link>
                 <Link
                   href="/products?category=bbq"
-                  className="px-3 py-1.5 rounded-xl bg-white border border-slate-200 text-xs font-semibold text-slate-700 hover:border-brand hover:text-brand-ink transition-colors shadow-2xs"
+                  className="px-3 py-1.5 rounded-xl bg-surface border border-line text-xs font-semibold text-ink hover:border-brand hover:text-brand-ink transition-colors shadow-2xs"
                 >
                   🔥 {t('pill.kebab')}
                 </Link>
                 <Link
                   href="/products?category=desserts"
-                  className="px-3 py-1.5 rounded-xl bg-white border border-slate-200 text-xs font-semibold text-slate-700 hover:border-amber-500 hover:text-amber-600 transition-colors shadow-2xs"
+                  className="px-3 py-1.5 rounded-xl bg-surface border border-line text-xs font-semibold text-ink hover:border-accent hover:text-accent-soft-ink transition-colors shadow-2xs"
                 >
                   🍯 {t('pill.kheer')}
                 </Link>
@@ -501,15 +498,14 @@ export default function CartPage() {
             {/* Primary Action Button */}
             <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
               <Link href="/products" className="w-full sm:w-auto">
-                <span className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-8 py-3.5 rounded-2xl bg-gradient-to-r from-brand to-brand hover:from-brand-500 hover:to-brand-500 text-on-brand text-sm font-bold shadow-md hover:shadow-lg transition-all active:scale-95 cursor-pointer">
-                  <Sparkles className="w-4 h-4 text-amber-200" />
+                <span className="w-full sm:w-auto inline-flex items-center justify-center gap-2 h-12 px-6 rounded-xl bg-brand hover:bg-brand-500 text-on-brand text-[15px] font-extrabold transition-colors active:scale-95 cursor-pointer">
                   <span>{t('discoverDishes')}</span>
                   <ArrowRight className="rtl:-scale-x-100 w-4 h-4" />
                 </span>
               </Link>
               <Link href="/kitchens" className="w-full sm:w-auto">
-                <span className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-6 py-3.5 rounded-2xl bg-white border border-slate-200 hover:border-slate-300 text-slate-700 text-sm font-bold shadow-2xs hover:bg-slate-50 transition-colors cursor-pointer">
-                  <ChefHat className="w-4 h-4 text-slate-400" />
+                <span className="w-full sm:w-auto inline-flex items-center justify-center gap-2 h-12 px-6 rounded-xl border border-line-strong text-ink text-[15px] font-bold hover:bg-raised transition-colors cursor-pointer">
+                  <ChefHat className="w-4 h-4 text-muted" />
                   <span>{t('browseKitchens')}</span>
                 </span>
               </Link>
@@ -533,28 +529,28 @@ export default function CartPage() {
       <div className="space-y-6 pb-12">
         {/* Single Kitchen Context Banner */}
         {activeSeller && (
-          <div className="bg-gradient-to-r from-brand/10 via-amber-500/10 to-transparent rounded-3xl border border-brand-200 p-4 sm:p-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shadow-2xs">
+          <div className="bg-surface rounded-[20px] border border-line p-4 sm:p-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
             <div className="flex items-center gap-3.5">
-              <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-brand to-amber-500 text-on-brand flex items-center justify-center font-bold text-lg shadow-xs shrink-0">
-                <ChefHat className="w-6 h-6 text-white" />
+              <div className="w-12 h-12 rounded-2xl bg-brand-soft text-brand-soft-ink flex items-center justify-center shrink-0">
+                <ChefHat className="w-6 h-6" />
               </div>
               <div>
                 <div className="flex items-center gap-2 flex-wrap">
-                  <h3 className="font-extrabold text-slate-950 text-base">
+                  <h3 className="font-extrabold text-ink text-base">
                     {activeSeller.businessName}
                   </h3>
                   {activeSeller.community?.name && (
-                    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-white text-slate-700 border border-slate-200 shadow-2xs">
+                    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-raised text-ink">
                       <MapPin className="w-3 h-3 text-brand-ink" />
                       <span>{activeSeller.community.name}</span>
                     </span>
                   )}
-                  <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-emerald-100 text-emerald-800">
+                  <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-brand-soft text-brand-soft-ink">
                     <ShieldCheck className="w-3 h-3" />
                     <span>{t('singleKitchenOrder')}</span>
                   </span>
                 </div>
-                <p className="text-xs text-slate-500 mt-1">
+                <p className="text-[13px] text-muted mt-1">
                   {t('singleKitchenText')}
                 </p>
               </div>
@@ -563,7 +559,7 @@ export default function CartPage() {
             <div className="flex items-center gap-2 self-end sm:self-center">
               <Link
                 href={`/kitchens/${activeSeller.id}`}
-                className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-white border border-slate-200 hover:border-brand-300 text-xs font-bold text-brand-ink shadow-2xs hover:shadow-xs transition-all"
+                className="inline-flex items-center gap-1.5 h-10 px-4 rounded-xl border border-line-strong hover:bg-raised text-sm font-bold text-brand-ink transition-colors"
               >
                 <span>{t('addMoreDishes')}</span>
                 <ChevronRight className="rtl:-scale-x-100 w-3.5 h-3.5" />
@@ -575,31 +571,29 @@ export default function CartPage() {
         {/* Free Delivery Unlocker Progress Bar: only for a kitchen that has an order amount which waives its delivery fee */}
         {freeDeliveryThreshold != null && (
           <div
-            className={`bg-white rounded-2xl p-4 border border-slate-200/80 shadow-2xs transition-opacity ${estimatePending ? 'opacity-60' : ''}`}
+            className={`bg-surface rounded-[20px] p-4 border border-line transition-opacity ${estimatePending ? 'opacity-60' : ''}`}
             aria-busy={estimatePending}
           >
             <div className="flex items-center justify-between gap-3 text-xs mb-2">
-              <span className="font-bold text-slate-800 flex items-center gap-1.5">
+              <span className="font-bold text-ink flex items-center gap-1.5">
                 <Truck className="w-4 h-4 text-brand-ink" />
                 {isFreeDelivery ? (
-                  <span className="text-emerald-700 font-extrabold">{t('unlockedFree')}</span>
+                  <span className="text-brand-soft-ink font-extrabold">{t('unlockedFree')}</span>
                 ) : (
                   <span>
                     {richText(t('addMoreForFree'), {
-                      amount: <strong className="text-slate-950 font-black">{formatPrice(freeDeliveryRemaining)}</strong>,
+                      amount: <strong className="text-ink font-black">{formatPrice(freeDeliveryRemaining)}</strong>,
                       free: <span className="text-brand-ink font-bold">{t('freeDelivery')}</span>,
                     })}
                   </span>
                 )}
               </span>
-              <span className="font-extrabold text-slate-500">{freeDeliveryProgress}%</span>
+              <span className="font-extrabold text-muted">{freeDeliveryProgress}%</span>
             </div>
-            <div className="w-full h-2 rounded-full bg-slate-100 overflow-hidden">
+            <div className="w-full h-2 rounded-full bg-raised overflow-hidden">
               <div
                 className={`h-full rounded-full transition-all duration-500 ${
-                  isFreeDelivery
-                    ? 'bg-gradient-to-r from-emerald-500 to-teal-500'
-                    : 'bg-gradient-to-r from-amber-400 to-brand'
+                  isFreeDelivery ? 'bg-brand' : 'bg-accent'
                 }`}
                 style={{ width: `${freeDeliveryProgress}%` }}
               />
@@ -611,14 +605,14 @@ export default function CartPage() {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
           {/* ── LEFT: DISH ITEMS ── */}
           <div className="lg:col-span-2 space-y-4">
-            <div className="bg-white rounded-2xl border border-slate-200/80 p-4 flex items-center justify-between shadow-2xs">
+            <div className="flex items-center justify-between px-1">
               <div className="flex items-center gap-2.5">
-                <div className="w-8 h-8 rounded-xl bg-brand-100 text-brand-ink flex items-center justify-center">
+                <div className="w-9 h-9 rounded-xl bg-brand-soft text-brand-soft-ink flex items-center justify-center">
                   <ShoppingCart className="w-4 h-4" />
                 </div>
                 <div>
-                  <h2 className="text-sm font-bold text-slate-900 leading-tight">{t('selectedDishes')}</h2>
-                  <span className="text-[11px] text-slate-500">
+                  <h2 className="text-base font-extrabold text-ink leading-tight">{t('selectedDishes')}</h2>
+                  <span className="text-xs text-muted">
                     {t(cart.items.length > 1 ? 'itemsInTrayMany' : 'itemsInTrayOne', { count: cart.items.length })}
                   </span>
                 </div>
@@ -627,7 +621,7 @@ export default function CartPage() {
               <button
                 type="button"
                 onClick={() => setShowClearModal(true)}
-                className="text-xs font-semibold text-rose-600 hover:text-rose-700 hover:bg-rose-50 px-2.5 py-1.5 rounded-xl transition-colors flex items-center gap-1 cursor-pointer"
+                className="text-sm font-bold text-muted hover:text-red-600 h-10 px-3 rounded-xl hover:bg-raised transition-colors flex items-center gap-1.5 cursor-pointer"
               >
                 <Trash2 className="w-3.5 h-3.5" />
                 <span>{t('clearTray')}</span>
@@ -647,13 +641,13 @@ export default function CartPage() {
                 return (
                   <div
                     key={item.id}
-                    className="bg-white rounded-2xl border border-slate-200/80 p-4 sm:p-5 shadow-2xs hover:shadow-xs transition-all"
+                    className="bg-surface rounded-[20px] border border-line p-3.5 sm:p-4"
                   >
                     <div className="flex gap-4 items-start">
                       {/* Dish Thumbnail */}
                       <Link
                         href={`/products/${item.product.id}`}
-                        className="w-24 h-24 sm:w-28 sm:h-28 rounded-2xl bg-slate-100 overflow-hidden shrink-0 relative block group"
+                        className="w-20 h-20 sm:w-24 sm:h-24 rounded-2xl bg-raised overflow-hidden shrink-0 relative block group"
                       >
                         {item.product.image ? (
                           <img
@@ -661,16 +655,16 @@ export default function CartPage() {
                             loading="lazy"
                             decoding="async"
                             alt={item.product.name}
-                            className="w-full h-full object-cover group-hover:scale-105 transition-transform"
+                            className="w-full h-full object-cover"
                           />
                         ) : (
-                          <div className="w-full h-full flex items-center justify-center text-slate-500">
+                          <div className="w-full h-full flex items-center justify-center text-muted">
                             <ImageOff className="w-8 h-8" />
                           </div>
                         )}
                         <span
-                          className={`absolute bottom-1.5 start-1.5 px-2 py-0.5 rounded-md text-[11px] font-bold text-white shadow-xs flex items-center gap-1 ${
-                            item.stockType === 'hub' ? 'bg-cyan-600' : 'bg-brand-700'
+                          className={`absolute bottom-1.5 start-1.5 px-2 py-0.5 rounded-full text-[11px] font-extrabold flex items-center gap-1 ${
+                            item.stockType === 'hub' ? 'bg-frozen-soft text-frozen-ink' : 'bg-surface/95 text-ink'
                           }`}
                         >
                           {item.stockType === 'hub' ? (
@@ -692,12 +686,12 @@ export default function CartPage() {
                         <div className="flex items-start justify-between gap-2">
                           <div>
                             <Link href={`/products/${item.product.id}`}>
-                              <h3 className="text-sm sm:text-base font-bold text-slate-900 hover:text-brand-ink transition-colors leading-snug">
+                              <h3 className="text-[15px] sm:text-base font-extrabold text-ink hover:underline leading-snug">
                                 {item.product.name}
                               </h3>
                             </Link>
-                            <p className="text-xs text-slate-500 mt-0.5 flex items-center gap-1.5">
-                              <Store className="w-3 h-3 text-slate-500 shrink-0" />
+                            <p className="text-xs text-muted mt-0.5 flex items-center gap-1.5">
+                              <Store className="w-3 h-3 text-muted shrink-0" />
                               <span className="truncate">{item.seller.businessName}</span>
                             </p>
                           </div>
@@ -705,50 +699,53 @@ export default function CartPage() {
                           <button
                             type="button"
                             onClick={() => handleRemoveItem(item.id)}
-                            className="w-7 h-7 rounded-lg text-slate-500 hover:text-rose-600 hover:bg-rose-50 flex items-center justify-center transition-colors shrink-0"
+                            className="w-9 h-9 rounded-xl text-muted hover:text-red-600 hover:bg-raised flex items-center justify-center transition-colors shrink-0"
                             title={t('removeDish')}
+                            aria-label={t('removeDish')}
                           >
                             <X className="w-4 h-4" />
                           </button>
                         </div>
 
                         {promotionLabel && (
-                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-emerald-100 text-emerald-800 text-[11px] font-bold mt-1.5">
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-accent text-on-accent text-[11px] font-extrabold mt-1.5">
                             <Tag className="w-2.5 h-2.5" />
                             <span>{promotionLabel}</span>
                           </span>
                         )}
 
                         {/* Quantity and Price Row */}
-                        <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between">
-                          <div className="flex items-center gap-1 bg-slate-100 px-1 py-0.5 rounded-xl border border-slate-200">
+                        <div className="mt-3 flex items-center justify-between gap-3">
+                          <div className="flex items-center h-10 rounded-xl border border-line">
                             <button
                               type="button"
                               onClick={() => handleUpdateQuantity(item.id, item.quantity - 1)}
-                              className="w-7 h-7 rounded-lg bg-white text-slate-800 font-bold hover:bg-slate-200 flex items-center justify-center text-xs shadow-2xs transition-colors"
+                              className="w-10 h-10 rounded-s-xl text-ink font-extrabold hover:bg-raised flex items-center justify-center text-lg transition-colors"
                               title={t('decrease')}
+                              aria-label={t('decrease')}
                             >
                               −
                             </button>
-                            <span className="w-8 text-center text-xs font-black text-slate-900">
+                            <span className="min-w-6 text-center text-sm font-extrabold text-ink" aria-live="polite">
                               {item.quantity}
                             </span>
                             <button
                               type="button"
                               onClick={() => handleUpdateQuantity(item.id, item.quantity + 1)}
-                              className="w-7 h-7 rounded-lg bg-brand text-on-brand font-bold hover:bg-brand-500 flex items-center justify-center text-xs shadow-2xs transition-colors"
+                              className="w-10 h-10 rounded-e-xl text-brand-ink font-extrabold hover:bg-raised flex items-center justify-center text-lg transition-colors"
                               title={t('increase')}
+                              aria-label={t('increase')}
                             >
                               +
                             </button>
                           </div>
 
                           <div className="text-end">
-                            <span className="text-base font-black text-slate-950 block">
+                            <span className="text-base font-extrabold text-ink block">
                               {formatPrice(lineTotal)}
                             </span>
                             {originalPrice > unitPrice && (
-                              <span className="text-[11px] text-slate-500 line-through">
+                              <span className="text-[11px] text-muted line-through">
                                 {formatPrice(originalPrice * item.quantity)}
                               </span>
                             )}
@@ -764,23 +761,23 @@ export default function CartPage() {
 
           {/* ── RIGHT: ORDER SUMMARY ── */}
           <div className="lg:col-span-1 sticky top-[calc(5rem+var(--safe-top))]">
-            <div className="bg-white rounded-3xl border border-slate-200/90 shadow-sm p-5 sm:p-6 space-y-4">
-              <h3 className="text-base font-extrabold text-slate-950 pb-3 border-b border-slate-100 flex items-center justify-between">
+            <div className="bg-surface rounded-[24px] border border-line p-5 sm:p-6 space-y-4">
+              <h3 className="text-base font-extrabold text-ink pb-3 border-b border-line flex items-center justify-between">
                 <span>{t('orderSummary')}</span>
-                <span className="text-xs font-semibold text-slate-500">
+                <span className="text-xs font-semibold text-muted">
                   {t(cart.items.length > 1 ? 'itemsMany' : 'itemsOne', { count: cart.items.length })}
                 </span>
               </h3>
 
               {/* Cost Rows */}
-              <div className="space-y-2.5 text-xs">
-                <div className="flex justify-between text-slate-600 font-medium">
+              <div className="space-y-2.5 text-sm">
+                <div className="flex justify-between text-muted font-medium">
                   <span>{t('dishesSubtotal')}</span>
-                  <span className="font-bold text-slate-900">{formatPrice(discountedSubtotal)}</span>
+                  <span className="font-bold text-ink">{formatPrice(discountedSubtotal)}</span>
                 </div>
 
                 {promotionSavings > 0 && (
-                  <div className="flex justify-between text-emerald-600 font-semibold">
+                  <div className="flex justify-between text-brand-soft-ink font-semibold">
                     <span className="flex items-center gap-1">
                       <Tag className="w-3.5 h-3.5" />
                       <span>{t('promotionsSavings')}</span>
@@ -789,50 +786,50 @@ export default function CartPage() {
                   </div>
                 )}
 
-                <div className="flex justify-between text-slate-600 font-medium">
+                <div className="flex justify-between text-muted font-medium">
                   <span className="flex items-center gap-1.5">
-                    <Snowflake className="w-3.5 h-3.5 text-cyan-600" />
+                    <Snowflake className="w-3.5 h-3.5 text-frozen-ink" />
                     <span>{t('insulatedPack')}</span>
                   </span>
-                  <span className="text-emerald-700 font-bold uppercase text-[11px]">{tc('free')}</span>
+                  <span className="text-brand-ink font-bold text-xs">{tc('free')}</span>
                 </div>
 
-                <div className={`flex justify-between text-slate-600 font-medium transition-opacity ${estimatePending ? 'opacity-60' : ''}`}>
+                <div className={`flex justify-between text-muted font-medium transition-opacity ${estimatePending ? 'opacity-60' : ''}`}>
                   <span className="flex items-center gap-1.5">
-                    <Truck className="w-3.5 h-3.5 text-slate-500" />
+                    <Truck className="w-3.5 h-3.5 text-muted" />
                     <span>{t('estimatedDelivery')}</span>
                   </span>
                   {!deliveryEstimate ? (
-                    <span className="font-semibold text-slate-500">{t('deliveryAtCheckout')}</span>
+                    <span className="font-semibold text-muted">{t('deliveryAtCheckout')}</span>
                   ) : !deliveryKnown ? (
-                    <span className="font-bold text-rose-600">{t('deliveryNotAvailable')}</span>
+                    <span className="font-bold text-red-600">{t('deliveryNotAvailable')}</span>
                   ) : (
-                    <span className={`font-bold ${isFreeDelivery ? 'text-emerald-600' : 'text-slate-900'}`}>
+                    <span className={`font-bold ${isFreeDelivery ? 'text-brand-ink' : 'text-ink'}`}>
                       {isFreeDelivery ? t('freeCaps') : formatPrice(deliveryFee)}
                     </span>
                   )}
                 </div>
                 {deliveryEstimate && !deliveryKnown && deliveryEstimate.reason && (
-                  <p className="text-[11px] text-rose-600 -mt-1">{deliveryEstimate.reason}</p>
+                  <p className="text-xs text-red-600 -mt-1">{deliveryEstimate.reason}</p>
                 )}
 
-                <div className="flex justify-between text-slate-600 font-medium">
+                <div className="flex justify-between text-muted font-medium">
                   <span>{t('salesTaxRegional')}</span>
-                  <span className="font-bold text-slate-900">{formatPrice(gst)}</span>
+                  <span className="font-bold text-ink">{formatPrice(gst)}</span>
                 </div>
               </div>
 
               {/* Promo Code Box */}
               <div className="pt-2">
-                <div className="p-3 rounded-2xl bg-slate-50 border border-slate-200">
-                  <span className="text-[11px] font-bold text-slate-700 uppercase tracking-wider block mb-1.5">
+                <div className="p-3 rounded-2xl bg-raised">
+                  <span className="text-xs font-bold text-muted block mb-1.5">
                     {t('voucherCode')}
                   </span>
                   {appliedPromoCode ? (
-                    <div className="flex items-center justify-between bg-white px-3 py-2 rounded-xl border border-emerald-300">
+                    <div className="flex items-center justify-between bg-surface px-3 py-2 rounded-xl border border-brand/40">
                       <div className="flex items-center gap-1.5">
-                        <Check className="w-3.5 h-3.5 text-emerald-600 stroke-[3]" />
-                        <span className="text-xs font-bold text-slate-900 font-mono" data-ltr>{appliedPromoCode}</span>
+                        <Check className="w-3.5 h-3.5 text-brand-soft-ink stroke-[3]" />
+                        <span className="text-xs font-bold text-ink font-mono" data-ltr>{appliedPromoCode}</span>
                       </div>
                       <button
                         type="button"
@@ -840,7 +837,7 @@ export default function CartPage() {
                           setAppliedPromoCode(null);
                           showToast(t('voucherRemoved'), 'info');
                         }}
-                        className="text-xs font-bold text-rose-500 hover:text-rose-700"
+                        className="text-xs font-bold text-red-600 hover:underline"
                       >
                         {tc('remove')}
                       </button>
@@ -853,14 +850,15 @@ export default function CartPage() {
                         onChange={(e) => setCartPromoInput(e.target.value.toUpperCase())}
                         placeholder={t('promoPlaceholder')}
                         dir="ltr"
-                        className="flex-1 px-3 py-1.5 text-xs border border-slate-200 rounded-xl focus:ring-1 focus:ring-brand focus:outline-none bg-white font-mono uppercase"
+                        aria-label={t('voucherCode')}
+                        className="flex-1 min-w-0 h-10 px-3 text-sm border border-line rounded-xl focus:ring-2 focus:ring-brand/30 focus:border-brand focus:outline-none bg-surface text-ink font-mono uppercase"
                       />
                       <Button
                         type="button"
                         size="sm"
                         disabled={!cartPromoInput.trim() || promoValidating}
                         onClick={handleApplyPromoInCart}
-                        className="text-xs font-bold bg-slate-900 hover:bg-brand hover:text-on-brand text-white px-3 rounded-xl transition-colors"
+                        className="h-10 text-sm font-extrabold bg-ink hover:bg-ink/90 text-page px-4 rounded-xl transition-colors"
                       >
                         {promoValidating ? '...' : t('apply')}
                       </Button>
@@ -870,12 +868,12 @@ export default function CartPage() {
               </div>
 
               {/* Total Row */}
-              <div className="pt-3 border-t border-slate-100">
+              <div className="pt-3 border-t border-line">
                 <div className="flex items-baseline justify-between">
-                  <span className="text-sm font-bold text-slate-900">{deliveryKnown ? t('totalPayable') : t('totalBeforeDelivery')}</span>
-                  <span className="text-2xl font-black text-slate-950">{formatPrice(displayTotal)}</span>
+                  <span className="text-sm font-bold text-ink">{deliveryKnown ? t('totalPayable') : t('totalBeforeDelivery')}</span>
+                  <span className="text-2xl font-extrabold text-ink">{formatPrice(displayTotal)}</span>
                 </div>
-                <span className="text-[11px] text-slate-500 block mt-0.5">
+                <span className="text-xs text-muted block mt-0.5">
                   {deliveryKnown ? t('includesAll') : t('deliveryAddedAtCheckout')}
                 </span>
               </div>
@@ -885,9 +883,9 @@ export default function CartPage() {
                 <Link href="/checkout" className="block pt-1">
                   <button
                     type="button"
-                    className="w-full py-4 rounded-2xl bg-gradient-to-r from-brand to-brand hover:from-brand-500 hover:to-brand-500 text-on-brand text-base font-black shadow-md hover:shadow-lg transition-all active:scale-98 flex items-center justify-center gap-2 cursor-pointer"
+                    className="w-full h-14 rounded-2xl bg-brand hover:bg-brand-500 text-on-brand text-base font-extrabold transition-colors active:scale-98 flex items-center justify-center gap-2 cursor-pointer"
                   >
-                    <ShoppingBag className="w-5 h-5 text-white" />
+                    <ShoppingBag className="w-5 h-5" />
                     <span>{t('proceedCheckout')}</span>
                     <ArrowRight className="rtl:-scale-x-100 w-4 h-4 ms-1" />
                   </button>
@@ -896,7 +894,7 @@ export default function CartPage() {
                 <Link href="/login?redirect=/checkout" className="block pt-1">
                   <button
                     type="button"
-                    className="w-full py-4 rounded-2xl bg-gradient-to-r from-brand to-brand hover:from-brand-500 hover:to-brand-500 text-on-brand text-base font-black shadow-md hover:shadow-lg transition-all active:scale-98 flex items-center justify-center gap-2 cursor-pointer"
+                    className="w-full h-14 rounded-2xl bg-brand hover:bg-brand-500 text-on-brand text-base font-extrabold transition-colors active:scale-98 flex items-center justify-center gap-2 cursor-pointer"
                   >
                     <span>{t('signInToComplete')}</span>
                     <ArrowRight className="rtl:-scale-x-100 w-4 h-4 ms-1" />
@@ -907,7 +905,7 @@ export default function CartPage() {
               <Link href="/products" className="block">
                 <button
                   type="button"
-                  className="w-full py-2.5 rounded-xl bg-slate-50 hover:bg-slate-100 text-slate-700 text-xs font-bold border border-slate-200 transition-colors flex items-center justify-center gap-1.5"
+                  className="w-full h-11 rounded-xl hover:bg-raised text-ink text-sm font-bold border border-line-strong transition-colors flex items-center justify-center gap-1.5"
                 >
                   <ChevronLeft className="rtl:-scale-x-100 w-3.5 h-3.5" />
                   <span>{t('continueExploring')}</span>
@@ -915,13 +913,13 @@ export default function CartPage() {
               </Link>
 
               {/* Trust Badges */}
-              <div className="pt-3 border-t border-slate-100 space-y-1.5 text-[11px] text-slate-500 font-medium">
+              <div className="pt-3 border-t border-line space-y-1.5 text-xs text-muted">
                 <div className="flex items-center gap-2">
-                  <ShieldCheck className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                  <ShieldCheck className="w-3.5 h-3.5 text-brand-soft-ink shrink-0" />
                   <span>{t('trustHalal')}</span>
                 </div>
                 <div className="flex items-center gap-2">
-                  <Lock className="w-3.5 h-3.5 text-slate-600 shrink-0" />
+                  <Lock className="w-3.5 h-3.5 text-muted shrink-0" />
                   <span>{t('trustEncrypted')}</span>
                 </div>
               </div>
