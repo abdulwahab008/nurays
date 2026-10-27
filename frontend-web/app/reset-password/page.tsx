@@ -45,16 +45,16 @@ function ResetForm() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-slate-50 px-4">
-      <div className="w-full max-w-md bg-white rounded-2xl shadow-sm border border-slate-200 p-8">
+    <div className="min-h-screen flex items-center justify-center bg-page px-4 py-8">
+      <div className="w-full max-w-md sm:bg-surface sm:rounded-[24px] sm:border sm:border-line p-2 sm:p-10">
         <div className="mb-6 flex justify-center">
           <BrandLockup />
         </div>
-        <h1 className="text-xl font-bold text-slate-900 mb-1">{t('resetTitle')}</h1>
+        <h1 className="text-[28px] leading-tight font-extrabold tracking-tight text-ink mb-1">{t('resetTitle')}</h1>
         {!token ? (
-          <p className="text-sm text-slate-600 mt-3">
+          <p className="text-sm text-muted mt-3">
             {t('resetMissingToken')}{' '}
-            <Link href="/forgot-password" className="underline text-emerald-700">
+            <Link href="/forgot-password" className="underline text-brand-soft-ink">
               {t('requestNewOne')}
             </Link>
             .
@@ -67,7 +67,7 @@ function ResetForm() {
               onChange={(e) => setPassword(e.target.value)}
               placeholder={t('newPassword')}
               required
-              className="w-full h-12 rounded-lg border border-slate-300 px-3 text-sm"
+              className="nuray-input"
             />
             <input
               type="password"
@@ -75,9 +75,9 @@ function ResetForm() {
               onChange={(e) => setConfirm(e.target.value)}
               placeholder={t('confirmNewPassword')}
               required
-              className="w-full h-12 rounded-lg border border-slate-300 px-3 text-sm"
+              className="nuray-input"
             />
-            <Button variant="primary" type="submit" className="w-full h-12 text-sm font-bold" disabled={loading}>
+            <Button variant="primary" type="submit" className="w-full h-12 text-[15px] font-extrabold" disabled={loading}>
               {loading ? t('saving') : t('updatePassword')}
             </Button>
           </form>

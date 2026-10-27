@@ -79,22 +79,21 @@ function VerifyEmailContent() {
     }
   };
 
-  const headingClass = 'font-display italic text-[36px] mb-3 leading-tight';
-  const bodyClass = 'text-[15px] mb-6';
+  const headingClass = 'text-[28px] font-extrabold tracking-tight mb-2 leading-tight text-ink';
+  const bodyClass = 'text-[15px] mb-6 text-muted';
 
   return (
-    <div className="min-h-screen flex items-center justify-center py-12 px-4 nuray-bg-cream">
-      <div className="nuray-w-card-sm nuray-card p-10 text-center">
+    <div className="min-h-screen flex items-center justify-center py-12 px-4 bg-page">
+      <div className="nuray-w-card-sm sm:bg-surface sm:border sm:border-line sm:rounded-[24px] p-2 sm:p-10 text-center">
         {status === 'verifying' && (
           <>
             <div
-              className="animate-spin rounded-full h-14 w-14 border-b-2 mx-auto mb-6"
-              style={{ borderColor: 'var(--forest-500)' }}
+              className="animate-spin rounded-full h-14 w-14 border-b-2 border-brand mx-auto mb-6"
             />
-            <h1 className={headingClass} style={{ color: 'var(--ink-900)' }}>
+            <h1 className={headingClass}>
               {t('verifyingEmail')}
             </h1>
-            <p className={bodyClass} style={{ color: 'var(--ink-500)' }}>
+            <p className={bodyClass}>
               {t('oneMoment')}
             </p>
           </>
@@ -103,17 +102,16 @@ function VerifyEmailContent() {
         {status === 'success' && (
           <>
             <div
-              className="mx-auto mb-6 w-14 h-14 rounded-full grid place-items-center"
-              style={{ background: 'var(--forest-50)', color: 'var(--forest-700)' }}
+              className="mx-auto mb-6 w-14 h-14 rounded-full grid place-items-center bg-brand-soft text-brand-soft-ink"
             >
               <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <polyline points="20 6 9 17 4 12" />
               </svg>
             </div>
-            <h1 className={headingClass} style={{ color: 'var(--ink-900)' }}>
+            <h1 className={headingClass}>
               {t('welcomeToNuray')}
             </h1>
-            <p className={bodyClass} style={{ color: 'var(--ink-500)' }}>
+            <p className={bodyClass}>
               {isSeller
                 ? t('verifiedSeller')
                 : t('verifiedCustomer')}
@@ -137,18 +135,17 @@ function VerifyEmailContent() {
         {status === 'error' && (
           <>
             <div
-              className="mx-auto mb-6 w-14 h-14 rounded-full grid place-items-center"
-              style={{ background: 'var(--anar-50)', color: 'var(--anar-600)' }}
+              className="mx-auto mb-6 w-14 h-14 rounded-full grid place-items-center bg-red-50 text-red-700"
             >
               <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <line x1="18" y1="6" x2="6" y2="18" />
                 <line x1="6" y1="6" x2="18" y2="18" />
               </svg>
             </div>
-            <h1 className={headingClass} style={{ color: 'var(--ink-900)' }}>
+            <h1 className={headingClass}>
               {t('verificationFailed')}
             </h1>
-            <p className={bodyClass} style={{ color: 'var(--ink-500)' }}>
+            <p className={bodyClass}>
               {error}
             </p>
             {isAuthenticated ? (
@@ -171,18 +168,17 @@ function VerifyEmailContent() {
         {status === 'expired' && (
           <>
             <div
-              className="mx-auto mb-6 w-14 h-14 rounded-full grid place-items-center"
-              style={{ background: 'var(--gold-50)', color: 'var(--gold-600)' }}
+              className="mx-auto mb-6 w-14 h-14 rounded-full grid place-items-center bg-accent-soft text-accent-soft-ink"
             >
               <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <circle cx="12" cy="12" r="10" />
                 <polyline points="12 6 12 12 16 14" />
               </svg>
             </div>
-            <h1 className={headingClass} style={{ color: 'var(--ink-900)' }}>
+            <h1 className={headingClass}>
               {t('linkExpired')}
             </h1>
-            <p className={bodyClass} style={{ color: 'var(--ink-500)' }}>
+            <p className={bodyClass}>
               {t('linkExpiredBody')}
             </p>
             {isAuthenticated ? (
@@ -205,15 +201,15 @@ function VerifyEmailContent() {
 
 function LoadingText() {
   const t = useT(authMessages);
-  return <p className="text-gray-600">{t('loadingDots')}</p>;
+  return <p className="text-muted">{t('loadingDots')}</p>;
 }
 
 export default function VerifyEmailPage() {
   return (
     <Suspense fallback={
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+      <div className="min-h-screen flex items-center justify-center bg-raised">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-green-600 mx-auto mb-4"></div>
+          <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-brand mx-auto mb-4"></div>
           <LoadingText />
         </div>
       </div>

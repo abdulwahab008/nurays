@@ -210,21 +210,21 @@ function RegisterForm() {
 
   const inputClass = 'nuray-input';
   const inputStyle: React.CSSProperties = {};
-  const labelClass = 'text-xs font-black uppercase tracking-wider text-slate-500 block mb-2';
-  const helperClass = 'text-xs mt-1.5 text-slate-500';
+  const labelClass = 'text-sm font-bold text-ink block mb-1.5';
+  const helperClass = 'text-xs mt-1.5 text-muted';
   const helperStyle = {} as const;
 
   return (
-    <div className="min-h-screen flex items-center justify-center py-12 px-4 bg-page">
-      <div className="nuray-w-card-md bg-white rounded-3xl p-8 sm:p-10 border border-slate-200/80 shadow-xl">
+    <div className="min-h-screen flex items-center justify-center py-8 sm:py-12 px-4 bg-page">
+      <div className="nuray-w-card-md sm:bg-surface sm:rounded-[24px] sm:p-10 sm:border sm:border-line">
         <div className="text-center mb-8">
           <Link href="/" className="inline-block">
-            <BrandLockup markSize={44} wordSize={30} />
+            <BrandLockup markSize={36} wordSize={26} />
           </Link>
-          <h1 className="text-2xl sm:text-3xl font-black text-slate-900 mt-6 tracking-tight">
+          <h1 className="text-[28px] sm:text-[32px] leading-tight font-extrabold text-ink mt-6 tracking-tight">
             {t('createYourAccount')}
           </h1>
-          <p className="mt-1 text-xs sm:text-sm text-slate-500 font-medium">
+          <p className="mt-1.5 text-[15px] text-muted">
             {t('registerSubtitle')}
           </p>
         </div>
@@ -232,14 +232,15 @@ function RegisterForm() {
         {/* User Type Selection */}
         <div className="mb-6">
           <label className={labelClass}>{t('iWantTo')}</label>
-          <div className="flex gap-1 p-1 rounded-full bg-slate-100 border border-slate-200">
+          <div role="group" className="grid grid-cols-3 gap-1 p-1 rounded-[14px] bg-raised">
             <button
               type="button"
               onClick={() => setFormData({ ...formData, user_type: 'customer' })}
-              className={`flex-1 h-11 rounded-full font-bold transition-all text-xs ${
+              aria-pressed={formData.user_type === 'customer'}
+              className={`h-11 rounded-[11px] text-sm transition-all ${
                 formData.user_type === 'customer'
-                  ? 'bg-gradient-to-r from-brand to-brand text-on-brand shadow-sm'
-                  : 'text-slate-600 hover:text-slate-900'
+                  ? 'bg-surface text-ink font-extrabold shadow-xs'
+                  : 'text-muted font-bold hover:text-ink'
               }`}
             >
               {t('orderFood')}
@@ -247,10 +248,11 @@ function RegisterForm() {
             <button
               type="button"
               onClick={() => setFormData({ ...formData, user_type: 'seller' })}
-              className={`flex-1 h-11 rounded-full font-bold transition-all text-xs ${
+              aria-pressed={formData.user_type === 'seller'}
+              className={`h-11 rounded-[11px] text-sm transition-all ${
                 formData.user_type === 'seller'
-                  ? 'bg-[#0F172A] text-white shadow-sm'
-                  : 'text-slate-600 hover:text-slate-900'
+                  ? 'bg-surface text-ink font-extrabold shadow-xs'
+                  : 'text-muted font-bold hover:text-ink'
               }`}
             >
               {t('cookAndSell')}
@@ -258,21 +260,22 @@ function RegisterForm() {
             <button
               type="button"
               onClick={() => setFormData({ ...formData, user_type: 'rider' })}
-              className={`flex-1 h-11 rounded-full font-bold transition-all text-xs ${
+              aria-pressed={formData.user_type === 'rider'}
+              className={`h-11 rounded-[11px] text-sm transition-all ${
                 formData.user_type === 'rider'
-                  ? 'bg-[#0F172A] text-white shadow-sm'
-                  : 'text-slate-600 hover:text-slate-900'
+                  ? 'bg-surface text-ink font-extrabold shadow-xs'
+                  : 'text-muted font-bold hover:text-ink'
               }`}
             >
               {t('deliverRide')}
             </button>
           </div>
           {formData.user_type === 'seller' && (
-            <div className="mt-3 p-4 rounded-lg" style={{ background: 'var(--gold-50)', border: '1px solid var(--gold-200)' }}>
-              <p className="text-sm" style={{ color: 'var(--ink-800)' }}>
+            <div className="mt-3 p-4 rounded-2xl bg-accent-soft text-accent-soft-ink">
+              <p className="text-sm">
                 <strong className="font-semibold">{t('sellerRegistration')}</strong> {t('sellerRegistrationBody')}
               </p>
-              <ul className="text-sm mt-2 ms-4 list-disc" style={{ color: 'var(--ink-700)' }}>
+              <ul className="text-sm mt-2 ms-4 list-disc">
                 <li>{t('sellerStep1')}</li>
                 <li>{t('sellerStep2')}</li>
                 <li>{t('sellerStep3')}</li>
@@ -280,11 +283,11 @@ function RegisterForm() {
             </div>
           )}
           {formData.user_type === 'rider' && (
-            <div className="mt-3 p-4 rounded-lg" style={{ background: 'var(--gold-50)', border: '1px solid var(--gold-200)' }}>
-              <p className="text-sm" style={{ color: 'var(--ink-800)' }}>
+            <div className="mt-3 p-4 rounded-2xl bg-accent-soft text-accent-soft-ink">
+              <p className="text-sm">
                 <strong className="font-semibold">{t('riderApplication')}</strong> {t('riderApplicationBody')}
               </p>
-              <ul className="text-sm mt-2 ms-4 list-disc" style={{ color: 'var(--ink-700)' }}>
+              <ul className="text-sm mt-2 ms-4 list-disc">
                 <li>{t('riderStep1')}</li>
                 <li>{t('riderStep2')}</li>
                 <li>{t('riderStep3')}</li>
@@ -294,8 +297,7 @@ function RegisterForm() {
         </div>
 
         {error && (
-          <div className="mb-4 p-3 rounded-lg text-sm"
-               style={{ background: 'var(--anar-50)', border: '1px solid var(--anar-200)', color: 'var(--anar-700)' }}>
+          <div role="alert" className="mb-4 p-3 rounded-xl text-sm bg-red-50 border border-red-200 text-red-700 font-medium">
             {error}
           </div>
         )}
@@ -342,10 +344,10 @@ function RegisterForm() {
                 style={{
                   background:
                     formData.password.length >= 8
-                      ? 'var(--forest-500)'
+                      ? '#41DAC7'
                       : formData.password.length > 0
-                      ? 'var(--gold-400)'
-                      : 'var(--ink-200)',
+                      ? '#FFC83D'
+                      : 'var(--border-rule)',
                 }}
               />
               <span className={helperClass} style={helperStyle}>{formData.password.length}/8</span>
@@ -409,7 +411,7 @@ function RegisterForm() {
 
           <div className="mb-4">
             <label htmlFor="phone" className={labelClass}>
-              {t('phoneNumber')} <span className="text-gray-500 text-xs">{t('optionalRecommended')}</span>
+              {t('phoneNumber')} <span className="text-muted text-xs">{t('optionalRecommended')}</span>
             </label>
             <input
               type="tel"
@@ -450,7 +452,7 @@ function RegisterForm() {
                       setSendingPhoneOtp(false);
                     }
                   }}
-                  className="px-3 py-1.5 text-xs font-bold rounded-lg border border-gray-300 hover:bg-gray-50 disabled:opacity-50"
+                  className="px-3 py-1.5 text-xs font-bold rounded-lg border border-line-strong hover:bg-raised disabled:opacity-50"
                 >
                   {sendingPhoneOtp ? t('sendingEllipsis') : phoneOtpSent ? t('resendCode') : t('sendVerificationCode')}
                 </button>
@@ -463,7 +465,7 @@ function RegisterForm() {
                     onChange={(e) => setPhoneOtp(e.target.value.replace(/\D/g, ''))}
                     placeholder={t('sixDigitCode')}
                     dir="ltr"
-                    className="w-32 px-3 py-1.5 text-sm border border-gray-300 rounded-lg"
+                    className="w-32 px-3 py-1.5 text-sm border border-line-strong rounded-lg"
                   />
                 )}
               </div>
@@ -497,10 +499,10 @@ function RegisterForm() {
                 id="termsAccepted"
                 checked={formData.termsAccepted}
                 onChange={(e) => setFormData({ ...formData, termsAccepted: e.target.checked })}
-                className="mt-1 h-4 w-4 rounded border-gray-300 text-brand-ink focus:ring-brand"
+                className="mt-1 h-4 w-4 rounded border-line-strong text-brand-ink focus:ring-brand"
                 required
               />
-              <span className="text-xs text-slate-600 leading-relaxed">
+              <span className="text-xs text-muted leading-relaxed">
                 {t('agreeTo')}{' '}
                 <Link href="/terms" className="text-brand-ink font-semibold hover:underline">
                   {t('termsOfService')}
@@ -510,7 +512,7 @@ function RegisterForm() {
                   {t('privacyPolicy')}
                 </Link>
                 {t('andWord')}{' '}
-                <span className="text-slate-900 font-semibold">
+                <span className="text-ink font-semibold">
                   {t('foodSafetyGuidelines')}
                 </span>
                 {t('agreeSuffix')}
@@ -531,12 +533,11 @@ function RegisterForm() {
 
           <div className="relative my-6">
             <div className="absolute inset-0 flex items-center">
-              <div className="w-full" style={{ borderTop: '1px solid var(--ink-200)' }} />
+              <div className="w-full border-t border-line" />
             </div>
             <div className="relative flex justify-center">
               <span
-                className="px-3 text-[11px] uppercase tracking-[0.18em] font-medium"
-                style={{ background: 'var(--paper-0)', color: 'var(--ink-500)' }}
+                className="px-3 text-xs font-semibold text-muted bg-page sm:bg-surface"
               >
                 {t('orContinueWith')}
               </span>
@@ -545,15 +546,15 @@ function RegisterForm() {
 
           <GoogleSignInButton onSuccess={handleGoogleSuccess} text={t('continueWithGoogle')} />
 
-          <p className="text-xs text-center mt-4" style={{ color: 'var(--ink-500)' }}>
+          <p className="text-xs text-center mt-4 text-muted">
             {t('byCreating')}
           </p>
         </form>
 
         <div className="mt-6 text-center">
-          <p className="text-sm" style={{ color: 'var(--ink-500)' }}>
+          <p className="text-sm text-muted">
             {t('haveAccount')}{' '}
-            <Link href="/login" className="font-medium" style={{ color: 'var(--forest-700)' }}>
+            <Link href="/login" className="font-bold text-brand-ink hover:underline">
               {t('signInLink')}
             </Link>
           </p>
@@ -565,18 +566,17 @@ function RegisterForm() {
 
 function RegisterFallback() {
   const t = useT(authMessages);
-  return <p style={{ color: 'var(--ink-500)' }}>{t('loading')}</p>;
+  return <p className="text-muted">{t('loading')}</p>;
 }
 
 export default function RegisterPage() {
   return (
     <Suspense
       fallback={
-        <div className="min-h-screen flex items-center justify-center" style={{ background: 'var(--cream-50)' }}>
+        <div className="min-h-screen flex items-center justify-center bg-page">
           <div className="text-center">
             <div
-              className="animate-spin rounded-full h-16 w-16 border-b-2 mx-auto mb-4"
-              style={{ borderColor: 'var(--forest-500)' }}
+              className="animate-spin rounded-full h-16 w-16 border-b-2 border-brand mx-auto mb-4"
             />
             <RegisterFallback />
           </div>

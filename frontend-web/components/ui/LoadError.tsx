@@ -58,15 +58,15 @@ export function LoadError({ error, onRetry, title, compact = false, className = 
   return (
     <div
       role="alert"
-      className={`rounded-3xl border border-amber-200 bg-amber-50 text-center ${compact ? 'p-5' : 'p-8 sm:p-12'} ${className}`}
+      className={`rounded-[20px] border border-dashed border-line-strong bg-surface text-center ${compact ? 'p-5' : 'p-8 sm:p-12'} ${className}`}
     >
-      <div className={`mx-auto flex items-center justify-center rounded-2xl bg-amber-100 text-amber-800 ${compact ? 'mb-3 h-10 w-10' : 'mb-4 h-14 w-14'}`}>
+      <div className={`mx-auto flex items-center justify-center rounded-2xl bg-accent-soft text-accent-soft-ink ${compact ? 'mb-3 h-10 w-10' : 'mb-4 h-14 w-14'}`}>
         <Icon className={compact ? 'h-5 w-5' : 'h-7 w-7'} aria-hidden="true" />
       </div>
-      <h3 className={`font-bold text-amber-950 ${compact ? 'text-sm' : 'text-lg'}`}>{title ?? t('loadFailedTitle')}</h3>
-      <p className={`mx-auto mt-1 max-w-md text-amber-900 ${compact ? 'text-xs' : 'text-sm'}`}>{message}</p>
+      <h3 className={`font-extrabold text-ink ${compact ? 'text-sm' : 'text-lg'}`}>{title ?? t('loadFailedTitle')}</h3>
+      <p className={`mx-auto mt-1 max-w-md text-muted ${compact ? 'text-xs' : 'text-sm'}`}>{message}</p>
       {onRetry && (
-        <Button type="button" variant="outline" size="sm" onClick={onRetry} className="mt-4 border-amber-300 text-amber-900 hover:bg-amber-100">
+        <Button type="button" variant="primary" size="sm" onClick={onRetry} className="mt-4 h-11 px-5 font-extrabold">
           <RefreshCw className="me-2 h-4 w-4" aria-hidden="true" />
           {t('retry')}
         </Button>

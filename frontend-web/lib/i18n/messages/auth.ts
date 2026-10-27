@@ -63,7 +63,7 @@ export const authMessages = defineMessages({
 
     // Register
     createYourAccount: 'Create Your Account',
-    registerSubtitle: "Join Pakistan's premier food & cold-chain marketplace.",
+    registerSubtitle: 'Order home-cooked food from verified kitchens near you, or join as a kitchen or a rider.',
     iWantTo: 'I want to',
     orderFood: 'Order Food',
     cookAndSell: 'Cook & Sell',
@@ -232,7 +232,7 @@ export const authMessages = defineMessages({
     errPasswordNotSet: 'اس اکاؤنٹ کا پاس ورڈ سیٹ نہیں ہے۔ براہِ کرم او ٹی پی سے لاگ اِن کریں یا پاس ورڈ ری سیٹ کریں۔',
 
     createYourAccount: 'اپنا اکاؤنٹ بنائیں',
-    registerSubtitle: 'پاکستان کی بہترین فوڈ اور کولڈ چین مارکیٹ پلیس کا حصہ بنیں۔',
+    registerSubtitle: 'قریبی تصدیق شدہ کچن سے گھر کا کھانا منگوائیں، یا کچن یا رائیڈر کے طور پر شامل ہوں۔',
     iWantTo: 'میں چاہتا/چاہتی ہوں',
     orderFood: 'کھانا منگوائیں',
     cookAndSell: 'پکائیں اور بیچیں',

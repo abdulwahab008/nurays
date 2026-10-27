@@ -87,25 +87,25 @@ export default function NotificationsPage() {
   const renderNotificationIcon = (type: string) => {
     switch (type) {
       case 'order':
-        return <Package className="w-5 h-5 text-blue-600" />;
+        return <Package className="w-5 h-5 text-brand-soft-ink" />;
       case 'promo':
-        return <Tag className="w-5 h-5 text-amber-600" />;
+        return <Tag className="w-5 h-5 text-accent-soft-ink" />;
       case 'delivery':
-        return <Truck className="w-5 h-5 text-green-600" />;
+        return <Truck className="w-5 h-5 text-frozen-ink" />;
       case 'system':
       default:
-        return <Bell className="w-5 h-5 text-gray-600" />;
+        return <Bell className="w-5 h-5 text-muted" />;
     }
   };
 
   const getNotificationColor = (type: string) => {
     const colors: Record<string, string> = {
-      order: 'bg-blue-50 border-blue-200',
-      promo: 'bg-amber-50 border-amber-200',
-      system: 'bg-gray-50 border-gray-200',
-      delivery: 'bg-green-50 border-green-200',
+      order: 'bg-brand-soft border-transparent',
+      promo: 'bg-accent-soft border-transparent',
+      system: 'bg-raised border-transparent',
+      delivery: 'bg-frozen-soft border-transparent',
     };
-    return colors[type] || 'bg-gray-50 border-gray-200';
+    return colors[type] || 'bg-raised border-line';
   };
 
   // The page only changes after the server has agreed, so what it shows is what the next load will show.
@@ -168,27 +168,27 @@ export default function NotificationsPage() {
           <div className="flex gap-2">
             <button
               onClick={() => setFilter('all')}
-              className={`px-4 py-2 rounded-xl text-sm font-medium transition-all ${
+              className={`h-10 px-4 rounded-full text-sm font-bold transition-colors ${
                 filter === 'all'
-                  ? 'bg-green-600 text-white'
-                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                  ? 'bg-ink text-page'
+                  : 'bg-surface text-ink border border-line hover:bg-raised'
               }`}
             >
               {t('filterAll', { count: notifications.length })}
             </button>
             <button
               onClick={() => setFilter('unread')}
-              className={`px-4 py-2 rounded-xl text-sm font-medium transition-all ${
+              className={`h-10 px-4 rounded-full text-sm font-bold transition-colors ${
                 filter === 'unread'
-                  ? 'bg-green-600 text-white'
-                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                  ? 'bg-ink text-page'
+                  : 'bg-surface text-ink border border-line hover:bg-raised'
               }`}
             >
               {t('filterUnread', { count: unreadCount })}
             </button>
           </div>
           <div className="flex items-center gap-2">
-            <Link href="/notifications/settings" className="text-sm font-medium text-slate-600 hover:text-slate-900 underline">
+            <Link href="/notifications/settings" className="text-sm font-medium text-muted hover:text-ink underline">
               {t('settings')}
             </Link>
             {unreadCount > 0 && (
@@ -207,19 +207,19 @@ export default function NotificationsPage() {
       {loading ? (
         <div className="flex items-center justify-center h-64">
           <div className="text-center">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-green-600 mx-auto mb-4"></div>
-            <p className="text-gray-600">{t('loadingNotifications')}</p>
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-brand mx-auto mb-4"></div>
+            <p className="text-muted">{t('loadingNotifications')}</p>
           </div>
         </div>
       ) : couldNotRead ? null : filteredNotifications.length === 0 ? (
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-12 text-center">
-          <div className="w-20 h-20 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-6 text-gray-500">
+        <div className="bg-surface rounded-2xl shadow-sm border border-line p-12 text-center">
+          <div className="w-20 h-20 bg-raised rounded-full flex items-center justify-center mx-auto mb-6 text-muted">
             <BellOff className="w-10 h-10" />
           </div>
-          <h2 className="text-xl font-bold text-gray-900 mb-2">
+          <h2 className="text-xl font-bold text-ink mb-2">
             {filter === 'unread' ? t('allCaughtUp') : t('noNotifications')}
           </h2>
-          <p className="text-gray-500">
+          <p className="text-muted">
             {filter === 'unread'
               ? t('readAll')
               : t('notificationsWillAppear')}
@@ -230,8 +230,8 @@ export default function NotificationsPage() {
           {filteredNotifications.map((notification) => (
             <div
               key={notification.id}
-              className={`bg-white rounded-2xl border p-4 transition-all hover:shadow-sm ${
-                !notification.isRead ? 'border-s-4 border-s-green-500' : 'border-gray-100'
+              className={`bg-surface rounded-[20px] border p-4 transition-colors hover:border-line-strong ${
+                !notification.isRead ? 'border-line border-s-4 border-s-brand' : 'border-line'
               }`}
             >
               <div className="flex items-start gap-4">
@@ -241,11 +241,11 @@ export default function NotificationsPage() {
                 <div className="flex-1 min-w-0">
                   <div className="flex items-start justify-between gap-4">
                     <div>
-                      <h3 className={`font-semibold ${!notification.isRead ? 'text-gray-900' : 'text-gray-700'}`}>
+                      <h3 className={`font-semibold ${!notification.isRead ? 'text-ink' : 'text-ink'}`}>
                         {notification.title}
                       </h3>
-                      <p className="text-gray-600 text-sm mt-1">{notification.message}</p>
-                      <p className="text-xs text-gray-500 mt-2">
+                      <p className="text-muted text-sm mt-1">{notification.message}</p>
+                      <p className="text-xs text-muted mt-2">
                         {formatDate(notification.createdAt)}
                       </p>
                     </div>
@@ -260,7 +260,7 @@ export default function NotificationsPage() {
                       )}
                       <button
                         onClick={() => deleteNotification(notification.id)}
-                        className="p-1 rounded-lg text-gray-500 hover:text-red-500 hover:bg-gray-50 transition-colors"
+                        className="p-1 rounded-lg text-muted hover:text-red-500 hover:bg-raised transition-colors"
                         title={tc('delete')}
                         aria-label={tc('delete')}
                       >

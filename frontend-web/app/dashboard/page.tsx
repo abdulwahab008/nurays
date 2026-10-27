@@ -491,24 +491,24 @@ export default function CustomerDashboardPage() {
         {/* ── ACTIVE ORDER LIVE TRACKER ── */}
         {activeOrder && (
           <Link href={`/orders/${activeOrder.id}`} className="block">
-            <div className="rounded-2xl p-4 sm:p-5 bg-white border border-brand/40 shadow-xs hover:shadow-md transition-all flex items-center justify-between gap-4">
+            <div className="rounded-2xl p-4 sm:p-5 bg-surface border border-brand/40 shadow-xs hover:shadow-md transition-all flex items-center justify-between gap-4">
               <div className="flex items-center gap-3.5">
                 <div className="w-10 h-10 rounded-xl bg-brand-100 text-brand-ink flex items-center justify-center font-bold shrink-0">
                   <Bike className="w-5 h-5" />
                 </div>
                 <div>
                   <div className="flex items-center gap-2">
-                    <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-                    <span className="text-[11px] font-bold uppercase tracking-wider text-emerald-600">{t('activeDelivery')}</span>
+                    <span className="w-2 h-2 rounded-full bg-brand animate-pulse" />
+                    <span className="text-[11px] font-bold uppercase tracking-wider text-brand-soft-ink">{t('activeDelivery')}</span>
                   </div>
-                  <p className="text-sm font-bold text-slate-900 mt-0.5">{t('orderNumber', { number: activeOrder.orderNumber })}</p>
-                  <p className="text-xs text-slate-500 font-medium">
-                    {t('statusLabel')} <span className="capitalize font-semibold text-slate-800">{statusKey(activeOrder.orderStatus) in commonMessages.en ? tc(statusKey(activeOrder.orderStatus)) : activeOrder.orderStatus.replace('_', ' ')}</span> · {t('itemsCount', { count: activeOrder.itemsCount })}
+                  <p className="text-sm font-bold text-ink mt-0.5">{t('orderNumber', { number: activeOrder.orderNumber })}</p>
+                  <p className="text-xs text-muted font-medium">
+                    {t('statusLabel')} <span className="capitalize font-semibold text-ink">{statusKey(activeOrder.orderStatus) in commonMessages.en ? tc(statusKey(activeOrder.orderStatus)) : activeOrder.orderStatus.replace('_', ' ')}</span> · {t('itemsCount', { count: activeOrder.itemsCount })}
                   </p>
                 </div>
               </div>
               <div className="text-end">
-                <p className="text-base font-bold text-slate-900">{formatPrice(activeOrder.totalAmount)}</p>
+                <p className="text-base font-bold text-ink">{formatPrice(activeOrder.totalAmount)}</p>
                 <span className="text-xs font-bold text-brand-ink inline-flex items-center gap-1 mt-0.5">
                   <span>{t('liveTrack')}</span>
                   <ChevronRight className="rtl:-scale-x-100 w-3.5 h-3.5" />
@@ -519,15 +519,15 @@ export default function CustomerDashboardPage() {
         )}
 
         {/* ── DISCOVERY & EXPLORE BY CUISINE — Unified Controls ── */}
-        <div className="bg-white rounded-2xl border border-slate-200/90 p-4 sm:p-5 shadow-2xs">
+        <div className="bg-surface rounded-2xl border border-line p-4 sm:p-5 shadow-2xs">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
             <div>
               <div className="inline-flex items-center gap-1.5 text-[11px] font-bold text-brand-ink uppercase tracking-wider mb-0.5">
                 <ChefHat className="w-3.5 h-3.5 text-brand-ink" />
                 <span>{t('handcrafted')}</span>
               </div>
-              <h2 className="text-lg font-bold text-slate-900 tracking-tight">{t('exploreByCuisine')}</h2>
-              <p className="text-xs text-slate-500 font-medium">
+              <h2 className="text-lg font-bold text-ink tracking-tight">{t('exploreByCuisine')}</h2>
+              <p className="text-xs text-muted font-medium">
                 {selectedCuisine
                   ? t('showingCuisine', { cuisine: selectedCuisineLabel })
                   : t('tapCuisine')}
@@ -542,8 +542,8 @@ export default function CustomerDashboardPage() {
                 onClick={() => { setViewMode('all'); setSelectedCuisine(''); }}
                 className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 ${
                   viewMode === 'all' && !selectedCuisine
-                    ? 'bg-slate-900 text-white shadow-xs'
-                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                    ? 'bg-ink text-page shadow-xs'
+                    : 'bg-raised text-muted hover:bg-line'
                 }`}
               >
                 <Layers className="w-3.5 h-3.5" />
@@ -557,7 +557,7 @@ export default function CustomerDashboardPage() {
                 className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 ${
                   viewMode === 'top10' && !selectedCuisine
                     ? 'bg-brand text-on-brand shadow-xs'
-                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                    : 'bg-raised text-muted hover:bg-line'
                 }`}
               >
                 <Trophy className="w-3.5 h-3.5" />
@@ -570,8 +570,8 @@ export default function CustomerDashboardPage() {
                 onClick={() => { setViewMode('kitchens'); setSelectedCuisine(''); }}
                 className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 ${
                   viewMode === 'kitchens' && !selectedCuisine
-                    ? 'bg-slate-900 text-white shadow-xs'
-                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                    ? 'bg-ink text-page shadow-xs'
+                    : 'bg-raised text-muted hover:bg-line'
                 }`}
               >
                 <ChefHat className="w-3.5 h-3.5" />
@@ -584,8 +584,8 @@ export default function CustomerDashboardPage() {
                 onClick={handleRandomize}
                 className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 ${
                   isRandomOrder
-                    ? 'bg-violet-600 text-white shadow-xs'
-                    : 'bg-violet-50 text-violet-700 border border-violet-200 hover:bg-violet-100'
+                    ? 'bg-ink text-page'
+                    : 'bg-surface text-ink border border-line hover:bg-raised'
                 }`}
                 title={t('randomizeTitle')}
               >
@@ -598,7 +598,7 @@ export default function CustomerDashboardPage() {
                 <button
                   type="button"
                   onClick={() => { setSelectedCuisine(''); setViewMode('all'); }}
-                  className="inline-flex items-center gap-1 text-xs font-bold text-slate-700 hover:text-slate-900 bg-slate-200/80 hover:bg-slate-300 px-3 py-1.5 rounded-xl transition-colors"
+                  className="inline-flex items-center gap-1 text-xs font-bold text-ink bg-raised hover:bg-line px-3 py-1.5 rounded-xl transition-colors"
                 >
                   <X className="w-3.5 h-3.5" />
                   <span>{t('clearFilter')}</span>
@@ -628,16 +628,16 @@ export default function CustomerDashboardPage() {
             <section>
               <div className="flex items-center justify-between mb-3">
                 <div>
-                  <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-slate-100 text-slate-700 text-[11px] font-bold uppercase tracking-wider mb-1">
+                  <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-raised text-ink text-[11px] font-bold uppercase tracking-wider mb-1">
                     <ChefHat className="w-3.5 h-3.5 text-brand-ink" />
                     <span>{t('verifiedDomesticCooks')}</span>
                   </div>
-                  <h2 className="text-xl font-black text-slate-900 tracking-tight">
+                  <h2 className="text-xl font-extrabold text-ink tracking-tight">
                     {currentCommunityName
                       ? t('cuisineKitchensIn', { cuisine: selectedCuisineLabel, community: currentCommunityName })
                       : t('cuisineKitchens', { cuisine: selectedCuisineLabel })}
                   </h2>
-                  <p className="text-xs text-slate-500 font-medium">
+                  <p className="text-xs text-muted font-medium">
                     {t('cuisineKitchensSub', { cuisine: selectedCuisineLabel })}
                   </p>
                 </div>
@@ -645,7 +645,7 @@ export default function CustomerDashboardPage() {
                   <button
                     type="button"
                     onClick={() => scrollRow(kitchensRowRef, -320)}
-                    className="w-8 h-8 rounded-full border border-slate-200 hover:border-slate-400 bg-white flex items-center justify-center text-slate-700 shadow-2xs transition-colors"
+                    className="w-8 h-8 rounded-full border border-line hover:border-line-strong bg-surface flex items-center justify-center text-ink shadow-2xs transition-colors"
                     title={t('scrollLeft')}
                   >
                     <ChevronLeft className="rtl:-scale-x-100 w-4 h-4" />
@@ -653,7 +653,7 @@ export default function CustomerDashboardPage() {
                   <button
                     type="button"
                     onClick={() => scrollRow(kitchensRowRef, 320)}
-                    className="w-8 h-8 rounded-full border border-slate-200 hover:border-slate-400 bg-white flex items-center justify-center text-slate-700 shadow-2xs transition-colors"
+                    className="w-8 h-8 rounded-full border border-line hover:border-line-strong bg-surface flex items-center justify-center text-ink shadow-2xs transition-colors"
                     title={t('scrollRight')}
                   >
                     <ChevronRight className="rtl:-scale-x-100 w-4 h-4" />
@@ -669,9 +669,9 @@ export default function CustomerDashboardPage() {
                   <div key={k.id} className="w-[280px] sm:w-[310px] shrink-0">
                     <Link
                       href={`/kitchens/${k.id}`}
-                      className="group bg-white rounded-2xl border border-slate-200/90 shadow-2xs hover:shadow-lg hover:border-slate-300 transition-all overflow-hidden flex flex-col justify-between h-full"
+                      className="group bg-surface rounded-2xl border border-line shadow-2xs hover:shadow-lg hover:border-line-strong transition-all overflow-hidden flex flex-col justify-between h-full"
                     >
-                      <div className="relative aspect-[16/10] w-full overflow-hidden bg-slate-100">
+                      <div className="relative aspect-[16/10] w-full overflow-hidden bg-raised">
                         <CoverImage
                           src={k.coverImageUrl}
                           alt={k.businessName}
@@ -679,13 +679,12 @@ export default function CustomerDashboardPage() {
                           size="md"
                           className="w-full h-full group-hover:scale-105 transition-transform duration-300"
                         />
-                        <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent" />
-                        <span className="absolute bottom-2.5 start-2.5 px-2 py-0.5 rounded-md bg-emerald-600/90 text-white text-[11px] font-bold flex items-center gap-1">
+                        <span className="absolute bottom-2.5 start-2.5 px-2 py-0.5 rounded-md bg-surface/95 text-ink text-[11px] font-bold shadow-xs flex items-center gap-1">
                           <ShieldCheck className="w-3 h-3" />
                           <span>{t('verified')}</span>
                         </span>
-                        <span className="absolute bottom-2.5 end-2.5 px-2 py-0.5 rounded-md bg-black/75 text-white text-[11px] font-bold flex items-center gap-1">
-                          <Star className="w-3 h-3 fill-amber-400 text-amber-400" />
+                        <span className="absolute bottom-2.5 end-2.5 px-2 py-0.5 rounded-md bg-surface/95 text-ink text-[11px] font-bold shadow-xs flex items-center gap-1">
+                          <Star className="w-3 h-3 fill-accent text-accent" />
                           <span>{displayRating(k.ratingAverage, k.totalReviews) ?? t('new')}</span>
                         </span>
                       </div>
@@ -698,22 +697,22 @@ export default function CustomerDashboardPage() {
                               alt={k.chef.name}
                               label={k.chef.name}
                               size="sm"
-                              className="w-8 h-8 rounded-xl border border-slate-200 shrink-0"
+                              className="w-8 h-8 rounded-xl border border-line shrink-0"
                             />
                             <div className="min-w-0">
-                              <h3 className="text-sm font-bold text-slate-900 group-hover:text-brand-ink transition-colors truncate">
+                              <h3 className="text-sm font-bold text-ink group-hover:text-brand-ink transition-colors truncate">
                                 {k.businessName}
                               </h3>
-                              <p className="text-[11px] text-slate-500 truncate">
+                              <p className="text-[11px] text-muted truncate">
                                 {[k.chef.name, k.chef.area].filter(Boolean).join(' • ')}
                               </p>
                             </div>
                           </div>
-                          <div className="text-xs text-slate-500 flex items-center gap-2 mt-2">
+                          <div className="text-xs text-muted flex items-center gap-2 mt-2">
                             {(k.minPrepTimeMinutes ?? 0) > 0 && (
                               <>
-                                <span className="flex items-center gap-1 font-semibold text-slate-700">
-                                  <Clock className="w-3 h-3 text-slate-500" />
+                                <span className="flex items-center gap-1 font-semibold text-ink">
+                                  <Clock className="w-3 h-3 text-muted" />
                                   {t('minutes', { count: k.minPrepTimeMinutes ?? 0 })}
                                 </span>
                                 <span>•</span>
@@ -723,8 +722,8 @@ export default function CustomerDashboardPage() {
                           </div>
                         </div>
 
-                        <div className="mt-3.5 pt-2.5 border-t border-slate-100 flex items-center justify-between text-xs">
-                          <span className="text-[11px] font-semibold text-slate-500 truncate">
+                        <div className="mt-3.5 pt-2.5 border-t border-line flex items-center justify-between text-xs">
+                          <span className="text-[11px] font-semibold text-muted truncate">
                             {k.mealCategories?.[0] || t('homeCooked')}
                           </span>
                           <span className="font-bold text-brand-ink inline-flex items-center gap-0.5 group-hover:translate-x-0.5 transition-transform shrink-0">
@@ -747,10 +746,10 @@ export default function CustomerDashboardPage() {
                     <Flame className="w-3.5 h-3.5 text-brand-ink" />
                     <span>{t('popularDishes')}</span>
                   </div>
-                  <h2 className="text-xl font-black text-slate-900 tracking-tight">
+                  <h2 className="text-xl font-extrabold text-ink tracking-tight">
                     {t('cuisineDishes', { cuisine: selectedCuisineLabel })}
                   </h2>
-                  <p className="text-xs text-slate-500 font-medium">
+                  <p className="text-xs text-muted font-medium">
                     {t('cuisineDishesSub', { cuisine: selectedCuisineLabel })}
                   </p>
                 </div>
@@ -758,7 +757,7 @@ export default function CustomerDashboardPage() {
                   <button
                     type="button"
                     onClick={() => scrollRow(top10RowRef, -300)}
-                    className="w-8 h-8 rounded-full border border-slate-200 hover:border-slate-400 bg-white flex items-center justify-center text-slate-700 shadow-2xs transition-colors"
+                    className="w-8 h-8 rounded-full border border-line hover:border-line-strong bg-surface flex items-center justify-center text-ink shadow-2xs transition-colors"
                     title={t('scrollLeft')}
                   >
                     <ChevronLeft className="rtl:-scale-x-100 w-4 h-4" />
@@ -766,7 +765,7 @@ export default function CustomerDashboardPage() {
                   <button
                     type="button"
                     onClick={() => scrollRow(top10RowRef, 300)}
-                    className="w-8 h-8 rounded-full border border-slate-200 hover:border-slate-400 bg-white flex items-center justify-center text-slate-700 shadow-2xs transition-colors"
+                    className="w-8 h-8 rounded-full border border-line hover:border-line-strong bg-surface flex items-center justify-center text-ink shadow-2xs transition-colors"
                     title={t('scrollRight')}
                   >
                     <ChevronRight className="rtl:-scale-x-100 w-4 h-4" />
@@ -779,14 +778,14 @@ export default function CustomerDashboardPage() {
                 className="flex gap-4 overflow-x-auto scrollbar-none pb-2 scroll-smooth"
               >
                 {displayDishes.length === 0 && !dishesUnreadable && (
-                  <p className="text-xs text-slate-500 font-medium py-6">
+                  <p className="text-xs text-muted font-medium py-6">
                     {dishesLoading ? t('loadingDishes') : t('noCuisineDishes', { cuisine: selectedCuisineLabel })}
                   </p>
                 )}
                 {displayDishes.map((dish) => (
                   <div key={dish.id} className="w-[240px] sm:w-[270px] shrink-0">
-                    <div className="group bg-white rounded-2xl border border-slate-200/90 shadow-2xs hover:shadow-lg hover:border-brand-300 transition-all overflow-hidden flex flex-col justify-between h-full">
-                      <div className="relative aspect-[16/10] w-full overflow-hidden bg-slate-100">
+                    <div className="group bg-surface rounded-2xl border border-line shadow-2xs hover:shadow-lg hover:border-brand-300 transition-all overflow-hidden flex flex-col justify-between h-full">
+                      <div className="relative aspect-[16/10] w-full overflow-hidden bg-raised">
                         <CoverImage
                           src={dish.photo}
                           alt={dish.name}
@@ -794,34 +793,33 @@ export default function CustomerDashboardPage() {
                           size="md"
                           className="w-full h-full group-hover:scale-105 transition-transform duration-300"
                         />
-                        <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-transparent to-transparent" />
                         <DealBadge dish={dish} />
-                        <span className="absolute bottom-2.5 end-2.5 px-2 py-0.5 rounded-md bg-white/95 text-slate-900 text-[11px] font-bold flex items-center gap-1 shadow-2xs">
-                          <Star className="w-3 h-3 fill-amber-500 text-amber-500" />
+                        <span className="absolute bottom-2.5 end-2.5 px-2 py-0.5 rounded-md bg-surface/95 text-ink text-[11px] font-bold flex items-center gap-1 shadow-2xs">
+                          <Star className="w-3 h-3 fill-accent text-accent" />
                           <span>{dish.rating ?? t('new')}</span>
                         </span>
                       </div>
 
                       <div className="p-3.5 flex-1 flex flex-col justify-between">
                         <div>
-                          <h3 className="text-sm font-bold text-slate-900 group-hover:text-brand-ink transition-colors leading-snug line-clamp-1">
+                          <h3 className="text-sm font-bold text-ink group-hover:text-brand-ink transition-colors leading-snug line-clamp-1">
                             {dish.name}
                           </h3>
                           {dish.nameUrdu && (
-                            <p className="text-[11px] text-amber-700 font-semibold mt-0.5 font-urdu truncate">{dish.nameUrdu}</p>
+                            <p className="text-[11px] text-accent-soft-ink font-semibold mt-0.5 font-urdu truncate">{dish.nameUrdu}</p>
                           )}
-                          <div className="mt-1.5 text-xs text-slate-500 flex items-center gap-1.5 truncate">
-                            <ChefHat className="w-3 h-3 text-slate-500 shrink-0" />
-                            <span className="font-semibold text-slate-700 truncate">{dish.kitchenName}</span>
+                          <div className="mt-1.5 text-xs text-muted flex items-center gap-1.5 truncate">
+                            <ChefHat className="w-3 h-3 text-muted shrink-0" />
+                            <span className="font-semibold text-ink truncate">{dish.kitchenName}</span>
                           </div>
                         </div>
 
-                        <div className="mt-3 pt-2.5 border-t border-slate-100 flex items-center justify-between">
-                          <span className="text-base font-bold text-slate-900">{formatPrice(dish.price)}</span>
+                        <div className="mt-3 pt-2.5 border-t border-line flex items-center justify-between">
+                          <span className="text-base font-bold text-ink">{formatPrice(dish.price)}</span>
                           <button
                             type="button"
                             onClick={() => handleAddToCart(dish)}
-                            className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl bg-slate-900 hover:bg-brand hover:text-on-brand text-white text-xs font-bold transition-colors shadow-2xs active:scale-95"
+                            className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl bg-ink hover:bg-brand hover:text-on-brand text-page text-xs font-bold transition-colors shadow-2xs active:scale-95"
                           >
                             <Plus className="w-3.5 h-3.5 stroke-[3]" />
                             <span>{t('add')}</span>
@@ -844,21 +842,21 @@ export default function CustomerDashboardPage() {
                 <div className="flex items-center justify-between mb-3">
                   <div>
                     <div className="flex items-center gap-2 mb-1">
-                      <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-gradient-to-r from-amber-500 to-brand text-white text-[11px] font-black uppercase tracking-wider shadow-xs">
+                      <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-accent text-on-accent text-[11px] font-extrabold">
                         <Trophy className="w-3 h-3" />
                         <span>{t('top10Badge')}</span>
                       </div>
                       {isRandomOrder && (
-                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-violet-100 text-violet-700 text-[11px] font-bold">
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-raised text-ink text-[11px] font-bold">
                           <Dices className="w-3 h-3" />
                           <span>{t('shuffled')}</span>
                         </span>
                       )}
                     </div>
-                    <h2 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight">
+                    <h2 className="text-xl sm:text-2xl font-extrabold text-ink tracking-tight">
                       {t('top10Title')}
                     </h2>
-                    <p className="text-xs text-slate-500 font-medium mt-0.5">
+                    <p className="text-xs text-muted font-medium mt-0.5">
                       {selectedCommunity?.name
                         ? t('top10SubIn', { community: selectedCommunity.name })
                         : t('top10Sub')}
@@ -870,7 +868,7 @@ export default function CustomerDashboardPage() {
                     <button
                       type="button"
                       onClick={() => scrollRow(top10RowRef, -380)}
-                      className="w-8 h-8 sm:w-9 sm:h-9 rounded-full border border-slate-200 hover:border-slate-400 bg-white flex items-center justify-center text-slate-700 shadow-2xs transition-colors"
+                      className="w-8 h-8 sm:w-9 sm:h-9 rounded-full border border-line hover:border-line-strong bg-surface flex items-center justify-center text-ink shadow-2xs transition-colors"
                       title={t('scrollLeft')}
                     >
                       <ChevronLeft className="rtl:-scale-x-100 w-4 h-4 sm:w-5 sm:h-5" />
@@ -878,7 +876,7 @@ export default function CustomerDashboardPage() {
                     <button
                       type="button"
                       onClick={() => scrollRow(top10RowRef, 380)}
-                      className="w-8 h-8 sm:w-9 sm:h-9 rounded-full border border-slate-200 hover:border-slate-400 bg-white flex items-center justify-center text-slate-700 shadow-2xs transition-colors"
+                      className="w-8 h-8 sm:w-9 sm:h-9 rounded-full border border-line hover:border-line-strong bg-surface flex items-center justify-center text-ink shadow-2xs transition-colors"
                       title={t('scrollRight')}
                     >
                       <ChevronRight className="rtl:-scale-x-100 w-4 h-4 sm:w-5 sm:h-5" />
@@ -892,7 +890,7 @@ export default function CustomerDashboardPage() {
                   className="flex gap-2 sm:gap-4 overflow-x-auto scrollbar-none pb-4 pt-1 px-1 scroll-smooth"
                 >
                   {top10Dishes.length === 0 && !dishesUnreadable && (
-                    <p className="text-xs text-slate-500 font-medium py-6">
+                    <p className="text-xs text-muted font-medium py-6">
                       {dishesLoading
                         ? t('loadingDishes')
                         : t('noDishes')}
@@ -906,9 +904,9 @@ export default function CustomerDashboardPage() {
                       {/* Giant Netflix Rank Numeral */}
                       <span
                         aria-hidden="true"
-                        className="text-8xl sm:text-9xl font-black italic tracking-tighter leading-none select-none text-slate-100 group-hover:text-brand-ink/25 transition-all me-[-28px] sm:me-[-36px] z-0 drop-shadow-sm pointer-events-none"
+                        className="text-8xl sm:text-9xl font-extrabold italic tracking-tighter leading-none select-none text-line group-hover:text-brand/30 transition-all me-[-28px] sm:me-[-36px] z-0 drop-shadow-sm pointer-events-none"
                         style={{
-                          WebkitTextStroke: '3px #cbd5e1',
+                          WebkitTextStroke: '3px var(--border-rule)',
                           fontFamily: 'system-ui, -apple-system, sans-serif',
                         }}
                       >
@@ -916,8 +914,8 @@ export default function CustomerDashboardPage() {
                       </span>
 
                       {/* Food Poster Card (slightly overlaps the number) */}
-                      <div className="relative z-10 w-[230px] sm:w-[260px] bg-white rounded-2xl border border-slate-200/90 shadow-2xs hover:shadow-xl hover:border-brand-300 transition-all overflow-hidden flex flex-col justify-between shrink-0">
-                        <div className="relative aspect-[16/10] w-full overflow-hidden bg-slate-100">
+                      <div className="relative z-10 w-[230px] sm:w-[260px] bg-surface rounded-2xl border border-line shadow-2xs hover:shadow-xl hover:border-brand-300 transition-all overflow-hidden flex flex-col justify-between shrink-0">
+                        <div className="relative aspect-[16/10] w-full overflow-hidden bg-raised">
                           <CoverImage
                             src={dish.photo}
                             alt={dish.name}
@@ -925,12 +923,11 @@ export default function CustomerDashboardPage() {
                             size="md"
                             className="w-full h-full group-hover:scale-105 transition-transform duration-300"
                           />
-                          <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-transparent to-transparent" />
 
                           <DealBadge dish={dish} />
 
                           {(dish.isFrozen || dish.prepTimeMinutes) && (
-                            <span className="absolute bottom-2.5 start-2.5 px-2 py-0.5 rounded-md bg-black/70 backdrop-blur-xs text-white text-[11px] font-bold flex items-center gap-1">
+                            <span className="absolute bottom-2.5 start-2.5 px-2 py-0.5 rounded-md bg-surface/95 text-ink text-[11px] font-bold shadow-xs flex items-center gap-1">
                               {dish.isFrozen ? (
                                 <>
                                   <Snowflake className="w-3 h-3 text-cyan-400" />
@@ -938,39 +935,39 @@ export default function CustomerDashboardPage() {
                                 </>
                               ) : (
                                 <>
-                                  <Clock className="w-3 h-3 text-amber-400" />
+                                  <Clock className="w-3 h-3 text-accent" />
                                   <span>{t('cookMinutes', { count: dish.prepTimeMinutes })}</span>
                                 </>
                               )}
                             </span>
                           )}
 
-                          <span className="absolute bottom-2.5 end-2.5 px-2 py-0.5 rounded-md bg-white/95 text-slate-900 text-[11px] font-bold flex items-center gap-1 shadow-2xs">
-                            <Star className="w-3 h-3 fill-amber-500 text-amber-500" />
+                          <span className="absolute bottom-2.5 end-2.5 px-2 py-0.5 rounded-md bg-surface/95 text-ink text-[11px] font-bold flex items-center gap-1 shadow-2xs">
+                            <Star className="w-3 h-3 fill-accent text-accent" />
                             <span>{dish.rating ?? t('new')}</span>
                           </span>
                         </div>
 
                         <div className="p-3.5 flex-1 flex flex-col justify-between">
                           <div>
-                            <h3 className="text-sm font-bold text-slate-900 group-hover:text-brand-ink transition-colors leading-snug line-clamp-1">
+                            <h3 className="text-sm font-bold text-ink group-hover:text-brand-ink transition-colors leading-snug line-clamp-1">
                               {dish.name}
                             </h3>
                             {dish.nameUrdu && (
-                              <p className="text-[11px] text-amber-700 font-semibold mt-0.5 font-urdu truncate">{dish.nameUrdu}</p>
+                              <p className="text-[11px] text-accent-soft-ink font-semibold mt-0.5 font-urdu truncate">{dish.nameUrdu}</p>
                             )}
 
-                            <div className="mt-1.5 text-xs text-slate-500 flex items-center gap-1.5 truncate">
-                              <ChefHat className="w-3 h-3 text-slate-500 shrink-0" />
-                              <span className="font-semibold text-slate-700 truncate">{dish.kitchenName}</span>
+                            <div className="mt-1.5 text-xs text-muted flex items-center gap-1.5 truncate">
+                              <ChefHat className="w-3 h-3 text-muted shrink-0" />
+                              <span className="font-semibold text-ink truncate">{dish.kitchenName}</span>
                             </div>
                           </div>
 
-                          <div className="mt-3 pt-2.5 border-t border-slate-100 flex items-center justify-between">
+                          <div className="mt-3 pt-2.5 border-t border-line flex items-center justify-between">
                             <div>
-                              <span className="text-base font-bold text-slate-900">{formatPrice(dish.price)}</span>
+                              <span className="text-base font-bold text-ink">{formatPrice(dish.price)}</span>
                               {dish.originalPrice && (
-                                <span className="text-xs text-slate-500 line-through ms-1 font-medium">
+                                <span className="text-xs text-muted line-through ms-1 font-medium">
                                   {formatPrice(dish.originalPrice)}
                                 </span>
                               )}
@@ -979,7 +976,7 @@ export default function CustomerDashboardPage() {
                             <button
                               type="button"
                               onClick={() => handleAddToCart(dish)}
-                              className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl bg-slate-900 hover:bg-brand hover:text-on-brand text-white text-xs font-bold transition-colors shadow-2xs active:scale-95"
+                              className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl bg-ink hover:bg-brand hover:text-on-brand text-page text-xs font-bold transition-colors shadow-2xs active:scale-95"
                             >
                               <Plus className="w-3.5 h-3.5 stroke-[3]" />
                               <span>{t('add')}</span>
@@ -998,16 +995,16 @@ export default function CustomerDashboardPage() {
               <section>
                 <div className="flex items-center justify-between mb-3">
                   <div>
-                    <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-slate-100 text-slate-700 text-[11px] font-bold uppercase tracking-wider mb-1">
+                    <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-raised text-ink text-[11px] font-bold uppercase tracking-wider mb-1">
                       <ChefHat className="w-3.5 h-3.5 text-brand-ink" />
                       <span>{t('verifiedHomeCooks')}</span>
                     </div>
-                    <h2 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight">
+                    <h2 className="text-xl sm:text-2xl font-extrabold text-ink tracking-tight">
                       {currentCommunityName
                         ? t('verifiedKitchensIn', { community: currentCommunityName })
                         : t('verifiedKitchens')}
                     </h2>
-                    <p className="text-xs text-slate-500 font-medium mt-0.5">
+                    <p className="text-xs text-muted font-medium mt-0.5">
                       {t('verifiedKitchensSub')}
                     </p>
                   </div>
@@ -1022,7 +1019,7 @@ export default function CustomerDashboardPage() {
                     <button
                       type="button"
                       onClick={() => scrollRow(kitchensRowRef, -320)}
-                      className="w-8 h-8 rounded-full border border-slate-200 hover:border-slate-400 bg-white flex items-center justify-center text-slate-700 shadow-2xs transition-colors"
+                      className="w-8 h-8 rounded-full border border-line hover:border-line-strong bg-surface flex items-center justify-center text-ink shadow-2xs transition-colors"
                       title={t('scrollLeft')}
                     >
                       <ChevronLeft className="rtl:-scale-x-100 w-4 h-4" />
@@ -1030,7 +1027,7 @@ export default function CustomerDashboardPage() {
                     <button
                       type="button"
                       onClick={() => scrollRow(kitchensRowRef, 320)}
-                      className="w-8 h-8 rounded-full border border-slate-200 hover:border-slate-400 bg-white flex items-center justify-center text-slate-700 shadow-2xs transition-colors"
+                      className="w-8 h-8 rounded-full border border-line hover:border-line-strong bg-surface flex items-center justify-center text-ink shadow-2xs transition-colors"
                       title={t('scrollRight')}
                     >
                       <ChevronRight className="rtl:-scale-x-100 w-4 h-4" />
@@ -1046,9 +1043,9 @@ export default function CustomerDashboardPage() {
                     <div key={k.id} className="w-[280px] sm:w-[310px] shrink-0">
                       <Link
                         href={`/kitchens/${k.id}`}
-                        className="group bg-white rounded-2xl border border-slate-200/90 shadow-2xs hover:shadow-lg hover:border-slate-300 transition-all overflow-hidden flex flex-col justify-between h-full"
+                        className="group bg-surface rounded-2xl border border-line shadow-2xs hover:shadow-lg hover:border-line-strong transition-all overflow-hidden flex flex-col justify-between h-full"
                       >
-                        <div className="relative aspect-[16/10] w-full overflow-hidden bg-slate-100">
+                        <div className="relative aspect-[16/10] w-full overflow-hidden bg-raised">
                           <CoverImage
                             src={k.coverImageUrl}
                             alt={k.businessName}
@@ -1056,13 +1053,12 @@ export default function CustomerDashboardPage() {
                             size="md"
                             className="w-full h-full group-hover:scale-105 transition-transform duration-300"
                           />
-                          <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent" />
-                          <span className="absolute bottom-2.5 start-2.5 px-2 py-0.5 rounded-md bg-emerald-600/90 text-white text-[11px] font-bold flex items-center gap-1">
+                          <span className="absolute bottom-2.5 start-2.5 px-2 py-0.5 rounded-md bg-surface/95 text-ink text-[11px] font-bold shadow-xs flex items-center gap-1">
                             <ShieldCheck className="w-3 h-3" />
                             <span>{t('verifiedDomesticCook')}</span>
                           </span>
-                          <span className="absolute bottom-2.5 end-2.5 px-2 py-0.5 rounded-md bg-black/75 text-white text-[11px] font-bold flex items-center gap-1">
-                            <Star className="w-3 h-3 fill-amber-400 text-amber-400" />
+                          <span className="absolute bottom-2.5 end-2.5 px-2 py-0.5 rounded-md bg-surface/95 text-ink text-[11px] font-bold shadow-xs flex items-center gap-1">
+                            <Star className="w-3 h-3 fill-accent text-accent" />
                             <span>{displayRating(k.ratingAverage, k.totalReviews) ?? t('new')}</span>
                           </span>
                         </div>
@@ -1075,22 +1071,22 @@ export default function CustomerDashboardPage() {
                                 alt={k.chef.name}
                                 label={k.chef.name}
                                 size="sm"
-                                className="w-8 h-8 rounded-xl border border-slate-200 shrink-0"
+                                className="w-8 h-8 rounded-xl border border-line shrink-0"
                               />
                               <div className="min-w-0">
-                                <h3 className="text-sm font-bold text-slate-900 group-hover:text-brand-ink transition-colors truncate">
+                                <h3 className="text-sm font-bold text-ink group-hover:text-brand-ink transition-colors truncate">
                                   {k.businessName}
                                 </h3>
-                                <p className="text-[11px] text-slate-500 truncate">
+                                <p className="text-[11px] text-muted truncate">
                                   {[k.chef.name, k.chef.area].filter(Boolean).join(' • ')}
                                 </p>
                               </div>
                             </div>
-                            <div className="text-xs text-slate-500 flex items-center gap-2 mt-2">
+                            <div className="text-xs text-muted flex items-center gap-2 mt-2">
                               {(k.minPrepTimeMinutes ?? 0) > 0 && (
                                 <>
-                                  <span className="flex items-center gap-1 font-semibold text-slate-700">
-                                    <Clock className="w-3 h-3 text-slate-500" />
+                                  <span className="flex items-center gap-1 font-semibold text-ink">
+                                    <Clock className="w-3 h-3 text-muted" />
                                     {t('minPrep', { count: k.minPrepTimeMinutes ?? 0 })}
                                   </span>
                                   <span>•</span>
@@ -1100,8 +1096,8 @@ export default function CustomerDashboardPage() {
                             </div>
                           </div>
 
-                          <div className="mt-3.5 pt-2.5 border-t border-slate-100 flex items-center justify-between text-xs">
-                            <span className="text-[11px] font-semibold text-slate-500 truncate">
+                          <div className="mt-3.5 pt-2.5 border-t border-line flex items-center justify-between text-xs">
+                            <span className="text-[11px] font-semibold text-muted truncate">
                               {k.mealCategories?.[0] || t('homeCooked')}
                             </span>
                             <span className="font-bold text-brand-ink inline-flex items-center gap-0.5 group-hover:translate-x-0.5 transition-transform shrink-0">
@@ -1122,14 +1118,14 @@ export default function CustomerDashboardPage() {
               <section>
                 <div className="flex items-center justify-between mb-3">
                   <div>
-                    <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-amber-100 text-amber-800 text-[11px] font-bold uppercase tracking-wider mb-1">
+                    <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-accent-soft text-accent-soft-ink text-[11px] font-bold uppercase tracking-wider mb-1">
                       <Sparkles className="w-3.5 h-3.5 text-brand-ink" />
                       <span>{t('generationalRecipes')}</span>
                     </div>
-                    <h2 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight">
+                    <h2 className="text-xl sm:text-2xl font-extrabold text-ink tracking-tight">
                       {t('biryaniTitle')}
                     </h2>
-                    <p className="text-xs text-slate-500 font-medium mt-0.5">
+                    <p className="text-xs text-muted font-medium mt-0.5">
                       {t('biryaniSub')}
                     </p>
                   </div>
@@ -1138,7 +1134,7 @@ export default function CustomerDashboardPage() {
                     <button
                       type="button"
                       onClick={() => scrollRow(biryaniRowRef, -300)}
-                      className="w-8 h-8 rounded-full border border-slate-200 hover:border-slate-400 bg-white flex items-center justify-center text-slate-700 shadow-2xs transition-colors"
+                      className="w-8 h-8 rounded-full border border-line hover:border-line-strong bg-surface flex items-center justify-center text-ink shadow-2xs transition-colors"
                       title={t('scrollLeft')}
                     >
                       <ChevronLeft className="rtl:-scale-x-100 w-4 h-4" />
@@ -1146,7 +1142,7 @@ export default function CustomerDashboardPage() {
                     <button
                       type="button"
                       onClick={() => scrollRow(biryaniRowRef, 300)}
-                      className="w-8 h-8 rounded-full border border-slate-200 hover:border-slate-400 bg-white flex items-center justify-center text-slate-700 shadow-2xs transition-colors"
+                      className="w-8 h-8 rounded-full border border-line hover:border-line-strong bg-surface flex items-center justify-center text-ink shadow-2xs transition-colors"
                       title={t('scrollRight')}
                     >
                       <ChevronRight className="rtl:-scale-x-100 w-4 h-4" />
@@ -1160,8 +1156,8 @@ export default function CustomerDashboardPage() {
                 >
                   {biryaniDishes.map((dish) => (
                     <div key={dish.id} className="w-[240px] sm:w-[270px] shrink-0">
-                      <div className="group bg-white rounded-2xl border border-slate-200/90 shadow-2xs hover:shadow-lg hover:border-brand-300 transition-all overflow-hidden flex flex-col justify-between h-full">
-                        <div className="relative aspect-[16/10] w-full overflow-hidden bg-slate-100">
+                      <div className="group bg-surface rounded-2xl border border-line shadow-2xs hover:shadow-lg hover:border-brand-300 transition-all overflow-hidden flex flex-col justify-between h-full">
+                        <div className="relative aspect-[16/10] w-full overflow-hidden bg-raised">
                           <CoverImage
                             src={dish.photo}
                             alt={dish.name}
@@ -1169,34 +1165,33 @@ export default function CustomerDashboardPage() {
                             size="md"
                             className="w-full h-full group-hover:scale-105 transition-transform duration-300"
                           />
-                          <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-transparent to-transparent" />
                           <DealBadge dish={dish} />
-                          <span className="absolute bottom-2.5 end-2.5 px-2 py-0.5 rounded-md bg-white/95 text-slate-900 text-[11px] font-bold flex items-center gap-1 shadow-2xs">
-                            <Star className="w-3 h-3 fill-amber-500 text-amber-500" />
+                          <span className="absolute bottom-2.5 end-2.5 px-2 py-0.5 rounded-md bg-surface/95 text-ink text-[11px] font-bold flex items-center gap-1 shadow-2xs">
+                            <Star className="w-3 h-3 fill-accent text-accent" />
                             <span>{dish.rating ?? t('new')}</span>
                           </span>
                         </div>
 
                         <div className="p-3.5 flex-1 flex flex-col justify-between">
                           <div>
-                            <h3 className="text-sm font-bold text-slate-900 group-hover:text-brand-ink transition-colors leading-snug line-clamp-1">
+                            <h3 className="text-sm font-bold text-ink group-hover:text-brand-ink transition-colors leading-snug line-clamp-1">
                               {dish.name}
                             </h3>
                             {dish.nameUrdu && (
-                              <p className="text-[11px] text-amber-700 font-semibold mt-0.5 font-urdu truncate">{dish.nameUrdu}</p>
+                              <p className="text-[11px] text-accent-soft-ink font-semibold mt-0.5 font-urdu truncate">{dish.nameUrdu}</p>
                             )}
-                            <div className="mt-1.5 text-xs text-slate-500 flex items-center gap-1.5 truncate">
-                              <ChefHat className="w-3 h-3 text-slate-500 shrink-0" />
-                              <span className="font-semibold text-slate-700 truncate">{dish.kitchenName}</span>
+                            <div className="mt-1.5 text-xs text-muted flex items-center gap-1.5 truncate">
+                              <ChefHat className="w-3 h-3 text-muted shrink-0" />
+                              <span className="font-semibold text-ink truncate">{dish.kitchenName}</span>
                             </div>
                           </div>
 
-                          <div className="mt-3 pt-2.5 border-t border-slate-100 flex items-center justify-between">
-                            <span className="text-base font-bold text-slate-900">{formatPrice(dish.price)}</span>
+                          <div className="mt-3 pt-2.5 border-t border-line flex items-center justify-between">
+                            <span className="text-base font-bold text-ink">{formatPrice(dish.price)}</span>
                             <button
                               type="button"
                               onClick={() => handleAddToCart(dish)}
-                              className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl bg-slate-900 hover:bg-brand hover:text-on-brand text-white text-xs font-bold transition-colors shadow-2xs active:scale-95"
+                              className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl bg-ink hover:bg-brand hover:text-on-brand text-page text-xs font-bold transition-colors shadow-2xs active:scale-95"
                             >
                               <Plus className="w-3.5 h-3.5 stroke-[3]" />
                               <span>{t('add')}</span>
@@ -1219,10 +1214,10 @@ export default function CustomerDashboardPage() {
                       <Flame className="w-3.5 h-3.5 text-red-600" />
                       <span>{t('slowBraised')}</span>
                     </div>
-                    <h2 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight">
+                    <h2 className="text-xl sm:text-2xl font-extrabold text-ink tracking-tight">
                       {t('nihariTitle')}
                     </h2>
-                    <p className="text-xs text-slate-500 font-medium mt-0.5">
+                    <p className="text-xs text-muted font-medium mt-0.5">
                       {t('nihariSub')}
                     </p>
                   </div>
@@ -1231,7 +1226,7 @@ export default function CustomerDashboardPage() {
                     <button
                       type="button"
                       onClick={() => scrollRow(slowPotRowRef, -300)}
-                      className="w-8 h-8 rounded-full border border-slate-200 hover:border-slate-400 bg-white flex items-center justify-center text-slate-700 shadow-2xs transition-colors"
+                      className="w-8 h-8 rounded-full border border-line hover:border-line-strong bg-surface flex items-center justify-center text-ink shadow-2xs transition-colors"
                       title={t('scrollLeft')}
                     >
                       <ChevronLeft className="rtl:-scale-x-100 w-4 h-4" />
@@ -1239,7 +1234,7 @@ export default function CustomerDashboardPage() {
                     <button
                       type="button"
                       onClick={() => scrollRow(slowPotRowRef, 300)}
-                      className="w-8 h-8 rounded-full border border-slate-200 hover:border-slate-400 bg-white flex items-center justify-center text-slate-700 shadow-2xs transition-colors"
+                      className="w-8 h-8 rounded-full border border-line hover:border-line-strong bg-surface flex items-center justify-center text-ink shadow-2xs transition-colors"
                       title={t('scrollRight')}
                     >
                       <ChevronRight className="rtl:-scale-x-100 w-4 h-4" />
@@ -1253,8 +1248,8 @@ export default function CustomerDashboardPage() {
                 >
                   {slowPotDishes.map((dish) => (
                     <div key={dish.id} className="w-[240px] sm:w-[270px] shrink-0">
-                      <div className="group bg-white rounded-2xl border border-slate-200/90 shadow-2xs hover:shadow-lg hover:border-brand-300 transition-all overflow-hidden flex flex-col justify-between h-full">
-                        <div className="relative aspect-[16/10] w-full overflow-hidden bg-slate-100">
+                      <div className="group bg-surface rounded-2xl border border-line shadow-2xs hover:shadow-lg hover:border-brand-300 transition-all overflow-hidden flex flex-col justify-between h-full">
+                        <div className="relative aspect-[16/10] w-full overflow-hidden bg-raised">
                           <CoverImage
                             src={dish.photo}
                             alt={dish.name}
@@ -1262,34 +1257,33 @@ export default function CustomerDashboardPage() {
                             size="md"
                             className="w-full h-full group-hover:scale-105 transition-transform duration-300"
                           />
-                          <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-transparent to-transparent" />
                           <DealBadge dish={dish} />
-                          <span className="absolute bottom-2.5 end-2.5 px-2 py-0.5 rounded-md bg-white/95 text-slate-900 text-[11px] font-bold flex items-center gap-1 shadow-2xs">
-                            <Star className="w-3 h-3 fill-amber-500 text-amber-500" />
+                          <span className="absolute bottom-2.5 end-2.5 px-2 py-0.5 rounded-md bg-surface/95 text-ink text-[11px] font-bold flex items-center gap-1 shadow-2xs">
+                            <Star className="w-3 h-3 fill-accent text-accent" />
                             <span>{dish.rating ?? t('new')}</span>
                           </span>
                         </div>
 
                         <div className="p-3.5 flex-1 flex flex-col justify-between">
                           <div>
-                            <h3 className="text-sm font-bold text-slate-900 group-hover:text-brand-ink transition-colors leading-snug line-clamp-1">
+                            <h3 className="text-sm font-bold text-ink group-hover:text-brand-ink transition-colors leading-snug line-clamp-1">
                               {dish.name}
                             </h3>
                             {dish.nameUrdu && (
-                              <p className="text-[11px] text-amber-700 font-semibold mt-0.5 font-urdu truncate">{dish.nameUrdu}</p>
+                              <p className="text-[11px] text-accent-soft-ink font-semibold mt-0.5 font-urdu truncate">{dish.nameUrdu}</p>
                             )}
-                            <div className="mt-1.5 text-xs text-slate-500 flex items-center gap-1.5 truncate">
-                              <ChefHat className="w-3 h-3 text-slate-500 shrink-0" />
-                              <span className="font-semibold text-slate-700 truncate">{dish.kitchenName}</span>
+                            <div className="mt-1.5 text-xs text-muted flex items-center gap-1.5 truncate">
+                              <ChefHat className="w-3 h-3 text-muted shrink-0" />
+                              <span className="font-semibold text-ink truncate">{dish.kitchenName}</span>
                             </div>
                           </div>
 
-                          <div className="mt-3 pt-2.5 border-t border-slate-100 flex items-center justify-between">
-                            <span className="text-base font-bold text-slate-900">{formatPrice(dish.price)}</span>
+                          <div className="mt-3 pt-2.5 border-t border-line flex items-center justify-between">
+                            <span className="text-base font-bold text-ink">{formatPrice(dish.price)}</span>
                             <button
                               type="button"
                               onClick={() => handleAddToCart(dish)}
-                              className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl bg-slate-900 hover:bg-brand hover:text-on-brand text-white text-xs font-bold transition-colors shadow-2xs active:scale-95"
+                              className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl bg-ink hover:bg-brand hover:text-on-brand text-page text-xs font-bold transition-colors shadow-2xs active:scale-95"
                             >
                               <Plus className="w-3.5 h-3.5 stroke-[3]" />
                               <span>{t('add')}</span>
@@ -1308,14 +1302,14 @@ export default function CustomerDashboardPage() {
               <section>
                 <div className="flex items-center justify-between mb-3">
                   <div>
-                    <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-cyan-100 text-cyan-800 text-[11px] font-bold uppercase tracking-wider mb-1">
-                      <Snowflake className="w-3.5 h-3.5 text-cyan-600" />
+                    <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-frozen-soft text-frozen-ink text-[11px] font-bold uppercase tracking-wider mb-1">
+                      <Snowflake className="w-3.5 h-3.5 text-frozen-ink" />
                       <span>{t('freezerReady')}</span>
                     </div>
-                    <h2 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight">
+                    <h2 className="text-xl sm:text-2xl font-extrabold text-ink tracking-tight">
                       {t('frozenTitle')}
                     </h2>
-                    <p className="text-xs text-slate-500 font-medium mt-0.5">
+                    <p className="text-xs text-muted font-medium mt-0.5">
                       {t('frozenSub')}
                     </p>
                   </div>
@@ -1324,7 +1318,7 @@ export default function CustomerDashboardPage() {
                     <button
                       type="button"
                       onClick={() => scrollRow(frozenRowRef, -300)}
-                      className="w-8 h-8 rounded-full border border-slate-200 hover:border-slate-400 bg-white flex items-center justify-center text-slate-700 shadow-2xs transition-colors"
+                      className="w-8 h-8 rounded-full border border-line hover:border-line-strong bg-surface flex items-center justify-center text-ink shadow-2xs transition-colors"
                       title={t('scrollLeft')}
                     >
                       <ChevronLeft className="rtl:-scale-x-100 w-4 h-4" />
@@ -1332,7 +1326,7 @@ export default function CustomerDashboardPage() {
                     <button
                       type="button"
                       onClick={() => scrollRow(frozenRowRef, 300)}
-                      className="w-8 h-8 rounded-full border border-slate-200 hover:border-slate-400 bg-white flex items-center justify-center text-slate-700 shadow-2xs transition-colors"
+                      className="w-8 h-8 rounded-full border border-line hover:border-line-strong bg-surface flex items-center justify-center text-ink shadow-2xs transition-colors"
                       title={t('scrollRight')}
                     >
                       <ChevronRight className="rtl:-scale-x-100 w-4 h-4" />
@@ -1346,8 +1340,8 @@ export default function CustomerDashboardPage() {
                 >
                   {frozenSavoriesDishes.map((dish) => (
                     <div key={dish.id} className="w-[240px] sm:w-[270px] shrink-0">
-                      <div className="group bg-white rounded-2xl border border-slate-200/90 shadow-2xs hover:shadow-lg hover:border-cyan-300 transition-all overflow-hidden flex flex-col justify-between h-full">
-                        <div className="relative aspect-[16/10] w-full overflow-hidden bg-slate-100">
+                      <div className="group bg-surface rounded-2xl border border-line shadow-2xs hover:shadow-lg hover:border-frozen-ink/30 transition-all overflow-hidden flex flex-col justify-between h-full">
+                        <div className="relative aspect-[16/10] w-full overflow-hidden bg-raised">
                           <CoverImage
                             src={dish.photo}
                             alt={dish.name}
@@ -1355,41 +1349,40 @@ export default function CustomerDashboardPage() {
                             size="md"
                             className="w-full h-full group-hover:scale-105 transition-transform duration-300"
                           />
-                          <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-transparent to-transparent" />
                           {dish.isFrozen ? (
-                            <span className="absolute top-2.5 start-2.5 px-2 py-0.5 rounded-lg text-white text-[11px] font-bold bg-cyan-600 shadow-xs uppercase tracking-wider flex items-center gap-1">
+                            <span className="absolute top-2.5 start-2.5 px-2 py-0.5 rounded-lg text-white text-[11px] font-bold bg-frozen shadow-xs uppercase tracking-wider flex items-center gap-1">
                               <Snowflake className="w-3 h-3" />
                               <span>{t('frozen')}</span>
                             </span>
                           ) : (
                             <DealBadge dish={dish} />
                           )}
-                          <span className="absolute bottom-2.5 end-2.5 px-2 py-0.5 rounded-md bg-white/95 text-slate-900 text-[11px] font-bold flex items-center gap-1 shadow-2xs">
-                            <Star className="w-3 h-3 fill-amber-500 text-amber-500" />
+                          <span className="absolute bottom-2.5 end-2.5 px-2 py-0.5 rounded-md bg-surface/95 text-ink text-[11px] font-bold flex items-center gap-1 shadow-2xs">
+                            <Star className="w-3 h-3 fill-accent text-accent" />
                             <span>{dish.rating ?? t('new')}</span>
                           </span>
                         </div>
 
                         <div className="p-3.5 flex-1 flex flex-col justify-between">
                           <div>
-                            <h3 className="text-sm font-bold text-slate-900 group-hover:text-brand-ink transition-colors leading-snug line-clamp-1">
+                            <h3 className="text-sm font-bold text-ink group-hover:text-brand-ink transition-colors leading-snug line-clamp-1">
                               {dish.name}
                             </h3>
                             {dish.nameUrdu && (
-                              <p className="text-[11px] text-amber-700 font-semibold mt-0.5 font-urdu truncate">{dish.nameUrdu}</p>
+                              <p className="text-[11px] text-accent-soft-ink font-semibold mt-0.5 font-urdu truncate">{dish.nameUrdu}</p>
                             )}
-                            <div className="mt-1.5 text-xs text-slate-500 flex items-center gap-1.5 truncate">
-                              <ChefHat className="w-3 h-3 text-slate-500 shrink-0" />
-                              <span className="font-semibold text-slate-700 truncate">{dish.kitchenName}</span>
+                            <div className="mt-1.5 text-xs text-muted flex items-center gap-1.5 truncate">
+                              <ChefHat className="w-3 h-3 text-muted shrink-0" />
+                              <span className="font-semibold text-ink truncate">{dish.kitchenName}</span>
                             </div>
                           </div>
 
-                          <div className="mt-3 pt-2.5 border-t border-slate-100 flex items-center justify-between">
-                            <span className="text-base font-bold text-slate-900">{formatPrice(dish.price)}</span>
+                          <div className="mt-3 pt-2.5 border-t border-line flex items-center justify-between">
+                            <span className="text-base font-bold text-ink">{formatPrice(dish.price)}</span>
                             <button
                               type="button"
                               onClick={() => handleAddToCart(dish)}
-                              className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl bg-slate-900 hover:bg-brand hover:text-on-brand text-white text-xs font-bold transition-colors shadow-2xs active:scale-95"
+                              className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl bg-ink hover:bg-brand hover:text-on-brand text-page text-xs font-bold transition-colors shadow-2xs active:scale-95"
                             >
                               <Plus className="w-3.5 h-3.5 stroke-[3]" />
                               <span>{t('add')}</span>

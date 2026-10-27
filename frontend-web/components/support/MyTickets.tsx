@@ -34,12 +34,12 @@ interface TicketDetail extends TicketSummary {
 
 const statusColor = (status: string) => {
   const map: Record<string, string> = {
-    open: 'bg-amber-100 text-amber-800',
-    in_progress: 'bg-blue-100 text-blue-800',
-    resolved: 'bg-green-100 text-green-800',
-    closed: 'bg-gray-100 text-gray-700',
+    open: 'bg-accent-soft text-accent-soft-ink',
+    in_progress: 'bg-frozen-soft text-frozen-ink',
+    resolved: 'bg-brand-soft text-brand-soft-ink',
+    closed: 'bg-raised text-ink',
   };
-  return map[status] || 'bg-gray-100 text-gray-700';
+  return map[status] || 'bg-raised text-ink';
 };
 
 export default function MyTickets() {
@@ -102,30 +102,30 @@ export default function MyTickets() {
 
   if (selected) {
     return (
-      <div className="bg-white rounded-2xl border border-gray-100 p-6">
-        <button onClick={() => setSelected(null)} className="text-sm text-gray-500 hover:text-gray-700 mb-4">
+      <div className="bg-surface rounded-2xl border border-line p-6">
+        <button onClick={() => setSelected(null)} className="text-sm text-muted hover:text-ink mb-4">
           {t('backToTickets')}
         </button>
         <div className="flex items-center gap-3 mb-1">
-          <h3 className="text-lg font-semibold text-gray-900">{selected.subject}</h3>
+          <h3 className="text-lg font-semibold text-ink">{selected.subject}</h3>
           <span className={`px-2 py-1 rounded text-xs font-medium ${statusColor(selected.status)}`}>
             {statusLabel(selected.status)}
           </span>
         </div>
-        <p className="text-xs text-gray-500 mb-4" data-ltr>{selected.ticketNumber}</p>
-        <p className="text-gray-700 bg-gray-50 rounded-xl p-4 mb-4">{selected.description}</p>
+        <p className="text-xs text-muted mb-4" data-ltr>{selected.ticketNumber}</p>
+        <p className="text-ink bg-raised rounded-xl p-4 mb-4">{selected.description}</p>
 
         <div className="space-y-4 mb-4">
           {selected.messages.map((m) => (
             <div
               key={m.id}
               className={`rounded-xl p-3 max-w-lg ${
-                m.authorType === 'admin' ? 'bg-green-50 ms-0' : 'bg-gray-50 ms-auto'
+                m.authorType === 'admin' ? 'bg-brand-soft ms-0' : 'bg-raised ms-auto'
               }`}
             >
-              <p className="text-xs font-medium text-gray-500 mb-1">{m.authorName}</p>
-              <p className="text-sm text-gray-800">{m.message}</p>
-              <p className="text-xs text-gray-500 mt-1">{formatDateTime(m.createdAt)}</p>
+              <p className="text-xs font-medium text-muted mb-1">{m.authorName}</p>
+              <p className="text-sm text-ink">{m.message}</p>
+              <p className="text-xs text-muted mt-1">{formatDateTime(m.createdAt)}</p>
             </div>
           ))}
         </div>
@@ -137,7 +137,7 @@ export default function MyTickets() {
               value={reply}
               onChange={(e) => setReply(e.target.value)}
               placeholder={t('typeReply')}
-              className="flex-1 px-4 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-green-500"
+              className="flex-1 px-4 py-2 border border-line rounded-xl bg-surface text-ink focus:ring-2 focus:ring-brand/30 focus:border-brand"
             />
             <Button onClick={sendReply} disabled={sending || !reply.trim()}>
               {sending ? t('sendingDots') : t('send')}
@@ -149,7 +149,7 @@ export default function MyTickets() {
   }
 
   if (loading) {
-    return <div className="text-sm text-gray-500 py-6">{t('loadingTickets')}</div>;
+    return <div className="text-sm text-muted py-6">{t('loadingTickets')}</div>;
   }
 
   if (loadError && tickets.length === 0) {
@@ -158,23 +158,23 @@ export default function MyTickets() {
 
   if (tickets.length === 0) {
     return (
-      <div className="bg-white rounded-2xl border border-gray-100 p-8 text-center">
-        <p className="text-gray-500">{t('noTickets')}</p>
+      <div className="bg-surface rounded-2xl border border-line p-8 text-center">
+        <p className="text-muted">{t('noTickets')}</p>
       </div>
     );
   }
 
   return (
-    <div className="bg-white rounded-2xl border border-gray-100 divide-y divide-gray-100">
+    <div className="bg-surface rounded-2xl border border-line divide-y divide-line">
       {tickets.map((ticket) => (
         <button
           key={ticket.id}
           onClick={() => openTicket(ticket.id)}
-          className="w-full text-start px-6 py-4 hover:bg-gray-50 transition-colors flex items-center justify-between"
+          className="w-full text-start px-6 py-4 hover:bg-raised transition-colors flex items-center justify-between"
         >
           <div>
-            <p className="font-medium text-gray-900">{ticket.subject}</p>
-            <p className="text-xs text-gray-500"><span data-ltr>{ticket.ticketNumber}</span> · {formatDateTime(ticket.createdAt)}</p>
+            <p className="font-medium text-ink">{ticket.subject}</p>
+            <p className="text-xs text-muted"><span data-ltr>{ticket.ticketNumber}</span> · {formatDateTime(ticket.createdAt)}</p>
           </div>
           <span className={`px-2 py-1 rounded text-xs font-medium ${statusColor(ticket.status)}`}>
             {statusLabel(ticket.status)}

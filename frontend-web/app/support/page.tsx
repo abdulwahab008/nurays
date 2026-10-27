@@ -167,35 +167,35 @@ export default function SupportPage() {
     >
       {/* Quick Contact Cards: the in-app support channels */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
-        <div className="bg-gradient-to-br from-green-50 to-white rounded-2xl p-6 border border-green-100">
-          <div className="w-12 h-12 bg-green-600 rounded-xl flex items-center justify-center mb-4 text-white shadow-xs">
+        <div className="bg-surface rounded-[20px] p-5 sm:p-6 border border-line">
+          <div className="w-12 h-12 bg-brand-soft rounded-xl flex items-center justify-center mb-4 text-brand-soft-ink">
             <Send className="w-6 h-6" />
           </div>
-          <h3 className="font-semibold text-gray-900 mb-1">{t('messageSupport')}</h3>
-          <p className="text-sm text-gray-500 mb-3">{t('openTicket')}</p>
-          <button type="button" onClick={openContactForm} className="text-green-600 font-medium hover:underline cursor-pointer">
+          <h3 className="font-semibold text-ink mb-1">{t('messageSupport')}</h3>
+          <p className="text-sm text-muted mb-3">{t('openTicket')}</p>
+          <button type="button" onClick={openContactForm} className="text-brand-ink font-bold hover:underline cursor-pointer">
             {t('sendUsMessage')}
           </button>
         </div>
 
-        <div className="bg-gradient-to-br from-blue-50 to-white rounded-2xl p-6 border border-blue-100">
-          <div className="w-12 h-12 bg-blue-500 rounded-xl flex items-center justify-center mb-4 text-white shadow-xs">
+        <div className="bg-surface rounded-[20px] p-5 sm:p-6 border border-line">
+          <div className="w-12 h-12 bg-accent-soft rounded-xl flex items-center justify-center mb-4 text-accent-soft-ink">
             <MessageCircle className="w-6 h-6" />
           </div>
-          <h3 className="font-semibold text-gray-900 mb-1">{t('chatKitchen')}</h3>
-          <p className="text-sm text-gray-500 mb-3">{t('chatKitchenDesc')}</p>
-          <Link href="/orders" className="text-blue-600 font-medium hover:underline">
+          <h3 className="font-semibold text-ink mb-1">{t('chatKitchen')}</h3>
+          <p className="text-sm text-muted mb-3">{t('chatKitchenDesc')}</p>
+          <Link href="/orders" className="text-brand-ink font-bold hover:underline">
             {t('openMyOrders')}
           </Link>
         </div>
 
-        <div className="bg-gradient-to-br from-purple-50 to-white rounded-2xl p-6 border border-purple-100">
-          <div className="w-12 h-12 bg-purple-500 rounded-xl flex items-center justify-center mb-4 text-white shadow-xs">
+        <div className="bg-surface rounded-[20px] p-5 sm:p-6 border border-line">
+          <div className="w-12 h-12 bg-frozen-soft rounded-xl flex items-center justify-center mb-4 text-frozen-ink">
             <Ticket className="w-6 h-6" />
           </div>
-          <h3 className="font-semibold text-gray-900 mb-1">{t('myTickets')}</h3>
-          <p className="text-sm text-gray-500 mb-3">{t('myTicketsDesc')}</p>
-          <button type="button" onClick={() => setActiveTab('tickets')} className="text-purple-600 font-medium hover:underline cursor-pointer">
+          <h3 className="font-semibold text-ink mb-1">{t('myTickets')}</h3>
+          <p className="text-sm text-muted mb-3">{t('myTicketsDesc')}</p>
+          <button type="button" onClick={() => setActiveTab('tickets')} className="text-brand-ink font-bold hover:underline cursor-pointer">
             {t('viewMyTickets')}
           </button>
         </div>
@@ -208,7 +208,7 @@ export default function SupportPage() {
           className={`px-3 sm:px-6 py-2.5 rounded-xl font-bold text-xs transition-all cursor-pointer flex items-center gap-2 ${
             activeTab === 'faq'
               ? 'bg-brand text-on-brand shadow-sm'
-              : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+              : 'bg-raised text-ink hover:bg-line'
           }`}
         >
           <HelpCircle className="w-4 h-4" /> {t('faqs')}
@@ -218,7 +218,7 @@ export default function SupportPage() {
           className={`px-3 sm:px-6 py-2.5 rounded-xl font-bold text-xs transition-all cursor-pointer flex items-center gap-2 ${
             activeTab === 'contact'
               ? 'bg-brand text-on-brand shadow-sm'
-              : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+              : 'bg-raised text-ink hover:bg-line'
           }`}
         >
           <Send className="w-4 h-4" /> {t('contactUs')}
@@ -228,7 +228,7 @@ export default function SupportPage() {
           className={`px-3 sm:px-6 py-2.5 rounded-xl font-bold text-xs transition-all cursor-pointer flex items-center gap-2 ${
             activeTab === 'tickets'
               ? 'bg-brand text-on-brand shadow-sm'
-              : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+              : 'bg-raised text-ink hover:bg-line'
           }`}
         >
           <Ticket className="w-4 h-4" /> {t('myTickets')}
@@ -244,14 +244,14 @@ export default function SupportPage() {
           {faqs.map((category, catIndex) => {
             const CategoryIcon = category.icon;
             return (
-              <div key={catIndex} className="bg-white rounded-2xl border border-gray-100 overflow-hidden">
-                <div className="bg-gray-50 px-6 py-4 border-b border-gray-100">
-                  <h3 className="font-semibold text-gray-900 flex items-center gap-2.5">
+              <div key={catIndex} className="bg-surface rounded-2xl border border-line overflow-hidden">
+                <div className="bg-raised px-6 py-4 border-b border-line">
+                  <h3 className="font-semibold text-ink flex items-center gap-2.5">
                     <CategoryIcon className="w-5 h-5 text-brand-ink" />
                     {category.category}
                   </h3>
                 </div>
-                <div className="divide-y divide-gray-100">
+                <div className="divide-y divide-line">
                   {category.questions.map((faq, faqIndex) => {
                     const index = catIndex * 10 + faqIndex;
                     const isExpanded = expandedFaq === index;
@@ -259,17 +259,17 @@ export default function SupportPage() {
                       <div key={faqIndex}>
                         <button
                           onClick={() => setExpandedFaq(isExpanded ? null : index)}
-                          className="w-full px-6 py-4 flex items-center justify-between text-start hover:bg-gray-50 transition-colors"
+                          className="w-full px-6 py-4 flex items-center justify-between text-start hover:bg-raised transition-colors"
                         >
-                          <span className="font-medium text-gray-900">{faq.q}</span>
+                          <span className="font-medium text-ink">{faq.q}</span>
                           <ChevronDown
-                            className={`w-4 h-4 text-gray-500 transition-transform ${
+                            className={`w-4 h-4 text-muted transition-transform ${
                               isExpanded ? 'rotate-180 text-brand-ink' : ''
                             }`}
                           />
                         </button>
                         {isExpanded && (
-                          <div className="px-6 pb-4 text-gray-600 bg-brand-50/30 text-sm leading-relaxed">
+                          <div className="px-6 pb-4 text-muted bg-brand-50/30 text-sm leading-relaxed">
                             {faq.a}
                           </div>
                         )}
@@ -285,15 +285,15 @@ export default function SupportPage() {
 
       {/* Contact Form */}
       {activeTab === 'contact' && (
-        <div className="bg-white rounded-2xl border border-gray-100 p-6">
-          <h3 className="text-lg font-semibold text-gray-900 mb-6">{t('sendUsMessage')}</h3>
+        <div className="bg-surface rounded-2xl border border-line p-6">
+          <h3 className="text-lg font-semibold text-ink mb-6">{t('sendUsMessage')}</h3>
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1.5">{t('category')}</label>
+              <label className="block text-sm font-medium text-ink mb-1.5">{t('category')}</label>
               <select
                 value={formData.category}
                 onChange={(e) => setFormData({ ...formData, category: e.target.value })}
-                className="w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-brand focus:border-transparent text-sm"
+                className="w-full px-4 py-2.5 border border-line rounded-xl focus:ring-2 focus:ring-brand focus:border-transparent text-sm"
               >
                 <option value="general">{t('ticketCat.general')}</option>
                 <option value="order">{t('ticketCat.order')}</option>
@@ -305,24 +305,24 @@ export default function SupportPage() {
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1.5">{t('subject')}</label>
+              <label className="block text-sm font-medium text-ink mb-1.5">{t('subject')}</label>
               <input
                 type="text"
                 value={formData.subject}
                 onChange={(e) => setFormData({ ...formData, subject: e.target.value })}
                 placeholder={t('subjectPlaceholder')}
-                className="w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-brand focus:border-transparent text-sm"
+                className="w-full px-4 py-2.5 border border-line rounded-xl focus:ring-2 focus:ring-brand focus:border-transparent text-sm"
               />
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1.5">{t('message')}</label>
+              <label className="block text-sm font-medium text-ink mb-1.5">{t('message')}</label>
               <textarea
                 value={formData.message}
                 onChange={(e) => setFormData({ ...formData, message: e.target.value })}
                 placeholder={t('messagePlaceholder')}
                 rows={5}
-                className="w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-brand focus:border-transparent resize-none text-sm"
+                className="w-full px-4 py-2.5 border border-line rounded-xl focus:ring-2 focus:ring-brand focus:border-transparent resize-none text-sm"
               />
             </div>
 
@@ -339,17 +339,16 @@ export default function SupportPage() {
       )}
 
       {/* Additional Help */}
-      <div className="mt-8 rounded-3xl p-6 sm:p-8 bg-[#0C1016] text-white border border-white/10 shadow-lg relative overflow-hidden">
-        <div className="absolute -top-24 -end-24 w-64 h-64 rounded-full pointer-events-none bg-brand/20 blur-2xl" />
+      <div className="mt-8 rounded-[24px] p-6 sm:p-8 bg-[#0D2624] text-white relative overflow-hidden">
         <div className="flex items-center justify-between flex-wrap gap-4 relative z-10">
           <div>
-            <h3 className="text-xl font-black tracking-tight mb-1">{t('stillNeedHelp')}</h3>
-            <p className="text-slate-300 text-xs sm:text-sm">{t('stillNeedHelpDesc')}</p>
+            <h3 className="text-xl font-extrabold tracking-tight mb-1">{t('stillNeedHelp')}</h3>
+            <p className="text-[#A3BCB7] text-sm">{t('stillNeedHelpDesc')}</p>
           </div>
           <Button
             type="button"
             onClick={openContactForm}
-            className="flame-btn px-6 py-3 text-xs font-black shadow-md rounded-2xl flex items-center gap-2"
+            className="bg-brand hover:bg-brand-500 text-on-brand h-12 px-6 text-sm font-extrabold rounded-xl flex items-center gap-2"
           >
             <Send className="w-4 h-4" /> {t('sendUsMessage')}
           </Button>
