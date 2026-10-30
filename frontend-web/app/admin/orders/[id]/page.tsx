@@ -262,12 +262,12 @@ export default function AdminOrderDetailPage() {
   // the dedicated cancel flow below), so only ever offer that single next step.
   const ORDER_FORWARD_SEQUENCE = ['pending', 'confirmed', 'preparing', 'ready', 'dispatched', 'in_transit', 'delivered', 'completed'];
   const NEXT_STATUS_META: Record<string, { label: string; color: string }> = {
-    confirmed: { label: 'Confirmed', color: 'bg-blue-500 hover:bg-blue-600' },
-    preparing: { label: 'Preparing', color: 'bg-purple-500 hover:bg-purple-600' },
-    ready: { label: 'Ready', color: 'bg-indigo-500 hover:bg-indigo-600' },
-    dispatched: { label: 'Dispatched', color: 'bg-pink-500 hover:bg-pink-600' },
+    confirmed: { label: 'Confirmed', color: 'bg-blue-700 hover:bg-blue-800' },
+    preparing: { label: 'Preparing', color: 'bg-purple-700 hover:bg-purple-800' },
+    ready: { label: 'Ready', color: 'bg-indigo-700 hover:bg-indigo-800' },
+    dispatched: { label: 'Dispatched', color: 'bg-pink-700 hover:bg-pink-800' },
     in_transit: { label: 'In Transit', color: 'bg-brand-700 hover:bg-brand-800' },
-    delivered: { label: 'Delivered', color: 'bg-green-500 hover:bg-green-600' },
+    delivered: { label: 'Delivered', color: 'bg-green-700 hover:bg-green-800' },
   };
   const currentIndex = order ? ORDER_FORWARD_SEQUENCE.indexOf(order.orderStatus) : -1;
   const nextStatus = currentIndex >= 0 && currentIndex < ORDER_FORWARD_SEQUENCE.length - 1
@@ -464,7 +464,7 @@ export default function AdminOrderDetailPage() {
                             className={`px-4 py-2 rounded-lg text-sm font-medium text-white transition-all ${
                               selectedStatus === s.value
                                 ? s.color + ' ring-2 ring-offset-2 ring-gray-400 scale-105'
-                                : s.color + ' opacity-80'
+                                : s.color
                             }`}
                           >
                             {s.label}
