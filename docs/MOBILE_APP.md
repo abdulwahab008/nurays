@@ -49,8 +49,9 @@ address), and an Archive from Xcode for iOS.
 - **Phone sign-in** and **push** (see below).
 - **iOS Universal Links**: in Xcode, add the Associated Domains capability with `applinks:<your-site>` (it needs the
   Team ID, so it is not in the project yet).
-- **Icons and screenshots**: the app still has Capacitor's default icon and splash screen; store screenshots and the
-  Play feature graphic are needed (MOBILE-12).
+- **Store screenshots** and the Play feature graphic are still needed (MOBILE-12). The launcher icons and splash
+  screens are done: they are drawn from the SVGs in `mobile/assets/` by `node scripts/make-icons.mjs` (run from
+  `mobile/`, after `npm ci` in `frontend-web`, whose sharp it uses). Change the SVGs, run it again, commit the PNGs.
 - The store questionnaires (data safety, privacy labels, content rating) can be filled from Deliverable 8 of
   `docs/PRODUCTION_READINESS_AUDIT.md`.
 

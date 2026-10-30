@@ -1,4 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="ic_launcher_background">#FFFFFF</color>
+    <!-- The turquoise behind the adaptive launcher icon (Nuray's brand colour). -->
+    <color name="ic_launcher_background">#41DAC7</color>
+    <!-- The splash screen's background: the website's page colour, so the app opens on the colour it then shows. -->
+    <color name="splash_background">#F5F8F7</color>
 </resources>

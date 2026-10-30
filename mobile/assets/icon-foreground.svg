@@ -1,0 +1,8 @@
+<!-- Android adaptive icon foreground (108 x 108 canvas, the 66-unit safe zone centred): the mark's letter and dot,
+     scaled 0.7 and centred, on transparent. The turquoise comes from the adaptive icon's background colour. -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 108 108" width="432" height="432">
+  <g transform="translate(20.4 20.4) scale(0.7)">
+    <path d="M33 70V45a15 15 0 0 1 30 0v25" fill="none" stroke="#06302B" stroke-width="11" stroke-linecap="round" stroke-linejoin="round"/>
+    <circle cx="74" cy="22" r="8" fill="#FFC83D"/>
+  </g>
+</svg>
