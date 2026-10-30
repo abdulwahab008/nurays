@@ -56,7 +56,8 @@ All of it is in `frontend-web/app/globals.css`: the values once for light (`:roo
 - `components/ui/button.tsx`: the button (`default`/`primary` turquoise, `dark`, `outline`, `ghost`, `destructive`).
   Classes only, so a colour passed in `className` replaces the variant's.
 - `components/ui/Mark.tsx`: the logo (a turquoise tile, a dark "n", a yellow dot); `public/brand/` has the same drawing
-  as SVG and the app icons as PNG.
+  as SVG and the web app icons as PNG. The store apps' icons and splash screens come from `mobile/assets/`
+  (`mobile/scripts/make-icons.mjs`).
 - `components/layout/SiteHeader.tsx`: the header of the customer pages (home, kitchens, dishes, a kitchen's menu).
 - `components/layout/CustomerTabBar.tsx`: the phone tab bar (Home, Orders, Tray, Profile); `lib/tab-bar.ts` decides where it shows.
   A bar floating at the bottom of a page sits `var(--tabbar-offset)` higher so the two do not overlap.

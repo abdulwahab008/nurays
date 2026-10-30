@@ -604,7 +604,7 @@ ticked; what is left needs the store accounts, a real phone, or both. `docs/MOBI
 - [ ] App Links and Universal Links switched on: `ANDROID_SHA256_CERT_FINGERPRINTS` and `IOS_APP_IDS` on the web server, Associated Domains in Xcode, and the links tried on phones (MOBILE-4, MOBILE-7).
 - [ ] Privacy policy, terms, refund policy and `/delete-account` URLs entered in both consoles; data-safety and privacy labels filled from the list above. Needs the legal pages final first (MOBILE-5).
 - [ ] Reviewer accounts (customer, kitchen, rider with a job) and a reviewer note describing the demo order path.
-- [ ] Store listings (en, ur), screenshots per device class, feature graphic, app icon without alpha (iOS); the app still has Capacitor's default icon and splash screen (MOBILE-12).
+- [ ] Store listings (en, ur), screenshots per device class, feature graphic, feature graphic (MOBILE-12). The app icon (iOS without alpha) and splash screens are done.
 - [ ] Crash reporting (Sentry already configured for the web app) wired to the native shells.
 
 ## Deliverable 9: Pre-launch checklist
@@ -657,7 +657,7 @@ P0 findings still carrying work (the exploitable part of each code finding is fi
 - [x] **FE-20** (fixed, fifth addendum): No area is chosen on the buyer's behalf; without a position the area picker stays open and says why.
 - [x] **INTEG-7** (fixed): Closed with FE-11.
 - [x] **MOBILE-11** (fixed, eleventh addendum): Inside the app the tokens are also kept in the Keychain or Keystore and come back from there.
-- [ ] **MOBILE-12** (partly fixed): The manifest has `id`, `scope` and `categories`, and a `mobile` Playwright project runs the phone checks in CI. Left: the app icon, splash screen, feature graphic and screenshots.
+- [ ] **MOBILE-12** (partly fixed): The manifest has `id`, `scope` and `categories`, and a `mobile` Playwright project runs the phone checks in CI. The launcher icons (Android adaptive with a themed layer, legacy square and round; iOS 1024) and the splash screens are drawn from `mobile/assets/` by `mobile/scripts/make-icons.mjs`. Left: the feature graphic and screenshots.
 - [x] **MONEY-7** (fixed, eighth addendum): An Idempotency-Key reused with a different order is refused (request fingerprint, approved migration).
 - [x] **OPS-13** (fixed): Closed with FE-11.
 - [x] **SEC-11** (fixed, seventh addendum): Sign-up and the code request still say when an account exists (kept on purpose), but those answers are counted per network address, and after five in an hour that address gets 429 (`middleware/accountProbe.ts`).
