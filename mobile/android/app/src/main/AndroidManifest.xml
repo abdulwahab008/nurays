@@ -41,6 +41,11 @@
 
         </activity>
 
+        <!-- Status-bar icon for order alerts: Android draws it as a white silhouette, so the full-colour launcher icon shows as a blank square. -->
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_icon"
+            android:resource="@drawable/ic_stat_nuray" />
+
         <provider
             android:name="androidx.core.content.FileProvider"
             android:authorities="${applicationId}.fileprovider"
@@ -51,6 +56,13 @@
                 android:resource="@xml/file_paths"></meta-data>
         </provider>
     </application>
+
+    <!-- Lets the website's "Take photo" inputs find the camera app (Android 11+ hides other apps unless they are declared). -->
+    <queries>
+        <intent>
+            <action android:name="android.media.action.IMAGE_CAPTURE" />
+        </intent>
+    </queries>
 
     <!-- Permissions -->
 

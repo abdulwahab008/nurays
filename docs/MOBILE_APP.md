@@ -32,13 +32,17 @@ Everything planned for the app is in; what is left is the store accounts and che
 ```bash
 cd mobile
 npm ci
-NURAY_APP_URL=https://your-site npm run sync      # writes the address into both apps
+NURAY_APP_URL=https://your-site NURAY_API_URL=https://your-api npm run sync   # writes both into both apps
 npm run build:android:debug                       # needs the Android SDK and Java 21
 npm run open:ios                                  # needs a Mac with Xcode
 ```
 
-A store build: `NURAY_APP_URL=https://your-site npm run build:android:release` (an AAB; refuses the placeholder
-address), and an Archive from Xcode for iOS.
+`NURAY_API_URL` is the API's public address, the server's `BASE_URL`. Safepay sends a customer who has paid back to
+the API (`BASE_URL/api/v1/payments/safepay/return`), which then forwards them to the website; without it that page
+opens in the phone's browser and the app is left on Safepay's page.
+
+A store build: `NURAY_APP_URL=https://your-site NURAY_API_URL=https://your-api npm run build:android:release` (an
+AAB; refuses the placeholder address, a missing `NURAY_API_URL`, and plain http), and an Archive from Xcode for iOS.
 
 ## What you need before submitting
 
@@ -67,9 +71,13 @@ Each value is a client id, not a secret. Until it is set, its button does not sh
 2. Make an **Android** client for `pk.nuray.app` with the SHA-1 of every key that signs the app: the debug key while
    testing, the upload key, and the Play App Signing key (Play Console, App integrity). A missing SHA-1 shows as a
    cancelled sign-in.
-3. Make an **iOS** client for `pk.nuray.app`. Put its id in `NEXT_PUBLIC_GOOGLE_IOS_CLIENT_ID` (web build), and in
-   `mobile/ios/App/App/Info.plist` add its reversed form (`com.googleusercontent.apps.<number>-<id>`) as a URL scheme
-   next to `pk.nuray.app`.
+3. Make an **iOS** client for `pk.nuray.app`. Its id looks like `<number>-<id>.apps.googleusercontent.com`; its
+   reversed form is `com.googleusercontent.apps.<number>-<id>`. In `mobile/ios/App/App/Info.plist`, under
+   `CFBundleURLTypes`, add the reversed form as a second `<string>` in the `CFBundleURLSchemes` array, after
+   `pk.nuray.app`. Ship that app build to the App Store first, and only then put the id in
+   `NEXT_PUBLIC_GOOGLE_IOS_CLIENT_ID` (web build): that id is what makes the Google button show on iPhones, and
+   Google's iOS sign-in crashes the app when the scheme is missing. Because the app loads the live site, the button
+   also shows in older installed builds, so check that the builds people still use carry the scheme.
 4. On the server, `GOOGLE_NATIVE_CLIENT_IDS` lists the Android and iOS client ids (comma-separated).
 
 **Apple** (Apple Developer, needs the paid account):

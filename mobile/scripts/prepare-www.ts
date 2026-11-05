@@ -1,12 +1,24 @@
 /**
- * Before every sync: tells the page shown when the website cannot be reached (www/offline.html) where "Try again" goes,
- * by writing www/app-config.js from NURAY_APP_URL. With --release it also refuses the placeholder address.
+ * Runs twice per sync.
+ * - Before it (`npm run sync…`): checks NURAY_APP_URL, and with --release refuses the placeholder address.
+ * - After `cap copy` has put the web files into a native project (the `capacitor:copy:after` hook, which sets
+ *   CAPACITOR_PLATFORM_NAME): writes the address into that project's copy of offline.html, so "Try again" knows where
+ *   to go. The committed www/offline.html keeps the placeholder.
  */
-import { writeFileSync } from 'node:fs';
+import { readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { assertReleasable, resolveAppUrl } from '../app-url.ts';
+import { COPIED_OFFLINE_PAGE, withAppUrl } from './offline-page.ts';
 
 const app = resolveAppUrl(process.env);
 if (process.argv.includes('--release')) assertReleasable(app);
-writeFileSync(join(import.meta.dirname, '..', 'www', 'app-config.js'), `window.NURAY_APP_URL = ${JSON.stringify(app.url)};\n`);
-console.log(`The app opens ${app.url}${app.placeholder ? ' (placeholder: set NURAY_APP_URL)' : ''}.`);
+
+const platform = process.env.CAPACITOR_PLATFORM_NAME;
+if (platform) {
+  const page = COPIED_OFFLINE_PAGE[platform];
+  if (!page) throw new Error(`No offline page location known for platform ${platform}.`);
+  const file = join(import.meta.dirname, '..', page);
+  writeFileSync(file, withAppUrl(readFileSync(file, 'utf8'), app.url));
+} else {
+  console.log(`The app opens ${app.url}${app.placeholder ? ' (placeholder: set NURAY_APP_URL)' : ''}.`);
+}

@@ -21,6 +21,8 @@ android {
         versionName "1.0"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         manifestPlaceholders = [appHost: appHost]
+        // The rider's "Delivery in progress" notification: the plugin reads its small icon from this string.
+        resValue "string", "capacitor_background_geolocation_notification_icon", "drawable/ic_stat_nuray"
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
              // Default: https://android.googlesource.com/platform/frameworks/base/+/282e181b58cf72b6ca770dc7ca5f91f135444502/tools/aapt/AaptAssets.cpp#61
@@ -55,11 +57,14 @@ dependencies {
 
 apply from: 'capacitor.build.gradle'
 
-try {
-    def servicesJSON = file('google-services.json')
-    if (servicesJSON.text) {
-        apply plugin: 'com.google.gms.google-services'
+if (file('google-services.json').exists()) {
+    apply plugin: 'com.google.gms.google-services'
+} else {
+    // Without it Firebase is never set up, and turning on alerts (PushNotifications.register) crashes the app.
+    // A debug build may go without (CI builds one); a store build may not.
+    gradle.taskGraph.whenReady { graph ->
+        if (graph.allTasks.any { it.project == project && it.name.contains('Release') }) {
+            throw new GradleException("mobile/android/app/google-services.json is missing. A release build without it crashes when someone turns on alerts. Download it from the Firebase project (see docs/MOBILE_APP.md).")
+        }
     }
-} catch(Exception e) {
-    logger.info("google-services.json not found, google-services plugin not applied. Push Notifications won't work")
 }
