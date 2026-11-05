@@ -12,27 +12,25 @@ import { riderMessages } from '@/lib/i18n/messages/rider';
 export function BackgroundLocationNotice({ onChoice }: { onChoice: (allow: boolean) => void }) {
   const t = useT(riderMessages);
   return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-4 bg-slate-950/70">
-      <div role="dialog" aria-modal="true" aria-labelledby="bgloc-title" className="w-full max-w-md bg-slate-900 border border-slate-700 rounded-3xl p-6 shadow-2xl" data-testid="background-location-notice">
-        <div className="flex items-start gap-3 mb-4">
-          <div className="w-11 h-11 rounded-2xl flex items-center justify-center shrink-0 bg-emerald-500/15 text-emerald-300 border border-emerald-500/30">
-            <MapPin className="w-5 h-5" aria-hidden="true" />
-          </div>
-          <h2 id="bgloc-title" className="text-base font-bold text-white leading-snug">
-            {t('bgloc.title')}
-          </h2>
-        </div>
-        <div className="space-y-2 text-sm text-slate-300 leading-relaxed mb-6">
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-ink/40">
+      <div role="dialog" aria-modal="true" aria-labelledby="bgloc-title" className="w-full sm:max-w-md bg-surface rounded-t-3xl sm:rounded-3xl p-6 pb-[calc(1.5rem+var(--safe-bottom))] sm:pb-6 shadow-2xl" data-testid="background-location-notice">
+        <span className="w-11 h-11 rounded-full flex items-center justify-center bg-brand-soft text-brand-soft-ink mb-4" aria-hidden="true">
+          <MapPin className="w-5 h-5" />
+        </span>
+        <h2 id="bgloc-title" className="text-xl font-semibold text-ink leading-snug">
+          {t('bgloc.title')}
+        </h2>
+        <div className="space-y-2 text-[15px] text-muted leading-relaxed mt-3 mb-6">
           <p>{t('bgloc.body1')}</p>
           <p>{t('bgloc.body2')}</p>
           <p>{t('bgloc.body3')}</p>
         </div>
-        <div className="flex flex-col-reverse sm:flex-row gap-3 sm:justify-end">
-          <button type="button" onClick={() => onChoice(false)} className="px-4 py-2.5 rounded-xl text-sm font-semibold border border-slate-600 text-slate-200 hover:bg-slate-800">
-            {t('bgloc.notNow')}
-          </button>
-          <button type="button" onClick={() => onChoice(true)} className="px-5 py-2.5 rounded-xl text-sm font-bold bg-emerald-500 text-slate-950 hover:bg-emerald-400">
+        <div className="flex flex-col gap-2">
+          <button type="button" onClick={() => onChoice(true)} className="min-h-12 rounded-xl text-[15px] font-semibold bg-brand text-on-brand hover:bg-brand-500">
             {t('bgloc.allow')}
+          </button>
+          <button type="button" onClick={() => onChoice(false)} className="min-h-12 rounded-xl text-[15px] font-medium text-ink hover:bg-raised">
+            {t('bgloc.notNow')}
           </button>
         </div>
       </div>

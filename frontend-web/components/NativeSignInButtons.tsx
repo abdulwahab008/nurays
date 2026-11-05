@@ -36,7 +36,8 @@ export function NativeSignInButtons({ onSuccess, googleText }: { onSuccess: (pro
     try {
       initialized ??= plugin.initialize(socialLoginInit(platform, ids));
       await initialized;
-      const { result } = await plugin.login({ provider, options: { scopes: provider === 'apple' ? ['name', 'email'] : ['email', 'profile'] } });
+      // Google already asks for e-mail and profile; on Android, naming scopes is refused unless MainActivity is changed.
+      const { result } = await plugin.login({ provider, options: provider === 'apple' ? { scopes: ['name', 'email'] } : {} });
       const proof = proofFromLogin(provider, result);
       if (!proof) throw new Error('no token');
       onSuccess(proof);

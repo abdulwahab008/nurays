@@ -188,7 +188,6 @@ export const accountMessages = defineMessages({
     // Location map
     mapSearchPlaceholder: 'Search society or area (e.g. Askari 11, DHA)...',
     detectMyLocation: 'Detect my location',
-    myLocation: 'My Location',
     mapHint: 'Click anywhere on the map or drag the pin to reposition',
     locateFailed: 'Your device did not share its location. Search for your area or drag the pin.',
     // Notifications
@@ -522,7 +521,6 @@ export const accountMessages = defineMessages({
     tipInstructionsDesc: 'گیٹ کوڈ، گھنٹی وغیرہ',
     mapSearchPlaceholder: 'سوسائٹی یا علاقہ تلاش کریں (مثلاً Askari 11، DHA)...',
     detectMyLocation: 'میری لوکیشن معلوم کریں',
-    myLocation: 'میری لوکیشن',
     mapHint: 'نقشے پر کہیں بھی کلک کریں یا پن کو کھینچ کر جگہ بدلیں',
     locateFailed: 'آپ کے آلے نے لوکیشن نہیں بتائی۔ اپنا علاقہ تلاش کریں یا پن کو کھینچیں۔',
     notifications: 'نوٹیفیکیشنز',

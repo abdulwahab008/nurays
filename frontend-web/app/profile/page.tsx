@@ -182,7 +182,7 @@ export default function ProfilePage() {
     if (leaving.current) return;
     const token = apiClient.getAccessToken();
     if (!token && !isAuthenticated) {
-      router.push(loginUrlHere());
+      router.replace(loginUrlHere());
       return;
     }
     loadProfile();

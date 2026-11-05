@@ -170,7 +170,7 @@ export default function AddressesPage() {
   useEffect(() => {
     // The saved session loads a moment after the page; a stored token means "signed in".
     if (!isAuthenticated && !apiClient.getAccessToken()) {
-      router.push(loginUrlHere());
+      router.replace(loginUrlHere());
       return;
     }
     loadAddresses();

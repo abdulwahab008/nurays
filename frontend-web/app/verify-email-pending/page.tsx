@@ -29,7 +29,7 @@ function VerifyEmailPendingContent() {
     // The first render still sees the signed-out state the server drew: a stored token means the person is signed in and the store
     // has not caught up yet, so only someone with neither is sent to sign in (a reload of this page used to bounce to /login).
     if (!isAuthenticated && !apiClient.getAccessToken()) {
-      router.push('/login');
+      router.replace('/login');
     }
   }, [isAuthenticated, router]);
 

@@ -456,7 +456,7 @@ export default function AdminCategoriesPage() {
 
   useEffect(() => {
     if (!isAuthenticated) {
-      router.push('/login');
+      router.replace('/login');
       return;
     }
 

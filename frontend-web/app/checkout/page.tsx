@@ -186,7 +186,7 @@ export default function CheckoutPage() {
   useEffect(() => {
     const token = apiClient.getAccessToken();
     if (!token && !isAuthenticated) {
-      router.push(loginUrlHere());
+      router.replace(loginUrlHere());
       return;
     }
     loadData();

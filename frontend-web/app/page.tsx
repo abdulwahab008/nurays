@@ -79,9 +79,9 @@ export default function Home() {
   useEffect(() => {
     if (isAuthenticated && user) {
       const userType = user.userType || user.user_type;
-      if (userType === 'admin') router.push('/admin/dashboard');
-      else if (userType === 'seller') router.push('/sellers/dashboard');
-      else if (userType === 'rider') router.push('/riders/dashboard');
+      if (userType === 'admin') router.replace('/admin/dashboard');
+      else if (userType === 'seller') router.replace('/sellers/dashboard');
+      else if (userType === 'rider') router.replace('/riders/dashboard');
     }
   }, [isAuthenticated, user, router]);
 

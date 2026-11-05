@@ -219,7 +219,7 @@ test.describe('opening something outside the app', () => {
     openExternal('geo:24.9,67.1?q=24.9,67.1(Door)', win);
     openExternal('/refund-policy', win);
     expect(opened).toEqual([
-      'browser https://www.google.com/maps/dir/?api=1&destination=24.9,67.1',
+      'launcher https://www.google.com/maps/dir/?api=1&destination=24.9,67.1', // a maps link opens the maps app
       'launcher geo:24.9,67.1?q=24.9,67.1(Door)',
       'browser https://nuray.pk/refund-policy',
     ]);

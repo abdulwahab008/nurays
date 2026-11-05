@@ -10,15 +10,7 @@ import { useToast } from '@/components/ui/toast';
 import { useAuthStore } from '@/lib/store/auth-store';
 import { apiClient } from '@/lib/api-client';
 import LocationMap from '@/components/ui/LocationMap';
-import {
-  Bike,
-  Store,
-  MapPin,
-  CheckCircle2,
-  Plus,
-  X,
-  Navigation,
-} from 'lucide-react';
+import { Plus, X } from 'lucide-react';
 import { useShallow } from 'zustand/react/shallow';
 
 interface CommunityTerms {
@@ -94,6 +86,7 @@ export default function SellerDeliveryPage() {
 
   // Per-community delivery fees
   const [communities, setCommunities] = useState<CommunityRow[]>([]);
+  const [showOtherCities, setShowOtherCities] = useState(false);
   const [drafts, setDrafts] = useState<Record<string, CommunityDraft>>({});
   const [allowCrossCommunity, setAllowCrossCommunity] = useState(true);
   const [homeCommunityName, setHomeCommunityName] = useState<string | null>(null);
@@ -158,7 +151,7 @@ export default function SellerDeliveryPage() {
 
   useEffect(() => {
     if (!isAuthenticated) {
-      router.push(loginUrlHere());
+      router.replace(loginUrlHere());
       return;
     }
 
@@ -310,7 +303,7 @@ export default function SellerDeliveryPage() {
           setCommunities(rows);
           setDrafts(Object.fromEntries(rows.map((r) => [r.id, toDraft(r)])));
         }
-        showToast('Delivery settings saved successfully.', 'success');
+        showToast('Delivery settings saved.', 'success');
       }
     } catch (err) {
       console.error('Failed to save delivery settings:', err);
@@ -323,21 +316,19 @@ export default function SellerDeliveryPage() {
     }
   };
 
+  const subtitle = 'Who takes your food to customers, where, and what they pay';
+
   // No form until the kitchen's own settings were read: the boxes would hold defaults, and saving them would replace the real ones.
   if (!settingsRead) {
     return (
-      <DashboardLayout
-        title="Delivery"
-        subtitle="Fulfillment options and local delivery rates"
-        sidebarItems={SELLER_SIDEBAR_ITEMS}
-        userType="seller"
-      >
-        <div className="max-w-3xl mx-auto space-y-6 pb-16">
+      <DashboardLayout title="Delivery" subtitle={subtitle} sidebarItems={SELLER_SIDEBAR_ITEMS} userType="seller">
+        <div className="max-w-3xl pb-16">
           {loadError ? (
             <LoadError error={loadError} onRetry={() => loadDeliverySettings()} title="We couldn't load your delivery settings" />
           ) : (
-            <div className="rounded-2xl border border-slate-200 bg-white p-10 text-center text-sm font-medium text-slate-600" role="status">
-              Loading your delivery settings…
+            <div className="py-16 text-center" role="status">
+              <div className="animate-spin rounded-full h-8 w-8 border-2 border-line border-t-brand-600 mx-auto mb-4" />
+              <p className="text-sm text-muted">Loading your delivery settings…</p>
             </div>
           )}
         </div>
@@ -345,373 +336,430 @@ export default function SellerDeliveryPage() {
     );
   }
 
+  const selfDelivery = deliveryModel === 'model_b';
+  const visibleCommunities = [...communities]
+    .filter((c) => c.isHome || allowCrossCommunity)
+    .sort(
+      (a, b) =>
+        Number(b.isHome) - Number(a.isHome) ||
+        Number(b.isNeighbor) - Number(a.isNeighbor) ||
+        a.name.localeCompare(b.name)
+    );
+  const noneTicked = !Object.values(drafts).some((d) => d.enabled) && communities.length > 0;
+  const homeCity = communities.find((c) => c.isHome)?.city;
+  const homeCityCommunities = homeCity ? visibleCommunities.filter((c) => c.city === homeCity) : visibleCommunities;
+  const otherCityCommunities = homeCity
+    ? visibleCommunities.filter((c) => c.city !== homeCity).sort((a, b) => a.city.localeCompare(b.city) || a.name.localeCompare(b.name))
+    : [];
+  const otherCitiesTicked = otherCityCommunities.filter((c) => drafts[c.id]?.enabled).length;
+
+  const listCls = 'rounded-[20px] border border-line bg-surface divide-y divide-line';
+  const communityRow = (c: CommunityRow) => {
+    const d = drafts[c.id] ?? { enabled: false, fee: '', freeAbove: '', minOrder: '' };
+    const setDraft = (patch: Partial<CommunityDraft>) =>
+      setDrafts((prev) => ({ ...prev, [c.id]: { ...d, ...patch } }));
+    return (
+      <li key={c.id} className="px-4 py-2">
+        <label className="flex min-h-11 cursor-pointer flex-wrap items-center gap-x-3 gap-y-1">
+          <input
+            type="checkbox"
+            checked={d.enabled}
+            onChange={(e) =>
+              setDraft({
+                enabled: e.target.checked,
+                fee: e.target.checked && d.fee === '' ? String(c.suggestedFee) : d.fee,
+              })
+            }
+            className="h-5 w-5 shrink-0 cursor-pointer accent-brand-700"
+          />
+          <span className="text-[15px] font-medium text-ink">{c.name}</span>
+          <span className="text-sm text-muted">{c.city}</span>
+          {c.isHome && (
+            <span className="rounded-full bg-brand-soft px-2 py-0.5 text-xs font-medium text-brand-soft-ink">Your community</span>
+          )}
+          {!c.isHome && c.isNeighbor && (
+            <span className="rounded-full bg-raised px-2 py-0.5 text-xs font-medium text-muted">Nearby</span>
+          )}
+        </label>
+
+        {d.enabled && !selfDelivery && (
+          <div className="grid grid-cols-2 gap-3 pb-3 sm:ps-8" data-testid="nuray-fee-row">
+            <div>
+              <span className="block text-sm text-muted">Customers pay Nuray</span>
+              <span className="mt-1 block text-[15px] font-semibold text-ink tabular-nums">
+                {c.nurayFee == null
+                  ? 'Too far for Nuray riders'
+                  : c.nurayFeeIsFixed
+                    ? `Rs ${c.nurayFee}, set fee`
+                    : `About Rs ${c.nurayFee}, by distance`}
+              </span>
+            </div>
+            <div>
+              <label htmlFor={`${c.id}-min`} className={labelCls}>Smallest order (Rs)</label>
+              <input
+                id={`${c.id}-min`}
+                type="number"
+                min={0}
+                step={50}
+                placeholder="Optional"
+                value={d.minOrder}
+                onChange={(e) => setDraft({ minOrder: e.target.value })}
+                className={inputCls}
+              />
+            </div>
+          </div>
+        )}
+
+        {d.enabled && selfDelivery && (
+          <div className="grid grid-cols-2 gap-3 pb-3 sm:grid-cols-3 sm:ps-8">
+            <div>
+              <label htmlFor={`${c.id}-fee`} className={labelCls}>Fee (Rs)</label>
+              <input
+                id={`${c.id}-fee`}
+                type="number"
+                min={0}
+                step={10}
+                value={d.fee}
+                onChange={(e) => setDraft({ fee: e.target.value })}
+                className={inputCls}
+              />
+            </div>
+            <div>
+              <label htmlFor={`${c.id}-free`} className={labelCls}>Free above (Rs)</label>
+              <input
+                id={`${c.id}-free`}
+                type="number"
+                min={0}
+                step={50}
+                placeholder="Optional"
+                value={d.freeAbove}
+                onChange={(e) => setDraft({ freeAbove: e.target.value })}
+                className={inputCls}
+              />
+            </div>
+            <div>
+              <label htmlFor={`${c.id}-min`} className={labelCls}>Smallest order (Rs)</label>
+              <input
+                id={`${c.id}-min`}
+                type="number"
+                min={0}
+                step={50}
+                placeholder="Optional"
+                value={d.minOrder}
+                onChange={(e) => setDraft({ minOrder: e.target.value })}
+                className={inputCls}
+              />
+            </div>
+          </div>
+        )}
+      </li>
+    );
+  };
+
   return (
-    <DashboardLayout
-      title="Delivery"
-      subtitle="Fulfillment options and local delivery rates"
-      sidebarItems={SELLER_SIDEBAR_ITEMS}
-      userType="seller"
-    >
-      <div className="max-w-3xl mx-auto space-y-6 pb-16">
+    <DashboardLayout title="Delivery" subtitle={subtitle} sidebarItems={SELLER_SIDEBAR_ITEMS} userType="seller">
+      <div className="max-w-3xl">
         {Boolean(loadError) && (
-          <div className="bg-red-50 border border-red-200 rounded-xl p-3.5 flex items-center justify-between text-xs text-red-700" role="alert">
+          <div className="mb-6 flex flex-wrap items-center justify-between gap-3 rounded-xl bg-red-50 px-4 py-3 text-sm text-red-700" role="alert">
             <span>{failureMessage(loadError)}</span>
-            <button onClick={() => loadDeliverySettings()} className="font-semibold underline">
+            <button type="button" onClick={() => loadDeliverySettings()} className="min-h-11 font-semibold underline">
               Retry
             </button>
           </div>
         )}
 
-        <form onSubmit={handleSubmit} className="space-y-6">
-          {/* Fulfillment Model */}
-          <div className="bg-white rounded-2xl p-5 sm:p-6 border border-slate-200/90 shadow-xs space-y-4">
-            <h3 className="text-sm font-bold text-slate-900 tracking-tight">
-              Fulfillment Model
-            </h3>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
-              {/* Model A */}
-              <div
-                onClick={() => setDeliveryModel('model_a')}
-                className={`p-4 rounded-xl border-2 transition-all cursor-pointer ${
-                  deliveryModel === 'model_a'
-                    ? 'border-blue-600 bg-blue-50/30'
-                    : 'border-slate-200 hover:border-slate-300 bg-white'
-                }`}
-              >
-                <div className="flex items-center gap-3">
-                  <div className="w-9 h-9 rounded-lg bg-blue-100 text-blue-700 flex items-center justify-center shrink-0">
-                    <Bike className="w-5 h-5 text-blue-700" />
-                  </div>
-                  <div>
-                    <h4 className="text-xs font-bold text-slate-900">Nuray Rider Fleet</h4>
-                    <p className="text-[11px] text-slate-500 mt-0.5">Platform riders pick up and deliver your orders; customers pay Nuray&apos;s delivery price</p>
-                  </div>
-                </div>
-              </div>
-
-              {/* Model B */}
-              <div
-                onClick={() => setDeliveryModel('model_b')}
-                className={`p-4 rounded-xl border-2 transition-all cursor-pointer ${
-                  deliveryModel === 'model_b'
-                    ? 'border-emerald-600 bg-emerald-50/30'
-                    : 'border-slate-200 hover:border-slate-300 bg-white'
-                }`}
-              >
-                <div className="flex items-center gap-3">
-                  <div className="w-9 h-9 rounded-lg bg-emerald-100 text-emerald-800 flex items-center justify-center shrink-0">
-                    <Store className="w-5 h-5 text-emerald-700" />
-                  </div>
-                  <div>
-                    <h4 className="text-xs font-bold text-slate-900">Self-Delivery</h4>
-                    <p className="text-[11px] text-slate-500 mt-0.5">You deliver your own orders and keep the delivery fee; no platform rider is assigned</p>
-                  </div>
-                </div>
-              </div>
+        <form onSubmit={handleSubmit}>
+          <section aria-labelledby="who-delivers">
+            <h2 id="who-delivers" className="text-sm font-semibold text-ink">Who delivers your orders</h2>
+            <div role="radiogroup" aria-labelledby="who-delivers" className="mt-3 grid gap-3 sm:grid-cols-2">
+              {(
+                [
+                  {
+                    value: 'model_a',
+                    title: 'Nuray riders',
+                    body: "A Nuray rider collects the order from your kitchen. Customers pay Nuray's delivery fee.",
+                  },
+                  {
+                    value: 'model_b',
+                    title: 'I deliver myself',
+                    body: 'You or your own rider take the order. You set the delivery fee and keep it.',
+                  },
+                ] as const
+              ).map((option) => {
+                const selected = deliveryModel === option.value;
+                return (
+                  <label
+                    key={option.value}
+                    className={`flex cursor-pointer items-start gap-3 rounded-xl border p-4 transition-colors focus-within:ring-3 focus-within:ring-brand/30 ${
+                      selected ? 'border-brand-600 bg-brand-soft' : 'border-line bg-surface hover:border-line-strong'
+                    }`}
+                  >
+                    <input
+                      type="radio"
+                      name="deliveryModel"
+                      value={option.value}
+                      checked={selected}
+                      onChange={() => setDeliveryModel(option.value)}
+                      className="mt-0.5 h-5 w-5 shrink-0 accent-brand-700 focus:outline-none"
+                    />
+                    <span>
+                      <span className="block text-[15px] font-semibold text-ink">{option.title}</span>
+                      <span className="mt-1 block text-sm text-muted">{option.body}</span>
+                    </span>
+                  </label>
+                );
+              })}
             </div>
-          </div>
+          </section>
 
-          {/* Community delivery fees */}
-          <div className="bg-white rounded-2xl p-5 sm:p-6 border border-slate-200/90 shadow-xs space-y-4">
-            <div>
-              <h3 className="text-sm font-bold text-slate-900 tracking-tight">
-                {deliveryModel === 'model_a' ? 'Where you deliver' : 'Delivery fee by community'}
-              </h3>
-              <p className="text-[11px] text-slate-500 mt-0.5">
-                {homeCommunityName
-                  ? `You are based in ${homeCommunityName}. `
-                  : ''}
-                {deliveryModel === 'model_a'
-                  ? "Nuray riders deliver your orders at Nuray's prices: a fixed fee within your community, and a fee by distance to other communities. Choose the communities you deliver to and, if you like, a minimum order."
-                  : 'Fix the fee you charge for each community you deliver to. Once you set fees, you only deliver to the communities you switch on.'}
-              </p>
-            </div>
+          <section aria-labelledby="where-you-deliver" className="mt-8 border-t border-line pt-6">
+            <h2 id="where-you-deliver" className="text-sm font-semibold text-ink">
+              {selfDelivery ? 'Fee for each community' : 'Where you deliver'}
+            </h2>
+            <p className="mt-1 text-sm text-muted">
+              {homeCommunityName ? `Your kitchen is in ${homeCommunityName}. ` : ''}
+              {selfDelivery
+                ? 'Set what you charge in each community you deliver to. Once you tick one, you only deliver to the ones ticked.'
+                : 'Nuray riders charge a set fee inside your community and a fee by distance to others. Tick the communities you deliver to.'}
+            </p>
 
-            <label className="flex items-center justify-between gap-3 text-xs font-medium text-slate-800 cursor-pointer">
+            <div className="mt-4 flex items-center justify-between gap-4">
               <span>
-                Deliver to other communities
-                <span className="block text-[11px] font-normal text-slate-500">
-                  Off = customers outside your community can&apos;t order delivery from you.
-                </span>
+                <span id="cross-community-label" className="block text-[15px] text-ink">Deliver outside my community</span>
+                <span id="cross-community-hint" className="block text-sm text-muted">When off, only customers in your community can order delivery.</span>
               </span>
-              <input
-                type="checkbox"
-                checked={allowCrossCommunity}
-                onChange={(e) => setAllowCrossCommunity(e.target.checked)}
-                className="w-4 h-4 text-brand-ink rounded border-slate-300 focus:ring-brand cursor-pointer"
-              />
-            </label>
+              <button
+                type="button"
+                role="switch"
+                aria-checked={allowCrossCommunity}
+                aria-labelledby="cross-community-label"
+                aria-describedby="cross-community-hint"
+                onClick={() => setAllowCrossCommunity(!allowCrossCommunity)}
+                className="w-12 min-h-11 shrink-0 flex items-center rounded-full focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-brand/40"
+              >
+                <span aria-hidden="true" className={`relative w-12 h-7 rounded-full transition-colors ${allowCrossCommunity ? 'bg-brand-600' : 'bg-line-strong'}`}>
+                  <span className={`absolute top-1 w-5 h-5 rounded-full bg-white shadow-sm transition-[inset-inline-start] ${allowCrossCommunity ? 'start-6' : 'start-1'}`} />
+                </span>
+              </button>
+            </div>
+
+            {noneTicked && (
+              <p className="mt-4 rounded-xl bg-accent-soft px-4 py-3 text-sm text-accent-soft-ink">
+                {selfDelivery
+                  ? 'No communities ticked yet, so your usual prices below apply everywhere you deliver.'
+                  : 'No communities ticked yet, so Nuray riders deliver anywhere they can reach.'}
+              </p>
+            )}
 
             {communitiesError ? (
-              <LoadError compact error={communitiesError} onRetry={() => loadDeliverySettings(true)} title="We couldn't load your community fees" />
-            ) : communities.length === 0 ? (
-              <p className="text-xs text-slate-500">No communities are available yet.</p>
-            ) : (
-              <div className="divide-y divide-slate-100 border border-slate-200 rounded-xl">
-                {[...communities]
-                  .filter((c) => c.isHome || allowCrossCommunity)
-                  .sort(
-                    (a, b) =>
-                      Number(b.isHome) - Number(a.isHome) ||
-                      Number(b.isNeighbor) - Number(a.isNeighbor) ||
-                      a.name.localeCompare(b.name)
-                  )
-                  .map((c) => {
-                    const d = drafts[c.id] ?? { enabled: false, fee: '', freeAbove: '', minOrder: '' };
-                    const setDraft = (patch: Partial<CommunityDraft>) =>
-                      setDrafts((prev) => ({ ...prev, [c.id]: { ...d, ...patch } }));
-                    return (
-                      <div key={c.id} className="p-3.5 space-y-2.5">
-                        <label className="flex items-center gap-2.5 cursor-pointer">
-                          <input
-                            type="checkbox"
-                            checked={d.enabled}
-                            onChange={(e) =>
-                              setDraft({
-                                enabled: e.target.checked,
-                                fee: e.target.checked && d.fee === '' ? String(c.suggestedFee) : d.fee,
-                              })
-                            }
-                            className="w-4 h-4 text-brand-ink rounded border-slate-300 focus:ring-brand"
-                          />
-                          <span className="text-xs font-bold text-slate-900">{c.name}</span>
-                          <span className="text-[11px] text-slate-500">{c.city}</span>
-                          {c.isHome && (
-                            <span className="text-[11px] font-bold px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700">
-                              Your community
-                            </span>
-                          )}
-                          {!c.isHome && c.isNeighbor && (
-                            <span className="text-[11px] font-bold px-1.5 py-0.5 rounded bg-blue-50 text-blue-700">
-                              Nearby
-                            </span>
-                          )}
-                        </label>
-
-                        {d.enabled && deliveryModel === 'model_a' && (
-                          <div className="grid grid-cols-3 gap-2.5 ps-6" data-testid="nuray-fee-row">
-                            <div className="col-span-2">
-                              <span className="text-[11px] text-slate-500 block mb-1">Customers pay Nuray</span>
-                              <span className="text-xs font-bold text-slate-900">
-                                {c.nurayFee == null
-                                  ? 'Too far for Nuray riders'
-                                  : c.nurayFeeIsFixed
-                                    ? `Rs ${c.nurayFee} (fixed)`
-                                    : `about Rs ${c.nurayFee} (by distance)`}
-                              </span>
-                            </div>
-                            <div>
-                              <label className="text-[11px] text-slate-500 block mb-1">Min order (PKR)</label>
-                              <input
-                                type="number"
-                                min={0}
-                                step={50}
-                                placeholder="optional"
-                                value={d.minOrder}
-                                onChange={(e) => setDraft({ minOrder: e.target.value })}
-                                className="w-full px-2.5 py-1.5 text-xs font-semibold border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-brand"
-                              />
-                            </div>
-                          </div>
-                        )}
-
-                        {d.enabled && deliveryModel === 'model_b' && (
-                          <div className="grid grid-cols-3 gap-2.5 ps-6">
-                            <div>
-                              <label className="text-[11px] text-slate-500 block mb-1">Fee (PKR)</label>
-                              <input
-                                type="number"
-                                min={0}
-                                step={10}
-                                value={d.fee}
-                                onChange={(e) => setDraft({ fee: e.target.value })}
-                                className="w-full px-2.5 py-1.5 text-xs font-semibold border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-brand"
-                              />
-                            </div>
-                            <div>
-                              <label className="text-[11px] text-slate-500 block mb-1">Free above (PKR)</label>
-                              <input
-                                type="number"
-                                min={0}
-                                step={50}
-                                placeholder="optional"
-                                value={d.freeAbove}
-                                onChange={(e) => setDraft({ freeAbove: e.target.value })}
-                                className="w-full px-2.5 py-1.5 text-xs font-semibold border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-brand"
-                              />
-                            </div>
-                            <div>
-                              <label className="text-[11px] text-slate-500 block mb-1">Min order (PKR)</label>
-                              <input
-                                type="number"
-                                min={0}
-                                step={50}
-                                placeholder="optional"
-                                value={d.minOrder}
-                                onChange={(e) => setDraft({ minOrder: e.target.value })}
-                                className="w-full px-2.5 py-1.5 text-xs font-semibold border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-brand"
-                              />
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
+              <div className="mt-4">
+                <LoadError compact error={communitiesError} onRetry={() => loadDeliverySettings(true)} title="We couldn't load your community fees" />
               </div>
+            ) : communities.length === 0 ? (
+              <p className="mt-4 text-sm text-muted">No communities are available yet.</p>
+            ) : (
+              <>
+                <ul className={`mt-4 ${listCls}`}>{homeCityCommunities.map(communityRow)}</ul>
+                {otherCityCommunities.length > 0 && (
+                  <>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      aria-expanded={showOtherCities}
+                      aria-controls="other-city-communities"
+                      onClick={() => setShowOtherCities((v) => !v)}
+                      className="mt-3 min-h-11 -ms-3"
+                    >
+                      {showOtherCities ? 'Hide other cities' : 'Show other cities'}
+                      {otherCitiesTicked > 0 && (
+                        <span className="font-normal text-muted"> ({otherCitiesTicked} ticked)</span>
+                      )}
+                    </Button>
+                    <ul id="other-city-communities" hidden={!showOtherCities} className={`mt-2 ${listCls}`}>
+                      {otherCityCommunities.map(communityRow)}
+                    </ul>
+                  </>
+                )}
+              </>
             )}
 
-            {!Object.values(drafts).some((d) => d.enabled) && communities.length > 0 && (
-              <p className="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
-                {deliveryModel === 'model_a'
-                  ? 'No communities chosen yet: Nuray riders deliver anywhere they reach until you switch on at least one.'
-                  : 'No community fees set yet. Your general delivery pricing is used until you switch on at least one community.'}
-              </p>
-            )}
-          </div>
+          </section>
 
-          {/* Model B Details */}
-          {deliveryModel === 'model_b' && (
-            <div className="bg-white rounded-2xl p-5 sm:p-6 border border-slate-200/90 shadow-xs space-y-5">
-              <h3 className="text-sm font-bold text-slate-900 tracking-tight">
-                Self-Delivery Pricing &amp; Zones (used where no community fee applies)
-              </h3>
+          {selfDelivery && (
+            <>
+              <section aria-labelledby="usual-prices" className="mt-8 border-t border-line pt-6">
+                <h2 id="usual-prices" className="text-sm font-semibold text-ink">Your usual prices</h2>
+                <p className="mt-1 text-sm text-muted">Used wherever no community fee is set.</p>
 
-              {/* Fee Type */}
-              <div className="space-y-3">
-                <label className="text-xs font-semibold text-slate-700 block">
-                  Delivery Fee
-                </label>
-                <div className="grid grid-cols-2 gap-3">
-                  <label
-                    className={`flex items-center gap-2.5 p-3 rounded-xl border cursor-pointer transition-colors ${
-                      formData.deliveryFeeType === 'fixed'
-                        ? 'border-brand bg-brand-50/20 text-slate-900 font-semibold'
-                        : 'border-slate-200 text-slate-600'
-                    }`}
-                  >
-                    <input
-                      type="radio"
-                      name="deliveryFeeType"
-                      checked={formData.deliveryFeeType === 'fixed'}
-                      onChange={() => setFormData({ ...formData, deliveryFeeType: 'fixed' })}
-                      className="text-brand-ink focus:ring-brand"
-                    />
-                    <span className="text-xs">Fixed Fee</span>
-                  </label>
-
-                  <label
-                    className={`flex items-center gap-2.5 p-3 rounded-xl border cursor-pointer transition-colors ${
-                      formData.deliveryFeeType === 'distance'
-                        ? 'border-brand bg-brand-50/20 text-slate-900 font-semibold'
-                        : 'border-slate-200 text-slate-600'
-                    }`}
-                  >
-                    <input
-                      type="radio"
-                      name="deliveryFeeType"
-                      checked={formData.deliveryFeeType === 'distance'}
-                      onChange={() => setFormData({ ...formData, deliveryFeeType: 'distance' })}
-                      className="text-brand-ink focus:ring-brand"
-                    />
-                    <span className="text-xs">Distance-Based (Per Km)</span>
-                  </label>
-                </div>
+                <fieldset className="mt-4">
+                  <legend className={labelCls}>How you charge</legend>
+                  <div className="flex flex-wrap gap-x-6">
+                    {(
+                      [
+                        { value: 'fixed', label: 'One fixed fee' },
+                        { value: 'distance', label: 'By distance' },
+                      ] as const
+                    ).map((option) => (
+                      <label key={option.value} className="flex min-h-11 cursor-pointer items-center gap-2.5 text-[15px] text-ink">
+                        <input
+                          type="radio"
+                          name="deliveryFeeType"
+                          checked={formData.deliveryFeeType === option.value}
+                          onChange={() => setFormData({ ...formData, deliveryFeeType: option.value })}
+                          className="h-5 w-5 accent-brand-700"
+                        />
+                        {option.label}
+                      </label>
+                    ))}
+                  </div>
+                </fieldset>
 
                 {formData.deliveryFeeType === 'fixed' && (
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs text-slate-500 font-medium">Flat Fee:</span>
-                    <div className="relative w-36">
-                      <input
-                        type="number"
-                        min={0}
-                        step={10}
-                        placeholder="50"
-                        value={formData.deliveryFeeFixed ?? ''}
-                        onChange={(e) =>
-                          setFormData({
-                            ...formData,
-                            deliveryFeeFixed: e.target.value === '' ? null : parseInt(e.target.value, 10),
-                          })
-                        }
-                        className="w-full ps-3 pe-9 py-2 text-xs font-bold border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-brand"
-                      />
-                      <span className="absolute end-3 top-2 text-[11px] text-slate-500 font-medium">PKR</span>
-                    </div>
+                  <div className="mt-3 max-w-[12rem]">
+                    <label htmlFor="deliveryFeeFixed" className={labelCls}>Delivery fee (Rs)</label>
+                    <input
+                      id="deliveryFeeFixed"
+                      type="number"
+                      min={0}
+                      step={10}
+                      placeholder="50"
+                      value={formData.deliveryFeeFixed ?? ''}
+                      onChange={(e) =>
+                        setFormData({
+                          ...formData,
+                          deliveryFeeFixed: e.target.value === '' ? null : parseInt(e.target.value, 10),
+                        })
+                      }
+                      className={inputCls}
+                    />
                   </div>
                 )}
 
                 {formData.deliveryFeeType === 'distance' && (
-                  <div className="grid grid-cols-2 gap-3">
+                  <div className="mt-3 grid max-w-md grid-cols-2 gap-3">
                     <div>
-                      <label className="text-[11px] text-slate-500 block mb-1">Base Fee</label>
-                      <div className="relative">
-                        <input
-                          type="number"
-                          min={0}
-                          step={10}
-                          placeholder="40"
-                          value={formData.deliveryFeeBase ?? ''}
-                          onChange={(e) =>
-                            setFormData({
-                              ...formData,
-                              deliveryFeeBase: e.target.value === '' ? null : parseInt(e.target.value, 10),
-                            })
-                          }
-                          className="w-full ps-3 pe-9 py-2 text-xs font-bold border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-brand"
-                        />
-                        <span className="absolute end-3 top-2 text-[11px] text-slate-500 font-medium">PKR</span>
-                      </div>
+                      <label htmlFor="deliveryFeeBase" className={labelCls}>Starting fee (Rs)</label>
+                      <input
+                        id="deliveryFeeBase"
+                        type="number"
+                        min={0}
+                        step={10}
+                        placeholder="40"
+                        value={formData.deliveryFeeBase ?? ''}
+                        onChange={(e) =>
+                          setFormData({
+                            ...formData,
+                            deliveryFeeBase: e.target.value === '' ? null : parseInt(e.target.value, 10),
+                          })
+                        }
+                        className={inputCls}
+                      />
                     </div>
                     <div>
-                      <label className="text-[11px] text-slate-500 block mb-1">Per Kilometer</label>
-                      <div className="relative">
-                        <input
-                          type="number"
-                          min={0}
-                          step={1}
-                          placeholder="15"
-                          value={formData.deliveryFeePerKm ?? ''}
-                          onChange={(e) =>
-                            setFormData({
-                              ...formData,
-                              deliveryFeePerKm: e.target.value === '' ? null : parseFloat(e.target.value),
-                            })
-                          }
-                          className="w-full ps-3 pe-11 py-2 text-xs font-bold border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-brand"
-                        />
-                        <span className="absolute end-3 top-2 text-[11px] text-slate-500 font-medium">Rs/km</span>
-                      </div>
+                      <label htmlFor="deliveryFeePerKm" className={labelCls}>Each km (Rs)</label>
+                      <input
+                        id="deliveryFeePerKm"
+                        type="number"
+                        min={0}
+                        step={1}
+                        placeholder="15"
+                        value={formData.deliveryFeePerKm ?? ''}
+                        onChange={(e) =>
+                          setFormData({
+                            ...formData,
+                            deliveryFeePerKm: e.target.value === '' ? null : parseFloat(e.target.value),
+                          })
+                        }
+                        className={inputCls}
+                      />
                     </div>
                   </div>
                 )}
-              </div>
 
-              {/* Free Delivery Areas */}
-              <div className="pt-3 border-t border-slate-100 space-y-2.5">
-                <label className="text-xs font-semibold text-slate-700 block">
-                  Free Delivery Areas (Rs 0 for Neighbors)
-                </label>
-
-                {/* Suggestions */}
-                <div className="flex items-center gap-1.5 flex-wrap">
-                  <span className="text-[11px] text-slate-500">Presets:</span>
-                  {['Askari 11', 'Askari 10', 'DHA Phase 6', 'Bedian Road', 'Gulshan-e-Iqbal', 'Clifton'].map((comm) => (
-                    <button
-                      key={comm}
-                      type="button"
-                      onClick={() => handleQuickAddSociety(comm)}
-                      className="px-2 py-0.5 rounded-md bg-slate-100 hover:bg-slate-200 text-slate-600 text-[11px] transition-colors flex items-center gap-1"
-                    >
-                      <Plus className="w-2.5 h-2.5 text-brand-ink" />
-                      <span>{comm}</span>
-                    </button>
-                  ))}
+                <div className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
+                  <div>
+                    <label htmlFor="freeDeliveryRadiusKm" className={labelCls}>Free within (km)</label>
+                    <input
+                      id="freeDeliveryRadiusKm"
+                      type="number"
+                      min={0}
+                      step={0.5}
+                      placeholder="2.5"
+                      value={formData.freeDeliveryRadiusKm ?? ''}
+                      onChange={(e) =>
+                        setFormData({
+                          ...formData,
+                          freeDeliveryRadiusKm: e.target.value === '' ? null : parseFloat(e.target.value),
+                        })
+                      }
+                      className={inputCls}
+                    />
+                  </div>
+                  <div>
+                    <label htmlFor="freeDeliveryThreshold" className={labelCls}>Free above (Rs)</label>
+                    <input
+                      id="freeDeliveryThreshold"
+                      type="number"
+                      min={0}
+                      step={50}
+                      placeholder="500"
+                      value={formData.freeDeliveryThreshold ?? ''}
+                      onChange={(e) =>
+                        setFormData({
+                          ...formData,
+                          freeDeliveryThreshold: e.target.value === '' ? null : parseInt(e.target.value, 10),
+                        })
+                      }
+                      className={inputCls}
+                    />
+                  </div>
+                  <div>
+                    <label htmlFor="maxDeliveryDistanceKm" className={labelCls}>Furthest (km)</label>
+                    <input
+                      id="maxDeliveryDistanceKm"
+                      type="number"
+                      min={0.5}
+                      step={0.5}
+                      placeholder="5.0"
+                      value={formData.maxDeliveryDistanceKm ?? ''}
+                      onChange={(e) =>
+                        setFormData({
+                          ...formData,
+                          maxDeliveryDistanceKm: e.target.value === '' ? null : parseFloat(e.target.value),
+                        })
+                      }
+                      className={inputCls}
+                    />
+                  </div>
+                  <div>
+                    <label htmlFor="minOrderAmountForDelivery" className={labelCls}>Smallest order (Rs)</label>
+                    <input
+                      id="minOrderAmountForDelivery"
+                      type="number"
+                      min={0}
+                      step={50}
+                      placeholder="250"
+                      value={formData.minOrderAmountForDelivery ?? ''}
+                      onChange={(e) =>
+                        setFormData({
+                          ...formData,
+                          minOrderAmountForDelivery: e.target.value === '' ? null : parseInt(e.target.value, 10),
+                        })
+                      }
+                      className={inputCls}
+                    />
+                  </div>
                 </div>
+              </section>
 
-                {/* Add Input */}
-                <div className="flex gap-2">
+              <section aria-labelledby="free-areas" className="mt-8 border-t border-line pt-6">
+                <h2 id="free-areas" className="text-sm font-semibold text-ink">Free delivery areas</h2>
+                <p className="mt-1 text-sm text-muted">Areas where delivery costs nothing, like your own block.</p>
+
+                <div className="mt-4 flex gap-2">
+                  <label htmlFor="newArea" className="sr-only">Area or society name</label>
                   <input
+                    id="newArea"
                     type="text"
                     value={newAreaInput}
                     onChange={(e) => setNewAreaInput(e.target.value)}
@@ -721,163 +769,90 @@ export default function SellerDeliveryPage() {
                         handleAddArea();
                       }
                     }}
-                    placeholder="Add area or society name..."
-                    className="flex-1 px-3 py-1.5 text-xs border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-brand"
+                    placeholder="Area or society name"
+                    className={`${inputCls} flex-1`}
                   />
-                  <Button
-                    type="button"
-                    onClick={handleAddArea}
-                    variant="outline"
-                    className="h-8 px-3 text-xs font-medium border-slate-300"
-                  >
+                  <Button type="button" onClick={handleAddArea} variant="outline" className="min-h-11 px-4">
                     Add
                   </Button>
                 </div>
 
-                {/* Tags */}
-                {formData.freeDeliveryAreas.length > 0 && (
-                  <div className="flex flex-wrap gap-1.5 pt-1">
-                    {formData.freeDeliveryAreas.map((area) => (
-                      <span
-                        key={area}
-                        className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-emerald-50 border border-emerald-200 text-xs font-medium text-emerald-800"
+                <div className="mt-3 flex flex-wrap items-center gap-2">
+                  <span className="text-sm text-muted">Suggestions:</span>
+                  {['Askari 11', 'Askari 10', 'DHA Phase 6', 'Bedian Road', 'Gulshan-e-Iqbal', 'Clifton']
+                    .filter((name) => !formData.freeDeliveryAreas.includes(name))
+                    .map((name) => (
+                      <button
+                        key={name}
+                        type="button"
+                        onClick={() => handleQuickAddSociety(name)}
+                        className="inline-flex min-h-9 items-center gap-1 rounded-full border border-line px-3 text-sm text-ink hover:bg-raised focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-brand/30"
                       >
-                        <MapPin className="w-3 h-3 text-emerald-600" />
-                        <span>{area}</span>
+                        <Plus className="h-3.5 w-3.5 text-muted" aria-hidden="true" />
+                        {name}
+                      </button>
+                    ))}
+                </div>
+
+                {formData.freeDeliveryAreas.length > 0 && (
+                  <ul className="mt-4 flex flex-wrap gap-2" aria-label="Your free delivery areas">
+                    {formData.freeDeliveryAreas.map((area) => (
+                      <li key={area} className="inline-flex items-center gap-1 rounded-full bg-brand-soft ps-3 text-sm font-medium text-brand-soft-ink">
+                        {area}
                         <button
                           type="button"
                           onClick={() => handleRemoveArea(area)}
-                          className="hover:text-red-500 ms-0.5"
+                          aria-label={`Remove ${area}`}
+                          className="flex h-9 w-9 items-center justify-center rounded-full hover:bg-brand-100 focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-brand/30"
                         >
-                          <X className="w-3 h-3" />
+                          <X className="h-4 w-4" aria-hidden="true" />
                         </button>
-                      </span>
+                      </li>
                     ))}
-                  </div>
+                  </ul>
                 )}
-              </div>
+              </section>
 
-              {/* Distance & Limits */}
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-3 border-t border-slate-100">
-                <div>
-                  <label className="text-[11px] text-slate-500 block mb-1">Free Radius (km)</label>
+              <section aria-labelledby="pickup-and-place" className="mt-8 border-t border-line pt-6">
+                <h2 id="pickup-and-place" className="text-sm font-semibold text-ink">Pickup and kitchen location</h2>
+                <label htmlFor="allowPickup" className="mt-3 flex min-h-11 cursor-pointer items-center justify-between gap-4">
+                  <span className="text-[15px] text-ink">Customers can collect from your kitchen</span>
                   <input
-                    type="number"
-                    min={0}
-                    step={0.5}
-                    placeholder="2.5"
-                    value={formData.freeDeliveryRadiusKm ?? ''}
-                    onChange={(e) =>
-                      setFormData({
-                        ...formData,
-                        freeDeliveryRadiusKm: e.target.value === '' ? null : parseFloat(e.target.value),
-                      })
-                    }
-                    className="w-full px-2.5 py-1.5 text-xs font-semibold border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-brand"
+                    type="checkbox"
+                    id="allowPickup"
+                    checked={formData.allowPickup}
+                    onChange={(e) => setFormData({ ...formData, allowPickup: e.target.checked })}
+                    className="h-5 w-5 shrink-0 cursor-pointer accent-brand-700"
                   />
-                </div>
-                <div>
-                  <label className="text-[11px] text-slate-500 block mb-1">Free Above (PKR)</label>
-                  <input
-                    type="number"
-                    min={0}
-                    step={50}
-                    placeholder="500"
-                    value={formData.freeDeliveryThreshold ?? ''}
-                    onChange={(e) =>
-                      setFormData({
-                        ...formData,
-                        freeDeliveryThreshold: e.target.value === '' ? null : parseInt(e.target.value, 10),
-                      })
-                    }
-                    className="w-full px-2.5 py-1.5 text-xs font-semibold border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-brand"
-                  />
-                </div>
-                <div>
-                  <label className="text-[11px] text-slate-500 block mb-1">Max Distance (km)</label>
-                  <input
-                    type="number"
-                    min={0.5}
-                    step={0.5}
-                    placeholder="5.0"
-                    value={formData.maxDeliveryDistanceKm ?? ''}
-                    onChange={(e) =>
-                      setFormData({
-                        ...formData,
-                        maxDeliveryDistanceKm: e.target.value === '' ? null : parseFloat(e.target.value),
-                      })
-                    }
-                    className="w-full px-2.5 py-1.5 text-xs font-semibold border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-brand"
-                  />
-                </div>
-                <div>
-                  <label className="text-[11px] text-slate-500 block mb-1">Min Order (PKR)</label>
-                  <input
-                    type="number"
-                    min={0}
-                    step={50}
-                    placeholder="250"
-                    value={formData.minOrderAmountForDelivery ?? ''}
-                    onChange={(e) =>
-                      setFormData({
-                        ...formData,
-                        minOrderAmountForDelivery: e.target.value === '' ? null : parseInt(e.target.value, 10),
-                      })
-                    }
-                    className="w-full px-2.5 py-1.5 text-xs font-semibold border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-brand"
-                  />
-                </div>
-              </div>
-
-              {/* Pickup Option */}
-              <div className="pt-2 flex items-center justify-between border-t border-slate-100">
-                <label htmlFor="allowPickup" className="text-xs font-medium text-slate-800 cursor-pointer">
-                  Allow Customer Door Pickup (Self-Pickup)
                 </label>
-                <input
-                  type="checkbox"
-                  id="allowPickup"
-                  checked={formData.allowPickup}
-                  onChange={(e) => setFormData({ ...formData, allowPickup: e.target.checked })}
-                  className="w-4 h-4 text-brand-ink rounded border-slate-300 focus:ring-brand cursor-pointer"
-                />
-              </div>
-
-              {/* Kitchen Map */}
-              <div className="pt-3 border-t border-slate-100 space-y-2">
-                <label className="text-xs font-semibold text-slate-700 block">
-                  Kitchen Location &amp; Delivery Radius
-                </label>
-                <LocationMap
-                  center={
-                    formData.latitude != null && formData.longitude != null
-                      ? { lat: formData.latitude, lng: formData.longitude }
-                      : { lat: 31.4720, lng: 74.4530 }
-                  }
-                  markerPosition={
-                    formData.latitude != null && formData.longitude != null
-                      ? { lat: formData.latitude, lng: formData.longitude }
-                      : null
-                  }
-                  radiusKm={formData.freeDeliveryRadiusKm ?? undefined}
-                  onLocationSelect={({ lat, lng }) =>
-                    setFormData((prev) => ({ ...prev, latitude: lat, longitude: lng }))
-                  }
-                  height="260px"
-                  draggable={true}
-                />
-              </div>
-            </div>
+                <p className="mt-4 text-sm text-muted">Drag the pin to your kitchen door. The circle shows your free delivery distance.</p>
+                <div className="mt-3 overflow-hidden rounded-2xl border border-line">
+                  <LocationMap
+                    center={
+                      formData.latitude != null && formData.longitude != null
+                        ? { lat: formData.latitude, lng: formData.longitude }
+                        : { lat: 31.4720, lng: 74.4530 }
+                    }
+                    markerPosition={
+                      formData.latitude != null && formData.longitude != null
+                        ? { lat: formData.latitude, lng: formData.longitude }
+                        : null
+                    }
+                    radiusKm={formData.freeDeliveryRadiusKm ?? undefined}
+                    onLocationSelect={({ lat, lng }) =>
+                      setFormData((prev) => ({ ...prev, latitude: lat, longitude: lng }))
+                    }
+                    height="260px"
+                    draggable={true}
+                  />
+                </div>
+              </section>
+            </>
           )}
 
-          {/* Action Bar */}
-          <div className="flex items-center justify-end gap-3 pt-2">
-            <Button
-              type="submit"
-              disabled={saving}
-              className="bg-brand hover:bg-brand-500 text-on-brand px-6 py-2.5 rounded-xl font-bold text-xs shadow-sm transition-all"
-            >
-              {saving ? 'Saving...' : 'Save Settings'}
+          <div className="sticky bottom-0 z-10 mt-8 flex justify-end border-t border-line bg-page/95 py-4 pb-[calc(1rem+var(--safe-bottom,0px))] backdrop-blur">
+            <Button type="submit" disabled={saving} className="min-h-11 w-full px-6 sm:w-auto">
+              {saving ? 'Saving…' : 'Save changes'}
             </Button>
           </div>
         </form>
@@ -885,3 +860,7 @@ export default function SellerDeliveryPage() {
     </DashboardLayout>
   );
 }
+
+const labelCls = 'mb-1.5 block text-sm text-muted';
+const inputCls =
+  'w-full min-h-11 rounded-xl border border-line-strong bg-surface px-3 text-[15px] text-ink tabular-nums placeholder:text-muted/70 focus:border-brand-600 focus:outline-none focus:ring-3 focus:ring-brand/30';

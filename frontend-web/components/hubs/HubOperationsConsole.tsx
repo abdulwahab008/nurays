@@ -114,7 +114,7 @@ export default function HubOperationsConsole({ mode }: { mode: 'admin' | 'manage
   // Auth Guard
   useEffect(() => {
     if (!isAuthenticated) {
-      router.push(loginUrlHere(isManagerMode ? '/login' : '/admin/login'));
+      router.replace(loginUrlHere(isManagerMode ? '/login' : '/admin/login'));
       return;
     }
     const role = user?.userType ?? user?.user_type;

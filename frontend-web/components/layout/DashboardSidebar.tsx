@@ -255,11 +255,6 @@ function DashboardSidebarContent({ items: allItems, userType }: DashboardSidebar
     >
       <div className="px-4 py-6">
 
-        {/* Menu Label */}
-        <div className="px-3 mb-2">
-          <span className="eyebrow">{tNav('menu')}</span>
-        </div>
-
         {/* Navigation Items */}
         <nav className="space-y-1">
           {items.map((item) => {
@@ -348,7 +343,7 @@ function DashboardSidebarContent({ items: allItems, userType }: DashboardSidebar
                           <span className="flex-1 truncate">{label(sub.name)}</span>
                           {sub.badge !== undefined && sub.badge > 0 && (
                             <span
-                              className="text-[11px] font-bold px-1.5 py-0.5 rounded-full"
+                              className="text-xs font-medium px-1.5 py-0.5 rounded-full"
                               style={{ background: accentColor, color: accentOn }}
                             >
                               {sub.badge}
@@ -364,29 +359,6 @@ function DashboardSidebarContent({ items: allItems, userType }: DashboardSidebar
           })}
         </nav>
 
-        {/* Quick Actions Card - Role Aware */}
-        {effectiveUserType === 'rider' ? (
-          <div className="mt-8 p-4 rounded-2xl bg-gradient-to-br from-emerald-50 to-teal-100/60 border border-emerald-200/80 shadow-xs">
-            <h4 className="font-bold text-xs mb-1 text-slate-900 flex items-center gap-1.5">
-              <svg className="w-4 h-4 text-emerald-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75m-3-7.036A11.959 11.959 0 013.598 6 11.99 11.99 0 003 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285z" />
-              </svg>
-              {tNav('riderHelpTitle')}
-            </h4>
-            <p className="text-[11px] mb-3 text-slate-600 font-medium">
-              {tNav('riderHelpText')}
-            </p>
-            <Link
-              href="/support"
-              className="flex items-center justify-center gap-1.5 w-full py-2 text-xs font-bold rounded-xl transition-all active:scale-95 shadow-sm bg-emerald-600 hover:bg-emerald-700 text-white"
-            >
-              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M8.625 12a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0H8.25m4.125 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0H12m4.125 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0h-.375M21 12c0 4.556-4.03 8.25-9 8.25a9.764 9.764 0 01-2.555-.337A5.972 5.972 0 015.41 20.97a5.969 5.969 0 01-.474-.065 4.48 4.48 0 00.978-2.025c.09-.457-.133-.901-.467-1.226C3.93 16.178 3 14.189 3 12c0-4.556 4.03-8.25 9-8.25s9 3.694 9 8.25z" />
-              </svg>
-              {tNav('contactSupport')}
-            </Link>
-          </div>
-        ) : null}
       </div>
     </aside>
   );
@@ -396,21 +368,11 @@ function SidebarSkeleton({ items }: { items: SidebarItem[] }) {
   return (
     <aside className="w-64 h-full overflow-y-auto bg-surface border-e border-line">
       <div className="px-4 py-6">
-        <div className="mb-8 p-4 rounded-2xl bg-slate-50 border border-slate-100 flex items-center gap-3">
-          <div className="w-10 h-10 rounded-2xl bg-slate-200 animate-pulse" />
-          <div className="flex-1 space-y-1.5">
-            <div className="h-3.5 w-24 bg-slate-200 rounded-md animate-pulse" />
-            <div className="h-2.5 w-16 bg-slate-200 rounded-md animate-pulse" />
-          </div>
-        </div>
-        <div className="px-3 mb-2">
-          <span className="text-[11px] font-bold tracking-wider uppercase text-slate-500">Menu</span>
-        </div>
         <nav className="space-y-1">
           {items.map((item) => (
-            <div key={item.name} className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-slate-600 text-sm font-medium">
-              <div className="w-5 h-5 rounded-md bg-slate-200 animate-pulse flex-shrink-0" />
-              <span className="text-slate-700">{item.name}</span>
+            <div key={item.name} className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-muted">
+              <div className="w-5 h-5 rounded-md bg-raised motion-safe:animate-pulse flex-shrink-0" />
+              <span>{item.name}</span>
             </div>
           ))}
         </nav>

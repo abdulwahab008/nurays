@@ -78,7 +78,7 @@ export default function NotificationsPage() {
   useEffect(() => {
     const token = apiClient.getAccessToken();
     if (!token && !isAuthenticated) {
-      router.push(loginUrlHere());
+      router.replace(loginUrlHere());
       return;
     }
     loadNotifications();

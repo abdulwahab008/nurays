@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useMemo, Suspense, ReactNode } from 'react';
+import { useState, useEffect, useMemo, Suspense } from 'react';
 import { loginUrlHere } from '@/lib/auth-redirect';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
@@ -13,6 +13,7 @@ import { useAuthStore } from '@/lib/store/auth-store';
 import { apiClient, apiErrorMessage } from '@/lib/api-client';
 import { formatPrice } from '@/lib/utils';
 import { useShallow } from 'zustand/react/shallow';
+import { ImageOff, Loader2, Package, Pencil, Plus, Search, Trash2, X } from 'lucide-react';
 
 const sidebarItems = SELLER_SIDEBAR_ITEMS;
 
@@ -37,86 +38,18 @@ interface Product {
   category?: { name: string };
 }
 
-// Icons
-const Icons = {
-  products: (
-    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6A2.25 2.25 0 016 3.75h2.25A2.25 2.25 0 0110.5 6v2.25a2.25 2.25 0 01-2.25 2.25H6a2.25 2.25 0 01-2.25-2.25V6zM3.75 15.75A2.25 2.25 0 016 13.5h2.25a2.25 2.25 0 012.25 2.25V18a2.25 2.25 0 01-2.25 2.25H6A2.25 2.25 0 013.75 18v-2.25zM13.5 6a2.25 2.25 0 012.25-2.25H18A2.25 2.25 0 0120.25 6v2.25A2.25 2.25 0 0118 10.5h-2.25a2.25 2.25 0 01-2.25-2.25V6zM13.5 15.75a2.25 2.25 0 012.25-2.25H18a2.25 2.25 0 012.25 2.25V18A2.25 2.25 0 0118 20.25h-2.25A2.25 2.25 0 0113.5 18v-2.25z" />
-    </svg>
-  ),
-  inventory: (
-    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M20.25 7.5l-.625 10.632a2.25 2.25 0 01-2.247 2.118H6.622a2.25 2.25 0 01-2.247-2.118L3.75 7.5M10 11.25h4M3.375 7.5h17.25c.621 0 1.125-.504 1.125-1.125v-1.5c0-.621-.504-1.125-1.125-1.125H3.375c-.621 0-1.125.504-1.125 1.125v1.5c0 .621.504 1.125 1.125 1.125z" />
-    </svg>
-  ),
-  discounts: (
-    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M9.568 3H5.25A2.25 2.25 0 003 5.25v4.318c0 .597.237 1.17.659 1.591l9.581 9.581c.699.699 1.78.872 2.607.386a11.175 11.175 0 004.914-4.914c.486-.827.313-1.908-.386-2.607L11.159 3.659A2.25 2.25 0 009.568 3z" />
-      <path strokeLinecap="round" strokeLinejoin="round" d="M6 6h.008v.008H6V6z" />
-    </svg>
-  ),
-  snowflake: (
-    <svg className="w-3.5 h-3.5 text-cyan-600 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M12 3v18m0-18l3 3m-3-3l-3 3m0 12l3 3m0 0l3-3M4.5 7.5l15 9m-15-9l3.5.5m-3.5-.5l.5 3.5m14.5 5.5l-3.5-.5m3.5.5l-.5-3.5M4.5 16.5l15-9m-15 9l.5-3.5m-.5 3.5l3.5-.5m11.5-8.5l.5 3.5m-.5-3.5l-3.5.5" />
-    </svg>
-  ),
-  leaf: (
-    <svg className="w-3.5 h-3.5 text-emerald-600 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M12 21a9.004 9.004 0 008.716-6.747M12 21a9.004 9.004 0 01-8.716-6.747M12 21c2.485 0 4.5-4.03 4.5-9S14.485 3 12 3m0 18c-2.485 0-4.5-4.03-4.5-9S9.515 3 12 3m0 0a8.997 8.997 0 017.843 4.582M12 3a8.997 8.997 0 00-7.843 4.582m15.686 0A11.953 11.953 0 0112 10.5c-2.998 0-5.74-1.1-7.843-2.918m15.686 0A8.959 8.959 0 0121 12c0 .778-.099 1.533-.284 2.253m0 0A17.919 17.919 0 0112 16.5c-3.162 0-6.133-.815-8.716-2.247m0 0A9.015 9.015 0 013 12c0-.778.099-1.533.284-2.253" />
-    </svg>
-  ),
-  plate: (
-    <svg className="w-3.5 h-3.5 text-brand-ink shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" />
-    </svg>
-  ),
-  pan: (
-    <svg className="w-3.5 h-3.5 text-purple-600 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M15.362 5.214A8.252 8.252 0 0112 21 8.25 8.25 0 016.038 7.048 8.287 8.287 0 009 9.6a8.983 8.983 0 013.361-6.867 8.21 8.21 0 003 2.48z" />
-      <path strokeLinecap="round" strokeLinejoin="round" d="M12 18a3.75 3.75 0 00.495-7.467 5.99 5.99 0 00-1.925 3.546 5.974 5.974 0 01-2.133-1A3.75 3.75 0 0012 18z" />
-    </svg>
-  ),
-  sparkles: (
-    <svg className="w-3.5 h-3.5 text-emerald-600 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09zM18.259 8.715L18 9.75l-.259-1.035a3.375 3.375 0 00-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 002.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 002.456 2.456L21.75 6l-1.035.259a3.375 3.375 0 00-2.456 2.456zM16.894 20.567L16.5 21.75l-.394-1.183a2.25 2.25 0 00-1.423-1.423L13.5 18.75l1.183-.394a2.25 2.25 0 001.423-1.423l.394-1.183.394 1.183a2.25 2.25 0 001.423 1.423l1.183.394-1.183.394a2.25 2.25 0 00-1.423 1.423z" />
-    </svg>
-  ),
-  clock: (
-    <svg className="w-3 h-3 text-white shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" />
-    </svg>
-  ),
-  box: (
-    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M20.25 7.5l-.625 10.632a2.25 2.25 0 01-2.247 2.118H6.622a2.25 2.25 0 01-2.247-2.118L3.75 7.5M10 11.25h4M3.375 7.5h17.25c.621 0 1.125-.504 1.125-1.125v-1.5c0-.621-.504-1.125-1.125-1.125H3.375c-.621 0-1.125.504-1.125 1.125v1.5c0 .621.504 1.125 1.125 1.125z" />
-    </svg>
-  ),
-  check: (
-    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-    </svg>
-  ),
-  alertTriangle: (
-    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
-    </svg>
-  ),
-  alertCircle: (
-    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z" />
-    </svg>
-  ),
+const productTypeLabel: Record<string, string> = {
+  frozen: 'Frozen',
+  fresh: 'Fresh',
+  ready_to_eat: 'Ready to eat',
+  ready_to_cook: 'Ready to cook',
 };
 
-// Product type display info with clean SVG icons
-const productTypeInfo: Record<string, { label: string; icon: ReactNode; color: string; border: string }> = {
-  frozen: { label: 'Sub-Zero Frozen', icon: Icons.snowflake, color: 'bg-cyan-50 text-cyan-700', border: 'border-cyan-200' },
-  fresh: { label: 'Fresh Market', icon: Icons.leaf, color: 'bg-emerald-50 text-emerald-700', border: 'border-emerald-200' },
-  ready_to_eat: { label: 'Ready to Eat', icon: Icons.plate, color: 'bg-brand-50 text-brand-ink', border: 'border-brand-200' },
-  ready_to_cook: { label: 'Ready to Cook', icon: Icons.pan, color: 'bg-purple-50 text-purple-700', border: 'border-purple-200' },
-};
+const DAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
-// Format unit for display
+const photoUrl = (url: string) =>
+  url.startsWith('http') ? url : `${process.env.NEXT_PUBLIC_API_URL?.replace('/api/v1', '') || 'http://localhost:3001'}${url}`;
+
 const formatUnit = (unit?: string): string => {
   if (!unit) return '';
   const unitMap: Record<string, string> = {
@@ -126,8 +59,8 @@ const formatUnit = (unit?: string): string => {
     '100g': 'per 100g',
     '250g': 'per 250g',
     '500g': 'per 500g',
-    '1kg': 'per 1 KG',
-    kg: 'per KG',
+    '1kg': 'per 1 kg',
+    kg: 'per kg',
   };
   return unitMap[unit] || unit;
 };
@@ -141,7 +74,7 @@ function SellerProductsContent() {
   const { confirm: confirmDialog } = useDialogs();
 
   const [loading, setLoading] = useState(true);
-  // Why the dishes could not be read; shown instead of "No Products in Kitchen Yet", which would be untrue.
+  // Why the dishes could not be read; shown instead of the empty list, which would be untrue.
   const [loadError, setLoadError] = useState<unknown>(null);
   const [products, setProducts] = useState<Product[]>([]);
   const [updatingStock, setUpdatingStock] = useState<{ [key: string]: boolean }>({});
@@ -178,13 +111,13 @@ function SellerProductsContent() {
 
   useEffect(() => {
     if (!isAuthenticated) {
-      router.push(loginUrlHere());
+      router.replace(loginUrlHere());
       return;
     }
 
     if (user?.userType !== 'seller' && user?.user_type !== 'seller') {
       router.push('/dashboard');
-      showToast('Access denied. Seller privileges required.', 'error');
+      showToast('This page is for kitchens only.', 'error');
       return;
     }
 
@@ -194,10 +127,10 @@ function SellerProductsContent() {
   const handleToggleActive = async (productId: string, currentStatus: boolean) => {
     try {
       await apiClient.patch(`/products/${productId}`, { isActive: !currentStatus });
-      showToast(`Product ${!currentStatus ? 'activated' : 'hidden'} successfully`, 'success');
+      showToast(!currentStatus ? 'Customers can see this dish now' : 'Dish hidden from customers', 'success');
       loadProducts();
     } catch (error) {
-      showToast(apiErrorMessage(error, 'Failed to update product'), 'error');
+      showToast(apiErrorMessage(error, "Couldn't change this dish"), 'error');
     }
   };
 
@@ -208,7 +141,7 @@ function SellerProductsContent() {
       showToast(on ? "Added to today's menu" : "Taken off today's menu", 'success');
       loadProducts();
     } catch (error) {
-      showToast(apiErrorMessage(error, 'Failed to update the menu'), 'error');
+      showToast(apiErrorMessage(error, "Couldn't change today's menu"), 'error');
     }
   };
 
@@ -217,20 +150,20 @@ function SellerProductsContent() {
 
   const handleQuickStockUpdate = async (productId: string, newStock: number) => {
     if (newStock < 0) {
-      showToast('Stock quantity cannot be negative', 'error');
+      showToast("Stock can't be less than 0", 'error');
       return;
     }
 
     try {
       setUpdatingStock((prev) => ({ ...prev, [productId]: true }));
       await apiClient.patch(`/products/${productId}`, { stockQuantity: newStock });
-      showToast('Stock updated successfully', 'success');
+      showToast('Stock saved', 'success');
 
       setProducts((prev) =>
         prev.map((p) => (p.id === productId ? { ...p, stockQuantity: newStock } : p))
       );
     } catch (error) {
-      showToast(apiErrorMessage(error, 'Failed to update stock'), 'error');
+      showToast(apiErrorMessage(error, "Couldn't save the stock"), 'error');
     } finally {
       setUpdatingStock((prev) => ({ ...prev, [productId]: false }));
     }
@@ -238,13 +171,13 @@ function SellerProductsContent() {
 
   const handleBulkStockUpdate = async () => {
     if (!bulkStockValue || selectedProducts.length === 0) {
-      showToast('Please enter stock value and select products', 'error');
+      showToast('Pick the dishes and enter how many you have', 'error');
       return;
     }
 
     const stockNum = parseInt(bulkStockValue, 10);
     if (isNaN(stockNum) || stockNum < 0) {
-      showToast('Stock quantity must be 0 or higher', 'error');
+      showToast('Stock must be 0 or more', 'error');
       return;
     }
 
@@ -255,13 +188,13 @@ function SellerProductsContent() {
           apiClient.patch(`/products/${productId}`, { stockQuantity: stockNum })
         )
       );
-      showToast(`Successfully updated stock for ${selectedProducts.length} items`, 'success');
+      showToast(`Stock saved for ${selectedProducts.length} ${selectedProducts.length === 1 ? 'dish' : 'dishes'}`, 'success');
       setShowBulkUpdate(false);
       setBulkStockValue('');
       setSelectedProducts([]);
       loadProducts();
     } catch (error) {
-      showToast(apiErrorMessage(error, 'Failed to bulk update stock'), 'error');
+      showToast(apiErrorMessage(error, "Couldn't save the stock"), 'error');
     } finally {
       setLoading(false);
     }
@@ -276,23 +209,23 @@ function SellerProductsContent() {
   const handleDeleteProduct = async (productId: string) => {
     try {
       await apiClient.delete(`/products/${productId}`);
-      showToast('Product removed from catalog', 'success');
+      showToast('Dish deleted', 'success');
       loadProducts();
     } catch (error) {
-      showToast(apiErrorMessage(error, 'Failed to delete product'), 'error');
+      showToast(apiErrorMessage(error, "Couldn't delete this dish"), 'error');
     }
   };
 
   // The dishes could not be read (and there is nothing older on the screen to show).
   const couldNotRead = !loading && !!loadError && products.length === 0;
 
-  // Metrics calculation
   const totalProducts = products.length;
   const inStockCount = products.filter((p) => p.stockQuantity > 10).length;
   const lowStockCount = products.filter((p) => p.stockQuantity > 0 && p.stockQuantity <= 10).length;
   const outOfStockCount = products.filter((p) => p.stockQuantity === 0).length;
   const activeCount = products.filter((p) => p.isActive && p.approvalStatus === 'approved').length;
   const pendingCount = products.filter((p) => p.approvalStatus === 'pending').length;
+  const hiddenCount = products.filter((p) => !p.isActive).length;
 
   // Filtered Products
   const filteredProducts = useMemo(() => {
@@ -326,791 +259,469 @@ function SellerProductsContent() {
     return null;
   }
 
+  const closeBulkUpdate = () => {
+    setShowBulkUpdate(false);
+    setSelectedProducts([]);
+    setBulkStockValue('');
+  };
+
+  const showEmpty = !loading && !loadError && products.length === 0;
+  const fieldClass =
+    'h-11 rounded-xl border border-line bg-surface text-sm text-ink focus:outline-none focus:border-brand-600 focus:ring-3 focus:ring-brand/30';
+  const iconButtonClass =
+    'inline-flex items-center justify-center w-11 h-11 rounded-xl text-muted hover:text-ink hover:bg-raised transition-colors focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-brand/40';
+  const tabs = [
+    { label: 'All dishes', href: '/sellers/products', selected: !isInventoryView },
+    { label: 'Stock', href: '/sellers/products?view=inventory', selected: isInventoryView },
+  ];
+  const needRestock = lowStockCount + outOfStockCount;
+
   return (
     <DashboardLayout
-      title={isInventoryView ? 'Inventory' : 'Products'}
-      subtitle={
-        isInventoryView
-          ? 'Manage your stock quantities and restock items'
-          : 'Manage dishes, pricing, and availability'
-      }
+      title={isInventoryView ? 'Stock' : 'Dishes'}
+      subtitle={isInventoryView ? 'How many of each dish you have left' : 'Your dishes, their prices and what customers can see'}
       sidebarItems={sidebarItems}
       userType="seller"
     >
-      <div className="max-w-7xl mx-auto space-y-6">
-        {/* ========================================================================= */}
-        {/* Sleek Sub-navigation Tabs */}
-        {/* ========================================================================= */}
-        <div className="bg-white rounded-2xl p-1.5 border border-slate-200 shadow-sm flex items-center justify-between flex-wrap gap-2">
-          <div className="flex items-center gap-1.5 overflow-x-auto w-full sm:w-auto">
-            {[
-              {
-                label: 'All Products',
-                icon: Icons.products,
-                href: '/sellers/products',
-                isActive: !isInventoryView,
-                count: couldNotRead ? undefined : totalProducts,
-              },
-              {
-                label: 'Inventory & Stock',
-                icon: Icons.inventory,
-                href: '/sellers/products?view=inventory',
-                isActive: isInventoryView,
-                alertCount: couldNotRead ? undefined : lowStockCount + outOfStockCount,
-              },
-              {
-                label: 'Discounts & Deals',
-                icon: Icons.discounts,
-                href: '/sellers/promotions',
-                isActive: false,
-              },
-            ].map((tab) => (
+      <div className="max-w-5xl space-y-6">
+        <div className="flex flex-col-reverse gap-3 sm:flex-row sm:items-end sm:justify-between border-b border-line">
+          <nav aria-label="Dishes" className="flex gap-6 -mb-px">
+            {tabs.map((tab) => (
               <Link
                 key={tab.href}
                 href={tab.href}
-                className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs sm:text-sm font-bold transition-all duration-200 whitespace-nowrap ${
-                  tab.isActive
-                    ? 'bg-slate-900 text-white shadow-sm'
-                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+                aria-current={tab.selected ? 'page' : undefined}
+                className={`flex items-center gap-2 min-h-11 pb-1 text-[15px] whitespace-nowrap border-b-2 transition-colors ${
+                  tab.selected ? 'border-brand-600 text-ink font-semibold' : 'border-transparent text-muted hover:text-ink'
                 }`}
               >
-                <span className="shrink-0">{tab.icon}</span>
-                <span>{tab.label}</span>
-                {tab.count !== undefined && (
-                  <span
-                    className={`text-xs px-2 py-0.5 rounded-full font-bold ${
-                      tab.isActive ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-700'
-                    }`}
-                  >
-                    {tab.count}
+                {tab.label}
+                {!couldNotRead && tab.href === '/sellers/products' && totalProducts > 0 && (
+                  <span className="min-w-6 px-1.5 py-0.5 rounded-full text-xs font-semibold tabular-nums bg-raised text-muted">
+                    {totalProducts}
                   </span>
                 )}
-                {tab.alertCount !== undefined && tab.alertCount > 0 && (
-                  <span
-                    className={`text-xs px-2 py-0.5 rounded-full font-bold ${
-                      tab.isActive
-                        ? 'bg-rose-500 text-white'
-                        : 'bg-rose-100 text-rose-700 animate-pulse'
-                    }`}
-                  >
-                    {tab.alertCount} alert{tab.alertCount > 1 ? 's' : ''}
+                {!couldNotRead && tab.href !== '/sellers/products' && needRestock > 0 && (
+                  <span className="px-2 py-0.5 rounded-full text-xs font-medium tabular-nums bg-accent-soft text-accent-soft-ink">
+                    {needRestock} to restock
                   </span>
                 )}
               </Link>
             ))}
-          </div>
+          </nav>
 
-          <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
+          <div className="flex gap-2 sm:pb-2">
             {products.length > 0 && (
-              <button
+              <Button
+                variant="outline"
+                className="flex-1 sm:flex-none px-4"
                 onClick={() => {
                   setSelectedProducts([]);
                   setBulkStockValue('');
                   setShowBulkUpdate(true);
                 }}
-                className="flex items-center gap-2 px-3.5 py-2 text-xs sm:text-sm font-bold text-slate-700 bg-white border border-slate-200 rounded-xl hover:bg-slate-50 hover:border-slate-300 shadow-sm transition-all"
               >
-                <svg className="w-4 h-4 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
-                </svg>
-                Bulk Stock
-                {selectedProducts.length > 0 && (
-                  <span className="px-2 py-0.5 text-xs font-black text-emerald-700 bg-emerald-100 rounded-full">
-                    {selectedProducts.length}
-                  </span>
-                )}
-              </button>
+                Update stock
+              </Button>
             )}
-
-            <Link href="/sellers/products/new">
-              <button className="flex items-center gap-2 px-4 py-2 text-xs sm:text-sm font-bold text-white bg-emerald-600 hover:bg-emerald-700 rounded-xl shadow-sm hover:shadow transition-all">
-                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
-                </svg>
-                Add Product
-              </button>
-            </Link>
+            {!showEmpty && (
+              <Link href="/sellers/products/new" className="flex-1 sm:flex-none">
+                <Button className="w-full px-5">
+                  <Plus className="w-4 h-4" aria-hidden="true" />
+                  Add a dish
+                </Button>
+              </Link>
+            )}
           </div>
         </div>
 
-        {/* Counters and filters describe a list; with no list to describe (it could not be read) they would say "0" and "Zero stockouts". */}
-        {!couldNotRead && (
+        {/* Counters and filters describe a list; with no list (it could not be read) they would say "0". */}
+        {!couldNotRead && products.length > 0 && (
           <>
-            {/* ========================================================================= */}
-            {/* KPI Strip: Highlights Key Metrics with Clean Icons */}
-            {/* ========================================================================= */}
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
-              {/* Card 1 */}
-              <div className="bg-white rounded-3xl p-4 sm:p-5 border border-slate-200 shadow-sm relative overflow-hidden group hover:border-slate-300 transition-all">
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-[11px] font-black uppercase tracking-wider text-slate-500">
-                    {isInventoryView ? 'Tracked Items' : 'Total Listings'}
-                  </span>
-                  <div className="w-8 h-8 rounded-xl bg-slate-100 text-slate-700 flex items-center justify-center font-bold text-sm">
-                    {Icons.box}
-                  </div>
+            <dl className="grid grid-cols-2 gap-x-6 gap-y-4 sm:flex sm:flex-wrap sm:gap-x-10">
+              {[
+                { label: 'Showing to customers', value: activeCount },
+                { label: 'Hidden', value: hiddenCount },
+                { label: 'Running low', value: lowStockCount },
+                { label: 'Sold out', value: outOfStockCount },
+                ...(pendingCount > 0 ? [{ label: 'Waiting for approval', value: pendingCount }] : []),
+              ].map((figure) => (
+                <div key={figure.label} className={figure.value === 0 && figure.label !== 'Showing to customers' ? 'hidden sm:block' : undefined}>
+                  <dt className="text-sm text-muted">{figure.label}</dt>
+                  <dd className="text-2xl font-semibold text-ink tabular-nums">{figure.value}</dd>
                 </div>
-                <div className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight">
-                  {totalProducts}
-                </div>
-                <div className="mt-2 text-xs font-medium text-slate-500">
-                  {activeCount} active in catalog
-                </div>
-              </div>
+              ))}
+            </dl>
 
-              {/* Card 2 */}
-              <div className="bg-white rounded-3xl p-4 sm:p-5 border border-slate-200 shadow-sm relative overflow-hidden group hover:border-slate-300 transition-all">
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-[11px] font-black uppercase tracking-wider text-emerald-600">
-                    Healthy Stock
-                  </span>
-                  <div className="w-8 h-8 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center font-bold text-sm">
-                    {Icons.check}
-                  </div>
-                </div>
-                <div className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight">
-                  {inStockCount}
-                </div>
-                <div className="mt-2 text-xs font-medium text-emerald-600 flex items-center gap-1">
-                  <span>Ready for fast dispatch</span>
-                </div>
-              </div>
-
-              {/* Card 3 */}
-              <div className="bg-white rounded-3xl p-4 sm:p-5 border border-slate-200 shadow-sm relative overflow-hidden group hover:border-slate-300 transition-all">
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-[11px] font-black uppercase tracking-wider text-amber-600">
-                    Low Stock Warning
-                  </span>
-                  <div className="w-8 h-8 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center font-bold text-sm">
-                    {Icons.alertTriangle}
-                  </div>
-                </div>
-                <div className="text-2xl sm:text-3xl font-black text-amber-600 tracking-tight">
-                  {lowStockCount}
-                </div>
-                <div className="mt-2 text-xs font-medium text-amber-700">
-                  1 – 10 items remaining
-                </div>
-              </div>
-
-              {/* Card 4 */}
-              <div className="bg-white rounded-3xl p-4 sm:p-5 border border-slate-200 shadow-sm relative overflow-hidden group hover:border-slate-300 transition-all">
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-[11px] font-black uppercase tracking-wider text-rose-600">
-                    Out of Stock
-                  </span>
-                  <div className="w-8 h-8 rounded-xl bg-rose-50 text-rose-600 flex items-center justify-center font-bold text-sm">
-                    {Icons.alertCircle}
-                  </div>
-                </div>
-                <div className="text-2xl sm:text-3xl font-black text-rose-600 tracking-tight">
-                  {outOfStockCount}
-                </div>
-                <div className="mt-2 text-xs font-medium text-rose-700">
-                  {outOfStockCount > 0 ? 'Restock immediately' : 'Zero stockouts'}
-                </div>
-              </div>
-            </div>
-
-            {/* ========================================================================= */}
-            {/* Search, Filter Chips & Controls */}
-            {/* ========================================================================= */}
-            <div className="bg-white rounded-3xl p-4 border border-slate-200 shadow-sm flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-3">
-              {/* Search Input: never squeezed below a usable width by the chips beside it */}
-              <div className="relative flex-1 lg:min-w-64">
-                <svg
-                  className="w-4 h-4 text-slate-500 absolute start-3.5 top-1/2 -translate-y-1/2"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
-                  strokeWidth={2}
-                >
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" />
-                </svg>
+            <div className="flex flex-col sm:flex-row gap-2">
+              <div className="relative flex-1">
+                <label htmlFor="dish-search" className="sr-only">Search dishes</label>
+                <Search className="w-4 h-4 text-muted absolute start-3.5 top-1/2 -translate-y-1/2 pointer-events-none" aria-hidden="true" />
                 <input
-                  type="text"
+                  id="dish-search"
+                  type="search"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder="Search by product title, category, or cuisine..."
-                  className="w-full ps-10 pe-9 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-900 focus:bg-white transition-all placeholder:text-slate-400"
+                  placeholder="Search by name or category"
+                  className={`${fieldClass} w-full ps-10 pe-11 placeholder:text-muted`}
                 />
                 {searchQuery && (
                   <button
+                    type="button"
                     onClick={() => setSearchQuery('')}
-                    className="absolute end-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-600 text-xs font-bold"
+                    aria-label="Clear search"
+                    className="absolute end-0 top-0 w-11 h-11 flex items-center justify-center text-muted hover:text-ink"
                   >
-                    ✕
+                    <X className="w-4 h-4" aria-hidden="true" />
                   </button>
                 )}
               </div>
-
-              {/* Filter Chips Bar */}
-              <div className="flex flex-wrap items-center gap-1.5">
-                {/* Stock Filters */}
-                {[
-                  { key: 'all', label: 'All Stock', count: products.length },
-                  { key: 'in_stock', label: 'Healthy', dot: 'bg-emerald-500', count: inStockCount },
-                  { key: 'low_stock', label: 'Low Stock', dot: 'bg-amber-500', count: lowStockCount },
-                  { key: 'out_of_stock', label: 'Out of Stock', dot: 'bg-rose-500', count: outOfStockCount },
-                ].map((chip) => (
-                  <button
-                    key={chip.key}
-                    onClick={() => setStockFilter(chip.key as StockFilter)}
-                    className={`px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all flex items-center gap-1.5 ${
-                      stockFilter === chip.key
-                        ? 'bg-slate-900 text-white shadow-sm'
-                        : 'bg-slate-100 text-slate-600 hover:bg-slate-200/70 hover:text-slate-900'
-                    }`}
-                  >
-                    {chip.dot && <span className={`w-2 h-2 rounded-full ${chip.dot} shrink-0`} />}
-                    <span>{chip.label}</span>
-                    <span
-                      className={`ms-1 text-[11px] px-1.5 py-0.2 rounded-full font-bold ${
-                        stockFilter === chip.key ? 'bg-white/20 text-white' : 'bg-white text-slate-600 shadow-xs'
-                      }`}
-                    >
-                      {chip.count}
-                    </span>
-                  </button>
-                ))}
-
-                {/* Status Filter (when in All Products view) */}
+              <div className="flex gap-2">
+                <label htmlFor="stock-filter" className="sr-only">Stock</label>
+                <select
+                  id="stock-filter"
+                  value={stockFilter}
+                  onChange={(e) => setStockFilter(e.target.value as StockFilter)}
+                  className={`${fieldClass} min-w-0 flex-1 sm:flex-none px-3`}
+                >
+                  <option value="all">Any stock</option>
+                  <option value="in_stock">More than 10 left ({inStockCount})</option>
+                  <option value="low_stock">Running low ({lowStockCount})</option>
+                  <option value="out_of_stock">Sold out ({outOfStockCount})</option>
+                </select>
                 {!isInventoryView && (
-                  <div className="flex items-center ps-2 border-s border-slate-200 gap-1">
-                    {[
-                      { key: 'all', label: 'Status: All' },
-                      { key: 'active', label: 'Live' },
-                      { key: 'hidden', label: 'Hidden' },
-                      ...(pendingCount > 0 ? [{ key: 'pending', label: 'Pending Review' }] : []),
-                    ].map((chip) => (
-                      <button
-                        key={chip.key}
-                        onClick={() => setStatusFilter(chip.key as StatusFilter)}
-                        className={`px-2.5 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all ${
-                          statusFilter === chip.key
-                            ? 'bg-emerald-700 text-white shadow-sm'
-                            : 'bg-slate-100 text-slate-600 hover:bg-slate-200/70'
-                        }`}
-                      >
-                        {chip.label}
-                      </button>
-                    ))}
-                  </div>
+                  <>
+                    <label htmlFor="status-filter" className="sr-only">Who can see it</label>
+                    <select
+                      id="status-filter"
+                      value={statusFilter}
+                      onChange={(e) => setStatusFilter(e.target.value as StatusFilter)}
+                      className={`${fieldClass} min-w-0 flex-1 sm:flex-none px-3`}
+                    >
+                      <option value="all">Every dish</option>
+                      <option value="active">Showing to customers</option>
+                      <option value="hidden">Hidden</option>
+                      {pendingCount > 0 && <option value="pending">Waiting for approval</option>}
+                    </select>
+                  </>
                 )}
               </div>
             </div>
           </>
         )}
 
-        {/* ========================================================================= */}
-        {/* Main Products Grid / Content */}
-        {/* ========================================================================= */}
-        {loading ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
-            {[1, 2, 3, 4, 5, 6, 7, 8].map((i) => (
-              <div key={i} className="bg-white rounded-3xl border border-slate-200 overflow-hidden shadow-sm animate-pulse">
-                <div className="h-48 bg-slate-100" />
-                <div className="p-5 space-y-3">
-                  <div className="h-4 bg-slate-200 rounded w-3/4" />
-                  <div className="h-6 bg-slate-100 rounded w-1/2" />
-                  <div className="h-10 bg-slate-50 rounded-xl" />
-                  <div className="h-8 bg-slate-100 rounded-xl" />
-                </div>
-              </div>
-            ))}
+        {Boolean(loadError) && products.length > 0 && (
+          <LoadError compact error={loadError} onRetry={loadProducts} title="We couldn't load your dishes" />
+        )}
+
+        {loading && products.length === 0 ? (
+          <div className="py-24 text-center" role="status">
+            <div className="animate-spin rounded-full h-8 w-8 border-2 border-line border-t-brand-600 mx-auto mb-4" />
+            <p className="text-sm text-muted">Loading your dishes</p>
           </div>
-        ) : loadError && products.length === 0 ? (
-          <LoadError error={loadError} onRetry={loadProducts} title="We couldn't load your dishes" className="max-w-2xl mx-auto" />
+        ) : couldNotRead ? (
+          <LoadError error={loadError} onRetry={loadProducts} title="We couldn't load your dishes" className="max-w-2xl" />
         ) : products.length === 0 ? (
-          <div className="bg-white rounded-3xl shadow-sm border border-slate-200 p-12 sm:p-16 text-center max-w-2xl mx-auto">
-            <div className="w-16 h-16 bg-emerald-50 rounded-2xl flex items-center justify-center mx-auto mb-5 text-emerald-600 shadow-inner">
-              <svg className="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M12 6.042A8.967 8.967 0 006 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 016 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 016-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0018 18a8.967 8.967 0 00-6 2.292m0-14.25v14.25" />
-              </svg>
-            </div>
-            <h2 className="text-2xl font-black text-slate-900 tracking-tight mb-2">No Products in Kitchen Yet</h2>
-            <p className="text-sm text-slate-500 mb-6 leading-relaxed">
-              Start publishing your ready-to-cook delicacies, sub-zero frozen specials, or fresh market items to get noticed by hungry customers.
-            </p>
+          <div className="py-14 text-center">
+            <p className="text-sm text-muted max-w-xs mx-auto mb-5">Your dishes will be listed here once you add them.</p>
             <Link href="/sellers/products/new">
-              <Button size="lg" className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-2xl shadow-lg shadow-emerald-600/20 px-6">
-                Add Your First Dish
+              <Button>
+                <Plus className="w-4 h-4" aria-hidden="true" />
+                Add your first dish
               </Button>
             </Link>
           </div>
         ) : filteredProducts.length === 0 ? (
-          <div className="bg-white rounded-3xl shadow-sm border border-slate-200 p-12 text-center max-w-xl mx-auto">
-            <div className="w-12 h-12 bg-slate-100 rounded-2xl flex items-center justify-center mx-auto mb-4 text-slate-500">
-              <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" />
-              </svg>
-            </div>
-            <h3 className="text-lg font-bold text-slate-900 mb-1">No products match criteria</h3>
-            <p className="text-xs text-slate-500 mb-5">Try modifying your search query or switching the stock filter.</p>
+          <div className="py-14 text-center">
+            <p className="text-sm text-muted mb-3">No dishes match these filters.</p>
             <Button
-              variant="outline"
-              size="sm"
+              variant="ghost"
               onClick={() => {
                 setSearchQuery('');
                 setStockFilter('all');
                 setStatusFilter('all');
               }}
-              className="rounded-xl font-bold text-xs"
             >
-              Reset Filters
+              Clear filters
             </Button>
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
-            {filteredProducts.map((product) => {
-              const isLow = product.stockQuantity > 0 && product.stockQuantity <= 10;
-              const isOut = product.stockQuantity === 0;
-              const typeMeta = productTypeInfo[product.productType || 'frozen'] || productTypeInfo.frozen;
+          <div className="rounded-[20px] bg-surface border border-line shadow-[var(--shadow-card)] overflow-hidden">
+            <div aria-hidden="true" className="hidden sm:grid sm:grid-cols-[3.5rem_minmax(0,1fr)_7rem_8rem_3rem_5.5rem] gap-x-5 px-5 py-2.5 border-b border-line text-xs text-muted">
+              <span />
+              <span>Dish</span>
+              <span className="text-end">Price</span>
+              <span>Stock</span>
+              <span>Showing</span>
+              <span />
+            </div>
+            <ul className="divide-y divide-line">
+              {filteredProducts.map((product) => {
+                const isLow = product.stockQuantity > 0 && product.stockQuantity <= 10;
+                const isOut = product.stockQuantity === 0;
+                const photo = product.images?.[0];
+                const editing = !!editingStock[product.id];
+                const onToday = onTodaysMenu(product);
+                const profit = product.costPrice && product.costPrice > 0
+                  ? product.price - product.costPrice - product.price * 0.15
+                  : null;
+                const meta = [
+                  productTypeLabel[product.productType || 'frozen'] ?? productTypeLabel.frozen,
+                  product.category?.name,
+                  product.menuType === 'weekly' && (product.availableDays ?? []).length > 0
+                    ? (product.availableDays ?? []).map((d) => DAY_NAMES[d]).join(', ')
+                    : null,
+                  product.shelfLifeHours ? `Keeps ${product.shelfLifeHours} h` : null,
+                ].filter(Boolean).join(', ');
 
-              return (
-                <div
-                  key={product.id}
-                  className={`bg-white rounded-3xl shadow-sm border transition-all duration-300 flex flex-col justify-between overflow-hidden group hover:shadow-xl hover:-translate-y-0.5 ${
-                    isOut
-                      ? 'border-rose-300 ring-1 ring-rose-100'
-                      : isLow
-                      ? 'border-amber-300 ring-1 ring-amber-100'
-                      : 'border-slate-200 hover:border-slate-300'
-                  }`}
-                >
-                  {/* Card Header & Thumbnail */}
-                  <div>
-                    <div className="h-48 bg-slate-100 relative overflow-hidden">
-                      {product.images && product.images[0] ? (
-                        <img
-                          src={
-                            product.images[0].imageUrl.startsWith('http')
-                              ? product.images[0].imageUrl
-                              : `${process.env.NEXT_PUBLIC_API_URL?.replace('/api/v1', '') || 'http://localhost:3001'}${product.images[0].imageUrl}`
-                          }
-                          alt={product.name}
-                          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500 ease-out"
-                        />
+                return (
+                  <li key={product.id} className="grid grid-cols-[3.5rem_minmax(0,1fr)_3rem] sm:grid-cols-[3.5rem_minmax(0,1fr)_7rem_8rem_3rem_5.5rem] items-center gap-x-4 sm:gap-x-5 gap-y-3 px-4 sm:px-5 py-4">
+                    <div className="col-start-1 row-start-1 self-start sm:self-center w-14 h-14 rounded-xl bg-raised overflow-hidden flex items-center justify-center">
+                      {photo ? (
+                        <img src={photoUrl(photo.imageUrl)} alt="" className="w-full h-full object-cover" />
                       ) : (
-                        <div className="w-full h-full flex flex-col items-center justify-center gap-2 bg-gradient-to-br from-slate-100 to-slate-200">
-                          <svg className="w-8 h-8 text-slate-300" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 15.75l5.159-5.159a2.25 2.25 0 013.182 0l5.159 5.159m-1.5-1.5l1.409-1.409a2.25 2.25 0 013.182 0l2.909 2.909m-18 3.75h16.5a1.5 1.5 0 001.5-1.5V6a1.5 1.5 0 00-1.5-1.5H3.75A1.5 1.5 0 002.25 6v12a1.5 1.5 0 001.5 1.5zm10.5-11.25h.008v.008h-.008V8.25zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0z" />
-                          </svg>
-                          <span className="text-[11px] font-semibold text-slate-500">No Image Uploaded</span>
-                        </div>
+                        <ImageOff className="w-5 h-5 text-muted" aria-label="No photo" />
                       )}
-
-                      {/* Top Gradient Overlay */}
-                      <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-black/20 pointer-events-none" />
-
-                      {/* Badges Overlay */}
-                      <div className="absolute top-3 start-3 end-3 flex items-center justify-between gap-2 pointer-events-auto">
-                        {/* Type Badge with SVG Icon */}
-                        <span
-                          className={`px-2.5 py-1 rounded-xl text-[11px] font-bold backdrop-blur-md border shadow-xs flex items-center gap-1.5 ${typeMeta.color} ${typeMeta.border}`}
-                        >
-                          {typeMeta.icon}
-                          <span>{typeMeta.label}</span>
-                        </span>
-
-                        {/* Status / Moderation Badge */}
-                        {product.approvalStatus === 'pending' ? (
-                          <span className="px-2.5 py-1 rounded-xl text-[11px] font-bold shadow-sm bg-amber-700 text-white backdrop-blur-md flex items-center gap-1">
-                            {Icons.clock}
-                            <span>Under Review</span>
-                          </span>
-                        ) : product.approvalStatus === 'rejected' ? (
-                          <span className="px-2.5 py-1 rounded-xl text-[11px] font-bold shadow-sm bg-rose-600 text-white backdrop-blur-md">
-                            ✕ Rejected
-                          </span>
-                        ) : (
-                          <span
-                            className={`px-2.5 py-1 rounded-xl text-[11px] font-bold shadow-xs flex items-center gap-1.5 backdrop-blur-md ${
-                              product.isActive
-                                ? 'bg-emerald-600/90 text-white'
-                                : 'bg-slate-800/80 text-slate-200'
-                            }`}
-                          >
-                            <span
-                              className={`w-1.5 h-1.5 rounded-full ${
-                                product.isActive ? 'bg-emerald-200 animate-pulse' : 'bg-slate-400'
-                              }`}
-                            />
-                            {product.isActive ? 'Live' : 'Hidden'}
-                          </span>
-                        )}
-                      </div>
-
-                      {/* Shelf Life / Category bottom badge on image: a dark fade under it keeps it readable on a pale photo */}
-                      <div className="absolute inset-x-0 bottom-0 h-14 bg-gradient-to-t from-black/60 to-transparent pointer-events-none" aria-hidden="true" />
-                      <div className="absolute bottom-2.5 start-3 end-3 flex items-center justify-between pointer-events-none text-white text-[11px] font-bold drop-shadow-sm">
-                        <span>{product.category?.name || 'General'}</span>
-                        {product.shelfLifeHours ? (
-                          <span className="bg-black/50 px-2 py-0.5 rounded-lg backdrop-blur-xs flex items-center gap-1">
-                            {Icons.clock}
-                            <span>{product.shelfLifeHours}h shelf</span>
-                          </span>
-                        ) : null}
-                      </div>
                     </div>
 
-                    {/* Product Details Content */}
-                    <div className="p-5">
-                      <div className="flex items-start justify-between gap-2 mb-1.5">
-                        <h3 className="font-bold text-slate-900 text-base leading-snug line-clamp-2 group-hover:text-emerald-700 transition-colors">
-                          {product.name}
-                        </h3>
-                      </div>
-
-                      {/* Price & Unit */}
-                      <div className="flex items-baseline justify-between mb-3">
-                        <div className="flex items-baseline gap-1.5">
-                          <span className="text-xl font-black text-slate-900 tracking-tight">
-                            {formatPrice(product.price)}
-                          </span>
-                          {product.unit && (
-                            <span className="text-xs font-semibold text-slate-500">
-                              {formatUnit(product.unit)}
-                            </span>
-                          )}
+                    <div className="col-start-2 row-start-1 min-w-0">
+                        <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                          <h3 className="font-semibold text-ink leading-snug">{product.name}</h3>
+                          {product.approvalStatus === 'pending' ? (
+                            <span className="rounded-full px-2 py-0.5 text-xs font-medium bg-accent-soft text-accent-soft-ink">Waiting for approval</span>
+                          ) : product.approvalStatus === 'rejected' ? (
+                            <span className="rounded-full px-2 py-0.5 text-xs font-medium bg-red-50 text-red-700">Not approved</span>
+                          ) : !product.isActive ? (
+                            <span className="rounded-full px-2 py-0.5 text-xs font-medium bg-raised text-muted">Hidden</span>
+                          ) : null}
                         </div>
+                        <p className="text-sm text-muted mt-0.5">{meta}</p>
+                        {profit !== null && (
+                          <p className="text-xs text-muted mt-0.5 tabular-nums">
+                            You keep about {formatPrice(profit)} ({((profit / product.price) * 100).toFixed(0)}%)
+                          </p>
+                        )}
+                        {product.menuType === 'daily' && (
+                          <button
+                            type="button"
+                            onClick={() => handleTodaysMenu(product.id, !onToday)}
+                            data-testid="todays-menu-toggle"
+                            aria-pressed={onToday}
+                            className={`mt-2 min-h-11 px-3 rounded-full text-sm font-medium border transition-colors focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-brand/40 ${
+                              onToday ? 'bg-brand-soft text-brand-soft-ink border-transparent' : 'border-line-strong text-ink hover:bg-raised'
+                            }`}
+                          >
+                            {onToday ? "On today's menu" : "Put on today's menu"}
+                          </button>
+                        )}
+                    </div>
 
-                        {/* Stock status pill */}
-                        <div
-                          className={`px-2.5 py-1 rounded-xl text-xs font-bold flex items-center gap-1.5 ${
+                    <div className="col-span-3 row-start-2 flex items-center gap-2 sm:contents">
+                        <p className="flex-1 whitespace-nowrap sm:col-start-3 sm:row-start-1 sm:text-end">
+                          <span className="font-semibold text-ink tabular-nums">{formatPrice(product.price)}</span>
+                          {product.unit && <span className="text-xs text-muted ms-1 sm:ms-0 sm:block">{formatUnit(product.unit)}</span>}
+                        </p>
+                        <button
+                          type="button"
+                          onClick={() => setEditingStock((prev) => ({ ...prev, [product.id]: !prev[product.id] }))}
+                          aria-expanded={editing}
+                          aria-label={`Change stock for ${product.name}`}
+                          className={`sm:col-start-4 sm:row-start-1 justify-self-start whitespace-nowrap inline-flex items-center gap-2 min-h-11 px-3 rounded-xl border text-sm tabular-nums transition-colors focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-brand/40 ${
                             isOut
-                              ? 'bg-rose-100 text-rose-800'
+                              ? 'border-red-200 bg-red-50 text-red-700'
                               : isLow
-                              ? 'bg-amber-100 text-amber-800'
-                              : 'bg-emerald-100 text-emerald-800'
+                                ? 'border-transparent bg-accent-soft text-accent-soft-ink'
+                                : 'border-line text-ink hover:bg-raised'
                           }`}
                         >
-                          <span
-                            className={`w-2 h-2 rounded-full ${
-                              isOut ? 'bg-rose-500' : isLow ? 'bg-amber-500' : 'bg-emerald-500'
-                            }`}
-                          />
-                          {isOut ? 'Out of stock' : `${product.stockQuantity} in stock`}
-                        </div>
-                      </div>
+                          <Package className="w-4 h-4 opacity-70" aria-hidden="true" />
+                          {isOut ? 'Sold out' : `${product.stockQuantity} left`}
+                        </button>
 
-                      {/* Visual Inventory Level Bar */}
-                      <div className="mb-3.5">
-                        <div className="flex items-center justify-between text-[11px] font-bold text-slate-500 mb-1">
-                          <span>Stock Level</span>
-                          <span className={isOut ? 'text-rose-600' : isLow ? 'text-amber-600' : 'text-slate-600'}>
-                            {product.stockQuantity} units
-                          </span>
-                        </div>
-                        <div className="w-full h-2 bg-slate-100 rounded-full overflow-hidden">
-                          <div
-                            className={`h-full rounded-full transition-all duration-500 ${
-                              isOut
-                                ? 'w-0'
-                                : isLow
-                                ? 'bg-amber-500'
-                                : 'bg-emerald-500'
-                            }`}
-                            style={{
-                              width: `${Math.min(100, Math.max(5, (product.stockQuantity / 50) * 100))}%`,
-                            }}
-                          />
-                        </div>
-                      </div>
+                    <div className="flex items-center justify-end sm:col-start-6 sm:row-start-1 -my-1">
+                      <Link href={`/sellers/products/${product.id}/edit`} aria-label={`Edit ${product.name}`} title="Edit" className={iconButtonClass}>
+                        <Pencil className="w-4 h-4" aria-hidden="true" />
+                      </Link>
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          if ((await confirmDialog({ title: 'Delete this dish?', message: `"${product.name}" will be removed for good.`, confirmText: 'Delete' }))) {
+                            handleDeleteProduct(product.id);
+                          }
+                        }}
+                        aria-label={`Delete ${product.name}`}
+                        title="Delete"
+                        className={`${iconButtonClass} hover:text-red-700 hover:bg-red-50`}
+                      >
+                        <Trash2 className="w-4 h-4" aria-hidden="true" />
+                      </button>
+                    </div>
+                    </div>
 
-                      {/* Profit Strip with SVG icon */}
-                      {product.costPrice && product.costPrice > 0 ? (
-                        <div className="mb-4 px-3 py-2 bg-emerald-50/70 border border-emerald-100 rounded-2xl flex items-center justify-between text-xs">
-                          <span className="font-bold text-emerald-900 flex items-center gap-1.5">
-                            {Icons.sparkles}
-                            <span>Margin</span>
-                          </span>
-                          <span className="font-black text-emerald-700">
-                            {formatPrice(product.price - product.costPrice - product.price * 0.15)}
-                            <span className="text-[11px] font-bold text-emerald-600 ms-1">
-                              ({(
-                                ((product.price - product.costPrice - product.price * 0.15) / product.price) *
-                                100
-                              ).toFixed(0)}
-                              %)
-                            </span>
-                          </span>
-                        </div>
-                      ) : (
-                        <div className="mb-4 h-[38px] flex items-center text-[11px] text-slate-500 px-1">
-                          <span>No cost price recorded</span>
-                        </div>
-                      )}
+                    <button
+                      type="button"
+                      role="switch"
+                      aria-checked={product.isActive}
+                      aria-label={`Show ${product.name} to customers`}
+                      onClick={() => handleToggleActive(product.id, product.isActive)}
+                      className="col-start-3 row-start-1 self-start sm:self-center sm:col-start-5 w-12 min-h-11 flex items-center rounded-full focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-brand/40"
+                    >
+                      <span aria-hidden="true" className={`relative w-12 h-7 rounded-full transition-colors ${product.isActive ? 'bg-brand-600' : 'bg-line-strong'}`}>
+                        <span className={`absolute top-1 w-5 h-5 rounded-full bg-white shadow-sm transition-[inset-inline-start] ${product.isActive ? 'start-6' : 'start-1'}`} />
+                      </span>
+                    </button>
 
-                      {/* Inline Stock Adjustment Drawer (When Active) */}
-                      {editingStock[product.id] && (
-                        <div className="mb-4 p-3 bg-slate-50 border border-slate-200 rounded-2xl space-y-2 animate-in fade-in zoom-in-95 duration-150">
-                          <div className="flex items-center justify-between text-xs font-bold text-slate-700">
-                            <span>Adjust Stock Level</span>
-                            <span className="text-slate-500">Current: {product.stockQuantity}</span>
-                          </div>
-
-                          {/* Stepper shortcuts */}
-                          <div className="grid grid-cols-4 gap-1.5">
-                            {[-5, -1, 1, 5].map((delta) => {
-                              const curr = stockValues[product.id] ?? product.stockQuantity;
-                              const target = Math.max(0, curr + delta);
-                              return (
-                                <button
-                                  key={delta}
-                                  type="button"
-                                  onClick={() => setStockValues((prev) => ({ ...prev, [product.id]: target }))}
-                                  className="py-1 rounded-lg text-xs font-bold bg-white border border-slate-200 hover:bg-slate-100 text-slate-700 transition-colors"
-                                >
-                                  {delta > 0 ? `+${delta}` : delta}
-                                </button>
-                              );
-                            })}
-                          </div>
-
-                          <div className="flex items-center gap-2 pt-1">
-                            <input
-                              type="number"
-                              min="0"
-                              value={stockValues[product.id] ?? product.stockQuantity}
-                              onChange={(e) =>
-                                setStockValues((prev) => ({
-                                  ...prev,
-                                  [product.id]: Math.max(0, parseInt(e.target.value, 10) || 0),
-                                }))
-                              }
-                              className="w-24 px-3 py-1.5 border border-slate-300 rounded-xl text-sm font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-900 bg-white"
-                              disabled={updatingStock[product.id]}
-                              autoFocus
-                            />
-
+                    {editing && (
+                      <div className="col-span-3 row-start-3 sm:row-start-2 sm:col-start-2 sm:col-span-5">
+                        <div className="rounded-2xl bg-raised p-3 flex flex-wrap items-center gap-2">
+                          <label htmlFor={`stock-${product.id}`} className="text-sm text-ink me-1 w-full sm:w-auto">
+                            How many left?
+                          </label>
+                          {[-5, -1].map((delta) => (
                             <button
+                              key={delta}
                               type="button"
+                              onClick={() => setStockValues((prev) => ({ ...prev, [product.id]: Math.max(0, (prev[product.id] ?? product.stockQuantity) + delta) }))}
+                              className="w-11 h-11 rounded-xl border border-line-strong bg-surface text-sm font-medium text-ink tabular-nums hover:bg-page"
+                            >
+                              {delta}
+                            </button>
+                          ))}
+                          <input
+                            id={`stock-${product.id}`}
+                            type="number"
+                            min="0"
+                            inputMode="numeric"
+                            value={stockValues[product.id] ?? product.stockQuantity}
+                            onChange={(e) =>
+                              setStockValues((prev) => ({
+                                ...prev,
+                                [product.id]: Math.max(0, parseInt(e.target.value, 10) || 0),
+                              }))
+                            }
+                            className={`${fieldClass} w-20 px-3 text-center font-semibold tabular-nums`}
+                            disabled={updatingStock[product.id]}
+                            autoFocus
+                          />
+                          {[1, 5].map((delta) => (
+                            <button
+                              key={delta}
+                              type="button"
+                              onClick={() => setStockValues((prev) => ({ ...prev, [product.id]: Math.max(0, (prev[product.id] ?? product.stockQuantity) + delta) }))}
+                              className="w-11 h-11 rounded-xl border border-line-strong bg-surface text-sm font-medium text-ink tabular-nums hover:bg-page"
+                            >
+                              +{delta}
+                            </button>
+                          ))}
+                          <div className="flex gap-2 ms-auto">
+                            <Button
+                              variant="ghost"
+                              onClick={() => {
+                                setEditingStock((prev) => ({ ...prev, [product.id]: false }));
+                                setStockValues((prev) => ({ ...prev, [product.id]: product.stockQuantity }));
+                              }}
+                            >
+                              Cancel
+                            </Button>
+                            <Button
                               onClick={async () => {
                                 const val = stockValues[product.id] ?? product.stockQuantity;
                                 await handleQuickStockUpdate(product.id, val);
                                 setEditingStock((prev) => ({ ...prev, [product.id]: false }));
                               }}
                               disabled={updatingStock[product.id]}
-                              className="flex-1 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold shadow-xs transition-colors flex items-center justify-center gap-1"
                             >
-                              {updatingStock[product.id] ? (
-                                <div className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                              ) : (
-                                <>Save</>
-                              )}
-                            </button>
-
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setEditingStock((prev) => ({ ...prev, [product.id]: false }));
-                                setStockValues((prev) => ({ ...prev, [product.id]: product.stockQuantity }));
-                              }}
-                              className="p-1.5 text-slate-500 hover:text-slate-600 hover:bg-slate-200 rounded-xl transition-colors"
-                              title="Cancel"
-                            >
-                              ✕
-                            </button>
+                              {updatingStock[product.id] ? <Loader2 className="w-4 h-4 animate-spin" aria-label="Saving" /> : 'Save'}
+                            </Button>
                           </div>
                         </div>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Card Bottom Action Toolbar */}
-                  <div className="p-4 pt-0 border-t border-slate-100 bg-slate-50/50 mt-auto">
-                    <div className="grid grid-cols-4 gap-1.5 pt-3">
-                      {/* Quick Stock Toggle */}
-                      <button
-                        onClick={() =>
-                          setEditingStock((prev) => ({ ...prev, [product.id]: !prev[product.id] }))
-                        }
-                        className={`flex items-center justify-center p-2.5 rounded-xl border transition-all ${
-                          editingStock[product.id]
-                            ? 'bg-slate-900 text-white border-slate-900 shadow-sm'
-                            : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-100 hover:border-slate-300'
-                        }`}
-                        title="Quick Stock Adjustment"
-                      >
-                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
-                        </svg>
-                      </button>
-
-                      {/* Edit Product */}
-                      <Link href={`/sellers/products/${product.id}/edit`} className="w-full">
-                        <button
-                          className="w-full flex items-center justify-center p-2.5 rounded-xl bg-white text-slate-700 border border-slate-200 hover:bg-slate-100 hover:border-slate-300 transition-all"
-                          title="Edit Details"
-                        >
-                          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125" />
-                          </svg>
-                        </button>
-                      </Link>
-
-                      {/* Daily menu: on today's menu or not; weekly: which days */}
-                      {product.menuType === 'daily' && (
-                        <button
-                          onClick={() => handleTodaysMenu(product.id, !onTodaysMenu(product))}
-                          className={`px-2.5 py-1 rounded-xl border text-[11px] font-bold ${onTodaysMenu(product) ? 'bg-emerald-600 text-white border-emerald-600' : 'bg-white text-slate-700 border-slate-300'}`}
-                          title="Daily menu"
-                          data-testid="todays-menu-toggle"
-                        >
-                          {onTodaysMenu(product) ? "✓ On today's menu" : "Put on today's menu"}
-                        </button>
-                      )}
-                      {product.menuType === 'weekly' && (
-                        <span className="px-2.5 py-1 rounded-xl bg-blue-50 text-blue-700 border border-blue-200 text-[11px] font-bold">
-                          {(product.availableDays ?? []).map((d) => ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][d]).join(', ')}
-                        </span>
-                      )}
-
-                      {/* Live / Hide Toggle */}
-                      <button
-                        onClick={() => handleToggleActive(product.id, product.isActive)}
-                        className={`flex items-center justify-center p-2.5 rounded-xl border transition-all ${
-                          product.isActive
-                            ? 'bg-amber-50 text-amber-700 border-amber-200 hover:bg-amber-100'
-                            : 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100'
-                        }`}
-                        title={product.isActive ? 'Hide from store' : 'Publish to store'}
-                      >
-                        {product.isActive ? (
-                          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21" />
-                          </svg>
-                        ) : (
-                          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-                          </svg>
-                        )}
-                      </button>
-
-                      {/* Delete */}
-                      <button
-                        onClick={async () => {
-                          if ((await confirmDialog({ title: 'Delete this dish?', message: `Are you sure you want to permanently delete "${product.name}"?`, confirmText: 'Delete' }))) {
-                            handleDeleteProduct(product.id);
-                          }
-                        }}
-                        className="flex items-center justify-center p-2.5 rounded-xl bg-white text-rose-600 border border-slate-200 hover:bg-rose-50 hover:border-rose-200 transition-all"
-                        title="Delete Product"
-                      >
-                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                        </svg>
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
+                      </div>
+                    )}
+                  </li>
+                );
+              })}
+            </ul>
           </div>
         )}
       </div>
 
-      {/* ========================================================================= */}
-      {/* High-End Bulk Stock Update Modal */}
-      {/* ========================================================================= */}
       {showBulkUpdate && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in duration-200">
-          <div className="bg-white rounded-3xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-hidden flex flex-col border border-slate-100">
-            {/* Modal Header */}
-            <div className="p-6 border-b border-slate-100 flex items-center justify-between">
+        <div className="fixed inset-0 bg-black/40 flex items-end sm:items-center justify-center z-50 sm:p-4">
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="bulk-stock-title"
+            className="bg-surface rounded-t-[20px] sm:rounded-[20px] border border-line shadow-[var(--shadow-card)] max-w-xl w-full max-h-[90vh] overflow-hidden flex flex-col"
+          >
+            <div className="px-5 pt-5 pb-4 flex items-start justify-between gap-4">
               <div>
-                <h2 className="text-xl font-black text-slate-900 tracking-tight flex items-center gap-2">
-                  <span className="text-slate-600">{Icons.box}</span>
-                  <span>Bulk Inventory Restock</span>
-                </h2>
-                <p className="text-xs text-slate-500 mt-0.5">
-                  Update inventory count simultaneously across multiple catalog dishes.
-                </p>
+                <h2 id="bulk-stock-title" className="text-lg font-semibold text-ink">Update stock for several dishes</h2>
+                <p className="text-sm text-muted mt-0.5">Every dish you tick gets the same number.</p>
               </div>
-              <button
-                onClick={() => {
-                  setShowBulkUpdate(false);
-                  setSelectedProducts([]);
-                  setBulkStockValue('');
-                }}
-                className="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-600 flex items-center justify-center font-bold text-sm transition-colors"
-              >
-                ✕
+              <button type="button" onClick={closeBulkUpdate} aria-label="Close" className={`${iconButtonClass} -me-2 -mt-2 shrink-0`}>
+                <X className="w-5 h-5" aria-hidden="true" />
               </button>
             </div>
 
-            {/* Modal Body */}
-            <div className="p-6 overflow-y-auto space-y-6 flex-1">
-              {/* Value Input and Quick Presets */}
-              <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200 space-y-3">
-                <label className="block text-xs font-black uppercase tracking-wider text-slate-700">
-                  Target Stock Quantity
-                </label>
-                <div className="flex items-center gap-3">
+            <div className="px-5 pb-5 overflow-y-auto space-y-6 flex-1">
+              <div className="space-y-2">
+                <label htmlFor="bulk-stock-value" className="block text-sm font-semibold text-ink">How many of each?</label>
+                <div className="flex flex-wrap items-center gap-2">
                   <input
+                    id="bulk-stock-value"
                     type="number"
                     min="0"
+                    inputMode="numeric"
                     value={bulkStockValue}
                     onChange={(e) => setBulkStockValue(e.target.value)}
-                    placeholder="e.g. 25"
-                    className="w-36 px-4 py-2.5 bg-white border border-slate-300 rounded-xl text-lg font-black text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-900"
+                    placeholder="25"
+                    className={`${fieldClass} w-24 px-3 text-center font-semibold tabular-nums`}
                     autoFocus
                   />
-                  <div className="flex items-center gap-1.5 flex-wrap">
-                    {[0, 10, 25, 50, 100].map((preset) => (
-                      <button
-                        key={preset}
-                        type="button"
-                        onClick={() => setBulkStockValue(String(preset))}
-                        className={`px-3 py-1.5 rounded-xl text-xs font-bold border transition-all ${
-                          bulkStockValue === String(preset)
-                            ? 'bg-slate-900 text-white border-slate-900'
-                            : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-100'
-                        }`}
-                      >
-                        {preset === 0 ? 'Out of stock (0)' : `${preset} units`}
-                      </button>
-                    ))}
-                  </div>
+                  {[0, 10, 25, 50, 100].map((preset) => (
+                    <button
+                      key={preset}
+                      type="button"
+                      onClick={() => setBulkStockValue(String(preset))}
+                      aria-pressed={bulkStockValue === String(preset)}
+                      className={`min-h-11 px-3 rounded-full text-sm tabular-nums border transition-colors ${
+                        bulkStockValue === String(preset)
+                          ? 'bg-brand-soft text-brand-soft-ink border-transparent font-medium'
+                          : 'border-line text-ink hover:bg-raised'
+                      }`}
+                    >
+                      {preset === 0 ? '0, sold out' : preset}
+                    </button>
+                  ))}
                 </div>
               </div>
 
-              {/* Product Selection List with Search */}
-              <div className="space-y-3">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-black uppercase tracking-wider text-slate-700">
-                    Select Products ({selectedProducts.length} chosen)
+              <div className="space-y-2 border-t border-line pt-5">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-sm font-semibold text-ink">
+                    Dishes <span className="font-normal text-muted tabular-nums">({selectedProducts.length} ticked)</span>
                   </span>
-                  <div className="flex items-center gap-1.5">
-                    <button
-                      type="button"
-                      onClick={() => setSelectedProducts(products.map((p) => p.id))}
-                      className="px-2.5 py-1 text-xs font-bold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors"
-                    >
-                      Select All
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setSelectedProducts([])}
-                      className="px-2.5 py-1 text-xs font-bold text-slate-500 hover:text-slate-700 rounded-lg transition-colors"
-                    >
+                  <div className="flex items-center">
+                    <Button variant="ghost" size="sm" onClick={() => setSelectedProducts(products.map((p) => p.id))}>
+                      Tick all
+                    </Button>
+                    <Button variant="ghost" size="sm" className="text-muted" onClick={() => setSelectedProducts([])}>
                       Clear
-                    </button>
+                    </Button>
                   </div>
                 </div>
 
+                <label htmlFor="bulk-search" className="sr-only">Find a dish</label>
                 <input
-                  type="text"
+                  id="bulk-search"
+                  type="search"
                   value={bulkModalSearch}
                   onChange={(e) => setBulkModalSearch(e.target.value)}
-                  placeholder="Filter items in list..."
-                  className="w-full px-3.5 py-2 text-xs border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-slate-900 bg-slate-50"
+                  placeholder="Find a dish"
+                  className={`${fieldClass} w-full px-3.5 placeholder:text-muted`}
                 />
 
-                <div className="max-h-60 overflow-y-auto space-y-2 border border-slate-100 rounded-2xl p-2 bg-slate-50/50">
+                <ul className="max-h-64 overflow-y-auto divide-y divide-line border border-line rounded-2xl">
                   {products
                     .filter((p) =>
                       bulkModalSearch.trim()
@@ -1120,60 +731,39 @@ function SellerProductsContent() {
                     .map((product) => {
                       const isSelected = selectedProducts.includes(product.id);
                       return (
-                        <div
-                          key={product.id}
-                          onClick={() => toggleProductSelection(product.id)}
-                          className={`p-3 rounded-xl border transition-all cursor-pointer flex items-center justify-between gap-3 ${
-                            isSelected
-                              ? 'bg-emerald-50 border-emerald-400 shadow-xs'
-                              : 'bg-white border-slate-200 hover:border-slate-300'
-                          }`}
-                        >
-                          <div className="flex items-center gap-3">
+                        <li key={product.id}>
+                          <label className={`flex items-center gap-3 px-3.5 min-h-14 py-2 cursor-pointer transition-colors ${isSelected ? 'bg-brand-soft/60' : 'hover:bg-raised'}`}>
                             <input
                               type="checkbox"
                               checked={isSelected}
                               onChange={() => toggleProductSelection(product.id)}
-                              className="w-4 h-4 rounded text-emerald-600 focus:ring-emerald-500"
+                              className="w-5 h-5 shrink-0 accent-brand-600"
                             />
-                            <div>
-                              <p className="text-xs font-bold text-slate-900">{product.name}</p>
-                              <p className="text-[11px] text-slate-500 font-medium">
-                                Current stock: {product.stockQuantity}
-                              </p>
-                            </div>
-                          </div>
-                          <span className="text-xs font-bold text-slate-700">
-                            {formatPrice(product.price)}
-                          </span>
-                        </div>
+                            <span className="min-w-0 flex-1">
+                              <span className="block text-sm font-medium text-ink truncate">{product.name}</span>
+                              <span className="block text-xs text-muted tabular-nums">{product.stockQuantity} left now</span>
+                            </span>
+                            <span className="text-sm text-muted tabular-nums">{formatPrice(product.price)}</span>
+                          </label>
+                        </li>
                       );
                     })}
-                </div>
+                </ul>
               </div>
             </div>
 
-            {/* Modal Footer */}
-            <div className="p-6 border-t border-slate-100 bg-slate-50 flex gap-3">
-              <Button
-                variant="outline"
-                onClick={() => {
-                  setShowBulkUpdate(false);
-                  setSelectedProducts([]);
-                  setBulkStockValue('');
-                }}
-                className="flex-1 rounded-xl font-bold text-xs"
-              >
+            <div className="px-5 py-4 border-t border-line flex gap-3">
+              <Button variant="outline" onClick={closeBulkUpdate} className="flex-1">
                 Cancel
               </Button>
               <Button
                 onClick={handleBulkStockUpdate}
                 disabled={!bulkStockValue || selectedProducts.length === 0 || loading}
-                className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold text-xs shadow-md shadow-emerald-600/20"
+                className="flex-1"
               >
                 {loading
-                  ? 'Updating...'
-                  : `Apply Restock to ${selectedProducts.length} Items`}
+                  ? 'Saving...'
+                  : `Save for ${selectedProducts.length} ${selectedProducts.length === 1 ? 'dish' : 'dishes'}`}
               </Button>
             </div>
           </div>
@@ -1187,8 +777,8 @@ export default function SellerProductsPage() {
   return (
     <Suspense
       fallback={
-        <div className="min-h-screen flex items-center justify-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-emerald-500" />
+        <div className="min-h-screen flex items-center justify-center bg-page">
+          <div className="animate-spin rounded-full h-8 w-8 border-2 border-line border-t-brand-600" />
         </div>
       }
     >

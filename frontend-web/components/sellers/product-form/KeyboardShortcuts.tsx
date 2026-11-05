@@ -41,71 +41,70 @@ export function useFormShortcuts(formRef: React.RefObject<HTMLFormElement | null
 }
 
 const Key = ({ children }: { children: React.ReactNode }) => (
-  <kbd className="px-2 py-1 text-xs font-semibold bg-white border border-gray-300 rounded shadow-sm">{children}</kbd>
+  <kbd className="rounded-md border border-line-strong bg-raised px-2 py-0.5 font-sans text-xs text-ink">{children}</kbd>
 );
 
-const ROWS: Array<{ label: string; keys: string[]; joiner?: string; bg: string }> = [
-  { label: 'Save', keys: ['Ctrl', 'S'], bg: 'bg-blue-50' },
-  { label: 'Quick Save', keys: ['Ctrl', 'Enter'], bg: 'bg-emerald-50' },
-  { label: 'Toggle Shortcuts Help', keys: ['Ctrl', 'K'], bg: 'bg-purple-50' },
-  { label: 'Close / Clear Focus', keys: ['Esc'], bg: 'bg-gray-50' },
-  { label: 'Navigate Between Fields', keys: ['Enter', 'Tab'], joiner: '/', bg: 'bg-amber-50' },
+const ROWS: Array<{ label: string; keys: string[]; joiner?: string }> = [
+  { label: 'Save', keys: ['Ctrl', 'S'] },
+  { label: 'Save', keys: ['Ctrl', 'Enter'] },
+  { label: 'Show or hide this list', keys: ['Ctrl', 'K'] },
+  { label: 'Close, or leave the field', keys: ['Esc'] },
+  { label: 'Next field', keys: ['Enter', 'Tab'], joiner: 'or' },
 ];
 
 export function ShortcutsButton({ onClick }: { onClick: () => void }) {
   return (
-    <div className="mb-4 flex justify-end">
-      <button
-        type="button"
-        onClick={onClick}
-        className="flex items-center gap-2 px-3 py-2 text-xs font-medium text-gray-600 hover:text-blue-600 bg-white hover:bg-blue-50 rounded-lg border border-gray-200 hover:border-blue-300 transition-all"
-      >
-        <span>⌨️</span>
-        <span>Keyboard Shortcuts</span>
-        <kbd className="px-1.5 py-0.5 text-xs bg-gray-100 border border-gray-300 rounded">Ctrl+K</kbd>
-      </button>
-    </div>
+    <button
+      type="button"
+      onClick={onClick}
+      className="hidden min-h-11 items-center gap-2 rounded-xl px-3 text-sm text-muted hover:bg-raised hover:text-ink focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-brand/40 sm:inline-flex"
+    >
+      Keyboard shortcuts
+      <Key>Ctrl K</Key>
+    </button>
   );
 }
 
 export function ShortcutsHelp({ onClose }: { onClose: () => void }) {
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={onClose}>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={onClose}>
       <div
         role="dialog"
         aria-modal="true"
         aria-labelledby="shortcuts-title"
-        className="bg-white rounded-2xl shadow-2xl max-w-md w-full mx-4 p-6"
+        className="mx-4 w-full max-w-md rounded-2xl border border-line bg-surface p-6 shadow-[var(--shadow-card)]"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex items-center justify-between mb-4">
-          <h3 id="shortcuts-title" className="text-xl font-bold text-gray-900">
-            ⌨️ Keyboard Shortcuts
+        <div className="flex items-center justify-between">
+          <h3 id="shortcuts-title" className="text-base font-semibold text-ink">
+            Keyboard shortcuts
           </h3>
-          <button type="button" onClick={onClose} aria-label="Close" className="text-gray-500 hover:text-gray-600 text-2xl leading-none">
-            ×
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Close"
+            className="flex h-11 w-11 items-center justify-center rounded-full text-muted hover:bg-raised hover:text-ink focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-brand/40"
+          >
+            <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-hidden="true">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+            </svg>
           </button>
         </div>
-        <div className="space-y-3">
+        <dl className="mt-3 divide-y divide-line">
           {ROWS.map((row) => (
-            <div key={row.label} className={`flex items-center justify-between p-3 ${row.bg} rounded-lg`}>
-              <span className="text-sm text-gray-700">{row.label}</span>
-              <div className="flex gap-1 flex-wrap justify-end">
+            <div key={row.keys.join('-')} className="flex items-center justify-between gap-4 py-2.5">
+              <dt className="text-sm text-ink">{row.label}</dt>
+              <dd className="flex flex-wrap items-center justify-end gap-1">
                 {row.keys.map((k, i) => (
-                  <span key={k} className="flex gap-1">
-                    {i > 0 && <span className="text-gray-500">{row.joiner || '+'}</span>}
+                  <span key={k} className="flex items-center gap-1">
+                    {i > 0 && <span className="text-xs text-muted">{row.joiner || '+'}</span>}
                     <Key>{k}</Key>
                   </span>
                 ))}
-              </div>
+              </dd>
             </div>
           ))}
-        </div>
-        <div className="mt-4 p-3 bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-lg">
-          <p className="text-xs text-blue-800">
-            <span className="font-bold">💡 Pro Tip:</span> Press Enter in input fields to jump to the next one. Tab works too!
-          </p>
-        </div>
+        </dl>
       </div>
     </div>
   );

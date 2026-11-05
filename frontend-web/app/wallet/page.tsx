@@ -64,7 +64,7 @@ function WalletContent() {
 
   useEffect(() => {
     if (!isAuthenticated && !apiClient.getAccessToken()) {
-      router.push(loginUrlHere());
+      router.replace(loginUrlHere());
       return;
     }
     load();

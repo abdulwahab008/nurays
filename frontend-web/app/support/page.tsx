@@ -154,7 +154,7 @@ export default function SupportPage() {
   useEffect(() => {
     const token = apiClient.getAccessToken();
     if (!token && !isAuthenticated) {
-      router.push(loginUrlHere());
+      router.replace(loginUrlHere());
     }
   }, [isAuthenticated, router]);
 

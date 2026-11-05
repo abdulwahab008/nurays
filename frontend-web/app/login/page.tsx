@@ -178,7 +178,7 @@ export default function LoginPage() {
 
   if (staffStep) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-raised px-4 py-12">
+      <div className="min-h-screen flex items-center justify-center bg-raised px-4 pt-[calc(3rem+var(--safe-top))] pb-12">
         <div className="max-w-md w-full bg-surface rounded-xl shadow-lg p-8">
           <StaffSecondStep
             mode={staffStep.mode}
@@ -200,7 +200,7 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen py-8 sm:py-12 px-4 bg-page flex flex-col items-center justify-center">
+    <div className="min-h-screen pt-[calc(2rem+var(--safe-top))] pb-8 sm:pt-[calc(3rem+var(--safe-top))] sm:pb-12 px-4 bg-page flex flex-col items-center justify-center">
       <div className={`w-full ${SHOW_DEMO_LOGIN ? 'max-w-5xl' : 'max-w-md'} sm:bg-surface sm:rounded-[24px] sm:p-10 sm:border sm:border-line`}>
         
         {/* Top Header */}

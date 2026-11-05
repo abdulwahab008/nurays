@@ -47,7 +47,7 @@ export default function FavoritesPage() {
   useEffect(() => {
     // Signed out: go and sign in, without first asking the server for a list it will refuse.
     if (!isAuthenticated && !apiClient.getAccessToken()) {
-      router.push(loginUrlHere());
+      router.replace(loginUrlHere());
       return;
     }
     fetchFavorites();

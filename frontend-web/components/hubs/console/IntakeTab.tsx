@@ -216,17 +216,17 @@ export default function IntakeTab({
           <div className="space-y-4">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <DatePicker
-                label="Manufacturing Date"
+                label="Made on"
                 value={intakeManufacturedDate}
                 onChange={(date) => setIntakeManufacturedDate(date)}
-                placeholder="Select mfg date"
+                placeholder="Pick the date made"
               />
 
               <DatePicker
-                label="Expiration Date *"
+                label="Use by *"
                 value={intakeExpiryDate}
                 onChange={(date) => setIntakeExpiryDate(date)}
-                placeholder="Select expiry date"
+                placeholder="Pick the use-by date"
               />
             </div>
 

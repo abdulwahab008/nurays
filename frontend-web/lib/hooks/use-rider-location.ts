@@ -4,7 +4,13 @@ import { useEffect, useRef, useState } from 'react';
 import { riderService } from '@/lib/services/rider.service';
 import { API_BASE_URL } from '@/lib/config';
 import { tokenStore } from '@/lib/token-store';
-import { absoluteApiUrl, nativePlugins, type CapacitorHttpPlugin, type NativeWindow } from '@/lib/native-shell';
+import {
+  absoluteApiUrl,
+  nativePlatform,
+  nativePlugins,
+  type CapacitorHttpPlugin,
+  type NativeWindow,
+} from '@/lib/native-shell';
 
 export type LocationSharing = 'off' | 'waiting' | 'sharing' | 'denied' | 'unavailable';
 
@@ -108,8 +114,14 @@ export function useRiderLocation(
       const notice = noticeRef.current;
       let watcher: string | null = null;
       let stopped = false;
-      void geo
-        .addWatcher(
+      // Android keeps the watch running in the background only if the location permission was already granted when
+      // it started: granted from the watch's own prompt, it quietly stops once the rider leaves the app. So ask first.
+      const granted =
+        nativePlatform(window as unknown as NativeWindow) === 'android'
+          ? geo.requestPermissions().then((res) => res?.location === 'granted', () => true)
+          : Promise.resolve(true);
+      const watch = () =>
+        geo.addWatcher(
           { backgroundTitle: notice?.title, backgroundMessage: notice?.message ?? ' ', requestPermissions: true, stale: false, distanceFilter: 10 },
           (location, error) => {
             if (error) {
@@ -120,10 +132,15 @@ export function useRiderLocation(
             sharing();
             consider({ latitude: location.latitude, longitude: location.longitude });
           }
-        )
-        .then((id) => {
-          if (stopped) void geo.removeWatcher({ id }).catch(() => {});
-          else watcher = id;
+        );
+      void granted
+        .then((ok) => {
+          if (stopped) return;
+          if (!ok) return setReported({ key, state: 'denied' });
+          return Promise.resolve(watch()).then((id) => {
+            if (stopped) void geo.removeWatcher({ id }).catch(() => {});
+            else watcher = id;
+          });
         })
         .catch(() => setReported({ key, state: 'unavailable' }));
       return () => {

@@ -43,29 +43,27 @@ export const CUSTOMER_SIDEBAR_ITEMS: SidebarItem[] = [
 ];
 
 export const RIDER_SIDEBAR_ITEMS: SidebarItem[] = [
-  { name: 'Fleet Dashboard', href: '/riders/dashboard', icon: 'dashboard' },
-  { name: 'Active Runs', href: '/riders/dashboard#active', icon: 'orders' },
-  { name: 'Available Pool', href: '/riders/dashboard#available', icon: 'addresses' },
-  { name: 'Earnings & Cash', href: '/riders/earnings', icon: 'earnings' },
-  { name: 'Help & Support', href: '/support', icon: 'support' },
+  { name: 'Deliveries', href: '/riders/dashboard', icon: 'dashboard' },
+  { name: 'Earnings and cash', href: '/riders/earnings', icon: 'earnings' },
+  { name: 'Help and support', href: '/support', icon: 'support' },
 ];
 
 export const SELLER_SIDEBAR_ITEMS: SidebarItem[] = [
-  { name: 'Dashboard', href: '/sellers/dashboard', icon: 'dashboard' },
+  { name: 'Your kitchen', href: '/sellers/dashboard', icon: 'dashboard' },
   { name: 'Orders', href: '/sellers/orders', icon: 'orders' },
   {
-    name: 'Products',
+    name: 'Menu',
     href: '/sellers/products',
     icon: 'products',
     subItems: [
-      { name: 'All Products', href: '/sellers/products', icon: 'products' },
-      { name: 'Inventory', href: '/sellers/products?view=inventory', icon: 'inventory' },
+      { name: 'Dishes', href: '/sellers/products', icon: 'products' },
+      { name: 'Stock', href: '/sellers/products?view=inventory', icon: 'inventory' },
       { name: 'Discounts', href: '/sellers/promotions', icon: 'promotions' },
     ],
   },
   { name: 'Delivery', href: '/sellers/delivery', icon: 'delivery' },
   { name: 'Earnings', href: '/sellers/earnings', icon: 'earnings' },
-  { name: 'Analytics', href: '/sellers/analytics', icon: 'analytics' },
+  { name: 'Reports', href: '/sellers/analytics', icon: 'analytics' },
   { name: 'Notifications', href: '/sellers/notifications', icon: 'notifications' },
   { name: 'Settings', href: '/sellers/settings', icon: 'settings' },
 ];
@@ -166,8 +164,6 @@ export function DashboardShell({
   return (
     <div className="min-h-screen bg-page text-ink">
       <DashboardNavbar
-        title={title}
-        subtitle={subtitle}
         userType={userType}
         onMenuToggle={() => setOpen((v) => !v)}
         drawerOpen={open}

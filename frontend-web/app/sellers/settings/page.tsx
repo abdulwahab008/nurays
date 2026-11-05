@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { loginUrlHere } from '@/lib/auth-redirect';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { Bike, Store, ArrowRight, MapPin, Plus, X } from 'lucide-react';
+import { X } from 'lucide-react';
 import { DashboardLayout, SELLER_SIDEBAR_ITEMS } from '@/components/layout/DashboardShell';
 import { Button } from '@/components/ui/button';
 import { LoadError } from '@/components/ui/LoadError';
@@ -21,30 +21,30 @@ const MEAL_CATEGORIES = [
   { value: 'breakfast', label: 'Breakfast' },
   { value: 'brunch', label: 'Brunch' },
   { value: 'lunch', label: 'Lunch' },
-  { value: 'evening_snacks', label: 'Evening Snacks' },
+  { value: 'evening_snacks', label: 'Evening snacks' },
   { value: 'dinner', label: 'Dinner' },
-  { value: 'late_night', label: 'Late Night' },
+  { value: 'late_night', label: 'Late night' },
   { value: 'desserts', label: 'Desserts' },
   { value: 'beverages', label: 'Beverages' },
 ];
 
 const BUSINESS_TYPES = [
-  { value: 'home_kitchen', label: 'Home Kitchen' },
+  { value: 'home_kitchen', label: 'Home kitchen' },
   { value: 'restaurant', label: 'Restaurant' },
   { value: 'bakery', label: 'Bakery' },
   { value: 'cafe', label: 'Café' },
-  { value: 'cloud_kitchen', label: 'Cloud Kitchen' },
+  { value: 'cloud_kitchen', label: 'Cloud kitchen' },
 ];
 
 const WALLET_NUMBER_PROBLEM = 'Enter a Pakistani mobile number such as 03001234567.';
 const BANK_ACCOUNT_PROBLEM = 'Enter an IBAN such as PK36SCBL0000001123456702, or an account number of 8 to 20 digits.';
 
 const AVAILABILITY_OVERRIDES = [
-  { value: '', label: 'Normal Schedule' },
-  { value: 'open', label: 'Force Open' },
-  { value: 'closed', label: 'Temporarily Closed' },
-  { value: 'busy', label: 'Kitchen Busy' },
-  { value: 'vacation', label: 'On Vacation' },
+  { value: '', label: 'Normal hours' },
+  { value: 'open', label: 'Open, whatever the hours' },
+  { value: 'closed', label: 'Closed for now' },
+  { value: 'busy', label: 'Too busy for new orders' },
+  { value: 'vacation', label: 'On holiday' },
 ];
 
 export default function SellerSettingsPage() {
@@ -115,6 +115,9 @@ export default function SellerSettingsPage() {
     advanceBookingMinDays: null as number | null,
     advanceBookingMaxDays: null as number | null,
   });
+  // The form as the server holds it (as loaded, or as last saved): Save changes stays quiet until the form differs from it.
+  const [savedForm, setSavedForm] = useState(formData);
+  const changed = JSON.stringify(formData) !== JSON.stringify(savedForm);
 
   const loadSettings = async () => {
     try {
@@ -133,7 +136,7 @@ export default function SellerSettingsPage() {
           easypaisaNumber: seller.easypaisaNumber || '',
           bankAccountNumber: seller.bankAccountNumber || '',
         });
-        setFormData({
+        const loaded: typeof formData = {
           businessName: seller.businessName || '',
           businessNameUrdu: seller.businessNameUrdu || '',
           description: seller.description || '',
@@ -183,7 +186,9 @@ export default function SellerSettingsPage() {
           preOrderOnly: seller.preOrderOnly ?? false,
           advanceBookingMinDays: seller.advanceBookingMinDays ?? null,
           advanceBookingMaxDays: seller.advanceBookingMaxDays ?? null,
-        });
+        };
+        setFormData(loaded);
+        setSavedForm(loaded);
         setSettingsRead(true);
       } else {
         throw new Error('The settings were not in the answer');
@@ -198,13 +203,13 @@ export default function SellerSettingsPage() {
 
   useEffect(() => {
     if (!isAuthenticated) {
-      router.push(loginUrlHere());
+      router.replace(loginUrlHere());
       return;
     }
 
     if (user?.userType !== 'seller' && user?.user_type !== 'seller') {
       router.push('/dashboard');
-      showToast('Seller access required.', 'error');
+      showToast('This page is for kitchens.', 'error');
       return;
     }
 
@@ -255,13 +260,13 @@ export default function SellerSettingsPage() {
     if (!settingsRead) return;
 
     const problems: Record<string, string> = {};
-    const changed = (field: keyof typeof heldNumbers) => formData[field].trim() !== heldNumbers[field];
-    if (changed('jazzcashNumber') && walletNumberIsWrong(formData.jazzcashNumber)) problems.jazzcashNumber = WALLET_NUMBER_PROBLEM;
-    if (changed('easypaisaNumber') && walletNumberIsWrong(formData.easypaisaNumber)) problems.easypaisaNumber = WALLET_NUMBER_PROBLEM;
-    if (changed('bankAccountNumber') && bankAccountIsWrong(formData.bankAccountNumber)) problems.bankAccountNumber = BANK_ACCOUNT_PROBLEM;
+    const numberChanged = (field: keyof typeof heldNumbers) => formData[field].trim() !== heldNumbers[field];
+    if (numberChanged('jazzcashNumber') && walletNumberIsWrong(formData.jazzcashNumber)) problems.jazzcashNumber = WALLET_NUMBER_PROBLEM;
+    if (numberChanged('easypaisaNumber') && walletNumberIsWrong(formData.easypaisaNumber)) problems.easypaisaNumber = WALLET_NUMBER_PROBLEM;
+    if (numberChanged('bankAccountNumber') && bankAccountIsWrong(formData.bankAccountNumber)) problems.bankAccountNumber = BANK_ACCOUNT_PROBLEM;
     setPayoutErrors(problems);
     if (Object.keys(problems).length > 0) {
-      showToast('Check the payout account numbers marked in red.', 'error');
+      showToast('Check the account numbers marked in red.', 'error');
       return;
     }
 
@@ -354,7 +359,7 @@ export default function SellerSettingsPage() {
       }
 
       if (!rest.businessName || !rest.businessName.trim()) {
-        showToast('Business name is required.', 'error');
+        showToast('Enter your kitchen name.', 'error');
         setLoading(false);
         return;
       }
@@ -403,10 +408,10 @@ export default function SellerSettingsPage() {
           }),
         () =>
           askDialog({
-            title: 'Confirm with your password',
-            message: 'You are changing the accounts customers pay into. Enter your password to save the settings.',
+            title: 'Enter your password',
+            message: 'You are changing the accounts customers pay into. Enter your password to save.',
             type: 'password',
-            confirmText: 'Save settings',
+            confirmText: 'Save',
           })
       );
       if (!saved) {
@@ -420,30 +425,46 @@ export default function SellerSettingsPage() {
         const numbers = { jazzcashNumber: kept.jazzcashNumber ?? '', easypaisaNumber: kept.easypaisaNumber ?? '', bankAccountNumber: kept.bankAccountNumber ?? '' };
         setHeldNumbers(numbers);
         setFormData((prev) => ({ ...prev, ...numbers }));
+        setSavedForm({ ...formData, ...numbers });
+      } else {
+        setSavedForm(formData);
       }
-      showToast('Settings saved successfully.', 'success');
+      showToast('Settings saved.', 'success');
     } catch (error) {
       const firstIssue = (apiErrorDetails(error) as Array<{ message?: string }> | undefined)?.[0]?.message;
-      showToast(firstIssue || apiErrorMessage(error, 'Failed to save settings'), 'error');
+      showToast(firstIssue || apiErrorMessage(error, 'Could not save your settings'), 'error');
     } finally {
       setLoading(false);
     }
   };
+
+  const fieldClass =
+    'w-full min-h-11 rounded-xl border border-line-strong bg-surface px-3 text-[15px] text-ink placeholder:text-muted focus:outline-none focus:ring-3 focus:ring-brand/30 focus:border-brand-600';
+  const labelClass = 'block text-sm font-medium text-ink mb-1.5';
+  const payoutFieldClass = (field: string) =>
+    `${fieldClass} ${payoutErrors[field] ? 'border-red-700 focus:border-red-700' : ''}`;
+  const chipClass = (on: boolean) =>
+    `inline-flex items-center gap-1.5 min-h-11 px-4 rounded-full border text-sm transition-colors focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-brand/40 ${
+      on ? 'border-brand-600 bg-brand-soft text-brand-soft-ink font-medium' : 'border-line-strong bg-surface text-ink hover:bg-raised'
+    }`;
+  const sectionClass = 'py-8 border-t border-line first:border-t-0 first:pt-0';
+  const headingClass = 'text-sm font-semibold text-ink';
 
   // No form until the kitchen's own settings were read: the boxes would hold blanks, and saving them would replace the real ones.
   if (!settingsRead) {
     return (
       <DashboardLayout
         title="Settings"
-        subtitle="Manage kitchen profile, delivery, and schedule"
+        subtitle="Your kitchen, hours, delivery and payout accounts"
         sidebarItems={SELLER_SIDEBAR_ITEMS}
         userType="seller"
       >
-        <div className="max-w-3xl mx-auto space-y-6 pb-16">
+        <div className="max-w-3xl pb-16">
           {loadError ? (
             <LoadError error={loadError} onRetry={loadSettings} title="We couldn't load your kitchen settings" />
           ) : (
-            <div className="rounded-2xl border border-slate-200 bg-white p-10 text-center text-sm font-medium text-slate-600" role="status">
+            <div className="flex items-center gap-3 py-10 text-sm text-muted" role="status">
+              <span className="h-5 w-5 rounded-full border-2 border-line-strong border-t-brand-600 motion-safe:animate-spin" aria-hidden="true" />
               Loading your settings…
             </div>
           )}
@@ -455,260 +476,24 @@ export default function SellerSettingsPage() {
   return (
     <DashboardLayout
       title="Settings"
-      subtitle="Manage kitchen profile, delivery, and schedule"
+      subtitle="Your kitchen, hours, delivery and payout accounts"
       sidebarItems={SELLER_SIDEBAR_ITEMS}
       userType="seller"
     >
-      <div className="max-w-3xl mx-auto space-y-6 pb-16">
-        <form onSubmit={handleSubmit} className="space-y-6">
-          {/* Kitchen Profile */}
-          <div className="bg-white rounded-2xl p-5 sm:p-6 border border-slate-200/90 shadow-xs space-y-4">
-            <h3 className="text-sm font-bold text-slate-900 tracking-tight">Kitchen Profile</h3>
+      <form onSubmit={handleSubmit} className="max-w-3xl pb-16">
+        <section aria-labelledby="hours-heading" className={sectionClass}>
+          <h2 id="hours-heading" className={headingClass}>Hours</h2>
+          <p className="text-sm text-muted mt-1">When customers can order from you.</p>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div className="mt-5 space-y-5">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
               <div>
-                <label className="text-xs font-semibold text-slate-700 block mb-1">
-                  Business Name (English)
-                </label>
-                <input
-                  type="text"
-                  value={formData.businessName}
-                  onChange={(e) => setFormData({ ...formData, businessName: e.target.value })}
-                  className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-brand"
-                  required
-                />
-              </div>
-
-              <div>
-                <label className="text-xs font-semibold text-slate-700 block mb-1">
-                  Business Name (Urdu)
-                </label>
-                <input
-                  type="text"
-                  value={formData.businessNameUrdu}
-                  onChange={(e) => setFormData({ ...formData, businessNameUrdu: e.target.value })}
-                  placeholder="مثلاً: فاطمہ کچن"
-                  className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-brand"
-                />
-              </div>
-            </div>
-
-            <div>
-              <label className="text-xs font-semibold text-slate-700 block mb-1">Description</label>
-              <textarea
-                value={formData.description}
-                onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                rows={3}
-                placeholder="Tell customers about your kitchen and specialty dishes..."
-                className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-brand"
-              />
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-1">
-              <div>
-                <label className="text-xs font-semibold text-slate-700 block mb-1">Kitchen Type</label>
+                <label htmlFor="availability-override" className={labelClass}>Right now</label>
                 <select
-                  value={formData.businessType}
-                  onChange={(e) => setFormData({ ...formData, businessType: e.target.value })}
-                  className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-brand bg-white"
-                >
-                  {BUSINESS_TYPES.map((t) => (
-                    <option key={t.value} value={t.value}>
-                      {t.label}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label className="text-xs font-semibold text-slate-700 block mb-1">Storefront Notice</label>
-                <input
-                  type="text"
-                  value={formData.storeNotice}
-                  onChange={(e) => setFormData({ ...formData, storeNotice: e.target.value })}
-                  placeholder="e.g. Special weekend Biryani available"
-                  className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-brand"
-                />
-              </div>
-            </div>
-
-            <div>
-              <label className="text-xs font-semibold text-slate-700 block mb-1.5">Meal Categories &amp; Timings</label>
-              <div className="flex flex-wrap gap-1.5">
-                {MEAL_CATEGORIES.map((c) => (
-                  <button
-                    key={c.value}
-                    type="button"
-                    onClick={() => toggleMealCategory(c.value)}
-                    className={`px-2.5 py-1 rounded-lg text-xs font-medium border transition-colors ${
-                      formData.mealCategories.includes(c.value)
-                        ? 'bg-slate-900 text-white border-slate-900 font-semibold'
-                        : 'bg-white text-slate-600 border-slate-200 hover:border-slate-300'
-                    }`}
-                  >
-                    {c.label}
-                  </button>
-                ))}
-                {formData.mealCategories
-                  .filter((cat) => !MEAL_CATEGORIES.some((c) => c.value === cat))
-                  .map((cat) => (
-                    <button
-                      key={cat}
-                      type="button"
-                      onClick={() => toggleMealCategory(cat)}
-                      className="px-2.5 py-1 rounded-lg text-xs font-medium border bg-slate-800 text-white border-slate-800 transition-colors flex items-center gap-1.5"
-                    >
-                      <span>{cat}</span>
-                      <span className="text-[11px] text-slate-400">✕</span>
-                    </button>
-                  ))}
-              </div>
-            </div>
-          </div>
-
-          {/* Delivery & Fulfillment */}
-          <div className="bg-white rounded-2xl p-5 sm:p-6 border border-slate-200/90 shadow-xs space-y-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <h3 className="text-sm font-bold text-slate-900 tracking-tight">Delivery &amp; Rates</h3>
-                <p className="text-[11px] text-slate-500 mt-0.5">Choose fulfillment model and local pricing</p>
-              </div>
-              <Link
-                href="/sellers/delivery"
-                className="inline-flex items-center gap-1.5 text-xs font-bold text-brand-ink hover:text-brand-800"
-              >
-                <span>Full Delivery Console</span>
-                <ArrowRight className="rtl:-scale-x-100 w-3.5 h-3.5" />
-              </Link>
-            </div>
-
-            <div className="grid grid-cols-2 gap-3 pt-1">
-              <div
-                onClick={() => setDeliveryModel('model_a')}
-                className={`p-3.5 rounded-xl border-2 transition-all cursor-pointer ${
-                  deliveryModel === 'model_a' ? 'border-blue-600 bg-blue-50/20' : 'border-slate-200 bg-white'
-                }`}
-              >
-                <div className="flex items-center gap-2">
-                  <Bike className="w-4 h-4 text-blue-600 shrink-0" />
-                  <span className="text-xs font-bold text-slate-900">Nuray Rider Fleet</span>
-                </div>
-              </div>
-
-              <div
-                onClick={() => setDeliveryModel('model_b')}
-                className={`p-3.5 rounded-xl border-2 transition-all cursor-pointer ${
-                  deliveryModel === 'model_b' ? 'border-emerald-600 bg-emerald-50/20' : 'border-slate-200 bg-white'
-                }`}
-              >
-                <div className="flex items-center gap-2">
-                  <Store className="w-4 h-4 text-emerald-600 shrink-0" />
-                  <span className="text-xs font-bold text-slate-900">Self-Delivery</span>
-                </div>
-              </div>
-            </div>
-
-            {deliveryModel === 'model_b' && (
-              <div className="space-y-4 pt-3 border-t border-slate-100">
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="text-[11px] font-semibold text-slate-600 block mb-1">Community Delivery Fee</label>
-                    <div className="relative">
-                      <input
-                        type="number"
-                        min={0}
-                        step={10}
-                        value={formData.deliveryFeeFixed ?? 50}
-                        onChange={(e) =>
-                          setFormData({
-                            ...formData,
-                            deliveryFeeFixed: e.target.value === '' ? null : parseInt(e.target.value, 10),
-                          })
-                        }
-                        className="w-full ps-3 pe-10 py-1.5 text-xs font-bold border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-brand"
-                      />
-                      <span className="absolute end-3 top-2 text-[11px] text-slate-500 font-medium">PKR</span>
-                    </div>
-                  </div>
-
-                  <div>
-                    <label className="text-[11px] font-semibold text-slate-600 block mb-1">Free Delivery Radius</label>
-                    <div className="relative">
-                      <input
-                        type="number"
-                        min={0}
-                        step={0.5}
-                        value={formData.freeDeliveryRadiusKm ?? 2.5}
-                        onChange={(e) =>
-                          setFormData({
-                            ...formData,
-                            freeDeliveryRadiusKm: e.target.value === '' ? null : parseFloat(e.target.value),
-                          })
-                        }
-                        className="w-full ps-3 pe-8 py-1.5 text-xs font-bold border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-brand"
-                      />
-                      <span className="absolute end-3 top-2 text-[11px] text-slate-500 font-medium">KM</span>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Free Areas */}
-                <div>
-                  <label className="text-[11px] font-semibold text-slate-600 block mb-1">Free Delivery Societies</label>
-                  <div className="flex gap-2 mb-2">
-                    <input
-                      type="text"
-                      value={newAreaInput}
-                      onChange={(e) => setNewAreaInput(e.target.value)}
-                      placeholder="Add area (e.g. Askari 11)..."
-                      className="flex-1 px-3 py-1.5 text-xs border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-brand"
-                    />
-                    <Button
-                      type="button"
-                      onClick={handleAddArea}
-                      variant="outline"
-                      className="h-8 px-3 text-xs border-slate-300"
-                    >
-                      Add
-                    </Button>
-                  </div>
-
-                  {formData.freeDeliveryAreas.length > 0 && (
-                    <div className="flex flex-wrap gap-1.5">
-                      {formData.freeDeliveryAreas.map((area) => (
-                        <span
-                          key={area}
-                          className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-emerald-50 border border-emerald-200 text-[11px] font-medium text-emerald-800"
-                        >
-                          <MapPin className="w-2.5 h-2.5 text-emerald-600" />
-                          <span>{area}</span>
-                          <button
-                            type="button"
-                            onClick={() => handleRemoveArea(area)}
-                            className="hover:text-red-500 ms-0.5"
-                          >
-                            <X className="w-2.5 h-2.5" />
-                          </button>
-                        </span>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              </div>
-            )}
-          </div>
-
-          {/* Operating Hours & Schedule */}
-          <div className="bg-white rounded-2xl p-5 sm:p-6 border border-slate-200/90 shadow-xs space-y-4">
-            <h3 className="text-sm font-bold text-slate-900 tracking-tight">Hours &amp; Availability</h3>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div>
-                <label className="text-xs font-semibold text-slate-700 block mb-1">Availability Override</label>
-                <select
+                  id="availability-override"
                   value={formData.availabilityOverride}
                   onChange={(e) => setFormData({ ...formData, availabilityOverride: e.target.value })}
-                  className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-brand bg-white"
+                  className={fieldClass}
                 >
                   {AVAILABILITY_OVERRIDES.map((o) => (
                     <option key={o.value} value={o.value}>
@@ -720,56 +505,60 @@ export default function SellerSettingsPage() {
 
               {formData.availabilityOverride && (
                 <div>
-                  <label className="text-xs font-semibold text-slate-700 block mb-1">Reopen Date</label>
+                  <label htmlFor="availability-override-until" className={labelClass}>Until</label>
                   <DatePicker
+                    id="availability-override-until"
                     value={formData.availabilityOverrideUntil}
                     onChange={(date) => setFormData({ ...formData, availabilityOverrideUntil: date })}
                     min={new Date().toISOString().split('T')[0]}
-                    placeholder="Select date"
+                    placeholder="Pick a date"
                   />
                 </div>
               )}
             </div>
 
-            <div className="grid grid-cols-2 gap-4 pt-1">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
               <div>
-                <label className="text-xs font-semibold text-slate-700 block mb-1">Opening Time</label>
+                <label htmlFor="open-time" className={labelClass}>Opens at</label>
                 <input
+                  id="open-time"
                   type="time"
                   value={formData.fixedDailyOpen}
                   onChange={(e) => setFormData({ ...formData, fixedDailyOpen: e.target.value })}
-                  className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-brand"
+                  className={fieldClass}
                 />
               </div>
-
               <div>
-                <label className="text-xs font-semibold text-slate-700 block mb-1">Closing Time</label>
+                <label htmlFor="close-time" className={labelClass}>Closes at</label>
                 <input
+                  id="close-time"
                   type="time"
                   value={formData.fixedDailyClose}
                   onChange={(e) => setFormData({ ...formData, fixedDailyClose: e.target.value })}
-                  className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-brand"
+                  className={fieldClass}
                 />
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-4 pt-1">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
               <div>
-                <label className="text-xs font-semibold text-slate-700 block mb-1">Daily Cut-off Time</label>
+                <label htmlFor="cutoff-time" className={labelClass}>Last order of the day</label>
                 <input
+                  id="cutoff-time"
                   type="time"
                   value={formData.orderCutoffTime}
                   onChange={(e) => setFormData({ ...formData, orderCutoffTime: e.target.value })}
-                  className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-brand"
+                  className={fieldClass}
                 />
               </div>
-
               <div>
-                <label className="text-xs font-semibold text-slate-700 block mb-1">Max Daily Orders</label>
+                <label htmlFor="max-orders" className={labelClass}>Most orders in a day</label>
                 <input
+                  id="max-orders"
                   type="number"
+                  inputMode="numeric"
                   min={1}
-                  placeholder="Unlimited"
+                  placeholder="No limit"
                   value={formData.maxDailyOrders ?? ''}
                   onChange={(e) =>
                     setFormData({
@@ -777,31 +566,239 @@ export default function SellerSettingsPage() {
                       maxDailyOrders: e.target.value === '' ? null : parseInt(e.target.value, 10),
                     })
                   }
-                  className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-brand"
+                  className={fieldClass}
                 />
               </div>
             </div>
           </div>
+        </section>
 
-          {/* Payment & Payouts */}
-          <div className="bg-white rounded-2xl p-5 sm:p-6 border border-slate-200/90 shadow-xs space-y-5">
-            <div>
-              <h3 className="text-sm font-bold text-slate-900 tracking-tight">Direct Payout Accounts</h3>
-              <p className="text-[11px] text-slate-500 mt-0.5">
-                Customers transfer funds directly to these accounts when selecting Bank Transfer, JazzCash, or EasyPaisa. Check every digit: a wrong number sends their money to someone else. Changing an account asks for your password.
-              </p>
+        <section aria-labelledby="kitchen-heading" className={sectionClass}>
+          <h2 id="kitchen-heading" className={headingClass}>Your kitchen</h2>
+          <p className="text-sm text-muted mt-1">What customers see on your kitchen page.</p>
+
+          <div className="mt-5 space-y-5">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+              <div>
+                <label htmlFor="business-name" className={labelClass}>Kitchen name</label>
+                <input
+                  id="business-name"
+                  type="text"
+                  value={formData.businessName}
+                  onChange={(e) => setFormData({ ...formData, businessName: e.target.value })}
+                  className={fieldClass}
+                  required
+                />
+              </div>
+              <div>
+                <label htmlFor="business-name-urdu" className={labelClass}>Kitchen name in Urdu</label>
+                <input
+                  id="business-name-urdu"
+                  type="text"
+                  dir="rtl"
+                  value={formData.businessNameUrdu}
+                  onChange={(e) => setFormData({ ...formData, businessNameUrdu: e.target.value })}
+                  placeholder="مثلاً: فاطمہ کچن"
+                  className={fieldClass}
+                />
+              </div>
             </div>
 
-            {/* JazzCash Section */}
-            <div className="p-4 bg-slate-50/80 rounded-2xl border border-slate-200/80 space-y-3">
-              <span className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
-                <span className="w-2 h-2 rounded-full bg-red-500" />
-                JazzCash Account
-              </span>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label htmlFor="description" className={labelClass}>About your kitchen</label>
+              <textarea
+                id="description"
+                value={formData.description}
+                onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                rows={3}
+                placeholder="What you cook and what you are known for"
+                className={`${fieldClass} py-2.5`}
+              />
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+              <div>
+                <label htmlFor="business-type" className={labelClass}>Kind of kitchen</label>
+                <select
+                  id="business-type"
+                  value={formData.businessType}
+                  onChange={(e) => setFormData({ ...formData, businessType: e.target.value })}
+                  className={fieldClass}
+                >
+                  {BUSINESS_TYPES.map((t) => (
+                    <option key={t.value} value={t.value}>
+                      {t.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label htmlFor="store-notice" className={labelClass}>Notice on your page</label>
+                <input
+                  id="store-notice"
+                  type="text"
+                  value={formData.storeNotice}
+                  onChange={(e) => setFormData({ ...formData, storeNotice: e.target.value })}
+                  placeholder="Biryani this weekend only"
+                  className={fieldClass}
+                />
+              </div>
+            </div>
+
+            <fieldset>
+              <legend className={labelClass}>Meals you cook</legend>
+              <div className="flex flex-wrap gap-2">
+                {MEAL_CATEGORIES.map((c) => {
+                  const on = formData.mealCategories.includes(c.value);
+                  return (
+                    <button
+                      key={c.value}
+                      type="button"
+                      aria-pressed={on}
+                      onClick={() => toggleMealCategory(c.value)}
+                      className={chipClass(on)}
+                    >
+                      {c.label}
+                    </button>
+                  );
+                })}
+                {formData.mealCategories
+                  .filter((cat) => !MEAL_CATEGORIES.some((c) => c.value === cat))
+                  .map((cat) => (
+                    <button
+                      key={cat}
+                      type="button"
+                      aria-pressed={true}
+                      aria-label={`Remove ${cat}`}
+                      onClick={() => toggleMealCategory(cat)}
+                      className={chipClass(true)}
+                    >
+                      {cat}
+                      <X className="w-3.5 h-3.5" aria-hidden="true" />
+                    </button>
+                  ))}
+              </div>
+            </fieldset>
+          </div>
+        </section>
+
+        <section aria-labelledby="delivery-heading" className={sectionClass}>
+          <h2 id="delivery-heading" className={headingClass}>Delivery</h2>
+          <div className="mt-1 flex flex-wrap items-center justify-between gap-x-4">
+            <p className="text-sm text-muted">
+              {deliveryModel === 'model_a' ? 'Nuray riders deliver your orders.' : 'You deliver your orders yourself.'}
+            </p>
+            <Link
+              href="/sellers/delivery"
+              className="inline-flex items-center min-h-11 text-sm font-medium text-brand-ink hover:underline underline-offset-4 focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-brand/40 rounded"
+            >
+              Change
+            </Link>
+          </div>
+
+          {deliveryModel === 'model_b' && (
+            <div className="mt-6 space-y-5">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
                 <div>
-                  <label className="text-[11px] font-semibold text-slate-600 block mb-1">JazzCash Mobile Number</label>
+                  <label htmlFor="delivery-fee" className={labelClass}>Delivery fee</label>
+                  <div className="relative">
+                    <input
+                      id="delivery-fee"
+                      type="number"
+                      inputMode="numeric"
+                      min={0}
+                      step={10}
+                      value={formData.deliveryFeeFixed ?? 50}
+                      onChange={(e) =>
+                        setFormData({
+                          ...formData,
+                          deliveryFeeFixed: e.target.value === '' ? null : parseInt(e.target.value, 10),
+                        })
+                      }
+                      className={`${fieldClass} pe-12 tabular-nums`}
+                    />
+                    <span className="pointer-events-none absolute inset-y-0 end-3 flex items-center text-sm text-muted">Rs</span>
+                  </div>
+                </div>
+                <div>
+                  <label htmlFor="free-radius" className={labelClass}>Free delivery within</label>
+                  <div className="relative">
+                    <input
+                      id="free-radius"
+                      type="number"
+                      inputMode="decimal"
+                      min={0}
+                      step={0.5}
+                      value={formData.freeDeliveryRadiusKm ?? 2.5}
+                      onChange={(e) =>
+                        setFormData({
+                          ...formData,
+                          freeDeliveryRadiusKm: e.target.value === '' ? null : parseFloat(e.target.value),
+                        })
+                      }
+                      className={`${fieldClass} pe-12 tabular-nums`}
+                    />
+                    <span className="pointer-events-none absolute inset-y-0 end-3 flex items-center text-sm text-muted">km</span>
+                  </div>
+                </div>
+              </div>
+
+              <div>
+                <label htmlFor="free-area" className={labelClass}>Free delivery to these areas</label>
+                <div className="flex gap-2">
                   <input
+                    id="free-area"
+                    type="text"
+                    value={newAreaInput}
+                    onChange={(e) => setNewAreaInput(e.target.value)}
+                    placeholder="Askari 11"
+                    className={`${fieldClass} flex-1 min-w-0`}
+                  />
+                  <Button type="button" onClick={handleAddArea} variant="outline">
+                    Add
+                  </Button>
+                </div>
+
+                {formData.freeDeliveryAreas.length > 0 && (
+                  <ul className="mt-3 flex flex-wrap gap-2">
+                    {formData.freeDeliveryAreas.map((area) => (
+                      <li
+                        key={area}
+                        className="inline-flex items-center gap-1 min-h-11 ps-4 rounded-full bg-raised text-sm text-ink"
+                      >
+                        {area}
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveArea(area)}
+                          aria-label={`Remove ${area}`}
+                          className="inline-flex h-11 w-11 items-center justify-center rounded-full text-muted hover:text-ink hover:bg-line focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-brand/40"
+                        >
+                          <X className="w-4 h-4" aria-hidden="true" />
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            </div>
+          )}
+        </section>
+
+        <section aria-labelledby="payout-heading" className={sectionClass}>
+          <h2 id="payout-heading" className={headingClass}>Where customers pay you</h2>
+          <p className="text-sm text-muted mt-1">
+            Customers who pay by JazzCash, Easypaisa or bank transfer send the money here. Check every digit: a wrong number sends their
+            money to someone else. Changing an account asks for your password.
+          </p>
+
+          <div className="mt-6 space-y-7">
+            <fieldset className="space-y-4">
+              <legend className="text-sm font-medium text-ink mb-3">JazzCash</legend>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+                <div>
+                  <label htmlFor="jazzcash-number" className={labelClass}>Mobile number</label>
+                  <input
+                    id="jazzcash-number"
                     type="tel"
                     dir="ltr"
                     placeholder="03XXXXXXXXX"
@@ -811,33 +808,32 @@ export default function SellerSettingsPage() {
                       clearPayoutError('jazzcashNumber');
                     }}
                     aria-invalid={Boolean(payoutErrors.jazzcashNumber)}
-                    className={`w-full px-3 py-2 text-xs border rounded-lg outline-none focus:ring-2 focus:ring-brand bg-white ${payoutErrors.jazzcashNumber ? 'border-red-500' : 'border-slate-300'}`}
+                    aria-describedby={payoutErrors.jazzcashNumber ? 'jazzcash-number-error' : undefined}
+                    className={payoutFieldClass('jazzcashNumber')}
                   />
-                  {payoutErrors.jazzcashNumber && <p role="alert" className="text-[11px] text-red-700 mt-1">{payoutErrors.jazzcashNumber}</p>}
+                  {payoutErrors.jazzcashNumber && <p id="jazzcash-number-error" role="alert" className="text-sm text-red-700 mt-1.5">{payoutErrors.jazzcashNumber}</p>}
                 </div>
                 <div>
-                  <label className="text-[11px] font-semibold text-slate-600 block mb-1">Account Title (Name on JazzCash)</label>
+                  <label htmlFor="jazzcash-title" className={labelClass}>Name on the account</label>
                   <input
+                    id="jazzcash-title"
                     type="text"
-                    placeholder="e.g. Bareera Zarish"
+                    placeholder="As written on the account"
                     value={formData.jazzcashAccountTitle}
                     onChange={(e) => setFormData({ ...formData, jazzcashAccountTitle: e.target.value })}
-                    className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-brand bg-white"
+                    className={fieldClass}
                   />
                 </div>
               </div>
-            </div>
+            </fieldset>
 
-            {/* EasyPaisa Section */}
-            <div className="p-4 bg-slate-50/80 rounded-2xl border border-slate-200/80 space-y-3">
-              <span className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
-                <span className="w-2 h-2 rounded-full bg-emerald-500" />
-                EasyPaisa Account
-              </span>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <fieldset className="space-y-4">
+              <legend className="text-sm font-medium text-ink mb-3">Easypaisa</legend>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
                 <div>
-                  <label className="text-[11px] font-semibold text-slate-600 block mb-1">EasyPaisa Mobile Number</label>
+                  <label htmlFor="easypaisa-number" className={labelClass}>Mobile number</label>
                   <input
+                    id="easypaisa-number"
                     type="tel"
                     dir="ltr"
                     placeholder="03XXXXXXXXX"
@@ -847,100 +843,95 @@ export default function SellerSettingsPage() {
                       clearPayoutError('easypaisaNumber');
                     }}
                     aria-invalid={Boolean(payoutErrors.easypaisaNumber)}
-                    className={`w-full px-3 py-2 text-xs border rounded-lg outline-none focus:ring-2 focus:ring-brand bg-white ${payoutErrors.easypaisaNumber ? 'border-red-500' : 'border-slate-300'}`}
+                    aria-describedby={payoutErrors.easypaisaNumber ? 'easypaisa-number-error' : undefined}
+                    className={payoutFieldClass('easypaisaNumber')}
                   />
-                  {payoutErrors.easypaisaNumber && <p role="alert" className="text-[11px] text-red-700 mt-1">{payoutErrors.easypaisaNumber}</p>}
+                  {payoutErrors.easypaisaNumber && <p id="easypaisa-number-error" role="alert" className="text-sm text-red-700 mt-1.5">{payoutErrors.easypaisaNumber}</p>}
                 </div>
                 <div>
-                  <label className="text-[11px] font-semibold text-slate-600 block mb-1">Account Title (Name on EasyPaisa)</label>
+                  <label htmlFor="easypaisa-title" className={labelClass}>Name on the account</label>
                   <input
+                    id="easypaisa-title"
                     type="text"
-                    placeholder="e.g. Bareera Zarish"
+                    placeholder="As written on the account"
                     value={formData.easypaisaAccountTitle}
                     onChange={(e) => setFormData({ ...formData, easypaisaAccountTitle: e.target.value })}
-                    className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-brand bg-white"
+                    className={fieldClass}
                   />
                 </div>
               </div>
-            </div>
+            </fieldset>
 
-            {/* Bank Transfer / IBFT Section */}
-            <div className="p-4 bg-slate-50/80 rounded-2xl border border-slate-200/80 space-y-3">
-              <span className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
-                <span className="w-2 h-2 rounded-full bg-blue-500" />
-                Bank Transfer / Raast (IBFT)
-              </span>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <fieldset className="space-y-4">
+              <legend className="text-sm font-medium text-ink mb-3">Bank transfer or Raast</legend>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
                 <div>
-                  <label className="text-[11px] font-semibold text-slate-600 block mb-1">Bank Name</label>
+                  <label htmlFor="bank-name" className={labelClass}>Bank</label>
                   <input
+                    id="bank-name"
                     type="text"
-                    placeholder="e.g. Bank Alfalah / Meezan Bank"
+                    placeholder="Bank name"
                     value={formData.bankName}
                     onChange={(e) => setFormData({ ...formData, bankName: e.target.value })}
-                    className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-brand bg-white"
+                    className={fieldClass}
                   />
                 </div>
                 <div>
-                  <label className="text-[11px] font-semibold text-slate-600 block mb-1">Account Title</label>
+                  <label htmlFor="bank-title" className={labelClass}>Name on the account</label>
                   <input
+                    id="bank-title"
                     type="text"
-                    placeholder="Account Holder Name"
+                    placeholder="As written on the account"
                     value={formData.bankAccountName}
                     onChange={(e) => setFormData({ ...formData, bankAccountName: e.target.value })}
-                    className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-brand bg-white"
+                    className={fieldClass}
                   />
                 </div>
-                <div>
-                  <label className="text-[11px] font-semibold text-slate-600 block mb-1">IBAN / Account Number</label>
+                <div className="sm:col-span-2">
+                  <label htmlFor="bank-number" className={labelClass}>IBAN or account number</label>
                   <input
+                    id="bank-number"
                     type="text"
                     dir="ltr"
-                    placeholder="PK36SCBL0000001123456702"
+                    placeholder="PK.. or account number"
                     value={formData.bankAccountNumber}
                     onChange={(e) => {
                       setFormData({ ...formData, bankAccountNumber: e.target.value });
                       clearPayoutError('bankAccountNumber');
                     }}
                     aria-invalid={Boolean(payoutErrors.bankAccountNumber)}
-                    className={`w-full px-3 py-2 text-xs border rounded-lg outline-none focus:ring-2 focus:ring-brand bg-white ${payoutErrors.bankAccountNumber ? 'border-red-500' : 'border-slate-300'}`}
+                    aria-describedby={payoutErrors.bankAccountNumber ? 'bank-number-error' : undefined}
+                    className={payoutFieldClass('bankAccountNumber')}
                   />
-                  {payoutErrors.bankAccountNumber && <p role="alert" className="text-[11px] text-red-700 mt-1">{payoutErrors.bankAccountNumber}</p>}
+                  {payoutErrors.bankAccountNumber && <p id="bank-number-error" role="alert" className="text-sm text-red-700 mt-1.5">{payoutErrors.bankAccountNumber}</p>}
                 </div>
               </div>
-            </div>
+            </fieldset>
           </div>
+        </section>
 
-          {/* Stock Alerts */}
-          <div className="bg-white rounded-2xl p-5 sm:p-6 border border-slate-200/90 shadow-xs flex items-center justify-between gap-4">
-            <div>
-              <h3 className="text-sm font-bold text-slate-900 tracking-tight">Stock Alerts</h3>
-              <p className="text-[11px] text-slate-500 mt-0.5">Receive alert when food portion inventory runs low</p>
-            </div>
-            <div className="flex items-center gap-2">
-              <span className="text-xs text-slate-600">Threshold:</span>
-              <input
-                type="number"
-                min={1}
-                value={formData.lowStockThreshold}
-                onChange={(e) => setFormData({ ...formData, lowStockThreshold: parseInt(e.target.value, 10) || 5 })}
-                className="w-16 px-2.5 py-1 text-xs font-bold border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-brand"
-              />
-            </div>
+        <section aria-labelledby="stock-heading" className={sectionClass}>
+          <h2 id="stock-heading" className={headingClass}>Running low</h2>
+          <div className="mt-4 flex flex-wrap items-center gap-x-3 gap-y-2">
+            <label htmlFor="low-stock" className="text-[15px] text-ink">Tell me when a dish has this many portions left</label>
+            <input
+              id="low-stock"
+              type="number"
+              inputMode="numeric"
+              min={1}
+              value={formData.lowStockThreshold}
+              onChange={(e) => setFormData({ ...formData, lowStockThreshold: parseInt(e.target.value, 10) || 5 })}
+              className={`${fieldClass.replace('w-full', 'w-24')} tabular-nums`}
+            />
           </div>
+        </section>
 
-          {/* Save Action */}
-          <div className="flex items-center justify-end pt-2">
-            <Button
-              type="submit"
-              disabled={loading}
-              className="bg-brand hover:bg-brand-500 text-on-brand px-7 py-2.5 rounded-xl font-bold text-xs shadow-sm transition-all"
-            >
-              {loading ? 'Saving...' : 'Save Settings'}
-            </Button>
-          </div>
-        </form>
-      </div>
+        <div className="sticky bottom-0 z-10 mt-8 flex justify-end border-t border-line bg-page/95 py-4 pb-[calc(1rem+var(--safe-bottom,0px))] backdrop-blur">
+          <Button type="submit" disabled={loading || !changed} className="min-h-11 w-full px-6 sm:w-auto">
+            {loading ? 'Saving…' : 'Save changes'}
+          </Button>
+        </div>
+      </form>
     </DashboardLayout>
   );
 }

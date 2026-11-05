@@ -18,45 +18,6 @@ import { useShallow } from 'zustand/react/shallow';
 
 const sidebarItems = SELLER_SIDEBAR_ITEMS;
 
-// Icons
-const Icons = {
-  bell: (
-    <svg className="w-16 h-16 text-gray-300" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M14.857 17.082a23.848 23.848 0 005.454-1.31A8.967 8.967 0 0118 9.75v-.7V9A6 6 0 006 9v.75a8.967 8.967 0 01-2.312 6.022c1.733.64 3.56 1.085 5.455 1.31m5.714 0a24.255 24.255 0 01-5.714 0m5.714 0a3 3 0 11-5.714 0" />
-    </svg>
-  ),
-  order: (
-    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h3.75M9 15h3.75M9 18h3.75m3 .75H18a2.25 2.25 0 002.25-2.25V6.108c0-1.135-.845-2.098-1.976-2.192a48.424 48.424 0 00-1.123-.08m-5.801 0c-.065.21-.1.433-.1.664 0 .414.336.75.75.75h4.5a.75.75 0 00.75-.75 2.25 2.25 0 00-.1-.664m-5.8 0A2.251 2.251 0 0113.5 2.25H15c1.012 0 1.867.668 2.15 1.586m-5.8 0c-.376.023-.75.05-1.124.08C9.095 4.01 8.25 4.973 8.25 6.108V8.25m0 0H4.875c-.621 0-1.125.504-1.125 1.125v11.25c0 .621.504 1.125 1.125 1.125h9.75c.621 0 1.125-.504 1.125-1.125V9.375c0-.621-.504-1.125-1.125-1.125H8.25zM6.75 12h.008v.008H6.75V12zm0 3h.008v.008H6.75V15zm0 3h.008v.008H6.75V18z" />
-    </svg>
-  ),
-  money: (
-    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v12m-3-2.818l.879.659c1.171.879 3.07.879 4.242 0 1.172-.879 1.172-2.303 0-3.182C13.536 12.219 12.768 12 12 12c-.725 0-1.45-.22-2.003-.659-1.106-.879-1.106-2.303 0-3.182s2.9-.879 4.006 0l.415.33M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-    </svg>
-  ),
-  product: (
-    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M20.25 7.5l-.625 10.632a2.25 2.25 0 01-2.247 2.118H6.622a2.25 2.25 0 01-2.247-2.118L3.75 7.5M10 11.25h4M3.375 7.5h17.25c.621 0 1.125-.504 1.125-1.125v-1.5c0-.621-.504-1.125-1.125-1.125H3.375c-.621 0-1.125.504-1.125 1.125v1.5c0 .621.504 1.125 1.125 1.125z" />
-    </svg>
-  ),
-  info: (
-    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M11.25 11.25l.041-.02a.75.75 0 011.063.852l-.708 2.836a.75.75 0 001.063.853l.041-.021M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-9-3.75h.008v.008H12V8.25z" />
-    </svg>
-  ),
-  warning: (
-    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
-    </svg>
-  ),
-  check: (
-    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-    </svg>
-  ),
-};
-
 interface Notification {
   id: string;
   type: 'order' | 'payment' | 'product' | 'system' | 'warning' | 'success';
@@ -103,7 +64,7 @@ export default function SellerNotificationsPage() {
 
   useEffect(() => {
     if (!isAuthenticated) {
-      router.push(loginUrlHere());
+      router.replace(loginUrlHere());
       return;
     }
 
@@ -136,23 +97,6 @@ export default function SellerNotificationsPage() {
     }
   };
 
-  const getNotificationIcon = (type: string) => {
-    switch (type) {
-      case 'order':
-        return { icon: Icons.order, bg: 'bg-blue-100', color: 'text-blue-600' };
-      case 'payment':
-        return { icon: Icons.money, bg: 'bg-green-100', color: 'text-green-600' };
-      case 'product':
-        return { icon: Icons.product, bg: 'bg-purple-100', color: 'text-purple-600' };
-      case 'warning':
-        return { icon: Icons.warning, bg: 'bg-amber-100', color: 'text-amber-600' };
-      case 'success':
-        return { icon: Icons.check, bg: 'bg-emerald-100', color: 'text-emerald-600' };
-      default:
-        return { icon: Icons.info, bg: 'bg-gray-100', color: 'text-gray-600' };
-    }
-  };
-
   const filteredNotifications = filter === 'unread' 
     ? notifications.filter(n => !n.isRead)
     : notifications;
@@ -168,92 +112,63 @@ export default function SellerNotificationsPage() {
   return (
     <DashboardLayout
       title={t('notifications')}
-      subtitle={couldNotRead ? undefined : t(unreadCount !== 1 ? 'youHaveUnreadMany' : 'youHaveUnreadOne', { count: unreadCount })}
+      subtitle={couldNotRead || unreadCount === 0 ? undefined : t(unreadCount !== 1 ? 'youHaveUnreadMany' : 'youHaveUnreadOne', { count: unreadCount })}
       sidebarItems={sidebarItems}
       userType="seller"
     >
-      <div className="max-w-4xl mx-auto">
-        {/* Actions Bar */}
-        {!couldNotRead && (
-          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4 mb-6">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={() => setFilter('all')}
-                  className={`px-4 py-2 rounded-xl font-medium text-sm transition-all duration-200 ${
-                    filter === 'all'
-                      ? 'bg-blue-500 text-white shadow-lg'
-                      : 'text-gray-600 hover:bg-gray-100'
-                  }`}
-                >
-                  {t('all')}
-                </button>
-                <button
-                  onClick={() => setFilter('unread')}
-                  className={`px-4 py-2 rounded-xl font-medium text-sm transition-all duration-200 flex items-center gap-2 ${
-                    filter === 'unread'
-                      ? 'bg-blue-500 text-white shadow-lg'
-                      : 'text-gray-600 hover:bg-gray-100'
-                  }`}
-                >
-                  {t('unread')}
-                  {unreadCount > 0 && (
-                    <span className={`px-2 py-0.5 rounded-full text-xs ${
-                      filter === 'unread' ? 'bg-white text-blue-600' : 'bg-blue-100 text-blue-600'
-                    }`}>
-                      {unreadCount}
-                    </span>
-                  )}
-                </button>
-              </div>
-              <div className="flex items-center gap-2">
-                <Link href="/notifications/settings" className="text-sm font-medium text-slate-600 hover:text-slate-900 underline">
-                  {t('alertSettings')}
-                </Link>
-                {unreadCount > 0 && (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={handleMarkAllAsRead}
-                    className="text-blue-600 border-blue-200 hover:bg-blue-50"
+      <div className="max-w-3xl">
+        {!couldNotRead && notifications.length > 0 && (
+          <div className="flex items-end justify-between gap-4 border-b border-line mb-2">
+            <div role="tablist" aria-label={t('notifications')} className="flex gap-6">
+              {(['all', 'unread'] as const).map((tab) => {
+                const selected = filter === tab;
+                return (
+                  <button
+                    key={tab}
+                    type="button"
+                    role="tab"
+                    aria-selected={selected}
+                    onClick={() => setFilter(tab)}
+                    className={`relative -mb-px flex items-center gap-2 min-h-11 pb-1 text-[15px] whitespace-nowrap border-b-2 transition-colors focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-brand/40 ${
+                      selected ? 'border-brand-600 text-ink font-semibold' : 'border-transparent text-muted hover:text-ink'
+                    }`}
                   >
-                    {t('markAllRead')}
-                  </Button>
-                )}
-              </div>
+                    {t(tab)}
+                    {tab === 'unread' && unreadCount > 0 && (
+                      <span className="min-w-6 px-1.5 py-0.5 rounded-full text-xs font-semibold tabular-nums bg-raised text-muted">
+                        {unreadCount}
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
             </div>
+            {unreadCount > 0 && (
+              <Button variant="ghost" onClick={handleMarkAllAsRead} className="mb-1 px-3">
+                {t('markAllRead')}
+              </Button>
+            )}
           </div>
         )}
 
         {Boolean(loadError) && !loading && (
-          <LoadError compact={!couldNotRead} error={loadError} onRetry={() => loadNotifications()} title={t('loadNotificationsFailed')} className="mb-6" />
+          <LoadError compact={!couldNotRead} error={loadError} onRetry={() => loadNotifications()} title={t('loadNotificationsFailed')} className="my-4" />
         )}
         {loading ? (
-          <div className="text-center py-16">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mx-auto mb-4"></div>
-            <p className="text-gray-500">{t('loadingNotifications')}</p>
+          <div className="flex items-center gap-3 py-10 text-sm text-muted" role="status">
+            <span className="h-5 w-5 rounded-full border-2 border-line-strong border-t-brand-600 motion-safe:animate-spin" aria-hidden="true" />
+            {t('loadingNotifications')}
           </div>
         ) : couldNotRead ? null : filteredNotifications.length === 0 ? (
-          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-16 text-center">
-            <div className="w-24 h-24 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-6">
-              {Icons.bell}
-            </div>
-            <h2 className="text-2xl font-bold text-gray-900 mb-2">
-              {filter === 'unread' ? t('noUnreadNotifications') : t('noNotificationsShort')}
-            </h2>
-            <p className="text-gray-500">
-              {filter === 'unread' 
-                ? t('caughtUpCheckLater')
-                : t('noNotificationsYetLong')}
-            </p>
-          </div>
+          <p className={`${notifications.length === 0 ? 'pt-2' : 'py-10'} text-[15px] text-muted`}>
+            {filter === 'unread' ? t('noUnreadNotifications') : t('noNotificationsYetLong')}
+          </p>
         ) : (
-          <div className="space-y-3">
-            {filteredNotifications.map((notification) => {
-              const iconConfig = getNotificationIcon(notification.type);
-              return (
-                <div
-                  key={notification.id}
+          <ul className="divide-y divide-line">
+            {filteredNotifications.map((notification) => (
+              <li key={notification.id}>
+                <button
+                  type="button"
                   onClick={() => {
                     if (!notification.isRead) {
                       handleMarkAsRead(notification.id);
@@ -262,36 +177,39 @@ export default function SellerNotificationsPage() {
                       router.push(notification.link);
                     }
                   }}
-                  className={`bg-white rounded-2xl shadow-sm border border-gray-100 p-5 transition-all duration-200 cursor-pointer hover:shadow-md ${
-                    !notification.isRead ? 'border-s-4 border-s-blue-500' : ''
-                  }`}
+                  className="w-full flex gap-3 py-4 px-2 -mx-2 text-start rounded-lg hover:bg-raised transition-colors focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-brand/40"
                 >
-                  <div className="flex gap-4">
-                    {/* Icon */}
-                    <div className={`w-12 h-12 ${iconConfig.bg} rounded-xl flex items-center justify-center ${iconConfig.color} flex-shrink-0`}>
-                      {iconConfig.icon}
-                    </div>
-                    
-                    {/* Content */}
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-start justify-between gap-4">
-                        <div>
-                          <h3 className={`font-semibold ${!notification.isRead ? 'text-gray-900' : 'text-gray-700'}`}>
-                            {notification.title}
-                          </h3>
-                          <p className="text-gray-500 text-sm mt-1">{notification.message}</p>
-                        </div>
-                        {!notification.isRead && (
-                          <span className="w-2.5 h-2.5 bg-blue-500 rounded-full flex-shrink-0 mt-2"></span>
-                        )}
-                      </div>
-                      <p className="text-xs text-gray-500 mt-2">{formatDate(notification.createdAt)}</p>
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
+                  <span className="w-2 shrink-0 pt-2" aria-hidden={notification.isRead}>
+                    {!notification.isRead && (
+                      <span className="block h-2 w-2 rounded-full bg-brand-600">
+                        <span className="sr-only">{t('unread')}</span>
+                      </span>
+                    )}
+                  </span>
+                  <span className="flex-1 min-w-0">
+                    <span className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-0.5">
+                      <span className={`text-[15px] ${notification.isRead ? 'text-ink' : 'text-ink font-semibold'}`}>
+                        {notification.title}
+                      </span>
+                      <span className="text-xs text-muted whitespace-nowrap">{formatDate(notification.createdAt)}</span>
+                    </span>
+                    <span className="block text-sm text-muted mt-0.5">{notification.message}</span>
+                  </span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+
+        {!couldNotRead && !loading && (
+          <p className={notifications.length === 0 ? 'mt-1' : 'mt-6'}>
+            <Link
+              href="/notifications/settings"
+              className="inline-flex items-center min-h-11 text-sm font-medium text-brand-ink hover:underline underline-offset-4 focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-brand/40 rounded"
+            >
+              {t('alertSettings')}
+            </Link>
+          </p>
         )}
       </div>
     </DashboardLayout>

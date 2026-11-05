@@ -38,6 +38,8 @@ import DetailsSection from './DetailsSection';
 import PhotosSection, { ProductImage } from './PhotosSection';
 import PricingSection from './PricingSection';
 import VariantsEditor from './VariantsEditor';
+import DeliveryMenuSection from './DeliveryMenuSection';
+import { SwitchRow } from './fields';
 import { ShortcutsButton, ShortcutsHelp, useFormShortcuts } from './KeyboardShortcuts';
 
 interface LoadedProduct extends SavedProduct {
@@ -135,7 +137,7 @@ export default function ProductForm(props: Props) {
 
   useEffect(() => {
     if (!isAuthenticated) {
-      router.push(loginUrlHere());
+      router.replace(loginUrlHere());
       return;
     }
     if (user?.userType !== 'seller' && user?.user_type !== 'seller') {
@@ -232,7 +234,7 @@ export default function ProductForm(props: Props) {
           'success',
         );
       } else {
-        showToast(touchedVariants ? `Product and ${n} variant(s) updated successfully!` : '✅ Product updated successfully!', 'success');
+        showToast(touchedVariants ? `Product and ${n} variant(s) updated successfully!` : 'Product updated successfully!', 'success');
       }
       router.push('/sellers/products');
     } catch (error) {
@@ -285,98 +287,44 @@ export default function ProductForm(props: Props) {
 
   if (!isAuthenticated) return null;
 
-  const title = mode === 'create' ? 'Add New Product' : 'Edit Product';
+  const title = mode === 'create' ? 'Add a dish' : 'Edit dish';
   if (loading) {
     return (
-      <DashboardLayout title={title} subtitle="Loading..." sidebarItems={SELLER_SIDEBAR_ITEMS} userType="seller">
-        <div className="flex items-center justify-center min-h-96">
-          <div className="text-center">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mx-auto mb-4"></div>
-            <p className="text-gray-500">Loading product...</p>
+      <DashboardLayout title={title} sidebarItems={SELLER_SIDEBAR_ITEMS} userType="seller">
+        <div className="max-w-3xl">
+          <div className="flex items-center gap-3 py-10 text-sm text-muted" role="status">
+            <span className="h-5 w-5 rounded-full border-2 border-line-strong border-t-brand-600 motion-safe:animate-spin" aria-hidden="true" />
+            Loading the dish…
           </div>
         </div>
       </DashboardLayout>
     );
   }
 
-  const detailsDone = !!form.name && !!form.categoryId;
-  const steps = [
-    { label: 'Photos', done: images.length > 0 },
-    { label: 'Details', done: detailsDone },
-    { label: 'Pricing', done: !!form.price },
-  ];
-
   return (
     <DashboardLayout
       title={title}
-      subtitle={mode === 'create' ? 'List a new product in your store' : 'Update your product details'}
+      subtitle={mode === 'create' ? 'Customers can order it once Nuray has checked it.' : undefined}
       sidebarItems={SELLER_SIDEBAR_ITEMS}
       userType="seller"
     >
-      <div className="max-w-4xl mx-auto">
-        <ShortcutsButton onClick={() => setHelpOpen(!helpOpen)} />
+      <div className="max-w-3xl">
         {helpOpen && <ShortcutsHelp onClose={() => setHelpOpen(false)} />}
-
-        {mode === 'create' && (
-          <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-2xl p-5 mb-6 border border-blue-100">
-            <div className="flex items-center justify-between max-w-3xl mx-auto">
-              {steps.map((step, i) => (
-                <div key={step.label} className={`flex items-center ${i < steps.length - 1 ? 'flex-1' : ''}`}>
-                  <div className="flex items-center gap-2">
-                    <div
-                      className={`w-10 h-10 rounded-full flex items-center justify-center font-bold ${
-                        step.done ? 'bg-emerald-600 text-white' : 'bg-white text-gray-400 border-2 border-gray-300'
-                      }`}
-                    >
-                      {step.done ? '✓' : i + 1}
-                    </div>
-                    <span className={`text-sm font-medium ${step.done ? 'text-emerald-700' : 'text-gray-500'}`}>{step.label}</span>
-                  </div>
-                  {i < steps.length - 1 && (
-                    <div className="flex-1 mx-4 h-1 bg-white rounded-full overflow-hidden">
-                      <div className={`h-full bg-emerald-500 transition-all duration-500 ${step.done ? 'w-full' : 'w-0'}`}></div>
-                    </div>
-                  )}
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
 
         <form ref={formRef} onSubmit={handleSubmit}>
           {mode === 'edit' && (
-            <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 mb-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h2 className="text-lg font-bold text-gray-900">Product Status</h2>
-                  <p className="text-sm text-gray-500">Control whether this product is visible to customers</p>
-                </div>
-                <button
-                  type="button"
-                  role="switch"
-                  aria-checked={form.isActive}
-                  aria-label="Visible to customers"
-                  onClick={() => update({ isActive: !form.isActive })}
-                  className={`relative inline-flex h-8 w-14 items-center rounded-full transition-colors ${form.isActive ? 'bg-emerald-500' : 'bg-gray-300'}`}
-                >
-                  <span
-                    className={`inline-block h-6 w-6 transform rounded-full bg-white shadow transition-transform ${
-                      form.isActive ? 'translate-x-7' : 'translate-x-1'
-                    }`}
-                  />
-                </button>
-              </div>
-              <div
-                className={`mt-3 inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-sm font-medium ${
-                  form.isActive ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-100 text-gray-600'
-                }`}
-              >
-                {form.isActive ? '● Live - Visible to customers' : '○ Hidden - Not visible to customers'}
-              </div>
-            </div>
+            <section aria-label="Showing to customers" className="border-b border-line pb-6 mb-8">
+              <SwitchRow
+                checked={form.isActive}
+                onChange={() => update({ isActive: !form.isActive })}
+                label={form.isActive ? 'Showing to customers' : 'Hidden from customers'}
+                hint={form.isActive ? 'Customers can see and order this dish.' : 'Customers cannot see this dish until you show it.'}
+                ariaLabel="Visible to customers"
+              />
+            </section>
           )}
 
-          <PhotosSection images={images} onChange={setImages} onTooMany={() => showToast('Maximum 4 images allowed', 'warning')} />
+          <PhotosSection images={images} onChange={setImages} onTooMany={() => showToast('You can add up to 4 photos', 'warning')} />
 
           <DetailsSection
             form={form}
@@ -415,65 +363,40 @@ export default function ProductForm(props: Props) {
                 onMakeDefault={(index) => setVariants((prev) => prev.map((v, i) => ({ ...v, isDefault: i === index })))}
               />
             }
-            menu={<MenuTypeField value={menu} onChange={setMenu} />}
           />
 
-          <div className="sticky bottom-0 bg-white border-t-2 border-gray-100 -mx-4 px-4 sm:-mx-6 sm:px-6 pt-5 pb-[calc(1.25rem+var(--safe-bottom))] mt-8 rounded-t-3xl shadow-2xl">
-            <div className="max-w-4xl mx-auto flex flex-col sm:flex-row gap-3">
-              <Button
-                type="submit"
-                disabled={saving}
-                className="flex-1 bg-gradient-to-r from-blue-500 to-indigo-600 hover:from-blue-600 hover:to-indigo-700 text-white py-4 rounded-xl font-bold text-lg shadow-xl hover:shadow-2xl transform hover:-translate-y-0.5 transition-all"
-              >
-                {saving ? (
-                  <span className="flex items-center justify-center gap-2">
-                    <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
-                      <path
-                        className="opacity-75"
-                        fill="currentColor"
-                        d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                      />
-                    </svg>
-                    <span>{mode === 'create' ? 'Creating Product...' : 'Saving...'}</span>
-                  </span>
-                ) : (
-                  <span className="flex items-center justify-center gap-2">
-                    <span className="text-xl">{mode === 'create' ? '✨' : '💾'}</span>
-                    <span>{mode === 'create' ? 'Create Product' : 'Save Changes'}</span>
-                    <span className="text-xs opacity-75 ms-2 px-2 py-1 bg-white/20 rounded">Ctrl+S</span>
-                  </span>
-                )}
-              </Button>
-              <Link href="/sellers/products" className="sm:w-auto">
-                <Button type="button" variant="outline" className="w-full sm:w-40 py-4 rounded-xl border-2 font-semibold hover:bg-gray-50">
-                  Cancel
-                </Button>
-              </Link>
-            </div>
-          </div>
+          <DeliveryMenuSection form={form} update={update} menu={<MenuTypeField value={menu} onChange={setMenu} />} />
 
-          {mode === 'create' ? (
-            <div className="mt-6 bg-gradient-to-br from-amber-50 to-brand-50 rounded-2xl p-5 border-2 border-amber-200 shadow-sm">
-              <h3 className="font-bold text-amber-900 mb-3 flex items-center gap-2 text-lg">
-                <span className="text-2xl">💡</span> Pro Tips for Better Sales
-              </h3>
-              <ul className="text-sm text-amber-700 space-y-1">
-                <li>• Use clear, well-lit photos from multiple angles</li>
-                <li>• Include quantity in product name (e.g., &quot;Pack of 12&quot;)</li>
-                <li>• Add a discount - products with discounts sell 3x more!</li>
-                <li>• List all ingredients for customer trust</li>
-              </ul>
-            </div>
-          ) : (
-            <div className="mt-8 border border-red-200 rounded-2xl p-6 bg-red-50">
-              <h3 className="font-bold text-red-700 mb-2">Danger Zone</h3>
-              <p className="text-sm text-red-600 mb-4">Once you delete a product, there is no going back. Please be certain.</p>
-              <Button type="button" variant="outline" onClick={handleDelete} disabled={saving} className="border-red-300 text-red-600 hover:bg-red-100">
-                🗑️ Delete Product
+          {mode === 'edit' && (
+            <section aria-labelledby="dish-delete" className="border-t border-line py-8">
+              <h2 id="dish-delete" className="text-sm font-semibold text-ink">
+                Delete this dish
+              </h2>
+              <p className="mt-1 text-sm text-muted">It leaves your menu for good. To take it off for a while, hide it instead.</p>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={handleDelete}
+                disabled={saving}
+                className="mt-4 border-red-200 text-red-700 hover:bg-red-50"
+              >
+                Delete dish
               </Button>
-            </div>
+            </section>
           )}
+
+          <div className="sticky bottom-0 z-10 flex flex-wrap items-center justify-end gap-3 border-t border-line bg-page/95 py-4 pb-[calc(1rem+var(--safe-bottom,0px))] backdrop-blur">
+            <ShortcutsButton onClick={() => setHelpOpen(!helpOpen)} />
+            <span className="hidden flex-1 sm:block" />
+            <Link href="/sellers/products" className="flex-1 sm:flex-none">
+              <Button type="button" variant="outline" className="w-full">
+                Cancel
+              </Button>
+            </Link>
+            <Button type="submit" disabled={saving} className="flex-1 sm:flex-none sm:px-8">
+              {saving ? (mode === 'create' ? 'Adding…' : 'Saving…') : mode === 'create' ? 'Add dish' : 'Save changes'}
+            </Button>
+          </div>
         </form>
       </div>
 

@@ -4,6 +4,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { loginUrlHere } from '@/lib/auth-redirect';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import { Loader2, MessageCircle, RefreshCw, X } from 'lucide-react';
 import { DashboardLayout, SELLER_SIDEBAR_ITEMS } from '@/components/layout/DashboardShell';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/toast';
@@ -11,12 +12,12 @@ import { LoadError } from '@/components/ui/LoadError';
 import { useAuthStore } from '@/lib/store/auth-store';
 import { useLiveRefresh } from '@/lib/hooks/use-live-refresh';
 import { apiClient, apiErrorMessage } from '@/lib/api-client';
-import { formatPrice, formatDate } from '@/lib/utils';
+import { formatPrice, formatDateTime } from '@/lib/utils';
 import OrderChatModal from '@/components/orders/OrderChatModal';
 import SelfHandoverActions from '@/components/orders/SelfHandoverActions';
 import { useT } from '@/lib/i18n';
 import { commonMessages } from '@/lib/i18n/messages/common';
-import { kitchenOrderMessages, paymentMethodLabel, paymentStatusLabel } from '@/lib/i18n/messages/kitchen-orders';
+import { kitchenOrderMessages, kitchenStatusLabel, paymentMethodLabel, paymentStatusLabel } from '@/lib/i18n/messages/kitchen-orders';
 import { ExternalLink } from '@/components/ExternalLink';
 import { useShallow } from 'zustand/react/shallow';
 
@@ -148,7 +149,7 @@ export default function SellerOrdersPage() {
 
   useEffect(() => {
     if (!isAuthenticated) {
-      router.push(loginUrlHere());
+      router.replace(loginUrlHere());
       return;
     }
     const role = user?.userType || user?.user_type;
@@ -271,27 +272,20 @@ export default function SellerOrdersPage() {
     }
   };
 
-  const getStatusBadge = (status: string) => {
-    const s = status.toLowerCase();
-    switch (s) {
+  const statusTone = (status: string) => {
+    switch (status) {
       case 'pending':
-        return { bg: 'bg-amber-100 text-amber-900 border-amber-300', dot: 'bg-amber-500', label: t('badge.pending') };
-      case 'confirmed':
-        return { bg: 'bg-blue-100 text-blue-900 border-blue-300', dot: 'bg-blue-500', label: t('badge.confirmed') };
+        return 'bg-accent-soft text-accent-soft-ink';
       case 'preparing':
-        return { bg: 'bg-purple-100 text-purple-900 border-purple-300', dot: 'bg-purple-500', label: t('badge.preparing') };
+        return 'bg-raised text-ink';
       case 'ready':
-        return { bg: 'bg-indigo-100 text-indigo-900 border-indigo-300', dot: 'bg-indigo-500', label: t('badge.ready') };
-      case 'dispatched':
-      case 'in_transit':
-        return { bg: 'bg-brand-100 text-brand-900 border-brand-300', dot: 'bg-brand', label: t('badge.onTheWay') };
       case 'delivered':
       case 'completed':
-        return { bg: 'bg-emerald-100 text-emerald-900 border-emerald-300', dot: 'bg-emerald-500', label: t('badge.completed') };
+        return 'bg-brand-soft text-brand-soft-ink';
       case 'cancelled':
-        return { bg: 'bg-red-100 text-red-900 border-red-300', dot: 'bg-red-500', label: t('badge.cancelled') };
+        return 'bg-red-50 text-red-700';
       default:
-        return { bg: 'bg-gray-100 text-gray-800 border-gray-300', dot: 'bg-gray-500', label: status };
+        return 'bg-raised text-muted';
     }
   };
 
@@ -313,426 +307,302 @@ export default function SellerOrdersPage() {
       sidebarItems={sidebarItems}
       userType="seller"
     >
-      <div className="max-w-7xl mx-auto space-y-6">
-        {/* Top Filter Bar */}
-        <div className="bg-white rounded-2xl p-2 shadow-sm border border-gray-100 flex gap-2 flex-wrap items-center justify-between">
-          <div className="flex gap-2 flex-wrap">
-            {filterTabs.map((tab) => (
-              <button
-                key={tab.id}
-                onClick={() => {
-                  setFilter(tab.id);
-                  setPage(1);
-                }}
-                className={`px-4 py-2 rounded-xl text-sm font-semibold transition-all ${
-                  filter === tab.id
-                    ? 'bg-gray-900 text-white shadow-md'
-                    : 'text-gray-600 hover:bg-gray-100'
-                }`}
-              >
-                {tab.label}
-              </button>
-            ))}
+      <div className="max-w-6xl">
+        <div className="mb-6 flex flex-col-reverse sm:flex-row sm:items-end sm:gap-4 sm:border-b sm:border-line">
+          <div role="tablist" aria-label={t('list.title')} className="flex-1 min-w-0 flex gap-x-3.5 sm:gap-x-6 overflow-x-auto [scrollbar-width:none] border-b border-line sm:border-b-0">
+            {filterTabs.map((tab) => {
+              const selected = filter === tab.id;
+              return (
+                <button
+                  key={tab.id}
+                  type="button"
+                  role="tab"
+                  aria-selected={selected}
+                  onClick={() => {
+                    setFilter(tab.id);
+                    setPage(1);
+                  }}
+                  className={`-mb-px min-h-11 pb-1 text-sm sm:text-[15px] whitespace-nowrap border-b-2 rounded-t transition-colors focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-inset focus-visible:ring-brand/40 ${
+                    selected ? 'border-brand-600 text-ink font-semibold' : 'border-transparent text-muted hover:text-ink'
+                  }`}
+                >
+                  {tab.label}
+                </button>
+              );
+            })}
           </div>
-          <Button
-            variant="outline"
-            size="sm"
+          <button
+            type="button"
             onClick={() => loadOrders(false)}
-            className="text-xs text-gray-600 flex items-center gap-1.5"
+            aria-label={t('list.refresh')}
+            className="self-end shrink-0 -mt-3 sm:mt-0 sm:mb-1 -me-2 sm:me-0 inline-flex items-center gap-1.5 min-h-11 px-2 rounded-lg text-sm font-medium text-muted hover:text-ink focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-brand/40"
           >
-            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-            </svg>
+            <RefreshCw className="w-4 h-4" aria-hidden="true" />
             {t('list.refresh')}
-          </Button>
+          </button>
         </div>
 
-        {/* Orders Listing */}
         {Boolean(loadError) && orderTickets.length > 0 && (
           <LoadError compact error={loadError} onRetry={() => void loadOrders()} title={t('list.loadFailed')} className="mb-4" />
         )}
         {loading ? (
-          <div className="text-center py-20 bg-white rounded-3xl border border-gray-100">
-            <div className="w-12 h-12 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-            <p className="text-gray-600 font-medium">{t('list.syncing')}</p>
+          <div className="py-24 text-center" role="status">
+            <div className="animate-spin rounded-full h-8 w-8 border-2 border-line border-t-brand-600 mx-auto mb-4" />
+            <p className="text-sm text-muted">{t('list.syncing')}</p>
           </div>
         ) : loadError && orderTickets.length === 0 ? (
           <LoadError error={loadError} onRetry={() => void loadOrders()} title={t('list.loadFailed')} />
         ) : orderTickets.length === 0 ? (
-          <div className="bg-white rounded-3xl p-16 text-center border border-gray-100 shadow-sm">
-            <div className="w-20 h-20 bg-emerald-50 text-emerald-600 rounded-full flex items-center justify-center mx-auto mb-4 text-3xl">
-              🍳
-            </div>
-            <h3 className="text-xl font-bold text-gray-900 mb-1">{t('list.emptyTitle')}</h3>
-            <p className="text-gray-500 text-sm max-w-md mx-auto">
-              {filter === 'all'
-                ? t('list.emptyAll')
-                : t('list.emptyFiltered', { filter: filterTabs.find((tab) => tab.id === filter)?.label ?? filter })}
-            </p>
-          </div>
+          <p className="py-16 text-center text-sm text-muted">
+            {filter === 'all'
+              ? t('list.emptyAll')
+              : t('list.emptyFiltered', { filter: filterTabs.find((tab) => tab.id === filter)?.label ?? filter })}
+          </p>
         ) : (
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <div className="grid grid-cols-1 xl:grid-cols-2 gap-5 items-start">
             {orderTickets.map((ticket) => {
               const ord = ticket.order;
               const items = ticket.items || [];
-              const badge = getStatusBadge(ord.orderStatus);
               const isActionBusy = actionLoadingId === ord.id;
+              const isNew = ord.orderStatus === 'pending';
               const maxPrepTime = Math.max(
                 ...items.map((i) => i.product?.preparationTime || 20),
                 15
               );
+              const area = [ord.deliveryAddress?.area || t('list.communityDelivery'), ord.deliveryAddress?.addressLine1].filter(Boolean).join(', ');
 
               return (
-                <div
+                <article
                   key={ord.id}
                   id={`order-card-${ord.id}`}
-                  className="bg-white rounded-3xl border border-gray-200 shadow-sm hover:shadow-md transition-shadow overflow-hidden flex flex-col justify-between"
+                  className={`rounded-[20px] bg-surface border overflow-hidden pb-5 ${
+                    isNew ? 'border-line shadow-[var(--shadow-card)]' : 'border-line'
+                  }`}
                 >
-                  {/* Ticket Header */}
-                  <div>
-                    <div className="p-5 bg-gradient-to-r from-gray-50 to-white border-b border-gray-100 flex items-start justify-between gap-3">
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <span className="font-extrabold text-lg text-gray-900 tracking-tight">
-                            <Link href={`/sellers/orders/${ord.id}`} className="hover:underline">
-                              {t('orderLabel')} <span data-ltr>#{ord.orderNumber || ord.id.slice(0, 8)}</span>
-                            </Link>
-                          </span>
-                          <span
-                            className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold border ${badge.bg}`}
-                          >
-                            <span className={`w-2 h-2 rounded-full ${badge.dot}`}></span>
-                            {badge.label}
-                          </span>
-                        </div>
-                        <div className="text-xs text-gray-500 mt-1 flex items-center gap-3">
-                          <span>🕒 {formatDate(ord.createdAt)}</span>
-                          <span>•</span>
-                          <span className="font-medium text-gray-700">{t('list.prep', { min: maxPrepTime })}</span>
-                        </div>
-                      </div>
-
-                      <div className="text-end">
-                        <span className="text-lg font-black text-emerald-600 block">
-                          {formatPrice(ord.totalAmount)}
-                        </span>
-                        <span className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider">
-                          {paymentMethodLabel(ord.paymentMethod, tc)} • {paymentStatusLabel(ord.paymentStatus, t)}
-                        </span>
-                      </div>
+                  <header className="px-5 pt-5">
+                    <div className="flex items-baseline justify-between gap-4">
+                      <Link href={`/sellers/orders/${ord.id}`} className="min-w-0 text-[15px] font-semibold text-ink hover:underline">
+                        {t('orderLabel')} <span data-ltr className="break-all">#{ord.orderNumber || ord.id.slice(0, 8)}</span>
+                      </Link>
+                      <p className="shrink-0 text-lg font-semibold text-ink tabular-nums">{formatPrice(ord.totalAmount)}</p>
                     </div>
-
-                    {/* Customer & Location Context + Chat Button */}
-                    <div className="px-5 py-3 bg-gray-50/70 border-b border-gray-100 flex flex-wrap items-center justify-between gap-2 text-xs">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span className="w-6 h-6 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center font-bold">
-                          👤
-                        </span>
-                        <span className="font-semibold text-gray-900">{ord.customerName || t('customer')}</span>
-                        {ord.customerPhone && (
-                          <span className="text-gray-500" data-ltr>({ord.customerPhone})</span>
-                        )}
-                        {ord.contactHidden && (
-                          <span className="text-gray-600" data-testid="contact-hidden">{t(`contact.${ord.contactHidden}`)}</span>
-                        )}
-
-                        {/* Two-Way Chat Button */}
-                        <button
-                          id={`chat-customer-btn-${ord.id}`}
-                          onClick={() => setChatTicket(ticket)}
-                          className="ms-2 inline-flex items-center gap-1.5 px-3 py-1 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-[11px] font-black transition-all shadow-xs"
-                          title={t('list.chatTitle')}
-                        >
-                          <span>💬</span>
-                          <span>{t('list.chat')}</span>
-                        </button>
-                      </div>
-
-                      <div className="flex items-center gap-1.5 text-gray-700 font-medium">
-                        <span className="text-emerald-600">📍</span>
-                        <span>
-                          {ord.deliveryAddress?.area || t('list.communityDelivery')}
-                          {ord.deliveryAddress?.addressLine1 ? `, ${ord.deliveryAddress.addressLine1}` : ''}
-                        </span>
-                      </div>
+                    <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-muted">
+                      <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${statusTone(ord.orderStatus)}`}>{kitchenStatusLabel(ord.orderStatus, t, tc)}</span>
+                      <span>{formatDateTime(ord.createdAt)}</span>
+                      {['pending', 'confirmed', 'preparing'].includes(ord.orderStatus) && (
+                        <span className="text-ink">{t('list.prep', { min: maxPrepTime })}</span>
+                      )}
                     </div>
+                    <p className="mt-1 text-xs text-muted">
+                      {paymentMethodLabel(ord.paymentMethod, tc)}, {paymentStatusLabel(ord.paymentStatus, t)}
+                    </p>
+                  </header>
 
-                    {/* Customer Payment Proof Verification Card */}
-                    {ord.paymentStatus === 'payment_submitted' && (
-                      <div className="px-5 py-3.5 bg-amber-50/90 border-b border-amber-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
-                        <div className="flex items-start gap-2.5">
-                          <span className="text-xl">💸</span>
-                          <div>
-                            <div className="flex items-center gap-2 flex-wrap">
-                              <span className="font-black text-amber-950">{t('list.proofTitle')}</span>
-                              <span className="px-2 py-0.5 rounded-full text-[11px] font-extrabold bg-amber-200 text-amber-900">
-                                {t('list.actionRequired')}
-                              </span>
-                            </div>
-                            <p className="text-[11px] text-amber-800 mt-0.5">
-                              {t('list.method')} <strong className="text-amber-950 font-bold">{ord.paymentSenderAccount || ord.paymentMethod || t('list.directWallet')}</strong>
-                              {ord.paymentReferenceNumber && ` • ${t('list.ref', { ref: ord.paymentReferenceNumber })}`}
-                            </p>
-                            {ord.paymentProofUrl && (
-                              <ExternalLink
-                                href={ord.paymentProofUrl}
-                                className="text-emerald-700 hover:underline font-bold text-[11px] inline-flex items-center gap-1 mt-1"
-                              >
-                                <span>{t('list.viewScreenshot')}</span>
-                              </ExternalLink>
-                            )}
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-2 shrink-0">
-                          <button
-                            id={`verify-payment-btn-${ord.id}`}
-                            onClick={() => handleConfirmPayment(ord.id, true)}
-                            disabled={actionLoadingId === `pay-${ord.id}`}
-                            className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white font-extrabold text-xs rounded-xl shadow-xs transition-all flex items-center gap-1"
-                          >
-                            <span>✓</span>
-                            <span>{t('list.confirmPaid')}</span>
-                          </button>
-                          <button
-                            id={`dispute-payment-btn-${ord.id}`}
-                            onClick={() => handleConfirmPayment(ord.id, false)}
-                            disabled={actionLoadingId === `pay-${ord.id}`}
-                            className="px-3 py-2 bg-white hover:bg-red-50 text-red-600 border border-red-200 font-bold text-xs rounded-xl transition-all"
-                          >
-                            <span>{t('list.dispute')}</span>
-                          </button>
-                        </div>
+                  <ul className="px-5 mt-4 space-y-1.5">
+                    {items.map((item) => (
+                      <li key={item.id} className="flex items-baseline justify-between gap-4 text-[15px]">
+                        <span className="text-ink">
+                          <span className="font-semibold tabular-nums">{item.quantity} ×</span> {item.product?.name || t('list.foodItem')}
+                        </span>
+                        <span className="text-sm text-muted tabular-nums shrink-0">{formatPrice(item.totalPrice)}</span>
+                      </li>
+                    ))}
+                  </ul>
+
+                  {(ord.deliveryInstructions || ord.notes) && (
+                    <p className="mx-5 mt-3 rounded-lg bg-raised px-3 py-2 text-sm text-ink">
+                      <span className="text-muted">{t('list.note')} </span>
+                      {ord.deliveryInstructions || ord.notes}
+                    </p>
+                  )}
+
+                  {ord.orderStatus === 'cancelled' && ord.cancellationReason && (
+                    <p className="mx-5 mt-3 text-sm text-red-700">
+                      {t('list.reason')} {ord.cancellationReason}
+                    </p>
+                  )}
+
+                  <div className="px-5 mt-4 pt-4 border-t border-line text-sm">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="text-ink">
+                          {ord.customerName || t('customer')}
+                          {ord.customerPhone && <span className="text-muted ms-1.5" data-ltr>{ord.customerPhone}</span>}
+                        </p>
+                        <p className="text-muted">{area}</p>
                       </div>
-                    )}
-
-                    {/* Special Delivery Instructions / Notes */}
-                    {(ord.deliveryInstructions || ord.notes) && (
-                      <div className="px-5 py-2.5 bg-amber-50/70 border-b border-amber-100 text-xs text-amber-900 flex items-start gap-2">
-                        <span className="font-bold">{t('list.note')}</span>
-                        <span>{ord.deliveryInstructions || ord.notes}</span>
-                      </div>
-                    )}
-
-                    {/* Rejection / Cancellation Banner */}
-                    {ord.orderStatus === 'cancelled' && ord.cancellationReason && (
-                      <div className="px-5 py-2.5 bg-red-50 border-b border-red-100 text-xs text-red-800 flex items-start gap-2">
-                        <span className="font-bold">{t('list.reason')}</span>
-                        <span>{ord.cancellationReason}</span>
-                      </div>
-                    )}
-
-                    {/* Items List */}
-                    <div className="p-5 divide-y divide-gray-100">
-                      {items.map((item) => (
-                        <div key={item.id} className="py-2.5 first:pt-0 last:pb-0 flex items-center justify-between gap-4">
-                          <div className="flex items-center gap-3">
-                            <div className="w-10 h-10 rounded-xl bg-gray-100 border border-gray-200 overflow-hidden flex items-center justify-center flex-shrink-0 text-sm">
-                              {item.product?.image ? (
-                                <img
-                                  src={item.product.image}
-                                  alt={item.product.name}
-                                  className="w-full h-full object-cover"
-                                />
-                              ) : (
-                                '🍔'
-                              )}
-                            </div>
-                            <div>
-                              <p className="font-bold text-sm text-gray-900">
-                                {item.quantity} × {item.product?.name || t('list.foodItem')}
-                              </p>
-                              <p className="text-xs text-gray-500">
-                                {t('list.itemPrep', { min: item.product?.preparationTime || 15, price: formatPrice(item.unitPrice) })}
-                              </p>
-                            </div>
-                          </div>
-                          <span className="font-semibold text-sm text-gray-900">
-                            {formatPrice(item.totalPrice)}
-                          </span>
-                        </div>
-                      ))}
+                      <button
+                        type="button"
+                        id={`chat-customer-btn-${ord.id}`}
+                        onClick={() => setChatTicket(ticket)}
+                        title={t('list.chatTitle')}
+                        className="shrink-0 -mt-2.5 inline-flex items-center gap-1.5 min-h-11 px-3 -me-3 rounded-lg font-semibold text-brand-ink hover:bg-brand-soft focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-brand/40"
+                      >
+                        <MessageCircle className="w-4 h-4" aria-hidden="true" />
+                        {t('list.chat')}
+                      </button>
                     </div>
+                    {ord.contactHidden && (
+                      <p className="mt-1 text-xs text-muted" data-testid="contact-hidden">{t(`contact.${ord.contactHidden}`)}</p>
+                    )}
                   </div>
 
-                  {/* Kitchen Status Card & Operational Actions */}
-                  <div className="p-5 bg-gray-50/50 border-t border-gray-100">
-                    {/* State: Pending */}
-                    {ord.orderStatus === 'pending' && (
-                      <div className="space-y-3">
-                        <div className="p-3 bg-amber-50 rounded-2xl border border-amber-200 text-xs text-amber-900 flex items-center justify-between">
-                          <span className="font-medium">{t('list.awaiting')}</span>
-                          <span className="font-bold">{t('list.estPrep', { min: maxPrepTime })}</span>
-                        </div>
-                        <div className="flex items-center gap-3">
+                  {ord.paymentStatus === 'payment_submitted' && (
+                    <div className="mx-5 mt-4 rounded-xl bg-accent-soft text-accent-soft-ink p-3.5 text-sm">
+                      <p className="font-semibold">{t('list.proofTitle')}</p>
+                      <p className="mt-0.5">
+                        {t('list.method')} {ord.paymentSenderAccount || ord.paymentMethod || t('list.directWallet')}
+                        {ord.paymentReferenceNumber && <>, <span data-ltr>{t('list.ref', { ref: ord.paymentReferenceNumber })}</span></>}
+                      </p>
+                      {ord.paymentProofUrl && (
+                        <ExternalLink href={ord.paymentProofUrl} className="inline-block mt-1 font-semibold underline underline-offset-2">
+                          {t('list.viewScreenshot')}
+                        </ExternalLink>
+                      )}
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        <Button
+                          className="px-4"
+                          id={`verify-payment-btn-${ord.id}`}
+                          onClick={() => handleConfirmPayment(ord.id, true)}
+                          disabled={actionLoadingId === `pay-${ord.id}`}
+                        >
+                          {t('list.confirmPaid')}
+                        </Button>
+                        <Button
+                          id={`dispute-payment-btn-${ord.id}`}
+                          variant="outline"
+                          onClick={() => handleConfirmPayment(ord.id, false)}
+                          disabled={actionLoadingId === `pay-${ord.id}`}
+                          className="px-4 bg-surface border-red-200 text-red-700 hover:bg-red-50"
+                        >
+                          {t('list.dispute')}
+                        </Button>
+                      </div>
+                    </div>
+                  )}
+
+                  {['pending', 'preparing', 'ready', 'dispatched', 'in_transit', 'delivered', 'completed'].includes(ord.orderStatus) && (
+                    <div className="px-5 pt-4">
+                      {ord.orderStatus === 'pending' && (
+                        <div className="flex items-center gap-2">
                           <Button
                             id={`accept-order-btn-${ord.id}`}
                             onClick={() => handleAcceptOrder(ord.id)}
                             disabled={isActionBusy}
-                            className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3 rounded-2xl shadow-md flex items-center justify-center gap-2"
+                            className="flex-1"
                           >
-                            {isActionBusy ? (
-                              <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                            ) : (
-                              <span>✓</span>
-                            )}
+                            {isActionBusy && <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" />}
                             {t('list.acceptStart')}
                           </Button>
-
                           <Button
                             id={`reject-order-btn-${ord.id}`}
                             variant="outline"
                             onClick={() => openRejectModal(ticket)}
                             disabled={isActionBusy}
-                            className="border-red-200 text-red-600 hover:bg-red-50 font-bold px-4 py-3 rounded-2xl"
+                            className="text-red-700 border-line-strong hover:bg-red-50"
                           >
                             {t('reject')}
                           </Button>
                         </div>
-                      </div>
-                    )}
+                      )}
 
-                    {/* State: Preparing */}
-                    {ord.orderStatus === 'preparing' && (
-                      <div className="space-y-3">
-                        <div className="p-3.5 bg-purple-50 rounded-2xl border border-purple-200 text-xs text-purple-900 flex items-center justify-between">
-                          <div className="flex items-center gap-2">
-                            <span className="animate-pulse text-base">👨‍🍳</span>
-                            <span className="font-semibold">{t('list.cooking')}</span>
-                          </div>
-                          <span className="font-extrabold bg-purple-200/80 px-2.5 py-1 rounded-lg">
-                            {t('list.target', { min: maxPrepTime })}
-                          </span>
-                        </div>
-
+                      {ord.orderStatus === 'preparing' && (
                         <Button
                           id={`ready-pickup-btn-${ord.id}`}
                           onClick={() => handleMarkReady(ord.id)}
                           disabled={isActionBusy}
-                          className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3.5 rounded-2xl shadow-md flex items-center justify-center gap-2"
+                          className="w-full"
                         >
-                          {isActionBusy ? (
-                            <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                          ) : (
-                            <span className="text-base">🛎️</span>
-                          )}
+                          {isActionBusy && <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" />}
                           {t('list.markReady')}
                         </Button>
-                      </div>
-                    )}
+                      )}
 
-                    {/* Self-delivery / pickup: the kitchen completes the handover itself */}
-                    {ord.sellerHandsOver && ['ready', 'dispatched', 'in_transit'].includes(ord.orderStatus) && (
-                      <SelfHandoverActions
-                        orderId={ord.id}
-                        orderStatus={ord.orderStatus}
-                        deliveryType={ord.deliveryType}
-                        onChanged={() => loadOrders(true)}
-                      />
-                    )}
+                      {ord.sellerHandsOver && ['ready', 'dispatched', 'in_transit'].includes(ord.orderStatus) && (
+                        <SelfHandoverActions
+                          orderId={ord.id}
+                          orderStatus={ord.orderStatus}
+                          deliveryType={ord.deliveryType}
+                          onChanged={() => loadOrders(true)}
+                        />
+                      )}
 
-                    {/* State: Ready (a Nuray rider is coming) */}
-                    {ord.orderStatus === 'ready' && !ord.sellerHandsOver && (
-                      <div className="p-4 bg-indigo-50 rounded-2xl border border-indigo-200 text-center">
-                        <p className="text-sm font-bold text-indigo-900 mb-1 flex items-center justify-center gap-2">
-                          <span>📦</span> {t('list.readyCounter')}
-                        </p>
-                        <p className="text-xs text-indigo-700">
-                          {t('list.riderAssigned')}
-                        </p>
-                      </div>
-                    )}
+                      {ord.orderStatus === 'ready' && !ord.sellerHandsOver && (
+                        <p className="text-sm text-brand-ink">{t('list.readyCounter')}</p>
+                      )}
 
-                    {/* State: Dispatched or In Transit (with a Nuray rider) */}
-                    {(ord.orderStatus === 'dispatched' || ord.orderStatus === 'in_transit') && !ord.sellerHandsOver && (
-                      <div className="p-4 bg-brand-50 rounded-2xl border border-brand-200 text-center">
-                        <p className="text-sm font-bold text-brand-900 mb-1 flex items-center justify-center gap-2">
-                          <span>🛵</span> {t('list.riderOnWay')}
-                        </p>
-                        <p className="text-xs text-brand-ink">
-                          {t('list.enRoute')}
-                        </p>
-                      </div>
-                    )}
+                      {(ord.orderStatus === 'dispatched' || ord.orderStatus === 'in_transit') && !ord.sellerHandsOver && (
+                        <p className="text-sm text-muted">{t('list.riderOnWay')}</p>
+                      )}
 
-                    {/* State: Delivered / Completed */}
-                    {(ord.orderStatus === 'delivered' || ord.orderStatus === 'completed') && (
-                      <div className="p-4 bg-emerald-50 rounded-2xl border border-emerald-200 flex items-center justify-between">
-                        <div>
-                          <p className="text-sm font-bold text-emerald-900">{t('list.deliveredTitle')}</p>
-                          <p className="text-xs text-emerald-700">{t('list.settlement')}</p>
-                        </div>
-                        <span className="text-emerald-700 font-extrabold text-sm">{t('list.completedCheck')}</span>
-                      </div>
-                    )}
-
-                    {/* State: Cancelled */}
-                    {ord.orderStatus === 'cancelled' && (
-                      <div className="p-3.5 bg-red-50 rounded-2xl border border-red-200 text-center">
-                        <p className="text-xs font-bold text-red-900">{t('list.closed')}</p>
-                      </div>
-                    )}
-                  </div>
-                </div>
+                      {(ord.orderStatus === 'delivered' || ord.orderStatus === 'completed') && (
+                        <p className="text-sm text-muted">{t('list.deliveredTitle')}</p>
+                      )}
+                    </div>
+                  )}
+                </article>
               );
             })}
           </div>
         )}
 
-        {/* Pagination */}
         {totalPages > 1 && (
-          <div className="flex items-center justify-between bg-white rounded-2xl p-4 border border-gray-100 shadow-sm">
+          <div className="mt-6 pt-4 border-t border-line flex items-center justify-between">
             <Button
               variant="outline"
               onClick={() => setPage((p) => Math.max(1, p - 1))}
               disabled={page === 1}
-              size="sm"
             >
               {t('list.previous')}
             </Button>
-            <span className="text-xs font-semibold text-gray-600">
+            <span className="text-sm text-muted tabular-nums">
               {t('list.pageOf', { page, total: totalPages })}
             </span>
             <Button
               variant="outline"
               onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
               disabled={page === totalPages}
-              size="sm"
             >
               {tc('next')}
             </Button>
           </div>
         )}
 
-        {/* Reject Reason Modal */}
         {rejectingOrder && (
-          <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="fixed inset-0 z-50 bg-black/50 flex items-end sm:items-center justify-center p-4">
             <div
               id="reject-order-modal"
-              className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-gray-100 animate-in fade-in zoom-in duration-200 space-y-5"
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="reject-order-title"
+              className="bg-surface text-ink rounded-[20px] max-w-md w-full p-5 sm:p-6 shadow-xl border border-line space-y-5"
             >
-              <div className="flex items-center justify-between border-b border-gray-100 pb-4">
+              <div className="flex items-start justify-between gap-4">
                 <div>
-                  <h3 className="text-lg font-bold text-gray-900">{t('list.rejectTitle')} <span data-ltr>#{rejectingOrder.order.orderNumber}</span></h3>
-                  <p className="text-xs text-gray-500 mt-0.5">{t('list.rejectHint')}</p>
+                  <h3 id="reject-order-title" className="text-lg font-semibold text-ink">
+                    {t('list.rejectTitle')} <span data-ltr>#{rejectingOrder.order.orderNumber}</span>
+                  </h3>
+                  <p className="text-sm text-muted mt-0.5">{t('list.rejectHint')}</p>
                 </div>
                 <button
+                  type="button"
                   onClick={closeRejectModal}
                   aria-label={tc('close')}
-                  className="w-8 h-8 rounded-full bg-gray-100 hover:bg-gray-200 text-gray-500 flex items-center justify-center text-sm"
+                  className="-me-2 -mt-1 w-11 h-11 shrink-0 rounded-full text-muted hover:bg-raised flex items-center justify-center focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-brand/40"
                 >
-                  ✕
+                  <X className="w-5 h-5" aria-hidden="true" />
                 </button>
               </div>
 
-              {/* Reasons List */}
-              <div className="space-y-2.5">
+              <fieldset className="space-y-2">
+                <legend className="sr-only">{t('list.rejectHint')}</legend>
                 {REJECTION_REASONS.map((r) => (
                   <label
                     key={r.id}
-                    className={`flex items-center gap-3 p-3.5 rounded-2xl border cursor-pointer transition-all ${
+                    className={`flex items-center gap-3 min-h-11 px-3.5 py-2.5 rounded-xl border cursor-pointer text-sm transition-colors ${
                       selectedReason === r.id
-                        ? 'border-red-500 bg-red-50/50 text-red-900 font-semibold'
-                        : 'border-gray-200 hover:bg-gray-50 text-gray-700'
+                        ? 'border-red-300 bg-red-50 text-red-700 font-medium'
+                        : 'border-line text-ink hover:bg-raised'
                     }`}
                   >
                     <input
@@ -741,34 +611,34 @@ export default function SellerOrdersPage() {
                       value={r.id}
                       checked={selectedReason === r.id}
                       onChange={() => setSelectedReason(r.id)}
-                      className="text-red-600 focus:ring-red-500 h-4 w-4"
+                      className="h-4 w-4 accent-red-700"
                     />
-                    <span className="text-sm">{t(r.key)}</span>
+                    <span>{t(r.key)}</span>
                   </label>
                 ))}
-              </div>
+              </fieldset>
 
-              {/* Optional Custom Note */}
               <div>
-                <label className="block text-xs font-semibold text-gray-700 mb-1.5">
+                <label htmlFor="reject-order-note" className="block text-sm text-muted mb-1.5">
                   {t('list.additionalNote')}
                 </label>
                 <textarea
+                  id="reject-order-note"
                   value={customReasonText}
                   onChange={(e) => setCustomReasonText(e.target.value)}
                   placeholder={t('list.notePlaceholder')}
                   rows={2}
-                  className="w-full text-xs p-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-red-500 focus:border-transparent outline-none"
+                  className="w-full text-sm p-3 rounded-xl bg-surface text-ink border border-line-strong focus:outline-none focus:ring-3 focus:ring-brand/40"
                 />
               </div>
 
-              {/* Modal Actions */}
-              <div className="flex items-center gap-3 pt-2">
+              <div className="flex items-center gap-2">
                 <Button
                   id="confirm-reject-btn"
+                  variant="destructive"
                   onClick={handleConfirmReject}
                   disabled={isSubmittingReject}
-                  className="flex-1 bg-red-600 hover:bg-red-700 text-white font-bold py-3 rounded-xl shadow-md"
+                  className="flex-1"
                 >
                   {isSubmittingReject ? t('list.rejecting') : t('list.confirmReject')}
                 </Button>
@@ -776,7 +646,6 @@ export default function SellerOrdersPage() {
                   variant="outline"
                   onClick={closeRejectModal}
                   disabled={isSubmittingReject}
-                  className="py-3 px-5 rounded-xl border-gray-300"
                 >
                   {tc('back')}
                 </Button>
@@ -785,7 +654,6 @@ export default function SellerOrdersPage() {
           </div>
         )}
 
-        {/* Live Customer Chat Modal */}
         {chatTicket && (
           <OrderChatModal
             orderId={chatTicket.order.id}

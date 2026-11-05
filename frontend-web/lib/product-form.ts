@@ -68,23 +68,23 @@ export interface VariantDraft {
 export const MAX_VARIANTS = 20;
 export const MAX_IMAGES = 4;
 
-export const PRODUCT_TYPE_OPTIONS: Array<{ value: ProductType; label: string; icon: string; description: string; selected: string }> = [
-  { value: 'frozen', label: 'Frozen', icon: '❄️', description: 'Stored frozen, long shelf life', selected: 'bg-blue-50 border-blue-500' },
-  { value: 'fresh', label: 'Fresh', icon: '🥬', description: 'Made fresh daily, same-day delivery', selected: 'bg-green-50 border-green-500' },
-  { value: 'ready_to_eat', label: 'Ready to Eat', icon: '🍽️', description: 'Ready to eat immediately', selected: 'bg-brand-50 border-brand' },
-  { value: 'ready_to_cook', label: 'Ready to Cook', icon: '🍳', description: 'Prepared, needs cooking', selected: 'bg-purple-50 border-purple-500' },
+export const PRODUCT_TYPE_OPTIONS: Array<{ value: ProductType; label: string; description: string }> = [
+  { value: 'frozen', label: 'Frozen', description: 'Stored frozen, long shelf life' },
+  { value: 'fresh', label: 'Fresh', description: 'Made fresh daily, same-day delivery' },
+  { value: 'ready_to_eat', label: 'Ready to eat', description: 'Ready to eat immediately' },
+  { value: 'ready_to_cook', label: 'Ready to cook', description: 'Prepared, needs cooking' },
 ];
 
 export const UNIT_OPTIONS = [
-  { value: 'piece', label: 'Per Piece', example: '1 samosa' },
-  { value: 'pack', label: 'Per Pack', example: '6 samosas' },
-  { value: 'dozen', label: 'Per Dozen', example: '12 pieces' },
+  { value: 'piece', label: 'Per piece', example: '1 samosa' },
+  { value: 'pack', label: 'Per pack', example: '6 samosas' },
+  { value: 'dozen', label: 'Per dozen', example: '12 pieces' },
   { value: '100g', label: 'Per 100g', example: '100 grams' },
   { value: '250g', label: 'Per 250g', example: '250 grams' },
   { value: '500g', label: 'Per 500g', example: '500 grams' },
-  { value: '1kg', label: 'Per 1 KG', example: '1000 grams' },
-  { value: 'kg', label: 'Per KG', example: 'per kilogram' },
-  { value: 'other', label: 'Other (Custom)', example: 'Custom unit' },
+  { value: '1kg', label: 'Per 1 kg', example: '1000 grams' },
+  { value: 'kg', label: 'Per kg', example: 'per kilogram' },
+  { value: 'other', label: 'Other (custom)', example: 'Custom unit' },
 ];
 
 /** A saved dish as GET /products/:id returns it (the fields the form reads). */

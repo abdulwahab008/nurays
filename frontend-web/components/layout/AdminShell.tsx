@@ -48,7 +48,6 @@ export function AdminShell({ children }: { children: ReactNode }) {
   return (
     <div className="min-h-screen" style={{ background: 'var(--cream-50)' }}>
       <DashboardNavbar
-        title="Nuray"
         userType="admin"
         onMenuToggle={() => setDrawerPath(drawerOpen ? null : pathname)}
         drawerOpen={drawerOpen}

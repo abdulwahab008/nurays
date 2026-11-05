@@ -316,7 +316,7 @@ test.describe.serial('Complete Seller End-to-End Workflow (Sections 1-14)', () =
 
     // Verify Active status badge and Store Live button
     await expect(page.locator('#store-live-toggle-btn')).toBeVisible();
-    await expect(page.locator('#store-live-toggle-btn')).toContainText('Store: OPEN');
+    await expect(page.locator('#store-live-toggle-btn')).toHaveAttribute('aria-checked', 'true');
 
     await page.screenshot({
       path: path.join(ARTIFACT_SCREENSHOT_DIR, '04_seller_dashboard_active.png'),
@@ -336,7 +336,7 @@ test.describe.serial('Complete Seller End-to-End Workflow (Sections 1-14)', () =
     // Toggle store to CLOSED
     await toggleBtn.click();
     await page.waitForTimeout(800);
-    await expect(toggleBtn).toContainText('Store: CLOSED');
+    await expect(toggleBtn).toHaveAttribute('aria-checked', 'false');
 
     await page.screenshot({
       path: path.join(ARTIFACT_SCREENSHOT_DIR, '05_seller_store_closed.png'),
@@ -346,7 +346,7 @@ test.describe.serial('Complete Seller End-to-End Workflow (Sections 1-14)', () =
     // Toggle store back to OPEN
     await toggleBtn.click();
     await page.waitForTimeout(800);
-    await expect(toggleBtn).toContainText('Store: OPEN');
+    await expect(toggleBtn).toHaveAttribute('aria-checked', 'true');
   });
 
   // 5. SECTION 4: Seller Adds Food Item with Kitchen Preparation Time Presets

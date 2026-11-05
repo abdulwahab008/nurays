@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/toast';
 import { apiClient, apiErrorMessage } from '@/lib/api-client';
@@ -8,6 +9,10 @@ import { useAuthStore } from '@/lib/store/auth-store';
 import { useT } from '@/lib/i18n';
 import { joinMessages } from '@/lib/i18n/messages/join';
 import { bankAccountIsWrong } from '@/lib/payout-account';
+import { commonMessages } from '@/lib/i18n/messages/common';
+import { cn } from '@/lib/utils';
+import { fieldClass, hintClass, labelClass, textareaClass } from '@/components/sellers/product-form/fields';
+import { Plus, X } from 'lucide-react';
 
 interface SellerOnboardingModalProps {
   isOpen: boolean;
@@ -50,6 +55,7 @@ import { useShallow } from 'zustand/react/shallow';
 export function SellerOnboardingModal({ isOpen, onClose, onComplete }: SellerOnboardingModalProps) {
   const { showToast } = useToast();
   const t = useT(joinMessages);
+  const tc = useT(commonMessages);
   const { user } = useAuthStore(useShallow((s) => ({ user: s.user })));
   const [step, setStep] = useState(1);
   const [loading, setLoading] = useState(false);
@@ -256,254 +262,230 @@ export function SellerOnboardingModal({ isOpen, onClose, onComplete }: SellerOnb
 
   if (!isOpen) return null;
 
+  const field = (name: string) => cn(fieldClass, errors[name] && 'border-red-700 bg-red-50');
+  const fieldError = (name: string) =>
+    errors[name] ? <p className="mt-1.5 text-sm text-red-700">{errors[name]}</p> : null;
+  const required = <span className="text-muted">*</span>;
+  const optional = <span className="text-muted font-normal">{t('ob.optional')}</span>;
+  const dropClass =
+    'flex flex-col items-center justify-center gap-1 border border-dashed border-line-strong bg-raised text-muted cursor-pointer hover:border-brand-600 hover:text-ink transition-colors focus-within:ring-3 focus-within:ring-brand/40';
+
+  /** A small round "remove" mark on a photo, with a 44px tap area around it. */
+  const removeButton = (onClick: () => void, place: string) => (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-label={tc('remove')}
+      className={`absolute ${place} w-11 h-11 flex items-center justify-center rounded-full focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-brand/40`}
+    >
+      <span aria-hidden="true" className="w-7 h-7 rounded-full bg-surface border border-line-strong text-ink shadow-sm flex items-center justify-center">
+        <X className="w-4 h-4" />
+      </span>
+    </button>
+  );
+
+  const stepHeading = (title: string, sub: string) => (
+    <div className="mb-6">
+      <h3 className="text-[17px] font-semibold text-ink">{title}</h3>
+      <p className="text-sm text-muted mt-0.5">{sub}</p>
+    </div>
+  );
+
   const renderStepIndicator = () => (
-    <div className="flex items-center justify-center mb-8">
-      {[1, 2, 3, 4, 5].map((s, idx) => (
-        <div key={s} className="flex items-center">
-          <div
-            className={`w-10 h-10 rounded-full flex items-center justify-center font-semibold transition-all duration-300 ${
-              s < step
-                ? 'bg-gray-600 text-white'
-                : s === step
-                ? 'bg-gray-600 text-white ring-4 ring-gray-100'
-                : 'bg-gray-200 text-gray-500'
-            }`}
-          >
-            {s < step ? (
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-              </svg>
-            ) : (
-              s
-            )}
-          </div>
-          {idx < 4 && (
-            <div className={`w-12 h-1 mx-1 rounded ${s < step ? 'bg-gray-600' : 'bg-gray-200'}`} />
-          )}
-        </div>
+    <div className="flex gap-1" aria-hidden="true">
+      {[1, 2, 3, 4, 5].map((s) => (
+        <span key={s} className={`h-1.5 flex-1 rounded-full ${s < step ? 'bg-brand-600' : s === step ? 'bg-brand-300' : 'bg-raised'}`} />
       ))}
     </div>
   );
 
   const renderStep1 = () => (
-    <div className="space-y-6">
-      <div className="text-center mb-6">
-        <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
-          <svg className="w-8 h-8 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
-          </svg>
+    <div>
+      {stepHeading(t('ob.s1Title'), t('ob.s1Sub'))}
+      <div className="space-y-5">
+        <div>
+          <label htmlFor="ob-businessName" className={labelClass}>
+            {t('ob.nameEn')} {required}
+          </label>
+          <input
+            id="ob-businessName"
+            type="text"
+            name="businessName"
+            value={formData.businessName}
+            onChange={handleInputChange}
+            className={field('businessName')}
+            aria-invalid={Boolean(errors.businessName)}
+            placeholder={t('ob.nameEnPh')}
+          />
+          {fieldError('businessName')}
         </div>
-        <h3 className="text-xl font-bold text-gray-900">{t('ob.s1Title')}</h3>
-        <p className="text-gray-500 mt-1">{t('ob.s1Sub')}</p>
-      </div>
 
-      <div>
-        <label className="block text-sm font-medium text-gray-700 mb-2">
-          {t('ob.nameEn')} <span className="text-gray-600">*</span>
-        </label>
-        <input
-          type="text"
-          name="businessName"
-          value={formData.businessName}
-          onChange={handleInputChange}
-          className={`w-full px-4 py-3 border rounded-xl focus:ring-2 focus:ring-green-500 focus:border-green-500 transition-all ${
-            errors.businessName ? 'border-red-500 bg-red-50' : 'border-gray-300'
-          }`}
-          placeholder={t('ob.nameEnPh')}
-        />
-        {errors.businessName && (
-          <p className="text-gray-600 text-sm mt-1 flex items-center gap-1">
-            <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-              <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
-            </svg>
-            {errors.businessName}
-          </p>
-        )}
-      </div>
+        <div>
+          <label htmlFor="ob-businessNameUrdu" className={labelClass}>
+            {t('ob.nameUr')} {optional}
+          </label>
+          <input
+            id="ob-businessNameUrdu"
+            type="text"
+            name="businessNameUrdu"
+            value={formData.businessNameUrdu}
+            onChange={handleInputChange}
+            className={fieldClass}
+            placeholder={t('ob.nameUrPh')}
+            dir="rtl"
+          />
+        </div>
 
-      <div>
-        <label className="block text-sm font-medium text-gray-700 mb-2">
-          {t('ob.nameUr')} <span className="text-gray-500 text-xs">{t('ob.optional')}</span>
-        </label>
-        <input
-          type="text"
-          name="businessNameUrdu"
-          value={formData.businessNameUrdu}
-          onChange={handleInputChange}
-          className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-green-500 transition-all"
-          placeholder={t('ob.nameUrPh')}
-          dir="rtl"
-        />
-      </div>
-
-      <div>
-        <label className="block text-sm font-medium text-gray-700 mb-2">
-          {t('ob.description')} <span className="text-gray-500 text-xs">{t('ob.optional')}</span>
-        </label>
-        <textarea
-          name="description"
-          value={formData.description}
-          onChange={handleInputChange}
-          rows={3}
-          className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-green-500 transition-all resize-none"
-          placeholder={t('ob.descPh')}
-        />
+        <div>
+          <label htmlFor="ob-description" className={labelClass}>
+            {t('ob.description')} {optional}
+          </label>
+          <textarea
+            id="ob-description"
+            name="description"
+            value={formData.description}
+            onChange={handleInputChange}
+            rows={3}
+            className={textareaClass}
+            placeholder={t('ob.descPh')}
+          />
+        </div>
       </div>
     </div>
   );
 
   const renderStep2 = () => (
-    <div className="space-y-4">
-      <div className="text-center mb-3">
-        <h3 className="text-lg font-bold text-gray-900">{t('ob.s2Title')}</h3>
-        <p className="text-gray-500 text-xs mt-0.5">{t('ob.s2Sub')}</p>
-      </div>
+    <div>
+      {stepHeading(t('ob.s2Title'), t('ob.s2Sub'))}
+      <div className="space-y-5">
+        <LocationMap
+          center={{
+            lat: formData.latitude || 31.5204,
+            lng: formData.longitude || 74.3587,
+          }}
+          markerPosition={
+            formData.latitude && formData.longitude
+              ? { lat: formData.latitude, lng: formData.longitude }
+              : null
+          }
+          onLocationSelect={handleLocationSelect}
+          height="240px"
+        />
 
-      <LocationMap
-        center={{
-          lat: formData.latitude || 31.5204,
-          lng: formData.longitude || 74.3587,
-        }}
-        markerPosition={
-          formData.latitude && formData.longitude
-            ? { lat: formData.latitude, lng: formData.longitude }
-            : null
-        }
-        onLocationSelect={handleLocationSelect}
-        height="240px"
-      />
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div>
+            <label htmlFor="ob-city" className={labelClass}>
+              {t('ob.city')} {required}
+            </label>
+            <select
+              id="ob-city"
+              name="city"
+              value={formData.city}
+              onChange={handleInputChange}
+              className={field('city')}
+              aria-invalid={Boolean(errors.city)}
+            >
+              <option value="">{t('ob.selectCity')}</option>
+              {CITIES.map(city => (
+                <option key={city} value={city}>{city}</option>
+              ))}
+            </select>
+            {fieldError('city')}
+          </div>
 
-      <div className="grid grid-cols-2 gap-3">
-        <div>
-          <label className="block text-xs font-semibold text-gray-700 mb-1">
-            {t('ob.city')} <span className="text-red-500">*</span>
-          </label>
-          <select
-            name="city"
-            value={formData.city}
-            onChange={handleInputChange}
-            className={`w-full px-3 py-2 text-sm border rounded-xl focus:ring-2 focus:ring-emerald-500 ${
-              errors.city ? 'border-red-500 bg-red-50' : 'border-gray-200'
-            }`}
-          >
-            <option value="">{t('ob.selectCity')}</option>
-            {CITIES.map(city => (
-              <option key={city} value={city}>{city}</option>
-            ))}
-          </select>
-          {errors.city && <p className="text-red-500 text-xs mt-1">{errors.city}</p>}
+          <div>
+            <label htmlFor="ob-area" className={labelClass}>
+              {t('ob.area')} {required}
+            </label>
+            <input
+              id="ob-area"
+              type="text"
+              name="area"
+              value={formData.area}
+              onChange={handleInputChange}
+              className={field('area')}
+              aria-invalid={Boolean(errors.area)}
+              placeholder={t('ob.areaPh')}
+            />
+            {fieldError('area')}
+          </div>
         </div>
 
         <div>
-          <label className="block text-xs font-semibold text-gray-700 mb-1">
-            {t('ob.area')} <span className="text-red-500">*</span>
+          <label htmlFor="ob-address" className={labelClass}>
+            {t('ob.fullAddress')}
           </label>
           <input
+            id="ob-address"
             type="text"
-            name="area"
-            value={formData.area}
+            name="address"
+            value={formData.address}
             onChange={handleInputChange}
-            className={`w-full px-3 py-2 text-sm border rounded-xl focus:ring-2 focus:ring-emerald-500 ${
-              errors.area ? 'border-red-500 bg-red-50' : 'border-gray-200'
-            }`}
-            placeholder={t('ob.areaPh')}
+            className={fieldClass}
+            placeholder={t('ob.addressPh')}
           />
-          {errors.area && <p className="text-red-500 text-xs mt-1">{errors.area}</p>}
         </div>
-      </div>
-
-      <div>
-        <label className="block text-xs font-semibold text-gray-700 mb-1">
-          {t('ob.fullAddress')}
-        </label>
-        <input
-          type="text"
-          name="address"
-          value={formData.address}
-          onChange={handleInputChange}
-          className="w-full px-3 py-2 text-sm border border-gray-200 rounded-xl focus:ring-2 focus:ring-emerald-500"
-          placeholder={t('ob.addressPh')}
-        />
       </div>
     </div>
   );
 
   const renderStep3 = () => (
-    <div className="space-y-6">
-      <div className="text-center mb-6">
-        <div className="w-16 h-16 bg-purple-100 rounded-full flex items-center justify-center mx-auto mb-4">
-          <svg className="w-8 h-8 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
-          </svg>
-        </div>
-        <h3 className="text-xl font-bold text-gray-900">{t('ob.s3Title')}</h3>
-        <p className="text-gray-500 mt-1">{t('ob.s3Sub')}</p>
-      </div>
+    <div>
+      {stepHeading(t('ob.s3Title'), t('ob.s3Sub'))}
 
-      {/* Mobile Wallets */}
-      <div className="bg-gradient-to-r from-red-50 to-brand-50 p-4 rounded-xl border border-red-100">
-        <h4 className="font-semibold text-gray-800 mb-3 flex items-center gap-2">
-          <svg className="w-5 h-5 text-gray-600" fill="currentColor" viewBox="0 0 20 20">
-            <path d="M2 3a1 1 0 011-1h2.153a1 1 0 01.986.836l.74 4.435a1 1 0 01-.54 1.06l-1.548.773a11.037 11.037 0 006.105 6.105l.774-1.548a1 1 0 011.059-.54l4.435.74a1 1 0 01.836.986V17a1 1 0 01-1 1h-2C7.82 18 2 12.18 2 5V3z" />
-          </svg>
-          {t('ob.mobileWallets')}
-        </h4>
-        <div className="grid grid-cols-2 gap-4">
+      <section aria-labelledby="ob-wallets">
+        <h4 id="ob-wallets" className="text-sm font-semibold text-ink mb-4">{t('ob.mobileWallets')}</h4>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
+            <label htmlFor="ob-jazzcash" className={labelClass}>
               {t('ob.jazzcash')}
             </label>
             <input
+              id="ob-jazzcash"
               dir="ltr"
               type="tel"
               name="jazzcashNumber"
               value={formData.jazzcashNumber}
               onChange={handleInputChange}
-              className={`w-full px-4 py-3 border rounded-xl focus:ring-2 focus:ring-red-400 focus:border-red-400 transition-all ${
-                errors.jazzcashNumber ? 'border-red-500 bg-red-50' : 'border-gray-300'
-              }`}
+              className={field('jazzcashNumber')}
+              aria-invalid={Boolean(errors.jazzcashNumber)}
               placeholder="03XXXXXXXXX"
               maxLength={11}
             />
-            {errors.jazzcashNumber && <p className="text-gray-600 text-sm mt-1">{errors.jazzcashNumber}</p>}
+            {fieldError('jazzcashNumber')}
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
+            <label htmlFor="ob-easypaisa" className={labelClass}>
               {t('ob.easypaisa')}
             </label>
             <input
+              id="ob-easypaisa"
               dir="ltr"
               type="tel"
               name="easypaisaNumber"
               value={formData.easypaisaNumber}
               onChange={handleInputChange}
-              className={`w-full px-4 py-3 border rounded-xl focus:ring-2 focus:ring-green-400 focus:border-green-400 transition-all ${
-                errors.easypaisaNumber ? 'border-red-500 bg-red-50' : 'border-gray-300'
-              }`}
+              className={field('easypaisaNumber')}
+              aria-invalid={Boolean(errors.easypaisaNumber)}
               placeholder="03XXXXXXXXX"
               maxLength={11}
             />
-            {errors.easypaisaNumber && <p className="text-gray-600 text-sm mt-1">{errors.easypaisaNumber}</p>}
+            {fieldError('easypaisaNumber')}
           </div>
         </div>
-      </div>
+      </section>
 
-      {/* Bank Account */}
-      <div className="bg-gradient-to-r from-blue-50 to-indigo-50 p-4 rounded-xl border border-blue-100">
-        <h4 className="font-semibold text-gray-800 mb-3 flex items-center gap-2">
-          <svg className="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 14v3m4-3v3m4-3v3M3 21h18M3 10h18M3 7l9-4 9 4M4 10h16v11H4V10z" />
-          </svg>
-          {t('ob.bankOptional')}
-        </h4>
-        <div className="space-y-3">
+      <section aria-labelledby="ob-bank" className="mt-6 pt-6 border-t border-line">
+        <h4 id="ob-bank" className="text-sm font-semibold text-ink mb-4">{t('ob.bankOptional')}</h4>
+        <div className="space-y-4">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">{t('bankName')}</label>
+            <label htmlFor="ob-bankName" className={labelClass}>{t('bankName')}</label>
             <select
+              id="ob-bankName"
               name="bankName"
               value={formData.bankName}
               onChange={handleInputChange}
-              className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-400 focus:border-blue-400 transition-all"
+              className={fieldClass}
             >
               <option value="">{t('ob.selectBank')}</option>
               <option value="HBL">HBL - Habib Bank Limited</option>
@@ -517,299 +499,214 @@ export function SellerOnboardingModal({ isOpen, onClose, onComplete }: SellerOnb
               <option value="Other">{t('ob.otherBank')}</option>
             </select>
           </div>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">{t('ob.accountNumber')}</label>
+              <label htmlFor="ob-bankAccountNumber" className={labelClass}>{t('ob.accountNumber')}</label>
               <input
+                id="ob-bankAccountNumber"
                 dir="ltr"
                 type="text"
                 name="bankAccountNumber"
                 value={formData.bankAccountNumber}
                 onChange={handleInputChange}
-                className={`w-full px-4 py-3 border rounded-xl focus:ring-2 focus:ring-blue-400 focus:border-blue-400 transition-all ${
-                  errors.bankAccountNumber ? 'border-red-500 bg-red-50' : 'border-gray-300'
-                }`}
+                className={field('bankAccountNumber')}
                 placeholder={t('ob.accountNumber')}
                 aria-invalid={Boolean(errors.bankAccountNumber)}
               />
-              {errors.bankAccountNumber && <p className="text-gray-600 text-sm mt-1">{errors.bankAccountNumber}</p>}
+              {fieldError('bankAccountNumber')}
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">{t('accountTitle')}</label>
+              <label htmlFor="ob-bankAccountTitle" className={labelClass}>{t('accountTitle')}</label>
               <input
+                id="ob-bankAccountTitle"
                 type="text"
                 name="bankAccountTitle"
                 value={formData.bankAccountTitle}
                 onChange={handleInputChange}
-                className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-400 focus:border-blue-400 transition-all"
+                className={fieldClass}
                 placeholder={t('ob.holderPh')}
               />
             </div>
           </div>
         </div>
-      </div>
+      </section>
 
-      <p className="text-xs text-gray-500 text-center">
-        {t('ob.payLater')}
-      </p>
+      <p className="mt-6 text-sm text-muted">{t('ob.payLater')}</p>
     </div>
   );
 
   const renderStep4 = () => (
-    <div className="space-y-6">
-      <div className="text-center mb-6">
-        <div className="w-16 h-16 bg-pink-100 rounded-full flex items-center justify-center mx-auto mb-4">
-          <svg className="w-8 h-8 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-          </svg>
-        </div>
-        <h3 className="text-xl font-bold text-gray-900">{t('ob.s4Title')}</h3>
-        <p className="text-gray-500 mt-1">{t('ob.s4Sub')}</p>
-      </div>
+    <div>
+      {stepHeading(t('ob.s4Title'), t('ob.s4Sub'))}
 
-      <div className="grid grid-cols-2 gap-6">
-        {/* Profile Image */}
+      <div className="grid grid-cols-1 sm:grid-cols-[auto_minmax(0,1fr)] gap-6">
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">{t('ob.profileImage')}</label>
-          <div className="relative">
-            {formData.profileImageUrl ? (
-              <div className="relative">
-                <img
-                  src={formData.profileImageUrl}
-                  alt={t('ob.altProfile')}
-                  className="w-32 h-32 rounded-full object-cover mx-auto border-4 border-green-200"
-                />
-                <button
-                  type="button"
-                  onClick={() => setFormData(prev => ({ ...prev, profileImageUrl: '' }))}
-                  className="absolute top-0 end-1/4 bg-red-500 text-white rounded-full w-6 h-6 flex items-center justify-center text-xs hover:bg-red-600"
-                >
-                  ×
-                </button>
-              </div>
-            ) : (
-              <label className="flex flex-col items-center justify-center w-32 h-32 mx-auto border-2 border-dashed border-gray-300 rounded-full cursor-pointer hover:border-gray-400 hover:bg-gray-50 transition-all">
-                <svg className="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-                </svg>
-                <span className="text-xs text-gray-500 mt-1">{t('ob.addPhoto')}</span>
-                <input
-                  type="file"
-                  accept="image/*"
-                  onChange={(e) => handleFileUpload(e, 'profileImageUrl')}
-                  className="hidden"
-                />
-              </label>
-            )}
-          </div>
-          <p className="text-xs text-gray-500 text-center mt-2">{t('ob.profileHint')}</p>
+          <p className={labelClass}>{t('ob.profileImage')}</p>
+          {formData.profileImageUrl ? (
+            <div className="relative w-32 h-32">
+              <img
+                src={formData.profileImageUrl}
+                alt={t('ob.altProfile')}
+                className="w-32 h-32 rounded-full object-cover border border-line"
+              />
+              {removeButton(() => setFormData(prev => ({ ...prev, profileImageUrl: '' })), '-top-2 -end-2')}
+            </div>
+          ) : (
+            <label className={`${dropClass} w-32 h-32 rounded-full`}>
+              <Plus className="w-6 h-6" aria-hidden="true" />
+              <span className="text-sm">{t('ob.addPhoto')}</span>
+              <input
+                type="file"
+                accept="image/*"
+                onChange={(e) => handleFileUpload(e, 'profileImageUrl')}
+                className="sr-only"
+              />
+            </label>
+          )}
+          <p className={hintClass}>{t('ob.profileHint')}</p>
+          {fieldError('profileImageUrl')}
         </div>
 
-        {/* Cover Image */}
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">{t('ob.coverImage')}</label>
-          <div className="relative">
-            {formData.coverImageUrl ? (
-              <div className="relative">
-                <img
-                  src={formData.coverImageUrl}
-                  alt={t('ob.altCover')}
-                  className="w-full h-32 rounded-xl object-cover border-2 border-green-200"
-                />
-                <button
-                  type="button"
-                  onClick={() => setFormData(prev => ({ ...prev, coverImageUrl: '' }))}
-                  className="absolute top-2 end-2 bg-red-500 text-white rounded-full w-6 h-6 flex items-center justify-center text-xs hover:bg-red-600"
-                >
-                  ×
-                </button>
-              </div>
-            ) : (
-              <label className="flex flex-col items-center justify-center w-full h-32 border-2 border-dashed border-gray-300 rounded-xl cursor-pointer hover:border-gray-400 hover:bg-gray-50 transition-all">
-                <svg className="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                </svg>
-                <span className="text-xs text-gray-500 mt-1">{t('ob.addCover')}</span>
-                <input
-                  type="file"
-                  accept="image/*"
-                  onChange={(e) => handleFileUpload(e, 'coverImageUrl')}
-                  className="hidden"
-                />
-              </label>
-            )}
-          </div>
-          <p className="text-xs text-gray-500 text-center mt-2">{t('ob.coverHint')}</p>
+          <p className={labelClass}>{t('ob.coverImage')}</p>
+          {formData.coverImageUrl ? (
+            <div className="relative">
+              <img
+                src={formData.coverImageUrl}
+                alt={t('ob.altCover')}
+                className="w-full h-32 rounded-xl object-cover border border-line"
+              />
+              {removeButton(() => setFormData(prev => ({ ...prev, coverImageUrl: '' })), 'top-0 end-0')}
+            </div>
+          ) : (
+            <label className={`${dropClass} w-full h-32 rounded-xl`}>
+              <Plus className="w-6 h-6" aria-hidden="true" />
+              <span className="text-sm">{t('ob.addCover')}</span>
+              <input
+                type="file"
+                accept="image/*"
+                onChange={(e) => handleFileUpload(e, 'coverImageUrl')}
+                className="sr-only"
+              />
+            </label>
+          )}
+          <p className={hintClass}>{t('ob.coverHint')}</p>
+          {fieldError('coverImageUrl')}
         </div>
       </div>
     </div>
   );
 
+  const cnicSide = (key: 'cnicFrontUrl' | 'cnicBackUrl', title: string, alt: string) => (
+    <div>
+      <p className={labelClass}>{title}</p>
+      {formData[key] ? (
+        <div className="relative">
+          <img src={formData[key]} alt={alt} className="w-full h-28 object-cover rounded-xl border border-line" />
+          {removeButton(() => setFormData(prev => ({ ...prev, [key]: '' })), 'top-0 end-0')}
+        </div>
+      ) : (
+        <label className={`${dropClass} h-28 rounded-xl`}>
+          <Plus className="w-5 h-5" aria-hidden="true" />
+          <span className="text-sm">{t('ob.upload')}</span>
+          <input type="file" accept="image/*" onChange={(e) => handleFileUpload(e, key)} className="sr-only" />
+        </label>
+      )}
+      {fieldError(key)}
+    </div>
+  );
+
   const renderStep5 = () => (
-    <div className="space-y-6">
-      <div className="text-center mb-6">
-        <div className="w-16 h-16 bg-amber-100 rounded-full flex items-center justify-center mx-auto mb-4">
-          <svg className="w-8 h-8 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
-          </svg>
-        </div>
-        <h3 className="text-xl font-bold text-gray-900">{t('ob.s5Title')}</h3>
-        <p className="text-gray-500 mt-1">{t('ob.s5Sub')}</p>
-      </div>
+    <div>
+      {stepHeading(t('ob.s5Title'), t('ob.s5Sub'))}
 
-      {/* CNIC Section */}
-      <div className="bg-gray-50 p-4 rounded-xl">
-        <h4 className="font-semibold text-gray-800 mb-3">{t('ob.cnicPhotos')}</h4>
+      <section aria-labelledby="ob-cnic">
+        <h4 id="ob-cnic" className="text-sm font-semibold text-ink mb-4">{t('ob.cnicPhotos')}</h4>
         <div className="grid grid-cols-2 gap-4">
-          {/* CNIC Front */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">{t('ob.frontSide')}</label>
-            {formData.cnicFrontUrl ? (
-              <div className="relative">
-                <img src={formData.cnicFrontUrl} alt={t('ob.altCnicFront')} className="w-full h-24 object-cover rounded-lg border" />
-                <button
-                  type="button"
-                  onClick={() => setFormData(prev => ({ ...prev, cnicFrontUrl: '' }))}
-                  className="absolute top-1 end-1 bg-red-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs"
-                >
-                  ×
-                </button>
-              </div>
-            ) : (
-              <label className="flex flex-col items-center justify-center h-24 border-2 border-dashed border-gray-300 rounded-lg cursor-pointer hover:border-gray-400 hover:bg-gray-50 transition-all">
-                <svg className="w-6 h-6 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-                </svg>
-                <span className="text-xs text-gray-500">{t('ob.upload')}</span>
-                <input type="file" accept="image/*" onChange={(e) => handleFileUpload(e, 'cnicFrontUrl')} className="hidden" />
-              </label>
-            )}
-          </div>
-
-          {/* CNIC Back */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">{t('ob.backSide')}</label>
-            {formData.cnicBackUrl ? (
-              <div className="relative">
-                <img src={formData.cnicBackUrl} alt={t('ob.altCnicBack')} className="w-full h-24 object-cover rounded-lg border" />
-                <button
-                  type="button"
-                  onClick={() => setFormData(prev => ({ ...prev, cnicBackUrl: '' }))}
-                  className="absolute top-1 end-1 bg-red-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs"
-                >
-                  ×
-                </button>
-              </div>
-            ) : (
-              <label className="flex flex-col items-center justify-center h-24 border-2 border-dashed border-gray-300 rounded-lg cursor-pointer hover:border-gray-400 hover:bg-gray-50 transition-all">
-                <svg className="w-6 h-6 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-                </svg>
-                <span className="text-xs text-gray-500">{t('ob.upload')}</span>
-                <input type="file" accept="image/*" onChange={(e) => handleFileUpload(e, 'cnicBackUrl')} className="hidden" />
-              </label>
-            )}
-          </div>
+          {cnicSide('cnicFrontUrl', t('ob.frontSide'), t('ob.altCnicFront'))}
+          {cnicSide('cnicBackUrl', t('ob.backSide'), t('ob.altCnicBack'))}
         </div>
-      </div>
+      </section>
 
-      {/* Kitchen Photos */}
-      <div className="bg-gray-50 p-4 rounded-xl">
-        <h4 className="font-semibold text-gray-800 mb-3">{t('ob.kitchenPhotos')}</h4>
-        <div className="grid grid-cols-4 gap-2">
+      <section aria-labelledby="ob-kitchen" className="mt-6 pt-6 border-t border-line">
+        <h4 id="ob-kitchen" className="text-sm font-semibold text-ink mb-4">{t('ob.kitchenPhotos')}</h4>
+        <div className="grid grid-cols-3 sm:grid-cols-4 gap-3">
           {formData.kitchenPhotoUrls.map((url, index) => (
             <div key={index} className="relative">
-              <img src={url} alt={t('ob.altKitchen', { n: index + 1 })} className="w-full h-20 object-cover rounded-lg border" />
-              <button
-                type="button"
-                onClick={() => removeKitchenPhoto(index)}
-                className="absolute top-1 end-1 bg-red-500 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs"
-              >
-                ×
-              </button>
+              <img src={url} alt={t('ob.altKitchen', { n: index + 1 })} className="w-full h-20 object-cover rounded-xl border border-line" />
+              {removeButton(() => removeKitchenPhoto(index), 'top-0 end-0')}
             </div>
           ))}
           {formData.kitchenPhotoUrls.length < 6 && (
-            <label className="flex flex-col items-center justify-center h-20 border-2 border-dashed border-gray-300 rounded-lg cursor-pointer hover:border-gray-400 hover:bg-gray-50 transition-all">
-              <svg className="w-6 h-6 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-              </svg>
+            <label className={`${dropClass} h-20 rounded-xl`}>
+              <Plus className="w-5 h-5" aria-hidden="true" />
+              <span className="sr-only">{t('ob.kitchenPhotos')}</span>
               <input
                 type="file"
                 accept="image/*"
                 onChange={(e) => handleFileUpload(e, 'kitchenPhotoUrls')}
-                className="hidden"
+                className="sr-only"
               />
             </label>
           )}
         </div>
-        <p className="text-xs text-gray-500 mt-2">{t('ob.kitchenPhotosHint')}</p>
-      </div>
+        <p className={hintClass}>{t('ob.kitchenPhotosHint')}</p>
+        {fieldError('kitchenPhotoUrls')}
+      </section>
 
-      {/* Kitchen Video */}
-      <div className="bg-gray-50 p-4 rounded-xl">
-        <h4 className="font-semibold text-gray-800 mb-3">{t('ob.kitchenVideo')}</h4>
+      <section className="mt-6 pt-6 border-t border-line">
+        <label htmlFor="ob-kitchenVideoUrl" className="block text-sm font-semibold text-ink mb-4">{t('ob.kitchenVideo')}</label>
         <input
+          id="ob-kitchenVideoUrl"
           type="url"
           dir="ltr"
           name="kitchenVideoUrl"
           value={formData.kitchenVideoUrl}
           onChange={handleInputChange}
-          className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-green-500 transition-all"
+          className={fieldClass}
           placeholder={t('ob.videoPh')}
         />
-      </div>
+      </section>
 
-      <div className="bg-gray-50 p-4 rounded-xl border border-gray-200">
-        <p className="text-sm text-gray-800 flex items-start gap-2">
-          <svg className="w-5 h-5 mt-0.5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
-            <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
-          </svg>
-          <span>
-            {t('ob.docsNote')}
-          </span>
-        </p>
-      </div>
+      <p className="mt-6 rounded-xl bg-raised px-4 py-3 text-sm text-ink">{t('ob.docsNote')}</p>
     </div>
   );
 
   const stepTitles = [t('ob.step1'), t('ob.step2'), t('ob.step3'), t('ob.step4'), t('ob.step5')];
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center">
-      {/* Backdrop */}
-      <div 
+  // On document.body, so the page's own layers (the fixed top bar) cannot sit above the dialog.
+  return createPortal(
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 pt-[calc(1rem+var(--safe-top))] pb-[calc(1rem+var(--safe-bottom))]">
+      <div
         className="absolute inset-0 bg-black/50 backdrop-blur-sm"
         onClick={onClose}
       />
-      
-      {/* Modal */}
-      <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-hidden mx-4">
-        {/* Header */}
-        <div className="bg-gradient-to-r from-green-600 to-green-500 px-6 py-4 text-white">
-          <div className="flex items-center justify-between">
-            <div>
-              <h2 className="text-xl font-bold">{t('ob.header')}</h2>
-              <p className="text-gray-100 text-sm">{t('ob.stepOf', { step, total: totalSteps, title: stepTitles[step - 1] })}</p>
+
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="ob-title"
+        className="relative flex flex-col bg-surface border border-line rounded-[20px] shadow-2xl w-full max-w-2xl max-h-full overflow-hidden"
+      >
+        <div className="px-5 sm:px-6 pt-4 pb-4 border-b border-line">
+          <div className="flex items-start justify-between gap-4">
+            <div className="min-w-0 pt-1.5">
+              <h2 id="ob-title" className="text-lg font-semibold text-ink">{t('ob.header')}</h2>
+              <p className="text-sm text-muted">{t('ob.stepOf', { step, total: totalSteps, title: stepTitles[step - 1] })}</p>
             </div>
             <button
+              type="button"
               onClick={onClose}
-              className="p-2 hover:bg-white/20 rounded-lg transition-colors"
+              aria-label={tc('close')}
+              className="-me-2 w-11 h-11 shrink-0 flex items-center justify-center rounded-full text-muted hover:text-ink hover:bg-raised focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-brand/40"
             >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-              </svg>
+              <X className="w-5 h-5" aria-hidden="true" />
             </button>
           </div>
+          <div className="mt-4">{renderStepIndicator()}</div>
         </div>
 
-        {/* Step Indicator */}
-        <div className="px-6 pt-6">
-          {renderStepIndicator()}
-        </div>
-
-        {/* Content */}
-        <div className="px-6 pb-6 overflow-y-auto max-h-[50vh]">
+        <div className="flex-1 min-h-0 px-5 sm:px-6 py-6 overflow-y-auto">
           {step === 1 && renderStep1()}
           {step === 2 && renderStep2()}
           {step === 3 && renderStep3()}
@@ -817,39 +714,32 @@ export function SellerOnboardingModal({ isOpen, onClose, onComplete }: SellerOnb
           {step === 5 && renderStep5()}
         </div>
 
-        {/* Footer */}
-        <div className="border-t border-gray-200 px-6 py-4 bg-gray-50 flex items-center justify-between">
-          <div>
-            {step > 1 && (
-              <Button
-                type="button"
-                variant="outline"
-                onClick={handleBack}
-                disabled={loading}
-              >
-                {t('ob.back')}
+        <div className="border-t border-line px-5 sm:px-6 py-4 flex flex-col-reverse gap-2 sm:flex-row sm:items-center">
+          {step > 1 && (
+            <Button
+              type="button"
+              variant="outline"
+              onClick={handleBack}
+              disabled={loading}
+              className="self-start"
+            >
+              {t('ob.back')}
+            </Button>
+          )}
+
+          <div className="flex items-center gap-2 sm:ms-auto">
+            {(step === 3 || step === 4 || step === 5) && (
+              <Button type="button" variant="ghost" onClick={handleSkip} disabled={loading} className="px-4 whitespace-nowrap">
+                {t('ob.skip')}
               </Button>
             )}
-          </div>
-          
-          <div className="flex items-center gap-3">
-            {(step === 3 || step === 4 || step === 5) && (
-              <button
-                type="button"
-                onClick={handleSkip}
-                disabled={loading}
-                className="text-gray-500 hover:text-gray-700 text-sm font-medium"
-              >
-                {t('ob.skip')}
-              </button>
-            )}
-            
+
             {step < totalSteps ? (
               <Button
                 type="button"
                 onClick={handleNext}
                 disabled={loading}
-                className="bg-gray-700 hover:bg-gray-800 text-white px-6"
+                className="flex-1 sm:flex-none"
               >
                 {t('ob.next')}
               </Button>
@@ -858,13 +748,13 @@ export function SellerOnboardingModal({ isOpen, onClose, onComplete }: SellerOnb
                 type="button"
                 onClick={handleSubmit}
                 disabled={loading}
-                className="bg-gray-700 hover:bg-gray-800 text-white px-8"
+                className="flex-1 sm:flex-none whitespace-nowrap"
               >
                 {loading ? (
-                  <span className="flex items-center gap-2">
-                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  <>
+                    <span aria-hidden="true" className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
                     {t('ob.submitting')}
-                  </span>
+                  </>
                 ) : (
                   t('ob.submit')
                 )}
@@ -873,6 +763,7 @@ export function SellerOnboardingModal({ isOpen, onClose, onComplete }: SellerOnb
           </div>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }

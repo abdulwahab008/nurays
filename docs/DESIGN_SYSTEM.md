@@ -62,6 +62,31 @@ All of it is in `frontend-web/app/globals.css`: the values once for light (`:roo
 - `components/layout/CustomerTabBar.tsx`: the phone tab bar (Home, Orders, Tray, Profile); `lib/tab-bar.ts` decides where it shows.
   A bar floating at the bottom of a page sits `var(--tabbar-offset)` higher so the two do not overlap.
 
+## Staff screens (kitchen, rider, hub)
+
+The people on these screens are working: a cook between orders, a rider on a motorbike. A screen answers "what needs me
+now?" first and keeps everything else quiet. `app/riders/dashboard/page.tsx` is the reference.
+
+- **Say it once.** The page title comes from `DashboardShell` and appears only as the page heading; nothing repeats it
+  (no second title, no banner restating it, no "Quick actions" block repeating the sidebar).
+- **One raised surface per screen.** The thing that needs action (the current job, the orders waiting for the kitchen)
+  is a `bg-surface` card with `border-line` and `shadow-[var(--shadow-card)]`. Everything else sits flat on `bg-page`
+  as sections divided by `border-t border-line`, with an `text-sm font-semibold text-ink` heading.
+- **Numbers, not tiles.** A figure is a `text-sm text-muted` label above a `text-2xl font-semibold text-ink tabular-nums`
+  value. No icon tile beside it, no tinted card behind it, no coloured text unless the colour means something.
+- **Tokens only.** `bg-page`, `bg-surface`, `bg-raised`, `text-ink`, `text-muted`, `border-line(-strong)`; turquoise
+  (`Button` default, `text-brand-ink`, `bg-brand-soft`) for actions and good news; `bg-accent-soft` /
+  `text-accent-soft-ink` for money to collect and things waiting; `red-700` / `bg-red-50` only for problems. No
+  `slate-900` panels, gradients, or blue/purple/amber/emerald accents.
+- **Words.** Sentence case everywhere. No ALL-CAPS labels, no letter-spaced eyebrows, no emojis, no `→` on links. Plain
+  names a cook or rider would use ("New jobs", "Waiting for you"), never system names ("Pool", "Mission control").
+- **Pieces.** `components/ui/button.tsx` for every button (default for the one main action, `outline` or `ghost` for
+  the rest); underlined tabs as on the rider screen; status as one small pill (`rounded-full px-2 py-0.5 text-xs
+  font-medium`, `bg-raised text-muted` by default, brand-soft for done or ready, accent-soft for waiting, red-50 for a
+  problem). Touch targets at least 44 px (`min-h-11`).
+- **Empty and loading.** An empty list is one line saying what will appear there and, when there is one, the action
+  that fills it. Loading is a small spinner with one line of text.
+
 ## Guards
 
 - `tests/unit/contrast-classes.test.ts` fails on white words on a light colour, turquoise and yellow included.

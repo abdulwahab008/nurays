@@ -21,40 +21,6 @@ import { PayoutStatement } from '@/components/payouts/PayoutStatement';
 
 const sidebarItems = SELLER_SIDEBAR_ITEMS;
 
-// Icons
-const Icons = {
-  earnings: (
-    <svg className="w-7 h-7" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 18.75a60.07 60.07 0 0115.797 2.101c.727.198 1.453-.342 1.453-1.096V18.75M3.75 4.5v.75A.75.75 0 013 6h-.75m0 0v-.375c0-.621.504-1.125 1.125-1.125H20.25M2.25 6v9m18-10.5v.75c0 .414.336.75.75.75h.75m-1.5-1.5h.375c.621 0 1.125.504 1.125 1.125v9.75c0 .621-.504 1.125-1.125 1.125h-.375m1.5-1.5H21a.75.75 0 00-.75.75v.75m0 0H3.75m0 0h-.375a1.125 1.125 0 01-1.125-1.125V15m1.5 1.5v-.75A.75.75 0 003 15h-.75M15 10.5a3 3 0 11-6 0 3 3 0 016 0zm3 0h.008v.008H18V10.5zm-12 0h.008v.008H6V10.5z" />
-    </svg>
-  ),
-  pending: (
-    <svg className="w-7 h-7" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" />
-    </svg>
-  ),
-  wallet: (
-    <svg className="w-7 h-7" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M21 12a2.25 2.25 0 00-2.25-2.25H15a3 3 0 11-6 0H5.25A2.25 2.25 0 003 12m18 0v6a2.25 2.25 0 01-2.25 2.25H5.25A2.25 2.25 0 013 18v-6m18 0V9M3 12V9m18 0a2.25 2.25 0 00-2.25-2.25H5.25A2.25 2.25 0 003 9m18 0V6a2.25 2.25 0 00-2.25-2.25H5.25A2.25 2.25 0 003 6v3" />
-    </svg>
-  ),
-  withdraw: (
-    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" />
-    </svg>
-  ),
-  history: (
-    <svg className="w-16 h-16 text-gray-300" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h3.75M9 15h3.75M9 18h3.75m3 .75H18a2.25 2.25 0 002.25-2.25V6.108c0-1.135-.845-2.098-1.976-2.192a48.424 48.424 0 00-1.123-.08m-5.801 0c-.065.21-.1.433-.1.664 0 .414.336.75.75.75h4.5a.75.75 0 00.75-.75 2.25 2.25 0 00-.1-.664m-5.8 0A2.251 2.251 0 0113.5 2.25H15c1.012 0 1.867.668 2.15 1.586m-5.8 0c-.376.023-.75.05-1.124.08C9.095 4.01 8.25 4.973 8.25 6.108V8.25m0 0H4.875c-.621 0-1.125.504-1.125 1.125v11.25c0 .621.504 1.125 1.125 1.125h9.75c.621 0 1.125-.504 1.125-1.125V9.375c0-.621-.504-1.125-1.125-1.125H8.25zM6.75 12h.008v.008H6.75V12zm0 3h.008v.008H6.75V15zm0 3h.008v.008H6.75V18z" />
-    </svg>
-  ),
-  money: (
-    <svg className="w-16 h-16 text-gray-300" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v12m-3-2.818l.879.659c1.171.879 3.07.879 4.242 0 1.172-.879 1.172-2.303 0-3.182C13.536 12.219 12.768 12 12 12c-.725 0-1.45-.22-2.003-.659-1.106-.879-1.106-2.303 0-3.182s2.9-.879 4.006 0l.415.33M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-    </svg>
-  ),
-};
-
 /** Puts React nodes where a translated sentence has {name} placeholders. */
 function withNodes(text: string, nodes: Record<string, ReactNode>) {
   return text.split(/\{(\w+)\}/g).map((part, i) => (i % 2 === 1 ? <span key={i}>{nodes[part] ?? `{${part}}`}</span> : part));
@@ -150,7 +116,7 @@ export default function SellerEarningsPage() {
 
   useEffect(() => {
     if (!isAuthenticated) {
-      router.push(loginUrlHere());
+      router.replace(loginUrlHere());
       return;
     }
 
@@ -204,14 +170,11 @@ export default function SellerEarningsPage() {
     }
   };
 
-  const getStatusConfig = (status: string) => {
-    const statusMap: Record<string, { bg: string; text: string; dot: string }> = {
-      pending: { bg: 'bg-amber-50', text: 'text-amber-700', dot: 'bg-amber-500' },
-      processing: { bg: 'bg-blue-50', text: 'text-blue-700', dot: 'bg-blue-500' },
-      completed: { bg: 'bg-emerald-50', text: 'text-emerald-700', dot: 'bg-emerald-500' },
-      failed: { bg: 'bg-red-50', text: 'text-red-700', dot: 'bg-red-500' },
-    };
-    return statusMap[status] || { bg: 'bg-gray-50', text: 'text-gray-700', dot: 'bg-gray-500' };
+  const statusPill = (status: string) => {
+    if (status === 'completed') return 'bg-brand-soft text-brand-soft-ink';
+    if (status === 'pending' || status === 'processing') return 'bg-accent-soft text-accent-soft-ink';
+    if (status === 'failed') return 'bg-red-50 text-red-700';
+    return 'bg-raised text-muted';
   };
 
   if (!isAuthenticated) {
@@ -225,280 +188,221 @@ export default function SellerEarningsPage() {
       sidebarItems={sidebarItems}
       userType="seller"
     >
-      <div className="max-w-7xl mx-auto">
+      <div className="max-w-6xl mx-auto pb-16">
         {loading ? (
-          <div className="text-center py-16">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-emerald-500 mx-auto mb-4"></div>
-            <p className="text-gray-500">{t('loading')}</p>
+          <div className="py-24 text-center" role="status">
+            <div className="animate-spin rounded-full h-8 w-8 border-2 border-line border-t-brand-600 mx-auto mb-4" />
+            <p className="text-sm text-muted">{t('loading')}</p>
           </div>
         ) : earnings ? (
-          <>
-            {/* Section 13 Operational Earnings Breakdown */}
-            {/* Top Balance & Payout Cards */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-              {/* Available Balance */}
-              <div className="bg-white rounded-2xl p-5 border border-blue-100 shadow-xs flex items-center justify-between">
-                <div>
-                  <span className="text-xs font-semibold text-blue-600 block">{t('available')}</span>
-                  <span className="text-2xl font-black text-gray-900 mt-1 block">{formatPrice(earnings.availableBalance)}</span>
-                  <span className="text-[11px] text-gray-500 mt-1 block">{t('availableHint')}</span>
-                  {earnings.awaitingRiderCash > 0 && (
-                    <span className="text-[11px] text-amber-700 font-semibold mt-1 block">
-                      {t('awaitingRiderCash', { amount: formatPrice(earnings.awaitingRiderCash) })}
-                    </span>
-                  )}
+          <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_300px] lg:grid-rows-[auto_1fr] gap-x-10 gap-y-8">
+            <div className="min-w-0 space-y-8 lg:col-start-1">
+              {/* Still owed to Nuray after netting: and when (or that) cash orders pause */}
+              {earnings.owing.amount > 0 && (
+                <div
+                  className={`rounded-2xl px-5 py-4 ${earnings.owing.cashPaused ? 'bg-red-50 text-red-800' : 'bg-accent-soft text-accent-soft-ink'}`}
+                  role="status"
+                  data-testid="owing-banner"
+                >
+                  <p className="font-semibold">{t('owingTitle', { amount: formatPrice(earnings.owing.amount) })}</p>
+                  <p className="text-sm mt-1 leading-relaxed">{t('owingBody')}</p>
+                  <p className="text-sm mt-2 font-medium leading-relaxed">
+                    {earnings.owing.cashPaused
+                      ? t('owingPaused')
+                      : t('owingPausesOn', { date: earnings.owing.cashPausesAt ? formatDate(earnings.owing.cashPausesAt) : '—' })}
+                  </p>
                 </div>
-                <div className="w-12 h-12 bg-blue-50 text-blue-600 rounded-xl flex items-center justify-center">
-                  {Icons.wallet}
-                </div>
-              </div>
+              )}
 
-              {/* Pending Payout */}
-              <div className="bg-white rounded-2xl p-5 border border-amber-100 shadow-xs flex items-center justify-between">
-                <div>
-                  <span className="text-xs font-semibold text-amber-600 block">{t('pendingSettlement')}</span>
-                  <span className="text-2xl font-black text-gray-900 mt-1 block">{formatPrice(earnings.pendingPayout || earnings.pendingSettlement)}</span>
-                  <span className="text-[11px] text-gray-500 mt-1 block">{t('pendingHint')}</span>
-                </div>
-                <div className="w-12 h-12 bg-amber-50 text-amber-600 rounded-xl flex items-center justify-center">
-                  {Icons.pending}
-                </div>
-              </div>
-
-              {/* Total Earnings */}
-              <div className="bg-white rounded-2xl p-5 border border-emerald-100 shadow-xs flex items-center justify-between">
-                <div>
-                  <span className="text-xs font-semibold text-emerald-600 block">{t('lifetime')}</span>
-                  <span className="text-2xl font-black text-gray-900 mt-1 block">{formatPrice(earnings.totalEarnings)}</span>
-                  <span className="text-[11px] text-gray-500 mt-1 block">{t('lifetimeHint')}</span>
-                </div>
-                <div className="w-12 h-12 bg-emerald-50 text-emerald-600 rounded-xl flex items-center justify-center">
-                  {Icons.earnings}
-                </div>
-              </div>
-            </div>
-
-            {/* Performance Overview */}
-            <div className="mb-6">
-              <h2 className="text-sm font-bold text-gray-900 mb-3">
-                {t('breakdown')}
-              </h2>
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                <div className="bg-white p-4 rounded-xl border border-gray-100 shadow-xs">
-                  <span className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider block">{t('todayEarnings')}</span>
-                  <span className="text-lg font-bold text-gray-900 mt-1 block">{formatPrice(earnings.todayEarnings)}</span>
-                </div>
-
-                <div className="bg-white p-4 rounded-xl border border-gray-100 shadow-xs">
-                  <span className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider block">{t('todayOrders')}</span>
-                  <span className="text-lg font-bold text-gray-900 mt-1 block">{earnings.todayOrders}</span>
-                </div>
-
-                {/* Gross minus every deduction equals net, on one screen. */}
-                {([
-                  ['grossVolume', earnings.grossSales, 0],
-                  ['platformFees', earnings.platformFees, -1],
-                  ['sellerDiscounts', earnings.sellerDiscounts, -1],
-                  ['deliveryEarned', earnings.deliveryEarned, 1],
-                  ['deliveryPaid', earnings.deliveryPaid, -1],
-                  ['netEarnings', earnings.netEarnings, 0],
-                ] as const)
-                  .filter(([, amount, sign]) => sign === 0 || amount !== 0)
-                  .map(([key, amount, sign]) => (
-                    <div
-                      key={key}
-                      className={`p-4 rounded-xl shadow-xs border ${sign < 0 ? 'border-red-100 bg-red-50/20' : 'border-gray-100 bg-white'}`}
-                    >
-                      <span className={`text-[11px] font-semibold uppercase tracking-wider block ${sign < 0 ? 'text-red-600' : 'text-gray-500'}`}>
-                        {t(key)}
-                      </span>
-                      <span className={`text-lg font-bold mt-1 block ${sign < 0 ? 'text-red-600' : 'text-gray-900'}`} data-ltr>
-                        {sign < 0 ? '-' : ''}{formatPrice(amount)}
-                      </span>
-                    </div>
-                  ))}
-              </div>
-            </div>
-
-            {/* Still owed to Nuray after netting: and when (or that) cash orders pause */}
-            {earnings.owing.amount > 0 && (
-              <div
-                className={`rounded-2xl p-5 mb-6 border ${earnings.owing.cashPaused ? 'bg-red-50 border-red-200' : 'bg-amber-50 border-amber-200'}`}
-                role="status"
-                data-testid="owing-banner"
-              >
-                <p className={`font-bold ${earnings.owing.cashPaused ? 'text-red-800' : 'text-amber-900'}`}>{t('owingTitle', { amount: formatPrice(earnings.owing.amount) })}</p>
-                <p className="text-sm text-gray-800 mt-1">{t('owingBody')}</p>
-                <p className={`text-sm mt-1 font-semibold ${earnings.owing.cashPaused ? 'text-red-800' : 'text-amber-900'}`}>
-                  {earnings.owing.cashPaused
-                    ? t('owingPaused')
-                    : t('owingPausesOn', { date: earnings.owing.cashPausesAt ? formatDate(earnings.owing.cashPausesAt) : '—' })}
-                </p>
-              </div>
-            )}
-
-            {/* Money the seller collected themselves */}
-            {earnings.codCommissionOwed > 0 && earnings.owing.amount === 0 && (
-              <div className="bg-gray-50 border border-gray-200 rounded-2xl p-5 mb-8 flex items-start gap-3">
-                <div className="w-9 h-9 rounded-full bg-gray-200 flex items-center justify-center flex-shrink-0 text-gray-600 font-bold">i</div>
-                <p className="text-sm text-gray-600">
-                  {withNodes(t('codNote'), {
-                    you: <span className="font-semibold text-gray-900">{t('codNoteYou')}</span>,
-                    amount: <span className="font-semibold text-gray-900">{formatPrice(earnings.codCommissionOwed)}</span>,
-                  })}
-                </p>
-              </div>
-            )}
-
-            {/* Request Payout Card - Enhanced */}
-            {earnings.availableBalance > 0 && (
-              <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 mb-8">
-                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+              <section className="rounded-[20px] bg-surface border border-line shadow-[var(--shadow-card)] p-5 sm:p-6">
+                <div className="flex flex-wrap items-start justify-between gap-x-10 gap-y-4">
                   <div>
-                    <h2 className="text-lg font-bold text-gray-900 mb-1">{t('requestPayout')}</h2>
-                    <p className="text-gray-500">
-                      {t('availableForWithdrawal')} <span className="font-bold text-emerald-600">{formatPrice(earnings.availableBalance)}</span>
+                    <p className="text-sm text-muted">{t('available')}</p>
+                    <p className="mt-1 text-4xl leading-tight font-semibold text-ink tabular-nums" data-ltr>
+                      {formatPrice(earnings.availableBalance)}
                     </p>
-                    <p className="text-sm text-gray-500 mt-1">{t('processingTime')}</p>
-                    <p className="text-sm text-gray-600 mt-1">{t('weeklyNote')}</p>
                   </div>
-                  {!showPayoutForm && (
-                    <Button
-                      onClick={() => setShowPayoutForm(true)}
-                      className="bg-emerald-700 hover:bg-emerald-800 text-white shadow-lg shadow-emerald-200 flex items-center gap-2 px-6"
-                      size="lg"
-                    >
-                      {Icons.withdraw}
-                      {t('requestPayout')}
-                    </Button>
+                  {(earnings.pendingPayout || earnings.pendingSettlement) > 0 && (
+                    <div>
+                      <p className="text-sm text-muted">{t('pendingSettlement')}</p>
+                      <p className="mt-1 text-2xl font-semibold text-ink tabular-nums" data-ltr>
+                        {formatPrice(earnings.pendingPayout || earnings.pendingSettlement)}
+                      </p>
+                    </div>
                   )}
                 </div>
-
-                {showPayoutForm && (
-                  <div className="mt-5 pt-5 border-t border-gray-100 space-y-4">
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">{t('receiveVia')}</label>
-                      <select
-                        value={payoutMethod}
-                        onChange={(e) => setPayoutMethod(e.target.value as typeof payoutMethod)}
-                        className="w-full md:w-64 px-4 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
-                      >
-                        <option value="jazzcash">{t('jazzcash')}</option>
-                        <option value="easypaisa">{t('easypaisa')}</option>
-                        <option value="bank_transfer">{t('bankTransfer')}</option>
-                      </select>
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        {payoutMethod === 'bank_transfer' ? t('bankAccountNumber') : t('walletNumber')}
-                      </label>
-                      <input
-                        type="text"
-                        value={accountNumber}
-                        onChange={(e) => setAccountNumber(e.target.value)}
-                        placeholder={t('example', { value: payoutMethod === 'bank_transfer' ? 'PK36SCBL0000001123456702' : '03001234567' })}
-                        dir="ltr"
-                        className="w-full md:w-80 px-4 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
-                      />
-                    </div>
-                    <div className="flex gap-3">
-                      <Button
-                        onClick={handleRequestPayout}
-                        disabled={requestingPayout || !accountNumber.trim()}
-                        className="bg-emerald-700 hover:bg-emerald-800 text-white flex items-center gap-2 px-6"
-                      >
-                        {requestingPayout ? (
-                          <>
-                            <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                            {t('submitting')}
-                          </>
-                        ) : (
-                          t('confirmRequest')
-                        )}
-                      </Button>
-                      <Button
-                        variant="outline"
-                        onClick={() => { setShowPayoutForm(false); setAccountNumber(''); }}
-                        disabled={requestingPayout}
-                      >
-                        {tc('cancel')}
-                      </Button>
-                    </div>
-                  </div>
+                <p className="mt-3 text-sm text-muted leading-relaxed">{t('availableHint')}</p>
+                {earnings.awaitingRiderCash > 0 && (
+                  <p className="mt-2 text-sm font-medium text-accent-soft-ink">
+                    {t('awaitingRiderCash', { amount: formatPrice(earnings.awaitingRiderCash) })}
+                  </p>
                 )}
-              </div>
-            )}
 
-            {/* Payout History - Enhanced */}
-            <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
-              <div className="px-6 py-4 bg-gradient-to-r from-gray-50 to-white border-b border-gray-100">
-                <h2 className="text-lg font-bold text-gray-900">{t('history')}</h2>
-              </div>
-              <div className="p-6">
-                {earnings.payouts.length === 0 ? (
-                  <div className="text-center py-12">
-                    <div className="w-24 h-24 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                      {Icons.history}
-                    </div>
-                    <p className="text-gray-500 font-medium">{t('noHistory')}</p>
-                    <p className="text-gray-500 text-sm mt-1">{t('noHistoryHint')}</p>
-                  </div>
-                ) : (
-                  <div className="space-y-3">
-                    {earnings.payouts.map((payout) => {
-                      const statusConfig = getStatusConfig(payout.status);
-                      return (
-                        <div key={payout.id} className="border border-gray-100 rounded-xl p-4 hover:shadow-md transition-all duration-200 bg-gray-50/50 hover:bg-white">
-                          <div className="flex items-center justify-between">
-                            <div>
-                              <p className="font-bold text-gray-900 text-lg" data-ltr>
-                                {payout.netAmount < 0 ? '-' : ''}{formatPrice(Math.abs(payout.netAmount))}
-                                {payout.automatic && <span className="ms-2 align-middle rounded-full bg-blue-50 px-2 py-0.5 text-xs font-semibold text-blue-800">{t('weekly')}</span>}
-                                {payout.payoutMethod === 'paid_to_nuray' && <span className="ms-2 align-middle rounded-full bg-gray-100 px-2 py-0.5 text-xs font-semibold text-gray-800">{t('paidToNuray')}</span>}
-                              </p>
-                              {payout.periodStart && payout.periodEnd && payout.payoutMethod !== 'paid_to_nuray' && (
-                                <p className="text-sm text-gray-600 mt-1">{t('period', { from: payout.periodStart, to: payout.periodEnd })}</p>
-                              )}
-                              <p className="text-sm text-gray-500 mt-1">
-                                {t('requested', { date: formatDate(payout.requestedAt) })}
-                              </p>
-                              {payout.processedAt && (
-                                <p className="text-sm text-gray-500">
-                                  {t('processed', { date: formatDate(payout.processedAt) })}
-                                </p>
-                              )}
-                            </div>
-                            <div className="flex flex-col items-end gap-2">
-                            <span className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold ${statusConfig.bg} ${statusConfig.text}`}>
-                              <span className={`w-1.5 h-1.5 rounded-full ${statusConfig.dot}`}></span>
-                              {`payout.${payout.status}` in kitchenEarningsMessages.en
-                                ? t(`payout.${payout.status}` as keyof typeof kitchenEarningsMessages.en)
-                                : payout.status.charAt(0).toUpperCase() + payout.status.slice(1)}
-                            </span>
-                            {payout.payoutMethod !== 'paid_to_nuray' && (
-                              <Button variant="outline" size="sm" onClick={() => setStatementFor(payout.id)} data-testid="open-statement">
-                                {t('statement')}
-                              </Button>
-                            )}
-                            </div>
+                {earnings.availableBalance > 0 && (
+                  <div className="mt-5 pt-5 border-t border-line">
+                    {!showPayoutForm ? (
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                        <p className="text-sm text-muted leading-relaxed">{t('weeklyNote')}</p>
+                        <Button onClick={() => setShowPayoutForm(true)} className="shrink-0">
+                          {t('requestPayout')}
+                        </Button>
+                      </div>
+                    ) : (
+                      <div className="space-y-4">
+                        <div className="grid gap-4 sm:grid-cols-[200px_minmax(0,1fr)]">
+                          <div>
+                            <label htmlFor="payout-method" className="block text-sm font-medium text-ink mb-1.5">{t('receiveVia')}</label>
+                            <select
+                              id="payout-method"
+                              value={payoutMethod}
+                              onChange={(e) => setPayoutMethod(e.target.value as typeof payoutMethod)}
+                              className="w-full min-h-11 px-3 rounded-xl border border-line-strong bg-surface text-ink focus:outline-none focus:border-brand-600 focus:ring-3 focus:ring-brand/30"
+                            >
+                              <option value="jazzcash">{t('jazzcash')}</option>
+                              <option value="easypaisa">{t('easypaisa')}</option>
+                              <option value="bank_transfer">{t('bankTransfer')}</option>
+                            </select>
+                          </div>
+                          <div>
+                            <label htmlFor="payout-account" className="block text-sm font-medium text-ink mb-1.5">
+                              {payoutMethod === 'bank_transfer' ? t('bankAccountNumber') : t('walletNumber')}
+                            </label>
+                            <input
+                              id="payout-account"
+                              type="text"
+                              value={accountNumber}
+                              onChange={(e) => setAccountNumber(e.target.value)}
+                              placeholder={t('example', { value: payoutMethod === 'bank_transfer' ? 'PK36SCBL0000001123456702' : '03001234567' })}
+                              dir="ltr"
+                              className="w-full min-h-11 px-3 rounded-xl border border-line-strong bg-surface text-ink tabular-nums placeholder:text-muted focus:outline-none focus:border-brand-600 focus:ring-3 focus:ring-brand/30"
+                            />
                           </div>
                         </div>
-                      );
-                    })}
+                        <div className="flex flex-wrap gap-3">
+                          <Button onClick={handleRequestPayout} disabled={requestingPayout || !accountNumber.trim()}>
+                            {requestingPayout && (
+                              <span className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" aria-hidden="true" />
+                            )}
+                            {requestingPayout ? t('submitting') : t('confirmRequest')}
+                          </Button>
+                          <Button
+                            variant="outline"
+                            onClick={() => { setShowPayoutForm(false); setAccountNumber(''); }}
+                            disabled={requestingPayout}
+                          >
+                            {tc('cancel')}
+                          </Button>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 )}
-              </div>
+              </section>
             </div>
-          </>
+
+            <aside className="space-y-7 lg:pt-1 lg:col-start-2 lg:row-start-1 lg:row-span-2">
+              <section>
+                <h2 className="text-sm font-semibold text-ink">{t('today')}</h2>
+                <dl className="mt-3 grid grid-cols-2 gap-4">
+                  <div>
+                    <dt className="text-sm text-muted">{t('todayEarnings')}</dt>
+                    <dd className="text-2xl font-semibold text-ink tabular-nums" data-ltr>{formatPrice(earnings.todayEarnings)}</dd>
+                  </div>
+                  <div>
+                    <dt className="text-sm text-muted">{t('todayOrders')}</dt>
+                    <dd className="text-2xl font-semibold text-ink tabular-nums">{earnings.todayOrders}</dd>
+                  </div>
+                </dl>
+              </section>
+
+              <section className="pt-6 border-t border-line">
+                <h2 className="text-sm font-semibold text-ink">{t('breakdown')}</h2>
+                {/* Gross minus every deduction equals net, on one screen. */}
+                <dl className="mt-3 text-sm">
+                  {([
+                    ['grossVolume', earnings.grossSales, 0],
+                    ['platformFees', earnings.platformFees, -1],
+                    ['sellerDiscounts', earnings.sellerDiscounts, -1],
+                    ['deliveryEarned', earnings.deliveryEarned, 1],
+                    ['deliveryPaid', earnings.deliveryPaid, -1],
+                  ] as const)
+                    .filter(([, amount, sign]) => sign === 0 || amount !== 0)
+                    .map(([key, amount, sign]) => (
+                      <div key={key} className="flex items-baseline justify-between gap-3 py-1.5">
+                        <dt className="text-muted">{t(key)}</dt>
+                        <dd className="text-ink tabular-nums" data-ltr>
+                          {sign < 0 ? '−' : sign > 0 ? '+' : ''}{formatPrice(amount)}
+                        </dd>
+                      </div>
+                    ))}
+                  <div className="flex items-baseline justify-between gap-3 pt-2.5 mt-1.5 border-t border-line">
+                    <dt className="font-semibold text-ink">{t('netEarnings')}</dt>
+                    <dd className="text-base font-semibold text-ink tabular-nums" data-ltr>{formatPrice(earnings.netEarnings)}</dd>
+                  </div>
+                </dl>
+              </section>
+
+              {/* Money the seller collected themselves */}
+              {earnings.codCommissionOwed > 0 && earnings.owing.amount === 0 && (
+                <section className="pt-6 border-t border-line">
+                  <p className="text-sm text-muted leading-relaxed">
+                    {withNodes(t('codNote'), {
+                      you: <span className="font-semibold text-ink">{t('codNoteYou')}</span>,
+                      amount: <span className="font-semibold text-ink tabular-nums">{formatPrice(earnings.codCommissionOwed)}</span>,
+                    })}
+                  </p>
+                </section>
+              )}
+            </aside>
+
+            <section className="min-w-0 lg:col-start-1 max-lg:pt-6 max-lg:border-t max-lg:border-line">
+              <h2 className="text-sm font-semibold text-ink">{t('history')}</h2>
+              {earnings.payouts.length === 0 ? (
+                <p className="mt-3 text-sm text-muted">{t('noHistory')}</p>
+              ) : (
+                <ul className="mt-2 divide-y divide-line">
+                  {earnings.payouts.map((payout) => (
+                    <li key={payout.id} className="py-4 flex items-start sm:items-center justify-between gap-4">
+                      <div className="min-w-0">
+                        <p className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                          <span className="text-base font-semibold text-ink tabular-nums" data-ltr>
+                            {payout.netAmount < 0 ? '-' : ''}{formatPrice(Math.abs(payout.netAmount))}
+                          </span>
+                          <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${statusPill(payout.status)}`}>
+                            {`payout.${payout.status}` in kitchenEarningsMessages.en
+                              ? t(`payout.${payout.status}` as keyof typeof kitchenEarningsMessages.en)
+                              : payout.status.charAt(0).toUpperCase() + payout.status.slice(1)}
+                          </span>
+                          {payout.automatic && <span className="rounded-full px-2 py-0.5 text-xs font-medium bg-raised text-muted">{t('weekly')}</span>}
+                          {payout.payoutMethod === 'paid_to_nuray' && <span className="rounded-full px-2 py-0.5 text-xs font-medium bg-raised text-muted">{t('paidToNuray')}</span>}
+                        </p>
+                        <p className="mt-1 text-sm text-muted">
+                          {[
+                            payout.periodStart && payout.periodEnd && payout.payoutMethod !== 'paid_to_nuray'
+                              ? t('period', { from: payout.periodStart, to: payout.periodEnd })
+                              : null,
+                            t('requested', { date: formatDate(payout.requestedAt) }),
+                            payout.processedAt ? t('processed', { date: formatDate(payout.processedAt) }) : null,
+                          ].filter(Boolean).join(', ')}
+                        </p>
+                      </div>
+                      {payout.payoutMethod !== 'paid_to_nuray' && (
+                        <Button variant="ghost" className="shrink-0 px-3 -me-3" onClick={() => setStatementFor(payout.id)} data-testid="open-statement">
+                          {t('statement')}
+                        </Button>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </section>
+          </div>
         ) : loadError ? (
           <LoadError error={loadError} onRetry={loadEarnings} title={t('loadFailed')} />
         ) : (
-          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-16 text-center">
-            <div className="w-24 h-24 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-6">
-              {Icons.money}
-            </div>
-            <h2 className="text-2xl font-bold text-gray-900 mb-2">{t('noData')}</h2>
-            <p className="text-gray-500">{t('noDataHint')}</p>
+          <div className="py-24 text-center">
+            <h2 className="text-base font-semibold text-ink">{t('noData')}</h2>
+            <p className="mt-1 text-sm text-muted">{t('noDataHint')}</p>
           </div>
         )}
       </div>

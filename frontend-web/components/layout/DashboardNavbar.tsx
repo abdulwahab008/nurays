@@ -23,10 +23,6 @@ import {
   AlertCircle,
   Info,
   ChevronRight,
-  Bike,
-  Radio,
-  Coins,
-  MessageCircle,
 } from 'lucide-react';
 import { useShallow } from 'zustand/react/shallow';
 
@@ -42,14 +38,12 @@ interface NavbarNotification {
 }
 
 interface DashboardNavbarProps {
-  title: string;
-  subtitle?: string;
   userType?: 'customer' | 'seller' | 'admin' | 'rider' | 'hub_manager';
   onMenuToggle?: () => void;
   drawerOpen?: boolean;
 }
 
-export function DashboardNavbar({ title, subtitle, userType = 'customer', onMenuToggle, drawerOpen }: DashboardNavbarProps) {
+export function DashboardNavbar({ userType = 'customer', onMenuToggle, drawerOpen }: DashboardNavbarProps) {
   const router = useRouter();
   const t = useT(shellMessages);
   const { showToast } = useToast();
@@ -220,30 +214,30 @@ export function DashboardNavbar({ title, subtitle, userType = 'customer', onMenu
   const getNotificationIcon = (type?: string) => {
     switch (type) {
       case 'order':
-        return <Package className="w-4 h-4 text-blue-600" />;
+        return <Package className="w-4 h-4 text-muted" />;
       case 'promo':
-        return <Tag className="w-4 h-4 text-amber-600" />;
+        return <Tag className="w-4 h-4 text-muted" />;
       case 'delivery':
-        return <Truck className="w-4 h-4 text-emerald-600" />;
+        return <Truck className="w-4 h-4 text-muted" />;
       case 'warning':
         return <AlertCircle className="w-4 h-4 text-rose-600" />;
       default:
-        return <Info className="w-4 h-4 text-slate-600" />;
+        return <Info className="w-4 h-4 text-muted" />;
     }
   };
 
   const getNotificationIconBg = (type?: string) => {
     switch (type) {
       case 'order':
-        return 'bg-blue-50 border-blue-100';
+        return 'bg-raised border-line';
       case 'promo':
-        return 'bg-amber-50 border-amber-100';
+        return 'bg-raised border-line';
       case 'delivery':
-        return 'bg-emerald-50 border-emerald-100';
+        return 'bg-raised border-line';
       case 'warning':
         return 'bg-rose-50 border-rose-100';
       default:
-        return 'bg-slate-50 border-slate-100';
+        return 'bg-raised border-line';
     }
   };
 
@@ -283,7 +277,7 @@ export function DashboardNavbar({ title, subtitle, userType = 'customer', onMenu
 
   return (
     <nav
-      className="fixed top-0 start-0 end-0 z-50 h-(--header-offset) pt-(--safe-top) pl-(--safe-left) pr-(--safe-right) bg-white/95 backdrop-blur-md border-b border-slate-200/80 shadow-xs"
+      className="fixed top-0 start-0 end-0 z-50 h-(--header-offset) pt-(--safe-top) pl-(--safe-left) pr-(--safe-right) bg-surface/95 backdrop-blur-md border-b border-line"
     >
       <div className="flex items-center justify-between h-full px-3 sm:px-6 gap-2">
         {/* Logo Section */}
@@ -355,18 +349,6 @@ export function DashboardNavbar({ title, subtitle, userType = 'customer', onMenu
           </div>
         )}
 
-        {/* Center - Seller/Admin/Rider Title */}
-        {(isSeller || isAdmin || isRider) && (
-          <div className="hidden md:flex flex-1 min-w-0 justify-center">
-            <div className="text-center min-w-0 max-w-full">
-              <h2 className="font-display italic text-[22px] truncate" style={{ color: 'var(--ink-900)' }} title={title}>
-                {title}
-              </h2>
-              {subtitle && <p className="eyebrow mt-1 truncate" title={subtitle}>{subtitle}</p>}
-            </div>
-          </div>
-        )}
-        
         {/* Right Side - Actions */}
         <div className="flex items-center gap-1 sm:gap-2 min-w-0">
 
@@ -394,31 +376,6 @@ export function DashboardNavbar({ title, subtitle, userType = 'customer', onMenu
           )}
 
           {/* Seller Quick Actions */}
-          {isSeller && (
-            <>
-              <Link href="/sellers/orders" className="relative">
-                <button className="w-10 h-10 rounded-lg hover:bg-gray-50 flex items-center justify-center transition-colors" title={t('orders')} aria-label={t('orders')}>
-                  <svg className="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M20.25 7.5l-.625 10.632a2.25 2.25 0 01-2.247 2.118H6.622a2.25 2.25 0 01-2.247-2.118L3.75 7.5M10 11.25h4M3.375 7.5h17.25c.621 0 1.125-.504 1.125-1.125v-1.5c0-.621-.504-1.125-1.125-1.125H3.375c-.621 0-1.125.504-1.125 1.125v1.5c0 .621.504 1.125 1.125 1.125z" />
-                  </svg>
-                </button>
-              </Link>
-              <Link href="/sellers/products" className="relative">
-                <button className="w-10 h-10 rounded-lg hover:bg-gray-50 flex items-center justify-center transition-colors" title={t('products')} aria-label={t('products')}>
-                  <svg className="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 8.25v-1.5m0 1.5c-1.355 0-2.697.056-4.024.166C6.845 8.51 6 9.473 6 10.608v2.513m6-4.87c1.355 0 2.697.055 4.024.165C17.155 8.51 18 9.473 18 10.608v2.513m-3-4.87v-1.5m-6 1.5v-1.5m12 9.75l-1.5.75a3.354 3.354 0 01-3 0 3.354 3.354 0 00-3 0 3.354 3.354 0 01-3 0 3.354 3.354 0 00-3 0 3.354 3.354 0 01-3 0L3 16.5m15-3.38a48.474 48.474 0 00-6-.37c-2.032 0-4.034.125-6 .37m12 0c.39.049.777.102 1.163.16 1.07.16 1.837 1.094 1.837 2.175v5.17c0 .62-.504 1.124-1.125 1.124H4.125A1.125 1.125 0 013 20.625v-5.17c0-1.08.768-2.014 1.837-2.174A47.78 47.78 0 016 13.12M12.265 3.11a.375.375 0 11-.53 0L12 2.845l.265.265zm-3 0a.375.375 0 11-.53 0L9 2.845l.265.265zm6 0a.375.375 0 11-.53 0L15 2.845l.265.265z" />
-                  </svg>
-                </button>
-              </Link>
-              <Link href="/sellers/earnings" className="relative">
-                <button className="w-10 h-10 rounded-lg hover:bg-gray-50 flex items-center justify-center transition-colors" title={t('earnings')} aria-label={t('earnings')}>
-                  <svg className="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 6v12m-3-2.818l.879.659c1.171.879 3.07.879 4.242 0 1.172-.879 1.172-2.303 0-3.182C13.536 12.219 12.768 12 12 12c-.725 0-1.45-.22-2.003-.659-1.106-.879-1.106-2.303 0-3.182s2.9-.879 4.006 0l.415.33M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                  </svg>
-                </button>
-              </Link>
-            </>
-          )}
 
           {/* A customer's phone has the language under Profile; the bar keeps room for the area */}
           <LanguageSwitcher className={isCustomer ? 'hidden sm:inline-flex px-2' : 'px-2 max-[420px]:[&>span]:hidden'} />
@@ -432,7 +389,7 @@ export function DashboardNavbar({ title, subtitle, userType = 'customer', onMenu
               aria-expanded={showNotificationsPanel}
               className={`relative w-10 h-10 rounded-lg flex items-center justify-center transition-colors ${
                 showNotificationsPanel 
-                  ? 'bg-amber-50 text-amber-600' 
+                  ? 'bg-raised text-ink' 
                   : 'text-gray-600 hover:bg-gray-50'
               }`}
               title={t('notifications')}
@@ -451,7 +408,7 @@ export function DashboardNavbar({ title, subtitle, userType = 'customer', onMenu
                   <div className="flex items-center gap-2">
                     <span className="font-semibold text-sm text-gray-900">{t('notifications')}</span>
                     {notificationUnreadCount > 0 && (
-                      <span className="px-2 py-0.5 text-[11px] font-bold rounded-full bg-amber-100 text-amber-800">
+                      <span className="px-2 py-0.5 text-[11px] font-bold rounded-full bg-accent-soft text-accent-soft-ink">
                         {t('newCount', { count: notificationUnreadCount })}
                       </span>
                     )}
@@ -460,7 +417,7 @@ export function DashboardNavbar({ title, subtitle, userType = 'customer', onMenu
                     <button
                       type="button"
                       onClick={handleMarkAllNotificationsRead}
-                      className="text-xs font-medium text-amber-600 hover:text-amber-700 flex items-center gap-1 transition-colors"
+                      className="text-xs font-medium text-brand-ink hover:underline flex items-center gap-1 transition-colors"
                     >
                       <CheckCheck className="w-3.5 h-3.5" />
                       <span>{t('markAllRead')}</span>
@@ -472,7 +429,7 @@ export function DashboardNavbar({ title, subtitle, userType = 'customer', onMenu
                 <div className="max-h-80 overflow-y-auto divide-y divide-gray-50">
                   {loadingNotifications ? (
                     <div className="py-8 flex flex-col items-center justify-center gap-2 text-gray-500">
-                      <div className="w-5 h-5 border-2 border-amber-500 border-t-transparent rounded-full animate-spin" />
+                      <div className="w-5 h-5 border-2 border-brand-600 border-t-transparent rounded-full animate-spin" />
                       <span className="text-xs">{t('loadingUpdates')}</span>
                     </div>
                   ) : notificationsError && recentNotifications.length === 0 ? (
@@ -493,7 +450,7 @@ export function DashboardNavbar({ title, subtitle, userType = 'customer', onMenu
                         key={notif.id}
                         onClick={() => handleMarkNotificationRead(notif.id, notif.actionUrl)}
                         className={`p-3.5 flex items-start gap-3 hover:bg-gray-50 cursor-pointer transition-colors ${
-                          !notif.isRead ? 'bg-amber-50/30' : ''
+                          !notif.isRead ? 'bg-brand-soft/40' : ''
                         }`}
                       >
                         <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 border ${getNotificationIconBg(notif.type)}`}>
@@ -513,7 +470,7 @@ export function DashboardNavbar({ title, subtitle, userType = 'customer', onMenu
                           </p>
                         </div>
                         {!notif.isRead && (
-                          <span className="w-1.5 h-1.5 rounded-full bg-amber-500 shrink-0 mt-1.5" />
+                          <span className="w-1.5 h-1.5 rounded-full bg-accent-500 shrink-0 mt-1.5" />
                         )}
                       </div>
                     ))
@@ -525,7 +482,7 @@ export function DashboardNavbar({ title, subtitle, userType = 'customer', onMenu
                   <Link
                     href={isSeller ? "/sellers/notifications" : isAdmin ? "/admin/notifications" : isRider ? "/riders/dashboard" : "/notifications"}
                     onClick={() => setShowNotificationsPanel(false)}
-                    className="w-full py-2 px-3 text-center text-xs font-medium text-gray-700 hover:text-amber-600 hover:bg-white rounded-lg transition-colors flex items-center justify-center gap-1 border border-transparent hover:border-gray-200"
+                    className="w-full py-2 px-3 text-center text-xs font-medium text-gray-700 hover:text-ink hover:bg-surface rounded-lg transition-colors flex items-center justify-center gap-1 border border-transparent hover:border-gray-200"
                   >
                     <span>{t('viewAllNotifications')}</span>
                     <ChevronRight className="rtl:-scale-x-100 w-3.5 h-3.5" />
@@ -560,8 +517,8 @@ export function DashboardNavbar({ title, subtitle, userType = 'customer', onMenu
                     {user?.profile?.fullName?.charAt(0).toUpperCase() || user?.email?.charAt(0).toUpperCase() || 'U'}
                   </span>
                 </div>
-                <span className="hidden sm:block text-gray-700 text-sm font-bold">
-                  {user?.profile?.fullName?.split(' ')[0] || t('user')}
+                <span className="hidden sm:block text-ink text-sm font-medium">
+                  {user?.profile?.fullName?.split(' ')[0] || user?.email?.split('@')[0] || t('user')}
                 </span>
                 <svg className="w-4 h-4 text-gray-500 max-[380px]:hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
@@ -573,12 +530,12 @@ export function DashboardNavbar({ title, subtitle, userType = 'customer', onMenu
               <div className="absolute end-0 top-full mt-2 w-72 bg-white rounded-2xl shadow-xl border border-gray-100 py-1 z-50 overflow-hidden animate-in fade-in zoom-in-95 duration-150">
                 <div className="px-4 py-3 border-b border-gray-100 bg-gray-50/70">
                   <div className="flex items-center justify-between gap-2">
-                    <p className="text-gray-900 font-bold truncate text-sm">{user?.profile?.fullName || t('user')}</p>
+                    <p className="text-ink font-semibold truncate text-sm">{user?.profile?.fullName || user?.email || t('user')}</p>
                     <span
-                      className="px-2 py-0.5 text-[11px] font-black rounded-full uppercase tracking-wider shrink-0"
+                      className="px-2 py-0.5 text-xs font-medium rounded-full shrink-0"
                       style={{
-                        background: isSeller ? 'var(--ink-100)' : isAdmin ? 'var(--gold-50)' : isRider ? '#ECFDF5' : 'var(--forest-50)',
-                        color: isSeller ? 'var(--ink-700)' : isAdmin ? 'var(--gold-700)' : isRider ? '#065F46' : 'var(--forest-700)',
+                        background: isSeller ? 'var(--ink-100)' : isAdmin ? 'var(--gold-50)' : isRider ? 'var(--brand-soft)' : 'var(--forest-50)',
+                        color: isSeller ? 'var(--ink-700)' : isAdmin ? 'var(--gold-700)' : isRider ? 'var(--brand-soft-ink)' : 'var(--forest-700)',
                       }}
                     >
                       {isSeller ? t('roleSeller') : isAdmin ? t('roleAdmin') : isRider ? t('roleRider') : isHubManager ? t('roleHub') : t('roleCustomer')}
@@ -589,52 +546,7 @@ export function DashboardNavbar({ title, subtitle, userType = 'customer', onMenu
 
 
                 <div className="py-1">
-                  {/* Rider-specific menu items */}
-                  {isRider && (
-                    <>
-                      <Link href="/riders/dashboard" className="flex items-center gap-3 px-4 py-2 text-gray-700 hover:bg-gray-50 transition-colors">
-                        <Bike className="w-4 h-4 text-emerald-600" />
-                        <span className="text-sm font-medium">{t('fleetCommand')}</span>
-                      </Link>
-                      <Link href="/riders/dashboard#active" className="flex items-center gap-3 px-4 py-2 text-gray-700 hover:bg-gray-50 transition-colors">
-                        <Package className="w-4 h-4 text-emerald-600" />
-                        <span className="text-sm font-medium">{t('activeDeliveries')}</span>
-                      </Link>
-                      <Link href="/riders/dashboard#available" className="flex items-center gap-3 px-4 py-2 text-gray-700 hover:bg-gray-50 transition-colors">
-                        <Radio className="w-4 h-4 text-emerald-600" />
-                        <span className="text-sm font-medium">{t('availablePool')}</span>
-                      </Link>
-                      <Link href="/riders/dashboard#cash" className="flex items-center gap-3 px-4 py-2 text-gray-700 hover:bg-gray-50 transition-colors">
-                        <Coins className="w-4 h-4 text-emerald-600" />
-                        <span className="text-sm font-medium">{t('codSettlement')}</span>
-                      </Link>
-                      <Link href="/support" className="flex items-center gap-3 px-4 py-2 text-gray-700 hover:bg-gray-50 transition-colors">
-                        <MessageCircle className="w-4 h-4 text-emerald-600" />
-                        <span className="text-sm font-medium">{t('fleetSupport')}</span>
-                      </Link>
-                    </>
-                  )}
-                  {/* Seller-specific menu items */}
                   {isSeller && (
-                    <>
-                      <Link href="/sellers/dashboard" className="flex items-center gap-3 px-4 py-2 text-gray-700 hover:bg-gray-50 transition-colors">
-                        <svg className="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3.75 6A2.25 2.25 0 016 3.75h2.25A2.25 2.25 0 0110.5 6v2.25a2.25 2.25 0 01-2.25 2.25H6a2.25 2.25 0 01-2.25-2.25V6z" />
-                        </svg>
-                        <span className="text-sm">{t('dashboard')}</span>
-                      </Link>
-                      <Link href="/sellers/orders" className="flex items-center gap-3 px-4 py-2 text-gray-700 hover:bg-gray-50 transition-colors">
-                        <svg className="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M20.25 7.5l-.625 10.632a2.25 2.25 0 01-2.247 2.118H6.622a2.25 2.25 0 01-2.247-2.118L3.75 7.5M10 11.25h4M3.375 7.5h17.25c.621 0 1.125-.504 1.125-1.125v-1.5c0-.621-.504-1.125-1.125-1.125H3.375c-.621 0-1.125.504-1.125 1.125v1.5c0 .621.504 1.125 1.125 1.125z" />
-                        </svg>
-                        <span className="text-sm">{t('myOrders')}</span>
-                      </Link>
-                      <Link href="/sellers/products" className="flex items-center gap-3 px-4 py-2 text-gray-700 hover:bg-gray-50 transition-colors">
-                        <svg className="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 8.25v-1.5m0 1.5c-1.355 0-2.697.056-4.024.166C6.845 8.51 6 9.473 6 10.608v2.513m6-4.87c1.355 0 2.697.055 4.024.165" />
-                        </svg>
-                        <span className="text-sm">{t('myProducts')}</span>
-                      </Link>
                       <Link href="/sellers/settings" className="flex items-center gap-3 px-4 py-2 text-gray-700 hover:bg-gray-50 transition-colors">
                         <svg className="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.645.87.074.04.147.083.22.127.324.196.72.257 1.075.124l1.217-.456a1.125 1.125 0 011.37.49l1.296 2.247a1.125 1.125 0 01-.26 1.431l-1.003.827c-.293.24-.438.613-.431.992a6.759 6.759 0 010 .255c-.007.378.138.75.43.99l1.005.828c.424.35.534.954.26 1.43l-1.298 2.247a1.125 1.125 0 01-1.369.491l-1.217-.456c-.355-.133-.75-.072-1.076.124a6.57 6.57 0 01-.22.128c-.331.183-.581.495-.644.869l-.213 1.28c-.09.543-.56.941-1.11.941h-2.594c-.55 0-1.02-.398-1.11-.94l-.213-1.281c-.062-.374-.312-.686-.644-.87a6.52 6.52 0 01-.22-.127c-.325-.196-.72-.257-1.076-.124l-1.217.456a1.125 1.125 0 01-1.369-.49l-1.297-2.247a1.125 1.125 0 01.26-1.431l1.004-.827c.292-.24.437-.613.43-.992a6.932 6.932 0 010-.255c.007-.378-.138-.75-.43-.99l-1.004-.828a1.125 1.125 0 01-.26-1.43l1.297-2.247a1.125 1.125 0 011.37-.491l1.216.456c.356.133.751.072 1.076-.124.072-.044.146-.087.22-.128.332-.183.582-.495.644-.869l.214-1.281z" />
@@ -642,7 +554,6 @@ export function DashboardNavbar({ title, subtitle, userType = 'customer', onMenu
                         </svg>
                         <span className="text-sm">{t('settings')}</span>
                       </Link>
-                    </>
                   )}
                   {/* Customer menu items */}
                   {isCustomer && (

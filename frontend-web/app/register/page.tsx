@@ -215,7 +215,7 @@ function RegisterForm() {
   const helperStyle = {} as const;
 
   return (
-    <div className="min-h-screen flex items-center justify-center py-8 sm:py-12 px-4 bg-page">
+    <div className="min-h-screen flex items-center justify-center pt-[calc(2rem+var(--safe-top))] pb-8 sm:pt-[calc(3rem+var(--safe-top))] sm:pb-12 px-4 bg-page">
       <div className="nuray-w-card-md sm:bg-surface sm:rounded-[24px] sm:p-10 sm:border sm:border-line">
         <div className="text-center mb-8">
           <Link href="/" className="inline-block">
