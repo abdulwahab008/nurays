@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useLocale, useT } from '@/lib/i18n';
 import { kitchenOrderMessages } from '@/lib/i18n/messages/kitchen-orders';
-import { formatTime } from '@/lib/utils';
+import { cn, formatTime } from '@/lib/utils';
 
 /** The rider on an order as the kitchen API gives it: a first name and how far the pickup has got. */
 export interface KitchenOrderRider {
@@ -80,7 +80,7 @@ export function useAge() {
   };
 }
 
-/** How long ready food has waited: "Ready 6 min ago", then "Ready since 9:05 pm" once it is more than an hour. */
+/** How long ready food has waited: "Ready 6 min ago", "Ready since 9:05 pm" after an hour, "Ready since 6 Nov" from an earlier day. */
 export function useReadyFor() {
   const t = useT(kitchenOrderMessages);
   const { locale } = useLocale();
@@ -88,7 +88,8 @@ export function useReadyFor() {
     const min = Math.floor((now - new Date(iso).getTime()) / 60_000);
     if (min < 1) return t('list.readyJustNow');
     if (min < 60) return t('list.readyMinAgo', { min });
-    return t('list.readySince', { time: whenShort(iso, now, locale) });
+    const today = new Date(iso).toDateString() === new Date(now).toDateString();
+    return t('list.readySince', { time: today ? formatTime(iso) : shortDay(iso, locale) });
   };
 }
 
@@ -116,7 +117,7 @@ export function RiderStatus({ rider, className = '' }: { rider: KitchenOrderRide
   } else {
     text = t('rider.coming', { name });
   }
-  return <p className={`text-sm text-ink ${className}`}>{text}</p>;
+  return <p className={cn('text-sm text-ink', className)}>{text}</p>;
 }
 
 const PREP_CHOICES = [15, 20, 30, 45, 60];

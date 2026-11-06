@@ -19,7 +19,6 @@ import { useT } from '@/lib/i18n';
 import { commonMessages } from '@/lib/i18n/messages/common';
 import { cancelReasonText, kitchenOrderMessages, kitchenStatusLabel, paymentMethodLabel, paymentStatusLabel } from '@/lib/i18n/messages/kitchen-orders';
 import { ExternalLink } from '@/components/ExternalLink';
-import { OrderStatusPill } from '@/components/ui/StatusPill';
 import { RejectOrderDialog } from '@/components/sellers/RejectOrderDialog';
 import { markNewOrdersSeen, setNowTabOpen } from '@/components/sellers/new-order-alert';
 import {
@@ -456,11 +455,16 @@ export default function SellerOrdersPage() {
     const ord = ticket.order;
     const status = ord.orderStatus;
     const tabStatuses = TAB_STATUSES[filter];
-    const showPill = filter === 'all' || (!!tabStatuses && !tabStatuses.includes(status));
+    // History rows name the status only when it is not what the tab already says (on All, delivered is the norm).
+    const shownTabStatuses = filter === 'all' ? TAB_STATUSES.delivered : tabStatuses;
+    const statusNote = filter !== 'active' && shownTabStatuses && !shownTabStatuses.includes(status) ? kitchenStatusLabel(status, t, tc) : null;
     const when =
       filter !== 'active' ? formatTime(ord.createdAt) : status === 'ready' && ord.readyAt ? readyFor(ord.readyAt, now) : age(ord.createdAt, now);
-    const firstName = ord.customerName?.trim().split(/\s+/)[0];
-    const meta = [when, firstName && <bdi key="name">{firstName}</bdi>, <OrderNo key="no" number={ord.orderNumber} />].filter(Boolean);
+    const firstName = filter === 'active' ? null : ord.customerName?.trim().split(/\s+/)[0];
+    const ended = ['cancelled', 'refunded', 'delivery_failed'].includes(status);
+    const reason = ord.cancellationReason && ['cancelled', 'refunded'].includes(status) ? cancelReasonText(ord.cancellationReason, t) : null;
+    const statusTag = statusNote && <span className={`font-medium ${ended ? 'text-red-700' : 'text-ink'}`}>{statusNote}</span>;
+    const meta = [!reason && statusTag, when, firstName && <bdi key="name">{firstName}</bdi>, <OrderNo key="no" number={ord.orderNumber} />].filter(Boolean);
     return (
       <li key={ord.id}>
         <Link
@@ -468,7 +472,7 @@ export default function SellerOrdersPage() {
           className="flex items-center gap-3 sm:gap-4 px-4 sm:px-5 py-4 min-h-11 hover:bg-raised focus-visible:outline-none focus-visible:bg-raised"
         >
           <div className="min-w-0 flex-1">
-            <p dir="auto" className="text-base text-ink truncate rtl:text-right">
+            <p dir="auto" className="text-base font-semibold text-ink line-clamp-2 break-words rtl:text-right">
               {(ticket.items || []).map((i, n) => (
                 <span key={i.id}>
                   {n > 0 && ', '}
@@ -476,7 +480,7 @@ export default function SellerOrdersPage() {
                 </span>
               ))}
             </p>
-            <p className="mt-0.5 text-sm text-muted">
+            <p className="mt-0.5 text-[13px] text-muted">
               {meta.map((part, n) => (
                 <span key={n}>
                   {n > 0 && ' '}
@@ -489,19 +493,19 @@ export default function SellerOrdersPage() {
             </p>
             {['ready', 'dispatched', 'in_transit'].includes(status) &&
               (ord.rider ? (
-                <RiderStatus rider={ord.rider} className="mt-1" />
+                <RiderStatus rider={ord.rider} className="mt-0.5 text-[13px]" />
               ) : (
-                <p className="mt-1 text-sm text-ink">{status === 'ready' ? t('rider.comingNoName') : t('list.riderOnWay')}</p>
+                <p className="mt-0.5 text-[13px] text-ink">{status === 'ready' ? t('rider.comingNoName') : t('list.riderOnWay')}</p>
               ))}
-            {ord.cancellationReason && ['cancelled', 'refunded'].includes(status) && (
-              <p className="mt-1 text-sm text-muted line-clamp-2">
-                {cancelReasonText(ord.cancellationReason, t)}
+            {reason && (
+              <p className="mt-0.5 text-[13px] text-muted truncate">
+                {statusTag && <>{statusTag} · </>}
+                {reason}
               </p>
             )}
           </div>
           <div className="text-end shrink-0">
-            <p className="text-base font-semibold text-ink tabular-nums">{formatPrice(ord.dishesTotal ?? ord.totalAmount)}</p>
-            {showPill && <OrderStatusPill status={status} label={kitchenStatusLabel(status, t, tc)} className="mt-1" />}
+            <p className={`text-base font-semibold tabular-nums ${ended ? 'text-muted' : 'text-ink'}`}>{formatPrice(ord.dishesTotal ?? ord.totalAmount)}</p>
           </div>
           <ChevronRight className="w-4 h-4 text-muted shrink-0 rtl:-scale-x-100" aria-hidden="true" />
         </Link>
@@ -509,7 +513,7 @@ export default function SellerOrdersPage() {
     );
   };
 
-  /** The history, a list card for each day under its date, the day's orders beside it, and on Delivered what they earned. */
+  /** The history: a list card for each day under its date. */
   const renderHistory = () => {
     const days: { key: string; tickets: OrderTicket[] }[] = [];
     for (const ticket of orderTickets) {
