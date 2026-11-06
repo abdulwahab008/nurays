@@ -12,7 +12,7 @@ import { AdminFilterTabs } from '@/components/admin/AdminFilterTabs';
 import { LoadingLine, Pager, PhoneText, SearchForm, StatusPill } from '@/components/admin/AdminListParts';
 import { useAuthStore } from '@/lib/store/auth-store';
 import { apiClient, apiErrorMessage } from '@/lib/api-client';
-import { formatDate, formatDateTime } from '@/lib/utils';
+import { formatDate, formatDateTime } from '@/components/admin/admin-dates';
 import { useShallow } from 'zustand/react/shallow';
 
 interface AdminUser {
@@ -182,7 +182,7 @@ export default function AdminUsersPage() {
                       <span className="flex items-start justify-between gap-2">
                         <span className="text-sm font-semibold text-ink">{u.name || 'Name not set'}</span>
                         <span className="flex shrink-0 gap-1">
-                          <StatusPill>{TYPE_LABEL[u.userType] ?? u.userType}</StatusPill>
+                          {type === 'all' && <StatusPill>{TYPE_LABEL[u.userType] ?? u.userType}</StatusPill>}
                           {u.status !== 'active' && <StatusPill tone="problem">{STATUS_LABEL[u.status] ?? u.status}</StatusPill>}
                         </span>
                       </span>
@@ -211,7 +211,7 @@ export default function AdminUsersPage() {
                 </thead>
                 <tbody className="divide-y divide-line">
                   {users.map((u) => (
-                    <tr key={u.id} className="align-top hover:bg-raised">
+                    <tr key={u.id} className="align-top hover:bg-page">
                       <td className="px-4 py-3">
                         <button type="button" onClick={() => setOpen(u)} className="min-h-11 text-start font-semibold text-ink hover:text-brand-ink hover:underline">
                           {u.name || 'Name not set'}
@@ -239,7 +239,7 @@ export default function AdminUsersPage() {
                 </tbody>
               </table>
             </div>
-            <Pager page={page} totalPages={totalPages} total={total} noun="accounts" onChange={setPage} />
+            <Pager page={page} totalPages={totalPages} total={total} noun="accounts" one="account" onChange={setPage} />
           </>
         )}
       </div>
@@ -294,7 +294,7 @@ function PersonSheet({
           </Button>
         </div>
         <div className="flex-1 space-y-5 overflow-y-auto px-4 py-4">
-          <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-2 text-sm">
+          <dl className="grid grid-cols-[auto_1fr] items-baseline gap-x-4 gap-y-2 text-sm">
             {rows.map(([label, value]) => (
               <div key={label} className="contents">
                 <dt className="text-muted">{label}</dt>

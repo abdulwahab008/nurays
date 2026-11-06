@@ -52,7 +52,21 @@ describe("a kitchen's order list", () => {
   it('pages by order and returns every one of its dishes on those orders', async () => {
     db.seller = { findUnique: jest.fn(async () => ({ id: 's1', deliveryProvider: 'platform' })) };
     const baseOrder = { orderStatus: 'pending', paymentStatus: 'pending', paymentMethod: 'cod', totalAmount: '0', createdAt: new Date(), deliveryType: 'home_delivery', deliveryFeeBreakdown: null, customer: null, deliveryAddress: null };
-    db.order = { findMany: jest.fn(async () => [{ id: 'o2' }, { id: 'o1' }]), count: jest.fn(async () => 7) };
+    db.order = {
+      findMany: jest.fn(async (args: any) =>
+        args.select.id
+          ? [{ id: 'o2' }, { id: 'o1' }]
+          : [
+              { orderStatus: 'pending', deliveryType: 'home_delivery', deliveryProvider: 'platform' },
+              { orderStatus: 'ready', deliveryType: 'home_delivery', deliveryProvider: 'platform' },
+              { orderStatus: 'ready', deliveryType: 'self_pickup', deliveryProvider: null },
+            ]
+      ),
+      count: jest.fn(async () => 7),
+      groupBy: jest.fn(async () => [{ orderStatus: 'pending', _count: { _all: 2 } }, { orderStatus: 'preparing', _count: { _all: 1 } }, { orderStatus: 'delivered', _count: { _all: 4 } }]),
+    };
+    db.delivery = { findMany: jest.fn(async () => [{ orderId: 'o1', status: 'assigned', arrivedAtPickup: null, pickupTime: null, rider: { userId: 'r-user' } }]) };
+    db.userProfile = { findMany: jest.fn(async () => [{ userId: 'r-user', fullName: 'Imran Ali' }]) };
     const dish = (id: string, orderId: string) => ({ id, status: 'pending', quantity: 1, unitPrice: '100', totalPrice: '100', sellerPayout: '90', product: null, order: { ...baseOrder, id: orderId, orderNumber: orderId } });
     db.orderItem = { findMany: jest.fn(async () => [dish('a', 'o1'), dish('b', 'o2'), dish('c', 'o1'), dish('d', 'o1')]) };
 
@@ -61,5 +75,29 @@ describe("a kitchen's order list", () => {
     expect(db.orderItem.findMany).toHaveBeenCalledWith(expect.objectContaining({ where: { sellerId: 's1', orderId: { in: ['o2', 'o1'] } } }));
     expect(out.orders.map((o: any) => [o.order.id, o.items.length])).toEqual([['o2', 1], ['o1', 3]]);
     expect(out.pagination).toEqual({ page: 2, limit: 2, total: 7, totalPages: 4 });
+    expect(out.counts).toEqual({ active: 3, needYou: 2, new: 2, delivered: 4, cancelled: 0 });
+    expect(out.orders.map((o: any) => o.order.needsKitchen)).toEqual([true, true]);
+    expect(out.orders.find((o: any) => o.order.id === 'o1').order.rider).toEqual({ name: 'Imran', status: 'assigned', arrivedAtPickup: null, pickedUpAt: null });
+    expect(out.orders.find((o: any) => o.order.id === 'o2').order.rider).toBeNull();
+  });
+
+  it('dates a ready order from when it was marked ready', async () => {
+    const readyAt = new Date('2026-11-06T16:05:00Z');
+    const dish = { id: 'a', status: 'ready', quantity: 1, unitPrice: '100', totalPrice: '100', sellerPayout: '90', product: null, order: { id: 'o1', orderNumber: 'o1', orderStatus: 'ready', paymentStatus: 'paid', paymentMethod: 'cod', totalAmount: '0', createdAt: new Date('2026-11-06T15:00:00Z'), deliveryType: 'home_delivery', deliveryProvider: 'platform', deliveryFeeBreakdown: null, customer: null, deliveryAddress: null } };
+    db.order.findMany = jest.fn(async (args: any) => (args.select.id ? [{ id: 'o1' }] : [{ orderStatus: 'ready', deliveryType: 'home_delivery', deliveryProvider: 'platform' }]));
+    db.orderItem = { findMany: jest.fn(async () => [dish]) };
+    db.orderStatusHistory = { findMany: jest.fn(async () => [{ orderId: 'o1', createdAt: readyAt }]) };
+
+    const out: any = await sellerOrderService.getSellerOrders('u1', { view: 'active' });
+    expect(out.orders[0].order).toMatchObject({ readyAt, needsKitchen: false });
+    expect(out.counts.needYou).toBe(0);
+  });
+
+  it('reads a tab as its group of statuses', async () => {
+    db.order.findMany.mockClear();
+    await sellerOrderService.getSellerOrders('u1', { view: 'active' });
+    expect(db.order.findMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: { orderStatus: { in: ['pending', 'confirmed', 'preparing', 'ready', 'dispatched', 'in_transit'] }, items: { some: { sellerId: 's1' } } },
+    }));
   });
 });

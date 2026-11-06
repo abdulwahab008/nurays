@@ -3,6 +3,8 @@
 import { useRef } from 'react';
 import { MAX_IMAGES } from '@/lib/product-form';
 import { FormSection } from './fields';
+import { useT } from '@/lib/i18n';
+import { kitchenProductFormMessages } from '@/lib/i18n/messages/kitchen-product-form';
 
 export interface ProductImage {
   /** Set for a photo already saved on the dish. */
@@ -26,6 +28,7 @@ export default function PhotosSection({
   onTooMany: () => void;
 }) {
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const t = useT(kitchenProductFormMessages);
 
   const add = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || []);
@@ -50,22 +53,22 @@ export default function PhotosSection({
     });
 
   return (
-    <FormSection id="dish-photos" title="Photos" hint="Up to four. The first one is the photo customers see first, so use good light and a clean background.">
+    <FormSection id="dish-photos" title={t('photos')} hint={t('photosHint')}>
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         {images.map((img, index) => (
           <div
             key={img.id || img.preview.slice(-32) + index}
             className="relative aspect-square rounded-xl overflow-hidden border border-line bg-raised group"
           >
-            <img src={img.preview} alt={`Photo ${index + 1}`} className="w-full h-full object-cover" />
+            <img src={img.preview} alt={t('photoAlt', { n: index + 1 })} className="w-full h-full object-cover" />
             {img.isPrimary && (
-              <span className="absolute top-2 start-2 rounded-full bg-surface px-2 py-0.5 text-xs font-medium text-ink">Main photo</span>
+              <span className="absolute top-2 start-2 rounded-full bg-surface px-2 py-0.5 text-xs font-medium text-ink">{t('mainPhoto')}</span>
             )}
-            {img.id && <span className="absolute bottom-2 start-2 rounded-full bg-surface px-2 py-0.5 text-xs font-medium text-muted">Saved</span>}
+            {img.id && <span className="absolute bottom-2 start-2 rounded-full bg-surface px-2 py-0.5 text-xs font-medium text-muted">{t('savedPhoto')}</span>}
             <button
               type="button"
               onClick={() => remove(index)}
-              aria-label={`Remove photo ${index + 1}`}
+              aria-label={t('removePhoto', { n: index + 1 })}
               className="absolute top-1 end-1 flex h-11 w-11 items-center justify-center rounded-full focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-brand/40"
             >
               <span className="flex h-7 w-7 items-center justify-center rounded-full bg-surface text-ink shadow-sm">
@@ -86,7 +89,7 @@ export default function PhotosSection({
             <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-hidden="true">
               <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
             </svg>
-            <span className="text-sm font-medium">{images.length === 0 ? 'Add photos' : `Add more (${MAX_IMAGES - images.length} left)`}</span>
+            <span className="text-sm font-medium">{images.length === 0 ? t('addPhotos') : t('addMorePhotos', { count: MAX_IMAGES - images.length })}</span>
           </button>
         )}
         <input ref={fileInputRef} type="file" accept="image/*" multiple onChange={add} className="hidden" />

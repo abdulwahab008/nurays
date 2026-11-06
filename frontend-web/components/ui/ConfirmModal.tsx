@@ -13,6 +13,8 @@ interface ConfirmModalProps {
   confirmText?: string;
   cancelText?: string;
   variant?: 'danger' | 'warning' | 'info';
+  /** The picture beside the title; by default a bin for `danger` and a warning sign otherwise. A danger that deletes nothing (handing a job back) takes `warning`. */
+  icon?: 'delete' | 'warning';
   loading?: boolean;
   onConfirm: () => void;
   onCancel: () => void;
@@ -25,6 +27,7 @@ export function ConfirmModal({
   confirmText,
   cancelText,
   variant = 'danger',
+  icon,
   loading = false,
   onConfirm,
   onCancel,
@@ -46,16 +49,17 @@ export function ConfirmModal({
   if (!isOpen) return null;
 
   const isDanger = variant === 'danger';
+  const Icon = (icon ?? (isDanger ? 'delete' : 'warning')) === 'delete' ? Trash2 : AlertTriangle;
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-ink/40"
+      className="fixed inset-0 z-[60] flex items-end sm:items-center justify-center p-0 sm:p-4 bg-ink/40"
       onClick={() => {
         if (!loading) onCancel();
       }}
     >
       <div
-        className="w-full sm:max-w-md bg-surface rounded-t-3xl sm:rounded-3xl p-6 pb-[calc(1.5rem+var(--safe-bottom))] sm:pb-6 shadow-2xl border border-line"
+        className="w-full sm:max-w-md bg-surface rounded-t-2xl sm:rounded-2xl p-5 sm:p-6 pb-[calc(1.25rem+var(--safe-bottom))] sm:pb-6 shadow-[var(--shadow-hover)]"
         onClick={(e) => e.stopPropagation()}
         role="dialog"
         aria-modal="true"
@@ -66,11 +70,11 @@ export function ConfirmModal({
           <div className="flex items-center gap-3 min-w-0">
             <div
               aria-hidden="true"
-              className={`w-11 h-11 rounded-2xl flex items-center justify-center shrink-0 ${
+              className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 ${
                 isDanger ? 'bg-red-50 text-red-700' : 'bg-accent-soft text-accent-soft-ink'
               }`}
             >
-              {isDanger ? <Trash2 className="w-5 h-5" /> : <AlertTriangle className="w-5 h-5" />}
+              <Icon className="w-5 h-5" />
             </div>
             <h3 id="confirm-dialog-title" className="text-lg font-semibold text-ink leading-snug">
               {title}
@@ -87,18 +91,19 @@ export function ConfirmModal({
           </button>
         </div>
 
-        <p id="confirm-dialog-message" className="text-[15px] text-muted leading-relaxed mt-3">{message}</p>
+        <p id="confirm-dialog-message" className="text-sm text-muted leading-relaxed mt-3">{message}</p>
 
         <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-3 mt-6">
-          <Button type="button" variant="outline" disabled={loading} onClick={onCancel} className="min-h-11">
+          {/* Focus starts on the safe answer, so Enter on a phone keyboard never confirms by accident. */}
+          <Button type="button" variant="outline" disabled={loading} onClick={onCancel} autoFocus>
             {cancelText ?? t('cancel')}
           </Button>
           {/* Words on turquoise are dark (text-on-brand, from the default variant); white only on the red. */}
-          <Button type="button" variant={isDanger ? 'destructive' : 'default'} disabled={loading} onClick={onConfirm} className="min-h-11 sm:min-w-28">
+          <Button type="button" variant={isDanger ? 'destructive' : 'default'} disabled={loading} onClick={onConfirm} className="sm:min-w-28">
             {loading ? (
               <span className="flex items-center gap-2">
                 <span aria-hidden="true" className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
-                <span>{t('clearing')}</span>
+                <span>{t('working')}</span>
               </span>
             ) : (
               confirmText ?? t('confirm')

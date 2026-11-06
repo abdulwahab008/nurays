@@ -1,6 +1,8 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { useT } from '@/lib/i18n';
+import { kitchenProductFormMessages } from '@/lib/i18n/messages/kitchen-product-form';
 
 const FOCUSABLE =
   'input:not([disabled]):not([type="hidden"]), textarea:not([disabled]), select:not([disabled]), button:not([disabled])[type="button"]';
@@ -44,28 +46,30 @@ const Key = ({ children }: { children: React.ReactNode }) => (
   <kbd className="rounded-md border border-line-strong bg-raised px-2 py-0.5 font-sans text-xs text-ink">{children}</kbd>
 );
 
-const ROWS: Array<{ label: string; keys: string[]; joiner?: string }> = [
-  { label: 'Save', keys: ['Ctrl', 'S'] },
-  { label: 'Save', keys: ['Ctrl', 'Enter'] },
-  { label: 'Show or hide this list', keys: ['Ctrl', 'K'] },
-  { label: 'Close, or leave the field', keys: ['Esc'] },
-  { label: 'Next field', keys: ['Enter', 'Tab'], joiner: 'or' },
-];
+const ROWS = [
+  { label: 'shortcut.save', keys: ['Ctrl', 'S'] },
+  { label: 'shortcut.save', keys: ['Ctrl', 'Enter'] },
+  { label: 'shortcut.toggle', keys: ['Ctrl', 'K'] },
+  { label: 'shortcut.close', keys: ['Esc'] },
+  { label: 'shortcut.next', keys: ['Enter', 'Tab'], or: true },
+] as const;
 
 export function ShortcutsButton({ onClick }: { onClick: () => void }) {
+  const t = useT(kitchenProductFormMessages);
   return (
     <button
       type="button"
       onClick={onClick}
       className="hidden min-h-11 items-center gap-2 rounded-xl px-3 text-sm text-muted hover:bg-raised hover:text-ink focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-brand/40 sm:inline-flex"
     >
-      Keyboard shortcuts
+      {t('shortcuts')}
       <Key>Ctrl K</Key>
     </button>
   );
 }
 
 export function ShortcutsHelp({ onClose }: { onClose: () => void }) {
+  const t = useT(kitchenProductFormMessages);
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={onClose}>
       <div
@@ -77,12 +81,12 @@ export function ShortcutsHelp({ onClose }: { onClose: () => void }) {
       >
         <div className="flex items-center justify-between">
           <h3 id="shortcuts-title" className="text-base font-semibold text-ink">
-            Keyboard shortcuts
+            {t('shortcuts')}
           </h3>
           <button
             type="button"
             onClick={onClose}
-            aria-label="Close"
+            aria-label={t('close')}
             className="flex h-11 w-11 items-center justify-center rounded-full text-muted hover:bg-raised hover:text-ink focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-brand/40"
           >
             <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-hidden="true">
@@ -93,11 +97,11 @@ export function ShortcutsHelp({ onClose }: { onClose: () => void }) {
         <dl className="mt-3 divide-y divide-line">
           {ROWS.map((row) => (
             <div key={row.keys.join('-')} className="flex items-center justify-between gap-4 py-2.5">
-              <dt className="text-sm text-ink">{row.label}</dt>
+              <dt className="text-sm text-ink">{t(row.label)}</dt>
               <dd className="flex flex-wrap items-center justify-end gap-1">
                 {row.keys.map((k, i) => (
                   <span key={k} className="flex items-center gap-1">
-                    {i > 0 && <span className="text-xs text-muted">{row.joiner || '+'}</span>}
+                    {i > 0 && <span className="text-xs text-muted">{'or' in row ? t('or') : '+'}</span>}
                     <Key>{k}</Key>
                   </span>
                 ))}

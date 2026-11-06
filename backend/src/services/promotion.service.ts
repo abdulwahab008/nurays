@@ -91,9 +91,8 @@ export class PromotionService {
 
   /**
    * Is this promotion actually usable right now for a real charge — in scope
-   * AND under both its total and per-user usage caps? (The public catalog
-   * preview below deliberately skips usage caps since it has no per-user
-   * context; charging must not.)
+   * AND under both its total and per-user usage caps? The catalog prices dishes
+   * with the same rule, so the price shown is the price charged.
    */
   private isCatalogEligibleForCharge(
     promotion: CatalogEligiblePromotion,
@@ -188,17 +187,26 @@ export class PromotionService {
       throw new AppError('Invalid promotion code', 400, 'INVALID_PROMO_CODE');
     }
 
-    // A seller- or product-scoped code only discounts the matching part of the
-    // cart. Scope it by the user's server cart when it has items.
+    // A seller- or product-scoped code only discounts the matching part of the cart, at the prices the order charges
+    // (after the kitchen's menu deals). Scope it by the user's server cart when it has items.
     if (promotion.sellerId || promotion.applicableProductIds.length > 0) {
       const cartItems = await prisma.cartItem.findMany({ where: { cart: { userId } } });
       if (cartItems.length > 0) {
-        const eligible = eligibleSubtotalForPromotion(
-          promotion,
+        const { discountedUnitPrices, usagesToRecord } = await this.computeOrderCatalogDiscounts(
+          userId,
           cartItems.map((i) => ({
             productId: i.productId,
             sellerId: i.sellerId,
-            total: Number(i.priceSnapshot) * i.quantity,
+            unitPrice: Number(i.priceSnapshot),
+            quantity: i.quantity,
+          }))
+        );
+        const eligible = eligibleSubtotalForPromotion(
+          promotion,
+          cartItems.map((i, idx) => ({
+            productId: i.productId,
+            sellerId: i.sellerId,
+            total: discountedUnitPrices[idx] * i.quantity,
           }))
         );
         if (eligible <= 0) {
@@ -212,18 +220,7 @@ export class PromotionService {
 
         // A kitchen's promotion is also a menu deal that comes off the dishes by itself (see computeOrderCatalogDiscounts).
         // Placing the order refuses its code in that case, so the preview must not promise a second discount.
-        if (promotion.sellerId) {
-          const { usagesToRecord } = await this.computeOrderCatalogDiscounts(
-            userId,
-            cartItems.map((i) => ({
-              productId: i.productId,
-              sellerId: i.sellerId,
-              unitPrice: Number(i.priceSnapshot),
-              quantity: i.quantity,
-            }))
-          );
-          if (usagesToRecord.some((u) => u.promotionId === promotion.id)) throw promotionAlreadyApplied();
-        }
+        if (promotion.sellerId && usagesToRecord.some((u) => u.promotionId === promotion.id)) throw promotionAlreadyApplied();
       }
     }
 
@@ -439,7 +436,7 @@ export class PromotionService {
    * Get active promotions that apply to each product (for customer catalog).
    * Returns { [productId]: [ { id, name, type, discountValue, ... } ] }
    */
-  async getPromotionsForCatalog(productIds: string[]): Promise<Record<string, Array<{
+  async getPromotionsForCatalog(productIds: string[], userId?: string): Promise<Record<string, Array<{
     id: string;
     name: string;
     type: string;
@@ -454,7 +451,7 @@ export class PromotionService {
     });
     const sellerIds = [...new Set(products.map((p) => p.sellerId))];
 
-    const promotionsRaw = await prisma.promotion.findMany({
+    const promotions = await prisma.promotion.findMany({
       where: {
         sellerId: { in: sellerIds },
         isActive: true,
@@ -469,22 +466,28 @@ export class PromotionService {
         applicableTo: true,
         usageLimitTotal: true,
         usedCount: true,
+        usageLimitPerUser: true,
         applicableProductIds: true,
         sellerId: true,
       },
     });
 
-    // A promo with no total-usage headroom left can't actually be charged to anyone
-    // anymore — don't advertise a deal price that charge-time would reject. (Per-user
-    // limits still can't be checked here: this endpoint is unauthenticated.)
-    const promotions = promotionsRaw.filter(
-      (p) => p.usageLimitTotal == null || p.usedCount < p.usageLimitTotal
-    );
+    // The deals shown are the ones the order will charge (isCatalogEligibleForCharge): a signed-in customer who has used
+    // up a deal sees the full price, so the tray and checkout never promise a price the order then refuses to give.
+    const userUsageCount = new Map<string, number>();
+    if (userId && promotions.length) {
+      const rows = await prisma.promotionUsage.groupBy({
+        by: ['promotionId'],
+        where: { promotionId: { in: promotions.map((p) => p.id) }, userId },
+        _count: { _all: true },
+      });
+      for (const r of rows) userUsageCount.set(r.promotionId, r._count._all);
+    }
 
     const result: Record<string, Array<{ id: string; name: string; type: string; discountValue: number }>> = {};
     for (const product of products) {
       const applicable = promotions.filter((p) =>
-        this.isInPromotionScope(p, product.id, product.sellerId)
+        this.isCatalogEligibleForCharge(p, product.id, product.sellerId, userUsageCount)
       );
       if (applicable.length) {
         result[product.id] = applicable.map((p) => ({

@@ -6,21 +6,19 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { DashboardLayout, SELLER_SIDEBAR_ITEMS } from '@/components/layout/DashboardShell';
 import { LoadError } from '@/components/ui/LoadError';
+import { StatusPill } from '@/components/ui/StatusPill';
 import { useToast } from '@/components/ui/toast';
 import { useAuthStore } from '@/lib/store/auth-store';
 import { apiClient } from '@/lib/api-client';
 import { formatPrice } from '@/lib/utils';
 import { useShallow } from 'zustand/react/shallow';
 import { RefreshCw } from 'lucide-react';
+import { useLocale, useT } from '@/lib/i18n';
+import { kitchenReportMessages } from '@/lib/i18n/messages/kitchen-reports';
 
 type PeriodType = '7d' | '30d' | '90d' | '1y';
 
-const PERIODS: { id: PeriodType; label: string; words: string }[] = [
-  { id: '7d', label: '7 days', words: 'The last 7 days' },
-  { id: '30d', label: '30 days', words: 'The last 30 days' },
-  { id: '90d', label: '90 days', words: 'The last 90 days' },
-  { id: '1y', label: '12 months', words: 'The last 12 months' },
-];
+const PERIODS: PeriodType[] = ['7d', '30d', '90d', '1y'];
 
 interface AnalyticsData {
   unitsSold: {
@@ -67,6 +65,9 @@ export default function SellerAnalyticsPage() {
   const router = useRouter();
   const { isAuthenticated, user } = useAuthStore(useShallow((s) => ({ isAuthenticated: s.isAuthenticated, user: s.user })));
   const { showToast } = useToast();
+  const t = useT(kitchenReportMessages);
+  const { locale } = useLocale();
+  const dateLocale = locale === 'ur' ? 'ur-PK-u-nu-latn' : 'en-PK';
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<unknown>(null);
@@ -88,7 +89,7 @@ export default function SellerAnalyticsPage() {
       if (response.data.success) {
         setAnalytics(response.data.data);
       } else {
-        throw new Error(response.data.message || 'Failed to load analytics');
+        throw new Error(response.data.message || t('loadFailedApi'));
       }
     } catch (err) {
       setError(err);
@@ -105,7 +106,7 @@ export default function SellerAnalyticsPage() {
 
     if (user?.userType !== 'seller' && user?.user_type !== 'seller') {
       router.push('/dashboard');
-      showToast('Access denied. Seller privileges required.', 'error');
+      showToast(t('accessDenied'), 'error');
       return;
     }
 
@@ -149,7 +150,7 @@ export default function SellerAnalyticsPage() {
       for (let i = 11; i >= 0; i--) {
         const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
         const monthKey = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-        const monthName = d.toLocaleString('en-US', { month: 'short' });
+        const monthName = d.toLocaleString(dateLocale, { month: 'short' });
         
         let monthRev = 0;
         dateMap.forEach((rev, dateStr) => {
@@ -168,7 +169,7 @@ export default function SellerAnalyticsPage() {
     for (let i = days - 1; i >= 0; i -= step) {
       const d = new Date(now.getTime() - i * 24 * 60 * 60 * 1000);
       const isoDate = dayKey(d);
-      const label = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+      const label = d.toLocaleDateString(dateLocale, { month: 'short', day: 'numeric' });
       
       let rev = 0;
       if (step === 1) {
@@ -184,7 +185,7 @@ export default function SellerAnalyticsPage() {
     }
 
     return result;
-  }, [analytics?.revenue?.graph, selectedPeriod]);
+  }, [analytics?.revenue?.graph, selectedPeriod, dateLocale]);
 
   const maxRevenueInChart = useMemo(() => {
     const maxVal = Math.max(...chartData.map((d) => d.revenue), 0);
@@ -203,7 +204,7 @@ export default function SellerAnalyticsPage() {
     return null;
   }
 
-  const periodWords = PERIODS.find((p) => p.id === selectedPeriod)?.words ?? '';
+  const periodWords = t(`periodWords.${selectedPeriod}`);
   const noSales = totalRevenue === 0 && chartData.every((d) => d.revenue === 0);
   const cancelledShare = totalOrders > 0 ? ((cancelledOrders / totalOrders) * 100).toFixed(1) : '0';
   const stepX = 920 / Math.max(1, chartData.length);
@@ -213,30 +214,30 @@ export default function SellerAnalyticsPage() {
 
   return (
     <DashboardLayout
-      title="Reports"
-      subtitle="What you sold and what you earned"
+      title={t('title')}
+      subtitle={t('subtitle')}
       sidebarItems={SELLER_SIDEBAR_ITEMS}
       userType="seller"
     >
       <div className="max-w-6xl mx-auto">
         <div className="flex items-end justify-between gap-4 border-b border-line mb-6">
-          <div role="tablist" aria-label="Time period" className="flex gap-5 sm:gap-6 overflow-x-auto [scrollbar-width:none]">
+          <div role="tablist" aria-label={t('periodLabel')} className="flex gap-5 sm:gap-6 overflow-x-auto [scrollbar-width:none]">
             {PERIODS.map((p) => {
-              const selected = selectedPeriod === p.id;
+              const selected = selectedPeriod === p;
               return (
                 <button
-                  key={p.id}
-                  id={`period-btn-${p.id}`}
+                  key={p}
+                  id={`period-btn-${p}`}
                   type="button"
                   role="tab"
                   aria-selected={selected}
-                  onClick={() => setSelectedPeriod(p.id)}
+                  onClick={() => setSelectedPeriod(p)}
                   disabled={loading}
                   className={`-mb-px min-h-11 pb-1 text-[15px] whitespace-nowrap border-b-2 transition-colors disabled:cursor-wait ${
                     selected ? 'border-brand-600 text-ink font-semibold' : 'border-transparent text-muted hover:text-ink'
                   }`}
                 >
-                  {p.label}
+                  {t(`period.${p}`)}
                 </button>
               );
             })}
@@ -245,57 +246,57 @@ export default function SellerAnalyticsPage() {
             type="button"
             onClick={() => loadAnalytics(selectedPeriod)}
             disabled={loading}
-            aria-label="Refresh"
+            aria-label={t('refresh')}
             className="shrink-0 mb-1 inline-flex items-center gap-1.5 min-h-11 px-2 rounded-lg text-sm font-medium text-muted hover:text-ink disabled:cursor-wait focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-brand/40"
           >
             <RefreshCw className={`w-4 h-4 ${loading ? 'motion-safe:animate-spin' : ''}`} aria-hidden="true" />
-            <span className="hidden sm:inline">Refresh</span>
+            <span className="hidden sm:inline">{t('refresh')}</span>
           </button>
         </div>
 
         {Boolean(error) && analytics && (
-          <LoadError compact error={error} onRetry={() => loadAnalytics(selectedPeriod)} title="We couldn't refresh your sales" className="mb-6" />
+          <LoadError compact error={error} onRetry={() => loadAnalytics(selectedPeriod)} title={t('refreshFailed')} className="mb-6" />
         )}
 
         {loading && !analytics ? (
           <div className="py-24 text-center" role="status">
             <div className="animate-spin rounded-full h-8 w-8 border-2 border-line border-t-brand-600 mx-auto mb-4" />
-            <p className="text-sm text-muted">Loading your sales…</p>
+            <p className="text-sm text-muted">{t('loading')}</p>
           </div>
         ) : !analytics ? (
           // Nothing could be read: no figures, which would read "Rs 0" and "0 sold".
-          error ? <LoadError error={error} onRetry={() => loadAnalytics(selectedPeriod)} title="We couldn't load your sales" /> : null
+          error ? <LoadError error={error} onRetry={() => loadAnalytics(selectedPeriod)} title={t('loadFailed')} /> : null
         ) : (
           <>
             <dl className="grid grid-cols-2 lg:grid-cols-4 gap-x-6 gap-y-6 mb-8">
               <div>
-                <dt className="text-sm text-muted">Earned</dt>
+                <dt className="text-sm text-muted">{t('earned')}</dt>
                 <dd className="text-2xl font-semibold text-ink tabular-nums mt-0.5">{formatPrice(totalRevenue)}</dd>
                 <dd className="text-xs text-muted mt-1 tabular-nums">
-                  Today {formatPrice(analytics.revenue?.today ?? 0)}, this month {formatPrice(analytics.revenue?.thisMonth ?? 0)}
+                  {t('earnedSplit', { today: formatPrice(analytics.revenue?.today ?? 0), month: formatPrice(analytics.revenue?.thisMonth ?? 0) })}
                 </dd>
               </div>
               <div>
-                <dt className="text-sm text-muted">Dishes sold</dt>
+                <dt className="text-sm text-muted">{t('dishesSold')}</dt>
                 <dd className="text-2xl font-semibold text-ink tabular-nums mt-0.5">{totalUnits}</dd>
                 <dd className="text-xs text-muted mt-1 tabular-nums">
-                  Today {analytics.unitsSold?.today ?? 0}, this week {analytics.unitsSold?.thisWeek ?? 0}
+                  {t('soldSplit', { today: analytics.unitsSold?.today ?? 0, week: analytics.unitsSold?.thisWeek ?? 0 })}
                 </dd>
               </div>
               <div>
-                <dt className="text-sm text-muted">Orders delivered</dt>
+                <dt className="text-sm text-muted">{t('ordersDelivered')}</dt>
                 <dd className="text-2xl font-semibold text-ink tabular-nums mt-0.5">
                   {completedOrders}
-                  <span className="text-sm font-normal text-muted"> of {totalOrders}</span>
+                  <span className="text-sm font-normal text-muted"> {t('ofTotal', { total: totalOrders })}</span>
                 </dd>
                 <dd className="text-xs text-muted mt-1 tabular-nums">
-                  {totalOrders > 0 ? `${fulfillmentRate}% of your orders` : 'No orders yet'}
+                  {totalOrders > 0 ? t('shareOfOrders', { percent: fulfillmentRate }) : t('noOrders')}
                 </dd>
               </div>
               <div>
-                <dt className="text-sm text-muted">Average you earn per order</dt>
+                <dt className="text-sm text-muted">{t('averagePerOrder')}</dt>
                 <dd className="text-2xl font-semibold text-ink tabular-nums mt-0.5">{formatPrice(averageOrderValue)}</dd>
-                <dd className="text-xs text-muted mt-1">From your dishes, after Nuray&apos;s fee</dd>
+                <dd className="text-xs text-muted mt-1">{t('averageHint')}</dd>
               </div>
             </dl>
 
@@ -303,18 +304,18 @@ export default function SellerAnalyticsPage() {
               <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-2 mb-4">
                 <div>
                   <h2 className="text-sm font-semibold text-ink">
-                    {selectedPeriod === '1y' ? 'Earnings by month' : 'Earnings by day'}
+                    {selectedPeriod === '1y' ? t('byMonth') : t('byDay')}
                   </h2>
                   {!noSales && (
                     <p className="text-xs text-muted mt-0.5 tabular-nums">
                       {peakDay && peakDay.revenue > 0
-                        ? `Best ${selectedPeriod === '1y' ? 'month' : 'day'}: ${peakDay.label}, ${formatPrice(peakDay.revenue)}`
+                        ? t(selectedPeriod === '1y' ? 'bestMonth' : 'bestDay', { label: peakDay.label, amount: formatPrice(peakDay.revenue) })
                         : periodWords}
                     </p>
                   )}
                 </div>
                 {!noSales && (
-                  <div role="group" aria-label="Chart style" className="flex rounded-lg border border-line p-0.5 text-xs">
+                  <div role="group" aria-label={t('chartStyle')} className="flex rounded-lg border border-line p-0.5 text-xs">
                     {(['bar', 'line'] as const).map((view) => (
                       <button
                         key={view}
@@ -325,7 +326,7 @@ export default function SellerAnalyticsPage() {
                           chartView === view ? 'bg-raised text-ink font-semibold' : 'text-muted hover:text-ink'
                         }`}
                       >
-                        {view === 'bar' ? 'Bars' : 'Line'}
+                        {view === 'bar' ? t('bars') : t('line')}
                       </button>
                     ))}
                   </div>
@@ -334,12 +335,12 @@ export default function SellerAnalyticsPage() {
 
               {noSales ? (
                 <p className="text-sm text-muted">
-                  No sales in {periodWords.toLowerCase()}.{' '}
+                  {periodWords}. {t('noSales')}{' '}
                   <Link
                     href="/sellers/products"
                     className="inline-flex items-center min-h-11 font-semibold text-brand-ink underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-brand/40 rounded"
                   >
-                    Check your dishes
+                    {t('checkDishes')}
                   </Link>
                 </p>
               ) : (
@@ -462,37 +463,37 @@ export default function SellerAnalyticsPage() {
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-x-12 gap-y-10">
               <section className="pt-3 border-t border-line">
                 <div className="flex items-center justify-between gap-3 mb-1">
-                  <h2 className="text-sm font-semibold text-ink">Orders</h2>
+                  <h2 className="text-sm font-semibold text-ink">{t('orders')}</h2>
                   <Link href="/sellers/orders" className="inline-flex items-center min-h-11 px-2 -me-2 text-sm font-semibold text-brand-ink rounded-lg hover:bg-brand-soft focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-brand/40">
-                    See orders
+                    {t('seeOrders')}
                   </Link>
                 </div>
                 <dl className="divide-y divide-line text-sm">
                   <div className="flex items-center justify-between py-2.5">
-                    <dt className="text-muted">Delivered and paid</dt>
+                    <dt className="text-muted">{t('deliveredPaid')}</dt>
                     <dd className="font-semibold text-ink tabular-nums">{completedOrders}</dd>
                   </div>
                   <div className="flex items-center justify-between py-2.5">
-                    <dt className="text-muted">Being made or on the way</dt>
+                    <dt className="text-muted">{t('inProgress')}</dt>
                     <dd className="font-semibold text-ink tabular-nums">{inProgressOrders}</dd>
                   </div>
                   {awaitingPaymentOrders > 0 && (
                     <div className="flex items-center justify-between py-2.5">
-                      <dt className="text-muted">Delivered, payment not in yet</dt>
+                      <dt className="text-muted">{t('awaitingPayment')}</dt>
                       <dd>
-                        <span className="rounded-full px-2 py-0.5 text-xs font-medium bg-accent-soft text-accent-soft-ink tabular-nums">{awaitingPaymentOrders}</span>
+                        <StatusPill tone="waiting" className="tabular-nums">{awaitingPaymentOrders}</StatusPill>
                       </dd>
                     </div>
                   )}
                   <div className="flex items-center justify-between py-2.5">
-                    <dt className="text-muted">Cancelled or refunded</dt>
+                    <dt className="text-muted">{t('cancelled')}</dt>
                     <dd className={`font-semibold tabular-nums ${cancelledOrders > 0 ? 'text-red-700' : 'text-ink'}`}>
                       {cancelledOrders}
                       {cancelledOrders > 0 && <span className="font-normal text-muted"> ({cancelledShare}%)</span>}
                     </dd>
                   </div>
                   <div className="flex items-center justify-between py-2.5">
-                    <dt className="text-ink font-medium">All orders</dt>
+                    <dt className="text-ink font-medium">{t('allOrders')}</dt>
                     <dd className="font-semibold text-ink tabular-nums">{totalOrders}</dd>
                   </div>
                 </dl>
@@ -500,13 +501,13 @@ export default function SellerAnalyticsPage() {
 
               <section className="pt-3 border-t border-line">
                 <div className="flex items-center justify-between gap-3 mb-1">
-                  <h2 className="text-sm font-semibold text-ink">Best-selling dishes</h2>
+                  <h2 className="text-sm font-semibold text-ink">{t('bestSelling')}</h2>
                   <Link href="/sellers/products" className="inline-flex items-center min-h-11 px-2 -me-2 text-sm font-semibold text-brand-ink rounded-lg hover:bg-brand-soft focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-brand/40">
-                    Your dishes
+                    {t('yourDishes')}
                   </Link>
                 </div>
                 {(!analytics.topProducts || analytics.topProducts.length === 0) ? (
-                  <p className="py-6 text-sm text-muted">Your dishes will be ranked here by what they earn, once they sell.</p>
+                  <p className="py-6 text-sm text-muted">{t('noRanking')}</p>
                 ) : (
                   <ol className="divide-y divide-line">
                     {analytics.topProducts.map((product, idx) => {
@@ -518,7 +519,7 @@ export default function SellerAnalyticsPage() {
                           <div className="flex items-baseline justify-between gap-3">
                             <p className="min-w-0 truncate text-sm text-ink">
                               <span className="inline-block w-5 text-muted tabular-nums">{idx + 1}</span>
-                              <span className="font-medium">{product.name}</span>
+                              <bdi className="font-medium">{product.name}</bdi>
                             </p>
                             <p className="shrink-0 text-sm font-semibold text-ink tabular-nums">{formatPrice(productRevenue)}</p>
                           </div>
@@ -526,7 +527,9 @@ export default function SellerAnalyticsPage() {
                             <div style={{ width: `${revenueShare}%` }} className="h-full bg-brand-600 rounded-full" />
                           </div>
                           <p className="ms-5 mt-1.5 text-xs text-muted tabular-nums">
-                            {product.quantity} sold{sales != null ? `, ${formatPrice(sales)} in sales` : ''}, {formatPrice(productRevenue)} to you ({revenueShare}% of what your dishes earned)
+                            {sales != null
+                              ? t('dishLineSales', { count: product.quantity, sales: formatPrice(sales), earned: formatPrice(productRevenue), percent: revenueShare })
+                              : t('dishLine', { count: product.quantity, earned: formatPrice(productRevenue), percent: revenueShare })}
                           </p>
                         </li>
                       );

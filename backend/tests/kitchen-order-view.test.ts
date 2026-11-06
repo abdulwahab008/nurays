@@ -12,6 +12,8 @@ jest.mock('../src/config/database', () => ({
     rider: { findUnique: jest.fn() },
     userProfile: { findUnique: jest.fn() },
     order: { findFirst: jest.fn(), findUnique: jest.fn() },
+    delivery: { findMany: jest.fn(async () => []) },
+    orderItem: { findMany: jest.fn(async () => []) },
   },
 }));
 

@@ -1,8 +1,8 @@
 'use client';
 
 /**
- * The cards under the filters: home food, open a home kitchen, the frozen pantry. Flat colours, no gradients. A signed-in
- * customer does not get the "sell on Nuray" card (the menu and footer keep it). On a phone they scroll sideways.
+ * The cards under the filters for a visitor (a signed-in customer does not see them): home food, open a home kitchen, the
+ * frozen pantry. Flat colours, no gradients. On a phone they scroll sideways.
  */
 import Link from 'next/link';
 import { Flame, ChefHat, Snowflake, ChevronRight, type LucideIcon } from 'lucide-react';
@@ -24,7 +24,7 @@ type Card = {
   button: string;
 };
 
-export default function PromoBanners({ forCustomer = false }: { forCustomer?: boolean }) {
+export default function PromoBanners() {
   const t = useT(homeMessages);
   const cards: Card[] = [
     {
@@ -69,16 +69,10 @@ export default function PromoBanners({ forCustomer = false }: { forCustomer?: bo
     },
   ];
 
-  const shown = forCustomer ? cards.filter((c) => c.key !== 'cook') : cards;
-
   return (
     <section className="max-w-[1280px] mx-auto pt-6 pb-2">
-      <div
-        className={`flex gap-3 overflow-x-auto scrollbar-none px-4 sm:px-8 md:grid md:gap-4 md:overflow-visible ${
-          shown.length === 2 ? 'md:grid-cols-2' : 'md:grid-cols-3'
-        }`}
-      >
-        {shown.map(({ key, href, icon: Icon, tag, title, body, cta, box, tagBox, bodyText, button }) => (
+      <div className="flex gap-3 overflow-x-auto scrollbar-none px-4 sm:px-8 md:grid md:grid-cols-3 md:gap-4 md:overflow-visible">
+        {cards.map(({ key, href, icon: Icon, tag, title, body, cta, box, tagBox, bodyText, button }) => (
           <div key={key} className={`w-[280px] shrink-0 md:w-auto rounded-[20px] p-5 sm:p-6 flex flex-col justify-between gap-4 min-h-[170px] ${box}`}>
             <div>
               <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold mb-3 ${tagBox}`}>

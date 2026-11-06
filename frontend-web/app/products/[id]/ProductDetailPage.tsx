@@ -8,7 +8,7 @@ import Link from 'next/link';
 import { productService } from '@/lib/services/product.service';
 import { cartService } from '@/lib/services/cart.service';
 import { addressService } from '@/lib/services/address.service';
-import { displayRating, formatPrice } from '@/lib/utils';
+import { displayRating, formatPrice, formatTime } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/toast';
 import { useCartStore, type CartItem } from '@/lib/store/cart-store';
@@ -31,10 +31,6 @@ interface CatalogPromotion {
   name: string;
   type: string;
   discountValue: number;
-}
-
-function formatClock(iso: string): string {
-  return new Date(iso).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
 }
 
 /**
@@ -539,7 +535,7 @@ export default function ProductDetailPage({ initial }: { initial?: RawProduct })
       {/* Product Images - left column */}
       <div className="lg:sticky lg:top-[calc(6rem+var(--safe-top))] self-start">
         <div className="bg-surface rounded-[24px] border border-line overflow-hidden">
-          <div className="aspect-[4/3] lg:aspect-square lg:max-h-[520px] bg-raised flex items-center justify-center overflow-hidden">
+          <div className="w-full aspect-[4/3] lg:aspect-square lg:max-h-[520px] bg-raised flex items-center justify-center overflow-hidden">
             {product.images[selectedImage]?.url ? (
               <img
                 src={product.images[selectedImage].url}
@@ -763,10 +759,10 @@ export default function ProductDetailPage({ initial }: { initial?: RawProduct })
                   : t('closed')}
               </p>
               {product.seller.availability.isOpen && product.seller.availability.closesAt && (
-                <p className="text-xs text-muted">{t('closesAt', { time: formatClock(product.seller.availability.closesAt) })}</p>
+                <p className="text-xs text-muted">{t('closesAt', { time: formatTime(product.seller.availability.closesAt) })}</p>
               )}
               {!product.seller.availability.isOpen && product.seller.availability.opensAt && (
-                <p className="text-xs text-muted">{t('opensAt', { time: formatClock(product.seller.availability.opensAt) })}</p>
+                <p className="text-xs text-muted">{t('opensAt', { time: formatTime(product.seller.availability.opensAt) })}</p>
               )}
               {!product.seller.availability.isOpen && product.seller.availability.reason && (
                 <p className="text-xs text-muted">{product.seller.availability.reason}</p>
@@ -779,7 +775,8 @@ export default function ProductDetailPage({ initial }: { initial?: RawProduct })
             )}
           </div>
         )}
-        {product.seller && (
+        {/* "Accepting orders" under "Open now" says nothing new; the line stays for pre-orders and for a kitchen not taking orders. */}
+        {product.seller && !(product.seller.isAcceptingOrders && !product.seller.preOrderOnly && product.seller.availability?.isOpen) && (
           <p className={`text-sm font-medium -mt-2 ${product.seller.isAcceptingOrders ? 'text-brand-ink' : 'text-red-600'}`}>
             {product.seller.isAcceptingOrders
               ? product.seller.preOrderOnly ? t('acceptingPreOrders') : t('acceptingOrders')
@@ -804,9 +801,11 @@ export default function ProductDetailPage({ initial }: { initial?: RawProduct })
               <p className="text-base font-semibold text-ink">
                 {product.delivery.deliverable
                   ? `${product.delivery.fee === 0 ? t('freeDelivery') : t('deliveryFeeAmount', { amount: formatPrice(product.delivery.fee) })}${
-                      product.estimatedDeliveryMinMinutes != null
-                        ? ` · ${t('etaMin', { min: product.estimatedDeliveryMinMinutes, max: product.estimatedDeliveryMaxMinutes })}`
-                        : ''
+                      stockType === 'direct'
+                        ? ` · ${t('nextDay')}`
+                        : product.estimatedDeliveryMinMinutes != null
+                          ? ` · ${t('etaMin', { min: product.estimatedDeliveryMinMinutes, max: product.estimatedDeliveryMaxMinutes })}`
+                          : ''
                     }${product.delivery.distanceKm != null ? ` · ${t('kmAway', { km: product.delivery.distanceKm })}` : ''}`
                   : product.delivery.reason || t('notDeliverable')}
               </p>
@@ -836,7 +835,7 @@ export default function ProductDetailPage({ initial }: { initial?: RawProduct })
                   disabled={product.stockQuantity !== undefined && product.stockQuantity <= 0}
                   className={`px-4 py-2 rounded-xl border-2 text-sm font-medium transition-all disabled:opacity-40 disabled:cursor-not-allowed ${
                     selectedVariantId === null
-                      ? 'border-ink bg-ink text-page'
+                      ? 'border-brand bg-brand-soft text-brand-soft-ink'
                       : 'border-line text-ink hover:border-line-strong'
                   }`}
                 >
@@ -851,7 +850,7 @@ export default function ProductDetailPage({ initial }: { initial?: RawProduct })
                     disabled={v.stockQuantity <= 0}
                     className={`px-4 py-2 rounded-xl border-2 text-sm font-medium transition-all disabled:opacity-40 disabled:cursor-not-allowed ${
                       selectedVariantId === v.id
-                        ? 'border-ink bg-ink text-page'
+                        ? 'border-brand bg-brand-soft text-brand-soft-ink'
                         : 'border-line text-ink hover:border-line-strong'
                     }`}
                   >

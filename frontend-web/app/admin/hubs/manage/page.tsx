@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
+import { PageHeader, outlineLinkClass } from '@/components/admin/AdminListParts';
 import { AdminShell } from '@/components/layout/AdminShell';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/toast';
@@ -185,22 +186,21 @@ export default function AdminHubSetupPage() {
 
   return (
     <AdminShell>
-      <div className="max-w-6xl mx-auto space-y-6">
-        <div className="flex flex-wrap items-end justify-between gap-3">
-          <div>
-            <h1 className="text-2xl font-semibold text-ink">Hubs and managers</h1>
-            <p className="text-sm text-muted mt-1">
-              Set up hubs and give each a manager. Day-to-day stock and temperature work is in{' '}
-              <Link href="/admin/hubs" className="text-brand-ink underline">
+      <div className="max-w-6xl space-y-6">
+        <PageHeader
+          title="Hubs and managers"
+          subtitle="Set up hubs and give each a manager. Day-to-day stock and temperature work is in Operations."
+          actions={
+            <>
+              <Link href="/admin/hubs" className={outlineLinkClass}>
                 Operations
               </Link>
-              .
-            </p>
-          </div>
-          <Button variant={form ? 'outline' : 'default'} onClick={() => setForm(form ? null : blankHub())}>
-            {form ? 'Close' : 'New hub'}
-          </Button>
-        </div>
+              <Button variant={form ? 'outline' : 'default'} onClick={() => setForm(form ? null : blankHub())}>
+                {form ? 'Close' : 'New hub'}
+              </Button>
+            </>
+          }
+        />
 
         {form && (
           <form onSubmit={saveHub} className="bg-surface border border-line rounded-2xl p-4 sm:p-5 grid grid-cols-1 lg:grid-cols-2 gap-5" data-testid="hub-form">

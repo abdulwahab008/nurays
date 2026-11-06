@@ -17,6 +17,7 @@ export const kitchenOrderMessages = defineMessages({
     statusNew: 'New order',
     // Payment statuses
     'payStatus.pending': 'not paid yet',
+    'pay.codPickup': 'Cash when collected',
     'payStatus.paid': 'paid',
     'payStatus.failed': 'failed',
     'payStatus.refunded': 'refunded',
@@ -52,22 +53,14 @@ export const kitchenOrderMessages = defineMessages({
     'dash.kitchenClosed': 'Closed',
     'dash.openHint': 'Customers can order from you now.',
     'dash.closedHint': 'Customers cannot order until you open.',
-    'dash.waiting': '{count} waiting for you',
-    'dash.waitingOne': '1 order waiting for you',
-    'dash.nothingWaiting': 'Nothing waiting for you',
-    'dash.waitingHint': 'New orders to accept and orders you are cooking.',
-    'dash.inProgress': '{count} more ready or with the rider',
     'dash.allQuiet': 'New orders will show here as soon as they come in.',
-    'dash.openOrders': 'Open orders',
-    'dash.latestOrders': 'Latest orders',
-    'dash.noOrders': 'No orders yet.',
     'dash.today': 'Today',
-    'dash.todayEarnings': 'Earned',
+    'dash.todayEarnings': 'Earned today',
+    'dash.earnedMeans': "Earned is what delivered, paid orders leave you after Nuray's fee.",
     'dash.ordersToday': 'Orders',
     'dash.money': 'Money',
-    'dash.totalEarnings': 'Earned so far',
-    'dash.comingToYou': 'Coming to you: {amount}',
     'dash.afterRiderCash': '{amount} of it after riders hand in the cash',
+    'dash.allAfterRiderCash': 'Once riders hand in the cash for your orders',
     'dash.noPayoutAccount': 'Add a JazzCash, Easypaisa or bank account so we can pay you.',
     'dash.addPayoutAccount': 'Add an account',
     'dash.earningsLink': 'See earnings',
@@ -76,9 +69,15 @@ export const kitchenOrderMessages = defineMessages({
     'dash.addFoodItem': 'Add a dish',
     'dash.lowStock': 'Running low',
     'dash.allStocked': 'Nothing is running low.',
-    'dash.yesterday': 'Yesterday {time}',
     'dash.onlyLeft': '{count} left',
     'dash.manage': 'All dishes',
+    'dash.needYou': '{count} orders need you',
+    'dash.needYouOne': '1 order needs you',
+    'dash.nothingToCook': 'Nothing to cook right now',
+    'dash.viewAll': 'All orders',
+    'dash.moreActive': '{count} more in progress',
+    'dash.comingToYouLabel': 'Coming to you',
+    'dash.earnedSoFar': 'Earned since you joined',
 
     // Orders list
     'reason.item_unavailable': 'Dish not available',
@@ -86,6 +85,14 @@ export const kitchenOrderMessages = defineMessages({
     'reason.unable_to_prepare': 'Cannot make it in time',
     'reason.temporary_issue': 'Gas, power or kitchen problem',
     'reason.other': 'Something else',
+    'reason.out_of_stock': 'Out of stock',
+    'reason.kitchen_unavailable': 'Kitchen not available',
+    'reason.customerMistake': 'Ordered by mistake',
+    'reason.customerChangedMind': 'Changed their mind',
+    'reason.customerTooLong': 'Taking too long',
+    'cancel.byKitchen': 'You rejected it: {reason}',
+    'cancel.notAcceptedInTime': 'Not accepted in time',
+    'cancel.notPaidInTime': 'Payment not completed in time',
     'list.loadFailed': 'Could not load orders',
     'list.paymentVerified': 'Payment confirmed. The order is marked paid.',
     'list.paymentDisputed': 'Marked as not received. Nuray will look into it.',
@@ -107,15 +114,12 @@ export const kitchenOrderMessages = defineMessages({
     'tab.delivered': 'Delivered',
     'tab.cancelled': 'Cancelled',
     'list.title': 'Orders',
-    'list.subtitle': 'Accept new orders, then mark them ready when they are cooked.',
     'list.refresh': 'Refresh',
     'list.syncing': 'Loading orders…',
     'list.emptyAll': 'No orders yet. New orders show here as soon as they come in.',
     'list.emptyFiltered': 'No orders in "{filter}".',
-    'list.prep': 'About {min} min to cook',
     'list.chatTitle': 'Message the customer',
     'list.chat': 'Message',
-    'list.communityDelivery': 'No area given',
     'list.proofTitle': 'The customer says they have paid',
     'list.method': 'Sent from',
     'list.directWallet': 'a wallet',
@@ -128,9 +132,7 @@ export const kitchenOrderMessages = defineMessages({
     'list.foodItem': 'Dish',
     'list.acceptStart': 'Accept and start cooking',
     'list.markReady': 'Mark ready',
-    'list.readyCounter': 'Ready. A Nuray rider is coming to collect it.',
     'list.riderOnWay': 'With the rider, on the way to the customer.',
-    'list.deliveredTitle': 'Delivered. The money is added to your earnings.',
     'list.previous': 'Previous',
     'list.pageOf': 'Page {page} of {total}',
     'list.rejectTitle': 'Reject order',
@@ -144,6 +146,29 @@ export const kitchenOrderMessages = defineMessages({
     'list.whyLabel': 'Tell the customer why',
     'list.whyTooShort': 'Write a few words so the customer knows why.',
     'list.yourKitchen': 'Your kitchen',
+    'tab.now': 'Now',
+    'list.section.onTheWay': 'On the way',
+    'list.justNow': 'Just now',
+    'list.minAgo': '{min} min ago',
+    'list.readyBy': 'Ready by {time}',
+    'list.late': '{min} min late',
+    'list.readyJustNow': 'Ready just now',
+    'list.readyMinAgo': 'Ready {min} min ago',
+    'list.readySince': 'Ready since {time}',
+    'list.newOrders': '{count} new orders',
+    'list.newOrdersOne': '1 new order',
+    'list.showNow': 'See them',
+    'list.emptyNow': 'Nothing to cook right now. New orders show here as soon as they come in.',
+    'list.acceptedReadyBy': 'Accepted. Ready by {time}.',
+    'prep.label': 'Ready in (minutes)',
+    'prep.option': '{min} minutes',
+    'rider.finding': 'Finding a rider to collect it',
+    'rider.coming': '{name} is coming to collect it',
+    'rider.comingNoName': 'A rider is coming to collect it',
+    'rider.here': '{name} is here to collect it',
+    'rider.hereNoName': 'The rider is here to collect it',
+    'rider.pickedUp': '{name} picked it up at {time}',
+    'rider.pickedUpNoName': 'The rider picked it up at {time}',
 
     // Order detail
     'detail.loadFailed': 'Could not load the order',
@@ -155,7 +180,6 @@ export const kitchenOrderMessages = defineMessages({
     'detail.youDeliver': 'You deliver it',
     'detail.riderDelivers': 'A Nuray rider delivers it',
     'detail.accepted': 'Order accepted.',
-    'detail.acceptOrder': 'Accept order',
     'detail.markedReady': 'Marked ready.',
     'detail.markReady': 'Mark ready',
     'detail.paymentConfirmed': 'Payment confirmed.',
@@ -179,18 +203,58 @@ export const kitchenOrderMessages = defineMessages({
     'detail.deliveryFeeKept': 'Delivery fee you keep',
     'detail.deliveryFeePaid': 'Nuray delivery fee (paid by you)',
     'detail.yourEarnings': 'You earn',
+    'detail.notEarnedCancelled': 'Not earned, order cancelled',
+    'detail.notEarnedRefunded': 'Not earned, order refunded',
     'detail.items': 'What to cook',
     'detail.itemsDone': 'Dishes',
     'detail.history': 'What happened',
     'detail.noHistory': 'No updates yet.',
+    'history.created': 'order placed',
+    'history.accepted': 'you accepted it, ready in {minutes} min',
+    'history.ready': 'food ready to hand over',
+    'history.cooking': 'you started cooking',
+    'history.confirmed': 'you confirmed it',
+    'history.selfOnTheWay': 'on its way with you',
+    'history.selfDelivered': 'you handed it over',
+    'history.pickupWaiting': 'Ready for collection',
+    'history.pickupCollected': 'Collected by the customer',
+    'history.selfFailed': 'you could not hand it over: {reason}',
+    'history.allItemsCancelled': 'you cancelled all your dishes',
+    'history.riderDelivered': "rider delivered it, checked with the customer's code",
+    'history.riderPickedUp': 'rider picked it up',
+    'history.riderInTransit': 'rider is on the way to the customer',
+    'history.riderArrived': 'rider reached the customer',
+    'history.riderFailed': 'rider could not deliver it: {reason}',
+    'history.cancelledByCustomer': 'Cancelled by the customer: {reason}',
+    'history.cancelledByAdmin': 'Cancelled by Nuray support: {reason}',
+    'history.cancelledAuto': 'Cancelled automatically: {reason}',
+    'history.kitchenRejected': '{kitchen} rejected its dishes: {reason}',
+    'history.kitchenRejectedNoReason': '{kitchen} rejected its dishes',
+    'history.dishCancelled': 'a kitchen cancelled {dish}',
+    'history.paymentSubmitted': 'customer says they paid, reference {reference}',
+    'history.paymentVerified': 'kitchen confirmed the payment',
+    'history.paymentDisputed': 'kitchen marked the payment not received',
+    'history.paymentDisputedReason': 'kitchen marked the payment not received: {reason}',
+    'history.paymentConfirmedBySupport': 'Nuray support confirmed the payment',
+    'history.paymentConfirmedBySupportNote': 'Nuray support confirmed the payment: {note}',
+    'history.paymentEscalated': 'sent to Nuray support: the kitchen has not confirmed the payment',
+    'history.paidOnline': 'paid online: Rs {amount}',
+    'history.extraPaymentReturned': 'an extra online payment of Rs {amount} went back to the customer',
+    'history.paidAfterCancel': 'payment arrived after the order was cancelled',
+    'history.updatedBySupport': 'updated by Nuray support',
+    'history.deliveryRetry': 'Nuray support is trying the delivery again, back with the riders',
+    'history.refundToWallet': "Rs {amount} refunded to the customer's wallet ({reason})",
+    'history.refundOwed': 'Rs {amount} is owed back to the customer by {method} ({reason})',
+    'history.refundUnconfirmed': 'customer says they sent Rs {amount} by {method}, never confirmed; Nuray support will check it ({reason})',
+    'history.refundSent': 'Rs {amount} refunded to the customer',
+    'history.refundDismissed': 'refund of Rs {amount} closed by Nuray support: {reason}',
 
     // New-order alert popup
-    'alert.acceptedToast': 'Order {number} accepted. Start cooking.',
+    'alert.acceptedReadyBy': 'Order {number} accepted. Ready by {time}.',
     'alert.incoming': 'New order',
     'alert.rings': 'Rings every 10 seconds until you accept or reject it',
     'alert.dismissAlert': 'Dismiss alert',
     'alert.ticket': 'Order',
-    'alert.acceptPrepare': 'Accept and cook',
     'alert.viewInOrders': 'Open the order',
 
     // Push prompt
@@ -229,6 +293,7 @@ export const kitchenOrderMessages = defineMessages({
     couldNotUpdate: 'آرڈر اپ ڈیٹ نہیں ہو سکا',
     statusNew: 'نیا آرڈر',
     'payStatus.pending': 'ابھی ادا نہیں ہوا',
+    'pay.codPickup': 'وصولی پر نقد',
     'payStatus.paid': 'ادا ہو گیا',
     'payStatus.failed': 'ناکام',
     'payStatus.refunded': 'ری فنڈ ہو گیا',
@@ -263,22 +328,14 @@ export const kitchenOrderMessages = defineMessages({
     'dash.kitchenClosed': 'بند ہے',
     'dash.openHint': 'کسٹمر ابھی آپ سے آرڈر کر سکتے ہیں۔',
     'dash.closedHint': 'کھولنے تک کسٹمر آرڈر نہیں کر سکتے۔',
-    'dash.waiting': '{count} آرڈر آپ کے منتظر',
-    'dash.waitingOne': '1 آرڈر آپ کا منتظر',
-    'dash.nothingWaiting': 'ابھی کچھ منتظر نہیں',
-    'dash.waitingHint': 'قبول کرنے والے نئے آرڈر اور جو آپ پکا رہے ہیں۔',
-    'dash.inProgress': '{count} مزید تیار یا رائیڈر کے پاس',
     'dash.allQuiet': 'نئے آرڈر آتے ہی یہاں نظر آئیں گے۔',
-    'dash.openOrders': 'آرڈرز کھولیں',
-    'dash.latestOrders': 'تازہ آرڈرز',
-    'dash.noOrders': 'ابھی کوئی آرڈر نہیں۔',
     'dash.today': 'آج',
-    'dash.todayEarnings': 'کمائی',
+    'dash.todayEarnings': 'آج کی کمائی',
+    'dash.earnedMeans': 'کمائی وہ رقم ہے جو ڈیلیور اور ادا شدہ آرڈرز سے نورے کی فیس کے بعد آپ کو ملتی ہے۔',
     'dash.ordersToday': 'آرڈرز',
     'dash.money': 'رقم',
-    'dash.totalEarnings': 'اب تک کی کمائی',
-    'dash.comingToYou': 'آپ کو ملنے والی رقم: {amount}',
     'dash.afterRiderCash': 'اس میں سے {amount} رائیڈرز کے نقد جمع کرانے کے بعد',
+    'dash.allAfterRiderCash': 'جب رائیڈر آپ کے آرڈرز کی نقد رقم جمع کرا دیں',
     'dash.noPayoutAccount': 'جاز کیش، ایزی پیسہ یا بینک اکاؤنٹ شامل کریں تاکہ ہم آپ کو ادائیگی کر سکیں۔',
     'dash.addPayoutAccount': 'اکاؤنٹ شامل کریں',
     'dash.earningsLink': 'کمائی دیکھیں',
@@ -287,15 +344,29 @@ export const kitchenOrderMessages = defineMessages({
     'dash.addFoodItem': 'ڈش شامل کریں',
     'dash.lowStock': 'ختم ہونے والی',
     'dash.allStocked': 'کچھ ختم نہیں ہو رہا۔',
-    'dash.yesterday': 'کل {time}',
     'dash.onlyLeft': '{count} باقی',
     'dash.manage': 'تمام ڈشز',
+    'dash.needYou': '{count} آرڈر آپ کے منتظر ہیں',
+    'dash.needYouOne': '1 آرڈر آپ کا منتظر ہے',
+    'dash.nothingToCook': 'ابھی پکانے کو کچھ نہیں',
+    'dash.viewAll': 'تمام آرڈرز',
+    'dash.moreActive': 'مزید {count} جاری ہیں',
+    'dash.comingToYouLabel': 'آپ کو ملنے والی رقم',
+    'dash.earnedSoFar': 'شروع سے اب تک کی کمائی',
 
     'reason.item_unavailable': 'ڈش دستیاب نہیں',
     'reason.too_busy': 'ابھی بہت مصروف ہیں',
     'reason.unable_to_prepare': 'وقت پر تیار نہیں ہو سکتا',
     'reason.temporary_issue': 'گیس، بجلی یا کچن کا مسئلہ',
     'reason.other': 'کچھ اور',
+    'reason.out_of_stock': 'اسٹاک ختم',
+    'reason.kitchen_unavailable': 'کچن دستیاب نہیں',
+    'reason.customerMistake': 'غلطی سے آرڈر ہو گیا',
+    'reason.customerChangedMind': 'ارادہ بدل گیا',
+    'reason.customerTooLong': 'بہت دیر ہو رہی تھی',
+    'cancel.byKitchen': 'آپ نے مسترد کیا: {reason}',
+    'cancel.notAcceptedInTime': 'وقت پر قبول نہیں ہوا',
+    'cancel.notPaidInTime': 'ادائیگی وقت پر مکمل نہیں ہوئی',
     'list.loadFailed': 'آرڈرز لوڈ نہیں ہو سکے',
     'list.paymentVerified': 'ادائیگی کی تصدیق ہو گئی۔ آرڈر ادا شدہ ہے۔',
     'list.paymentDisputed': 'نہیں ملی درج ہو گیا۔ Nuray اسے دیکھے گا۔',
@@ -317,15 +388,12 @@ export const kitchenOrderMessages = defineMessages({
     'tab.delivered': 'پہنچ گئے',
     'tab.cancelled': 'منسوخ',
     'list.title': 'آرڈرز',
-    'list.subtitle': 'نئے آرڈر قبول کریں، پکنے پر تیار درج کریں۔',
     'list.refresh': 'ریفریش',
     'list.syncing': 'آرڈرز لوڈ ہو رہے ہیں…',
     'list.emptyAll': 'ابھی کوئی آرڈر نہیں۔ نئے آرڈر آتے ہی یہاں نظر آئیں گے۔',
     'list.emptyFiltered': '"{filter}" میں کوئی آرڈر نہیں۔',
-    'list.prep': 'پکنے میں تقریباً {min} منٹ',
     'list.chatTitle': 'کسٹمر کو میسج کریں',
     'list.chat': 'میسج',
-    'list.communityDelivery': 'علاقہ نہیں دیا',
     'list.proofTitle': 'کسٹمر کہتا ہے کہ ادائیگی کر دی ہے',
     'list.method': 'بھیجا گیا',
     'list.directWallet': 'والٹ سے',
@@ -338,9 +406,7 @@ export const kitchenOrderMessages = defineMessages({
     'list.foodItem': 'ڈش',
     'list.acceptStart': 'قبول کریں اور پکانا شروع کریں',
     'list.markReady': 'تیار ہے',
-    'list.readyCounter': 'تیار ہے۔ Nuray رائیڈر لینے آ رہا ہے۔',
     'list.riderOnWay': 'رائیڈر کے پاس ہے، کسٹمر کی طرف جا رہا ہے۔',
-    'list.deliveredTitle': 'پہنچ گیا۔ رقم آپ کی کمائی میں شامل ہو گئی۔',
     'list.previous': 'پچھلا',
     'list.pageOf': 'صفحہ {page} از {total}',
     'list.rejectTitle': 'آرڈر مسترد کریں',
@@ -354,6 +420,29 @@ export const kitchenOrderMessages = defineMessages({
     'list.whyLabel': 'کسٹمر کو وجہ بتائیں',
     'list.whyTooShort': 'چند الفاظ لکھیں تاکہ کسٹمر کو وجہ معلوم ہو۔',
     'list.yourKitchen': 'آپ کا کچن',
+    'tab.now': 'ابھی',
+    'list.section.onTheWay': 'راستے میں',
+    'list.justNow': 'ابھی ابھی',
+    'list.minAgo': '{min} منٹ پہلے',
+    'list.readyBy': '{time} تک تیار',
+    'list.late': '{min} منٹ دیر',
+    'list.readyJustNow': 'ابھی تیار ہوا',
+    'list.readyMinAgo': '{min} منٹ سے تیار',
+    'list.readySince': '{time} سے تیار',
+    'list.newOrders': '{count} نئے آرڈر',
+    'list.newOrdersOne': '1 نیا آرڈر',
+    'list.showNow': 'دیکھیں',
+    'list.emptyNow': 'ابھی پکانے کو کچھ نہیں۔ نئے آرڈر آتے ہی یہاں نظر آئیں گے۔',
+    'list.acceptedReadyBy': 'قبول ہو گیا۔ {time} تک تیار۔',
+    'prep.label': 'تیار ہونے میں (منٹ)',
+    'prep.option': '{min} منٹ',
+    'rider.finding': 'لینے کے لیے رائیڈر تلاش کیا جا رہا ہے',
+    'rider.coming': '{name} لینے آ رہے ہیں',
+    'rider.comingNoName': 'رائیڈر لینے آ رہا ہے',
+    'rider.here': '{name} لینے پہنچ گئے ہیں',
+    'rider.hereNoName': 'رائیڈر لینے پہنچ گیا ہے',
+    'rider.pickedUp': '{name} نے {time} پر لے لیا',
+    'rider.pickedUpNoName': 'رائیڈر نے {time} پر لے لیا',
 
     'detail.loadFailed': 'آرڈر لوڈ نہیں ہو سکا',
     'detail.title': 'آرڈر',
@@ -364,7 +453,6 @@ export const kitchenOrderMessages = defineMessages({
     'detail.youDeliver': 'آپ پہنچائیں گے',
     'detail.riderDelivers': 'Nuray رائیڈر پہنچائے گا',
     'detail.accepted': 'آرڈر قبول ہو گیا۔',
-    'detail.acceptOrder': 'آرڈر قبول کریں',
     'detail.markedReady': 'تیار درج ہو گیا۔',
     'detail.markReady': 'تیار ہے',
     'detail.paymentConfirmed': 'ادائیگی کی تصدیق ہو گئی۔',
@@ -388,17 +476,57 @@ export const kitchenOrderMessages = defineMessages({
     'detail.deliveryFeeKept': 'ڈیلیوری فیس جو آپ رکھیں گے',
     'detail.deliveryFeePaid': 'Nuray ڈیلیوری فیس (آپ ادا کرتے ہیں)',
     'detail.yourEarnings': 'آپ کی کمائی',
+    'detail.notEarnedCancelled': 'کوئی کمائی نہیں، آرڈر منسوخ ہو گیا',
+    'detail.notEarnedRefunded': 'کوئی کمائی نہیں، آرڈر کی رقم واپس ہو گئی',
     'detail.items': 'کیا پکانا ہے',
     'detail.itemsDone': 'کھانے',
     'detail.history': 'کیا ہوا',
     'detail.noHistory': 'ابھی کوئی اپ ڈیٹ نہیں۔',
+    'history.created': 'آرڈر دیا گیا',
+    'history.accepted': 'آپ نے قبول کیا، {minutes} منٹ میں تیار',
+    'history.ready': 'کھانا حوالے کرنے کے لیے تیار',
+    'history.cooking': 'آپ نے پکانا شروع کیا',
+    'history.confirmed': 'آپ نے تصدیق کی',
+    'history.selfOnTheWay': 'آپ کے ساتھ راستے میں',
+    'history.selfDelivered': 'آپ نے حوالے کر دیا',
+    'history.pickupWaiting': 'کسٹمر کے لینے کے لیے تیار',
+    'history.pickupCollected': 'کسٹمر نے لے لیا',
+    'history.selfFailed': 'آپ حوالے نہیں کر سکے: {reason}',
+    'history.allItemsCancelled': 'آپ نے اپنی تمام ڈشز منسوخ کیں',
+    'history.riderDelivered': 'رائیڈر نے پہنچا دیا، گاہک کے کوڈ سے تصدیق ہوئی',
+    'history.riderPickedUp': 'رائیڈر نے اٹھا لیا',
+    'history.riderInTransit': 'رائیڈر کسٹمر کی طرف جا رہا ہے',
+    'history.riderArrived': 'رائیڈر کسٹمر کے پاس پہنچ گیا',
+    'history.riderFailed': 'رائیڈر نہیں پہنچا سکا: {reason}',
+    'history.cancelledByCustomer': 'کسٹمر نے منسوخ کیا: {reason}',
+    'history.cancelledByAdmin': 'Nuray سپورٹ نے منسوخ کیا: {reason}',
+    'history.cancelledAuto': 'خود بخود منسوخ: {reason}',
+    'history.kitchenRejected': '{kitchen} نے اپنی ڈشز مسترد کیں: {reason}',
+    'history.kitchenRejectedNoReason': '{kitchen} نے اپنی ڈشز مسترد کیں',
+    'history.dishCancelled': 'ایک کچن نے {dish} منسوخ کی',
+    'history.paymentSubmitted': 'کسٹمر کہتا ہے کہ ادائیگی کر دی، حوالہ {reference}',
+    'history.paymentVerified': 'کچن نے ادائیگی کی تصدیق کی',
+    'history.paymentDisputed': 'کچن نے ادائیگی نہ ملنا درج کیا',
+    'history.paymentDisputedReason': 'کچن نے ادائیگی نہ ملنا درج کیا: {reason}',
+    'history.paymentConfirmedBySupport': 'Nuray سپورٹ نے ادائیگی کی تصدیق کی',
+    'history.paymentConfirmedBySupportNote': 'Nuray سپورٹ نے ادائیگی کی تصدیق کی: {note}',
+    'history.paymentEscalated': 'Nuray سپورٹ کو بھیجا گیا: کچن نے ادائیگی کی تصدیق نہیں کی',
+    'history.paidOnline': 'آن لائن ادائیگی: Rs {amount}',
+    'history.extraPaymentReturned': 'Rs {amount} کی اضافی آن لائن ادائیگی کسٹمر کو واپس گئی',
+    'history.paidAfterCancel': 'ادائیگی آرڈر منسوخ ہونے کے بعد آئی',
+    'history.updatedBySupport': 'Nuray سپورٹ نے اپ ڈیٹ کیا',
+    'history.deliveryRetry': 'Nuray سپورٹ دوبارہ ڈیلیوری کروا رہا ہے، آرڈر پھر رائیڈرز کے پاس',
+    'history.refundToWallet': 'Rs {amount} کسٹمر کے والٹ میں واپس ({reason})',
+    'history.refundOwed': 'Rs {amount} کسٹمر کو {method} سے واپس کرنے ہیں ({reason})',
+    'history.refundUnconfirmed': 'کسٹمر کہتا ہے کہ Rs {amount} {method} سے بھیجے، تصدیق نہیں ہوئی؛ Nuray سپورٹ دیکھے گا ({reason})',
+    'history.refundSent': 'Rs {amount} کسٹمر کو واپس کر دیے',
+    'history.refundDismissed': 'Rs {amount} کا ری فنڈ Nuray سپورٹ نے بند کیا: {reason}',
 
-    'alert.acceptedToast': 'آرڈر {number} قبول ہو گیا۔ پکانا شروع کریں۔',
+    'alert.acceptedReadyBy': 'آرڈر {number} قبول ہو گیا۔ {time} تک تیار۔',
     'alert.incoming': 'نیا آرڈر',
     'alert.rings': 'قبول یا مسترد کرنے تک ہر 10 سیکنڈ بعد گھنٹی بجے گی',
     'alert.dismissAlert': 'الرٹ ہٹائیں',
     'alert.ticket': 'آرڈر',
-    'alert.acceptPrepare': 'قبول کریں اور پکائیں',
     'alert.viewInOrders': 'آرڈر کھولیں',
 
     'push.enabled': 'اس ڈیوائس پر الرٹس آن ہو گئے',
@@ -450,9 +578,156 @@ export function kitchenStatusLabel(status: string, t: KitchenT, tc: CommonT): st
   return key in commonMessages.en ? tc(key) : status;
 }
 
+// What the reasons dialog sends (RejectOrderDialog), and older codes, to their words.
+const REASON_KEYS: Record<string, keyof typeof kitchenOrderMessages.en> = {
+  'item unavailable': 'reason.item_unavailable',
+  item_unavailable: 'reason.item_unavailable',
+  'too busy / high kitchen load': 'reason.too_busy',
+  too_busy: 'reason.too_busy',
+  'unable to prepare in time': 'reason.unable_to_prepare',
+  unable_to_prepare: 'reason.unable_to_prepare',
+  'temporary kitchen or utility issue': 'reason.temporary_issue',
+  temporary_issue: 'reason.temporary_issue',
+  'other reason': 'reason.other',
+  other: 'reason.other',
+  out_of_stock: 'reason.out_of_stock',
+  'kitchen unavailable': 'reason.kitchen_unavailable',
+  "the kitchen didn't confirm the order in time.": 'cancel.notAcceptedInTime',
+  "the payment wasn't completed in time.": 'cancel.notPaidInTime',
+  'payment received after the order was cancelled': 'history.paidAfterCancel',
+  // The reasons a customer picks when cancelling (the order page's cancel dialog).
+  'ordered by mistake': 'reason.customerMistake',
+  'changed my mind': 'reason.customerChangedMind',
+  'taking too long': 'reason.customerTooLong',
+};
+// The order's cancellation reason says "Rejected by kitchen: …", its history note "Order rejected by kitchen: …".
+const BY_KITCHEN = /^(?:Order rejected|Rejected) by kitchen: /;
+
+/** Why an order was cancelled, in the kitchen's words: a known reason is translated, the customer's own words stay as written. */
+export function cancelReasonText(raw: string, t: KitchenT): string {
+  return reasonParts(raw, t)
+    .map((part) => (typeof part === 'string' ? part : part.value))
+    .join('');
+}
+
+/** A piece of a history note: the kitchen's own words, or a value the server filled in (a reason, a reference) shown as written. */
+export type NotePart = string | { value: string };
+export interface HistoryNote {
+  parts: NotePart[];
+  /** The note names the status itself ("Cancelled by the customer: …"), so it is shown instead of the status. */
+  standalone: boolean;
+}
+
+/** A message with each {placeholder} taken from vars: a string is a value shown as written, parts are spliced in. */
+function fill(t: KitchenT, key: keyof typeof kitchenOrderMessages.en, vars: Record<string, string | NotePart[]> = {}): NotePart[] {
+  return t(key)
+    .split(/\{(\w+)\}/)
+    .flatMap((piece, i): NotePart[] => {
+      if (i % 2 === 0) return piece ? [piece] : [];
+      const v = vars[piece] ?? [];
+      return typeof v === 'string' ? [{ value: v }] : v;
+    });
+}
+
+/** A cancellation or refund reason: a known one in the kitchen's words, the rest as written. */
+function reasonParts(raw: string, t: KitchenT): NotePart[] {
+  const text = raw.trim();
+  let m = BY_KITCHEN.exec(text);
+  if (m) return fill(t, 'cancel.byKitchen', { reason: reasonParts(text.slice(m[0].length), t) });
+  m = /^Order cancelled by (customer|admin|system): ([\s\S]*)$/.exec(text);
+  if (m) {
+    const key = m[1] === 'customer' ? 'history.cancelledByCustomer' : m[1] === 'admin' ? 'history.cancelledByAdmin' : 'history.cancelledAuto';
+    return fill(t, key, { reason: reasonParts(m[2], t) });
+  }
+  m = /^Rejected by (.+?): ([\s\S]*)$/.exec(text);
+  if (m) return fill(t, 'history.kitchenRejected', { kitchen: m[1], reason: reasonParts(m[2], t) });
+  m = /^Rejected by (.+)$/.exec(text);
+  if (m) return fill(t, 'history.kitchenRejectedNoReason', { kitchen: m[1] });
+  m = /^Item cancelled by seller \((.*)\)$/.exec(text);
+  if (m) return fill(t, 'history.dishCancelled', { dish: m[1] });
+  const split = text.indexOf(': ');
+  const head = split > 0 ? text.slice(0, split) : text;
+  const key = REASON_KEYS[head.trim().toLowerCase()];
+  if (!key) return [{ value: text }];
+  return split > 0 ? [t(key), ': ', { value: text.slice(split + 2) }] : [t(key)];
+}
+
+// The notes the server writes in an order's history that carry nothing of their own, to their words.
+const HISTORY_NOTES: Record<string, keyof typeof kitchenOrderMessages.en> = {
+  'order created': 'history.created',
+  'food is prepared and ready for pickup by delivery rider.': 'history.ready',
+  'all items ready for dispatch': 'history.ready',
+  'order preparation started': 'history.cooking',
+  'order confirmed by seller': 'history.confirmed',
+  'out for delivery with the kitchen': 'history.selfOnTheWay',
+  'self-delivered by seller': 'history.selfDelivered',
+  'all items cancelled by seller': 'history.allItemsCancelled',
+  "rider delivered order (verified with the customer's code)": 'history.riderDelivered',
+  'rider marked delivery as picked up': 'history.riderPickedUp',
+  'rider marked delivery as in transit': 'history.riderInTransit',
+  'rider marked delivery as arrived at customer': 'history.riderArrived',
+  'payment verified and marked as paid by seller': 'history.paymentVerified',
+  'payment disputed by seller: payment not received': 'history.paymentDisputed',
+  'payment confirmed by nuray support': 'history.paymentConfirmedBySupport',
+  'escalated to admins: the kitchen has not confirmed the reported payment': 'history.paymentEscalated',
+  'status updated by admin': 'history.updatedBySupport',
+  'delivery retry initiated by admin — back in the rider queue': 'history.deliveryRetry',
+};
+
+type NoteRule = [RegExp, (m: RegExpExecArray, t: KitchenT, tc: CommonT) => NotePart[], standalone?: boolean];
+
+// The notes the server writes from a template with something filled in (backend/src/services, orderStatusHistory.create).
+const NOTE_RULES: NoteRule[] = [
+  [/^Order accepted by kitchen\. Estimated preparation time: (\d+) min\.?$/, (m, t) => [t('history.accepted', { minutes: Number(m[1]) })]],
+  [/^Seller reported a failed self-delivery: ([\s\S]*)$/, (m, t) => fill(t, 'history.selfFailed', { reason: m[1] })],
+  [/^Rider reported failed delivery: ([\s\S]*)$/, (m, t) => fill(t, 'history.riderFailed', { reason: m[1] })],
+  [/^Cancelled by customer\. Reason: ([\s\S]*)$/, (m, t) => fill(t, 'history.cancelledByCustomer', { reason: reasonParts(m[1], t) }), true],
+  [/^Cancelled by admin\. Reason: ([\s\S]*)$/, (m, t) => fill(t, 'history.cancelledByAdmin', { reason: reasonParts(m[1], t) }), true],
+  [/^Cancelled automatically\. ([\s\S]*)$/, (m, t) => fill(t, 'history.cancelledAuto', { reason: reasonParts(m[1], t) }), true],
+  [/^Order rejected by kitchen: ([\s\S]*)$/, (m, t) => fill(t, 'cancel.byKitchen', { reason: reasonParts(m[1], t) }), true],
+  [/^(.+) rejected its items: ([\s\S]*)$/, (m, t) => fill(t, 'history.kitchenRejected', { kitchen: m[1], reason: reasonParts(m[2], t) })],
+  [/^Payment submitted by customer\. Reference\/TID: ([\s\S]*)$/, (m, t) => fill(t, 'history.paymentSubmitted', { reference: m[1] })],
+  [/^Payment disputed by seller: ([\s\S]*)$/, (m, t) => fill(t, 'history.paymentDisputedReason', { reason: m[1] })],
+  [/^Payment confirmed by Nuray support: ([\s\S]*)$/, (m, t) => fill(t, 'history.paymentConfirmedBySupportNote', { note: m[1] })],
+  [/^Paid online: Rs (.+)$/, (m, t) => fill(t, 'history.paidOnline', { amount: m[1] })],
+  [/^An extra online payment of Rs (.+) was credited back to the customer$/, (m, t) => fill(t, 'history.extraPaymentReturned', { amount: m[1] })],
+  [/^Refund of (\S+) credited to the customer's wallet \(([\s\S]*)\)$/, (m, t) => fill(t, 'history.refundToWallet', { amount: m[1], reason: reasonParts(m[2], t) })],
+  [
+    /^Refund of (\S+) is owed to the customer — awaiting manual (\S+) transfer \(([\s\S]*)\)$/,
+    (m, t, tc) => fill(t, 'history.refundOwed', { amount: m[1], method: paymentMethodLabel(m[2], tc), reason: reasonParts(m[3], t) }),
+  ],
+  [
+    /^Customer reported sending (\S+) by (\S+) but it was never confirmed\.[\s\S]*? \(([\s\S]*)\)$/,
+    (m, t, tc) => fill(t, 'history.refundUnconfirmed', { amount: m[1], method: paymentMethodLabel(m[2], tc), reason: reasonParts(m[3], t) }),
+  ],
+  [/^Refund of (\S+) sent to the customer$/, (m, t) => fill(t, 'history.refundSent', { amount: m[1] })],
+  [/^Refund of (\S+) dismissed by admin: ([\s\S]*)$/, (m, t) => fill(t, 'history.refundDismissed', { amount: m[1], reason: m[2] })],
+];
+
+// The server writes the same handover notes whether the kitchen delivered the order or the customer collected it.
+const PICKUP_NOTES: Record<string, keyof typeof kitchenOrderMessages.en> = {
+  'out for delivery with the kitchen': 'history.pickupWaiting',
+  'self-delivered by seller': 'history.pickupCollected',
+};
+
+/** What an entry of the order's history says beyond its status: the server's notes in the kitchen's words, anything else as written. */
+export function historyNote(status: string, note: string, t: KitchenT, tc: CommonT, pickup = false): HistoryNote {
+  const text = note.trim();
+  const pickupKey = pickup ? PICKUP_NOTES[text.toLowerCase()] : undefined;
+  if (pickupKey) return { parts: [t(pickupKey)], standalone: true };
+  const key = HISTORY_NOTES[text.toLowerCase()];
+  if (key) return { parts: [t(key)], standalone: false };
+  for (const [pattern, read, standalone = false] of NOTE_RULES) {
+    const m = pattern.exec(text);
+    if (m) return { parts: read(m, t, tc), standalone };
+  }
+  return { parts: status === 'cancelled' ? reasonParts(text, t) : [{ value: text }], standalone: false };
+}
+
 /** A payment method's words, or the raw value for one we don't know. */
-export function paymentMethodLabel(method: string | undefined, tc: CommonT): string {
+export function paymentMethodLabel(method: string | undefined, tc: CommonT, pickupT?: KitchenT): string {
   if (!method) return '';
+  if (pickupT && method === 'cod') return pickupT('pay.codPickup');
   const key = `pay.${method}` as keyof typeof commonMessages.en;
   return key in commonMessages.en ? tc(key) : method.replace(/_/g, ' ');
 }

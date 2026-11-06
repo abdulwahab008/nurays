@@ -4,7 +4,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState, t
 import { Lock, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { ConfirmModal } from '@/components/ui/ConfirmModal';
-import { useT } from '@/lib/i18n';
+import { PageLocale, useT } from '@/lib/i18n';
 import { commonMessages } from '@/lib/i18n/messages/common';
 import { askProblem } from '@/lib/ask-validation';
 import { useToast } from '@/components/ui/toast';
@@ -24,6 +24,8 @@ export interface ConfirmOptions {
   cancelText?: string;
   /** `danger` (default) for deleting and suspending, `warning` for the rest. */
   variant?: 'danger' | 'warning';
+  /** `delete` (the default for `danger`) shows a bin; `warning` a warning sign, for a danger that deletes nothing. */
+  icon?: 'delete' | 'warning';
 }
 
 export interface AskOptions {
@@ -42,6 +44,8 @@ export interface AskOptions {
   optional?: boolean;
   /** The exact text that must be typed, such as DELETE. */
   mustEqual?: string;
+  /** The answer deletes or ends something: the confirm button is red. */
+  destructive?: boolean;
 }
 
 type Pending =
@@ -89,26 +93,28 @@ export function DialogProvider({ children }: { children: ReactNode }) {
   return (
     <DialogsContext.Provider value={value}>
       {children}
-      {current?.kind === 'confirm' && (
-        <ConfirmDialog
-          key={queue.length + current.options.message}
-          options={current.options}
-          onAnswer={(answer) => {
-            current.resolve(answer);
-            close();
-          }}
-        />
-      )}
-      {current?.kind === 'ask' && (
-        <AskDialog
-          key={queue.length + current.options.title}
-          options={current.options}
-          onAnswer={(answer) => {
-            current.resolve(answer);
-            close();
-          }}
-        />
-      )}
+      <PageLocale>
+        {current?.kind === 'confirm' && (
+          <ConfirmDialog
+            key={queue.length + current.options.message}
+            options={current.options}
+            onAnswer={(answer) => {
+              current.resolve(answer);
+              close();
+            }}
+          />
+        )}
+        {current?.kind === 'ask' && (
+          <AskDialog
+            key={queue.length + current.options.title}
+            options={current.options}
+            onAnswer={(answer) => {
+              current.resolve(answer);
+              close();
+            }}
+          />
+        )}
+      </PageLocale>
     </DialogsContext.Provider>
   );
 }
@@ -123,6 +129,7 @@ function ConfirmDialog({ options, onAnswer }: { options: ConfirmOptions; onAnswe
       confirmText={options.confirmText}
       cancelText={options.cancelText}
       variant={options.variant ?? 'danger'}
+      icon={options.icon}
       onConfirm={() => onAnswer(true)}
       onCancel={() => onAnswer(false)}
     />
@@ -162,34 +169,39 @@ function AskDialog({ options, onAnswer }: { options: AskOptions; onAnswer: (answ
   };
 
   return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-slate-950/60" onClick={() => onAnswer(null)}>
+    <div className="fixed inset-0 z-[60] flex items-end sm:items-center justify-center p-0 sm:p-4 bg-ink/40" onClick={() => onAnswer(null)}>
       <form
         onSubmit={submit}
         noValidate
-        className="w-full max-w-md bg-white rounded-3xl p-6 sm:p-7 shadow-2xl border border-slate-100"
+        className="w-full sm:max-w-md bg-surface rounded-t-2xl sm:rounded-2xl p-5 sm:p-6 pb-[calc(1.25rem+var(--safe-bottom))] sm:pb-6 shadow-[var(--shadow-hover)]"
         role="dialog"
         aria-modal="true"
         aria-labelledby="ask-dialog-title"
         onClick={(event) => event.stopPropagation()}
       >
-        <div className="flex items-start justify-between gap-4 mb-3">
-          <div className="flex items-center gap-3">
+        <div className="flex items-start justify-between gap-4">
+          <div className="flex items-center gap-3 min-w-0">
             {isPassword && (
-              <div className="w-11 h-11 rounded-2xl flex items-center justify-center shrink-0 bg-amber-50 text-amber-600 border border-amber-100">
-                <Lock className="w-5 h-5" aria-hidden="true" />
+              <div aria-hidden="true" className="w-10 h-10 rounded-full flex items-center justify-center shrink-0 bg-raised text-muted">
+                <Lock className="w-5 h-5" />
               </div>
             )}
-            <h3 id="ask-dialog-title" className="text-base font-bold text-slate-900 tracking-tight">
+            <h3 id="ask-dialog-title" className="text-lg font-semibold text-ink leading-snug">
               {options.title}
             </h3>
           </div>
-          <button type="button" onClick={() => onAnswer(null)} aria-label={tc('close')} className="w-8 h-8 rounded-full text-slate-500 hover:bg-slate-100 flex items-center justify-center">
-            <X className="w-4 h-4" />
+          <button
+            type="button"
+            onClick={() => onAnswer(null)}
+            aria-label={tc('close')}
+            className="w-11 h-11 -me-2 -mt-1 rounded-full text-muted hover:text-ink hover:bg-raised flex items-center justify-center transition-colors shrink-0"
+          >
+            <X className="w-5 h-5" aria-hidden="true" />
           </button>
         </div>
-        {options.message && <p className="text-xs text-slate-600 leading-relaxed mb-4">{options.message}</p>}
+        {options.message && <p className="text-sm text-muted leading-relaxed mt-2">{options.message}</p>}
 
-        <label htmlFor="ask-dialog-input" className="block text-sm font-medium text-ink">
+        <label htmlFor="ask-dialog-input" className="mt-4 block text-sm font-medium text-ink">
           {options.label ?? options.title}
         </label>
         <input
@@ -203,17 +215,19 @@ function AskDialog({ options, onAnswer }: { options: AskOptions; onAnswer: (answ
           aria-invalid={touched && !!problem}
           aria-describedby="ask-dialog-help"
           dir="auto"
-          className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-brand"
+          className={`mt-1.5 h-11 w-full rounded-xl border bg-surface px-3 text-base sm:text-sm text-ink placeholder:text-muted focus:outline-none focus:ring-3 focus:ring-brand/30 ${
+            touched && problem ? 'border-red-700' : 'border-line-strong focus:border-brand'
+          }`}
         />
-        <p id="ask-dialog-help" className={`mt-1 text-xs ${touched && problem ? 'text-red-700' : 'text-slate-600'}`} role={touched && problem ? 'alert' : undefined}>
+        <p id="ask-dialog-help" className={`mt-1 min-h-5 text-xs ${touched && problem ? 'text-red-700' : 'text-muted'}`} role={touched && problem ? 'alert' : undefined}>
           {touched && problem ? problem : ' '}
         </p>
 
-        <div className="mt-4 flex items-center justify-end gap-3">
-          <Button type="button" variant="outline" size="sm" onClick={() => onAnswer(null)} className="rounded-xl px-4 text-xs font-semibold">
+        <div className="mt-4 flex flex-col-reverse sm:flex-row sm:justify-end gap-3">
+          <Button type="button" variant="outline" onClick={() => onAnswer(null)}>
             {options.cancelText ?? tc('cancel')}
           </Button>
-          <Button type="submit" size="sm" className="rounded-xl px-5 text-xs font-bold text-on-brand bg-brand hover:bg-brand-500">
+          <Button type="submit" variant={options.destructive ? 'destructive' : 'default'} className="sm:min-w-28">
             {options.confirmText ?? tc('confirm')}
           </Button>
         </div>

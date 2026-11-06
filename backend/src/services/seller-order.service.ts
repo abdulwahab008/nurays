@@ -39,6 +39,60 @@ const ITEM_TRANSITIONS: Record<string, string[]> = {
   cancelled: [],
 };
 
+/** The statuses behind each of the kitchen's order tabs. */
+export const ORDER_VIEWS = {
+  active: ['pending', 'confirmed', 'preparing', 'ready', 'dispatched', 'in_transit'],
+  delivered: ['delivered', 'completed'],
+  cancelled: ['cancelled', 'refunded', 'refund_pending', 'delivery_failed'],
+} as const;
+export type OrderView = keyof typeof ORDER_VIEWS;
+
+type DeliveryShape = Parameters<typeof deliveryProviderOf>[0];
+
+/** The kitchen hands this order over itself (self-delivery or customer pickup) rather than to a Nuray rider. */
+function handsOverItself(order: DeliveryShape, kitchenProvider: string | null | undefined): boolean {
+  return order.deliveryType === 'self_pickup' || deliveryProviderOf(order, kitchenProvider) === 'self';
+}
+
+/**
+ * The order waits on the kitchen: to accept it, cook it, or hand it over itself. One rule for the dashboard's "orders need
+ * you" and the orders list's Now count; an order ready for (or with) a Nuray rider waits on the rider, not the kitchen.
+ */
+export function needsKitchen(order: { orderStatus: string; sellerHandsOver: boolean }): boolean {
+  if (['pending', 'confirmed', 'preparing'].includes(order.orderStatus)) return true;
+  return order.sellerHandsOver && ['ready', 'dispatched', 'in_transit'].includes(order.orderStatus);
+}
+
+/** How long the kitchen's dishes on an order take: the slowest dish, its own time or the kitchen's, never under 15 minutes. */
+function prepMinutesFor(prepTimes: Array<number | null | undefined>, kitchenMinutes: number | null | undefined): number {
+  return Math.max(...prepTimes.map((min) => min || kitchenMinutes || 20), 15);
+}
+
+/** The rider on each order, as the kitchen sees them: a first name and how far the pickup has got. */
+async function ridersFor(orderIds: string[]) {
+  const deliveries = await prisma.delivery.findMany({
+    where: { orderId: { in: orderIds }, status: { not: 'cancelled' } },
+    select: { orderId: true, status: true, arrivedAtPickup: true, pickupTime: true, rider: { select: { userId: true } } },
+  });
+  const riderUserIds = deliveries.map((d) => d.rider?.userId).filter((id): id is string => !!id);
+  const profiles = riderUserIds.length
+    ? await prisma.userProfile.findMany({ where: { userId: { in: riderUserIds } }, select: { userId: true, fullName: true } })
+    : [];
+  const names = new Map(profiles.map((p) => [p.userId, firstName(p.fullName)]));
+  return new Map(
+    deliveries.map((d) => [
+      d.orderId,
+      {
+        // null while Nuray is still finding a rider.
+        name: d.rider ? names.get(d.rider.userId) ?? null : null,
+        status: d.status,
+        arrivedAtPickup: d.arrivedAtPickup,
+        pickedUpAt: d.pickupTime,
+      },
+    ])
+  );
+}
+
 export class SellerOrderService {
   /**
    * Get seller orders
@@ -50,6 +104,7 @@ export class SellerOrderService {
       limit?: number;
       status?: string;
       orderStatus?: string;
+      view?: OrderView;
       dateFrom?: string;
       dateTo?: string;
     }
@@ -78,6 +133,8 @@ export class SellerOrderService {
     const orderWhere: Prisma.OrderWhereInput = {};
     if (filters.orderStatus) {
       orderWhere.orderStatus = filters.orderStatus;
+    } else if (filters.view) {
+      orderWhere.orderStatus = { in: [...ORDER_VIEWS[filters.view]] };
     }
     if (filters.dateFrom || filters.dateTo) {
       orderWhere.createdAt = {};
@@ -93,6 +150,7 @@ export class SellerOrderService {
       prisma.order.count({ where: pageWhere }),
     ]);
     const pageOrderIds = pageOrders.map((o) => o.id);
+    const riders = await ridersFor(pageOrderIds);
 
     const orderItems = await prisma.orderItem.findMany({
       where: { ...where, orderId: { in: pageOrderIds } },
@@ -185,13 +243,12 @@ export class SellerOrderService {
             paymentSubmittedAt: item.order.paymentSubmittedAt,
             deliveryType: item.order.deliveryType,
             // Who hands the order over: the kitchen itself (self-delivery or pickup) or a Nuray rider.
-            sellerHandsOver:
-              item.order.deliveryType === 'self_pickup' ||
-              deliveryProviderOf(item.order, seller.deliveryProvider) === 'self',
+            sellerHandsOver: handsOverItself(item.order, seller.deliveryProvider),
             customerName: (contactHidden ? firstName(fullName) : fullName) || 'Customer',
             customerPhone: contactHidden ? null : item.order.customer?.phone,
             deliveryAddress: contactHidden ? withoutDoor(item.order.deliveryAddress) : item.order.deliveryAddress,
             contactHidden,
+            rider: riders.get(orderId) ?? null,
             // What this kitchen's dishes cost the customer, and what the kitchen keeps of the order: the order total also holds
             // other kitchens' dishes, tax and the delivery fee, none of which reaches this kitchen.
             dishesTotal: 0,
@@ -224,11 +281,50 @@ export class SellerOrderService {
     });
 
     const orders = pageOrderIds.filter((id) => orderMap.has(id)).map((id) => orderMap.get(id));
+    const readyIds = orders.filter((o) => o.order.orderStatus === 'ready').map((o) => o.order.id);
+    const readyRows = readyIds.length
+      ? await prisma.orderStatusHistory.findMany({
+          where: { orderId: { in: readyIds }, status: 'ready' },
+          orderBy: { createdAt: 'asc' },
+          select: { orderId: true, createdAt: true },
+        })
+      : [];
+    // The latest time each order was marked ready: how long the food has waited, not how old the order is.
+    const readySince = new Map(readyRows.map((r) => [r.orderId, r.createdAt]));
+    for (const o of orders) {
+      o.order.needsKitchen = needsKitchen(o.order);
+      o.order.readyAt = readySince.get(o.order.id) ?? null;
+      o.order.suggestedPrepMinutes = prepMinutesFor(
+        orderItems.filter((i) => i.orderId === o.order.id).map((i) => i.product?.preparationTime),
+        seller.minPrepTimeMinutes
+      );
+    }
     // Payment receipts are private: this seller gets short-lived links to their orders' receipts.
     for (const o of orders) o.order.paymentProofUrl = await presentFile(o.order.paymentProofUrl);
 
+    // How many orders each tab holds, whatever tab is open.
+    const byStatus = await prisma.order.groupBy({
+      by: ['orderStatus'],
+      where: { items: { some: { sellerId: seller.id } } },
+      _count: { _all: true },
+    });
+    const countOf = (statuses: readonly string[]) =>
+      byStatus.filter((row) => statuses.includes(row.orderStatus)).reduce((sum, row) => sum + row._count._all, 0);
+    const activeOrders = await prisma.order.findMany({
+      where: { orderStatus: { in: [...ORDER_VIEWS.active] }, items: { some: { sellerId: seller.id } } },
+      select: { orderStatus: true, deliveryType: true, deliveryProvider: true, deliveryFeeBreakdown: true },
+    });
+    const counts = {
+      active: countOf(ORDER_VIEWS.active),
+      needYou: activeOrders.filter((o) => needsKitchen({ orderStatus: o.orderStatus, sellerHandsOver: handsOverItself(o, seller.deliveryProvider) })).length,
+      new: countOf(['pending', 'confirmed']),
+      delivered: countOf(ORDER_VIEWS.delivered),
+      cancelled: countOf(ORDER_VIEWS.cancelled),
+    };
+
     return {
       orders,
+      counts,
       pagination: {
         page,
         limit,
@@ -265,7 +361,7 @@ export class SellerOrderService {
       throw new AppError('No items found for this seller in this order', 404, 'NO_ITEMS_FOUND');
     }
 
-    return presentKitchenOrder(order, {
+    const view = presentKitchenOrder(order, {
       sellerId: seller.id,
       businessName: seller.businessName,
       businessNameUrdu: seller.businessNameUrdu,
@@ -273,6 +369,16 @@ export class SellerOrderService {
       // The receipt is private: the kitchen gets a short-lived link to it.
       paymentProofUrl: await presentFile(order.paymentProofUrl),
     });
+    const [riders, dishes] = await Promise.all([
+      ridersFor([orderId]),
+      prisma.orderItem.findMany({ where: { orderId, sellerId: seller.id }, select: { product: { select: { preparationTime: true } } } }),
+    ]);
+    return {
+      ...view,
+      rider: riders.get(orderId) ?? null,
+      // What "Ready in" starts at when the kitchen accepts: the time accepting without one would use.
+      suggestedPrepMinutes: prepMinutesFor(dishes.map((d) => d.product?.preparationTime), seller.minPrepTimeMinutes),
+    };
   }
 
   /**
@@ -638,8 +744,7 @@ export class SellerOrderService {
     }
 
     // Determine prep time from items or seller default
-    const prepTimes = order.items.map((i) => i.product?.preparationTime || seller.minPrepTimeMinutes || 20);
-    const maxPrepMinutes = preparationMinutes ?? Math.max(...prepTimes, 15);
+    const maxPrepMinutes = preparationMinutes ?? prepMinutesFor(order.items.map((i) => i.product?.preparationTime), seller.minPrepTimeMinutes);
     const estimatedReadyAt = new Date(Date.now() + maxPrepMinutes * 60 * 1000);
 
     const result = await prisma.$transaction(async (tx) => {

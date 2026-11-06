@@ -4,9 +4,7 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import {
-  ShoppingCart,
   Trash2,
-  Store,
   Truck,
   Tag,
   ShoppingBag,
@@ -16,12 +14,11 @@ import {
   ChefHat,
   MapPin,
   X,
-  ShieldCheck,
   Flame,
   Snowflake,
   ArrowRight,
 } from 'lucide-react';
-import { cartService, CartResponse } from '@/lib/services/cart.service';
+import { cartService, CartResponse, type CartItem } from '@/lib/services/cart.service';
 import { productService } from '@/lib/services/product.service';
 import { useCommunityStore } from '@/lib/store/community-store';
 import { loginUrlFor } from '@/lib/auth-redirect';
@@ -375,7 +372,7 @@ export default function CartPage() {
   }, [traySellerId, areaId]);
   const info = kitchenInfo?.key === `${traySellerId}:${areaId}` ? kitchenInfo : null;
   // Hub stock is the frozen range; a kitchen's own frozen dishes are known from its listing.
-  const hasFrozen = (cart?.items ?? []).some((i) => i.stockType === 'hub' || info?.frozen.has(i.product.id));
+  const isFrozenItem = (i: CartItem) => i.stockType === 'hub' || !!info?.frozen.has(i.product.id);
   const areaQuote = !deliveryEstimate && !estimatePending ? info?.quote ?? null : null;
   const areaQuoteKnown = !!areaQuote && areaQuote.deliverable;
 
@@ -429,7 +426,7 @@ export default function CartPage() {
     return (
       <DashboardLayout
         title={t('cartTitle')}
-        subtitle={t('emptySubtitle')}
+        subtitle=""
         sidebarItems={sidebarItems}
         userType="customer"
       >
@@ -437,11 +434,8 @@ export default function CartPage() {
           <div className="rounded-[24px] bg-surface border border-line p-8 sm:p-12 text-center">
 
             {/* Tray Icon */}
-            <div className="relative inline-flex items-center justify-center w-20 h-20 rounded-3xl bg-brand-soft mb-5">
-              <ShoppingBag className="w-10 h-10 text-brand-soft-ink" />
-              <span className="absolute -bottom-1.5 -end-1.5 px-2 py-0.5 rounded-full bg-accent text-on-accent text-[11px] font-extrabold">
-                {t('zeroItems')}
-              </span>
+            <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-brand-soft mb-5">
+              <ShoppingBag className="w-8 h-8 text-brand-soft-ink" aria-hidden />
             </div>
 
             <h2 className="text-2xl sm:text-[28px] font-extrabold text-ink tracking-tight mb-2">
@@ -459,31 +453,31 @@ export default function CartPage() {
               <div className="flex flex-wrap items-center justify-center gap-2 max-w-lg mx-auto">
                 <Link
                   href="/products?category=biryani"
-                  className="px-3 py-1.5 rounded-xl bg-surface border border-line text-xs font-semibold text-ink hover:border-brand hover:text-brand-ink transition-colors shadow-2xs"
+                  className="inline-flex items-center h-11 px-4 rounded-full bg-surface border border-line text-sm font-semibold text-ink hover:border-brand hover:text-brand-ink transition-colors"
                 >
                   {t('pill.biryani')}
                 </Link>
                 <Link
                   href="/products?category=paratha"
-                  className="px-3 py-1.5 rounded-xl bg-surface border border-line text-xs font-semibold text-ink hover:border-brand hover:text-brand-ink transition-colors shadow-2xs"
+                  className="inline-flex items-center h-11 px-4 rounded-full bg-surface border border-line text-sm font-semibold text-ink hover:border-brand hover:text-brand-ink transition-colors"
                 >
                   {t('pill.paratha')}
                 </Link>
                 <Link
                   href="/products?productType=frozen"
-                  className="px-3 py-1.5 rounded-xl bg-surface border border-line text-xs font-semibold text-ink hover:border-frozen-ink hover:text-frozen-ink transition-colors shadow-2xs"
+                  className="inline-flex items-center h-11 px-4 rounded-full bg-surface border border-line text-sm font-semibold text-ink hover:border-brand hover:text-brand-ink transition-colors"
                 >
                   {t('pill.frozen')}
                 </Link>
                 <Link
                   href="/products?category=bbq"
-                  className="px-3 py-1.5 rounded-xl bg-surface border border-line text-xs font-semibold text-ink hover:border-brand hover:text-brand-ink transition-colors shadow-2xs"
+                  className="inline-flex items-center h-11 px-4 rounded-full bg-surface border border-line text-sm font-semibold text-ink hover:border-brand hover:text-brand-ink transition-colors"
                 >
                   {t('pill.kebab')}
                 </Link>
                 <Link
                   href="/products?category=desserts"
-                  className="px-3 py-1.5 rounded-xl bg-surface border border-line text-xs font-semibold text-ink hover:border-accent hover:text-accent-soft-ink transition-colors shadow-2xs"
+                  className="inline-flex items-center h-11 px-4 rounded-full bg-surface border border-line text-sm font-semibold text-ink hover:border-brand hover:text-brand-ink transition-colors"
                 >
                   {t('pill.kheer')}
                 </Link>
@@ -530,42 +524,28 @@ export default function CartPage() {
       <div className="space-y-6 pb-12">
         {/* Single Kitchen Context Banner */}
         {activeSeller && (
-          <div className="bg-surface rounded-[20px] border border-line p-4 sm:p-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-            <div className="flex items-center gap-3.5">
-              <div className="w-12 h-12 rounded-2xl bg-brand-soft text-brand-soft-ink flex items-center justify-center shrink-0">
-                <ChefHat className="w-6 h-6" />
+          <div className="bg-surface rounded-[20px] border border-line px-4 py-3 sm:px-5 flex items-center justify-between gap-3">
+            <div className="flex items-center gap-3 min-w-0">
+              <div className="w-10 h-10 rounded-xl bg-brand-soft text-brand-soft-ink flex items-center justify-center shrink-0">
+                <ChefHat className="w-5 h-5" aria-hidden />
               </div>
-              <div>
-                <div className="flex items-center gap-2 flex-wrap">
-                  <h3 className="font-extrabold text-ink text-base">
-                    {activeSeller.businessName}
-                  </h3>
-                  {activeSeller.community?.name && (
-                    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-raised text-ink">
-                      <MapPin className="w-3 h-3 text-brand-ink" />
-                      <span>{activeSeller.community.name}</span>
-                    </span>
-                  )}
-                  <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-brand-soft text-brand-soft-ink">
-                    <ShieldCheck className="w-3 h-3" />
-                    <span>{t('singleKitchenOrder')}</span>
-                  </span>
-                </div>
-                <p className="text-[13px] text-muted mt-1">
-                  {t('singleKitchenText')}
-                </p>
+              <div className="min-w-0">
+                <h3 className="font-extrabold text-ink text-base break-words">{activeSeller.businessName}</h3>
+                {activeSeller.community?.name && (
+                  <p className="flex items-center gap-1 text-xs text-muted truncate">
+                    <MapPin className="w-3 h-3 shrink-0" aria-hidden />
+                    <span>{activeSeller.community.name}</span>
+                  </p>
+                )}
               </div>
             </div>
-
-            <div className="flex items-center gap-2 self-end sm:self-center">
-              <Link
-                href={`/kitchens/${activeSeller.id}`}
-                className="inline-flex items-center gap-1.5 h-10 px-4 rounded-xl border border-line-strong hover:bg-raised text-sm font-bold text-brand-ink transition-colors"
-              >
-                <span>{t('addMoreDishes')}</span>
-                <ChevronRight className="rtl:-scale-x-100 w-3.5 h-3.5" />
-              </Link>
-            </div>
+            <Link
+              href={`/kitchens/${activeSeller.id}`}
+              className="shrink-0 inline-flex items-center gap-1 min-h-11 text-sm font-bold text-brand-ink hover:underline whitespace-nowrap"
+            >
+              <span>{t('addMoreDishes')}</span>
+              <ChevronRight className="rtl:-scale-x-100 w-3.5 h-3.5" aria-hidden />
+            </Link>
           </div>
         )}
 
@@ -607,22 +587,12 @@ export default function CartPage() {
           {/* ── LEFT: DISH ITEMS ── */}
           <div className="lg:col-span-2 space-y-4">
             <div className="flex items-center justify-between px-1">
-              <div className="flex items-center gap-2.5">
-                <div className="w-9 h-9 rounded-xl bg-brand-soft text-brand-soft-ink flex items-center justify-center">
-                  <ShoppingCart className="w-4 h-4" />
-                </div>
-                <div>
-                  <h2 className="text-base font-extrabold text-ink leading-tight">{t('selectedDishes')}</h2>
-                  <span className="text-xs text-muted">
-                    {t(trayCount === 1 ? 'itemsInTrayOne' : 'itemsInTrayMany', { count: trayCount })}
-                  </span>
-                </div>
-              </div>
+              <h2 className="text-base font-extrabold text-ink">{t('selectedDishes')}</h2>
 
               <button
                 type="button"
                 onClick={() => setShowClearModal(true)}
-                className="text-sm font-bold text-muted hover:text-red-600 h-10 px-3 rounded-xl hover:bg-raised transition-colors flex items-center gap-1.5 cursor-pointer"
+                className="text-sm font-bold text-muted hover:text-red-600 h-11 px-3 rounded-xl hover:bg-raised transition-colors flex items-center gap-1.5 cursor-pointer"
               >
                 <Trash2 className="w-3.5 h-3.5" />
                 <span>{t('clearTray')}</span>
@@ -663,10 +633,10 @@ export default function CartPage() {
                         )}
                         <span
                           className={`absolute bottom-1.5 start-1.5 px-2 py-0.5 rounded-full text-[11px] font-extrabold flex items-center gap-1 ${
-                            item.stockType === 'hub' ? 'bg-frozen-soft text-frozen-ink' : 'bg-surface/95 text-ink'
+                            isFrozenItem(item) ? 'bg-frozen-soft text-frozen-ink' : 'bg-surface/95 text-ink'
                           }`}
                         >
-                          {item.stockType === 'hub' ? (
+                          {isFrozenItem(item) ? (
                             <>
                               <Snowflake className="w-2.5 h-2.5" />
                               <span>{t('frozen')}</span>
@@ -689,10 +659,6 @@ export default function CartPage() {
                                 {item.product.name}
                               </h3>
                             </Link>
-                            <p className="text-xs text-muted mt-0.5 flex items-center gap-1.5">
-                              <Store className="w-3 h-3 text-muted shrink-0" />
-                              <span className="truncate">{item.seller.businessName}</span>
-                            </p>
                           </div>
 
                           <button
@@ -772,7 +738,7 @@ export default function CartPage() {
               <div className="space-y-2.5 text-sm">
                 <div className="flex justify-between text-muted font-medium">
                   <span>{t('dishesSubtotal')}</span>
-                  <span className="font-bold text-ink">{formatPrice(discountedSubtotal)}</span>
+                  <bdi dir="ltr" className="font-bold text-ink">{formatPrice(discountedSubtotal + promotionSavings)}</bdi>
                 </div>
 
                 {promotionSavings > 0 && (
@@ -781,17 +747,7 @@ export default function CartPage() {
                       <Tag className="w-3.5 h-3.5" />
                       <span>{t('promotionsSavings')}</span>
                     </span>
-                    <span>-{formatPrice(promotionSavings)}</span>
-                  </div>
-                )}
-
-                {hasFrozen && (
-                  <div className="flex justify-between text-muted font-medium">
-                    <span className="flex items-center gap-1.5">
-                      <Snowflake className="w-3.5 h-3.5 text-frozen-ink" />
-                      <span>{t('insulatedPack')}</span>
-                    </span>
-                    <span className="text-brand-ink font-bold text-xs">{tc('free')}</span>
+                    <bdi dir="ltr">-{formatPrice(promotionSavings)}</bdi>
                   </div>
                 )}
 
@@ -871,16 +827,16 @@ export default function CartPage() {
                         placeholder={t('promoPlaceholder')}
                         dir="ltr"
                         aria-label={t('voucherCode')}
-                        className="flex-1 min-w-0 h-10 px-3 text-sm border border-line rounded-xl focus:ring-2 focus:ring-brand/30 focus:border-brand focus:outline-none bg-surface text-ink font-mono uppercase"
+                        className="flex-1 min-w-0 h-11 px-3 text-sm border border-line rounded-xl focus:ring-2 focus:ring-brand/30 focus:border-brand focus:outline-none bg-surface text-ink font-mono uppercase placeholder:font-sans placeholder:normal-case"
                       />
                       <Button
                         type="button"
-                        size="sm"
+                        variant="outline"
                         disabled={!cartPromoInput.trim() || promoValidating}
                         onClick={handleApplyPromoInCart}
-                        className="h-10 text-sm font-extrabold bg-ink hover:bg-ink/90 text-page px-4 rounded-xl transition-colors"
+                        className="h-11 text-sm font-bold px-4 rounded-xl"
                       >
-                        {promoValidating ? '...' : t('apply')}
+                        {promoValidating ? t('checking') : t('apply')}
                       </Button>
                     </div>
                   )}
@@ -902,36 +858,30 @@ export default function CartPage() {
 
               {/* Checkout CTA Button */}
               {isAuthenticated ? (
-                <Link href="/checkout" className="block pt-1">
-                  <button
-                    type="button"
-                    className="w-full h-14 rounded-2xl bg-brand hover:bg-brand-500 text-on-brand text-base font-extrabold transition-colors active:scale-98 flex items-center justify-center gap-2 cursor-pointer"
-                  >
-                    <ShoppingBag className="w-5 h-5" />
-                    <span>{t('proceedCheckout')}</span>
-                    <ArrowRight className="rtl:-scale-x-100 w-4 h-4 ms-1" />
-                  </button>
+                <Link
+                  href="/checkout"
+                  className="w-full h-14 rounded-2xl bg-brand hover:bg-brand-500 text-on-brand text-base font-extrabold transition-colors active:scale-98 flex items-center justify-center gap-2"
+                >
+                  <ShoppingBag className="w-5 h-5" aria-hidden />
+                  <span>{t('proceedCheckout')}</span>
+                  <ArrowRight className="rtl:-scale-x-100 w-4 h-4 ms-1" aria-hidden />
                 </Link>
               ) : (
-                <Link href={loginUrlFor('/checkout')} className="block pt-1">
-                  <button
-                    type="button"
-                    className="w-full h-14 rounded-2xl bg-brand hover:bg-brand-500 text-on-brand text-base font-extrabold transition-colors active:scale-98 flex items-center justify-center gap-2 cursor-pointer"
-                  >
-                    <span>{t('signInToComplete')}</span>
-                    <ArrowRight className="rtl:-scale-x-100 w-4 h-4 ms-1" />
-                  </button>
+                <Link
+                  href={loginUrlFor('/checkout')}
+                  className="w-full h-14 rounded-2xl bg-brand hover:bg-brand-500 text-on-brand text-base font-extrabold transition-colors active:scale-98 flex items-center justify-center gap-2"
+                >
+                  <span>{t('signInToComplete')}</span>
+                  <ArrowRight className="rtl:-scale-x-100 w-4 h-4 ms-1" aria-hidden />
                 </Link>
               )}
 
-              <Link href="/products" className="block">
-                <button
-                  type="button"
-                  className="w-full h-11 rounded-xl hover:bg-raised text-ink text-sm font-bold border border-line-strong transition-colors flex items-center justify-center gap-1.5"
-                >
-                  <ChevronLeft className="rtl:-scale-x-100 w-3.5 h-3.5" />
-                  <span>{t('continueExploring')}</span>
-                </button>
+              <Link
+                href="/products"
+                className="w-full h-11 rounded-xl hover:bg-raised text-ink text-sm font-bold border border-line-strong transition-colors flex items-center justify-center gap-1.5"
+              >
+                <ChevronLeft className="rtl:-scale-x-100 w-3.5 h-3.5" aria-hidden />
+                <span>{t('continueExploring')}</span>
               </Link>
 
             </div>

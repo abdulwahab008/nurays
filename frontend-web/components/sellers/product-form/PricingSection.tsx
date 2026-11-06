@@ -2,11 +2,16 @@
 
 import { PRODUCT_FIELD, ProductFormData, UNIT_OPTIONS, discountPercent, profitOf } from '@/lib/product-form';
 import { FieldError, FormSection, fieldClass, hintClass, labelClass, useFieldError } from './fields';
+import { useT } from '@/lib/i18n';
+import { kitchenProductFormMessages } from '@/lib/i18n/messages/kitchen-product-form';
+import { StatusPill } from '@/components/ui/StatusPill';
+
+type UnitValue = 'piece' | 'pack' | 'dozen' | '100g' | '250g' | '500g' | '1kg' | 'kg' | 'other';
 
 function stockBadge(qty: number) {
-  if (qty > 20) return { cls: 'bg-brand-soft text-brand-soft-ink', text: 'Good stock' };
-  if (qty > 10) return { cls: 'bg-accent-soft text-accent-soft-ink', text: 'Low' };
-  return { cls: 'bg-red-50 text-red-700', text: 'Very low' };
+  if (qty > 20) return { tone: 'good', text: 'stockGood' } as const;
+  if (qty > 10) return { tone: 'waiting', text: 'stockLow' } as const;
+  return { tone: 'problem', text: 'stockVeryLow' } as const;
 }
 
 function MoneyField({
@@ -68,23 +73,26 @@ export default function PricingSection({
   const profit = price > 0 && cost > 0 ? profitOf(price, cost) : null;
   const customUnitError = useFieldError(PRODUCT_FIELD.customUnit);
   const stockError = useFieldError(PRODUCT_FIELD.stock);
-  const unitLabel = form.unit === 'other' ? customUnit : UNIT_OPTIONS.find((u) => u.value === form.unit)?.label;
+  const t = useT(kitchenProductFormMessages);
+  const unitOption = UNIT_OPTIONS.find((u) => u.value === form.unit);
+  const unitLabel = form.unit === 'other' ? customUnit : unitOption && t(`unitOpt.${unitOption.value as UnitValue}`);
+  const optional = <span className="font-normal text-muted">{t('optional')}</span>;
 
   return (
-    <FormSection id="dish-price" title="Price and stock">
+    <FormSection id="dish-price" title={t('priceStock')}>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
         <div>
           <label htmlFor="product-price-input" className={labelClass}>
-            Price
+            {t('price')}
           </label>
           <MoneyField id="product-price-input" value={form.price} onChange={(v) => update({ price: v })} placeholder="299" />
           <FieldError id={PRODUCT_FIELD.price} />
-          <p className={hintClass}>What the customer pays.</p>
+          <p className={hintClass}>{t('priceHint')}</p>
         </div>
 
         <div>
           <label htmlFor="product-original-price-input" className={labelClass}>
-            Price before discount <span className="font-normal text-muted">(optional)</span>
+            {t('priceBefore')} {optional}
           </label>
           <MoneyField
             id="product-original-price-input"
@@ -94,21 +102,21 @@ export default function PricingSection({
           />
           <FieldError id={PRODUCT_FIELD.originalPrice} />
           <p className={hintClass}>
-            {discount > 0 ? <span className="text-brand-ink">Customers see {discount}% off.</span> : 'Set it higher than the price to show a discount.'}
+            {discount > 0 ? <span className="text-brand-ink">{t('customersSeeOff', { percent: discount })}</span> : t('priceBeforeHint')}
           </p>
         </div>
 
         <div className="sm:col-span-2">
           <label htmlFor="product-cost-price-input" className={labelClass}>
-            What it costs you to make <span className="font-normal text-muted">(optional, only you see it)</span>
+            {t('costLabel')} <span className="font-normal text-muted">{t('costOptional')}</span>
           </label>
           <MoneyField id="product-cost-price-input" value={form.costPrice} onChange={(v) => update({ costPrice: v })} placeholder="180" />
-          <p className={hintClass}>Ingredients, packaging and your time, so we can show what you keep.</p>
+          <p className={hintClass}>{t('costHint')}</p>
         </div>
 
         <div>
           <label htmlFor="product-unit-select" className={labelClass}>
-            Price is for
+            {t('priceFor')}
           </label>
           <select
             id="product-unit-select"
@@ -121,7 +129,7 @@ export default function PricingSection({
           >
             {UNIT_OPTIONS.map((opt) => (
               <option key={opt.value} value={opt.value}>
-                {opt.label} ({opt.example})
+                {t(`unitOpt.${opt.value as UnitValue}`)} ({t(`unitEx.${opt.value as UnitValue}`)})
               </option>
             ))}
           </select>
@@ -130,10 +138,10 @@ export default function PricingSection({
               <input
                 type="text"
                 id={PRODUCT_FIELD.customUnit}
-                aria-label="Your own unit"
+                aria-label={t('ownUnit')}
                 value={customUnit}
                 onChange={(e) => onCustomUnit(e.target.value)}
-                placeholder="e.g. per dozen, per box, per tray"
+                placeholder={t('ownUnitPlaceholder')}
                 {...customUnitError.inputProps}
                 className={`${fieldClass} mt-2 ${customUnitError.errorClass}`}
               />
@@ -144,10 +152,8 @@ export default function PricingSection({
 
         <div>
           <label htmlFor="product-stock-input" className={`${labelClass} flex items-center justify-between gap-2`}>
-            <span>How many you have</span>
-            {stock > 0 && (
-              <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${stockBadge(stock).cls}`}>{stockBadge(stock).text}</span>
-            )}
+            <span>{t('howMany')}</span>
+            {stock > 0 && <StatusPill tone={stockBadge(stock).tone}>{t(stockBadge(stock).text)}</StatusPill>}
           </label>
           <input
             type="number"
@@ -161,20 +167,20 @@ export default function PricingSection({
             className={`${fieldClass} tabular-nums ${stockError.errorClass}`}
           />
           <FieldError id={PRODUCT_FIELD.stock} />
-          {form.stockQuantity.trim() === '0' && <p className={hintClass}>Sold out: customers cannot order it until you add more.</p>}
+          {form.stockQuantity.trim() === '0' && <p className={hintClass}>{t('soldOutHint')}</p>}
         </div>
       </div>
 
       {form.price && (
         <div className="mt-6 grid grid-cols-1 gap-6 sm:grid-cols-2">
           <div>
-            <p className="text-sm text-muted">Customers see</p>
+            <p className="text-sm text-muted">{t('customersSee')}</p>
             <p className="mt-1 flex flex-wrap items-baseline gap-x-2">
               <span className="text-2xl font-semibold text-ink tabular-nums">Rs {form.price}</span>
               {discount > 0 && (
                 <>
                   <span className="text-sm text-muted line-through tabular-nums">Rs {form.originalPrice}</span>
-                  <span className="rounded-full bg-brand-soft px-2 py-0.5 text-xs font-medium text-brand-soft-ink">{discount}% off</span>
+                  <StatusPill tone="good">{t('percentOff', { percent: discount })}</StatusPill>
                 </>
               )}
             </p>
@@ -183,13 +189,13 @@ export default function PricingSection({
 
           {profit && (
             <div>
-              <p className="text-sm text-muted">You keep, only you see this</p>
+              <p className="text-sm text-muted">{t('youKeepPrivate')}</p>
               <dl className="mt-1 divide-y divide-line">
-                <Row label="Price" value={`Rs ${form.price}`} />
-                <Row label="Your cost" value={`− Rs ${form.costPrice}`} />
-                <Row label="Nuray fee (15%)" value={`− Rs ${profit.fee.toFixed(0)}`} />
+                <Row label={t('price')} value={`Rs ${form.price}`} />
+                <Row label={t('yourCost')} value={`− Rs ${form.costPrice}`} />
+                <Row label={t('nurayFee')} value={`− Rs ${profit.fee.toFixed(0)}`} />
                 <div className="flex items-baseline justify-between gap-4 py-2">
-                  <dt className="text-sm font-semibold text-ink">You keep</dt>
+                  <dt className="text-sm font-semibold text-ink">{t('youKeep')}</dt>
                   <dd className={`text-[15px] font-semibold tabular-nums ${profit.profit > 0 ? 'text-ink' : 'text-red-700'}`}>
                     Rs {profit.profit.toFixed(0)}
                     <span className="ms-2 text-sm font-normal text-muted">{profit.margin.toFixed(1)}%</span>

@@ -10,7 +10,7 @@ import { AdminFilterTabs } from '@/components/admin/AdminFilterTabs';
 import { LoadingLine, StatusPill, type PillTone } from '@/components/admin/AdminListParts';
 import { useAuthStore } from '@/lib/store/auth-store';
 import { apiClient, apiErrorMessage } from '@/lib/api-client';
-import { formatDateTime } from '@/lib/utils';
+import { formatDateTime } from '@/components/admin/admin-dates';
 import { useShallow } from 'zustand/react/shallow';
 
 interface CategoryRequest {
@@ -168,7 +168,7 @@ export default function CategoryRequestsPage() {
                           {request.nameUrdu}
                         </p>
                       )}
-                      <dl className="mt-3 grid grid-cols-[auto_1fr] gap-x-4 gap-y-1.5 text-sm">
+                      <dl className="mt-3 grid grid-cols-[auto_1fr] items-baseline gap-x-4 gap-y-1.5 text-sm">
                         <dt className="text-muted">Kitchen</dt>
                         <dd className="min-w-0 text-ink">
                           {request.seller?.businessName || 'Unknown kitchen'}

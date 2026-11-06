@@ -61,12 +61,9 @@ export function KitchenCard({
 }) {
   const t = useT(homeMessages);
   return (
-    <Link
-      href={kitchen.href}
-      className="group flex flex-col bg-surface rounded-[20px] border border-line hover:border-line-strong hover:shadow-[var(--shadow-card)] transition-all duration-200 overflow-hidden"
-    >
+    <div className="group relative flex flex-col bg-surface rounded-[20px] border border-line hover:border-line-strong hover:shadow-[var(--shadow-card)] transition-all duration-200 overflow-hidden">
       {/* The kitchen's own cover photo, nothing laid over it but the deal and the heart */}
-      <div className="relative aspect-[16/10] w-full overflow-hidden bg-raised">
+      <div className="relative aspect-[2/1] sm:aspect-[16/10] w-full overflow-hidden bg-raised">
         <CoverImage
           src={kitchen.coverPhoto}
           alt={kitchen.name}
@@ -86,7 +83,7 @@ export function KitchenCard({
         <button
           type="button"
           onClick={(e) => onToggleFavorite(kitchen.id, e)}
-          className="absolute top-1 end-1 w-11 h-11 flex items-center justify-center"
+          className="absolute z-10 top-1 end-1 w-11 h-11 flex items-center justify-center"
           aria-label={isFav ? t('removeSaved') : t('saveFav')}
           aria-pressed={isFav}
         >
@@ -100,7 +97,12 @@ export function KitchenCard({
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
             <h3 className="text-base font-extrabold text-ink flex items-center gap-1 min-w-0">
-              <span className="truncate">{kitchen.name}</span>
+              <Link
+                href={kitchen.href}
+                className="truncate after:absolute after:inset-0 after:rounded-[20px] focus-visible:outline-none focus-visible:after:ring-2 focus-visible:after:ring-inset focus-visible:after:ring-brand"
+              >
+                {kitchen.name}
+              </Link>
               {/* Every listed kitchen is verified */}
               <ShieldCheck className="w-4 h-4 shrink-0 text-brand-ink" aria-label={kitchen.badge} />
             </h3>
@@ -169,7 +171,7 @@ export function KitchenCard({
         </div>
 
       </div>
-    </Link>
+    </div>
   );
 }
 
@@ -185,6 +187,7 @@ export function KitchenGrid({
   isAuthenticated,
   favoriteKitchenIds,
   onToggleFavorite,
+  phoneLimit,
 }: {
   /** The heading; "Home kitchens" when no area is chosen. */
   title?: string;
@@ -198,6 +201,8 @@ export function KitchenGrid({
   isAuthenticated: boolean;
   favoriteKitchenIds: Set<string>;
   onToggleFavorite: ToggleFavorite;
+  /** On a phone show only the first three cards (View all has the rest), so the dishes below are not a long scroll away. */
+  phoneLimit?: boolean;
 }) {
   const t = useT(homeMessages);
   return (
@@ -260,8 +265,7 @@ export function KitchenGrid({
           }
         />
       ) : (
-        /* Responsive Grid */
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
+        <div className={`grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6 ${phoneLimit ? 'max-sm:[&>:nth-child(n+4)]:hidden' : ''}`}>
           {filteredKitchens.map((kitchen) => (
             <KitchenCard
               key={kitchen.id}

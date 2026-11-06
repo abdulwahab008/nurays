@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { loginUrlHere } from '@/lib/auth-redirect';
 import { useRouter } from 'next/navigation';
-import { Package, CreditCard, Truck, Snowflake, ChevronDown, Send } from 'lucide-react';
+import { Send } from 'lucide-react';
 import { DashboardLayout, CUSTOMER_SIDEBAR_ITEMS } from '@/components/layout/DashboardShell';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/toast';
@@ -12,6 +12,7 @@ import { apiClient, apiErrorMessage } from '@/lib/api-client';
 import { orderService, type Order } from '@/lib/services/order.service';
 import { formatDate } from '@/lib/utils';
 import MyTickets from '@/components/support/MyTickets';
+import { HelpFaq } from '@/app/help/HelpFaq';
 import { useT } from '@/lib/i18n';
 import { accountMessages } from '@/lib/i18n/messages/account';
 import { useShallow } from 'zustand/react/shallow';
@@ -30,88 +31,12 @@ export default function SupportPage() {
   const t = useT(accountMessages);
   const [activeTab, setActiveTab] = useState<'faq' | 'contact' | 'tickets'>('faq');
   const [submitting, setSubmitting] = useState(false);
-  const [expandedFaq, setExpandedFaq] = useState<number | null>(null);
   const [formData, setFormData] = useState(EMPTY_FORM);
   const [errors, setErrors] = useState<FieldErrors>({});
   const [recentOrders, setRecentOrders] = useState<Order[]>([]);
   const orderNeeded = NEEDS_ORDER.includes(formData.category);
 
   const sidebarItems = CUSTOMER_SIDEBAR_ITEMS;
-
-  const faqs = [
-    {
-      category: t('faq.catOrders'),
-      icon: Package,
-      questions: [
-        {
-          q: t('faq.q1'),
-          a: t('faq.a1'),
-        },
-        {
-          q: t('faq.q2'),
-          a: t('faq.a2'),
-        },
-        {
-          q: t('faq.q3'),
-          a: t('faq.a3'),
-        },
-      ],
-    },
-    {
-      category: t('faq.catPayment'),
-      icon: CreditCard,
-      questions: [
-        {
-          q: t('faq.q4'),
-          a: t('faq.a4'),
-        },
-        {
-          q: t('faq.q5'),
-          a: t('faq.a5'),
-        },
-        {
-          q: t('faq.q6'),
-          a: t('faq.a6'),
-        },
-      ],
-    },
-    {
-      category: t('faq.catDelivery'),
-      icon: Truck,
-      questions: [
-        {
-          q: t('faq.q7'),
-          a: t('faq.a7'),
-        },
-        {
-          q: t('faq.q8'),
-          a: t('faq.a8'),
-        },
-        {
-          q: t('faq.q9'),
-          a: t('faq.a9'),
-        },
-      ],
-    },
-    {
-      category: t('faq.catQuality'),
-      icon: Snowflake,
-      questions: [
-        {
-          q: t('faq.q10'),
-          a: t('faq.a10'),
-        },
-        {
-          q: t('faq.q11'),
-          a: t('faq.a11'),
-        },
-        {
-          q: t('faq.q12'),
-          a: t('faq.a12'),
-        },
-      ],
-    },
-  ];
 
   const validate = (data: typeof formData): FieldErrors => {
     const next: FieldErrors = {};
@@ -215,49 +140,7 @@ export default function SupportPage() {
       {activeTab === 'tickets' && <MyTickets />}
 
       {/* FAQ Section */}
-      {activeTab === 'faq' && (
-        <div className="space-y-6">
-          {faqs.map((category, catIndex) => {
-            const CategoryIcon = category.icon;
-            return (
-              <div key={catIndex} className="bg-surface rounded-2xl border border-line overflow-hidden">
-                <div className="bg-raised px-6 py-4 border-b border-line">
-                  <h3 className="font-semibold text-ink flex items-center gap-2.5">
-                    <CategoryIcon className="w-5 h-5 text-brand-ink" />
-                    {category.category}
-                  </h3>
-                </div>
-                <div className="divide-y divide-line">
-                  {category.questions.map((faq, faqIndex) => {
-                    const index = catIndex * 10 + faqIndex;
-                    const isExpanded = expandedFaq === index;
-                    return (
-                      <div key={faqIndex}>
-                        <button
-                          onClick={() => setExpandedFaq(isExpanded ? null : index)}
-                          className="w-full min-h-11 px-4 sm:px-6 py-4 flex items-center justify-between text-start hover:bg-raised transition-colors"
-                        >
-                          <span className="font-medium text-ink">{faq.q}</span>
-                          <ChevronDown
-                            className={`w-4 h-4 text-muted transition-transform ${
-                              isExpanded ? 'rotate-180 text-brand-ink' : ''
-                            }`}
-                          />
-                        </button>
-                        {isExpanded && (
-                          <div className="px-4 sm:px-6 pb-4 text-muted text-sm leading-relaxed">
-                            {faq.a}
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      )}
+      {activeTab === 'faq' && <HelpFaq />}
 
       {/* Contact Form */}
       {activeTab === 'contact' && (

@@ -11,8 +11,9 @@ import { LoadError } from '@/components/ui/LoadError';
 import { useToast } from '@/components/ui/toast';
 import { useAuthStore } from '@/lib/store/auth-store';
 import { apiClient, apiErrorMessage } from '@/lib/api-client';
-import { formatDate } from '@/lib/utils';
-import { useT } from '@/lib/i18n';
+import { formatTime } from '@/lib/utils';
+import { dateClock } from '@/components/sellers/order-timing';
+import { useLocale, useT } from '@/lib/i18n';
 import { accountMessages } from '@/lib/i18n/messages/account';
 import { useShallow } from 'zustand/react/shallow';
 
@@ -33,6 +34,9 @@ export default function SellerNotificationsPage() {
   const { isAuthenticated, user } = useAuthStore(useShallow((s) => ({ isAuthenticated: s.isAuthenticated, user: s.user })));
   const { showToast } = useToast();
   const t = useT(accountMessages);
+  const { locale } = useLocale();
+  // Today's alerts by the clock (a kitchen reads several a day), older ones with their date.
+  const when = (iso: string) => (new Date(iso).toDateString() === new Date().toDateString() ? formatTime(iso) : dateClock(iso, locale));
   const [loading, setLoading] = useState(true);
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [filter, setFilter] = useState<'all' | 'unread'>('all');
@@ -54,7 +58,6 @@ export default function SellerNotificationsPage() {
         );
       }
     } catch (error: unknown) {
-      console.error('Failed to load notifications:', error);
       // What is already on the screen stays (a refresh that fails must not wipe the list).
       setLoadError(error);
     } finally {
@@ -112,7 +115,6 @@ export default function SellerNotificationsPage() {
   return (
     <DashboardLayout
       title={t('notifications')}
-      subtitle={couldNotRead || unreadCount === 0 ? undefined : t(unreadCount !== 1 ? 'youHaveUnreadMany' : 'youHaveUnreadOne', { count: unreadCount })}
       sidebarItems={sidebarItems}
       userType="seller"
     >
@@ -187,11 +189,11 @@ export default function SellerNotificationsPage() {
                     )}
                   </span>
                   <span className="flex-1 min-w-0">
-                    <span className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-0.5">
-                      <span className={`text-[15px] ${notification.isRead ? 'text-ink' : 'text-ink font-semibold'}`}>
+                    <span className="flex items-baseline justify-between gap-x-3">
+                      <span className={`min-w-0 text-[15px] ${notification.isRead ? 'text-ink' : 'text-ink font-semibold'}`}>
                         {notification.title}
                       </span>
-                      <span className="text-xs text-muted whitespace-nowrap">{formatDate(notification.createdAt)}</span>
+                      <span className="shrink-0 text-xs text-muted whitespace-nowrap">{when(notification.createdAt)}</span>
                     </span>
                     <span className="block text-sm text-muted mt-0.5">{notification.message}</span>
                   </span>

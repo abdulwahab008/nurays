@@ -157,7 +157,9 @@ export default function FavoritesPage() {
                       <Bike className="w-4 h-4 text-muted shrink-0" aria-hidden />
                       {quote
                         ? quote.min != null && quote.max != null
-                          ? t('favQuote', { fee: quote.fee === 0 ? t('freeDelivery') : formatPrice(quote.fee), min: quote.min, max: quote.max })
+                          ? quote.fee === 0
+                            ? t('favFreeQuote', { min: quote.min, max: quote.max })
+                            : t('favQuote', { fee: formatPrice(quote.fee), min: quote.min, max: quote.max })
                           : quote.fee === 0
                             ? t('freeDelivery')
                             : formatPrice(quote.fee)

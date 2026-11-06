@@ -1,5 +1,5 @@
 import prisma from '../config/database';
-import socketManager from '../config/socket';
+import socketManager, { ON_DUTY_RIDERS_ROOM } from '../config/socket';
 import { AppError } from '../middleware/errorHandler';
 import { notify, notifyMany } from './notify.service';
 import type { DeliveryChannel } from '../jobs/notify.jobs';
@@ -169,9 +169,21 @@ export class RealtimeOrderService {
     }
   }
 
-  /** A delivery job joined the open pool: the riders who can take it (on duty) reload their list of available jobs. */
-  emitDeliveryPosted(deliveryId: string, orderId: string) {
-    socketManager.emitToOnDutyRiders('delivery:new', { deliveryId, orderId });
+  /**
+   * A delivery job joined the open pool: the riders who can take it (on duty) reload their list of available jobs.
+   * A job a rider just handed back is not news to them, so none of their devices hear of it.
+   */
+  emitDeliveryPosted(deliveryId: string, orderId: string, opts: { exceptUserId?: string } = {}) {
+    const payload = { deliveryId, orderId };
+    if (!opts.exceptUserId) {
+      socketManager.emitToOnDutyRiders('delivery:new', payload);
+      return;
+    }
+    try {
+      socketManager.getIO().to(ON_DUTY_RIDERS_ROOM).except(`user:${opts.exceptUserId}`).emit('delivery:new', payload);
+    } catch (err) {
+      logger.error({ err, deliveryId }, 'delivery:new event failed');
+    }
   }
 
   /**

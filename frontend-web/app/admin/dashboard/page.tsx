@@ -47,18 +47,9 @@ function waitedFor(since: string | null): string | null {
   return hours < 48 ? `${hours} h` : `${Math.round(hours / 24)} days`;
 }
 
-const SECTIONS = [
-  { href: '/admin/orders', label: 'Orders', note: 'Every order and its status' },
-  { href: '/admin/sellers', label: 'Kitchens', note: 'Find a kitchen, its dishes and sales' },
-  { href: '/admin/products', label: 'Dishes', note: 'Approve new and changed dishes' },
-  { href: '/admin/users', label: 'People', note: 'Find an account, suspend or reactivate it' },
-  { href: '/admin/riders', label: 'Riders', note: 'Cash riders hold and their pay' },
-  { href: '/admin/analytics', label: 'Analytics', note: 'Sales and orders over time' },
-] as const;
-
 /**
- * What needs an admin now (approvals, refunds, problem orders) first, then today's figures, then the way into each
- * section. The one raised surface is the list of things waiting.
+ * What needs an admin now (approvals, refunds, problem orders) first, then today's figures. The side menu is the way
+ * into each section, so the page does not repeat it. The one raised surface is the list of things waiting.
  */
 export default function AdminDashboardPage() {
   const router = useRouter();
@@ -188,7 +179,7 @@ export default function AdminDashboardPage() {
 
         <section aria-labelledby="today-heading" className="border-t border-line pt-6">
           <h2 id="today-heading" className="mb-4 text-sm font-semibold text-ink">
-            Today
+            Orders
           </h2>
           {statsError ? (
             <LoadError
@@ -204,38 +195,20 @@ export default function AdminDashboardPage() {
           ) : stats ? (
             <div className="grid grid-cols-2 gap-x-6 gap-y-5 sm:grid-cols-3" data-testid="today-figures">
               <Figure
-                label="Orders"
+                label="Placed today"
                 value={stats.today.orders}
                 sub={stats.today.cancelled ? `Plus ${stats.today.cancelled} cancelled` : 'None cancelled'}
                 href="/admin/orders"
               />
-              <Figure label="Paid sales" value={formatPrice(stats.today.revenue)} />
-              <Figure label="Waiting for a kitchen" value={stats.waitingForKitchen ?? stats.pendingOrders} sub="Not accepted yet" />
+              <Figure label="Paid sales today" value={formatPrice(stats.today.revenue)} />
+              <Figure label="Waiting for a kitchen" value={stats.waitingForKitchen ?? stats.pendingOrders} sub="Not accepted yet" href="/admin/orders?status=pending" />
               <Figure label="Being prepared" value={stats.beingPrepared ?? 0} sub="Accepted, cooking or ready" />
               <Figure label="On the way" value={stats.inTransitOrders} sub="With a rider" />
-              <Figure label="Average order" value={formatPrice(stats.averageOrderValue)} sub="Last 30 days" />
+              <Figure label="Average order" value={formatPrice(Math.round(stats.averageOrderValue))} sub="Over the last 30 days" />
             </div>
           ) : null}
         </section>
 
-        <section aria-labelledby="sections-heading" className="border-t border-line pt-6">
-          <h2 id="sections-heading" className="mb-2 text-sm font-semibold text-ink">
-            Go to
-          </h2>
-          <ul className="grid grid-cols-1 sm:grid-cols-2 sm:gap-x-8">
-            {SECTIONS.map((s) => (
-              <li key={s.href} className="border-b border-line">
-                <Link href={s.href} className="flex min-h-14 items-center gap-3 py-2 hover:text-brand-ink">
-                  <span className="min-w-0 flex-1">
-                    <span className="block text-[15px] font-medium text-ink">{s.label}</span>
-                    <span className="block text-xs text-muted">{s.note}</span>
-                  </span>
-                  <ChevronRight aria-hidden="true" className="h-4 w-4 shrink-0 text-muted rtl:rotate-180" />
-                </Link>
-              </li>
-            ))}
-          </ul>
-        </section>
       </div>
     </DashboardLayout>
   );

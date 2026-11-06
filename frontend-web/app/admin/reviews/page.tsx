@@ -11,7 +11,7 @@ import { useShallow } from 'zustand/react/shallow';
 import { useToast } from '@/components/ui/toast';
 import { LoadError } from '@/components/ui/LoadError';
 import { apiClient, apiErrorMessage } from '@/lib/api-client';
-import { formatDateTime } from '@/lib/utils';
+import { formatDateTime } from '@/components/admin/admin-dates';
 
 interface ReviewRow {
   id: string;
@@ -144,7 +144,7 @@ export default function AdminReviewsPage() {
                     <p className="mt-1 text-sm text-muted">
                       {r.productName ? (
                         r.productId ? (
-                          <Link href={`/products/${r.productId}`} className="font-medium text-brand-ink hover:underline">
+                          <Link href={`/products/${r.productId}`} className="-my-3 inline-flex min-h-11 items-center font-medium text-brand-ink hover:underline">
                             {r.productName}
                           </Link>
                         ) : (
@@ -153,7 +153,7 @@ export default function AdminReviewsPage() {
                       ) : (
                         'A dish that is gone'
                       )}{' '}
-                      · {r.businessName} · {formatDateTime(r.createdAt)}
+                      · <bdi>{r.businessName}</bdi> · <bdi>{formatDateTime(r.createdAt)}</bdi>
                     </p>
                   </div>
                   <p className="text-sm font-semibold text-ink">{r.customerName}</p>
@@ -193,7 +193,7 @@ export default function AdminReviewsPage() {
           </ul>
         )}
 
-        <Pager page={page} totalPages={totalPages} total={total} noun="reviews" onChange={setPage} />
+        <Pager page={page} totalPages={totalPages} total={total} noun="reviews" one="review" onChange={setPage} />
       </div>
     </DashboardLayout>
   );

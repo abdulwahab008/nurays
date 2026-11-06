@@ -26,9 +26,7 @@ import {
   Bike,
   ShoppingCart,
   Camera,
-  Zap,
   MapPin,
-  Package,
   BarChart3,
   User,
   Pencil,
@@ -37,10 +35,14 @@ import {
   Lock,
   AlertTriangle,
   Check,
-  ArrowRight,
   Globe,
   LogOut,
   Palette,
+  Heart,
+  Wallet,
+  Bell,
+  LifeBuoy,
+  ChevronRight,
 } from 'lucide-react';
 import { useShallow } from 'zustand/react/shallow';
 
@@ -54,7 +56,7 @@ export default function ProfilePage() {
 
   // Closing the account: typed confirmation, then the password if the server asks for one.
   const handleDeleteAccount = async () => {
-    if ((await askDialog({ title: t('deleteAccount'), message: t('deleteConfirmPrompt'), label: 'DELETE', mustEqual: 'DELETE' })) !== 'DELETE') return;
+    if ((await askDialog({ title: t('deleteAccount'), message: t('deleteConfirmPrompt'), label: 'DELETE', mustEqual: 'DELETE', destructive: true })) !== 'DELETE') return;
     const attempt = async (password?: string) => {
       await userProfileService.deleteAccount(password);
       showToast(t('accountDeleted'), 'success');
@@ -68,7 +70,7 @@ export default function ProfilePage() {
         await attempt();
       } catch (error) {
         if (apiErrorCode(error) !== 'PASSWORD_REQUIRED') throw error;
-        const password = (await askDialog({ title: t('password'), message: t('deletePasswordPrompt'), type: 'password' }));
+        const password = (await askDialog({ title: t('password'), message: t('deletePasswordPrompt'), type: 'password', destructive: true }));
         if (!password) return;
         await attempt(password);
       }
@@ -304,6 +306,7 @@ export default function ProfilePage() {
                 {profile?.email || profile?.phone || t('role.customer')}
               </p>
               <div className="flex items-center justify-center gap-2 mb-4">
+                {profile?.userType && profile.userType !== 'customer' && (
                 <span className={`px-3 py-1 rounded-full text-xs font-medium flex items-center gap-1.5 ${
                   profile?.userType === 'seller'
                     ? 'bg-accent-soft text-accent-soft-ink'
@@ -314,6 +317,7 @@ export default function ProfilePage() {
                   {profile?.userType === 'seller' ? <Store className="w-3.5 h-3.5" /> : profile?.userType === 'rider' ? <Bike className="w-3.5 h-3.5" /> : <ShoppingCart className="w-3.5 h-3.5" />}
                   <span className="capitalize">{roleLabel(profile?.userType)}</span>
                 </span>
+                )}
                 {profile?.emailVerified && (
                   <span className="px-3 py-1 rounded-full text-xs font-bold bg-brand text-on-brand flex items-center gap-1">
                     <Check className="w-3 h-3" /> {t('verified')}
@@ -341,58 +345,30 @@ export default function ProfilePage() {
             </div>
           </div>
 
-          {/* Quick Links */}
-          <div className="bg-surface rounded-[20px] border border-line p-6 mt-6">
-            <h3 className="font-extrabold text-ink mb-4 flex items-center gap-2">
-              <Zap className="w-4 h-4 text-accent" /> {t('quickLinks')}
-            </h3>
-            <div className="space-y-2">
-              <Link href="/profile/addresses" className="flex items-center gap-3 p-3 rounded-xl hover:bg-raised transition-colors group">
-                <div className="w-10 h-10 bg-brand-soft rounded-xl flex items-center justify-center text-brand-soft-ink">
-                  <MapPin className="w-5 h-5" />
-                </div>
-                <div className="flex-1">
-                  <p className="font-medium text-ink">{t('addresses')}</p>
-                  <p className="text-xs text-muted">{t('addressesDesc')}</p>
-                </div>
-                <ArrowRight className="rtl:-scale-x-100 w-4 h-4 text-muted group-hover:translate-x-1 transition-transform" />
-              </Link>
-              <Link href="/orders" className="flex items-center gap-3 p-3 rounded-xl hover:bg-raised transition-colors group">
-                <div className="w-10 h-10 bg-brand-soft rounded-xl flex items-center justify-center text-brand-soft-ink">
-                  <Package className="w-5 h-5" />
-                </div>
-                <div className="flex-1">
-                  <p className="font-medium text-ink">{t('orderHistory')}</p>
-                  <p className="text-xs text-muted">{t('orderHistoryDesc')}</p>
-                </div>
-                <ArrowRight className="rtl:-scale-x-100 w-4 h-4 text-muted group-hover:translate-x-1 transition-transform" />
-              </Link>
-              {profile?.userType !== 'seller' && (
-                <Link href="/sellers/register" className="flex items-center gap-3 p-3 rounded-xl hover:bg-raised transition-colors group">
-                  <div className="w-10 h-10 bg-accent-soft rounded-xl flex items-center justify-center text-accent-soft-ink">
-                    <Store className="w-5 h-5" />
-                  </div>
-                  <div className="flex-1">
-                    <p className="font-medium text-ink">{t('becomeSeller')}</p>
-                    <p className="text-xs text-muted">{t('becomeSellerDesc')}</p>
-                  </div>
-                  <ArrowRight className="rtl:-scale-x-100 w-4 h-4 text-muted group-hover:translate-x-1 transition-transform" />
-                </Link>
-              )}
-              {profile?.userType === 'seller' && (
-                <Link href="/sellers/dashboard" className="flex items-center gap-3 p-3 rounded-xl hover:bg-raised transition-colors group">
-                  <div className="w-10 h-10 bg-accent-soft rounded-xl flex items-center justify-center text-accent-soft-ink">
-                    <BarChart3 className="w-5 h-5" />
-                  </div>
-                  <div className="flex-1">
-                    <p className="font-medium text-ink">{t('sellerDashboard')}</p>
-                    <p className="text-xs text-muted">{t('sellerDashboardDesc')}</p>
-                  </div>
-                  <ArrowRight className="rtl:-scale-x-100 w-4 h-4 text-muted group-hover:translate-x-1 transition-transform" />
-                </Link>
-              )}
-            </div>
-          </div>
+          {/* Everything else a customer keeps here: on a phone the tab bar has only Home, Orders, Tray and Profile. */}
+          <nav aria-labelledby="quick-links" className="bg-surface rounded-[20px] border border-line p-2 mt-6">
+            <h3 id="quick-links" className="sr-only">{t('quickLinks')}</h3>
+            <ul className="divide-y divide-line">
+              {[
+                { href: '/profile/addresses', icon: MapPin, label: t('addresses') },
+                { href: '/favorites', icon: Heart, label: t('savedKitchens') },
+                { href: '/wallet', icon: Wallet, label: t('walletLink') },
+                { href: '/notifications', icon: Bell, label: t('notifications') },
+                { href: '/support', icon: LifeBuoy, label: t('helpSupport') },
+                profile?.userType === 'seller'
+                  ? { href: '/sellers/dashboard', icon: BarChart3, label: t('sellerDashboard') }
+                  : { href: '/sellers/register', icon: Store, label: t('becomeSeller') },
+              ].map(({ href, icon: Icon, label }) => (
+                <li key={href}>
+                  <Link href={href} className="flex items-center gap-3 min-h-12 px-3 rounded-xl hover:bg-raised transition-colors">
+                    <Icon className="w-5 h-5 text-muted shrink-0" aria-hidden />
+                    <span className="flex-1 font-medium text-ink">{label}</span>
+                    <ChevronRight className="rtl:-scale-x-100 w-4 h-4 text-muted" aria-hidden />
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </nav>
         </div>
 
         {/* Main Content - Right Side */}
@@ -493,8 +469,8 @@ export default function ProfilePage() {
                 </div>
               </form>
             ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div className="p-4 bg-raised rounded-xl">
+              <div className="grid grid-cols-1 md:grid-cols-2 md:gap-x-6 divide-y divide-line md:divide-y-0 border-t border-line md:border-t-0">
+                <div className="py-3 md:py-0">
                   <p className="text-xs text-muted mb-1">{t('phoneNumber')}</p>
                   <p className="font-semibold text-ink flex items-center gap-2">
                     <Phone className="w-4 h-4 text-muted" />
@@ -516,7 +492,7 @@ export default function ProfilePage() {
                         setVerifyingPhone(true);
                         setPhoneInput(hasRealPhone ? profile!.phone : '');
                       }}
-                      className="mt-2 text-xs font-bold text-brand-ink hover:underline"
+                      className="mt-1 inline-flex items-center min-h-11 text-sm font-semibold text-brand-ink hover:underline"
                     >
                       {hasRealPhone ? t('verifyThisNumber') : t('addVerifyPhone')}
                     </button>
@@ -530,7 +506,7 @@ export default function ProfilePage() {
                         placeholder="+923001234567"
                         dir="ltr"
                         disabled={phoneCodeSent}
-                        className="w-full px-3 py-1.5 text-sm border border-line-strong rounded-lg"
+                        className="w-full h-11 px-3 text-sm border border-line-strong rounded-xl bg-surface text-ink"
                       />
                       {phoneCodeSent && (
                         <input
@@ -541,23 +517,23 @@ export default function ProfilePage() {
                           onChange={(e) => setPhoneCode(e.target.value.replace(/\D/g, ''))}
                           placeholder={t('sixDigitCode')}
                           dir="ltr"
-                          className="w-full px-3 py-1.5 text-sm border border-line-strong rounded-lg"
+                          className="w-full h-11 px-3 text-sm border border-line-strong rounded-xl bg-surface text-ink"
                         />
                       )}
                       <div className="flex gap-2">
                         {!phoneCodeSent ? (
-                          <button type="button" disabled={phoneBusy} onClick={sendPhoneCode} className="px-3 py-1.5 text-xs font-bold rounded-lg bg-ink text-page disabled:opacity-50">
+                          <button type="button" disabled={phoneBusy} onClick={sendPhoneCode} className="min-h-11 px-4 text-sm font-semibold rounded-xl bg-brand text-on-brand disabled:opacity-50">
                             {phoneBusy ? t('sending') : t('sendCode')}
                           </button>
                         ) : (
-                          <button type="button" disabled={phoneBusy || phoneCode.length !== 6} onClick={confirmPhoneCode} className="px-3 py-1.5 text-xs font-bold rounded-lg bg-brand-700 text-white disabled:opacity-50">
+                          <button type="button" disabled={phoneBusy || phoneCode.length !== 6} onClick={confirmPhoneCode} className="min-h-11 px-4 text-sm font-semibold rounded-xl bg-brand text-on-brand disabled:opacity-50">
                             {phoneBusy ? t('verifying') : t('verify')}
                           </button>
                         )}
                         <button
                           type="button"
                           onClick={() => { setVerifyingPhone(false); setPhoneCode(''); setPhoneCodeSent(false); }}
-                          className="px-3 py-1.5 text-xs font-bold rounded-lg border border-line-strong"
+                          className="min-h-11 px-4 text-sm font-semibold rounded-xl border border-line-strong text-ink"
                         >
                           {tc('cancel')}
                         </button>
@@ -565,21 +541,21 @@ export default function ProfilePage() {
                     </div>
                   )}
                 </div>
-                <div className="p-4 bg-raised rounded-xl">
+                <div className="py-3 md:py-0">
                   <p className="text-xs text-muted mb-1">{t('emailAddress')}</p>
                   <p className="font-semibold text-ink flex items-center gap-2">
                     <Mail className="w-4 h-4 text-muted" />
                     {profile?.email ? <span data-ltr>{profile.email}</span> : t('notProvided')}
                   </p>
                 </div>
-                <div className="p-4 bg-raised rounded-xl">
+                <div className="py-3 md:py-0">
                   <p className="text-xs text-muted mb-1">{t('fullName')}</p>
                   <p className="font-semibold text-ink flex items-center gap-2">
                     <User className="w-4 h-4 text-muted" />
                     {profile?.profile?.fullName || t('notSet')}
                   </p>
                 </div>
-                <div className="p-4 bg-raised rounded-xl">
+                <div className="py-3 md:py-0">
                   <p className="text-xs text-muted mb-1">{t('location')}</p>
                   <p className="font-semibold text-ink flex items-center gap-2">
                     <MapPin className="w-4 h-4 text-muted shrink-0" />
@@ -594,13 +570,6 @@ export default function ProfilePage() {
                   <Link href="/profile/addresses" className="inline-flex items-center min-h-11 text-xs font-semibold text-brand-ink hover:underline">
                     {defaultAddress ? t('editAddresses') : t('addAnAddress')}
                   </Link>
-                </div>
-                <div className="p-4 bg-raised rounded-xl">
-                  <p className="text-xs text-muted mb-1">{t('accountType')}</p>
-                  <p className="font-semibold text-ink flex items-center gap-2">
-                    {profile?.userType === 'seller' ? <Store className="w-4 h-4 text-accent-soft-ink" /> : profile?.userType === 'rider' ? <Bike className="w-4 h-4 text-brand-ink" /> : <ShoppingCart className="w-4 h-4 text-brand-ink" />}
-                    <span className="capitalize">{roleLabel(profile?.userType)}</span>
-                  </p>
                 </div>
               </div>
             )}

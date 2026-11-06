@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { ShoppingBag, Package, RotateCcw, Search, X } from 'lucide-react';
 import { orderService, Order, OrderItem } from '@/lib/services/order.service';
-import { formatPrice, formatDate } from '@/lib/utils';
+import { formatPrice, formatDateTime } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { LoadError } from '@/components/ui/LoadError';
 import { useAuthStore } from '@/lib/store/auth-store';
@@ -19,8 +19,8 @@ import { useT } from '@/lib/i18n';
 import { commonMessages, statusKey } from '@/lib/i18n/messages/common';
 import { ordersMessages } from '@/lib/i18n/messages/orders';
 import { useShallow } from 'zustand/react/shallow';
-import { OrderProgress } from '@/components/orders/OrderProgress';
-import { awaitingPayment, paymentNote, type PaymentNote } from '@/components/orders/order-progress';
+import { OrderStatusPill } from '@/components/ui/StatusPill';
+import { awaitingPayment, orderProgress, paymentNote, type PaymentNote } from '@/components/orders/order-progress';
 
 /** A listed order, with what newer servers add to the list (how it is paid and fulfilled, and its kitchen). */
 type ListedOrder = Order & {
@@ -181,16 +181,8 @@ function OrdersContent() {
     e.stopPropagation();
     setReorderingId(order.id);
     try {
-      showToast(t('list.toastAddingToTray'), 'info');
-      let items: OrderItem[] = order.items || [];
-      if (!items.length || !items[0]?.productId) {
-        try {
-          const fullRes = await orderService.getOrder(order.id);
-          items = fullRes.data?.items || items;
-        } catch {
-          // ignore fallback error
-        }
-      }
+      // The list carries only the first dishes and not how each was stocked; the order itself has all of them.
+      const items: OrderItem[] = (await orderService.getOrder(order.id)).data?.items ?? order.items ?? [];
       for (const item of items) {
         const pId = item.productId || item.product?.id;
         if (pId) {
@@ -198,15 +190,16 @@ function OrdersContent() {
             productId: pId,
             variantId: item.variantId || undefined,
             quantity: item.quantity || 1,
-            stockType: 'direct',
+            stockType: item.fulfillmentType === 'hub' ? 'hub' : 'direct',
+            hubId: item.fulfillmentType === 'hub' ? item.hubId ?? undefined : undefined,
             clearAndAdd: true,
           });
         }
       }
       showToast(t('list.toastAddedToTray'), 'success');
       router.push('/cart');
-    } catch {
-      router.push(`/orders/${order.id}`);
+    } catch (error) {
+      showToast(apiErrorMessage(error, t('list.reorderFailed')), 'error');
     } finally {
       setReorderingId(null);
     }
@@ -278,23 +271,13 @@ function OrdersContent() {
     }).sort((a, b) => Number(ACTIVE_STATUSES.includes(getOrderStatus(b))) - Number(ACTIVE_STATUSES.includes(getOrderStatus(a))));
   }, [orders, filter, searchQuery]);
 
-  const getStatusBadge = (status: string) => {
-    const label = `list.badge.${status}` in ordersMessages.en
+  const getStatusBadge = (status: string) => ({
+    label: `list.badge.${status}` in ordersMessages.en
       ? t(`list.badge.${status}` as keyof typeof ordersMessages.en)
       : statusKey(status) in commonMessages.en
         ? tc(statusKey(status))
-        : status.replace(/_/g, ' ');
-    const color = ['delivered', 'completed', 'ready'].includes(status)
-      ? 'bg-brand-soft text-brand-soft-ink'
-      : ['pending', 'pending_payment'].includes(status)
-        ? 'bg-accent-soft text-accent-soft-ink'
-        : ['cancelled', 'delivery_failed'].includes(status)
-          ? 'bg-red-50 text-red-700'
-          : ACTIVE_STATUSES.includes(status)
-            ? 'bg-brand-soft text-brand-soft-ink'
-            : 'bg-raised text-muted';
-    return { label, color };
-  };
+        : status.replace(/_/g, ' '),
+  });
 
   return (
     <DashboardLayout
@@ -315,7 +298,7 @@ function OrdersContent() {
             </div>
             <h3 className="text-xl font-bold text-ink mb-2">{t('list.emptyAllTitle')}</h3>
             <p className="text-sm text-muted max-w-md mx-auto mb-6">{t('list.emptyAllBody')}</p>
-            <Link href="/dashboard">
+            <Link href="/kitchens">
               <Button className="min-h-11 px-6 rounded-xl">
                 <ShoppingBag className="w-4 h-4" /> {t('list.exploreKitchens')}
               </Button>
@@ -339,13 +322,15 @@ function OrdersContent() {
                   aria-selected={selected}
                   onClick={() => setFilter(tab.id)}
                   className={`flex-shrink-0 inline-flex items-center gap-2 min-h-11 px-4 rounded-full text-sm font-semibold whitespace-nowrap transition-colors cursor-pointer ${
-                    selected ? 'bg-ink text-page' : 'bg-surface text-ink border border-line hover:bg-raised'
+                    selected ? 'bg-brand-soft text-brand-soft-ink border border-brand' : 'bg-surface text-ink border border-line hover:bg-raised'
                   }`}
                 >
                   <span>{tab.label}</span>
-                  <span className={`px-1.5 rounded-full text-xs font-semibold tabular-nums ${selected ? 'bg-page/20 text-page' : 'bg-raised text-muted'}`}>
-                    {tab.count}
-                  </span>
+                  {!loading && (
+                    <span className={`px-1.5 rounded-full text-xs font-semibold tabular-nums ${selected ? 'bg-surface text-brand-soft-ink' : 'bg-raised text-muted'}`}>
+                      {tab.count}
+                    </span>
+                  )}
                 </button>
               );
             })}
@@ -400,6 +385,7 @@ function OrdersContent() {
               const note = paymentNote(status, order.paymentMethod, order.paymentStatus);
               const showNote = SHOWN_PAYMENT_NOTES.includes(note) && !(unpaid && note === 'awaitingPayment');
               const kitchen = items[0]?.seller?.businessName;
+              const progress = isActive && !unpaid ? orderProgress(status, order.deliveryType) : null;
 
               return (
                 <li
@@ -409,30 +395,43 @@ function OrdersContent() {
                   }`}
                   data-testid="order-card"
                 >
-                  <div className="p-4 sm:p-5 space-y-3">
+                  <div className="p-4 sm:p-5 space-y-2.5">
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0">
                         <Link
                           href={`/orders/${order.id}`}
-                          className="font-semibold text-ink hover:underline after:absolute after:inset-0 after:rounded-[20px]"
+                          className="block truncate font-semibold text-ink hover:underline after:absolute after:inset-0 after:rounded-[20px]"
                         >
                           {kitchen || t('list.orderNumber', { number: order.orderNumber })}
                         </Link>
-                        <p className="text-xs text-muted mt-0.5">
-                          {kitchen && <span data-ltr>#{order.orderNumber} · </span>}
-                          {formatDate(order.createdAt)}
-                        </p>
+                        {kitchen && (
+                          <p className="text-xs text-muted tabular-nums">
+                            <bdi>#{order.orderNumber}</bdi>
+                          </p>
+                        )}
                       </div>
-                      <span className={`shrink-0 inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${badge.color}`}>
-                        {badge.label}
-                      </span>
+                      <OrderStatusPill status={unpaid ? 'pending_payment' : status} label={badge.label} className="shrink-0" />
                     </div>
 
-                    {isActive && !unpaid && (
-                      <OrderProgress status={status} deliveryType={order.deliveryType} compact />
+                    {progress && (
+                      <div data-testid="order-progress">
+                        <p className="text-xs text-muted">
+                          {t('list.step', { step: progress.reached + 1, total: progress.steps.length })}
+                        </p>
+                        <div
+                          role="progressbar"
+                          aria-valuemin={1}
+                          aria-valuemax={progress.steps.length}
+                          aria-valuenow={progress.reached + 1}
+                          aria-valuetext={t('list.step', { step: progress.reached + 1, total: progress.steps.length })}
+                          className="mt-1 h-1.5 rounded-full bg-raised overflow-hidden"
+                        >
+                          <div className="h-full rounded-full bg-brand" style={{ width: `${((progress.reached + 1) / progress.steps.length) * 100}%` }} />
+                        </div>
+                      </div>
                     )}
 
-                    <p className="text-sm text-ink truncate">
+                    <p className={`text-sm truncate ${isActive ? 'text-ink' : 'text-muted'}`}>
                       {items.length > 0
                         ? items.map((it) => `${it.quantity || 1}× ${it.productName || it.product?.name || t('list.dishFallback')}`).join(', ')
                         : itemCount !== 1
@@ -441,13 +440,15 @@ function OrdersContent() {
                     </p>
 
                     <div className="flex items-center justify-between gap-3">
-                      <div className="flex items-center gap-2 min-w-0">
-                        <span className="text-base font-bold text-ink tabular-nums">{formatPrice(order.totalAmount)}</span>
-                        {showNote && (
-                          <span className="text-xs text-muted truncate" data-testid="payment-note">· {t(`list.pay.${note}`)}</span>
-                        )}
-                      </div>
-                      {['delivered', 'completed'].includes(status) && (
+                      <p className="min-w-0 flex-1 text-sm text-muted">
+                        <bdi dir="ltr" className={`font-semibold tabular-nums ${status === 'cancelled' ? 'text-muted' : 'text-ink'}`}>
+                          {formatPrice(order.totalAmount)}
+                        </bdi>
+                        {' · '}
+                        <bdi>{formatDateTime(order.createdAt)}</bdi>
+                        {showNote && <span data-testid="payment-note"> · {t(`list.pay.${note}`)}</span>}
+                      </p>
+                      {['delivered', 'completed', 'cancelled'].includes(status) && (
                         <Button
                           type="button"
                           variant="outline"

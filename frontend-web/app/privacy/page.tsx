@@ -3,13 +3,13 @@ import Link from 'next/link';
 import { LegalPage, ContactUs, Operator } from '@/components/legal/LegalPage';
 
 export const metadata: Metadata = {
-  title: 'Privacy Policy | Nuray',
+  title: 'Privacy policy | Nuray',
   description: 'What Nuray collects, why, who it is shared with and your choices.',
 };
 
 export default function PrivacyPage() {
   return (
-    <LegalPage title="Privacy Policy" updated="26 October 2026">
+    <LegalPage title="Privacy policy" updated="26 October 2026">
       <p>
         This policy explains what personal information <Operator /> (&quot;Nuray&quot;, &quot;we&quot;) collects when you
         use Nuray, why, who it is shared with and the choices you have. We handle it in line with the laws of Pakistan that

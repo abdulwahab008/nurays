@@ -1,6 +1,9 @@
 'use client';
 
 import { createContext, useContext, useState, useCallback, ReactNode } from 'react';
+import { AlertTriangle, CircleAlert, CircleCheck, Info, X } from 'lucide-react';
+import { PageLocale, useT } from '@/lib/i18n';
+import { commonMessages } from '@/lib/i18n/messages/common';
 
 export type ToastType = 'success' | 'error' | 'info' | 'warning';
 
@@ -63,65 +66,43 @@ export function ToastProvider({ children }: { children: ReactNode }) {
 function ToastContainer({ toasts, removeToast }: { toasts: Toast[]; removeToast: (id: string) => void }) {
   return (
     // Above every other layer (the new-order and job alerts, the dialogs, the community picker): a message about what just
-    // failed must never sit hidden behind one. Only the messages themselves take clicks.
-    <div className="fixed top-[calc(1rem+var(--safe-top))] end-[calc(1rem+var(--safe-end))] z-[100000] flex flex-col gap-2 max-w-md w-[calc(100%-2rem)] pointer-events-none">
-      {toasts.map((toast) => (
-        <ToastItem key={toast.id} toast={toast} onRemove={removeToast} />
-      ))}
+    // failed must never sit hidden behind one. Only the messages themselves take clicks. Where they sit is .nuray-toaster in
+    // globals.css: under the top bar, clear of every page's bottom action bar, and at the bottom while a top-bar panel is open.
+    <div className="nuray-toaster fixed end-[calc(1rem+var(--safe-end))] z-[100000] flex flex-col gap-2 max-w-md w-[calc(100%-2rem)] pointer-events-none">
+      {/* The corner follows the page's frame (the top bar's language); the words follow the page (English on admin pages). */}
+      <PageLocale>
+        {toasts.map((toast) => (
+          <ToastItem key={toast.id} toast={toast} onRemove={removeToast} />
+        ))}
+      </PageLocale>
     </div>
   );
 }
 
-function ToastItem({ toast, onRemove }: { toast: Toast; onRemove: (id: string) => void }) {
-  const bgColors = {
-    success: 'bg-green-50 border-green-500 text-green-800',
-    error: 'bg-red-50 border-red-500 text-red-800',
-    info: 'bg-blue-50 border-blue-500 text-blue-800',
-    warning: 'bg-yellow-50 border-yellow-500 text-yellow-800',
-  };
+// One surface for every message; only the icon carries the colour, so a toast reads like the rest of the app.
+const TOAST_ICON = { success: CircleCheck, error: CircleAlert, info: Info, warning: AlertTriangle };
+const TOAST_TONE = { success: 'text-brand-ink', error: 'text-red-700', info: 'text-muted', warning: 'text-accent-700' };
 
-  const icons = {
-    success: (
-      <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-      </svg>
-    ),
-    error: (
-      <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" />
-      </svg>
-    ),
-    info: (
-      <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-      </svg>
-    ),
-    warning: (
-      <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-      </svg>
-    ),
-  };
+function ToastItem({ toast, onRemove }: { toast: Toast; onRemove: (id: string) => void }) {
+  const t = useT(commonMessages);
+  const Icon = TOAST_ICON[toast.type];
+  const urgent = toast.type === 'error' || toast.type === 'warning';
 
   return (
     <div
-      className={`${bgColors[toast.type]} pointer-events-auto border-s-4 rounded-lg shadow-lg p-4 flex items-start gap-3 animate-in slide-in-from-end-full duration-300`}
-      role="alert"
+      className="pointer-events-auto flex items-start gap-3 rounded-xl border border-line bg-surface ps-4 text-ink shadow-[var(--shadow-hover)] animate-in slide-in-from-end-full duration-300"
+      role={urgent ? 'alert' : 'status'}
     >
-      <div className="flex-shrink-0 mt-0.5">{icons[toast.type]}</div>
-      <div className="flex-1">
-        <p className="text-sm font-medium">{toast.message}</p>
-      </div>
+      <Icon className={`mt-3.5 h-5 w-5 shrink-0 ${TOAST_TONE[toast.type]}`} aria-hidden="true" />
+      <p className="flex-1 py-3.5 text-sm font-medium">{toast.message}</p>
       <button
+        type="button"
         onClick={() => onRemove(toast.id)}
-        className="flex-shrink-0 text-gray-500 hover:text-gray-600 transition-colors"
-        aria-label="Close"
+        className="grid h-11 w-11 shrink-0 place-items-center rounded-xl text-muted transition-colors hover:text-ink"
+        aria-label={t('close')}
       >
-        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-        </svg>
+        <X className="h-4 w-4" aria-hidden="true" />
       </button>
     </div>
   );
 }
-

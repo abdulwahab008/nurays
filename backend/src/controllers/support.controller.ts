@@ -66,7 +66,7 @@ export const adminGetTickets = async (req: Request, res: Response) => {
   const limit = req.query.limit ? Number(req.query.limit) : 20;
 
   const str = (v: unknown) => (typeof v === 'string' && v ? v : undefined);
-  const result = await supportService.adminGetTickets({ status, priority: str(req.query.priority), assignedTo: str(req.query.assignedTo), search: str(req.query.search), page, limit });
+  const result = await supportService.adminGetTickets({ status, priority: str(req.query.priority), assignedTo: str(req.query.assignedTo), search: str(req.query.search), sort: str(req.query.sort), page, limit });
 
   res.status(200).json({
     success: true,

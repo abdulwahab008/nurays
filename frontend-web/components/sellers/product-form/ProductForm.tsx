@@ -14,10 +14,12 @@ import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/toast';
 import { useDialogs } from '@/components/ui/Dialogs';
 import { CategoryRequestModal } from '@/components/CategoryRequestModal';
-import MenuTypeField, { DEFAULT_MENU, MenuType, MenuValue, menuError, menuPayload } from '@/components/sellers/MenuTypeField';
+import MenuTypeField, { DEFAULT_MENU, MenuType, MenuValue, menuIncomplete, menuPayload } from '@/components/sellers/MenuTypeField';
 import { useAuthStore } from '@/lib/store/auth-store';
 import { apiClient } from '@/lib/api-client';
 import { loginUrlHere } from '@/lib/auth-redirect';
+import { useT } from '@/lib/i18n';
+import { kitchenProductFormMessages } from '@/lib/i18n/messages/kitchen-product-form';
 import {
   EMPTY_PRODUCT_FORM,
   MAX_VARIANTS,
@@ -64,6 +66,7 @@ export default function ProductForm(props: Props) {
   const { isAuthenticated, user } = useAuthStore(useShallow((s) => ({ isAuthenticated: s.isAuthenticated, user: s.user })));
   const { showToast } = useToast();
   const { confirm: confirmDialog } = useDialogs();
+  const t = useT(kitchenProductFormMessages);
   const formRef = useRef<HTMLFormElement>(null);
 
   const [loading, setLoading] = useState(mode === 'edit');
@@ -108,12 +111,12 @@ export default function ProductForm(props: Props) {
           apiClient.get(`/products/${id}`),
           apiClient.get(`/product-variants/product/${id}`).catch((error) => {
             console.error('Failed to load variants:', error);
-            showToast("We couldn't load this dish's sizes; saving now leaves them as they are.", 'warning');
+            showToast(t('sizesLoadFailed'), 'warning');
             return null;
           }),
         ]);
         const product: LoadedProduct | undefined = productRes.data.success ? productRes.data.data : undefined;
-        if (!product) throw new Error('Product not found');
+        if (!product) throw new Error(t('notFound'));
 
         const filled = formFromProduct(product);
         setForm(filled.form);
@@ -131,13 +134,13 @@ export default function ProductForm(props: Props) {
         setShowVariants(saved.length > 0);
       } catch (error) {
         console.error('Failed to load product:', error);
-        showToast("We couldn't open this dish.", 'error');
+        showToast(t('openFailed'), 'error');
         router.push('/sellers/products');
       } finally {
         setLoading(false);
       }
     },
-    [router, showToast],
+    [router, showToast, t],
   );
 
   useEffect(() => {
@@ -147,7 +150,7 @@ export default function ProductForm(props: Props) {
     }
     if (user?.userType !== 'seller' && user?.user_type !== 'seller') {
       router.push('/dashboard');
-      showToast('This page is for kitchens.', 'error');
+      showToast(t('accessDenied'), 'error');
       return;
     }
     loadCategories();
@@ -201,7 +204,9 @@ export default function ProductForm(props: Props) {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const problems = productProblems(form, customUnit, { requireCategory: mode === 'create', variants });
+    const problems = Object.fromEntries(
+      Object.entries(productProblems(form, customUnit, { requireCategory: mode === 'create', variants })).map(([field, problem]) => [field, t(problem)])
+    );
     setFieldErrors(problems);
     const first = Object.keys(problems)[0];
     if (first) {
@@ -210,12 +215,11 @@ export default function ProductForm(props: Props) {
       field?.scrollIntoView({ block: 'center', behavior: 'smooth' });
       field?.focus({ preventScroll: true });
       const count = Object.keys(problems).length;
-      showToast(count === 1 ? problems[first] : `Fix the ${count} things marked in red.`, 'error');
+      showToast(count === 1 ? problems[first] : t('fixCount', { count }), 'error');
       return;
     }
-    const menuProblem = menuError(menu);
-    if (menuProblem) {
-      showToast(menuProblem, 'error');
+    if (menuIncomplete(menu)) {
+      showToast(t('pickDay'), 'error');
       return;
     }
 
@@ -223,7 +227,7 @@ export default function ProductForm(props: Props) {
       setSaving(true);
       const uploaded = await uploadNewPhotos();
       if (uploaded === null) {
-        showToast(mode === 'create' ? 'The photos did not upload. The dish is saved without them.' : 'The new photos did not upload.', 'warning');
+        showToast(mode === 'create' ? t('photosNotUploadedCreate') : t('photosNotUploadedEdit'), 'warning');
       }
       const savedPhotos = images.filter((img) => img.url).map((img) => img.url as string);
       const body = { ...productPayload(form, customUnit, [...savedPhotos, ...(uploaded || [])], mode), ...menuPayload(menu) };
@@ -238,9 +242,7 @@ export default function ProductForm(props: Props) {
 
       if (!variantsSaved) {
         showToast(
-          mode === 'create'
-            ? "Dish saved, but its sizes were not. Open it and add them again."
-            : 'Changes saved, but some sizes were not. Try saving again.',
+          mode === 'create' ? t('sizesNotSavedCreate') : t('sizesNotSavedEdit'),
           'warning',
         );
         // The dish exists now: going on as "Add a dish" would make a second one.
@@ -250,18 +252,16 @@ export default function ProductForm(props: Props) {
         }
       } else if (mode === 'create') {
         showToast(
-          n > 0
-            ? `Dish saved with ${n} size${n > 1 ? 's' : ''}. Customers can order it once Nuray has checked it.`
-            : "Dish saved. Customers can order it once Nuray has checked it.",
+          n > 1 ? t('savedWithSizes', { count: n }) : n === 1 ? t('savedWithSizesOne') : t('savedNew'),
           'success',
         );
       } else {
-        showToast('Changes saved.', 'success');
+        showToast(t('changesSaved'), 'success');
       }
       router.push('/sellers/products');
     } catch (error) {
       console.error('Failed to save product:', error);
-      showToast(saveErrorMessage(error, mode === 'create' ? 'The dish was not saved. Try again.' : 'Your changes were not saved. Try again.'), 'error');
+      showToast(saveErrorMessage(error, mode === 'create' ? t('notSavedCreate') : t('notSavedEdit')), 'error');
     } finally {
       setSaving(false);
     }
@@ -271,9 +271,9 @@ export default function ProductForm(props: Props) {
     if (!productId) return;
     if (
       !(await confirmDialog({
-        title: 'Delete this dish?',
-        message: 'It leaves your menu for good. This cannot be undone.',
-        confirmText: 'Delete',
+        title: t('deleteTitle'),
+        message: t('deleteBody'),
+        confirmText: t('delete'),
       }))
     ) {
       return;
@@ -282,12 +282,12 @@ export default function ProductForm(props: Props) {
       setSaving(true);
       const response = await apiClient.delete(`/products/${productId}`);
       if (response.data.success) {
-        showToast('Dish deleted.', 'success');
+        showToast(t('deleted'), 'success');
         router.push('/sellers/products');
       }
     } catch (error) {
       console.error('Failed to delete product:', error);
-      showToast(saveErrorMessage(error, 'The dish was not deleted. Try again.'), 'error');
+      showToast(saveErrorMessage(error, t('notDeleted')), 'error');
     } finally {
       setSaving(false);
     }
@@ -295,7 +295,7 @@ export default function ProductForm(props: Props) {
 
   const addVariant = () => {
     if (variants.length >= MAX_VARIANTS) {
-      showToast(`A dish can have up to ${MAX_VARIANTS} sizes.`, 'warning');
+      showToast(t('maxSizes', { max: MAX_VARIANTS }), 'warning');
       return;
     }
     setVariants((prev) => [...prev, newVariant(form, prev.length)]);
@@ -309,14 +309,14 @@ export default function ProductForm(props: Props) {
 
   if (!isAuthenticated) return null;
 
-  const title = mode === 'create' ? 'Add a dish' : 'Edit dish';
+  const title = mode === 'create' ? t('addTitle') : t('editTitle');
   if (loading) {
     return (
       <DashboardLayout title={title} sidebarItems={SELLER_SIDEBAR_ITEMS} userType="seller">
         <div className="max-w-3xl">
           <div className="flex items-center gap-3 py-10 text-sm text-muted" role="status">
             <span className="h-5 w-5 rounded-full border-2 border-line-strong border-t-brand-600 motion-safe:animate-spin" aria-hidden="true" />
-            Loading the dish…
+            {t('loading')}
           </div>
         </div>
       </DashboardLayout>
@@ -326,7 +326,7 @@ export default function ProductForm(props: Props) {
   return (
     <DashboardLayout
       title={title}
-      subtitle={mode === 'create' ? 'Customers can order it once Nuray has checked it.' : undefined}
+      subtitle={mode === 'create' ? t('addSubtitle') : undefined}
       sidebarItems={SELLER_SIDEBAR_ITEMS}
       userType="seller"
     >
@@ -336,18 +336,18 @@ export default function ProductForm(props: Props) {
         <FieldErrorsContext.Provider value={fieldErrors}>
         <form ref={formRef} onSubmit={handleSubmit} noValidate>
           {mode === 'edit' && (
-            <section aria-label="Showing to customers" className="border-b border-line pb-6 mb-8">
+            <section aria-label={t('showingSection')} className="border-b border-line pb-6 mb-8">
               <SwitchRow
                 checked={form.isActive}
                 onChange={() => update({ isActive: !form.isActive })}
-                label={form.isActive ? 'Showing to customers' : 'Hidden from customers'}
-                hint={form.isActive ? 'Customers can see and order this dish.' : 'Customers cannot see this dish until you show it.'}
-                ariaLabel="Visible to customers"
+                label={form.isActive ? t('showing') : t('hidden')}
+                hint={form.isActive ? t('showingHint') : t('hiddenHint')}
+                ariaLabel={t('visibleLabel')}
               />
             </section>
           )}
 
-          <PhotosSection images={images} onChange={setImages} onTooMany={() => showToast('You can add up to 4 photos', 'warning')} />
+          <PhotosSection images={images} onChange={setImages} onTooMany={() => showToast(t('tooManyPhotos'), 'warning')} />
 
           <DetailsSection
             form={form}
@@ -396,9 +396,9 @@ export default function ProductForm(props: Props) {
           {mode === 'edit' && (
             <section aria-labelledby="dish-delete" className="border-t border-line py-8">
               <h2 id="dish-delete" className="text-sm font-semibold text-ink">
-                Delete this dish
+                {t('deleteHeading')}
               </h2>
-              <p className="mt-1 text-sm text-muted">It leaves your menu for good. To take it off for a while, hide it instead.</p>
+              <p className="mt-1 text-sm text-muted">{t('deleteHint')}</p>
               <Button
                 type="button"
                 variant="outline"
@@ -406,21 +406,21 @@ export default function ProductForm(props: Props) {
                 disabled={saving}
                 className="mt-4 border-red-200 text-red-700 hover:bg-red-50"
               >
-                Delete dish
+                {t('deleteDish')}
               </Button>
             </section>
           )}
 
-          <div className="sticky bottom-0 z-10 flex flex-wrap items-center justify-end gap-3 border-t border-line bg-page/95 py-4 pb-[calc(1rem+var(--safe-bottom,0px))] backdrop-blur">
+          <div data-bottom-bar className="sticky bottom-0 z-10 flex flex-wrap items-center justify-end gap-3 border-t border-line bg-page/95 py-4 pb-[calc(1rem+var(--safe-bottom,0px))] backdrop-blur">
             <ShortcutsButton onClick={() => setHelpOpen(!helpOpen)} />
             <span className="hidden flex-1 sm:block" />
             <Link href="/sellers/products" className="flex-1 sm:flex-none">
               <Button type="button" variant="outline" className="w-full">
-                Cancel
+                {t('cancel')}
               </Button>
             </Link>
             <Button type="submit" disabled={saving} className="flex-1 sm:flex-none sm:px-8">
-              {saving ? (mode === 'create' ? 'Adding…' : 'Saving…') : mode === 'create' ? 'Add dish' : 'Save changes'}
+              {saving ? (mode === 'create' ? t('adding') : t('saving')) : mode === 'create' ? t('addDish') : t('saveChanges')}
             </Button>
           </div>
         </form>

@@ -9,6 +9,7 @@ import { useAuthStore } from '@/lib/store/auth-store';
 import { apiClient } from '@/lib/api-client';
 import { formatPrice } from '@/lib/utils';
 import { useShallow } from 'zustand/react/shallow';
+import { statusLabel } from '../orders/order-labels';
 
 interface AnalyticsData {
   overview: {
@@ -36,18 +37,6 @@ const PERIODS: ReadonlyArray<{ id: Period; label: string }> = [
 ];
 
 const STATUS_ORDER = ['pending', 'confirmed', 'preparing', 'ready', 'dispatched', 'in_transit', 'delivered', 'delivery_failed', 'cancelled', 'refunded'];
-const STATUS_LABEL: Record<string, string> = {
-  pending: 'Waiting for kitchen',
-  confirmed: 'Accepted',
-  preparing: 'Cooking',
-  ready: 'Ready for pickup',
-  dispatched: 'Picked up',
-  in_transit: 'On the way',
-  delivered: 'Delivered',
-  delivery_failed: 'Delivery failed',
-  cancelled: 'Cancelled',
-  refunded: 'Refunded',
-};
 
 /** Paid sales for every day of the period, with the days that had none as zero. */
 function dailySeries(rows: AnalyticsData['revenueByDay'], days: number) {
@@ -153,7 +142,7 @@ export default function AdminAnalyticsPage() {
                 <Figure label="Commission earned" value={formatPrice(o.totalCommission)} />
                 <Figure label="Customers who ordered" value={o.activeUsers} />
                 <Figure label="Kitchens with orders" value={o.activeSellers} />
-                <Figure label="Average paid order" value={formatPrice(paidOrders ? o.periodRevenue / paidOrders : 0)} />
+                <Figure label="Average paid order" value={formatPrice(paidOrders ? Math.round(o.periodRevenue / paidOrders) : 0)} />
               </div>
             </section>
 
@@ -175,7 +164,7 @@ export default function AdminAnalyticsPage() {
                   <ul className="divide-y divide-line text-sm">
                     {statuses.map(([status, count]) => (
                       <li key={status} className="flex justify-between gap-3 py-2">
-                        <span className={status === 'delivery_failed' || status === 'cancelled' ? 'text-red-700' : 'text-ink'}>{STATUS_LABEL[status] ?? status}</span>
+                        <span className={status === 'delivery_failed' || status === 'cancelled' ? 'text-red-700' : 'text-ink'}>{statusLabel(status)}</span>
                         <span className="font-medium tabular-nums text-ink">{count}</span>
                       </li>
                     ))}

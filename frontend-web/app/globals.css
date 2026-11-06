@@ -1,6 +1,10 @@
 @import "tailwindcss";
 @import "leaflet/dist/leaflet.css";
 
+/* Tailwind's own rtl: matches anything inside [dir=rtl], so an arrow in an English-only (dir="ltr") area of the Urdu app,
+   such as the admin pages, still flipped. Here the nearest dir decides. */
+@custom-variant rtl (&:where([dir="rtl"], [dir="rtl"] *):not(:where([dir="ltr"], [dir="ltr"] *)));
+
 /* ============================================================
    NURAY DESIGN SYSTEM
    Turquoise does the work (buttons, links, selected states); yellow is a highlight only (deals, stars, counts).
@@ -275,13 +279,21 @@
   html[data-tabbar="on"] {
     --tabbar-offset: 4rem;
   }
-  html[data-tabbar="on"] .floating-cart-pill {
-    bottom: calc(1rem + var(--tabbar-offset) + var(--safe-bottom));
-  }
 }
 html[dir="rtl"] {
   --safe-start: var(--safe-right);
   --safe-end: var(--safe-left);
+}
+/* Toasts (components/ui/toast.tsx) sit just under the top bar, so they never cover a page's fixed or sticky bottom
+   action bar (Place order, Save, the rider's job buttons). While a panel hangs from the top bar (the bell, the account
+   menu, the appearance menu; each marks itself data-top-panel) they move to the bottom, above the phone tab bar, so the
+   panel's header and buttons stay in reach. */
+.nuray-toaster {
+  top: calc(var(--header-offset) + 0.5rem);
+}
+html:has([data-top-panel]) .nuray-toaster {
+  top: auto;
+  bottom: calc(var(--tabbar-offset) + var(--safe-bottom) + 1rem);
 }
 /* Turned sideways, the notch is at a side: the page keeps clear of it (fixed bars do the same for themselves). */
 body {
@@ -330,6 +342,13 @@ html[lang="ur"] *:not(code):not(pre):not(input) {
 html[lang="ur"] :is(h1, h2, h3, h4, h5, h6, p, span, a, button, label, li, td, th, dt, dd, div)[class*="leading-"] {
   line-height: 1.8;
 }
+/* An English-only area inside the Urdu app (the admin pages) keeps English line spacing. */
+html[lang="ur"] [lang="en"] {
+  line-height: 1.5;
+}
+html[lang="ur"] [lang="en"] :is(h1, h2, h3, h4, h5, h6, p, span, a, button, label, li, td, th, dt, dd, div)[class*="leading-"] {
+  line-height: revert-layer;
+}
 /* Maps, phone numbers, codes and amounts read left to right in either language. */
 html[dir="rtl"] .leaflet-container,
 html[dir="rtl"] [data-ltr] {
@@ -361,10 +380,10 @@ h1, h2, h3, h4, h5, h6 {
   align-items: center;
   justify-content: center;
   gap: 8px;
-  height: 48px;
-  padding: 0 24px;
-  border-radius: 9999px;
-  font-weight: 700;
+  height: 44px;
+  padding: 0 20px;
+  border-radius: 12px;
+  font-weight: 600;
   font-size: 14px;
   letter-spacing: -0.01em;
   color: #06302B;
@@ -381,213 +400,22 @@ h1, h2, h3, h4, h5, h6 {
   transform: scale(0.98);
 }
 
-/* Sub-Zero Frost Button / Pill */
-.frost-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  height: 44px;
-  padding: 0 20px;
-  border-radius: 9999px;
-  font-weight: 700;
-  font-size: 13px;
-  color: var(--brand-soft-ink);
-  background: var(--brand-soft);
-  border: 1px solid var(--border-hair);
-  transition: all 0.2s ease;
-}
-.frost-btn:hover {
-  border-color: #41DAC7;
-}
-
-/* Modern Food Card */
-.food-delivery-card {
-  position: relative;
-  background: var(--bg-card);
-  border-radius: 20px;
-  border: 1px solid var(--border-hair);
-  box-shadow: var(--shadow-card);
-  transition: all 0.3s var(--ease-spring);
-  overflow: hidden;
-}
-.food-delivery-card:hover {
-  transform: translateY(-2px);
-  box-shadow: var(--shadow-hover);
-  border-color: rgba(65, 218, 199, 0.5);
-}
-
-/* Image container with smooth zoom */
-.food-delivery-card .food-img-container {
-  overflow: hidden;
-  position: relative;
-}
-.food-delivery-card .food-img-container img {
-  transition: transform 0.6s var(--ease-spring);
-}
-.food-delivery-card:hover .food-img-container img {
-  transform: scale(1.04);
-}
-
-/* Live Delivery Radar Pulse */
-@keyframes radar-pulse {
-  0% {
-    box-shadow: 0 0 0 0 rgba(65, 218, 199, 0.7);
-  }
-  70% {
-    box-shadow: 0 0 0 10px rgba(65, 218, 199, 0);
-  }
-  100% {
-    box-shadow: 0 0 0 0 rgba(65, 218, 199, 0);
-  }
-}
-.radar-pulse-dot {
-  width: 10px;
-  height: 10px;
-  background-color: #41DAC7;
-  border-radius: 9999px;
-  animation: radar-pulse 2s infinite;
-}
-
-/* Unorthodox Sub-Zero Temp Badge */
-.subzero-badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 4px 12px;
-  border-radius: 9999px;
-  font-size: 11px;
-  font-weight: 800;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  background: #E6ECFF;
-  color: #2A47A8;
-  border: 1px solid #C9D5FF;
-}
-
-/* Glassmorphism Panel */
-.glass-panel {
-  background: color-mix(in srgb, var(--bg-card) 88%, transparent);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
-  border: 1px solid var(--border-hair);
-}
-.dark-glass-panel {
-  background: rgba(13, 38, 36, 0.88);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  color: #FFFFFF;
-}
-
-/* Backward compatibility aliases for nuray-btn & nuray-input to maintain consistency */
-.nuray-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  height: 46px;
-  padding: 0 22px;
-  border-radius: 9999px;
-  font-size: 14px;
-  font-weight: 700;
-  letter-spacing: -0.01em;
-  cursor: pointer;
-  transition: all 0.2s ease;
-  border: 0;
-  text-decoration: none;
-}
-.nuray-btn-primary {
-  background: #41DAC7;
-  color: #06302B;
-}
-.nuray-btn-primary:hover {
-  background: #22BFAC;
-}
-.nuray-btn-dark {
-  background: var(--bg-inverse);
-  color: var(--fg-inverse);
-}
-.nuray-btn-dark:hover {
-  opacity: 0.9;
-}
-.nuray-btn-outline {
-  background: transparent;
-  color: var(--fg-default);
-  border: 1px solid var(--border-rule);
-}
-.nuray-btn-outline:hover {
-  background: var(--bg-raised);
-}
-.nuray-card {
-  background: var(--bg-card);
-  border-radius: 20px;
-  border: 1px solid var(--border-hair);
-  box-shadow: var(--shadow-card);
-}
+/* The field the admin pages still use by class name */
 .nuray-input {
   width: 100%;
-  height: 46px;
+  height: 44px;
   padding: 0 16px;
   border-radius: 12px;
   background: var(--bg-card);
   border: 1px solid var(--border-rule);
   color: var(--fg-default);
-  font-size: 15px;
+  font-size: 16px;
   outline: none;
   transition: all 0.2s ease;
 }
 .nuray-input:focus {
   border-color: #41DAC7;
   box-shadow: 0 0 0 3px var(--brand-ring);
-}
-
-/* Category capsule button */
-.category-capsule {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  padding: 10px 20px;
-  border-radius: 9999px;
-  font-size: 13px;
-  font-weight: 700;
-  white-space: nowrap;
-  background: var(--bg-card);
-  border: 1px solid var(--border-hair);
-  color: var(--fg-default);
-  transition: all 0.2s var(--ease-spring);
-  cursor: pointer;
-}
-.category-capsule:hover {
-  border-color: #41DAC7;
-  color: var(--brand-ink);
-}
-.category-capsule.active {
-  background: #41DAC7;
-  border-color: #41DAC7;
-  color: #06302B;
-}
-
-/* Floating Cart Pill */
-.floating-cart-pill {
-  position: fixed;
-  bottom: 28px;
-  right: 28px;
-  z-index: 99;
-  display: inline-flex;
-  align-items: center;
-  gap: 12px;
-  padding: 14px 24px;
-  border-radius: 9999px;
-  background: var(--bg-inverse);
-  color: var(--fg-inverse);
-  font-weight: 800;
-  font-size: 15px;
-  box-shadow: 0 16px 36px -8px rgba(13, 38, 36, 0.45);
-  transition: all 0.3s var(--ease-spring);
-}
-.floating-cart-pill:hover {
-  transform: translateY(-2px);
 }
 
 /* Custom modern scrollbars */
@@ -638,25 +466,34 @@ h1, h2, h3, h4, h5, h6 {
   }
 }
 
-/* ---- Phones: tables become cards, touch targets are big enough ---- */
+/* ---- Phones: a table becomes one card per row (components/layout/StackedTables.tsx) ----
+   What the table, its rows and cells display as sits in the components layer, so a utility on them (hidden, sm:table,
+   hidden md:table-cell) still wins: unlayered, these rules showed a table its page had hidden on a phone next to the
+   phone's own list. The card's spacing stays unlayered, over the cells' desktop padding and nowrap. */
+@layer components {
+  @media (max-width: 767px) {
+    main table.stack-table,
+    main table.stack-table tbody,
+    main table.stack-table tr,
+    main table.stack-table td {
+      display: block;
+      width: 100%;
+    }
+    main table.stack-table thead {
+      display: none;
+    }
+    main table.stack-table td[data-label] {
+      display: grid;
+    }
+  }
+}
 @media (max-width: 767px) {
-  main table.stack-table,
-  main table.stack-table tbody,
-  main table.stack-table tr,
-  main table.stack-table td {
-    display: block;
-    width: 100%;
-  }
-  main table.stack-table thead {
-    display: none;
-  }
   main table.stack-table tr {
     margin: 0 0 0.75rem;
     padding: 0.5rem 0.875rem;
     border: 1px solid var(--border-hair);
-    border-radius: 14px;
+    border-radius: 16px;
     background: var(--bg-card);
-    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
   }
   /* A labelled cell is two columns: the column name, then the cell's own lines stacked as they are on a desktop
      (a cell holding a name, a phone and a city keeps them as three lines, not three side-by-side columns). */
@@ -668,7 +505,6 @@ h1, h2, h3, h4, h5, h6 {
     overflow-wrap: anywhere;
   }
   main table.stack-table td[data-label] {
-    display: grid;
     grid-template-columns: minmax(0, 38%) minmax(0, 1fr);
     column-gap: 0.75rem;
     row-gap: 0;
@@ -695,12 +531,12 @@ h1, h2, h3, h4, h5, h6 {
     [role="button"],
     select,
     input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="hidden"]) {
-      min-height: 40px;
+      min-height: 44px;
     }
     /* Menu and toggle controls inside the sidebar */
     .nuray-drawer button {
-      min-width: 40px;
-      min-height: 40px;
+      min-width: 44px;
+      min-height: 44px;
     }
   }
 }

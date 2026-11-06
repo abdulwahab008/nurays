@@ -23,8 +23,9 @@ import TriPartiteReviewModal from '@/components/orders/TriPartiteReviewModal';
 import { OrderProgress } from '@/components/orders/OrderProgress';
 import { awaitingPayment, isPickupOrder } from '@/components/orders/order-progress';
 import { Mark } from '@/components/ui/Mark';
+import { CoverImage } from '@/components/ui/CoverImage';
 import dynamic from 'next/dynamic';
-import { ArrowLeft, Bike, LifeBuoy, MapPin, MessageCircle, Printer, Receipt, Star, X } from 'lucide-react';
+import { ArrowLeft, Bike, ChevronDown, LifeBuoy, MapPin, MessageCircle, Phone, Printer, Receipt, Star, X } from 'lucide-react';
 import { useT } from '@/lib/i18n';
 import { commonMessages, statusKey } from '@/lib/i18n/messages/common';
 import { ordersMessages } from '@/lib/i18n/messages/orders';
@@ -248,7 +249,8 @@ function mapOrderToDetail(raw: OrderDetails): OrderDetail {
         raw.delivery?.rider ?
           {
             name: raw.delivery.rider.name ?? '',
-            phone: '',
+            // Sent to the order's customer only while the rider holds the job.
+            phone: (raw.delivery.rider as { phone?: string | null }).phone ?? '',
             vehicle: [raw.delivery.rider.vehicleType, raw.delivery.rider.vehicleNumber].filter(Boolean).join(' - '),
           }
         : undefined,
@@ -578,7 +580,7 @@ function OrderDetailContent() {
   return (
     <DashboardLayout
       title={t('detail.pageTitle', { number: order.orderNumber })}
-      subtitle={unpaid ? t('headline.awaitingPayment') : statusText(effectiveStatus)}
+      subtitle={`\u2068${formatDateTime(order.createdAt)}\u2069`}
       sidebarItems={customerSidebarItems}
       userType="customer"
     >
@@ -614,6 +616,13 @@ function OrderDetailContent() {
                   ? t('detail.placedBodyPay', { amount: formatPrice(order.pricing.total) })
                   : t('detail.placedBody', { kitchen: sellerName })}
               </p>
+              {!pickup && (
+                <p className="text-sm mt-1" data-testid="placed-delivery">
+                  {order.pricing.deliveryFee
+                    ? t('detail.placedDelivery', { fee: formatPrice(order.pricing.deliveryFee), total: formatPrice(order.pricing.total) })
+                    : t('detail.placedFreeDelivery', { total: formatPrice(order.pricing.total) })}
+                </p>
+              )}
             </div>
             <button
               type="button"
@@ -634,7 +643,6 @@ function OrderDetailContent() {
                 {(etaLine || slotLine) && (
                   <p className="text-sm text-muted mt-1">{etaLine ?? slotLine}</p>
                 )}
-                {etaLine && slotLine && <p className="text-sm text-muted">{slotLine}</p>}
               </div>
               {!unpaid && <OrderProgress status={effectiveStatus} deliveryType={order.delivery?.type} />}
               {effectiveStatus === 'cancelled' && notice && (
@@ -658,6 +666,27 @@ function OrderDetailContent() {
                   <MessageCircle className="w-5 h-5" aria-hidden />
                 </button>
               </div>
+              {active && order.delivery?.rider && (
+                <div className="flex items-center justify-between gap-3 pt-3 border-t border-line" data-testid="rider-row">
+                  <div className="min-w-0">
+                    <p className="text-xs text-muted">{t('detail.yourRider')}</p>
+                    <p className="font-semibold text-ink truncate">
+                      {riderName}
+                      {order.delivery.rider.vehicle && <span className="font-normal text-muted"> · {order.delivery.rider.vehicle}</span>}
+                    </p>
+                  </div>
+                  {order.delivery.rider.phone && (
+                    <a
+                      href={`tel:${order.delivery.rider.phone}`}
+                      aria-label={t('detail.callRider', { name: riderName })}
+                      className="shrink-0 w-11 h-11 rounded-full bg-brand-soft text-brand-soft-ink hover:bg-brand/30 flex items-center justify-center transition-colors"
+                      data-testid="call-rider"
+                    >
+                      <Phone className="w-5 h-5" aria-hidden />
+                    </a>
+                  )}
+                </div>
+              )}
             </section>
 
             {/* Online payment not finished yet */}
@@ -723,11 +752,7 @@ function OrderDetailContent() {
               <ul className="divide-y divide-line">
                 {order.items.map((item) => (
                   <li key={item.id} className="flex gap-3 py-3 first:pt-0 last:pb-0">
-                    <div className="w-14 h-14 bg-raised rounded-xl overflow-hidden flex-shrink-0">
-                      {item.productImage && (
-                        <img src={item.productImage} alt="" className="w-full h-full object-cover" />
-                      )}
-                    </div>
+                    <CoverImage src={item.productImage} alt="" label={item.productName} size="sm" className="w-14 h-14 rounded-xl overflow-hidden flex-shrink-0" />
                     <div className="flex-1 min-w-0">
                       <p className="font-semibold text-ink">{item.productName}</p>
                       {item.variantName && <p className="text-sm text-muted">{item.variantName}</p>}
@@ -747,7 +772,7 @@ function OrderDetailContent() {
                 <MapPin className="w-4 h-4 text-muted mt-0.5 shrink-0" aria-hidden />
                 <p>{pickup ? t('detail.pickupFrom', { kitchen: sellerName }) : order.delivery?.address ?? '—'}</p>
               </div>
-              {order.delivery?.rider && (
+              {!active && order.delivery?.rider && (
                 <div className="flex items-center gap-2.5 text-sm text-ink">
                   <Bike className="w-4 h-4 text-muted shrink-0" aria-hidden />
                   <p>
@@ -760,9 +785,12 @@ function OrderDetailContent() {
 
             {/* Timeline */}
             {(order.timeline ?? []).length > 0 && (
-              <section className={card}>
-                <h2 className={`${sectionTitle} mb-3`}>{t('detail.timeline')}</h2>
-                <ol className="space-y-3">
+              <details className={`${card} group`}>
+                <summary className="flex items-center justify-between gap-3 min-h-11 -my-2 cursor-pointer list-none [&::-webkit-details-marker]:hidden">
+                  <h2 className={sectionTitle}>{t('detail.timeline')}</h2>
+                  <ChevronDown className="w-4 h-4 text-muted transition-transform group-open:rotate-180" aria-hidden />
+                </summary>
+                <ol className="space-y-3 mt-3">
                   {order.timeline.map((event, index) => (
                     <li key={index} className="flex items-start gap-3">
                       <span className="w-2.5 h-2.5 rounded-full bg-brand mt-1.5 ring-4 ring-brand/20 flex-shrink-0" />
@@ -773,7 +801,7 @@ function OrderDetailContent() {
                     </li>
                   ))}
                 </ol>
-              </section>
+              </details>
             )}
           </div>
 
@@ -790,13 +818,13 @@ function OrderDetailContent() {
                 {!pickup && (
                   <div className="flex justify-between text-muted">
                     <dt>{t('detail.deliveryFee')}</dt>
-                    <dd>{formatPrice(order.pricing?.deliveryFee ?? 0)}</dd>
+                    <dd>{order.pricing?.deliveryFee ? formatPrice(order.pricing.deliveryFee) : tc('free')}</dd>
                   </div>
                 )}
                 {(order.pricing?.discount ?? 0) > 0 && (
                   <div className="flex justify-between text-brand-ink font-medium">
                     <dt>{tc('discount')}</dt>
-                    <dd>-{formatPrice(order.pricing?.discount ?? 0)}</dd>
+                    <dd><bdi dir="ltr">-{formatPrice(order.pricing?.discount ?? 0)}</bdi></dd>
                   </div>
                 )}
                 <div className="flex justify-between text-muted">
@@ -1096,7 +1124,7 @@ function OrderDetailContent() {
             {!pickup && (
               <div className="flex justify-between">
                 <span className="text-muted">{t('receipt.communityDelivery')}</span>
-                <span className="font-mono text-ink">{formatPrice(order.pricing.deliveryFee)}</span>
+                <span className="font-mono text-ink">{order.pricing.deliveryFee ? formatPrice(order.pricing.deliveryFee) : tc('free')}</span>
               </div>
             )}
             {order.pricing.tax > 0 && (
@@ -1108,7 +1136,7 @@ function OrderDetailContent() {
             {order.pricing.discount > 0 && (
               <div className="flex justify-between text-brand-soft-ink font-bold">
                 <span>{t('receipt.promoDiscount')}</span>
-                <span className="font-mono">-{formatPrice(order.pricing.discount)}</span>
+                <bdi dir="ltr" className="font-mono">-{formatPrice(order.pricing.discount)}</bdi>
               </div>
             )}
             <div className="flex justify-between border-t-2 border-line-strong pt-2 text-base font-bold text-ink">

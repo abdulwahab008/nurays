@@ -11,7 +11,8 @@ import { LoadError } from '@/components/ui/LoadError';
 import { useToast } from '@/components/ui/toast';
 import { useDialogs } from '@/components/ui/Dialogs';
 import { apiClient, apiErrorMessage } from '@/lib/api-client';
-import { formatDate, formatPrice, formatDateTime } from '@/lib/utils';
+import { formatPrice } from '@/lib/utils';
+import { formatDate, formatDateTime } from '@/components/admin/admin-dates';
 import { useAuthStore } from '@/lib/store/auth-store';
 import { useShallow } from 'zustand/react/shallow';
 import DocumentList from '@/components/admin/DocumentList';
@@ -175,18 +176,20 @@ function RidersMoney() {
               const overLimit = r.cashHeld >= r.cashLimit && r.cashHeld > 0;
               return (
                 <li key={r.id}>
-                  <Link href={`/admin/riders/${r.id}`} className="flex min-h-[72px] items-center gap-3 py-3 hover:bg-raised">
+                  <Link href={`/admin/riders/${r.id}`} className="flex min-h-[72px] items-center gap-3 py-3 hover:bg-page">
                     <span className="min-w-0 flex-1">
                       <span className="flex items-start justify-between gap-2">
                         <span className="text-sm font-semibold text-ink">{r.name || 'Name not set'}</span>
-                        <span className={`text-sm font-semibold tabular-nums ${overLimit ? 'text-red-700' : 'text-ink'}`}>{formatPrice(r.cashHeld)}</span>
+                        <span className={`text-end text-sm font-semibold tabular-nums ${overLimit ? 'text-red-700' : 'text-ink'}`}>
+                          {formatPrice(r.cashHeld)}
+                          <span className="block text-xs font-normal text-muted">{overLimit ? 'at cash limit' : 'cash in hand'}</span>
+                        </span>
                       </span>
                       <span className="block truncate text-xs text-muted">
                         {[r.phone, r.city, r.vehicleNumber].filter(Boolean).join(' · ')}
-                        {r.status !== 'active' ? ` · ${r.status}` : ''}
+                        {r.status !== 'active' ? ` · ${r.status === 'suspended' ? 'Suspended' : 'Inactive'}` : ''}
                       </span>
                       <span className="block text-xs text-muted">
-                        {overLimit ? 'At cash limit · ' : ''}
                         {r.balance > 0 ? `Owed ${formatPrice(r.balance)}` : r.balance < 0 ? `Owes ${formatPrice(Math.abs(r.balance))}` : 'Settled'} · {r.totalDeliveries} {r.totalDeliveries === 1 ? 'delivery' : 'deliveries'}
                       </span>
                     </span>
@@ -214,12 +217,12 @@ function RidersMoney() {
                 {data.riders.map((r) => {
                   const overLimit = r.cashHeld >= r.cashLimit && r.cashHeld > 0;
                   return (
-                    <tr key={r.id} className="hover:bg-raised">
+                    <tr key={r.id} className="hover:bg-page">
                       <td className="px-4 py-3">
                         <p className="font-semibold text-ink">{r.name || 'Name not set'}</p>
                         <p className="text-xs text-muted">
                           {[r.phone, r.city, r.vehicleNumber].filter(Boolean).join(' · ')}
-                          {r.status !== 'active' ? ` · ${r.status}` : ''}
+                          {r.status !== 'active' ? ` · ${r.status === 'suspended' ? 'Suspended' : 'Inactive'}` : ''}
                         </p>
                       </td>
                       <td className="px-4 py-3">
@@ -243,7 +246,7 @@ function RidersMoney() {
               </tbody>
             </table>
           </div>
-          <Pager page={data.pagination.page} totalPages={data.pagination.totalPages} total={data.pagination.total} noun="riders" onChange={setPage} />
+          <Pager page={data.pagination.page} totalPages={data.pagination.totalPages} total={data.pagination.total} noun="riders" one="rider" onChange={setPage} />
         </>
       )}
     </div>
@@ -336,7 +339,7 @@ function Applications() {
                       <h3 className="text-[17px] font-semibold text-ink">{rider.user?.profile?.fullName || 'Name not given'}</h3>
                       {rider.applicationComplete ? <StatusPill tone="waiting">Ready to approve</StatusPill> : <StatusPill tone="problem">Incomplete</StatusPill>}
                     </div>
-                    <dl className="mt-3 grid grid-cols-[auto_1fr] gap-x-4 gap-y-1.5 text-sm">
+                    <dl className="mt-3 grid grid-cols-[auto_1fr] items-baseline gap-x-4 gap-y-1.5 text-sm">
                       <dt className="text-muted">Phone</dt>
                       <dd className="min-w-0">
                         <PhoneText phone={rider.user?.phone} />

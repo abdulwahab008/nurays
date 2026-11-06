@@ -6,8 +6,11 @@ import { AdminShell } from '@/components/layout/AdminShell';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/toast';
 import { LoadError } from '@/components/ui/LoadError';
+import { AdminFilterTabs } from '@/components/admin/AdminFilterTabs';
+import { LoadingLine, PageHeader } from '@/components/admin/AdminListParts';
 import { apiClient, apiErrorMessage } from '@/lib/api-client';
-import { formatPrice, formatDateTime } from '@/lib/utils';
+import { formatPrice } from '@/lib/utils';
+import { formatDateTime } from '@/components/admin/admin-dates';
 
 interface RefundRow {
   id: string;
@@ -99,31 +102,21 @@ export default function AdminRefundsPage() {
 
   return (
     <AdminShell>
-      <div className="max-w-5xl mx-auto space-y-5">
-        <div>
-          <h1 className="text-2xl font-semibold text-ink">Refunds</h1>
-          <p className="text-sm text-muted mt-1">Money owed back to customers that has to be sent by hand. Wallet refunds happen instantly and don&apos;t appear here.</p>
-        </div>
+      <div className="max-w-5xl space-y-5">
+        <PageHeader title="Refunds" subtitle="Money owed back to customers that has to be sent by hand. Wallet refunds happen instantly and don't appear here." />
 
-        <div className="inline-flex rounded-xl border border-line bg-surface p-1">
-          {TABS.map(([id, label]) => (
-            <button
-              key={id}
-              type="button"
-              onClick={() => {
-                setTab(id);
-                setPage(1);
-              }}
-              aria-pressed={tab === id}
-              className={`h-11 px-4 rounded-lg text-sm font-semibold ${tab === id ? 'bg-ink text-page' : 'text-muted hover:bg-raised'}`}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
+        <AdminFilterTabs
+          label="Refunds"
+          value={tab}
+          onChange={(id) => {
+            setTab(id);
+            setPage(1);
+          }}
+          tabs={TABS.map(([id, label]) => ({ id, label }))}
+        />
 
         {loading && rows.length === 0 ? (
-          <div className="p-10 text-center text-sm text-muted" role="status">Loading…</div>
+          <LoadingLine text="Loading refunds" />
         ) : loadError ? (
           <LoadError error={loadError} onRetry={load} title="We couldn't load the refunds" />
         ) : rows.length === 0 ? (
@@ -136,12 +129,12 @@ export default function AdminRefundsPage() {
               <div key={r.id} className="bg-surface border border-line rounded-2xl p-4 sm:p-5">
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div>
-                    <p className="text-2xl font-semibold text-ink tabular-nums">{formatPrice(r.amount)}</p>
+                    <p className="text-2xl font-semibold text-ink tabular-nums"><bdi>{formatPrice(r.amount)}</bdi></p>
                     <p className="text-sm text-muted mt-1">
-                      <Link href={`/admin/orders/${r.orderId}`} className="text-brand-ink underline font-medium">
+                      <Link href={`/admin/orders/${r.orderId}`} className="-my-3 inline-flex min-h-11 items-center text-brand-ink underline font-medium">
                         Order #{r.order.orderNumber}
                       </Link>{' '}
-                      · paid by {METHOD_LABEL[r.order.paymentMethod] ?? r.order.paymentMethod} · {formatDateTime(r.createdAt)}
+                      · paid by {METHOD_LABEL[r.order.paymentMethod] ?? r.order.paymentMethod} · <bdi>{formatDateTime(r.createdAt)}</bdi>
                     </p>
                     {r.reason && <p className="text-sm text-muted mt-1">Why: {r.reason}</p>}
                   </div>

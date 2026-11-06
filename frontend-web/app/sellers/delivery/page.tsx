@@ -5,6 +5,7 @@ import { loginUrlHere } from '@/lib/auth-redirect';
 import { useRouter } from 'next/navigation';
 import { DashboardLayout, SELLER_SIDEBAR_ITEMS } from '@/components/layout/DashboardShell';
 import { Button } from '@/components/ui/button';
+import { StatusPill } from '@/components/ui/StatusPill';
 import { LoadError, useLoadFailureMessage } from '@/components/ui/LoadError';
 import { useToast } from '@/components/ui/toast';
 import { useAuthStore } from '@/lib/store/auth-store';
@@ -12,6 +13,8 @@ import { apiClient } from '@/lib/api-client';
 import LocationMap from '@/components/ui/LocationMap';
 import { Plus, X } from 'lucide-react';
 import { useShallow } from 'zustand/react/shallow';
+import { useT } from '@/lib/i18n';
+import { kitchenDeliveryMessages } from '@/lib/i18n/messages/kitchen-delivery';
 
 interface CommunityTerms {
   fee: number;
@@ -53,6 +56,7 @@ export default function SellerDeliveryPage() {
   const router = useRouter();
   const { isAuthenticated, user } = useAuthStore(useShallow((s) => ({ isAuthenticated: s.isAuthenticated, user: s.user })));
   const { showToast } = useToast();
+  const t = useT(kitchenDeliveryMessages);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   // Why the kitchen's settings could not be read. Until they were read there is no form: it would show made-up defaults, and saving them
@@ -131,7 +135,7 @@ export default function SellerDeliveryPage() {
           longitude: s.longitude != null ? parseFloat(String(s.longitude)) : null,
         });
       } else {
-        throw new Error('The settings were not in the answer');
+        throw new Error(t('notInAnswer'));
       }
 
       // Its own try/catch: the seller's own settings above are already on screen, and
@@ -150,7 +154,7 @@ export default function SellerDeliveryPage() {
       } catch (err: unknown) {
         console.error('Failed to load community delivery fees:', err);
         setCommunitiesError(err);
-        showToast('Could not load your per-community delivery fees, so nothing can be saved yet. Try again first.', 'error');
+        showToast(t('communityLoadToast'), 'error');
       }
       setSettingsRead(true);
       setSnapshotDue(true);
@@ -170,7 +174,7 @@ export default function SellerDeliveryPage() {
 
     if (user?.userType !== 'seller' && user?.user_type !== 'seller') {
       router.push('/dashboard');
-      showToast('Seller access required.', 'error');
+      showToast(t('accessDenied'), 'error');
       return;
     }
 
@@ -210,7 +214,7 @@ export default function SellerDeliveryPage() {
     e.preventDefault();
     if (!settingsRead) return;
     if (communitiesError) {
-      showToast('Your per-community fees could not be read, so nothing was saved. Try loading them again first.', 'error');
+      showToast(t('communityNotRead'), 'error');
       return;
     }
     setSaving(true);
@@ -283,7 +287,7 @@ export default function SellerDeliveryPage() {
         const fee = num(d.fee);
         // With Nuray riders the fee is Nuray's; the kitchen only sets one for its own deliveries.
         if (d.enabled && fee == null && deliveryModel === 'model_b') {
-          showToast(`Enter a delivery fee for ${c.name}, or switch it off.`, 'error');
+          showToast(t('enterFeeFor', { name: c.name }), 'error');
           setSaving(false);
           return;
         }
@@ -299,8 +303,8 @@ export default function SellerDeliveryPage() {
         }
       }
       const home = communities.find((c) => c.isHome);
-      if (terms.some((t) => t.isEnabled) && home && !drafts[home.id]?.enabled) {
-        showToast(`Switch on your own community (${home.name}) first.`, 'error');
+      if (terms.some((row) => row.isEnabled) && home && !drafts[home.id]?.enabled) {
+        showToast(t('homeFirst', { name: home.name }), 'error');
         setSaving(false);
         return;
       }
@@ -309,7 +313,7 @@ export default function SellerDeliveryPage() {
       const res = await apiClient.patch('/sellers/me', payload);
       if (res.data?.success) {
         const cdRes = await apiClient.put('/sellers/me/community-delivery', {
-          terms: terms.some((t) => t.isEnabled) ? terms : [],
+          terms: terms.some((row) => row.isEnabled) ? terms : [],
         });
         if (cdRes.data?.success) {
           const rows: CommunityRow[] = cdRes.data.data.communities;
@@ -317,7 +321,7 @@ export default function SellerDeliveryPage() {
           setDrafts(Object.fromEntries(rows.map((r) => [r.id, toDraft(r)])));
         }
         setSnapshotDue(true);
-        showToast('Delivery settings saved.', 'success');
+        showToast(t('saved'), 'success');
       }
     } catch (err) {
       console.error('Failed to save delivery settings:', err);
@@ -330,19 +334,19 @@ export default function SellerDeliveryPage() {
     }
   };
 
-  const subtitle = 'Who takes your food to customers, where, and what they pay';
+  const subtitle = t('subtitle');
 
   // No form until the kitchen's own settings were read: the boxes would hold defaults, and saving them would replace the real ones.
   if (!settingsRead) {
     return (
-      <DashboardLayout title="Delivery" subtitle={subtitle} sidebarItems={SELLER_SIDEBAR_ITEMS} userType="seller">
+      <DashboardLayout title={t('title')} subtitle={subtitle} sidebarItems={SELLER_SIDEBAR_ITEMS} userType="seller">
         <div className="max-w-3xl pb-16">
           {loadError ? (
-            <LoadError error={loadError} onRetry={() => loadDeliverySettings()} title="We couldn't load your delivery settings" />
+            <LoadError error={loadError} onRetry={() => loadDeliverySettings()} title={t('loadFailed')} />
           ) : (
             <div className="py-16 text-center" role="status">
               <div className="animate-spin rounded-full h-8 w-8 border-2 border-line border-t-brand-600 mx-auto mb-4" />
-              <p className="text-sm text-muted">Loading your delivery settings…</p>
+              <p className="text-sm text-muted">{t('loading')}</p>
             </div>
           )}
         </div>
@@ -386,36 +390,36 @@ export default function SellerDeliveryPage() {
             }
             className="h-5 w-5 shrink-0 cursor-pointer accent-brand-700"
           />
-          <span className="text-[15px] font-medium text-ink">{c.name}</span>
+          <bdi className="text-[15px] font-medium text-ink">{c.name}</bdi>
           <span className="text-sm text-muted">{c.city}</span>
           {c.isHome && (
-            <span className="rounded-full bg-brand-soft px-2 py-0.5 text-xs font-medium text-brand-soft-ink">Your community</span>
+            <StatusPill tone="good">{t('yourCommunity')}</StatusPill>
           )}
           {!c.isHome && c.isNeighbor && (
-            <span className="rounded-full bg-raised px-2 py-0.5 text-xs font-medium text-muted">Nearby</span>
+            <StatusPill>{t('nearby')}</StatusPill>
           )}
         </label>
 
         {d.enabled && !selfDelivery && (
           <div className="grid grid-cols-2 gap-3 pb-3 sm:ps-8" data-testid="nuray-fee-row">
             <div>
-              <span className="block text-sm text-muted">Nuray&apos;s fee, from your earnings</span>
+              <span className="block text-sm text-muted">{t('nurayFeeLabel')}</span>
               <span className="mt-1 block text-[15px] font-semibold text-ink tabular-nums">
                 {c.nurayFee == null
-                  ? 'Too far for Nuray riders'
+                  ? t('tooFar')
                   : c.nurayFeeIsFixed
-                    ? `Rs ${c.nurayFee}, set fee`
-                    : `About Rs ${c.nurayFee}, by distance`}
+                    ? t('setFee', { fee: c.nurayFee })
+                    : t('aboutFee', { fee: c.nurayFee })}
               </span>
             </div>
             <div>
-              <label htmlFor={`${c.id}-min`} className={labelCls}>Smallest order (Rs)</label>
+              <label htmlFor={`${c.id}-min`} className={labelCls}>{t('smallestOrder')}</label>
               <input
                 id={`${c.id}-min`}
                 type="number"
                 min={0}
                 step={50}
-                placeholder="Optional"
+                placeholder={t('optional')}
                 value={d.minOrder}
                 onChange={(e) => setDraft({ minOrder: e.target.value })}
                 className={inputCls}
@@ -427,7 +431,7 @@ export default function SellerDeliveryPage() {
         {d.enabled && selfDelivery && (
           <div className="grid grid-cols-2 gap-3 pb-3 sm:grid-cols-3 sm:ps-8">
             <div>
-              <label htmlFor={`${c.id}-fee`} className={labelCls}>Fee (Rs)</label>
+              <label htmlFor={`${c.id}-fee`} className={labelCls}>{t('fee')}</label>
               <input
                 id={`${c.id}-fee`}
                 type="number"
@@ -439,26 +443,26 @@ export default function SellerDeliveryPage() {
               />
             </div>
             <div>
-              <label htmlFor={`${c.id}-free`} className={labelCls}>Free above (Rs)</label>
+              <label htmlFor={`${c.id}-free`} className={labelCls}>{t('freeAbove')}</label>
               <input
                 id={`${c.id}-free`}
                 type="number"
                 min={0}
                 step={50}
-                placeholder="Optional"
+                placeholder={t('optional')}
                 value={d.freeAbove}
                 onChange={(e) => setDraft({ freeAbove: e.target.value })}
                 className={inputCls}
               />
             </div>
             <div>
-              <label htmlFor={`${c.id}-min`} className={labelCls}>Smallest order (Rs)</label>
+              <label htmlFor={`${c.id}-min`} className={labelCls}>{t('smallestOrder')}</label>
               <input
                 id={`${c.id}-min`}
                 type="number"
                 min={0}
                 step={50}
-                placeholder="Optional"
+                placeholder={t('optional')}
                 value={d.minOrder}
                 onChange={(e) => setDraft({ minOrder: e.target.value })}
                 className={inputCls}
@@ -471,38 +475,35 @@ export default function SellerDeliveryPage() {
   };
 
   const homeFee = communities.find((c) => c.isHome)?.nurayFee;
-  const nurayRiderBody =
-    'A Nuray rider collects the order from your kitchen. Nuray\'s delivery fee comes out of your earnings for that order' +
-    (homeFee != null ? ` (Rs ${homeFee} inside your community)` : '') +
-    '; the customer pays no delivery fee.';
+  const nurayRiderBody = homeFee != null ? t('nurayRiderBodyFee', { fee: homeFee }) : t('nurayRiderBody');
 
   return (
-    <DashboardLayout title="Delivery" subtitle={subtitle} sidebarItems={SELLER_SIDEBAR_ITEMS} userType="seller">
+    <DashboardLayout title={t('title')} subtitle={subtitle} sidebarItems={SELLER_SIDEBAR_ITEMS} userType="seller">
       <div className="max-w-3xl">
         {Boolean(loadError) && (
           <div className="mb-6 flex flex-wrap items-center justify-between gap-3 rounded-xl bg-red-50 px-4 py-3 text-sm text-red-700" role="alert">
             <span>{failureMessage(loadError)}</span>
             <button type="button" onClick={() => loadDeliverySettings()} className="min-h-11 font-semibold underline">
-              Retry
+              {t('retry')}
             </button>
           </div>
         )}
 
         <form onSubmit={handleSubmit}>
           <section aria-labelledby="who-delivers">
-            <h2 id="who-delivers" className="text-sm font-semibold text-ink">Who delivers your orders</h2>
+            <h2 id="who-delivers" className="text-sm font-semibold text-ink">{t('whoDelivers')}</h2>
             <div role="radiogroup" aria-labelledby="who-delivers" className="mt-3 grid gap-3 sm:grid-cols-2">
               {(
                 [
                   {
                     value: 'model_a',
-                    title: 'Nuray riders',
+                    title: t('nurayRiders'),
                     body: nurayRiderBody,
                   },
                   {
                     value: 'model_b',
-                    title: 'I deliver myself',
-                    body: 'You or your own rider take the order. You set the delivery fee and keep it.',
+                    title: t('selfDeliver'),
+                    body: t('selfDeliverBody'),
                   },
                 ] as const
               ).map((option) => {
@@ -534,19 +535,17 @@ export default function SellerDeliveryPage() {
 
           <section aria-labelledby="where-you-deliver" className="mt-8 border-t border-line pt-6">
             <h2 id="where-you-deliver" className="text-sm font-semibold text-ink">
-              {selfDelivery ? 'Fee for each community' : 'Where you deliver'}
+              {selfDelivery ? t('feePerCommunity') : t('whereYouDeliver')}
             </h2>
             <p className="mt-1 text-sm text-muted">
-              {homeCommunityName ? `Your kitchen is in ${homeCommunityName}. ` : ''}
-              {selfDelivery
-                ? 'Set what you charge in each community you deliver to. Once you tick one, you only deliver to the ones ticked.'
-                : 'Nuray charges you a set fee for each order inside your community, and a fee by distance to others. It comes out of your earnings for that order. Tick the communities you deliver to.'}
+              {homeCommunityName ? `${t('kitchenIn', { name: homeCommunityName })} ` : ''}
+              {selfDelivery ? t('selfCommunityHint') : t('nurayCommunityHint')}
             </p>
 
             <div className="mt-4 flex items-center justify-between gap-4">
               <span>
-                <span id="cross-community-label" className="block text-[15px] text-ink">Deliver outside my community</span>
-                <span id="cross-community-hint" className="block text-sm text-muted">When off, only customers in your community can order delivery.</span>
+                <span id="cross-community-label" className="block text-[15px] text-ink">{t('crossCommunity')}</span>
+                <span id="cross-community-hint" className="block text-sm text-muted">{t('crossCommunityHint')}</span>
               </span>
               <button
                 type="button"
@@ -566,17 +565,17 @@ export default function SellerDeliveryPage() {
             {noneTicked && (
               <p className="mt-4 rounded-xl bg-accent-soft px-4 py-3 text-sm text-accent-soft-ink">
                 {selfDelivery
-                  ? 'No communities ticked yet, so your usual prices below apply everywhere you deliver.'
-                  : 'No communities ticked yet, so Nuray riders deliver anywhere they can reach.'}
+                  ? t('noneTickedSelf')
+                  : t('noneTickedNuray')}
               </p>
             )}
 
             {communitiesError ? (
               <div className="mt-4">
-                <LoadError compact error={communitiesError} onRetry={() => loadDeliverySettings(true)} title="We couldn't load your community fees" />
+                <LoadError compact error={communitiesError} onRetry={() => loadDeliverySettings(true)} title={t('communityFeesFailed')} />
               </div>
             ) : communities.length === 0 ? (
-              <p className="mt-4 text-sm text-muted">No communities are available yet.</p>
+              <p className="mt-4 text-sm text-muted">{t('noCommunities')}</p>
             ) : (
               <>
                 <ul className={`mt-4 ${listCls}`}>{homeCityCommunities.map(communityRow)}</ul>
@@ -590,9 +589,9 @@ export default function SellerDeliveryPage() {
                       onClick={() => setShowOtherCities((v) => !v)}
                       className="mt-3 min-h-11 -ms-3"
                     >
-                      {showOtherCities ? 'Hide other cities' : 'Show other cities'}
+                      {showOtherCities ? t('hideOtherCities') : t('showOtherCities')}
                       {otherCitiesTicked > 0 && (
-                        <span className="font-normal text-muted"> ({otherCitiesTicked} ticked)</span>
+                        <span className="font-normal text-muted"> {t('ticked', { count: otherCitiesTicked })}</span>
                       )}
                     </Button>
                     <ul id="other-city-communities" hidden={!showOtherCities} className={`mt-2 ${listCls}`}>
@@ -608,16 +607,16 @@ export default function SellerDeliveryPage() {
           {selfDelivery && (
             <>
               <section aria-labelledby="usual-prices" className="mt-8 border-t border-line pt-6">
-                <h2 id="usual-prices" className="text-sm font-semibold text-ink">Your usual prices</h2>
-                <p className="mt-1 text-sm text-muted">Used wherever no community fee is set.</p>
+                <h2 id="usual-prices" className="text-sm font-semibold text-ink">{t('usualPrices')}</h2>
+                <p className="mt-1 text-sm text-muted">{t('usualPricesHint')}</p>
 
                 <fieldset className="mt-4">
-                  <legend className={labelCls}>How you charge</legend>
+                  <legend className={labelCls}>{t('howYouCharge')}</legend>
                   <div className="flex flex-wrap gap-x-6">
                     {(
                       [
-                        { value: 'fixed', label: 'One fixed fee' },
-                        { value: 'distance', label: 'By distance' },
+                        { value: 'fixed', label: t('oneFixedFee') },
+                        { value: 'distance', label: t('byDistance') },
                       ] as const
                     ).map((option) => (
                       <label key={option.value} className="flex min-h-11 cursor-pointer items-center gap-2.5 text-[15px] text-ink">
@@ -636,7 +635,7 @@ export default function SellerDeliveryPage() {
 
                 {formData.deliveryFeeType === 'fixed' && (
                   <div className="mt-3 max-w-[12rem]">
-                    <label htmlFor="deliveryFeeFixed" className={labelCls}>Delivery fee (Rs)</label>
+                    <label htmlFor="deliveryFeeFixed" className={labelCls}>{t('deliveryFee')}</label>
                     <input
                       id="deliveryFeeFixed"
                       type="number"
@@ -658,7 +657,7 @@ export default function SellerDeliveryPage() {
                 {formData.deliveryFeeType === 'distance' && (
                   <div className="mt-3 grid max-w-md grid-cols-2 gap-3">
                     <div>
-                      <label htmlFor="deliveryFeeBase" className={labelCls}>Starting fee (Rs)</label>
+                      <label htmlFor="deliveryFeeBase" className={labelCls}>{t('startingFee')}</label>
                       <input
                         id="deliveryFeeBase"
                         type="number"
@@ -676,7 +675,7 @@ export default function SellerDeliveryPage() {
                       />
                     </div>
                     <div>
-                      <label htmlFor="deliveryFeePerKm" className={labelCls}>Each km (Rs)</label>
+                      <label htmlFor="deliveryFeePerKm" className={labelCls}>{t('eachKm')}</label>
                       <input
                         id="deliveryFeePerKm"
                         type="number"
@@ -698,7 +697,7 @@ export default function SellerDeliveryPage() {
 
                 <div className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
                   <div>
-                    <label htmlFor="freeDeliveryRadiusKm" className={labelCls}>Free within (km)</label>
+                    <label htmlFor="freeDeliveryRadiusKm" className={labelCls}>{t('freeWithin')}</label>
                     <input
                       id="freeDeliveryRadiusKm"
                       type="number"
@@ -716,7 +715,7 @@ export default function SellerDeliveryPage() {
                     />
                   </div>
                   <div>
-                    <label htmlFor="freeDeliveryThreshold" className={labelCls}>Free above (Rs)</label>
+                    <label htmlFor="freeDeliveryThreshold" className={labelCls}>{t('freeAbove')}</label>
                     <input
                       id="freeDeliveryThreshold"
                       type="number"
@@ -734,7 +733,7 @@ export default function SellerDeliveryPage() {
                     />
                   </div>
                   <div>
-                    <label htmlFor="maxDeliveryDistanceKm" className={labelCls}>Furthest (km)</label>
+                    <label htmlFor="maxDeliveryDistanceKm" className={labelCls}>{t('furthest')}</label>
                     <input
                       id="maxDeliveryDistanceKm"
                       type="number"
@@ -752,7 +751,7 @@ export default function SellerDeliveryPage() {
                     />
                   </div>
                   <div>
-                    <label htmlFor="minOrderAmountForDelivery" className={labelCls}>Smallest order (Rs)</label>
+                    <label htmlFor="minOrderAmountForDelivery" className={labelCls}>{t('smallestOrder')}</label>
                     <input
                       id="minOrderAmountForDelivery"
                       type="number"
@@ -773,11 +772,11 @@ export default function SellerDeliveryPage() {
               </section>
 
               <section aria-labelledby="free-areas" className="mt-8 border-t border-line pt-6">
-                <h2 id="free-areas" className="text-sm font-semibold text-ink">Free delivery areas</h2>
-                <p className="mt-1 text-sm text-muted">Areas where delivery costs nothing, like your own block.</p>
+                <h2 id="free-areas" className="text-sm font-semibold text-ink">{t('freeAreas')}</h2>
+                <p className="mt-1 text-sm text-muted">{t('freeAreasHint')}</p>
 
                 <div className="mt-4 flex gap-2">
-                  <label htmlFor="newArea" className="sr-only">Area or society name</label>
+                  <label htmlFor="newArea" className="sr-only">{t('areaName')}</label>
                   <input
                     id="newArea"
                     type="text"
@@ -789,16 +788,16 @@ export default function SellerDeliveryPage() {
                         handleAddArea();
                       }
                     }}
-                    placeholder="Area or society name"
+                    placeholder={t('areaName')}
                     className={`${inputCls} flex-1`}
                   />
                   <Button type="button" onClick={handleAddArea} variant="outline" className="min-h-11 px-4">
-                    Add
+                    {t('add')}
                   </Button>
                 </div>
 
                 <div className="mt-3 flex flex-wrap items-center gap-2">
-                  <span className="text-sm text-muted">Suggestions:</span>
+                  <span className="text-sm text-muted">{t('suggestions')}</span>
                   {['Askari 11', 'Askari 10', 'DHA Phase 6', 'Bedian Road', 'Gulshan-e-Iqbal', 'Clifton']
                     .filter((name) => !formData.freeDeliveryAreas.includes(name))
                     .map((name) => (
@@ -815,14 +814,14 @@ export default function SellerDeliveryPage() {
                 </div>
 
                 {formData.freeDeliveryAreas.length > 0 && (
-                  <ul className="mt-4 flex flex-wrap gap-2" aria-label="Your free delivery areas">
+                  <ul className="mt-4 flex flex-wrap gap-2" aria-label={t('yourFreeAreas')}>
                     {formData.freeDeliveryAreas.map((area) => (
                       <li key={area} className="inline-flex items-center gap-1 rounded-full bg-brand-soft ps-3 text-sm font-medium text-brand-soft-ink">
                         {area}
                         <button
                           type="button"
                           onClick={() => handleRemoveArea(area)}
-                          aria-label={`Remove ${area}`}
+                          aria-label={t('removeArea', { area })}
                           className="flex h-9 w-9 items-center justify-center rounded-full hover:bg-brand-100 focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-brand/30"
                         >
                           <X className="h-4 w-4" aria-hidden="true" />
@@ -834,9 +833,9 @@ export default function SellerDeliveryPage() {
               </section>
 
               <section aria-labelledby="pickup-and-place" className="mt-8 border-t border-line pt-6">
-                <h2 id="pickup-and-place" className="text-sm font-semibold text-ink">Pickup and kitchen location</h2>
+                <h2 id="pickup-and-place" className="text-sm font-semibold text-ink">{t('pickupAndPlace')}</h2>
                 <label htmlFor="allowPickup" className="mt-3 flex min-h-11 cursor-pointer items-center justify-between gap-4">
-                  <span className="text-[15px] text-ink">Customers can collect from your kitchen</span>
+                  <span className="text-[15px] text-ink">{t('allowPickup')}</span>
                   <input
                     type="checkbox"
                     id="allowPickup"
@@ -845,7 +844,7 @@ export default function SellerDeliveryPage() {
                     className="h-5 w-5 shrink-0 cursor-pointer accent-brand-700"
                   />
                 </label>
-                <p className="mt-4 text-sm text-muted">Drag the pin to your kitchen door. The circle shows your free delivery distance.</p>
+                <p className="mt-4 text-sm text-muted">{t('pinHint')}</p>
                 <div className="mt-3 overflow-hidden rounded-2xl border border-line">
                   <LocationMap
                     center={
@@ -870,9 +869,9 @@ export default function SellerDeliveryPage() {
             </>
           )}
 
-          <div className="sticky bottom-0 z-10 mt-8 flex justify-end border-t border-line bg-page/95 py-4 pb-[calc(1rem+var(--safe-bottom,0px))] backdrop-blur">
+          <div data-bottom-bar className="sticky bottom-0 z-10 mt-8 flex justify-end border-t border-line bg-page/95 py-4 pb-[calc(1rem+var(--safe-bottom,0px))] backdrop-blur">
             <Button type="submit" disabled={saving || !changed} className="min-h-11 w-full px-6 sm:w-auto">
-              {saving ? 'Saving…' : 'Save changes'}
+              {saving ? t('saving') : t('save')}
             </Button>
           </div>
         </form>

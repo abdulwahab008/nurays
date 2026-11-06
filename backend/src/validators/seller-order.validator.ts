@@ -16,6 +16,8 @@ export const getSellerOrdersQuerySchema = z.object({
     'completed',
     'cancelled',
   ]).optional(),
+  // A group of statuses, as the kitchen's tabs show them: orders still being worked on, delivered ones, cancelled ones.
+  view: z.enum(['active', 'delivered', 'cancelled']).optional(),
   dateFrom: readableDate('dateFrom').optional(),
   dateTo: readableDate('dateTo').optional(),
 });

@@ -12,11 +12,13 @@ import { useDialogs } from '@/components/ui/Dialogs';
 import { ExternalLink } from '@/components/ExternalLink';
 import DocumentList from '@/components/admin/DocumentList';
 import { RejectReasonModal } from '@/components/admin/RejectReasonModal';
-import { Figure, LoadingLine, PhoneText, StatusPill, outlineLinkClass, type PillTone } from '@/components/admin/AdminListParts';
+import { Figure, LoadingLine, OrderStatusPill, PhoneText, StatusPill, outlineLinkClass, type PillTone } from '@/components/admin/AdminListParts';
 import { useAuthStore } from '@/lib/store/auth-store';
 import { apiClient, apiErrorMessage, apiErrorStatus } from '@/lib/api-client';
-import { displayRating, formatDate, formatDateTime, formatPrice } from '@/lib/utils';
+import { displayRating, formatPrice } from '@/lib/utils';
+import { formatDate, formatDateTime } from '@/components/admin/admin-dates';
 import { useShallow } from 'zustand/react/shallow';
+import { statusLabel } from '../../orders/order-labels';
 
 interface SellerDetail {
   id: string;
@@ -65,20 +67,6 @@ interface SellerDetail {
 }
 
 const MODE_LABEL: Record<string, string> = { delivery: 'Delivery', pickup: 'Pickup', dine_in: 'Dine in' };
-const ORDER_STATUS_LABEL: Record<string, string> = {
-  pending: 'Waiting for kitchen',
-  confirmed: 'Accepted',
-  preparing: 'Cooking',
-  ready: 'Ready',
-  dispatched: 'Picked up',
-  in_transit: 'On the way',
-  delivered: 'Delivered',
-  delivery_failed: 'Delivery failed',
-  cancelled: 'Cancelled',
-  refunded: 'Refunded',
-};
-const orderTone = (status: string): PillTone =>
-  status === 'delivered' ? 'good' : status === 'cancelled' || status === 'delivery_failed' ? 'problem' : status === 'refunded' ? 'neutral' : 'waiting';
 
 function kitchenPill(s: SellerDetail): { tone: PillTone; label: string } {
   if (s.status === 'suspended') return { tone: 'problem', label: 'Suspended' };
@@ -300,7 +288,7 @@ export default function AdminSellerDetailPage() {
                   value={displayRating(f.ratingAverage, f.totalReviews) ?? 'New'}
                   sub={f.totalReviews > 0 ? `${f.totalReviews} ${f.totalReviews === 1 ? 'review' : 'reviews'}` : 'No reviews yet'}
                 />
-                <Figure label="Dishes live" value={`${f.liveDishes} of ${f.totalDishes}`} />
+                <Figure label="Dishes live" value={f.totalDishes ? `${f.liveDishes} of ${f.totalDishes}` : "None"} sub={f.totalDishes ? undefined : "No dishes added yet"} />
               </div>
             )}
 
@@ -323,7 +311,7 @@ export default function AdminSellerDetailPage() {
                     [
                       'Map pin',
                       k?.latitude != null && k.longitude != null ? (
-                        <ExternalLink href={`https://www.google.com/maps?q=${k.latitude},${k.longitude}`} className="font-medium text-brand-ink hover:underline">
+                        <ExternalLink href={`https://www.google.com/maps?q=${k.latitude},${k.longitude}`} className="-my-3 inline-flex min-h-11 items-center font-medium text-brand-ink hover:underline">
                           Open in Maps
                         </ExternalLink>
                       ) : (
@@ -351,12 +339,12 @@ export default function AdminSellerDetailPage() {
                 <Facts
                   rows={[
                     ['Name', seller.user.profile?.fullName || <span className="text-muted">Not given</span>],
-                    ['Phone', <PhoneText key="phone" phone={seller.user.phone} />],
-                    ...(k?.pickupPhone && k.pickupPhone !== seller.user.phone ? ([['Kitchen phone', <PhoneText key="kphone" phone={k.pickupPhone} />]] as Array<[string, ReactNode]>) : []),
+                    ['Phone', <PhoneText key="phone" className="-my-3" phone={seller.user.phone} />],
+                    ...(k?.pickupPhone && k.pickupPhone !== seller.user.phone ? ([['Kitchen phone', <PhoneText key="kphone" className="-my-3" phone={k.pickupPhone} />]] as Array<[string, ReactNode]>) : []),
                     [
                       'Email',
                       seller.user.email ? (
-                        <a href={`mailto:${seller.user.email}`} className="text-brand-ink hover:underline break-all">
+                        <a href={`mailto:${seller.user.email}`} className="-my-3 inline-flex min-h-11 items-center text-brand-ink hover:underline break-all">
                           {seller.user.email}
                         </a>
                       ) : (
@@ -405,12 +393,12 @@ export default function AdminSellerDetailPage() {
                 <ul className="divide-y divide-line text-sm">
                   {seller.recentOrders!.map((o) => (
                     <li key={o.id}>
-                      <Link href={`/admin/orders/${o.id}`} className="flex min-h-11 flex-wrap items-center gap-x-3 gap-y-1 py-2 hover:bg-raised">
+                      <Link href={`/admin/orders/${o.id}`} className="flex min-h-11 flex-wrap items-center gap-x-3 gap-y-1 py-2 hover:bg-page">
                         <span className="font-medium text-ink">#{o.orderNumber}</span>
-                        <span className="text-muted">{formatDateTime(o.createdAt)}</span>
+                        <bdi className="text-muted">{formatDateTime(o.createdAt)}</bdi>
                         <span className="ms-auto flex items-center gap-3">
                           <span className="tabular-nums text-ink">{formatPrice(o.kitchenTotal)}</span>
-                          <StatusPill tone={orderTone(o.orderStatus)}>{ORDER_STATUS_LABEL[o.orderStatus] ?? o.orderStatus}</StatusPill>
+                          <OrderStatusPill status={o.orderStatus} label={statusLabel(o.orderStatus)} />
                         </span>
                       </Link>
                     </li>

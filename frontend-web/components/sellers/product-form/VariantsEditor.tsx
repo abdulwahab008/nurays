@@ -3,6 +3,9 @@
 import { Button } from '@/components/ui/button';
 import { MAX_VARIANTS, PRODUCT_FIELD, VariantDraft, profitOf } from '@/lib/product-form';
 import { FieldError, fieldClass, useFieldError } from './fields';
+import { useT } from '@/lib/i18n';
+import { kitchenProductFormMessages } from '@/lib/i18n/messages/kitchen-product-form';
+import { StatusPill } from '@/components/ui/StatusPill';
 
 const input = `${fieldClass} tabular-nums`;
 
@@ -40,13 +43,14 @@ function MoneyInput({
 function VariantNameInput({ index, value, onChange }: { index: number; value: string; onChange: (name: string) => void }) {
   const id = PRODUCT_FIELD.variantName(index);
   const { inputProps, errorClass } = useFieldError(id);
+  const t = useT(kitchenProductFormMessages);
   return (
     <input
       type="text"
       id={id}
       value={value}
       onChange={(e) => onChange(e.target.value)}
-      placeholder="e.g. Small pack (6 pieces)"
+      placeholder={t('sizeNamePlaceholder')}
       {...inputProps}
       className={`${fieldClass} ${errorClass}`}
     />
@@ -73,20 +77,19 @@ export default function VariantsEditor({
   onUpdate: (index: number, patch: Partial<VariantDraft>) => void;
   onMakeDefault: (index: number) => void;
 }) {
+  const t = useT(kitchenProductFormMessages);
   return (
     <div className="mt-8 border-t border-line pt-6">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h3 className="text-sm font-semibold text-ink">
-            Sizes and packs
-            {variants.length > 0 && (
-              <span className="ms-2 rounded-full bg-raised px-2 py-0.5 text-xs font-medium text-muted tabular-nums">{variants.length}</span>
-            )}
+            {t('sizes')}
+            {variants.length > 0 && <StatusPill className="ms-2 tabular-nums">{variants.length}</StatusPill>}
           </h3>
-          <p className="mt-1 text-sm text-muted">Sell the dish in more than one size, each with its own price and stock. For example small (6 pieces) and large (12 pieces).</p>
+          <p className="mt-1 text-sm text-muted">{t('sizesHint')}</p>
         </div>
         <Button type="button" variant="outline" onClick={onToggle} aria-expanded={open}>
-          {open ? 'Hide sizes' : mode === 'edit' ? 'Manage sizes' : 'Add sizes'}
+          {open ? t('hideSizes') : mode === 'edit' ? t('manageSizes') : t('addSizes')}
         </Button>
       </div>
 
@@ -98,15 +101,13 @@ export default function VariantsEditor({
               <div key={variant.id || `new-${index}`} className="rounded-xl border border-line bg-surface p-4">
                 <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
                   <h4 className="flex items-center gap-2 text-[15px] font-semibold text-ink">
-                    {mode === 'edit' && !variant.id ? 'New size' : 'Size'} {index + 1}
-                    {variant.isDefault && (
-                      <span className="rounded-full bg-brand-soft px-2 py-0.5 text-xs font-medium text-brand-soft-ink">Shown first</span>
-                    )}
+                    {mode === 'edit' && !variant.id ? t('newSize', { n: index + 1 }) : t('size', { n: index + 1 })}
+                    {variant.isDefault && <StatusPill tone="good">{t('shownFirst')}</StatusPill>}
                   </h4>
                   <div className="flex items-center gap-1">
                     {!variant.isDefault && (
                       <Button type="button" variant="ghost" size="sm" onClick={() => onMakeDefault(index)} className="min-h-11">
-                        Show first
+                        {t('showFirst')}
                       </Button>
                     )}
                     <Button
@@ -114,10 +115,10 @@ export default function VariantsEditor({
                       variant="ghost"
                       size="sm"
                       onClick={() => onRemove(index)}
-                      aria-label={`Remove variant ${index + 1}`}
+                      aria-label={t('removeSizeLabel', { n: index + 1 })}
                       className="min-h-11 text-red-700 hover:bg-red-50"
                     >
-                      Remove
+                      {t('remove')}
                     </Button>
                   </div>
                 </div>
@@ -125,13 +126,13 @@ export default function VariantsEditor({
                 <div className="grid grid-cols-2 gap-3">
                   <div className="col-span-2">
                     <label className="block">
-                      <Label>Name</Label>
+                      <Label>{t('name')}</Label>
                       <VariantNameInput index={index} value={variant.name} onChange={(name) => onUpdate(index, { name })} />
                     </label>
                     <FieldError id={PRODUCT_FIELD.variantName(index)} />
                   </div>
                   <label className="col-span-2 block">
-                    <Label>Name in Urdu (optional)</Label>
+                    <Label>{t('sizeNameUrdu')}</Label>
                     <input
                       type="text"
                       value={variant.nameUrdu || ''}
@@ -141,16 +142,16 @@ export default function VariantsEditor({
                       dir="rtl"
                     />
                   </label>
-                  <MoneyInput label="Price" value={variant.price} onChange={(v) => onUpdate(index, { price: v || 0 })} placeholder="300" />
+                  <MoneyInput label={t('price')} value={variant.price} onChange={(v) => onUpdate(index, { price: v || 0 })} placeholder="300" />
                   <MoneyInput
-                    label="Before discount"
+                    label={t('beforeDiscount')}
                     value={variant.originalPrice}
                     onChange={(v) => onUpdate(index, { originalPrice: v })}
                     placeholder="350"
                   />
-                  <MoneyInput label="Your cost" value={variant.costPrice} onChange={(v) => onUpdate(index, { costPrice: v })} placeholder="180" />
+                  <MoneyInput label={t('yourCost')} value={variant.costPrice} onChange={(v) => onUpdate(index, { costPrice: v })} placeholder="180" />
                   <label className="block">
-                    <Label>How many you have</Label>
+                    <Label>{t('howMany')}</Label>
                     <input
                       type="number"
                       value={variant.stockQuantity || ''}
@@ -161,7 +162,7 @@ export default function VariantsEditor({
                     />
                   </label>
                   <label className="block">
-                    <Label>Warn me below</Label>
+                    <Label>{t('warnBelow')}</Label>
                     <input
                       type="number"
                       value={variant.stockThreshold || ''}
@@ -172,7 +173,7 @@ export default function VariantsEditor({
                     />
                   </label>
                   <label className="block">
-                    <Label>SKU or barcode (optional)</Label>
+                    <Label>{t('sku')}</Label>
                     <input
                       type="text"
                       value={variant.sku || ''}
@@ -183,7 +184,7 @@ export default function VariantsEditor({
                   </label>
                   {profit && (
                     <p className="col-span-2 flex justify-between gap-4 text-sm">
-                      <span className="text-muted">You keep for each one</span>
+                      <span className="text-muted">{t('keepEach')}</span>
                       <span className={`font-semibold tabular-nums ${profit.profit > 0 ? 'text-ink' : 'text-red-700'}`}>
                         Rs {profit.profit.toFixed(0)}
                         <span className="ms-1 font-normal text-muted">({profit.margin.toFixed(1)}%)</span>
@@ -196,12 +197,12 @@ export default function VariantsEditor({
           })}
 
           <Button type="button" variant="outline" onClick={onAdd} disabled={variants.length >= MAX_VARIANTS} className="w-full border-dashed">
-            Add a size {variants.length > 0 && `(${variants.length} of ${MAX_VARIANTS})`}
+            {t('addSize')} {variants.length > 0 && t('sizeCount', { count: variants.length, max: MAX_VARIANTS })}
           </Button>
 
           <p className="text-sm text-muted">
-            The size shown first is picked unless the customer changes it. Up to {MAX_VARIANTS} sizes.
-            {mode === 'edit' && ' Removed sizes are deleted when you save.'}
+            {t('sizesFoot', { max: MAX_VARIANTS })}
+            {mode === 'edit' && ` ${t('sizesFootEdit')}`}
           </p>
         </div>
       )}

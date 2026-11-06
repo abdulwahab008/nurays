@@ -8,7 +8,7 @@ import { isAxiosError } from 'axios';
 import { CoverImage } from '@/components/ui/CoverImage';
 import { useAuthStore } from '@/lib/store/auth-store';
 import { useToast } from '@/components/ui/toast';
-import { displayRating, formatPrice } from '@/lib/utils';
+import { displayRating, formatDate, formatPrice } from '@/lib/utils';
 import { getStackedDiscountedPrice, type CatalogPromotionLike } from '@/lib/pricing';
 import { apiClient, ApiResponse, apiErrorStatus, apiErrorCode, apiErrorDetails, errorMessage, type CartConflictDetails } from '@/lib/api-client';
 import type { PublicSeller, PublicSellerAvailability } from '@/lib/services/seller.service';
@@ -22,6 +22,7 @@ import { addressService } from '@/lib/services/address.service';
 import { useCommunityStore } from '@/lib/store/community-store';
 import { loginUrlHere } from '@/lib/auth-redirect';
 import { useT } from '@/lib/i18n';
+import { useHydrated } from '@/lib/hooks/use-hydrated';
 import { browseMessages, businessTypeKey, productTypeKey, type BrowseT } from '@/lib/i18n/messages/browse';
 import { kitchenMessages, kitchenKey, type KitchenT } from '@/lib/i18n/messages/kitchen';
 import {
@@ -136,7 +137,7 @@ function whenParts(iso: string | null | undefined, tk: KitchenT): { day: string;
     ? tk('tomorrow')
     : date.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', timeZone: PKT });
   const time = date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true, timeZone: PKT });
-  return { day, time, isToday };
+  return { day, time: `\u2066${time}\u2069`, isToday };
 }
 
 function formatWhen(iso: string | null | undefined, tk: KitchenT): string | null {
@@ -150,7 +151,7 @@ function formatCutoff(hhmm: string): string | null {
   if (!match) return null;
   const hour = Number(match[1]);
   if (hour > 23) return null;
-  return `${hour % 12 || 12}:${match[2]} ${hour < 12 ? 'AM' : 'PM'}`;
+  return `\u2066${hour % 12 || 12}:${match[2]} ${hour < 12 ? 'AM' : 'PM'}\u2069`;
 }
 
 /** Closing time when open, next opening when closed, else today's order cutoff — whatever the API gave. */
@@ -283,6 +284,7 @@ export default function KitchenStorefrontPage({ initial }: { initial?: PublicSel
   const { isAuthenticated } = useAuthStore(useShallow((s) => ({ isAuthenticated: s.isAuthenticated })));
   const tb = useT(browseMessages);
   const tk = useT(kitchenMessages);
+  const hydrated = useHydrated();
   // The API's seller; the page's text is built from it in the current language.
   const [seller, setSeller] = useState<PublicSeller | null>(initial ?? null);
   const [promotions, setPromotions] = useState<Record<string, CatalogPromotion[]>>({});
@@ -774,6 +776,8 @@ export default function KitchenStorefrontPage({ initial }: { initial?: PublicSel
                 <Bike className="w-4 h-4 text-muted shrink-0" aria-hidden />
                 {deliveryLine ? (
                   <span className="font-semibold text-ink">{deliveryLine}</span>
+                ) : communityId ? (
+                  <span className="text-muted">{tk('feeAtCheckout')}</span>
                 ) : (
                   <button type="button" onClick={openAreaPicker} className="min-h-8 font-semibold text-brand-ink underline-offset-2 hover:underline">
                     {tk('chooseAreaForFee')}
@@ -900,19 +904,14 @@ export default function KitchenStorefrontPage({ initial }: { initial?: PublicSel
           </div>
         ) : (
           <>
-            <div className="mb-5 flex items-end justify-between gap-4">
-              <div>
-                <h2 className="text-[22px] sm:text-[28px] font-extrabold tracking-tight text-ink">
-                  {category === 'all'
-                    ? tk('currentMenu')
-                    : category === 'fresh'
-                    ? tk('freshMeals')
-                    : tk('frozenPacks')}
-                </h2>
-                <p className="text-sm text-muted mt-0.5">
-                  {tk('preparedBy', { name: kitchen.chefName })}
-                </p>
-              </div>
+            <div className="mb-4 flex items-end justify-between gap-4">
+              <h2 className="text-[22px] sm:text-[28px] font-extrabold tracking-tight text-ink">
+                {category === 'all'
+                  ? tk('currentMenu')
+                  : category === 'fresh'
+                  ? tk('freshMeals')
+                  : tk('frozenPacks')}
+              </h2>
               <span className="text-sm font-semibold text-muted flex-shrink-0">
                 {tk(filteredDishes.length === 1 ? 'dishOne' : 'dishMany', { count: filteredDishes.length })}
               </span>
@@ -1059,100 +1058,47 @@ export default function KitchenStorefrontPage({ initial }: { initial?: PublicSel
         )}
       </main>
 
-      {/* Customer Reviews & Feedback Section */}
-      <section id="customer-reviews" className="max-w-[1280px] mx-auto px-4 sm:px-8 mt-14 mb-10 scroll-mt-24">
-        <div className="bg-surface rounded-[24px] p-5 sm:p-8 border border-line">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-6 border-b border-line">
-            <div>
-              <h2 className="text-[22px] sm:text-[28px] font-extrabold tracking-tight text-ink">
-                {tk('reviewsTitle')}
-              </h2>
-              <p className="text-xs text-muted mt-0.5">
-                {tk('reviewsSub', { name: kitchen.chefName })}
-              </p>
-            </div>
-
-            <div className="flex items-center gap-3 bg-accent-soft rounded-2xl px-4 py-3 self-start sm:self-auto">
-              <div className="text-3xl font-black text-accent-soft-ink">{kitchen.rating ?? tk('new')}</div>
-              <div>
-                <div className="flex items-center gap-0.5">
-                  {[1, 2, 3, 4, 5].map((s) => (
-                    <Star
-                      key={s}
-                      className={`w-3.5 h-3.5 ${
-                        s <= Math.round(kitchen.ratingValue)
-                          ? 'fill-accent text-accent'
-                          : 'text-line-strong'
-                      }`}
-                    />
-                  ))}
-                </div>
-                <span className="text-[11px] text-accent-soft-ink font-semibold mt-0.5 block">
-                  {kitchen.reviewCount > 0
-                    ? tk(kitchen.reviewCount === 1 ? 'verifiedReviewsOne' : 'verifiedReviewsMany', { count: kitchen.reviewCount })
-                    : tk('noReviews')}
-                </span>
-              </div>
-            </div>
+      {/* What customers said, flat on the page: the header carries the score, each review is one card. */}
+      <section id="customer-reviews" className="max-w-[1280px] mx-auto px-4 sm:px-8 mt-12 mb-10 scroll-mt-24">
+          <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 mb-4">
+            <h2 className="text-[22px] sm:text-[28px] font-extrabold tracking-tight text-ink">{tk('reviewsTitle')}</h2>
+            <p className="flex items-center gap-1.5 text-sm text-muted">
+              <Star className="w-4 h-4 fill-accent text-accent" aria-hidden />
+              <span className="font-bold text-ink">{kitchen.rating ?? tk('new')}</span>
+              <span>
+                ·{' '}
+                {kitchen.reviewCount > 0
+                  ? tk(kitchen.reviewCount === 1 ? 'verifiedReviewsOne' : 'verifiedReviewsMany', { count: kitchen.reviewCount })
+                  : tk('noReviews')}
+              </span>
+            </p>
           </div>
 
-          {/* Reviews List */}
-          <div className="mt-6">
+          <div>
             {kitchen.reviews.length > 0 ? (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-4">
                 {kitchen.reviews.map((rev) => (
-                  <div
-                    key={rev.id}
-                    className="p-4 rounded-2xl bg-raised flex flex-col justify-between"
-                  >
-                    <div>
-                      <div className="flex items-center justify-between mb-2">
-                        <div className="flex items-center gap-2.5">
-                          <div className="w-9 h-9 rounded-full bg-brand-soft flex items-center justify-center text-brand-soft-ink font-extrabold text-sm">
-                            {rev.author.charAt(0).toUpperCase()}
-                          </div>
-                          <div>
-                            <span className="text-xs font-bold text-ink block leading-tight">
-                              {rev.author}
-                            </span>
-                            <span className="text-[11px] text-brand-soft-ink font-semibold inline-flex items-center gap-0.5">
-                              <Check className="w-2.5 h-2.5" />
-                              <span>{tk('verifiedCustomer')}</span>
-                            </span>
-                          </div>
+                  <article key={rev.id} className="p-4 rounded-2xl bg-surface border border-line">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        <div className="w-9 h-9 shrink-0 rounded-full bg-brand-soft flex items-center justify-center text-brand-soft-ink font-extrabold text-sm">
+                          {rev.author.charAt(0).toUpperCase()}
                         </div>
-
-                        <div className="flex items-center gap-0.5">
-                          {[1, 2, 3, 4, 5].map((s) => (
-                            <Star
-                              key={s}
-                              className={`w-3 h-3 ${
-                                s <= rev.rating
-                                  ? 'fill-accent text-accent'
-                                  : 'text-line-strong'
-                              }`}
-                            />
-                          ))}
+                        <div className="min-w-0">
+                          <p className="text-sm font-bold text-ink truncate">{rev.author}</p>
+                          <p className="text-xs text-muted">
+                            {tk('verifiedCustomer')} · {hydrated ? formatDate(rev.createdAt) : null}
+                          </p>
                         </div>
                       </div>
-
-                      {rev.comment ? (
-                        <p className="text-sm text-ink leading-relaxed mt-2">
-                          &ldquo;{rev.comment}&rdquo;
-                        </p>
-                      ) : (
-                        <p className="text-xs text-muted mt-2">{tk('noComment')}</p>
-                      )}
+                      <div className="flex items-center gap-0.5 shrink-0" aria-label={`${rev.rating} / 5`}>
+                        {[1, 2, 3, 4, 5].map((n) => (
+                          <Star key={n} className={`w-3.5 h-3.5 ${n <= rev.rating ? 'fill-accent text-accent' : 'text-line-strong'}`} aria-hidden />
+                        ))}
+                      </div>
                     </div>
-
-                    <div className="mt-3 pt-2 border-t border-line text-[11px] text-muted">
-                      {new Date(rev.createdAt).toLocaleDateString('en-US', {
-                        month: 'short',
-                        day: 'numeric',
-                        year: 'numeric',
-                      })}
-                    </div>
-                  </div>
+                    {rev.comment && <p className="text-sm text-ink leading-relaxed mt-3">&ldquo;{rev.comment}&rdquo;</p>}
+                  </article>
                 ))}
               </div>
             ) : (
@@ -1165,7 +1111,6 @@ export default function KitchenStorefrontPage({ initial }: { initial?: PublicSel
               </div>
             )}
           </div>
-        </div>
       </section>
 
       {/* Floating Kitchen Cart Pill (Foodpanda/DoorDash style) */}

@@ -15,6 +15,8 @@ export interface CreateOrderRequest {
   paymentMethod: 'jazzcash' | 'easypaisa' | 'card' | 'safepay' | 'bank' | 'cod' | 'wallet';
   promotionCode?: string;
   deliveryInstructions?: string;
+  /** The total the checkout showed; the server refuses the order (PRICE_CHANGED) when it would charge another amount. */
+  expectedTotal?: number;
 }
 
 /**
@@ -32,6 +34,9 @@ export interface OrderItem {
   unitPrice?: number | string;
   totalPrice?: number | string;
   status: string;
+  /** How the dish was stocked when ordered: 'hub' for frozen stock from a hub, 'direct' from the kitchen. On the order's own page. */
+  fulfillmentType?: string | null;
+  hubId?: string | null;
   seller?: {
     id?: string;
     businessName?: string;

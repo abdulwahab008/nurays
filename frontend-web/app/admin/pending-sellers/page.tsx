@@ -13,7 +13,7 @@ import DocumentList from '@/components/admin/DocumentList';
 import { ExternalLink } from '@/components/ExternalLink';
 import { RejectReasonModal } from '@/components/admin/RejectReasonModal';
 import { LoadingLine, PhoneText, StatusPill } from '@/components/admin/AdminListParts';
-import { formatDate } from '@/lib/utils';
+import { formatDate } from '@/components/admin/admin-dates';
 import { useShallow } from 'zustand/react/shallow';
 
 interface PendingSeller {
@@ -54,7 +54,11 @@ export default function AdminPendingSellersPage() {
     try {
       setLoading(true);
       const response = await apiClient.get('/admin/pending-sellers');
-      if (response.data.success) setPendingSellers(response.data.data || []);
+      if (response.data.success) {
+        const found: typeof pendingSellers = response.data.data || [];
+        // Complete applications first: those are the ones an admin can approve now.
+        setPendingSellers([...found].sort((a, b) => (a.missing?.length ?? 0) - (b.missing?.length ?? 0)));
+      }
       setLoadError(null);
     } catch (error) {
       setLoadError(error);
@@ -138,7 +142,7 @@ export default function AdminPendingSellersPage() {
                       {seller.businessNameUrdu && <p className="text-sm text-muted" dir="rtl">{seller.businessNameUrdu}</p>}
                       {seller.description && <p className="mt-1 text-sm text-ink">{seller.description}</p>}
 
-                      <dl className="mt-3 grid grid-cols-[auto_1fr] gap-x-4 gap-y-1.5 text-sm">
+                      <dl className="mt-3 grid grid-cols-[auto_1fr] items-baseline gap-x-4 gap-y-1.5 text-sm">
                         <dt className="text-muted">Owner</dt>
                         <dd className="min-w-0 text-ink">{seller.user.profile?.fullName || 'Not given'}</dd>
                         <dt className="text-muted">Phone</dt>

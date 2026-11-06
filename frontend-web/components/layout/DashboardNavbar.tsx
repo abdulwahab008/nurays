@@ -134,10 +134,6 @@ export function DashboardNavbar({ userType = 'customer', onMenuToggle, drawerOpe
     return '/';
   };
 
-  // Theme accents: ink for the kitchen, soft turquoise for the rider, turquoise for customer/admin (dark words on turquoise)
-  const accentBg = isRider ? 'var(--brand-soft)' : isSeller ? 'var(--ink-900)' : 'var(--forest-500)';
-  const accentFg = isRider ? 'var(--brand-soft-ink)' : isSeller ? 'var(--fg-inverse)' : '#06302B';
-
   // Fetch notification unread count so we only show the red dot when there are unread
   useEffect(() => {
     if (!user?.id) return;
@@ -202,7 +198,6 @@ export function DashboardNavbar({ userType = 'customer', onMenuToggle, drawerOpe
       }
       setNotificationsError(null);
     } catch (error) {
-      console.error('Failed to fetch recent notifications:', error);
       setNotificationsError(error);
     } finally {
       setLoadingNotifications(false);
@@ -224,7 +219,7 @@ export function DashboardNavbar({ userType = 'customer', onMenuToggle, drawerOpe
       );
       setNotificationUnreadCount(prev => Math.max(0, prev - 1));
     } catch (err) {
-      console.error('Failed to mark notification read:', err);
+      showToast(apiErrorMessage(err, t('markReadFailed')), 'error');
     }
     if (actionUrl) {
       setShowNotificationsPanel(false);
@@ -238,7 +233,6 @@ export function DashboardNavbar({ userType = 'customer', onMenuToggle, drawerOpe
       setRecentNotifications(prev => prev.map(n => ({ ...n, isRead: true })));
       setNotificationUnreadCount(0);
     } catch (err) {
-      console.error('Failed to mark all notifications read:', err);
       showToast(apiErrorMessage(err, t('markAllReadFailed')), 'error');
     }
   };
@@ -246,30 +240,15 @@ export function DashboardNavbar({ userType = 'customer', onMenuToggle, drawerOpe
   const getNotificationIcon = (type?: string) => {
     switch (type) {
       case 'order':
-        return <Package className="w-4 h-4 text-muted" />;
+        return <Package className="w-4 h-4" />;
       case 'promo':
-        return <Tag className="w-4 h-4 text-muted" />;
+        return <Tag className="w-4 h-4" />;
       case 'delivery':
-        return <Truck className="w-4 h-4 text-muted" />;
+        return <Truck className="w-4 h-4" />;
       case 'warning':
-        return <AlertCircle className="w-4 h-4 text-rose-600" />;
+        return <AlertCircle className="w-4 h-4" />;
       default:
-        return <Info className="w-4 h-4 text-muted" />;
-    }
-  };
-
-  const getNotificationIconBg = (type?: string) => {
-    switch (type) {
-      case 'order':
-        return 'bg-raised border-line';
-      case 'promo':
-        return 'bg-raised border-line';
-      case 'delivery':
-        return 'bg-raised border-line';
-      case 'warning':
-        return 'bg-rose-50 border-rose-100';
-      default:
-        return 'bg-raised border-line';
+        return <Info className="w-4 h-4" />;
     }
   };
 
@@ -316,7 +295,7 @@ export function DashboardNavbar({ userType = 'customer', onMenuToggle, drawerOpe
     >
       <div className="flex items-center justify-between h-full px-3 sm:px-6 gap-2">
         {/* Logo Section */}
-        <div className="flex items-center gap-2 sm:gap-4">
+        <div className="flex items-center gap-1 sm:gap-4">
           {onMenuToggle && (
             <button
               ref={menuToggleRef}
@@ -324,7 +303,7 @@ export function DashboardNavbar({ userType = 'customer', onMenuToggle, drawerOpe
               onClick={onMenuToggle}
               aria-label={t('toggleNav')}
               aria-expanded={Boolean(drawerOpen)}
-              className="lg:hidden grid h-11 w-11 place-items-center rounded-full text-ink hover:bg-raised transition-colors"
+              className="lg:hidden grid h-11 w-11 shrink-0 place-items-center rounded-full text-ink hover:bg-raised transition-colors"
             >
               <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
                 {drawerOpen ? (
@@ -346,7 +325,7 @@ export function DashboardNavbar({ userType = 'customer', onMenuToggle, drawerOpe
             <Mark size={32} />
             <div className="hidden sm:block leading-tight">
               <Wordmark size={22} />
-              <p className="eyebrow mt-0.5">
+              <p className="eyebrow text-xs font-medium text-muted">
                 {isSeller ? t('ctxSeller') : isAdmin ? t('ctxAdmin') : isRider ? t('ctxRider') : isHubManager ? t('ctxHub') : t('ctxCustomer')}
               </p>
             </div>
@@ -364,12 +343,11 @@ export function DashboardNavbar({ userType = 'customer', onMenuToggle, drawerOpe
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder={t('searchPlaceholder')}
                 aria-label={t('search')}
-                className="w-full min-h-11 ps-10 pe-24 py-2.5 rounded-full text-sm outline-none transition-all bg-page border border-line text-ink placeholder:text-muted focus:border-brand focus:ring-2 focus:ring-brand/20"
+                className="w-full min-h-11 ps-10 pe-24 py-2.5 rounded-xl text-sm outline-none transition-all bg-page border border-line text-ink placeholder:text-muted focus:border-brand focus:ring-2 focus:ring-brand/20"
               />
               <button
                 type="submit"
-                className="absolute end-1.5 top-1/2 -translate-y-1/2 px-4 py-1.5 text-sm font-medium rounded-full transition-colors"
-                style={{ background: 'var(--ink-900)', color: 'var(--fg-inverse)' }}
+                className="absolute end-1.5 top-1/2 -translate-y-1/2 h-8 px-3.5 text-sm font-semibold rounded-lg transition-colors bg-brand text-on-brand hover:bg-brand-500"
               >
                 {t('search')}
               </button>
@@ -378,7 +356,7 @@ export function DashboardNavbar({ userType = 'customer', onMenuToggle, drawerOpe
         )}
 
         {/* Right Side - Actions */}
-        <div className="flex items-center gap-1 sm:gap-2 min-w-0">
+        <div className="flex items-center justify-end gap-1 sm:gap-2 min-w-0 max-sm:flex-1">
 
           {/* Below lg the inline search does not fit: a button opens the dish search instead */}
           {isCustomer && (
@@ -387,9 +365,9 @@ export function DashboardNavbar({ userType = 'customer', onMenuToggle, drawerOpe
             </Link>
           )}
 
-          {/* Community Selector - Only for customers; it keeps its size on a tablet and gives way on a phone */}
+          {/* Community Selector - Only for customers; on a phone it takes the room the bar has left, so the area's name fits */}
           {isCustomer && (
-            <div className="flex items-center min-w-0 max-w-[200px] md:shrink-0">
+            <div className="flex items-center justify-end min-w-0 max-sm:flex-1 sm:max-w-[200px] md:shrink-0">
               <CommunitySelector variant="navbar" />
             </div>
           )}
@@ -429,24 +407,25 @@ export function DashboardNavbar({ userType = 'customer', onMenuToggle, drawerOpe
 
             {/* Notification Dropdown Panel */}
             {showNotificationsPanel && (
-              <div className={`${panel} sm:w-96`}>
+              <div data-top-panel className={`${panel} sm:w-96`}>
                 {/* Panel Header */}
-                <div className="flex items-center justify-between px-4 py-3 border-b border-line bg-raised">
+                <div className="flex min-h-12 items-center justify-between ps-4 pe-2 border-b border-line">
                   <div className="flex items-center gap-2">
                     <span className="font-semibold text-sm text-ink">{t('notifications')}</span>
-                    {notificationUnreadCount > 0 && (
+                    {notificationUnreadCount > 0 && !notificationsError && (
                       <span className="px-2 py-0.5 text-[11px] font-bold rounded-full bg-accent-soft text-accent-soft-ink">
                         {t('newCount', { count: notificationUnreadCount })}
                       </span>
                     )}
                   </div>
-                  {notificationUnreadCount > 0 && (
+                  {/* Offline the count is stale and marking would fail: neither is offered until the list loads. */}
+                  {notificationUnreadCount > 0 && !notificationsError && (
                     <button
                       type="button"
                       onClick={handleMarkAllNotificationsRead}
-                      className="min-h-11 text-xs font-medium text-brand-ink hover:underline flex items-center gap-1 transition-colors"
+                      className="min-h-11 px-2 rounded-lg text-sm font-medium text-brand-ink hover:bg-raised flex items-center gap-1.5 transition-colors"
                     >
-                      <CheckCheck className="w-3.5 h-3.5" />
+                      <CheckCheck className="w-4 h-4" aria-hidden="true" />
                       <span>{t('markAllRead')}</span>
                     </button>
                   )}
@@ -460,57 +439,53 @@ export function DashboardNavbar({ userType = 'customer', onMenuToggle, drawerOpe
                       <span className="text-xs">{t('loadingUpdates')}</span>
                     </div>
                   ) : notificationsError && recentNotifications.length === 0 ? (
-                    <div className="p-3">
-                      <LoadError compact error={notificationsError} onRetry={fetchRecentNotifications} />
-                    </div>
+                    <LoadError compact plain error={notificationsError} onRetry={fetchRecentNotifications} />
                   ) : recentNotifications.length === 0 ? (
-                    <div className="py-10 px-4 text-center">
-                      <div className="w-10 h-10 rounded-full bg-raised flex items-center justify-center mx-auto mb-2 text-muted">
-                        <Bell className="w-5 h-5" />
-                      </div>
-                      <p className="text-sm font-semibold text-ink">{t('allCaughtUp')}</p>
-                      <p className="text-xs text-muted mt-0.5">{t('noNotifications')}</p>
-                    </div>
+                    <p className="py-10 px-4 text-center text-sm text-muted">{t('noNotifications')}</p>
                   ) : (
                     recentNotifications.map((notif) => (
-                      <div
+                      <button
+                        type="button"
                         key={notif.id}
                         onClick={() => handleMarkNotificationRead(notif.id, notif.actionUrl)}
-                        className={`p-3.5 flex items-start gap-3 hover:bg-raised cursor-pointer transition-colors ${
-                          !notif.isRead ? 'bg-brand-soft/40' : ''
-                        }`}
+                        className="w-full p-3.5 flex items-start gap-3 text-start hover:bg-raised transition-colors"
                       >
-                        <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 border ${getNotificationIconBg(notif.type)}`}>
+                        <span
+                          aria-hidden="true"
+                          className={`w-8 h-8 rounded-full grid place-items-center shrink-0 ${notif.type === 'warning' ? 'bg-red-50 text-red-700' : 'bg-raised text-muted'}`}
+                        >
                           {getNotificationIcon(notif.type)}
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center justify-between gap-1 mb-0.5">
-                            <p className={`text-xs truncate ${!notif.isRead ? 'font-semibold text-ink' : 'font-medium text-muted'}`}>
+                        </span>
+                        <span className="flex-1 min-w-0">
+                          <span className="flex items-center justify-between gap-2 mb-0.5">
+                            <span className={`text-sm truncate ${!notif.isRead ? 'font-semibold text-ink' : 'text-muted'}`}>
                               {notif.title}
-                            </p>
-                            <span className="text-[11px] text-muted shrink-0">
+                            </span>
+                            <span className="text-xs text-muted shrink-0">
                               {formatRelativeTime(notif.createdAt, t)}
                             </span>
-                          </div>
-                          <p className="text-xs text-muted line-clamp-2 leading-relaxed">
+                          </span>
+                          <span className="block text-xs text-muted line-clamp-2 leading-relaxed">
                             {notif.message}
-                          </p>
-                        </div>
+                          </span>
+                        </span>
                         {!notif.isRead && (
-                          <span className="w-1.5 h-1.5 rounded-full bg-accent-500 shrink-0 mt-1.5" />
+                          <span className="w-2 h-2 rounded-full bg-brand-600 shrink-0 mt-1.5">
+                            <span className="sr-only">{t('unread')}</span>
+                          </span>
                         )}
-                      </div>
+                      </button>
                     ))
                   )}
                 </div>
 
                 {/* Panel Footer: a rider has no full list (the customer page would open the customer menu), so none */}
                 {!isRider && (
-                  <div className="p-2 border-t border-line bg-raised">
+                  <div className="border-t border-line">
                     <Link
                       href={isSeller ? "/sellers/notifications" : isAdmin ? "/admin/notifications" : "/notifications"}
                       onClick={() => setShowNotificationsPanel(false)}
-                      className="w-full min-h-11 px-3 text-center text-xs font-medium text-ink hover:bg-surface rounded-lg transition-colors flex items-center justify-center gap-1 border border-transparent hover:border-line"
+                      className="w-full min-h-12 px-3 text-sm font-medium text-brand-ink hover:bg-raised transition-colors flex items-center justify-center gap-1"
                     >
                       <span>{t('viewAllNotifications')}</span>
                       <ChevronRight className="rtl:-scale-x-100 w-3.5 h-3.5" />
@@ -526,7 +501,7 @@ export function DashboardNavbar({ userType = 'customer', onMenuToggle, drawerOpe
             <div className="flex items-center gap-2 ms-2">
               <Link
                 href="/login"
-                className="px-4 py-2 rounded-xl text-xs font-bold text-on-brand shadow-xs transition-transform active:scale-95 bg-brand hover:bg-brand-500"
+                className="inline-flex h-11 items-center px-4 rounded-xl text-sm font-semibold text-on-brand transition-colors bg-brand hover:bg-brand-500"
               >
                 {t('signIn')}
               </Link>
@@ -539,12 +514,9 @@ export function DashboardNavbar({ userType = 'customer', onMenuToggle, drawerOpe
                 aria-label={tSite('account')}
                 aria-haspopup="menu"
                 aria-expanded={showDropdown}
-                className="flex min-h-11 items-center gap-2 px-2 py-1 rounded-lg hover:bg-raised transition-colors cursor-pointer"
+                className="flex min-h-11 min-w-11 items-center justify-center gap-2 sm:px-2 rounded-lg hover:bg-raised transition-colors cursor-pointer"
               >
-                <div
-                  className="w-9 h-9 rounded-full flex items-center justify-center shadow-2xs"
-                  style={{ background: accentBg, color: accentFg }}
-                >
+                <div className="w-9 h-9 rounded-full flex items-center justify-center bg-brand-soft text-brand-soft-ink">
                   <span className="font-semibold text-sm">
                     {user?.profile?.fullName?.charAt(0).toUpperCase() || user?.email?.charAt(0).toUpperCase() || 'U'}
                   </span>
@@ -552,24 +524,18 @@ export function DashboardNavbar({ userType = 'customer', onMenuToggle, drawerOpe
                 <span className="hidden sm:block text-ink text-sm font-medium">
                   {user?.profile?.fullName?.split(' ')[0] || user?.email?.split('@')[0] || t('user')}
                 </span>
-                <svg className="w-4 h-4 text-muted max-[380px]:hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg className="hidden sm:block w-4 h-4 text-muted" aria-hidden="true" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                 </svg>
               </button>
             
             {/* Dropdown Menu */}
             {showDropdown && (
-              <div className={`${panel} sm:w-72 py-1`}>
-                <div className="px-4 py-3 border-b border-line bg-raised">
+              <div data-top-panel className={`${panel} sm:w-72 py-1`}>
+                <div className="px-4 py-3 border-b border-line">
                   <div className="flex items-center justify-between gap-2">
                     <p className="text-ink font-semibold truncate text-sm">{user?.profile?.fullName || user?.email || t('user')}</p>
-                    <span
-                      className="px-2 py-0.5 text-xs font-medium rounded-full shrink-0"
-                      style={{
-                        background: isSeller ? 'var(--ink-100)' : isAdmin ? 'var(--gold-50)' : isRider ? 'var(--brand-soft)' : 'var(--forest-50)',
-                        color: isSeller ? 'var(--ink-700)' : isAdmin ? 'var(--gold-700)' : isRider ? 'var(--brand-soft-ink)' : 'var(--forest-700)',
-                      }}
-                    >
+                    <span className="px-2 py-0.5 text-xs font-medium rounded-full shrink-0 bg-raised text-muted">
                       {isSeller ? t('roleSeller') : isAdmin ? t('roleAdmin') : isRider ? t('roleRider') : isHubManager ? t('roleHub') : t('roleCustomer')}
                     </span>
                   </div>

@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { Fragment, useCallback, useEffect, useState } from 'react';
 import { loginUrlHere } from '@/lib/auth-redirect';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
@@ -11,15 +11,17 @@ import { useToast } from '@/components/ui/toast';
 import { LoadError } from '@/components/ui/LoadError';
 import { useAuthStore } from '@/lib/store/auth-store';
 import { apiClient, apiErrorMessage, apiErrorStatus } from '@/lib/api-client';
-import { formatPrice, formatDateTime } from '@/lib/utils';
+import { formatPrice, formatTime } from '@/lib/utils';
 import SelfHandoverActions from '@/components/orders/SelfHandoverActions';
 import OrderChatModal from '@/components/orders/OrderChatModal';
 import { useLiveRefresh } from '@/lib/hooks/use-live-refresh';
-import { useT } from '@/lib/i18n';
+import { useLocale, useT } from '@/lib/i18n';
 import { commonMessages } from '@/lib/i18n/messages/common';
-import { kitchenOrderMessages, kitchenStatusLabel, paymentMethodLabel, paymentStatusLabel } from '@/lib/i18n/messages/kitchen-orders';
+import { historyNote, kitchenOrderMessages, kitchenStatusLabel, paymentMethodLabel, paymentStatusLabel, type NotePart } from '@/lib/i18n/messages/kitchen-orders';
 import { ExternalLink } from '@/components/ExternalLink';
 import { RejectOrderDialog } from '@/components/sellers/RejectOrderDialog';
+import { NewOrderAlertSlot } from '@/components/sellers/new-order-alert';
+import { KitchenOrderRider, PrepTimePicker, ReadyBy, RiderStatus, dateClock, useNow } from '@/components/sellers/order-timing';
 import { useShallow } from 'zustand/react/shallow';
 
 interface SellerOrderDetail {
@@ -36,6 +38,11 @@ interface SellerOrderDetail {
   discountAmount: number;
   taxAmount: number;
   createdAt: string;
+  /** Once accepted: when the kitchen said the food would be ready. */
+  estimatedDeliveryAt?: string | null;
+  rider?: KitchenOrderRider | null;
+  /** The minutes accepting without a choice would give (the slowest dish). */
+  suggestedPrepMinutes?: number;
   deliveryInstructions?: string | null;
   notes?: string | null;
   cancellationReason?: string | null;
@@ -59,6 +66,11 @@ interface SellerOrderDetail {
   sellerTotals?: { subtotal: number; commission: number; payout: number; deliveryFeeKept: number; deliveryFeePaid?: number };
 }
 
+/** A history note, with what the server filled in (a reason, a reference, a name) kept in its own direction. */
+function NoteText({ parts }: { parts: NotePart[] }) {
+  return parts.map((part, i) => (typeof part === 'string' ? <Fragment key={i}>{part}</Fragment> : <bdi key={i}>{part.value}</bdi>));
+}
+
 export default function SellerOrderDetailPage() {
   const params = useParams();
   const router = useRouter();
@@ -76,6 +88,9 @@ export default function SellerOrderDetailPage() {
   const [busy, setBusy] = useState<string | null>(null);
   const [chatOpen, setChatOpen] = useState(false);
   const [rejecting, setRejecting] = useState(false);
+  const { locale } = useLocale();
+  const now = useNow();
+  const [prep, setPrep] = useState<number | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -114,11 +129,11 @@ export default function SellerOrderDetailPage() {
     enabled: isAuthenticated && !!order && !finished,
   });
 
-  const act = async (key: string, path: string, body: object, ok: string) => {
+  const act = async (key: string, path: string, body: object, ok: string | ((data: { estimatedReadyAt?: string }) => string)) => {
     try {
       setBusy(key);
-      await apiClient.post(path, body);
-      showToast(ok, 'success');
+      const res = await apiClient.post(path, body);
+      showToast(typeof ok === 'string' ? ok : ok(res.data?.data ?? {}), 'success');
       await load();
     } catch (err) {
       showToast(apiErrorMessage(err, t('couldNotUpdate')), 'error');
@@ -129,8 +144,16 @@ export default function SellerOrderDetailPage() {
 
   if (!isAuthenticated) return null;
 
+  const suggested = order?.suggestedPrepMinutes ?? 20;
   const total = (order?.sellerTotals?.payout ?? 0) + (order?.sellerTotals?.deliveryFeeKept || 0) - (order?.sellerTotals?.deliveryFeePaid || 0);
-  const handoverLabel = order?.deliveryType === 'self_pickup'
+  const isPickup = order?.deliveryType === 'self_pickup';
+  const closed = ['cancelled', 'refunded'].includes(order?.orderStatus ?? '');
+  const orderStatusLabel = (s: string) => {
+    if (isPickup && ['dispatched', 'in_transit'].includes(s)) return t('history.pickupWaiting');
+    if (isPickup && s === 'delivered') return t('history.pickupCollected');
+    return statusLabel(s);
+  };
+  const handoverLabel = isPickup
     ? t('detail.customerPickup')
     : order?.sellerHandsOver
       ? t('detail.youDeliver')
@@ -148,11 +171,13 @@ export default function SellerOrderDetailPage() {
             <ArrowLeft className="w-4 h-4 rtl:-scale-x-100" aria-hidden="true" />
             {t('detail.allOrders')}
           </Link>
-          <h1 className="text-[28px] sm:text-[32px] lg:text-[36px] leading-tight font-extrabold text-ink tracking-tight">
+          <h1 className="text-2xl sm:text-[28px] lg:text-[32px] leading-tight font-extrabold text-ink tracking-tight break-words">
             {order ? <>{t('orderLabel')} <span data-ltr>#{order.orderNumber}</span></> : t('detail.title')}
           </h1>
-          {order && <p className="mt-1.5 text-sm sm:text-[15px] text-muted">{formatDateTime(order.createdAt)}</p>}
+          {order && <p className="mt-1.5 text-sm sm:text-[15px] text-muted">{dateClock(order.createdAt, locale)}</p>}
         </div>
+
+        <NewOrderAlertSlot />
 
         {loading && (
           <div className="py-24 text-center" role="status">
@@ -177,10 +202,10 @@ export default function SellerOrderDetailPage() {
             <article className="min-w-0 self-start rounded-[20px] bg-surface border border-line shadow-[var(--shadow-card)] overflow-hidden">
               <header className="px-5 pt-5 flex items-start justify-between gap-4">
                 <div className="min-w-0">
-                  <p className="text-lg font-semibold text-ink first-letter:uppercase">{statusLabel(order.orderStatus)}</p>
+                  <p className="text-lg font-semibold text-ink first-letter:uppercase">{orderStatusLabel(order.orderStatus)}</p>
                   <p className="text-sm text-muted mt-0.5">{handoverLabel}</p>
                 </div>
-                <p className="shrink-0 text-lg font-semibold text-ink tabular-nums">{formatPrice(order.totalAmount)}</p>
+                <p className="shrink-0 text-lg font-semibold text-ink tabular-nums">{formatPrice(order.sellerTotals?.subtotal ?? order.totalAmount)}</p>
               </header>
 
               <section className="px-5 mt-5">
@@ -190,7 +215,7 @@ export default function SellerOrderDetailPage() {
                     <li key={item.id} className="py-3 flex items-baseline justify-between gap-4">
                       <div className="min-w-0">
                         <p className="text-[15px] text-ink">
-                          <span className="font-semibold tabular-nums">{item.quantity} ×</span> {item.productName}
+                          <span className="font-semibold tabular-nums">{item.quantity} ×</span> <bdi>{item.productName}</bdi>
                           {item.variantName ? ` (${item.variantName})` : ''}
                         </p>
                         {item.status !== order.orderStatus && <p className="text-xs text-muted">{statusLabel(item.status)}</p>}
@@ -236,14 +261,19 @@ export default function SellerOrderDetailPage() {
               )}
 
               <div className="px-5 pt-5 pb-5 space-y-3">
-                {order.orderStatus === 'pending' && (
+                {['pending', 'confirmed'].includes(order.orderStatus) && (
                   <>
+                    <PrepTimePicker idPrefix={order.id} suggested={suggested} value={prep ?? suggested} onChange={setPrep} disabled={!!busy} />
                     <Button
                       className="w-full"
                       disabled={!!busy}
-                      onClick={() => act('accept', `/seller/orders/${order.id}/accept`, {}, t('detail.accepted'))}
+                      onClick={() =>
+                        act('accept', `/seller/orders/${order.id}/accept`, { preparationTime: prep ?? suggested }, (data) =>
+                          data.estimatedReadyAt ? t('list.acceptedReadyBy', { time: formatTime(data.estimatedReadyAt) }) : t('detail.accepted')
+                        )
+                      }
                     >
-                      {t('detail.acceptOrder')}
+                      {t('list.acceptStart')}
                     </Button>
                     <Button
                       id={`reject-order-btn-${order.id}`}
@@ -256,7 +286,12 @@ export default function SellerOrderDetailPage() {
                     </Button>
                   </>
                 )}
-                {['confirmed', 'preparing'].includes(order.orderStatus) && (
+                {order.orderStatus === 'preparing' && order.estimatedDeliveryAt && (
+                  <p className="text-sm">
+                    <ReadyBy at={order.estimatedDeliveryAt} now={now} />
+                  </p>
+                )}
+                {order.orderStatus === 'preparing' && (
                   <Button
                     className="w-full"
                     disabled={!!busy}
@@ -265,6 +300,7 @@ export default function SellerOrderDetailPage() {
                     {t('detail.markReady')}
                   </Button>
                 )}
+                {!order.sellerHandsOver && ['ready', 'dispatched', 'in_transit'].includes(order.orderStatus) && <RiderStatus rider={order.rider} />}
                 {order.sellerHandsOver && (
                   <SelfHandoverActions orderId={order.id} orderStatus={order.orderStatus} deliveryType={order.deliveryType} onChanged={load} />
                 )}
@@ -298,7 +334,8 @@ export default function SellerOrderDetailPage() {
               <section className="pt-6 border-t border-line">
                 <h2 className="text-sm font-semibold text-ink">{t('detail.payment')}</h2>
                 <p className="mt-2 text-ink">
-                  {paymentMethodLabel(order.paymentMethod, tc)}, {paymentStatusLabel(order.paymentStatus, t)}
+                  {paymentMethodLabel(order.paymentMethod, tc, isPickup ? t : undefined)}
+                  {!(closed && order.paymentStatus === 'pending') && <>, {paymentStatusLabel(order.paymentStatus, t)}</>}
                 </p>
                 {(order.paymentReferenceNumber || order.paymentSenderName || order.paymentProofUrl) && (
                   <dl className="mt-2 grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-1">
@@ -321,7 +358,11 @@ export default function SellerOrderDetailPage() {
                     {t('detail.viewReceipt')}
                   </ExternalLink>
                 )}
-                {order.sellerTotals && (
+                {closed ? (
+                  <p className="mt-3 pt-2 border-t border-line font-semibold text-ink">
+                    {t(order.orderStatus === 'refunded' ? 'detail.notEarnedRefunded' : 'detail.notEarnedCancelled')}
+                  </p>
+                ) : order.sellerTotals && (
                   <dl className="mt-3 space-y-1.5">
                     <div className="flex justify-between gap-3">
                       <dt className="text-muted">{t('detail.yourItems')}</dt>
@@ -357,15 +398,29 @@ export default function SellerOrderDetailPage() {
                   <p className="mt-2 text-muted">{t('detail.noHistory')}</p>
                 ) : (
                   <ol className="mt-2 space-y-2.5">
-                    {order.statusHistory.map((h, i) => (
-                      <li key={i}>
-                        <p className="text-ink first-letter:uppercase">
-                          {statusLabel(h.status)}
-                          {h.notes ? <span className="text-muted">, {h.notes}</span> : null}
-                        </p>
-                        <p className="text-xs text-muted">{formatDateTime(h.createdAt)}</p>
-                      </li>
-                    ))}
+                    {order.statusHistory.map((h, i) => {
+                      const note = h.notes ? historyNote(h.status, h.notes, t, tc, isPickup) : null;
+                      return (
+                        <li key={i}>
+                          <p className="text-ink first-letter:uppercase">
+                            {note?.standalone ? (
+                              <NoteText parts={note.parts} />
+                            ) : (
+                              <>
+                                {orderStatusLabel(h.status)}
+                                {note && (
+                                  <span className="text-muted">
+                                    {locale === 'ur' ? '، ' : ', '}
+                                    <NoteText parts={note.parts} />
+                                  </span>
+                                )}
+                              </>
+                            )}
+                          </p>
+                          <p className="text-xs text-muted">{dateClock(h.createdAt, locale)}</p>
+                        </li>
+                      );
+                    })}
                   </ol>
                 )}
               </section>

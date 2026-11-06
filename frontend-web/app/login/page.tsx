@@ -13,7 +13,7 @@ import { useToast } from '@/components/ui/toast';
 import { authService } from '@/lib/services/auth.service';
 import { useAuthStore } from '@/lib/store/auth-store';
 import { apiClient, apiErrorCode } from '@/lib/api-client';
-import { AuthLogo, AuthSocial, PasswordInput, authColumn, authHeading, authHelper, authInput, authLabel, authLede, authLink, authSegment, authShell, authSubmit, focusNextOnEnter } from '@/components/auth/AuthLayout';
+import { AuthLogo, AuthSocial, PasswordInput, authColumn, authFieldError, authHeading, authHelper, authInput, authLabel, authLede, authLink, authSegment, authShell, authSubmit, focusNextOnEnter } from '@/components/auth/AuthLayout';
 import { useT } from '@/lib/i18n';
 import { useRequestErrorMessage } from '@/components/ui/LoadError';
 import { authMessages } from '@/lib/i18n/messages/auth';
@@ -228,6 +228,13 @@ export default function LoginPage() {
       {error}
     </p>
   ) : null;
+  // An empty or malformed email or password is said under that field; a refused sign-in stays above the button.
+  const fieldError = (field: 'email' | 'password') =>
+    error && errorField === field ? (
+      <p id="login-error" role="alert" className={authFieldError}>
+        {error}
+      </p>
+    ) : null;
   const invalid = (field: LoginField) =>
     error && (errorField === null || errorField === field) ? { 'aria-invalid': true, 'aria-describedby': 'login-error' } : {};
 
@@ -394,6 +401,7 @@ export default function LoginPage() {
                     {...invalid('email')}
                     {...focusNextOnEnter('password')}
                   />
+                  {fieldError('email')}
                 </div>
                 <div>
                   <div className="mb-1.5 flex items-center justify-between gap-3">
@@ -416,13 +424,14 @@ export default function LoginPage() {
                     hideLabel={t('hidePassword')}
                     {...invalid('password')}
                   />
+                  {fieldError('password')}
                   {demo && (
                     <div className="mt-1.5">
                       <demo.DemoPasswordHint />
                     </div>
                   )}
                 </div>
-                {errorLine}
+                {errorField !== 'email' && errorField !== 'password' && errorLine}
                 <Button type="submit" className={authSubmit} disabled={loading}>
                   {loading ? t('loggingIn') : t('login')}
                 </Button>

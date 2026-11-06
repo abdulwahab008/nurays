@@ -36,9 +36,22 @@ All of it is in `frontend-web/app/globals.css`: the values once for light (`:roo
 
 - Plus Jakarta Sans; Noto Nastaliq Urdu for Urdu, with more line height.
 - Sizes: 36 display, 24 title, 18 heading, 16 body, 14 small, 12 label. Weight carries the hierarchy.
+- A page title (from `DashboardShell`) is 24 on a phone and 28 from `lg`; nothing on a working screen is bigger.
 - A 4-point spacing scale; the screen edge is 16 px on a phone, 32 px on a desktop.
-- Corners: 12 for buttons and fields, 16–20 for cards, fully round for chips.
-- Touch targets at least 44 px.
+- Corners: 12 (`rounded-xl`) for buttons, fields and menu rows, 16 (`rounded-2xl`) for cards, sheets and dialogs, fully
+  round for chips, pills and avatars.
+- Elevation has two steps. `shadow-[var(--shadow-card)]` for the one raised card on a screen; `shadow-[var(--shadow-hover)]`
+  for things that float above the page (menus, dialogs, toasts). Lists, rows and table cards have a border or a divider,
+  never a shadow.
+- Icons are 20 px (`h-5 w-5`) in bars and menus, 16 px beside words in a button or row.
+- Touch targets at least 44 px. On a touch screen every button, field and select is at least 44 px tall
+  (`globals.css`, `pointer: coarse`), and `Button size="sm"` grows from 36 to 44.
+- Fields are 16 px text on a phone (`text-base`): anything smaller makes iOS zoom the page when the field is focused.
+- Dates and times come from `lib/utils.ts`: `formatTime` ("9:35 pm") for a time of day, `formatDate` and `formatDateTime`
+  for the rest; never `toLocaleTimeString` or a hand-made `Intl.DateTimeFormat` in a page. They follow the page's
+  language. In Urdu a time keeps Western digits and the Latin "PM" (Intl has no Urdu word for it), and is wrapped in a
+  left-to-right isolate (U+2066 ... U+2069) so the right-to-left line around it cannot move "PM" ahead of the digits.
+  Text built around a time (`t('readyBy', { time: formatTime(at) })`) passes the formatted string, never its own clock.
 
 ## Dark theme
 
@@ -53,14 +66,83 @@ All of it is in `frontend-web/app/globals.css`: the values once for light (`:roo
 
 ## Shared pieces
 
-- `components/ui/button.tsx`: the button (`default`/`primary` turquoise, `dark`, `outline`, `ghost`, `destructive`).
-  Classes only, so a colour passed in `className` replaces the variant's.
+- `components/ui/button.tsx`: the button. Variants: `default` turquoise, for the one main action of a screen (`primary` is
+  the same button under its old name, do not use it in new code); `outline` for every other action; `ghost` for a
+  turquoise word that acts; `destructive` red, for delete, cancel or sign out everywhere; `dark` ink, only on a photo or a
+  coloured panel. Sizes: `default` 44, `sm` 36 with a mouse and 44 on touch, `lg` 48 for a sheet's full-width action.
+  Classes only, so a colour passed in `className` replaces the variant's; do not pass heights or font weights to
+  re-size a button, pick the size.
+- `components/ui/StatusPill.tsx`: every status, on every role's screens (see "Status" below).
+- `components/ui/ConfirmModal.tsx` and `useDialogs()` from `components/ui/Dialogs.tsx`: questions. A bottom sheet on a
+  phone, a centred dialog from `sm`. The safe answer (Cancel) has the focus when it opens; the risky one is `destructive`.
+  `ask()` takes `destructive: true` when the typed answer deletes or ends something (a password to delete an account):
+  its confirm button is then the red `destructive` one. Never the browser's `confirm()` or `prompt()`.
+  The icon beside the title follows `icon`: `delete` (a bin, the default for `danger`) or `warning` (a warning sign, the
+  default otherwise). A danger that deletes nothing, such as a rider handing a job back, passes `icon: 'warning'`.
+- `components/ui/toast.tsx` (`useToast().showToast(text, type)`): a short message about something that just happened.
+  One white surface; only the icon carries the colour (turquoise done, red failed, yellow warning). It sits at the top
+  end, just under the top bar (`.nuray-toaster` in `globals.css`), so it never covers a page's fixed or sticky bottom
+  action bar (Place order, Save, the rider's job buttons). While a panel hangs from the top bar it moves to the bottom,
+  above the phone tab bar, so the panel's header and buttons stay in reach: a new top-bar panel marks itself
+  `data-top-panel` to get this. A message the person must act on is not a toast: say it on the page, next to the thing.
+- `components/ui/LoadError.tsx`: a list or page that could not be read. Says why and offers Try again; never an empty
+  list in its place. `compact` for one section of a page, `plain` (no frame of its own) inside a panel that has one.
+  While a list is failing, its panel offers nothing that depends on it (no "3 new", no "Mark all read").
+- Sign in is one button everywhere (`SiteHeader`, `DashboardNavbar`, the home hero): turquoise, `bg-brand
+  text-on-brand`, 44 px tall. Signed out it is the only solid button in the header; the tray beside it takes the
+  outline style until the person signs in. In the phone header it is a 44 px person icon (named "Sign in" for screen readers) in the
+  place the account button takes once signed in, so the area chip beside it stays readable; Join, shown from `sm`, is
+  the `outline` style next to it.
 - `components/ui/Mark.tsx`: the logo (a turquoise tile, a dark "n", a yellow dot); `public/brand/` has the same drawing
   as SVG and the web app icons as PNG. The store apps' icons and splash screens come from `mobile/assets/`
   (`mobile/scripts/make-icons.mjs`).
 - `components/layout/SiteHeader.tsx`: the header of the customer pages (home, kitchens, dishes, a kitchen's menu).
+  Every icon button in it is 44 by 44 and `shrink-0`, so a long area name never squeezes them.
 - `components/layout/CustomerTabBar.tsx`: the phone tab bar (Home, Orders, Tray, Profile); `lib/tab-bar.ts` decides where it shows.
-  A bar floating at the bottom of a page sits `var(--tabbar-offset)` higher so the two do not overlap.
+  The current tab's icon sits on a `bg-brand-soft` pill and its label is bold. A bar floating at the bottom of a page sits
+  `var(--tabbar-offset)` higher so the two do not overlap.
+  Its labels carry a `leading-` class so in Urdu the Nastaliq line gets its taller height and no descender is cut off.
+- `components/layout/DashboardNavbar.tsx`: the top bar of every signed-in screen. The same for all roles: borderless 44 px
+  icon buttons, a round `bg-brand-soft` initial for the account (no colour per role), the role named in a quiet
+  `bg-raised` pill inside the account menu. The phone drawer (`DashboardSidebar`) marks the current page with
+  `bg-brand-soft text-brand-soft-ink` for every role.
+- `components/layout/DashboardShell.tsx` and `AdminShell.tsx`: the frame of every signed-in screen, with the same page
+  padding (`px-4 sm:px-6 lg:px-10 py-5 lg:py-8`) and a side menu whose background runs the page's full length. Menu
+  names are sentence case and match the page they open ("Saved kitchens", "Nuray wallet"). A destination is offered once
+  per screen size: the tray is in the top bar (from `md`) and the phone tab bar, never in the side menu; on a phone the
+  menu leaves out what the tab bar has (`phoneTab`).
+  The admin pages are written in English only: their content area is `dir="ltr" lang="en"` in either language, while the
+  top bar and the side menu (translated in `lib/i18n/messages/nav.ts`) follow the language chosen.
+  The questions from `useDialogs()` and the words of a toast follow the admin pages: on an `/admin` route they are
+  left to right with English buttons (`PageLocale` in `lib/i18n`), while the toast keeps the corner of the top bar.
+  `rtl:` classes (`rtl:-scale-x-100` on an arrow) do not apply inside a `dir="ltr"` area (`app/globals.css` redefines
+  the variant), so the admin pages' arrows point the English way in the Urdu app.
+- `components/layout/StackedTables.tsx`: below 768 px a table with three or more columns becomes one card per row. What
+  the table displays as is in the components layer, so `hidden` / `sm:table` on it still win; a table with its own
+  phone layout opts out with `data-no-stack`.
+
+## Status
+
+One colour language for an order, everywhere (kitchen, rider, customer, admin). The colour says what kind of moment it
+is; the words say which one, and a role may use its own words (`label`).
+
+| Tone | Looks | Order statuses | Means |
+|---|---|---|---|
+| `waiting` | `bg-accent-soft text-accent-soft-ink` | pending, pending_payment | Someone has to act: accept it, pay for it. |
+| `good` | `bg-brand-soft text-brand-soft-ink` | confirmed, preparing, ready, dispatched, in_transit | It is moving. |
+| `neutral` | `bg-raised text-muted` | delivered, completed | It is over. History recedes so live orders stand out. |
+| `ended` | outlined, `text-muted` | cancelled, refunded | It stopped without happening. Not a problem, so not red. |
+| `problem` | `bg-red-50 text-red-700` | delivery_failed | A person has to sort it out. |
+
+```tsx
+<OrderStatusPill status={order.orderStatus} />               // shared words from common.ts
+orderStatusTone(order.orderStatus)                            // the tone alone, for a dot or a border in the same colour
+<OrderStatusPill status={order.orderStatus} label={kitchenStatusLabel(order.orderStatus, t, tc)} />
+<StatusPill tone="waiting">Receipt to check</StatusPill>      // any other status: pick the tone by what it means
+```
+
+Other statuses (an application, a payout, a ticket) use `StatusPill` with the tone that matches its meaning. Do not write
+a new status-to-colour map in a page.
 
 ## Staff screens (kitchen, rider, hub)
 
@@ -81,11 +163,20 @@ now?" first and keeps everything else quiet. `app/riders/dashboard/page.tsx` is 
 - **Words.** Sentence case everywhere. No ALL-CAPS labels, no letter-spaced eyebrows, no emojis, no `→` on links. Plain
   names a cook or rider would use ("New jobs", "Waiting for you"), never system names ("Pool", "Mission control").
 - **Pieces.** `components/ui/button.tsx` for every button (default for the one main action, `outline` or `ghost` for
-  the rest); underlined tabs as on the rider screen; status as one small pill (`rounded-full px-2 py-0.5 text-xs
-  font-medium`, `bg-raised text-muted` by default, brand-soft for done or ready, accent-soft for waiting, red-50 for a
-  problem). Touch targets at least 44 px (`min-h-11`).
+  the rest); underlined tabs as on the rider screen; status as `StatusPill` / `OrderStatusPill` (see "Status"). Touch
+  targets at least 44 px (`min-h-11`).
 - **Empty and loading.** An empty list is one line saying what will appear there and, when there is one, the action
-  that fills it. Loading is a small spinner with one line of text.
+  that fills it. Loading is a small spinner with one line of text. A failed load is `LoadError`.
+- **Lists on a dashboard.** A home screen shows the few rows that need the person now (two or three) and a "See all"
+  link to the full page; the full list, with its filters, lives on that page.
+
+## Forms
+
+- A label above every field (`text-sm font-medium text-ink`), the hint under it in `text-muted`.
+- A problem with one field is said under that field (`text-[13px] text-red-700`, `role="alert"`) and the field gets
+  `aria-invalid` (a red border). A problem with the whole form (a refused sign-in) sits just above its button.
+- Messages are full sentences with a full stop, saying what to do: "Use at least 8 characters.", not "Invalid password".
+- The sign-in and sign-up screens (`components/auth/AuthLayout.tsx`) are the reference.
 
 ## Guards
 

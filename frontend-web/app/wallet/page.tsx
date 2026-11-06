@@ -155,7 +155,7 @@ function WalletContent() {
                   <p className="mt-1 text-xs text-muted">
                     {t('topUpHint', { min: formatPrice(min), max: formatPrice(max) })}
                   </p>
-                  <div className="mt-4 flex flex-wrap gap-2">
+                  <div className="mt-4 grid grid-cols-2 sm:flex sm:flex-wrap gap-2">
                     {PRESETS.filter((p) => p >= min && p <= max).map((p) => (
                       <button
                         key={p}
@@ -165,7 +165,7 @@ function WalletContent() {
                           setCustom('');
                         }}
                         className={`min-h-11 px-4 rounded-xl border text-sm font-semibold ${
-                          !custom && amount === p ? 'border-brand bg-brand-50 text-brand-ink' : 'border-line text-ink hover:border-line-strong'
+                          !custom && amount === p ? 'border-brand bg-brand-soft text-brand-soft-ink' : 'border-line text-ink hover:border-line-strong'
                         }`}
                       >
                         {formatPrice(p)}
@@ -180,7 +180,7 @@ function WalletContent() {
                       dir="ltr"
                       value={custom}
                       onChange={(e) => setCustom(e.target.value)}
-                      className={`w-36 min-h-11 px-3 rounded-xl border bg-surface text-ink text-sm ${customOutOfRange ? 'border-red-700' : 'border-line'}`}
+                      className={`col-span-2 sm:w-36 min-h-11 px-3 rounded-xl border bg-surface text-ink text-sm ${customOutOfRange ? 'border-red-700' : 'border-line'}`}
                       aria-label={t('otherAmountAria')}
                       aria-invalid={customOutOfRange}
                       aria-describedby={customOutOfRange ? 'topup-range-error' : undefined}
@@ -195,7 +195,7 @@ function WalletContent() {
                     type="button"
                     disabled={!validAmount || starting}
                     onClick={startTopUp}
-                    className="mt-4 inline-flex items-center gap-2 min-h-11 px-5 rounded-xl bg-brand text-on-brand text-sm font-bold hover:bg-brand-500 disabled:opacity-50"
+                    className="mt-4 w-full sm:w-auto inline-flex items-center justify-center gap-2 min-h-11 px-5 rounded-xl bg-brand text-on-brand text-sm font-bold hover:bg-brand-500 disabled:opacity-50"
                   >
                     <Plus className="w-4 h-4" />
                     {starting ? t('openingPayPage') : t('topUpButton', { amount: validAmount ? formatPrice(chosen) : '' })}

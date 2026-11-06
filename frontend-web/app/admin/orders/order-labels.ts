@@ -1,4 +1,6 @@
-// The words and tag colours the admin order screens use for an order's status and its payment.
+// The words and tones the admin order screens use for an order's status and its payment.
+
+import type { StatusTone } from '@/components/ui/StatusPill';
 
 export const STATUS_LABEL: Record<string, string> = {
   pending: 'Pending',
@@ -16,20 +18,6 @@ export const STATUS_LABEL: Record<string, string> = {
 
 export const statusLabel = (status: string) => STATUS_LABEL[status] ?? status.replace(/_/g, ' ').replace(/^./, (c) => c.toUpperCase());
 
-const TAG = 'inline-flex items-center whitespace-nowrap rounded-full px-2 py-0.5 text-xs font-medium';
-export const TAG_QUIET = `${TAG} bg-raised text-muted`;
-export const TAG_GOOD = `${TAG} bg-brand-soft text-brand-soft-ink`;
-export const TAG_WAITING = `${TAG} bg-accent-soft text-accent-soft-ink`;
-export const TAG_PROBLEM = `${TAG} bg-red-50 text-red-700`;
-
-/** One small pill per status: done or ready is turquoise, waiting is yellow, a problem is red, the rest quiet. */
-export function statusTag(status: string): string {
-  if (status === 'delivery_failed') return TAG_PROBLEM;
-  if (status === 'pending') return TAG_WAITING;
-  if (['ready', 'delivered', 'completed'].includes(status)) return TAG_GOOD;
-  return TAG_QUIET;
-}
-
 export const METHOD_LABEL: Record<string, string> = {
   cod: 'Cash on delivery',
   wallet: 'Nuray Wallet',
@@ -42,27 +30,32 @@ export const METHOD_LABEL: Record<string, string> = {
 
 export const methodLabel = (method?: string | null) => (method ? (METHOD_LABEL[method] ?? method) : 'Not recorded');
 
-/** What the payment of an order means for the admin, as words and a tag colour. */
-export function paymentState(order: { paymentStatus: string; paymentMethod?: string | null; orderStatus: string }): { label: string; tag: string } {
+type PaymentFacts = { paymentStatus: string; paymentMethod?: string | null; orderStatus: string };
+
+/** A cancelled order nobody paid for has no payment to speak of, so neither the list nor the order shows one. */
+export const nothingToCollect = (order: PaymentFacts) => order.orderStatus === 'cancelled' && order.paymentStatus === 'pending';
+
+/** What the payment of an order means for the admin, as words and a tone. */
+export function paymentState(order: PaymentFacts): { label: string; tone: StatusTone } {
   const cash = order.paymentMethod === 'cod';
   const closed = order.orderStatus === 'cancelled';
   switch (order.paymentStatus) {
     case 'paid':
-      return { label: 'Paid', tag: TAG_GOOD };
+      return { label: 'Paid', tone: 'good' };
     case 'refund_pending':
-      return { label: 'Refund owed', tag: TAG_WAITING };
+      return { label: 'Refund owed', tone: 'waiting' };
     case 'refunded':
-      return { label: 'Refunded', tag: TAG_QUIET };
+      return { label: 'Refunded', tone: 'neutral' };
     case 'disputed':
-      return { label: 'Transfer disputed', tag: TAG_PROBLEM };
+      return { label: 'Transfer disputed', tone: 'problem' };
     case 'payment_submitted':
-      return { label: 'Receipt to check', tag: TAG_WAITING };
+      return { label: 'Receipt to check', tone: 'waiting' };
     case 'failed':
-      return { label: 'Payment failed', tag: TAG_PROBLEM };
+      return { label: 'Payment failed', tone: 'problem' };
     case 'pending':
-      if (cash) return closed ? { label: 'Cash, not collected', tag: TAG_QUIET } : { label: 'Cash due', tag: TAG_WAITING };
-      return closed ? { label: 'Not paid', tag: TAG_QUIET } : { label: 'Awaiting payment', tag: TAG_WAITING };
+      if (cash) return closed ? { label: 'Cash, not collected', tone: 'neutral' } : { label: 'Cash due', tone: 'waiting' };
+      return closed ? { label: 'Not paid', tone: 'neutral' } : { label: 'Awaiting payment', tone: 'waiting' };
     default:
-      return { label: statusLabel(order.paymentStatus), tag: TAG_QUIET };
+      return { label: statusLabel(order.paymentStatus), tone: 'neutral' };
   }
 }

@@ -8,6 +8,7 @@ import { useToast } from '@/components/ui/toast';
 import { useLiveRefresh } from '@/lib/hooks/use-live-refresh';
 import { LoadError } from '@/components/ui/LoadError';
 import { useT } from '@/lib/i18n';
+import { formatTime } from '@/lib/utils';
 import { ordersMessages } from '@/lib/i18n/messages/orders';
 
 interface OrderChatModalProps {
@@ -535,7 +536,7 @@ export default function OrderChatModal({
                   <div className="flex items-center gap-1.5 mb-1 px-1">
                     <span className="text-[11px] font-extrabold text-muted">{senderLabel}</span>
                     <span className="text-[11px] text-muted">
-                      {new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                      {formatTime(msg.createdAt)}
                     </span>
                   </div>
 

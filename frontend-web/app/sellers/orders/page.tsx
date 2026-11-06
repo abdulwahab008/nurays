@@ -4,7 +4,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { loginUrlHere } from '@/lib/auth-redirect';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { Loader2, MessageCircle, RefreshCw } from 'lucide-react';
+import { ChevronRight, Loader2, MessageCircle, RefreshCw } from 'lucide-react';
 import { DashboardLayout, SELLER_SIDEBAR_ITEMS } from '@/components/layout/DashboardShell';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/toast';
@@ -12,14 +12,27 @@ import { LoadError } from '@/components/ui/LoadError';
 import { useAuthStore } from '@/lib/store/auth-store';
 import { useLiveRefresh } from '@/lib/hooks/use-live-refresh';
 import { apiClient, apiErrorMessage } from '@/lib/api-client';
-import { formatPrice, formatDateTime } from '@/lib/utils';
+import { formatPrice, formatTime } from '@/lib/utils';
 import OrderChatModal from '@/components/orders/OrderChatModal';
 import SelfHandoverActions from '@/components/orders/SelfHandoverActions';
-import { useT } from '@/lib/i18n';
+import { useLocale, useT } from '@/lib/i18n';
 import { commonMessages } from '@/lib/i18n/messages/common';
-import { kitchenOrderMessages, kitchenStatusLabel, paymentMethodLabel, paymentStatusLabel } from '@/lib/i18n/messages/kitchen-orders';
+import { cancelReasonText, kitchenOrderMessages, kitchenStatusLabel, paymentMethodLabel, paymentStatusLabel } from '@/lib/i18n/messages/kitchen-orders';
 import { ExternalLink } from '@/components/ExternalLink';
+import { OrderStatusPill } from '@/components/ui/StatusPill';
 import { RejectOrderDialog } from '@/components/sellers/RejectOrderDialog';
+import { markNewOrdersSeen, setNowTabOpen } from '@/components/sellers/new-order-alert';
+import {
+  KitchenOrderRider,
+  OrderNo,
+  PrepTimePicker,
+  ReadyBy,
+  RiderStatus,
+  dateClock,
+  useAge,
+  useNow,
+  useReadyFor,
+} from '@/components/sellers/order-timing';
 import { useShallow } from 'zustand/react/shallow';
 
 const sidebarItems = SELLER_SIDEBAR_ITEMS;
@@ -54,7 +67,8 @@ interface OrderTicket {
     /** What the kitchen keeps of the order: its dishes less Nuray's fee and any rider fee it pays. */
     kitchenEarns?: number;
     createdAt: string;
-    estimatedDeliveryAt?: string;
+    /** Once accepted: when the kitchen said the food would be ready. */
+    estimatedDeliveryAt?: string | null;
     deliveryInstructions?: string;
     notes?: string;
     cancellationReason?: string;
@@ -67,19 +81,36 @@ interface OrderTicket {
     deliveryType?: string;
     /** The kitchen hands this order over itself (self-delivery or customer pickup). */
     sellerHandsOver?: boolean;
+    /** When it was last marked ready (ready orders only). */
+    readyAt?: string | null;
     customerName?: string;
     customerPhone?: string | null;
-    /** Why the phone and door are not shown (PRIV-4), or null when they are. */
-    contactHidden?: 'nuray_rider' | 'not_accepted' | 'closed' | null;
     deliveryAddress?: {
       area?: string;
       city?: string;
       addressLine1?: string;
       label?: string;
     };
+    rider?: KitchenOrderRider | null;
+    /** The minutes accepting without a choice would give (the slowest dish). */
+    suggestedPrepMinutes?: number;
   };
   items: OrderItemEntry[];
 }
+
+type View = 'active' | 'delivered' | 'cancelled' | 'all';
+type Counts = { active: number; needYou: number; new: number; delivered: number; cancelled: number };
+
+// The statuses each history tab is named after: a row there only shows its status when it is a different one.
+const TAB_STATUSES: Partial<Record<View, string[]>> = { delivered: ['delivered', 'completed'], cancelled: ['cancelled'] };
+
+// The orders still being worked on, in the order a kitchen deals with them.
+const SECTIONS = [
+  { key: 'new', title: 'tab.pending', statuses: ['pending', 'confirmed'] },
+  { key: 'cooking', title: 'tab.preparing', statuses: ['preparing'] },
+  { key: 'ready', title: 'tab.ready', statuses: ['ready'] },
+  { key: 'onTheWay', title: 'list.section.onTheWay', statuses: ['dispatched', 'in_transit'] },
+] as const;
 
 export default function SellerOrdersPage() {
   const router = useRouter();
@@ -87,20 +118,24 @@ export default function SellerOrdersPage() {
   const { showToast } = useToast();
   const t = useT(kitchenOrderMessages);
   const tc = useT(commonMessages);
+  const { locale } = useLocale();
+  const now = useNow();
+  const age = useAge();
+  const readyFor = useReadyFor();
   const [loading, setLoading] = useState(true);
   // Why the orders could not be read; shown instead of "No orders yet", which a kitchen with orders waiting must never be told.
   const [loadError, setLoadError] = useState<unknown>(null);
   const [orderTickets, setOrderTickets] = useState<OrderTicket[]>([]);
-  const [filter, setFilter] = useState<string>('all');
+  const [counts, setCounts] = useState<Counts | null>(null);
+  const [filter, setFilter] = useState<View>('active');
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [actionLoadingId, setActionLoadingId] = useState<string | null>(null);
+  // The "Ready in" minutes the kitchen picked on each new order, until it accepts.
+  const [prepChoice, setPrepChoice] = useState<Record<string, number>>({});
 
   const [rejectingOrder, setRejectingOrder] = useState<OrderTicket | null>(null);
-
-  // Chat with Customer Modal State
   const [chatTicket, setChatTicket] = useState<OrderTicket | null>(null);
-
 
   const filterRef = useRef(filter);
   const pageRef = useRef(page);
@@ -113,23 +148,22 @@ export default function SellerOrdersPage() {
   const loadOrders = useCallback(async (silent = false) => {
     try {
       if (!silent) setLoading(true);
+      const view = filterRef.current;
       const params = new URLSearchParams({
         page: pageRef.current.toString(),
-        limit: '20',
+        // Every order in progress on one screen: a kitchen never has to page to find one it is cooking.
+        limit: view === 'active' ? '100' : '20',
       });
-      if (filterRef.current !== 'all') {
-        params.append('orderStatus', filterRef.current);
-      }
+      if (view !== 'all') params.append('view', view);
       const response = await apiClient.get(`/seller/orders?${params.toString()}`);
       if (response.data.success) {
         const raw = response.data.data;
-        const rawOrders = raw?.orders || [];
-        setOrderTickets(rawOrders);
+        setOrderTickets(raw?.orders || []);
+        setCounts(raw?.counts ?? null);
         setTotalPages(raw?.pagination?.totalPages ?? 1);
       }
       setLoadError(null);
     } catch (error) {
-      console.error('Failed to load orders:', error);
       // A refresh that fails keeps the orders on the screen (and says they may be out of date); a first or chosen load that
       // fails shows the failure, not the orders of the tab before.
       if (!silent) setOrderTickets([]);
@@ -160,13 +194,26 @@ export default function SellerOrdersPage() {
     enabled: isAuthenticated,
   });
 
-  // Sync when notifications modal accepts/rejects order
+  // The Now tab shows every new order with Accept and Reject: the new-order bell stays quiet while it is open, and has done
+  // its job for the orders it showed.
+  // Not when the orders could not be read: then the bell is the kitchen's only news of a new one.
+  const nowTabShowing = filter === 'active' && !loadError;
+  useEffect(() => {
+    if (!nowTabShowing) return;
+    setNowTabOpen(true);
+    return () => setNowTabOpen(false);
+  }, [nowTabShowing]);
+  useEffect(() => {
+    if (filter !== 'active' || loading) return;
+    markNewOrdersSeen(orderTickets.filter((ticket) => ['pending', 'confirmed'].includes(ticket.order.orderStatus)).map((ticket) => ticket.order.id));
+  }, [filter, loading, orderTickets]);
+
+  // Sync when the new-order alert accepts or rejects an order
   useEffect(() => {
     const handleRemoteUpdate = () => loadOrders(true);
     window.addEventListener('seller-orders-updated', handleRemoteUpdate);
     return () => window.removeEventListener('seller-orders-updated', handleRemoteUpdate);
   }, [loadOrders]);
-
 
   const handleConfirmPayment = async (orderId: string, confirmed: boolean) => {
     try {
@@ -176,12 +223,7 @@ export default function SellerOrdersPage() {
         disputeReason: confirmed ? undefined : 'Payment transfer not found in kitchen account',
       });
       if (res.data?.success) {
-        showToast(
-          confirmed
-            ? t('list.paymentVerified')
-            : t('list.paymentDisputed'),
-          confirmed ? 'success' : 'info'
-        );
+        showToast(confirmed ? t('list.paymentVerified') : t('list.paymentDisputed'), confirmed ? 'success' : 'info');
         loadOrders(true);
       }
     } catch (err) {
@@ -191,15 +233,16 @@ export default function SellerOrdersPage() {
     }
   };
 
-  const handleAcceptOrder = async (orderId: string) => {
+  const handleAcceptOrder = async (orderId: string, preparationTime: number) => {
     try {
       setActionLoadingId(orderId);
-      const res = await apiClient.post(`/seller/orders/${orderId}/accept`);
+      const res = await apiClient.post<{ success: boolean; data: { estimatedReadyAt?: string } }>(`/seller/orders/${orderId}/accept`, {
+        preparationTime,
+      });
       if (res.data.success) {
-        showToast(t('list.accepted'), 'success');
-        if (typeof window !== 'undefined') {
-          window.dispatchEvent(new CustomEvent('seller-order-status-changed', { detail: { orderId, status: 'accepted' } }));
-        }
+        const readyAt = res.data.data?.estimatedReadyAt;
+        showToast(readyAt ? t('list.acceptedReadyBy', { time: formatTime(readyAt) }) : t('list.accepted'), 'success');
+        window.dispatchEvent(new CustomEvent('seller-order-status-changed', { detail: { orderId, status: 'accepted' } }));
         loadOrders(true);
       }
     } catch (error) {
@@ -224,44 +267,252 @@ export default function SellerOrdersPage() {
     }
   };
 
-  const statusTone = (status: string) => {
-    switch (status) {
-      case 'pending':
-        return 'bg-accent-soft text-accent-soft-ink';
-      case 'preparing':
-        return 'bg-raised text-ink';
-      case 'ready':
-      case 'delivered':
-      case 'completed':
-        return 'bg-brand-soft text-brand-soft-ink';
-      case 'cancelled':
-        return 'bg-red-50 text-red-700';
-      default:
-        return 'bg-raised text-muted';
-    }
-  };
-
-  const filterTabs = [
-    { id: 'all', label: t('tab.all') },
-    { id: 'pending', label: t('tab.pending') },
-    { id: 'preparing', label: t('tab.preparing') },
-    { id: 'ready', label: t('tab.ready') },
+  const filterTabs: Array<{ id: View; label: string; count?: number }> = [
+    { id: 'active', label: t('tab.now'), count: counts?.needYou },
     { id: 'delivered', label: t('tab.delivered') },
     { id: 'cancelled', label: t('tab.cancelled') },
+    { id: 'all', label: t('tab.all') },
   ];
 
   if (!isAuthenticated) return null;
 
+  const paymentProof = (ord: OrderTicket['order']) =>
+    ord.paymentStatus === 'payment_submitted' && (
+      <div className="mx-5 mt-4 rounded-xl bg-accent-soft text-accent-soft-ink p-3.5 text-sm">
+        <p className="font-semibold">{t('list.proofTitle')}</p>
+        <p className="mt-0.5">
+          {t('list.method')} {ord.paymentSenderAccount || ord.paymentMethod || t('list.directWallet')}
+          {ord.paymentReferenceNumber && <>, <span data-ltr>{t('list.ref', { ref: ord.paymentReferenceNumber })}</span></>}
+        </p>
+        {ord.paymentProofUrl && (
+          <ExternalLink href={ord.paymentProofUrl} className="inline-flex items-center min-h-11 font-semibold underline underline-offset-2">
+            {t('list.viewScreenshot')}
+          </ExternalLink>
+        )}
+        <div className="mt-2 flex flex-wrap gap-2">
+          <Button
+            className="px-4"
+            id={`verify-payment-btn-${ord.id}`}
+            onClick={() => handleConfirmPayment(ord.id, true)}
+            disabled={actionLoadingId === `pay-${ord.id}`}
+          >
+            {t('list.confirmPaid')}
+          </Button>
+          <Button
+            id={`dispute-payment-btn-${ord.id}`}
+            variant="outline"
+            onClick={() => handleConfirmPayment(ord.id, false)}
+            disabled={actionLoadingId === `pay-${ord.id}`}
+            className="px-4 bg-surface border-red-200 text-red-700 hover:bg-red-50"
+          >
+            {t('list.dispute')}
+          </Button>
+        </div>
+      </div>
+    );
+
+  /** An order still being worked on: what to cook, for whom, by when, and the one next step. */
+  const renderCard = (ticket: OrderTicket) => {
+    const ord = ticket.order;
+    const items = ticket.items || [];
+    const isActionBusy = actionLoadingId === ord.id;
+    const isNew = ord.orderStatus === 'pending' || ord.orderStatus === 'confirmed';
+    const since = ord.orderStatus === 'ready' && ord.readyAt ? readyFor(ord.readyAt, now) : age(ord.createdAt, now);
+    const suggested = ord.suggestedPrepMinutes ?? 20;
+    const prep = prepChoice[ord.id] ?? suggested;
+    const area = [ord.deliveryAddress?.addressLine1, ord.deliveryAddress?.area].filter(Boolean).join(', ');
+
+    return (
+      <article
+        key={ord.id}
+        id={`order-card-${ord.id}`}
+        className={`rounded-[20px] bg-surface border overflow-hidden pb-5 ${
+          isNew ? 'border-accent-soft-ink/30 shadow-[var(--shadow-card)]' : 'border-line'
+        }`}
+      >
+        <header className={`px-5 pt-4 ${isNew ? 'bg-accent-soft pb-3' : ''}`}>
+          <div className="flex items-start justify-between gap-4">
+            <div className="min-w-0">
+              {isNew ? (
+                <p className="text-[15px] font-semibold text-accent-soft-ink">
+                  {t('statusNew')}
+                  <span className="font-normal"> · {since}</span>
+                </p>
+              ) : (
+                <p className="text-sm text-muted">{since}</p>
+              )}
+              <Link
+                href={`/sellers/orders/${ord.id}`}
+                className={`inline-flex items-center min-h-11 -my-2 hover:underline ${isNew ? 'text-sm text-accent-soft-ink' : 'text-[15px] font-semibold text-ink'}`}
+              >
+                <span data-ltr>#{ord.orderNumber || ord.id.slice(0, 8)}</span>
+              </Link>
+            </div>
+            <div className="shrink-0 text-end">
+              <p className="text-lg font-semibold text-ink tabular-nums">{formatPrice(ord.dishesTotal ?? ord.totalAmount)}</p>
+              {ord.kitchenEarns != null && (
+                <p className={`text-sm tabular-nums ${isNew ? 'text-accent-soft-ink' : 'text-muted'}`}>{t('list.youEarn', { amount: formatPrice(ord.kitchenEarns) })}</p>
+              )}
+            </div>
+          </div>
+        </header>
+
+        <ul className="px-5 mt-4 space-y-1.5">
+          {items.map((item) => (
+            <li key={item.id} className="flex items-baseline justify-between gap-4 text-[15px]">
+              <span className="text-ink min-w-0">
+                <span className="font-semibold tabular-nums">{item.quantity} ×</span> <bdi>{item.product?.name || t('list.foodItem')}</bdi>
+              </span>
+              <span className="text-sm text-muted tabular-nums shrink-0">{formatPrice(item.totalPrice)}</span>
+            </li>
+          ))}
+        </ul>
+
+        {(ord.deliveryInstructions || ord.notes) && (
+          <p className="mx-5 mt-3 rounded-lg bg-raised px-3 py-2 text-sm text-ink">
+            <span className="text-muted">{t('list.note')} </span>
+            {ord.deliveryInstructions || ord.notes}
+          </p>
+        )}
+
+        <div className="px-5 mt-3 flex items-center justify-between gap-3 text-sm">
+          <p className="min-w-0 text-muted truncate">
+            <span className="text-ink">{ord.customerName || t('customer')}</span>
+            {ord.customerPhone && (
+              <a href={`tel:${ord.customerPhone}`} className="ms-1.5 text-brand-ink hover:underline" data-ltr>{ord.customerPhone}</a>
+            )}
+            {area && <>, {area}</>}
+          </p>
+          <button
+            type="button"
+            id={`chat-customer-btn-${ord.id}`}
+            onClick={() => setChatTicket(ticket)}
+            aria-label={t('list.chatTitle')}
+            className="shrink-0 -me-3 inline-flex items-center gap-1.5 min-h-11 px-3 rounded-lg font-semibold text-brand-ink hover:bg-brand-soft focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-brand/40"
+          >
+            <MessageCircle className="w-4 h-4" aria-hidden="true" />
+            {t('list.chat')}
+          </button>
+        </div>
+        <p className="px-5 text-xs text-muted">
+          {paymentMethodLabel(ord.paymentMethod, tc, ord.deliveryType === 'self_pickup' ? t : undefined)}, {paymentStatusLabel(ord.paymentStatus, t)}
+        </p>
+
+        {paymentProof(ord)}
+
+        <div className="px-5 pt-4 mt-4 border-t border-line">
+          {isNew && (
+            <div className="space-y-3">
+              <PrepTimePicker
+                idPrefix={ord.id}
+                suggested={suggested}
+                value={prep}
+                onChange={(min) => setPrepChoice((c) => ({ ...c, [ord.id]: min }))}
+                disabled={isActionBusy}
+              />
+              <div className="flex items-center gap-2">
+                <Button id={`accept-order-btn-${ord.id}`} onClick={() => handleAcceptOrder(ord.id, prep)} disabled={isActionBusy} className="flex-1">
+                  {isActionBusy && <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" />}
+                  {t('list.acceptStart')}
+                </Button>
+                <Button
+                  id={`reject-order-btn-${ord.id}`}
+                  variant="outline"
+                  onClick={() => setRejectingOrder(ticket)}
+                  disabled={isActionBusy}
+                  className="text-red-700 border-line-strong hover:bg-red-50"
+                >
+                  {t('reject')}
+                </Button>
+              </div>
+            </div>
+          )}
+
+          {ord.orderStatus === 'preparing' && (
+            <div className="space-y-3">
+              {ord.estimatedDeliveryAt && (
+                <p className="text-sm">
+                  <ReadyBy at={ord.estimatedDeliveryAt} now={now} />
+                </p>
+              )}
+              <Button id={`ready-pickup-btn-${ord.id}`} onClick={() => handleMarkReady(ord.id)} disabled={isActionBusy} className="w-full">
+                {isActionBusy && <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" />}
+                {t('list.markReady')}
+              </Button>
+            </div>
+          )}
+
+          {ord.sellerHandsOver && ['ready', 'dispatched', 'in_transit'].includes(ord.orderStatus) && (
+            <SelfHandoverActions orderId={ord.id} orderStatus={ord.orderStatus} deliveryType={ord.deliveryType} onChanged={() => loadOrders(true)} />
+          )}
+
+        </div>
+      </article>
+    );
+  };
+
+  /** An order the kitchen only follows (a Nuray rider has it), or any order in the history tabs: one line, the details one tap away. */
+  const renderRow = (ticket: OrderTicket) => {
+    const ord = ticket.order;
+    const status = ord.orderStatus;
+    const tabStatuses = TAB_STATUSES[filter];
+    const showPill = filter === 'all' || (!!tabStatuses && !tabStatuses.includes(status));
+    return (
+      <li key={ord.id}>
+        <Link
+          href={`/sellers/orders/${ord.id}`}
+          className="flex items-center gap-3 sm:gap-4 px-4 sm:px-5 py-3.5 min-h-11 hover:bg-raised focus-visible:outline-none focus-visible:bg-raised"
+        >
+          <div className="min-w-0 flex-1">
+            <p dir="auto" className="text-[15px] text-ink truncate rtl:text-right">
+              {(ticket.items || []).map((i, n) => (
+                <span key={i.id}>
+                  {n > 0 && ', '}
+                  <bdi>{i.quantity} × {i.product?.name || t('list.foodItem')}</bdi>
+                </span>
+              ))}
+            </p>
+            <p className="text-sm text-muted">
+              {status === 'ready' && ord.readyAt ? readyFor(ord.readyAt, now) : dateClock(ord.createdAt, locale)}, <OrderNo number={ord.orderNumber} />
+            </p>
+            {['ready', 'dispatched', 'in_transit'].includes(status) &&
+              (ord.rider ? (
+                <RiderStatus rider={ord.rider} />
+              ) : (
+                <p className="text-sm text-ink">{status === 'ready' ? t('rider.comingNoName') : t('list.riderOnWay')}</p>
+              ))}
+            {ord.cancellationReason && ['cancelled', 'refunded'].includes(status) && (
+              <p className="text-sm text-muted line-clamp-2">
+                {t('list.reason')} {cancelReasonText(ord.cancellationReason, t)}
+              </p>
+            )}
+          </div>
+          <div className="text-end shrink-0">
+            <p className="text-[15px] font-semibold text-ink tabular-nums">{formatPrice(ord.dishesTotal ?? ord.totalAmount)}</p>
+            {showPill && <OrderStatusPill status={status} label={kitchenStatusLabel(status, t, tc)} className="mt-0.5" />}
+          </div>
+          <ChevronRight className="w-4 h-4 text-muted shrink-0 rtl:-scale-x-100" aria-hidden="true" />
+        </Link>
+      </li>
+    );
+  };
+
+  const byAge = (a: OrderTicket, b: OrderTicket) => new Date(a.order.createdAt).getTime() - new Date(b.order.createdAt).getTime();
+  const byReadyTime = (a: OrderTicket, b: OrderTicket) =>
+    new Date(a.order.estimatedDeliveryAt ?? a.order.createdAt).getTime() - new Date(b.order.estimatedDeliveryAt ?? b.order.createdAt).getTime();
+
+  const emptyText =
+    filter === 'active'
+      ? t('list.emptyNow')
+      : filter === 'all'
+        ? t('list.emptyAll')
+        : t('list.emptyFiltered', { filter: filterTabs.find((tab) => tab.id === filter)?.label ?? filter });
+
   return (
-    <DashboardLayout
-      title={t('list.title')}
-      subtitle={t('list.subtitle')}
-      sidebarItems={sidebarItems}
-      userType="seller"
-    >
+    <DashboardLayout title={t('list.title')} sidebarItems={sidebarItems} userType="seller">
       <div className="max-w-6xl">
-        <div className="mb-6 flex flex-col-reverse sm:flex-row sm:items-end sm:gap-4 sm:border-b sm:border-line">
-          <div role="tablist" aria-label={t('list.title')} className="flex-1 min-w-0 flex gap-x-3.5 sm:gap-x-6 overflow-x-auto [scrollbar-width:none] border-b border-line sm:border-b-0">
+        <div className="mb-6 flex items-end gap-2 border-b border-line">
+          <div role="tablist" aria-label={t('list.title')} className="flex-1 min-w-0 flex gap-x-5 sm:gap-x-6 overflow-x-auto [scrollbar-width:none]">
             {filterTabs.map((tab) => {
               const selected = filter === tab.id;
               return (
@@ -274,11 +525,16 @@ export default function SellerOrdersPage() {
                     setFilter(tab.id);
                     setPage(1);
                   }}
-                  className={`-mb-px min-h-11 pb-1 text-sm sm:text-[15px] whitespace-nowrap border-b-2 rounded-t transition-colors focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-inset focus-visible:ring-brand/40 ${
+                  className={`-mb-px inline-flex items-center gap-1.5 min-h-11 pb-1 text-[15px] whitespace-nowrap border-b-2 rounded-t transition-colors focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-inset focus-visible:ring-brand/40 ${
                     selected ? 'border-brand-600 text-ink font-semibold' : 'border-transparent text-muted hover:text-ink'
                   }`}
                 >
                   {tab.label}
+                  {tab.count ? (
+                    <span className={`min-w-6 px-1.5 rounded-full text-xs font-semibold tabular-nums ${counts?.new ? 'bg-accent text-on-accent' : 'bg-raised text-muted'}`}>
+                      {tab.count}
+                    </span>
+                  ) : null}
                 </button>
               );
             })}
@@ -287,12 +543,29 @@ export default function SellerOrdersPage() {
             type="button"
             onClick={() => loadOrders(false)}
             aria-label={t('list.refresh')}
-            className="self-end shrink-0 -mt-3 sm:mt-0 sm:mb-1 -me-2 sm:me-0 inline-flex items-center gap-1.5 min-h-11 px-2 rounded-lg text-sm font-medium text-muted hover:text-ink focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-brand/40"
+            title={t('list.refresh')}
+            className="shrink-0 mb-0.5 inline-flex items-center justify-center w-11 h-11 rounded-lg text-muted hover:text-ink hover:bg-raised focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-brand/40"
           >
             <RefreshCw className="w-4 h-4" aria-hidden="true" />
-            {t('list.refresh')}
           </button>
         </div>
+
+        {filter !== 'active' && !!counts?.new && (
+          <button
+            type="button"
+            onClick={() => {
+              setFilter('active');
+              setPage(1);
+            }}
+            className="mb-4 w-full flex items-center justify-between gap-3 min-h-11 px-4 rounded-xl bg-accent-soft text-accent-soft-ink text-sm focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-brand/40"
+          >
+            <span className="font-semibold">{counts.new === 1 ? t('list.newOrdersOne') : t('list.newOrders', { count: counts.new })}</span>
+            <span className="inline-flex items-center gap-1 font-semibold underline underline-offset-2">
+              {t('list.showNow')}
+              <ChevronRight className="w-4 h-4 rtl:-scale-x-100" aria-hidden="true" />
+            </span>
+          </button>
+        )}
 
         {Boolean(loadError) && orderTickets.length > 0 && (
           <LoadError compact error={loadError} onRetry={() => void loadOrders()} title={t('list.loadFailed')} className="mb-4" />
@@ -305,221 +578,48 @@ export default function SellerOrdersPage() {
         ) : loadError && orderTickets.length === 0 ? (
           <LoadError error={loadError} onRetry={() => void loadOrders()} title={t('list.loadFailed')} />
         ) : orderTickets.length === 0 ? (
-          <p className="py-16 text-center text-sm text-muted">
-            {filter === 'all'
-              ? t('list.emptyAll')
-              : t('list.emptyFiltered', { filter: filterTabs.find((tab) => tab.id === filter)?.label ?? filter })}
-          </p>
-        ) : (
-          <div className="grid grid-cols-1 xl:grid-cols-2 gap-5 items-start">
-            {orderTickets.map((ticket) => {
-              const ord = ticket.order;
-              const items = ticket.items || [];
-              const isActionBusy = actionLoadingId === ord.id;
-              const isNew = ord.orderStatus === 'pending';
-              const maxPrepTime = Math.max(
-                ...items.map((i) => i.product?.preparationTime || 20),
-                15
-              );
-              const area = [ord.deliveryAddress?.area || t('list.communityDelivery'), ord.deliveryAddress?.addressLine1].filter(Boolean).join(', ');
-
+          <p className="py-16 text-center text-sm text-muted">{emptyText}</p>
+        ) : filter === 'active' ? (
+          <div className="space-y-8">
+            {SECTIONS.map((section) => {
+              const tickets = orderTickets
+                .filter((ticket) => (section.statuses as readonly string[]).includes(ticket.order.orderStatus))
+                .sort(section.key === 'cooking' ? byReadyTime : byAge);
+              if (tickets.length === 0) return null;
               return (
-                <article
-                  key={ord.id}
-                  id={`order-card-${ord.id}`}
-                  className={`rounded-[20px] bg-surface border overflow-hidden pb-5 ${
-                    isNew ? 'border-line shadow-[var(--shadow-card)]' : 'border-line'
-                  }`}
-                >
-                  <header className="px-5 pt-5">
-                    <div className="flex items-baseline justify-between gap-4">
-                      <Link href={`/sellers/orders/${ord.id}`} className="min-w-0 text-[15px] font-semibold text-ink hover:underline">
-                        {t('orderLabel')} <span data-ltr className="break-all">#{ord.orderNumber || ord.id.slice(0, 8)}</span>
-                      </Link>
-                      <div className="shrink-0 text-end">
-                        <p className="text-lg font-semibold text-ink tabular-nums">{formatPrice(ord.dishesTotal ?? ord.totalAmount)}</p>
-                        {ord.kitchenEarns != null && (
-                          <p className="text-sm text-muted tabular-nums">{t('list.youEarn', { amount: formatPrice(ord.kitchenEarns) })}</p>
-                        )}
-                      </div>
-                    </div>
-                    <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-muted">
-                      <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${statusTone(ord.orderStatus)}`}>{kitchenStatusLabel(ord.orderStatus, t, tc)}</span>
-                      <span>{formatDateTime(ord.createdAt)}</span>
-                      {['pending', 'confirmed', 'preparing'].includes(ord.orderStatus) && (
-                        <span className="text-ink">{t('list.prep', { min: maxPrepTime })}</span>
+                <section key={section.key} aria-labelledby={`orders-${section.key}`}>
+                  <h2 id={`orders-${section.key}`} className="mb-3 text-sm font-semibold text-ink">
+                    {t(section.title)} <span className="font-normal text-muted tabular-nums">{tickets.length}</span>
+                  </h2>
+                  {section.key === 'ready' || section.key === 'onTheWay' ? (
+                    <div className="space-y-4">
+                      {tickets.some((ticket) => ticket.order.sellerHandsOver) && (
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-start">{tickets.filter((ticket) => ticket.order.sellerHandsOver).map(renderCard)}</div>
+                      )}
+                      {tickets.some((ticket) => !ticket.order.sellerHandsOver) && (
+                        <ul className="rounded-[20px] bg-surface border border-line divide-y divide-line overflow-hidden">
+                          {tickets.filter((ticket) => !ticket.order.sellerHandsOver).map(renderRow)}
+                        </ul>
                       )}
                     </div>
-                    <p className="mt-1 text-xs text-muted">
-                      {paymentMethodLabel(ord.paymentMethod, tc)}, {paymentStatusLabel(ord.paymentStatus, t)}
-                    </p>
-                  </header>
-
-                  <ul className="px-5 mt-4 space-y-1.5">
-                    {items.map((item) => (
-                      <li key={item.id} className="flex items-baseline justify-between gap-4 text-[15px]">
-                        <span className="text-ink">
-                          <span className="font-semibold tabular-nums">{item.quantity} ×</span> {item.product?.name || t('list.foodItem')}
-                        </span>
-                        <span className="text-sm text-muted tabular-nums shrink-0">{formatPrice(item.totalPrice)}</span>
-                      </li>
-                    ))}
-                  </ul>
-
-                  {(ord.deliveryInstructions || ord.notes) && (
-                    <p className="mx-5 mt-3 rounded-lg bg-raised px-3 py-2 text-sm text-ink">
-                      <span className="text-muted">{t('list.note')} </span>
-                      {ord.deliveryInstructions || ord.notes}
-                    </p>
+                  ) : (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-start">{tickets.map(renderCard)}</div>
                   )}
-
-                  {ord.orderStatus === 'cancelled' && ord.cancellationReason && (
-                    <p className="mx-5 mt-3 text-sm text-red-700">
-                      {t('list.reason')} {ord.cancellationReason}
-                    </p>
-                  )}
-
-                  <div className="px-5 mt-4 pt-4 border-t border-line text-sm">
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="min-w-0">
-                        <p className="text-ink">
-                          {ord.customerName || t('customer')}
-                          {ord.customerPhone && <span className="text-muted ms-1.5" data-ltr>{ord.customerPhone}</span>}
-                        </p>
-                        <p className="text-muted">{area}</p>
-                      </div>
-                      <button
-                        type="button"
-                        id={`chat-customer-btn-${ord.id}`}
-                        onClick={() => setChatTicket(ticket)}
-                        title={t('list.chatTitle')}
-                        className="shrink-0 -mt-2.5 inline-flex items-center gap-1.5 min-h-11 px-3 -me-3 rounded-lg font-semibold text-brand-ink hover:bg-brand-soft focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-brand/40"
-                      >
-                        <MessageCircle className="w-4 h-4" aria-hidden="true" />
-                        {t('list.chat')}
-                      </button>
-                    </div>
-                    {ord.contactHidden && (
-                      <p className="mt-1 text-xs text-muted" data-testid="contact-hidden">{t(`contact.${ord.contactHidden}`)}</p>
-                    )}
-                  </div>
-
-                  {ord.paymentStatus === 'payment_submitted' && (
-                    <div className="mx-5 mt-4 rounded-xl bg-accent-soft text-accent-soft-ink p-3.5 text-sm">
-                      <p className="font-semibold">{t('list.proofTitle')}</p>
-                      <p className="mt-0.5">
-                        {t('list.method')} {ord.paymentSenderAccount || ord.paymentMethod || t('list.directWallet')}
-                        {ord.paymentReferenceNumber && <>, <span data-ltr>{t('list.ref', { ref: ord.paymentReferenceNumber })}</span></>}
-                      </p>
-                      {ord.paymentProofUrl && (
-                        <ExternalLink href={ord.paymentProofUrl} className="inline-block mt-1 font-semibold underline underline-offset-2">
-                          {t('list.viewScreenshot')}
-                        </ExternalLink>
-                      )}
-                      <div className="mt-3 flex flex-wrap gap-2">
-                        <Button
-                          className="px-4"
-                          id={`verify-payment-btn-${ord.id}`}
-                          onClick={() => handleConfirmPayment(ord.id, true)}
-                          disabled={actionLoadingId === `pay-${ord.id}`}
-                        >
-                          {t('list.confirmPaid')}
-                        </Button>
-                        <Button
-                          id={`dispute-payment-btn-${ord.id}`}
-                          variant="outline"
-                          onClick={() => handleConfirmPayment(ord.id, false)}
-                          disabled={actionLoadingId === `pay-${ord.id}`}
-                          className="px-4 bg-surface border-red-200 text-red-700 hover:bg-red-50"
-                        >
-                          {t('list.dispute')}
-                        </Button>
-                      </div>
-                    </div>
-                  )}
-
-                  {['pending', 'preparing', 'ready', 'dispatched', 'in_transit', 'delivered', 'completed'].includes(ord.orderStatus) && (
-                    <div className="px-5 pt-4">
-                      {ord.orderStatus === 'pending' && (
-                        <div className="flex items-center gap-2">
-                          <Button
-                            id={`accept-order-btn-${ord.id}`}
-                            onClick={() => handleAcceptOrder(ord.id)}
-                            disabled={isActionBusy}
-                            className="flex-1"
-                          >
-                            {isActionBusy && <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" />}
-                            {t('list.acceptStart')}
-                          </Button>
-                          <Button
-                            id={`reject-order-btn-${ord.id}`}
-                            variant="outline"
-                            onClick={() => setRejectingOrder(ticket)}
-                            disabled={isActionBusy}
-                            className="text-red-700 border-line-strong hover:bg-red-50"
-                          >
-                            {t('reject')}
-                          </Button>
-                        </div>
-                      )}
-
-                      {ord.orderStatus === 'preparing' && (
-                        <Button
-                          id={`ready-pickup-btn-${ord.id}`}
-                          onClick={() => handleMarkReady(ord.id)}
-                          disabled={isActionBusy}
-                          className="w-full"
-                        >
-                          {isActionBusy && <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" />}
-                          {t('list.markReady')}
-                        </Button>
-                      )}
-
-                      {ord.sellerHandsOver && ['ready', 'dispatched', 'in_transit'].includes(ord.orderStatus) && (
-                        <SelfHandoverActions
-                          orderId={ord.id}
-                          orderStatus={ord.orderStatus}
-                          deliveryType={ord.deliveryType}
-                          onChanged={() => loadOrders(true)}
-                        />
-                      )}
-
-                      {ord.orderStatus === 'ready' && !ord.sellerHandsOver && (
-                        <p className="text-sm text-brand-ink">{t('list.readyCounter')}</p>
-                      )}
-
-                      {(ord.orderStatus === 'dispatched' || ord.orderStatus === 'in_transit') && !ord.sellerHandsOver && (
-                        <p className="text-sm text-muted">{t('list.riderOnWay')}</p>
-                      )}
-
-                      {(ord.orderStatus === 'delivered' || ord.orderStatus === 'completed') && (
-                        <p className="text-sm text-muted">{t('list.deliveredTitle')}</p>
-                      )}
-                    </div>
-                  )}
-                </article>
+                </section>
               );
             })}
           </div>
+        ) : (
+          <ul className="rounded-[20px] bg-surface border border-line divide-y divide-line overflow-hidden">{orderTickets.map(renderRow)}</ul>
         )}
 
-        {totalPages > 1 && (
-          <div className="mt-6 pt-4 border-t border-line flex items-center justify-between">
-            <Button
-              variant="outline"
-              onClick={() => setPage((p) => Math.max(1, p - 1))}
-              disabled={page === 1}
-            >
+        {filter !== 'active' && totalPages > 1 && (
+          <div className="mt-6 flex items-center justify-between">
+            <Button variant="outline" onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page === 1}>
               {t('list.previous')}
             </Button>
-            <span className="text-sm text-muted tabular-nums">
-              {t('list.pageOf', { page, total: totalPages })}
-            </span>
-            <Button
-              variant="outline"
-              onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-              disabled={page === totalPages}
-            >
+            <span className="text-sm text-muted tabular-nums">{t('list.pageOf', { page, total: totalPages })}</span>
+            <Button variant="outline" onClick={() => setPage((p) => Math.min(totalPages, p + 1))} disabled={page === totalPages}>
               {tc('next')}
             </Button>
           </div>

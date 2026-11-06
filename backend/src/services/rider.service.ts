@@ -364,9 +364,12 @@ export class RiderService {
         tripKm: job.distanceKm ?? null,
         exceedsCashLimit: job.exceedsCashLimit,
       });
-      return { job: { ...job, pickupDistanceKm }, score };
+      return { job: { ...job, pickupDistanceKm, handedBackByYou: d.releasedRiderIds.includes(rider.id) }, score };
     });
-    return ranked.sort((a, b) => b.score - a.score).map((r) => r.job);
+    // A job this rider handed back stays open to them in case they change their mind, below every other job.
+    return ranked
+      .sort((a, b) => Number(a.job.handedBackByYou) - Number(b.job.handedBackByYou) || b.score - a.score)
+      .map((r) => r.job);
   }
 
   /**
@@ -644,8 +647,9 @@ export class RiderService {
     }
     // No longer a party to this order: out of its live room (status and the next rider's position).
     socketManager.removeUserFromOrder(userId, delivery.orderId);
-    // Offer it to another rider (never the one who handed it back); the pool hears of it only if nobody takes it.
-    postDeliverySoon(deliveryId, delivery.orderId);
+    // Offer it to another rider (never the one who handed it back); the pool hears of it only if nobody takes
+    // it, and the rider who handed it back is not told about it as a new job.
+    postDeliverySoon(deliveryId, delivery.orderId, { releasedByUserId: userId });
     return { released: true };
   }
 

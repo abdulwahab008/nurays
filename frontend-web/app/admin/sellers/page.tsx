@@ -10,7 +10,8 @@ import { AdminFilterTabs } from '@/components/admin/AdminFilterTabs';
 import { LoadingLine, Pager, SearchForm, StatusPill, type PillTone } from '@/components/admin/AdminListParts';
 import { useAuthStore } from '@/lib/store/auth-store';
 import { apiClient } from '@/lib/api-client';
-import { displayRating, formatDate } from '@/lib/utils';
+import { displayRating } from '@/lib/utils';
+import { formatDate } from '@/components/admin/admin-dates';
 import { useShallow } from 'zustand/react/shallow';
 
 interface Seller {
@@ -147,7 +148,7 @@ function AdminAllSellers() {
                 const st = kitchenStatus(s);
                 return (
                   <li key={s.id}>
-                    <Link href={`/admin/sellers/${s.id}`} className="flex min-h-[72px] items-center gap-3 py-3 hover:bg-raised">
+                    <Link href={`/admin/sellers/${s.id}`} className="flex min-h-[72px] items-center gap-3 py-3 hover:bg-page">
                       <span className="min-w-0 flex-1">
                         <span className="flex items-start justify-between gap-2">
                           <span className="text-sm font-semibold text-ink">{s.businessName}</span>
@@ -158,7 +159,7 @@ function AdminAllSellers() {
                           {s.communityName ? ` · ${s.communityName}` : ''}
                         </span>
                         <span className="block text-xs text-muted">
-                          {s.liveDishes ?? 0} of {s.totalDishes ?? 0} dishes live · {s.orders30d ?? 0} {s.orders30d === 1 ? 'order' : 'orders'} in 30 days
+                          {s.totalDishes ? `${s.liveDishes ?? 0} of ${s.totalDishes} dishes live` : 'No dishes yet'} · {s.orders30d ?? 0} {s.orders30d === 1 ? 'order' : 'orders'} in 30 days
                           {rating(s) ? ` · ${rating(s)} stars` : ''}
                         </span>
                       </span>
@@ -186,7 +187,7 @@ function AdminAllSellers() {
                   {sellers.map((s) => {
                     const st = kitchenStatus(s);
                     return (
-                      <tr key={s.id} className="hover:bg-raised">
+                      <tr key={s.id} className="hover:bg-page">
                         <td className="px-4 py-3">
                           <Link href={`/admin/sellers/${s.id}`} className="font-semibold text-ink hover:text-brand-ink hover:underline">
                             {s.businessName}
@@ -212,7 +213,7 @@ function AdminAllSellers() {
                 </tbody>
               </table>
             </div>
-            <Pager page={page} totalPages={pagination.totalPages} total={pagination.total} noun="kitchens" onChange={setPage} />
+            <Pager page={page} totalPages={pagination.totalPages} total={pagination.total} noun="kitchens" one="kitchen" onChange={setPage} />
           </>
         )}
       </div>

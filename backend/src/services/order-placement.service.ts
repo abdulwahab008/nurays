@@ -58,6 +58,21 @@ export function transferAccountMissing(
   return false;
 }
 
+/**
+ * The total the checkout showed on its button must be the total charged. When the price moved in between (a deal ran out
+ * or was used up, a dish was repriced, the fee changed), the order is refused with the new total instead of being placed
+ * at an amount the customer did not agree to.
+ */
+export function quotedTotalProblem(expectedTotal: number | undefined, totalAmount: number): AppError | null {
+  if (expectedTotal == null || Math.round(expectedTotal) === Math.round(totalAmount)) return null;
+  return new AppError(
+    `The price of your order has changed to Rs ${Math.round(totalAmount).toLocaleString('en-PK')}. Please check your order and place it again.`,
+    409,
+    'PRICE_CHANGED',
+    { total: totalAmount, expectedTotal }
+  );
+}
+
 /** Placing an order: the cart's items priced, discounted, split by kitchen and written in one transaction. */
 export class OrderPlacement {
   /**
@@ -121,6 +136,7 @@ export class OrderPlacement {
       paymentMethod: string;
       promotionCode?: string;
       deliveryInstructions?: string;
+      expectedTotal?: number;
     },
     opts: { idempotencyKey?: string } = {}
   ) {
@@ -549,6 +565,8 @@ export class OrderPlacement {
 
     // 5% GST on the goods after discounts; the total in whole rupees (see priceOrder).
     const { taxAmount, totalAmount } = priceOrder(subtotal - discountAmount, deliveryFee);
+    const priceMoved = quotedTotalProblem(data.expectedTotal, totalAmount);
+    if (priceMoved) throw priceMoved;
 
     // Create order with items in transaction (retried with a new number on a clash)
     let order: Awaited<ReturnType<typeof placeOrder>>;

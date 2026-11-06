@@ -149,3 +149,22 @@ describe('where the rider collects the food', () => {
     expect(j.pickup.phone).toBeNull();
   });
 });
+
+describe('the open pool (getAvailableDeliveries)', () => {
+  const open = (id: string, minutesAgo: number, releasedRiderIds: string[] = []) => ({
+    ...job(id, 'pending', minutesAgo),
+    riderId: null,
+    releasedRiderIds,
+    order: { ...job(id, 'pending', minutesAgo).order, paymentMethod: 'card', paymentStatus: 'paid' },
+  });
+
+  it('keeps a job the rider handed back, marked as theirs and below every other job', async () => {
+    findDeliveries.mockImplementation(async (args: any) =>
+      args.where.riderId === null ? [open('handed-back', 60, ['rider-1']), open('fresh', 1), open('other-rider', 30, ['rider-2'])] : []
+    );
+    const list = await riderService.getAvailableDeliveries('user-1');
+    expect(list.map((d) => d.id).at(-1)).toBe('handed-back');
+    expect(list.find((d) => d.id === 'handed-back')?.handedBackByYou).toBe(true);
+    expect(list.filter((d) => d.handedBackByYou)).toHaveLength(1);
+  });
+});

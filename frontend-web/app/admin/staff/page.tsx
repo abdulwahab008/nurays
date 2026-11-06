@@ -6,9 +6,10 @@ import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/toast';
 import { LoadError } from '@/components/ui/LoadError';
 import { useDialogs } from '@/components/ui/Dialogs';
+import { LoadingLine, PageHeader } from '@/components/admin/AdminListParts';
 import { apiClient, apiErrorMessage } from '@/lib/api-client';
 import { useAuthStore } from '@/lib/store/auth-store';
-import { formatDateTime } from '@/lib/utils';
+import { formatDateTime } from '@/components/admin/admin-dates';
 import { useShallow } from 'zustand/react/shallow';
 
 interface Member {
@@ -39,6 +40,7 @@ export default function AdminStaffPage() {
   // Why the staff could not be read; shown instead of an empty list.
   const [loadError, setLoadError] = useState<unknown>(null);
   const [busy, setBusy] = useState<string | null>(null);
+  const [adding, setAdding] = useState(false);
   const [form, setForm] = useState({ fullName: '', email: '', role: 'support' as 'admin' | 'support', password: '' });
 
   const load = useCallback(async () => {
@@ -58,14 +60,16 @@ export default function AdminStaffPage() {
     else setLoading(false);
   }, [allowed, load]);
 
-  const run = async (id: string, action: () => Promise<unknown>, done: string) => {
+  const run = async (id: string, action: () => Promise<unknown>, done: string): Promise<boolean> => {
     setBusy(id);
     try {
       await action();
       showToast(done, 'success');
       await load();
+      return true;
     } catch (error) {
       showToast(apiErrorMessage(error, 'That did not work'), 'error');
+      return false;
     } finally {
       setBusy(null);
     }
@@ -73,8 +77,10 @@ export default function AdminStaffPage() {
 
   const create = async (e: FormEvent) => {
     e.preventDefault();
-    await run('new', () => apiClient.post('/admin/staff', form), `${ROLE_LABEL[form.role]} account created`);
+    // What was typed stays when the account could not be made, so it can be corrected and sent again.
+    if (!(await run('new', () => apiClient.post('/admin/staff', form), `${ROLE_LABEL[form.role]} account created`))) return;
     setForm({ fullName: '', email: '', role: form.role, password: '' });
+    setAdding(false);
   };
 
   const resetPassword = async (m: Member) => {
@@ -95,11 +101,18 @@ export default function AdminStaffPage() {
 
   return (
     <AdminShell>
-      <div className="max-w-5xl mx-auto">
-        <div className="mb-6">
-          <h1 className="text-2xl font-semibold text-ink">Staff</h1>
-          <p className="text-sm text-muted mt-1">There is one super admin with full access. Add an admin to run operations, or a customer support person to resolve complaints.</p>
-        </div>
+      <div className="max-w-5xl">
+        <PageHeader
+          title="Staff"
+          subtitle="There is one super admin with full access. Add an admin to run operations, or a customer support person to resolve complaints."
+          actions={
+            allowed && (
+              <Button variant={adding ? 'outline' : 'default'} onClick={() => setAdding(!adding)} aria-expanded={adding}>
+                {adding ? 'Close' : 'Add staff member'}
+              </Button>
+            )
+          }
+        />
 
         {!allowed ? (
           <p className="rounded-xl bg-accent-soft p-4 text-sm text-accent-soft-ink" data-testid="staff-denied">
@@ -107,6 +120,7 @@ export default function AdminStaffPage() {
           </p>
         ) : (
           <>
+            {adding && (
             <form onSubmit={create} className="mb-8 grid gap-3 rounded-2xl border border-line bg-surface p-4 sm:grid-cols-2" data-testid="staff-form">
               <h2 className="sm:col-span-2 text-base font-semibold text-ink">Add a staff member</h2>
               <label className="text-sm font-medium text-ink">
@@ -133,23 +147,24 @@ export default function AdminStaffPage() {
                 <Button type="submit" disabled={busy === 'new'}>{busy === 'new' ? 'Creating…' : 'Create account'}</Button>
               </div>
             </form>
+            )}
 
-            <h2 className="mb-3 text-base font-semibold text-ink">Everyone with admin access</h2>
+            <h2 className="mb-3 text-sm font-semibold text-ink">Everyone with admin access</h2>
             {loading ? (
-              <p className="text-sm text-muted" role="status">Loading…</p>
+              <LoadingLine text="Loading the staff" />
             ) : loadError && members.length === 0 ? (
               <LoadError error={loadError} onRetry={load} title="We couldn't load the staff" />
             ) : (
-              <ul className="grid gap-3" data-testid="staff-list">
+              <ul className="divide-y divide-line border-y border-line" data-testid="staff-list">
                 {members.map((m) => {
                   const locked = m.role === 'super_admin' || m.id === user?.id;
                   return (
-                    <li key={m.id} className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-line bg-surface p-4 min-w-0">
+                    <li key={m.id} className="flex flex-wrap items-center justify-between gap-3 py-4 min-w-0">
                       <div className="min-w-0 max-w-full break-words">
                         <p className="font-semibold text-ink">
                           {m.name ?? m.email}{' '}
                           <span className="ms-1 rounded-full bg-raised px-2 py-0.5 text-xs font-medium text-muted">{ROLE_LABEL[m.role]}</span>
-                          {m.status !== 'active' && <span className="ms-1 rounded-full bg-red-50 px-2 py-0.5 text-xs font-medium text-red-700">{m.status}</span>}
+                          {m.status !== 'active' && <span className="ms-1 rounded-full bg-red-50 px-2 py-0.5 text-xs font-medium text-red-700">{m.status === 'suspended' ? 'Suspended' : 'Inactive'}</span>}
                           <span className={`ms-1 rounded-full px-2 py-0.5 text-xs font-medium ${m.twoFactorEnabled ? 'bg-brand-soft text-brand-soft-ink' : 'bg-accent-soft text-accent-soft-ink'}`} data-testid="staff-2fa">
                             {m.twoFactorEnabled ? 'Two-step on' : 'Two-step not set up'}
                           </span>
@@ -177,7 +192,7 @@ export default function AdminStaffPage() {
                           {m.twoFactorEnabled && (
                             <Button variant="outline" disabled={busy === m.id} onClick={() => resetTwoFactor(m)}>Reset two-step</Button>
                           )}
-                          <Button variant="outline" disabled={busy === m.id} onClick={() => remove(m)}>Remove</Button>
+                          <Button variant="outline" className="text-red-700" disabled={busy === m.id} onClick={() => remove(m)}>Remove</Button>
                         </div>
                       )}
                     </li>

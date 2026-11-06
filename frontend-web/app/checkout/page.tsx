@@ -65,6 +65,10 @@ const KITCHEN_REFUSALS = ['KITCHEN_CLOSED', 'KITCHEN_PREORDER_ONLY', 'KITCHEN_OR
 type KitchenRefusal = (typeof KITCHEN_REFUSALS)[number];
 const isKitchenRefusal = (code: string | undefined): code is KitchenRefusal => KITCHEN_REFUSALS.some((c) => c === code);
 
+/** The total the server would charge, from a PRICE_CHANGED refusal. */
+const changedTotal = (details: unknown): number | null =>
+  details && typeof details === 'object' && 'total' in details && typeof details.total === 'number' ? details.total : null;
+
 /** How far ahead a delivery day can be chosen when the kitchen sets no limit of its own. */
 const DEFAULT_MAX_DAYS_AHEAD = 6;
 
@@ -77,6 +81,21 @@ interface CatalogPromotion {
   type: string;
   discountValue: number;
 }
+
+type AppliedPromo = { code: string; discountAmount: number };
+
+/** The tray's goods at the prices the order charges: each dish after its kitchen's menu deals. */
+const dealSubtotal = (items: CartResponse['items'], promotions: Record<string, CatalogPromotion[]>) =>
+  items.reduce((sum, item) => {
+    const base = item.variant?.price ?? item.product.price;
+    const promos = promotions[item.product.id] || [];
+    return sum + (promos.length > 0 ? getStackedDiscountedPrice(base, promos) : base) * item.quantity;
+  }, 0);
+
+const validatePromo = async (code: string, cartTotal: number): Promise<AppliedPromo | null> => {
+  const res = await apiClient.post<{ success: boolean; data: AppliedPromo }>('/promotions/validate', { code: code.trim(), cartTotal });
+  return res.data?.success && res.data?.data ? { code: res.data.data.code, discountAmount: res.data.data.discountAmount } : null;
+};
 
 export default function CheckoutPage() {
   const router = useRouter();
@@ -102,7 +121,7 @@ export default function CheckoutPage() {
     return today.length ? { offset: 0, time: today[0] } : { offset: 1, time: 'morning' };
   });
   const [promoCode, setPromoCode] = useState('');
-  const [appliedPromo, setAppliedPromo] = useState<{ code: string; discountAmount: number } | null>(null);
+  const [appliedPromo, setAppliedPromo] = useState<AppliedPromo | null>(null);
   const [promoValidating, setPromoValidating] = useState(false);
   const [loading, setLoading] = useState(true);
   // Why the tray and addresses could not be read; shown instead of "Your Tray is Empty", which would be untrue.
@@ -129,6 +148,22 @@ export default function CheckoutPage() {
     version: trayVersion,
   });
 
+  const loadPromotions = async (productIds: string[]): Promise<Record<string, CatalogPromotion[]>> => {
+    let promotions: Record<string, CatalogPromotion[]> = {};
+    if (productIds.length) {
+      try {
+        const promRes = await apiClient.get<{ success: boolean; data: Record<string, CatalogPromotion[]> }>(
+          `/promotions/catalog?productIds=${encodeURIComponent(productIds.join(','))}`
+        );
+        if (promRes.data?.success && promRes.data?.data) promotions = promRes.data.data;
+      } catch {
+        promotions = {};
+      }
+    }
+    setPromotionsByProductId(promotions);
+    return promotions;
+  };
+
   const loadData = async () => {
     setLoading(true);
     setLoadError(null);
@@ -145,48 +180,19 @@ export default function CheckoutPage() {
         setSelectedAddress(defaultAddress.id);
       }
       if (cartData?.items?.length) {
-        const productIds = cartData.items.map((i) => i.product.id).filter(Boolean);
-        if (productIds.length) {
-          try {
-            const promRes = await apiClient.get<{ success: boolean; data: Record<string, CatalogPromotion[]> }>(
-              `/promotions/catalog?productIds=${encodeURIComponent(productIds.join(','))}`
-            );
-            if (promRes.data?.success && promRes.data?.data) {
-              setPromotionsByProductId(promRes.data.data);
-            }
-          } catch {
-            setPromotionsByProductId({});
-          }
-        }
+        const promotions = await loadPromotions(cartData.items.map((i) => i.product.id).filter(Boolean));
 
-        // Auto-validate promo code pre-selected from dashboard or tray
+        // A code chosen on the home page or in the tray is checked against the tray after its menu deals, as the order is.
         const storedPromo = useCartStore.getState().appliedPromoCode;
         if (storedPromo && !appliedPromo) {
           setPromoCode(storedPromo);
-          const discountedSub = cartData.items.reduce((s, it) => {
-            const base = it.variant?.price ?? it.product.price;
-            return s + base * it.quantity;
-          }, 0);
-          apiClient
-            .post<{ success: boolean; data: { code: string; discountAmount: number } }>(
-              '/promotions/validate',
-              { code: storedPromo.trim(), cartTotal: discountedSub }
-            )
-            .then((res) => {
-              if (res.data?.success && res.data?.data) {
-                setAppliedPromo({
-                  code: res.data.data.code,
-                  discountAmount: res.data.data.discountAmount,
-                });
-                showToast(
-                  t('autoApplied', { code: res.data.data.code, amount: formatPrice(res.data.data.discountAmount) }),
-                  'success'
-                );
-              }
+          validatePromo(storedPromo, dealSubtotal(cartData.items, promotions))
+            .then((applied) => {
+              if (!applied) return;
+              setAppliedPromo(applied);
+              showToast(t('autoApplied', { code: applied.code, amount: formatPrice(applied.discountAmount) }), 'success');
             })
-            .catch(() => {
-              // Ignore if min order not met
-            });
+            .catch(() => undefined);
         }
       }
     } catch (error) {
@@ -352,10 +358,10 @@ export default function CheckoutPage() {
           ? t('day.tomorrow').toLocaleLowerCase(intlLocale)
           : new Intl.DateTimeFormat(intlLocale, { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'Asia/Karachi' }).format(opens);
     const time = new Intl.DateTimeFormat(intlLocale, { hour: 'numeric', minute: '2-digit', timeZone: 'Asia/Karachi' }).format(opens);
-    return t('kitchenOpensAt', { day: dayText, time });
+    return t('kitchenOpensAt', { day: dayText, time: `\u2066${time}\u2069` });
   };
 
-  const handleCreateOrder = async () => {
+  const handleCreateOrder = async (expectedTotal: number | undefined) => {
     if (kitchenClosed) return;
     if (!isPickup) {
       if (!selectedAddress) {
@@ -419,6 +425,7 @@ export default function CheckoutPage() {
         paymentMethod: paymentMethod,
         promotionCode: appliedPromo?.code || undefined,
         deliveryInstructions: finalInstructions || undefined,
+        expectedTotal,
       };
 
       // One key per checkout attempt, reused if this same order is retried, so a
@@ -488,6 +495,14 @@ export default function CheckoutPage() {
             details && typeof details === 'object' && 'nextOpenAt' in details && typeof details.nextOpenAt === 'string' ? details.nextOpenAt : null;
           setKitchenAvailability({ status: 'closed', isOpen: false, nextOpenAt });
         }
+        if (code === 'PRICE_CHANGED') {
+          const promotions = await loadPromotions(cart.items.map((i) => i.product.id));
+          setTrayVersion((v) => v + 1);
+          if (appliedPromo) {
+            // The code's discount depends on the dish prices, so it is worked out again on the new ones.
+            setAppliedPromo(await validatePromo(appliedPromo.code, dealSubtotal(cart.items, promotions)).catch(() => null));
+          }
+        }
         if (code === 'CASH_UNAVAILABLE') {
           setCashUnavailable(true);
           const fallback = (['safepay', 'bank', 'jazzcash', 'easypaisa'] as const).find((m) =>
@@ -500,6 +515,8 @@ export default function CheckoutPage() {
             ? t('onlineUnavailable')
             : code === 'CASH_UNAVAILABLE'
               ? t('cashUnavailable')
+              : code === 'PRICE_CHANGED'
+                ? t('priceChanged', { amount: formatPrice(changedTotal(apiErrorDetails(error)) ?? expectedTotal ?? 0) })
               : code === 'PAYMENT_METHOD_UNAVAILABLE'
                 ? t('paymentMethodUnavailable', { kitchen: kitchen?.businessName || t('verifiedKitchen') })
                 : code === 'DELIVERY_SLOT_PASSED'
@@ -567,50 +584,61 @@ export default function CheckoutPage() {
   const closedOpensText = kitchenClosed ? opensLabel(kitchenAvailability?.opensAt || kitchenAvailability?.nextOpenAt) : null;
 
   // Subtotals with promotions
-  const discountedSubtotal = cart.items.reduce((sum, item) => {
-    const base = item.variant?.price ?? item.product.price;
-    const promos = promotionsByProductId[item.product.id] || [];
-    const unitPrice = promos.length > 0 ? getStackedDiscountedPrice(base, promos) : base;
-    return sum + unitPrice * item.quantity;
-  }, 0);
+  const discountedSubtotal = dealSubtotal(cart.items, promotionsByProductId);
   const promotionSavings = Math.max(0, cart.summary.subtotal - discountedSubtotal);
   // Delivery is added to the total only once the server has said what it costs to the chosen address.
   // Collecting from the kitchen costs nothing to deliver, so the total is known straight away.
   const deliveryKnown = isPickup || (!!deliveryEstimate && deliveryEstimate.isDeliverable !== false);
   const notDeliverable = !isPickup && !!deliveryEstimate && deliveryEstimate.isDeliverable === false;
+  // Delivery still to be added on top: the summary and the place-order button say so in the same states.
+  const deliveryToAdd = !deliveryKnown && !notDeliverable;
   const effectiveDeliveryFee = !isPickup && deliveryEstimate && deliveryKnown && !deliveryEstimate.isFree ? deliveryEstimate.deliveryFee : 0;
   const promoDiscountAmount = appliedPromo?.discountAmount || 0;
   // Exactly what the server charges (priceOrder in order.service.ts): GST on the goods after
   // all discounts, the total in whole rupees, so this is the amount the rider collects.
   const { gst: gstAmount, total: totalPayable } = orderTotals(discountedSubtotal - promoDiscountAmount, effectiveDeliveryFee);
+  const canPlaceOrder = !(
+    processing ||
+    kitchenClosed ||
+    !chosenTime ||
+    !methodUsable(paymentMethod) ||
+    (!isPickup && (!selectedAddress || notDeliverable || (estimatePending && !deliveryEstimate)))
+  );
+  const placeOrderLabel = processing ? (
+    <>
+      <div className="w-4 h-4 border-2 border-on-brand border-t-transparent rounded-full animate-spin" />
+      <span>{t('placing')}</span>
+    </>
+  ) : (
+    <>
+      <span>
+        {deliveryKnown
+          ? t('placeOrder', { amount: formatPrice(totalPayable) })
+          : deliveryToAdd
+            ? t('placeOrderPlusDelivery', { amount: formatPrice(totalPayable) })
+            : t('placeOrderPlain')}
+      </span>
+      <ArrowRight className="rtl:-scale-x-100 w-4 h-4" />
+    </>
+  );
 
   return (
     <DashboardLayout title={t('checkoutTitle')} subtitle={t('reviewSubtitle')} sidebarItems={sidebarItems} userType="customer">
-      <div className="max-w-6xl mx-auto pb-16">
+      <div className="max-w-6xl mx-auto pb-28 lg:pb-16">
         {/* Kitchen Origin Header Banner */}
-        <div className="mb-6 p-4 rounded-[20px] bg-surface border border-line flex flex-wrap items-center justify-between gap-3">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-brand-soft flex items-center justify-center text-brand-soft-ink">
-              <Store className="w-5 h-5" />
+        <div className="mb-6 px-4 py-2 rounded-[20px] bg-surface border border-line flex items-center justify-between gap-3">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="w-10 h-10 shrink-0 rounded-xl bg-brand-soft flex items-center justify-center text-brand-soft-ink">
+              <Store className="w-5 h-5" aria-hidden />
             </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <span className="text-[15px] font-bold text-ink">{sellerTitle}</span>
-                <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-brand-soft text-brand-soft-ink">
-                  {t('singleKitchenBatch')}
-                </span>
-              </div>
-              <p className="text-xs text-muted">
-                {t('oneKitchenText')}
-              </p>
-            </div>
+            <span className="min-w-0 break-words text-[15px] font-bold text-ink">{sellerTitle}</span>
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-3 shrink-0">
             <Link
               href="/cart"
-              className="min-h-11 text-sm font-semibold text-brand-ink hover:underline inline-flex items-center gap-1"
+              className="min-h-11 text-sm font-semibold text-brand-ink hover:underline inline-flex items-center gap-1 whitespace-nowrap"
             >
-              <span>{t(cart.summary.totalItems === 1 ? 'editTrayOne' : 'editTray', { count: cart.summary.totalItems })}</span>
+              <span>{t('editTray')}</span>
               <ChevronRight className="rtl:-scale-x-100 w-3.5 h-3.5" />
             </Link>
           </div>
@@ -683,10 +711,7 @@ export default function CheckoutPage() {
                   <div className="w-9 h-9 rounded-xl bg-brand-soft text-brand-soft-ink flex items-center justify-center shrink-0">
                     <MapPin className="w-4 h-4" />
                   </div>
-                  <div className="min-w-0">
-                    <h2 className="text-base font-bold text-ink">{t('addressHeading')}</h2>
-                    <p className="text-xs text-muted">{t('addressHint')}</p>
-                  </div>
+                  <h2 className="min-w-0 text-base font-bold text-ink">{t('addressHeading')}</h2>
                 </div>
                 {addresses.length > 0 && (
                   <Link
@@ -758,17 +783,12 @@ export default function CheckoutPage() {
                               </Link>
                             )}
                           </div>
-                          <p className="text-xs text-muted leading-relaxed truncate">
+                          <p dir="auto" className="text-xs text-muted leading-relaxed truncate">
                             {address.addressLine1}
                             {address.area ? `, ${address.area}` : ''}
                             {address.city ? `, ${address.city}` : ''}
                           </p>
                         </div>
-                        {isSelected && (
-                          <div className="w-5 h-5 rounded-full bg-brand text-on-brand flex items-center justify-center shrink-0 text-xs">
-                            <Check className="w-3 h-3 stroke-[3]" />
-                          </div>
-                        )}
                       </label>
                     );
                   })}
@@ -783,10 +803,7 @@ export default function CheckoutPage() {
                 <div className="w-9 h-9 rounded-xl bg-brand-soft text-brand-soft-ink flex items-center justify-center">
                   <Clock className="w-4 h-4" />
                 </div>
-                <div>
-                  <h2 className="text-base font-bold text-ink">{t(isPickup ? 'pickupSlotHeading' : 'slotHeading')}</h2>
-                  <p className="text-xs text-muted">{t(isPickup ? 'pickupSlotHint' : 'slotHint')}</p>
-                </div>
+                <h2 className="text-base font-bold text-ink">{t(isPickup ? 'pickupSlotHeading' : 'slotHeading')}</h2>
               </div>
 
               {days.length === 0 ? (
@@ -863,10 +880,7 @@ export default function CheckoutPage() {
                 <div className="w-9 h-9 rounded-xl bg-brand-soft text-brand-soft-ink flex items-center justify-center">
                   <Banknote className="w-4 h-4" />
                 </div>
-                <div>
-                  <h2 className="text-base font-bold text-ink">{t('paymentHeading')}</h2>
-                  <p className="text-xs text-muted">{t('paymentHint')}</p>
-                </div>
+                <h2 className="text-base font-bold text-ink">{t('paymentHeading')}</h2>
               </div>
 
               <div className="space-y-3">
@@ -981,7 +995,7 @@ export default function CheckoutPage() {
                           {walletBalance < totalPayable && (
                             <>
                               {t('walletNotEnough')}
-                              <Link href="/wallet" className="underline font-semibold inline-flex items-center min-h-11 px-1">
+                              <Link href="/wallet" className="underline font-semibold inline-block py-3 -my-3 px-1">
                                 {t('topUp')}
                               </Link>
                             </>
@@ -1269,7 +1283,7 @@ export default function CheckoutPage() {
                 <h3 className="text-base font-bold text-ink">{t('orderSummary')}</h3>
                 <div className="flex items-center gap-3">
                   <span className="text-xs font-semibold text-muted">
-                    {t(cart.summary.totalItems === 1 ? 'portionsOne' : 'portionsMany', { count: cart.summary.totalItems })}
+                    {t(cart.summary.totalItems === 1 ? 'itemsOne' : 'itemsMany', { count: cart.summary.totalItems })}
                   </span>
                   <button
                     type="button"
@@ -1363,7 +1377,7 @@ export default function CheckoutPage() {
                       setPromoCode(e.target.value.toUpperCase());
                       if (appliedPromo) setAppliedPromo(null);
                     }}
-                    placeholder={t('voucherPlaceholder')}
+                    placeholder={t('promoPlaceholder')}
                     dir="ltr"
                     disabled={!!appliedPromo}
                     aria-label={t('voucherPlaceholder')}
@@ -1387,26 +1401,17 @@ export default function CheckoutPage() {
                   ) : (
                     <Button
                       type="button"
-                      size="sm"
+                      variant="outline"
                       disabled={!promoCode.trim() || promoValidating}
                       onClick={async () => {
                         if (!promoCode.trim() || !cart) return;
                         setPromoValidating(true);
                         try {
-                          const res = await apiClient.post<{
-                            success: boolean;
-                            data: { code: string; discountAmount: number };
-                          }>('/promotions/validate', {
-                            code: promoCode.trim(),
-                            cartTotal: discountedSubtotal,
-                          });
-                          if (res.data?.success && res.data?.data) {
-                            setAppliedPromo({
-                              code: res.data.data.code,
-                              discountAmount: res.data.data.discountAmount,
-                            });
-                            useCartStore.getState().setAppliedPromoCode(res.data.data.code);
-                            showToast(t('voucherAppliedToast', { amount: formatPrice(res.data.data.discountAmount) }), 'success');
+                          const applied = await validatePromo(promoCode, discountedSubtotal);
+                          if (applied) {
+                            setAppliedPromo(applied);
+                            useCartStore.getState().setAppliedPromoCode(applied.code);
+                            showToast(t('voucherAppliedToast', { amount: formatPrice(applied.discountAmount) }), 'success');
                           }
                         } catch (err) {
                           showToast(apiErrorMessage(err, t('invalidVoucher')), 'error');
@@ -1414,7 +1419,7 @@ export default function CheckoutPage() {
                           setPromoValidating(false);
                         }
                       }}
-                      className="h-11 bg-ink hover:bg-ink/90 text-page text-sm font-extrabold rounded-xl px-4"
+                      className="h-11 text-sm font-bold px-4 rounded-xl"
                     >
                       {promoValidating ? t('checking') : t('apply')}
                     </Button>
@@ -1434,20 +1439,20 @@ export default function CheckoutPage() {
               <div className="pt-2 border-t border-line space-y-2.5 text-sm">
                 <div className="flex justify-between text-muted">
                   <span>{t('dishesSubtotal')}</span>
-                  <span className="font-semibold text-ink">{formatPrice(discountedSubtotal)}</span>
+                  <bdi dir="ltr" className="font-semibold text-ink">{formatPrice(discountedSubtotal + promotionSavings)}</bdi>
                 </div>
 
                 {promotionSavings > 0 && (
                   <div className="flex justify-between text-brand-soft-ink font-medium">
                     <span>{t('menuDealsSavings')}</span>
-                    <span>-{formatPrice(promotionSavings)}</span>
+                    <bdi dir="ltr">-{formatPrice(promotionSavings)}</bdi>
                   </div>
                 )}
 
                 {appliedPromo && (
                   <div className="flex justify-between text-brand-soft-ink font-medium">
                     <span>{t('voucherDiscount')}</span>
-                    <span>-{formatPrice(appliedPromo.discountAmount)}</span>
+                    <bdi dir="ltr">-{formatPrice(appliedPromo.discountAmount)}</bdi>
                   </div>
                 )}
 
@@ -1480,7 +1485,10 @@ export default function CheckoutPage() {
                     <span className="text-base font-extrabold text-ink block">{deliveryKnown ? t('totalPayable') : t('totalBeforeDelivery')}</span>
                     <span className="text-xs text-muted">{deliveryKnown ? t('includesDeliveryTax') : t('deliveryAddedWhenPlaced')}</span>
                   </div>
-                  <span className="text-2xl font-extrabold text-ink">{formatPrice(totalPayable)}</span>
+                  <span className="text-end">
+                    <bdi dir="ltr" className="text-2xl font-extrabold text-ink">{formatPrice(totalPayable)}</bdi>
+                    {deliveryToAdd && <span className="block text-xs font-semibold text-muted">{t('plusDelivery')}</span>}
+                  </span>
                 </div>
               </div>
 
@@ -1489,38 +1497,22 @@ export default function CheckoutPage() {
               )}
               <Button
                 type="button"
-                disabled={
-                  processing ||
-                  kitchenClosed ||
-                  !chosenTime ||
-                  !methodUsable(paymentMethod) ||
-                  (!isPickup && (!selectedAddress || notDeliverable || (estimatePending && !deliveryEstimate)))
-                }
-                onClick={handleCreateOrder}
-                className="w-full h-14 bg-brand hover:bg-brand-500 text-on-brand font-extrabold text-base rounded-2xl transition-all active:scale-[0.99] flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+                disabled={!canPlaceOrder}
+                onClick={() => handleCreateOrder(deliveryKnown ? totalPayable : undefined)}
+                className="hidden lg:flex w-full h-14 bg-brand hover:bg-brand-500 text-on-brand font-extrabold text-base rounded-2xl transition-all active:scale-[0.99] items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
               >
-                {processing ? (
-                  <>
-                    <div className="w-4 h-4 border-2 border-on-brand border-t-transparent rounded-full animate-spin" />
-                    <span>{t('placing')}</span>
-                  </>
-                ) : (
-                  <>
-                    <span>{deliveryKnown ? t('placeOrder', { amount: formatPrice(totalPayable) }) : t('placeOrderPlain')}</span>
-                    <ArrowRight className="rtl:-scale-x-100 w-4 h-4" />
-                  </>
-                )}
+                {placeOrderLabel}
               </Button>
 
               <p className="text-center text-xs leading-relaxed text-muted">
                 {richText(t('agreeTerms'), {
                   terms: (
-                    <ExternalLink href="/terms" className="inline-flex items-center min-h-11 font-semibold text-ink underline hover:text-brand-ink">
+                    <ExternalLink href="/terms" className="inline-block py-3 -my-3 font-semibold text-ink underline hover:text-brand-ink">
                       {t('terms')}
                     </ExternalLink>
                   ),
                   refund: (
-                    <ExternalLink href="/refund-policy" className="inline-flex items-center min-h-11 font-semibold text-ink underline hover:text-brand-ink">
+                    <ExternalLink href="/refund-policy" className="inline-block py-3 -my-3 font-semibold text-ink underline hover:text-brand-ink">
                       {t('refundPolicy')}
                     </ExternalLink>
                   ),
@@ -1529,6 +1521,19 @@ export default function CheckoutPage() {
             </div>
           </div>
         </div>
+      </div>
+
+      {/* On a phone the order is placed from a bar that stays under the thumb; the summary card has the same button on a desktop. */}
+      <div className="lg:hidden fixed inset-x-0 bottom-[var(--tabbar-offset)] z-40 border-t border-line bg-surface px-4 pt-3 pb-[calc(0.75rem+var(--safe-bottom))]">
+        <Button
+          type="button"
+          disabled={!canPlaceOrder}
+          onClick={() => handleCreateOrder(deliveryKnown ? totalPayable : undefined)}
+          className="w-full h-13 bg-brand hover:bg-brand-500 text-on-brand font-extrabold text-base rounded-2xl active:scale-[0.99] flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+          data-testid="place-order-bar"
+        >
+          {placeOrderLabel}
+        </Button>
       </div>
 
       <ConfirmModal

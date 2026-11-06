@@ -223,24 +223,25 @@ export function dispatchSoon(deliveryId?: string) {
  * A job has just joined the open pool (a new one, one handed back, one reopened by an admin). It is
  * offered to the best rider first: when a rider takes it, no other rider ever hears of it, so a busy
  * hour does not make every connected rider reload their lists twice per order. Only a job nobody
- * could take is announced to every rider, who can then claim it by hand. The dispatcher is a
- * parameter so the choice can be tested without a database.
+ * could take is announced to every rider, who can then claim it by hand, except the one who just handed it
+ * back. The dispatcher is an option so the choice can be tested without a database.
  */
 export async function postDelivery(
   deliveryId: string,
   orderId: string,
-  dispatch: (id: string, opts: { announced: boolean }) => Promise<DispatchResult> = dispatchDelivery
+  opts: { releasedByUserId?: string; dispatch?: (id: string, o: { announced: boolean }) => Promise<DispatchResult> } = {}
 ): Promise<void> {
+  const dispatch = opts.dispatch ?? dispatchDelivery;
   let taken = false;
   try {
     taken = (await dispatch(deliveryId, { announced: false })).assigned;
   } catch (err) {
     logger.error({ err, deliveryId }, 'Dispatch failed');
   }
-  if (!taken) realtimeOrderService.emitDeliveryPosted(deliveryId, orderId);
+  if (!taken) realtimeOrderService.emitDeliveryPosted(deliveryId, orderId, { exceptUserId: opts.releasedByUserId });
 }
 
 /** Fire and forget: posting a job must never fail what triggered it. */
-export function postDeliverySoon(deliveryId: string, orderId: string) {
-  void postDelivery(deliveryId, orderId).catch((err) => logger.error({ err, deliveryId }, 'Posting a delivery failed'));
+export function postDeliverySoon(deliveryId: string, orderId: string, opts: { releasedByUserId?: string } = {}) {
+  void postDelivery(deliveryId, orderId, opts).catch((err) => logger.error({ err, deliveryId }, 'Posting a delivery failed'));
 }

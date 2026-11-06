@@ -90,7 +90,7 @@ function formatWhen(iso: string | null | undefined, tk: KitchenT): string | null
       ? tk('tomorrow')
       : date.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', timeZone: PKT });
   const time = date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true, timeZone: PKT });
-  return tk('dayAt', { day, time });
+  return tk('dayAt', { day, time: `\u2066${time}\u2069` });
 }
 
 function describeOpenState(
@@ -481,7 +481,7 @@ export default function KitchensDirectoryPage() {
               );
             })}
 
-            <label className="flex flex-shrink-0 items-center gap-1 h-11 px-3 rounded-full border border-line bg-surface text-sm text-muted">
+            <label className="relative flex flex-shrink-0 items-center gap-1 h-11 px-3 rounded-full border border-line bg-surface text-sm text-muted">
               <ArrowUpDown className="w-4 h-4" aria-hidden />
               <span className="sr-only">{tk('sortLabel')}</span>
               <select

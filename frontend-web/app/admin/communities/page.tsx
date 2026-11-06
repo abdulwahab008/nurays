@@ -9,6 +9,7 @@ import LocationMap from '@/components/ui/LocationMap';
 import { apiClient, apiErrorMessage } from '@/lib/api-client';
 import { formatPrice } from '@/lib/utils';
 import { CommunityPairFees } from '@/components/admin/CommunityPairFees';
+import { PageHeader } from '@/components/admin/AdminListParts';
 
 interface Community {
   id: string;
@@ -154,16 +155,16 @@ export default function AdminCommunitiesPage() {
 
   return (
     <AdminShell>
-      <div className="max-w-6xl mx-auto space-y-5">
-        <div className="flex flex-wrap items-end justify-between gap-3">
-          <div>
-            <h1 className="text-2xl font-semibold text-ink">Communities</h1>
-            <p className="text-sm text-muted mt-1">Neighbourhoods buyers and kitchens belong to, with their delivery fees.</p>
-          </div>
-          <Button variant={form ? 'outline' : 'default'} onClick={() => setForm(form ? null : blank())}>
-            {form ? 'Close' : 'New community'}
-          </Button>
-        </div>
+      <div className="max-w-6xl space-y-5">
+        <PageHeader
+          title="Communities"
+          subtitle="Neighbourhoods buyers and kitchens belong to, with their delivery fees."
+          actions={
+            <Button variant={form ? 'outline' : 'default'} onClick={() => setForm(form ? null : blank())}>
+              {form ? 'Close' : 'New community'}
+            </Button>
+          }
+        />
 
         {form && (
           <form onSubmit={save} className="bg-surface border border-line rounded-2xl p-4 sm:p-5 grid grid-cols-1 lg:grid-cols-2 gap-5" data-testid="community-form">
@@ -264,7 +265,7 @@ export default function AdminCommunitiesPage() {
             <p className="p-10 text-center text-sm text-muted">No communities yet. Add the first with New community.</p>
           ) : (
             <>
-            <ul className="sm:hidden divide-y divide-line" data-testid="communities-cards">
+            <ul className="md:hidden divide-y divide-line" data-testid="communities-cards">
               {communities.map((c) => (
                 <li key={c.id} className={`flex items-center gap-3 px-4 py-3 ${c.isActive ? '' : 'opacity-60'}`}>
                   <div className="min-w-0 flex-1">
@@ -273,13 +274,14 @@ export default function AdminCommunitiesPage() {
                       {!c.isActive && <span className="ms-2 rounded-full bg-raised px-2 py-0.5 text-xs font-medium text-muted">Off</span>}
                     </p>
                     <p className="text-sm text-muted">{deliveryLine(c)}</p>
-                    <p className="text-xs text-muted">Radius {c.radiusKm} km · {neighbourCount(c)} · {c.sellerCount} kitchens</p>
+                    <p className="text-xs text-muted">Radius {c.radiusKm} km · {neighbourCount(c)} · {c.sellerCount === 1 ? '1 kitchen' : `${c.sellerCount} kitchens`}</p>
                   </div>
                   <Button variant="outline" onClick={() => editCommunity(c)}>Edit</Button>
                 </li>
               ))}
             </ul>
-            <table className="hidden sm:table w-full text-sm" data-testid="communities-table">
+            <div className="hidden md:block">
+            <table className="w-full text-sm [&_th]:text-start" data-testid="communities-table">
               <thead className="bg-raised text-start text-xs font-medium text-muted">
                 <tr>
                   <th className="px-4 py-3">Community</th>
@@ -319,6 +321,7 @@ export default function AdminCommunitiesPage() {
                 ))}
               </tbody>
             </table>
+            </div>
             </>
           )}
         </div>

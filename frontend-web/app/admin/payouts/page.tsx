@@ -5,10 +5,13 @@ import { AdminShell } from '@/components/layout/AdminShell';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/toast';
 import { LoadError } from '@/components/ui/LoadError';
+import { AdminFilterTabs } from '@/components/admin/AdminFilterTabs';
+import { PageHeader } from '@/components/admin/AdminListParts';
 import { useDialogs } from '@/components/ui/Dialogs';
 import { useAuthStore } from '@/lib/store/auth-store';
 import { apiClient, apiErrorMessage } from '@/lib/api-client';
-import { formatPrice, formatDate } from '@/lib/utils';
+import { formatPrice } from '@/lib/utils';
+import { formatDate } from '@/components/admin/admin-dates';
 import { PayoutStatement } from '@/components/payouts/PayoutStatement';
 
 interface Payout {
@@ -178,16 +181,16 @@ export default function AdminPayoutsPage() {
 
   return (
     <AdminShell>
-      <div className="max-w-7xl mx-auto">
-        <div className="mb-6 flex flex-wrap items-end justify-between gap-3">
-          <div>
-            <h1 className="text-2xl font-semibold text-ink">Kitchen payouts</h1>
-            <p className="text-sm text-muted mt-1">Money owed to kitchens, and what kitchens owe Nuray.</p>
-          </div>
-          <Button variant="outline" onClick={loadPayouts} disabled={loading}>
-            {loading ? 'Loading…' : 'Refresh'}
-          </Button>
-        </div>
+      <div className="max-w-7xl">
+        <PageHeader
+          title="Kitchen payouts"
+          subtitle="Money owed to kitchens, and what kitchens owe Nuray."
+          actions={
+            <Button variant="outline" onClick={loadPayouts} disabled={loading}>
+              {loading ? 'Loading…' : 'Refresh'}
+            </Button>
+          }
+        />
 
         {/* Kitchens that owe Nuray */}
         {owingError ? (
@@ -215,21 +218,13 @@ export default function AdminPayoutsPage() {
           </div>
         ) : null}
 
-        <div className="flex gap-2 mb-6 overflow-x-auto no-scrollbar">
-          {FILTERS.map((f) => (
-            <button
-              key={f}
-              type="button"
-              aria-pressed={filter === f}
-              onClick={() => setFilter(f)}
-              className={`shrink-0 min-h-11 px-4 rounded-full text-sm font-medium border transition-colors ${
-                filter === f ? 'border-ink bg-ink text-page' : 'border-line bg-surface text-ink hover:bg-raised'
-              }`}
-            >
-              {f === 'all' ? 'All' : statusWord(f)}
-            </button>
-          ))}
-        </div>
+        <AdminFilterTabs
+          label="Payout status"
+          value={filter}
+          onChange={setFilter}
+          tabs={FILTERS.map((f) => ({ id: f, label: f === 'all' ? 'All' : statusWord(f) }))}
+          className="mb-6"
+        />
 
         {loading ? (
           <div className="flex items-center justify-center gap-3 py-12 text-sm text-muted" role="status">

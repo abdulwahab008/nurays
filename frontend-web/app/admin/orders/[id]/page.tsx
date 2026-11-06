@@ -1,8 +1,10 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, type ReactNode } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
+import { ChevronDown, ChevronLeft } from 'lucide-react';
+import { describeAction } from '../../audit-log/describe';
 import { AdminShell } from '@/components/layout/AdminShell';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/toast';
@@ -10,9 +12,11 @@ import { LoadError } from '@/components/ui/LoadError';
 import { useDialogs } from '@/components/ui/Dialogs';
 import { useAuthStore } from '@/lib/store/auth-store';
 import { apiClient, apiErrorMessage, apiErrorStatus } from '@/lib/api-client';
-import { formatPrice, formatDate, formatDateTime } from '@/lib/utils';
+import { formatPrice } from '@/lib/utils';
+import { formatDate, formatDateTime } from '@/components/admin/admin-dates';
 import { ExternalLink } from '@/components/ExternalLink';
-import { methodLabel, paymentState, statusLabel, statusTag } from '../order-labels';
+import { OrderStatusPill, PhoneText, StatusPill } from '@/components/admin/AdminListParts';
+import { methodLabel, nothingToCollect, paymentState, statusLabel } from '../order-labels';
 
 interface OrderDetail {
   id: string;
@@ -72,6 +76,122 @@ const RIDER_STEPS = new Set(['dispatched', 'in_transit', 'delivered']);
 const ORDER_FORWARD_SEQUENCE = ['pending', 'confirmed', 'preparing', 'ready', 'dispatched', 'in_transit', 'delivered', 'completed'];
 
 const section = 'pt-5 border-t border-line';
+
+type Investigation = NonNullable<OrderDetail['investigation']>;
+type InvestigationRow = { text: ReactNode; raw: string };
+
+const ATTEMPT_STATUS: Record<string, string> = { pending: 'started, not finished', paid: 'paid', duplicate: 'paid a second time', expired: 'expired before it was paid' };
+const SETTLED_VIA: Record<string, string> = { return: 'confirmed when the customer came back', webhook: 'confirmed by the gateway' };
+const WALLET_TYPE: Record<string, string> = { credit: 'Added to the wallet', debit: 'Paid from the wallet' };
+const LEDGER_TYPE: Record<string, string> = {
+  customer_payment: 'Customer paid',
+  seller_earning: 'Kitchen earned',
+  platform_commission: 'Nuray commission',
+  delivery_fee: 'Delivery fee kept by Nuray',
+  seller_delivery_charge: 'Delivery taken from the kitchen',
+  seller_delivery_fee: 'Own-rider delivery fee owed to the kitchen',
+  refund: 'Refund',
+  adjustment: 'Correction',
+};
+const RIDER_LEDGER_TYPE: Record<string, string> = {
+  cod_collected: 'Cash collected from the customer',
+  delivery_fee: 'Delivery fee earned',
+  bonus: 'Bonus',
+  cash_deposit: 'Cash handed in',
+  payout: 'Paid out',
+  adjustment: 'Correction',
+};
+
+const sentence = (s: string) => s.replace(/_/g, ' ').replace(/^./, (c) => c.toUpperCase());
+const plain = (map: Record<string, string>, key: string) => map[key] ?? sentence(key);
+
+/** The rupees an admin action asked for (a refund's amount), so repeated attempts can be told apart. */
+function actionAmount(details: unknown): number | null {
+  if (details == null || typeof details !== 'object') return null;
+  const { refundAmount, amount } = details as { refundAmount?: unknown; amount?: unknown };
+  const value = refundAmount ?? amount;
+  return typeof value === 'number' ? value : null;
+}
+
+/** The money and admin trail behind an order, in plain words; the stored values stay one tap away. */
+function investigationGroups(inv: Investigation): Array<{ title: string; rows: InvestigationRow[]; open?: boolean }> {
+  return [
+    {
+      title: 'Payment attempts',
+      rows: inv.paymentAttempts.map((a) => ({
+        text: `${sentence(a.gateway)} payment of ${formatPrice(a.amount)}, ${plain(ATTEMPT_STATUS, a.status)}${a.settledVia ? `, ${plain(SETTLED_VIA, a.settledVia)}` : ''} · ${formatDate(a.createdAt)}`,
+        raw: `${a.gateway} ${a.status} ${a.settledVia ?? ''} tracker ${a.tracker} · ${a.id}`,
+      })),
+    },
+    {
+      title: 'Wallet movements',
+      rows: inv.walletTransactions.map((w) => ({
+        text: `${plain(WALLET_TYPE, w.transactionType)}: ${formatPrice(w.amount)}${w.status === 'completed' ? '' : ` (${sentence(w.status).toLowerCase()})`} · ${formatDate(w.createdAt)}`,
+        raw: `${w.transactionType} ${w.status}${w.description ? ` · ${w.description}` : ''} · ${w.id}`,
+      })),
+    },
+    {
+      title: 'Ledger entries',
+      rows: inv.ledgerEntries.map((l) => ({
+        text: `${plain(LEDGER_TYPE, l.transactionType)}: ${formatPrice(l.amount)} · ${formatDate(l.createdAt)}`,
+        raw: `${l.transactionType} ${l.accountType} ${l.entryType}${l.description ? ` · ${l.description}` : ''} · ${l.id}`,
+      })),
+    },
+    {
+      title: 'Rider ledger',
+      rows: inv.riderLedgerEntries.map((l) => ({
+        text: `${plain(RIDER_LEDGER_TYPE, l.type)}: ${formatPrice(l.amount)}${l.note ? ` · ${l.note}` : ''} · ${formatDate(l.createdAt)}`,
+        raw: `${l.type} · ${l.id}`,
+      })),
+    },
+    {
+      title: 'Admin actions on this order',
+      open: true,
+      rows: inv.adminActions.map((a) => {
+        const refused = a.status != null && a.status >= 400;
+        const amount = actionAmount(a.details);
+        return {
+          text: (
+            <>
+              {describeAction(a.action, { refused })}
+              {amount != null && (
+                <>
+                  {' '}of <bdi>{formatPrice(amount)}</bdi>
+                </>
+              )}{' '}
+              by <bdi>{a.admin || 'an unknown admin'}</bdi>
+              {refused ? ', refused (nothing changed)' : ''} · <bdi>{formatDateTime(a.createdAt)}</bdi>
+            </>
+          ),
+          raw: `${a.action} (${a.status ?? 'no answer'})${a.details != null ? ` ${JSON.stringify(a.details)}` : ''}`,
+        };
+      }),
+    },
+  ].filter((g) => g.rows.length > 0);
+}
+
+function InvestigationGroup({ title, rows, open }: { title: string; rows: InvestigationRow[]; open?: boolean }) {
+  const [technical, setTechnical] = useState(false);
+  return (
+    <details className="group text-sm" open={open}>
+      <summary className="flex min-h-11 cursor-pointer list-none items-center gap-2 font-medium text-ink [&::-webkit-details-marker]:hidden">
+        <ChevronDown aria-hidden="true" className="h-4 w-4 text-muted transition-transform group-open:rotate-180" />
+        {title} <span className="font-normal text-muted">({rows.length})</span>
+      </summary>
+      <ul className="mt-1 space-y-1 text-sm text-ink break-words">
+        {rows.map((r, i) => (
+          <li key={i}>
+            {r.text}
+            {technical && <p className="text-xs text-muted break-all" data-ltr>{r.raw}</p>}
+          </li>
+        ))}
+      </ul>
+      <button type="button" onClick={() => setTechnical(!technical)} aria-expanded={technical} className="min-h-11 text-xs font-medium text-brand-ink hover:underline">
+        {technical ? 'Hide technical details' : 'Show technical details'}
+      </button>
+    </details>
+  );
+}
 const sectionTitle = 'text-sm font-semibold text-ink mb-2';
 
 export default function AdminOrderDetailPage() {
@@ -266,16 +386,17 @@ export default function AdminOrderDetailPage() {
   // Cancelled, through the cancel flow below), so only that single next step is offered.
   const currentIndex = order ? ORDER_FORWARD_SEQUENCE.indexOf(order.orderStatus) : -1;
   const nextStatus = currentIndex >= 0 && currentIndex < ORDER_FORWARD_SEQUENCE.length - 2 ? ORDER_FORWARD_SEQUENCE[currentIndex + 1] : null;
-  const payment = order ? paymentState(order) : null;
-  const deliveries = (order?.deliveryFeeBreakdown ?? []).filter((d) => Number(d.fee) > 0);
+  const payment = order && !nothingToCollect(order) ? paymentState(order) : null;
+  const kitchenPaidDeliveries = (order?.deliveryFeeBreakdown ?? []).filter((d) => Number(d.fee) > 0 && d.paidBy === 'seller');
   const canChangeStatus = !!order && !['delivered', 'completed', 'cancelled', 'refunded'].includes(order.orderStatus);
 
   return (
     <AdminShell>
-      <div className="max-w-4xl mx-auto">
-        <div className="mb-4">
-          <Link href="/admin/orders" className="inline-flex min-h-11 items-center text-sm font-medium text-brand-ink hover:underline">
-            Back to orders
+      <div className="max-w-4xl">
+        <div className="-mt-2 mb-2">
+          <Link href="/admin/orders" className="inline-flex min-h-11 items-center gap-1 text-sm font-medium text-brand-ink hover:underline">
+            <ChevronLeft aria-hidden="true" className="h-4 w-4 rtl:rotate-180" />
+            All orders
           </Link>
         </div>
 
@@ -294,17 +415,25 @@ export default function AdminOrderDetailPage() {
         ) : (
           <div className="bg-surface border border-line rounded-2xl shadow-[var(--shadow-card)]">
             <div className="p-4 sm:p-6 border-b border-line">
-              <h1 className="text-2xl font-semibold text-ink break-all">Order #{order.orderNumber}</h1>
+              <h1 className="text-xl font-semibold text-ink sm:text-2xl">
+                Order <span className="whitespace-nowrap">#{order.orderNumber}</span>
+              </h1>
               <p className="text-sm text-muted mt-1">Placed {formatDateTime(order.createdAt)}</p>
               <dl className="mt-3 flex flex-wrap gap-x-5 gap-y-2 text-sm">
                 <div className="flex items-center gap-2">
                   <dt className="text-muted">Order</dt>
-                  <dd className={statusTag(order.orderStatus)} data-testid="order-status">{statusLabel(order.orderStatus)}</dd>
+                  <dd data-testid="order-status">
+                    <OrderStatusPill status={order.orderStatus} label={statusLabel(order.orderStatus)} />
+                  </dd>
                 </div>
-                <div className="flex items-center gap-2">
-                  <dt className="text-muted">Payment</dt>
-                  <dd className={payment!.tag} data-testid="payment-status">{payment!.label}</dd>
-                </div>
+                {payment && (
+                  <div className="flex items-center gap-2">
+                    <dt className="text-muted">Payment</dt>
+                    <dd data-testid="payment-status">
+                      <StatusPill tone={payment.tone}>{payment.label}</StatusPill>
+                    </dd>
+                  </div>
+                )}
               </dl>
             </div>
 
@@ -326,7 +455,11 @@ export default function AdminOrderDetailPage() {
                   <div>
                     <h2 className={sectionTitle}>Customer</h2>
                     <p className="text-ink">{order.customer.profile?.fullName || 'No name given'}</p>
-                    {order.customer.phone && <p className="text-sm text-muted" data-ltr>{order.customer.phone}</p>}
+                    {order.customer.phone && (
+                      <p className="text-sm" data-ltr>
+                        <PhoneText phone={order.customer.phone} />
+                      </p>
+                    )}
                     {order.customer.email && <p className="text-sm text-muted break-all">{order.customer.email}</p>}
                   </div>
                 )}
@@ -410,14 +543,6 @@ export default function AdminOrderDetailPage() {
                       <dd className="tabular-nums">{formatPrice(order.deliveryFee)}</dd>
                     </div>
                   )}
-                  {deliveries
-                    .filter((d) => d.paidBy === 'seller')
-                    .map((d, i) => (
-                      <div key={i} className="flex justify-between gap-3 text-muted" data-testid="delivery-paid-by-kitchen">
-                        <dt>Delivery, paid by the kitchen ({d.provider === 'platform' ? 'Nuray rider' : 'own rider'})</dt>
-                        <dd className="shrink-0 tabular-nums">{formatPrice(Number(d.fee))}</dd>
-                      </div>
-                    ))}
                   {order.discountAmount > 0 && (
                     <div className="flex justify-between text-brand-ink">
                       <dt>Discount</dt>
@@ -441,6 +566,25 @@ export default function AdminOrderDetailPage() {
                     </div>
                   )}
                 </dl>
+
+                {kitchenPaidDeliveries.length > 0 && (
+                  <div className="mt-4 rounded-xl border border-line p-3 text-sm">
+                    <h3 className="font-medium text-ink">Paid by the kitchen, not by the customer</h3>
+                    <p className="text-xs text-muted">
+                      {order.orderStatus === 'cancelled'
+                        ? 'Not part of the total above. The order was cancelled, so nothing was taken from the kitchen.'
+                        : 'Not part of the total above. It comes off what the kitchen earns from this order.'}
+                    </p>
+                    <dl className="mt-2 space-y-1">
+                      {kitchenPaidDeliveries.map((d, i) => (
+                        <div key={i} className="flex justify-between gap-3 text-ink" data-testid="delivery-paid-by-kitchen">
+                          <dt>Delivery by {d.provider === 'platform' ? 'a Nuray rider' : 'its own rider'}</dt>
+                          <dd className="shrink-0 tabular-nums">{formatPrice(Number(d.fee))}</dd>
+                        </div>
+                      ))}
+                    </dl>
+                  </div>
+                )}
               </div>
 
               {canChangeStatus && (
@@ -563,9 +707,7 @@ export default function AdminOrderDetailPage() {
                             <Button size="sm" variant="outline" className="h-11" onClick={() => handleDismissRefund(r.id)} disabled={updating}>Not owed</Button>
                           </div>
                         ) : (
-                          <span className={r.status === 'completed' ? 'inline-flex rounded-full px-2 py-0.5 text-xs font-medium bg-brand-soft text-brand-soft-ink' : 'inline-flex rounded-full px-2 py-0.5 text-xs font-medium bg-raised text-muted'}>
-                            {r.status === 'completed' ? 'Refunded' : 'Not owed'}
-                          </span>
+                          <StatusPill tone={r.status === 'completed' ? 'good' : 'neutral'}>{r.status === 'completed' ? 'Refunded' : 'Not owed'}</StatusPill>
                         )}
                       </li>
                     ))}
@@ -589,41 +731,46 @@ export default function AdminOrderDetailPage() {
                 </div>
               )}
 
-              {order.investigation && (
+              {order.investigation && (order.investigation.rider || order.investigation.supportTickets.length > 0 || investigationGroups(order.investigation).length > 0) && (
                 <div data-testid="order-investigation" className={`${section} space-y-3`}>
                   <h2 className={sectionTitle}>Investigation</h2>
                   {order.investigation.rider && (
-                    <p className="text-sm text-ink" data-testid="inv-rider">
-                      Rider: <strong>{order.investigation.rider.name || 'Unnamed'}</strong>
-                      {order.investigation.rider.phone && <> · <span data-ltr>{order.investigation.rider.phone}</span></>}
-                      {order.investigation.rider.vehicle && <> · {order.investigation.rider.vehicle}</>}
-                    </p>
+                    <dl className="grid grid-cols-[auto_1fr] items-baseline gap-x-4 gap-y-1 text-sm" data-testid="inv-rider">
+                      <dt className="text-muted">Rider</dt>
+                      <dd className="font-semibold text-ink">{order.investigation.rider.name || 'Unnamed'}</dd>
+                      {order.investigation.rider.phone && (
+                        <>
+                          <dt className="text-muted">Phone</dt>
+                          <dd data-ltr>
+                            <PhoneText phone={order.investigation.rider.phone} />
+                          </dd>
+                        </>
+                      )}
+                      {order.investigation.rider.vehicle && (
+                        <>
+                          <dt className="text-muted">Vehicle</dt>
+                          <dd className="text-ink first-letter:uppercase">{order.investigation.rider.vehicle}</dd>
+                        </>
+                      )}
+                    </dl>
                   )}
                   {order.investigation.supportTickets.length > 0 && (
                     <div data-testid="inv-tickets">
                       <p className="text-xs font-medium text-muted mb-1">Complaints on this order</p>
                       <ul className="text-sm text-ink space-y-1">
                         {order.investigation.supportTickets.map((t) => (
-                          <li key={t.id}>{t.ticketNumber} · {t.subject} · <span className="font-medium">{t.status.replace('_', ' ')}</span> · {t.priority}</li>
+                          <li key={t.id}>
+                            <Link href={`/admin/support?ticket=${t.id}`} className="flex min-h-11 w-fit items-center text-brand-ink hover:underline">{t.ticketNumber}</Link>
+                            {t.subject} ·{' '}
+                            <span className="font-medium">{({ open: 'New', in_progress: 'In progress', resolved: 'Resolved', closed: 'Closed' } as Record<string, string>)[t.status] ?? t.status}</span> ·{' '}
+                            {t.priority.charAt(0).toUpperCase() + t.priority.slice(1)} priority
+                          </li>
                         ))}
                       </ul>
                     </div>
                   )}
-                  {[
-                    ['Payment attempts', order.investigation.paymentAttempts.map((a) => `${a.gateway} ${a.status} Rs ${a.amount}${a.settledVia ? ` via ${a.settledVia}` : ''} · ${formatDate(a.createdAt)}`)],
-                    ['Wallet movements', order.investigation.walletTransactions.map((w) => `${w.transactionType} Rs ${w.amount} (${w.status}) · ${formatDate(w.createdAt)}`)],
-                    ['Ledger entries', order.investigation.ledgerEntries.map((l) => `${l.transactionType} ${l.entryType} Rs ${l.amount} · ${formatDate(l.createdAt)}`)],
-                    ['Rider ledger', order.investigation.riderLedgerEntries.map((l) => `${l.type} Rs ${l.amount}${l.note ? ` · ${l.note}` : ''} · ${formatDate(l.createdAt)}`)],
-                    ['Admin actions on this order', order.investigation.adminActions.map((a) => `${a.action.replace(/^admin:/, '')} by ${a.admin || 'unknown'} (${a.status ?? '?'}) · ${formatDateTime(a.createdAt)}`)],
-                  ].map(([title, rows]) => (
-                    (rows as string[]).length > 0 && (
-                      <details key={title as string} className="text-sm" open={title === 'Admin actions on this order'}>
-                        <summary className="cursor-pointer min-h-11 flex items-center text-xs font-medium text-muted">{title as string} ({(rows as string[]).length})</summary>
-                        <ul className="mt-1 space-y-0.5 text-muted text-xs break-words">
-                          {(rows as string[]).map((r, i) => <li key={i}>{r}</li>)}
-                        </ul>
-                      </details>
-                    )
+                  {investigationGroups(order.investigation).map((group) => (
+                    <InvestigationGroup key={group.title} {...group} />
                   ))}
                 </div>
               )}

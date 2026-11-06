@@ -110,6 +110,15 @@ describe('the preview of a promotion code', () => {
       expect(findMany).not.toHaveBeenCalled();
     });
 
+    it('works a scoped code out on the dish after its menu deal, as the order does', async () => {
+      const menuDeal = promotion({ id: 'deal-2', code: null, sellerId: 'kitchen-1', applicableTo: 'all', discountValue: 20 });
+      findUnique.mockResolvedValue(promotion({ code: 'SAMOSA10', discountValue: 10, applicableProductIds: ['p1'] }));
+      findMany.mockResolvedValue([menuDeal]);
+      cartItems.mockResolvedValue([dish({ priceSnapshot: 500, quantity: 1 })]);
+      const preview = await promotionService.validatePromotionCode('u1', 'samosa10', 500);
+      expect(preview.discountAmount).toBe(40);
+    });
+
     it('keeps saying the code does not apply when none of the dishes belong to the kitchen', async () => {
       findUnique.mockResolvedValue(deal());
       cartItems.mockResolvedValue([dish({ sellerId: 'kitchen-2' })]);

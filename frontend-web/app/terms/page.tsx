@@ -3,19 +3,19 @@ import Link from 'next/link';
 import { LegalPage, ContactUs, Operator } from '@/components/legal/LegalPage';
 
 export const metadata: Metadata = {
-  title: 'Terms of Service | Nuray',
+  title: 'Terms of service | Nuray',
   description: 'The terms for buying from, selling on and delivering with Nuray.',
 };
 
 export default function TermsPage() {
   return (
-    <LegalPage title="Terms of Service" updated="24 October 2026">
+    <LegalPage title="Terms of service" updated="24 October 2026">
       <p>
         These terms are an agreement between you and <Operator /> (&quot;Nuray&quot;, &quot;we&quot;). Nuray is an online
         marketplace in Pakistan: it connects people who order home-cooked food (&quot;customers&quot;) with independent home
         kitchens (&quot;sellers&quot;) in their community, and with delivery riders. By creating an account or placing an
-        order you agree to these terms, the <Link href="/privacy" className="underline">Privacy Policy</Link> and the{' '}
-        <Link href="/refund-policy" className="underline">Refund &amp; Cancellation Policy</Link>. Agreeing online is as
+        order you agree to these terms, the <Link href="/privacy" className="underline">privacy policy</Link> and the{' '}
+        <Link href="/refund-policy" className="underline">refund and cancellation policy</Link>. Agreeing online is as
         valid as signing on paper (Electronic Transactions Ordinance, 2002).
       </p>
 
@@ -42,7 +42,7 @@ export default function TermsPage() {
         <li>An order is accepted when the kitchen confirms it. If the kitchen does not confirm it in time, it is cancelled automatically and any payment is refunded.</li>
         <li>Each order has a 4-digit handover code shown only to you. Give it to whoever hands you the order (the rider, the kitchen or the pickup counter) only after you have received it; it confirms delivery.</li>
         <li>Delivery times are estimates, not promises.</li>
-        <li>Cancellations and refunds follow the <Link href="/refund-policy" className="underline">Refund &amp; Cancellation Policy</Link>.</li>
+        <li>Cancellations and refunds follow the <Link href="/refund-policy" className="underline">refund and cancellation policy</Link>.</li>
       </ul>
 
       <h2>4. Payment</h2>

@@ -1,6 +1,8 @@
 'use client';
 
 import { SwitchRow, chipClass, labelClass, optionClass } from '@/components/sellers/product-form/fields';
+import { useLocale, useT } from '@/lib/i18n';
+import { kitchenProductFormMessages } from '@/lib/i18n/messages/kitchen-product-form';
 
 /** When a dish can be ordered: always (fixed menu), on chosen weekdays (weekly), or only on days the kitchen puts it on the menu (daily). */
 export type MenuType = 'fixed' | 'weekly' | 'daily';
@@ -15,13 +17,7 @@ export interface MenuValue {
 
 export const DEFAULT_MENU: MenuValue = { menuType: 'fixed', availableDays: [], onTodaysMenu: false };
 
-const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-
-const OPTIONS: Array<{ value: MenuType; label: string; desc: string }> = [
-  { value: 'fixed', label: 'Fixed menu', desc: 'Always available' },
-  { value: 'weekly', label: 'Weekly menu', desc: 'Only on the days you choose' },
-  { value: 'daily', label: 'Daily menu', desc: "Only on days you put it on today's menu" },
-];
+const OPTIONS: MenuType[] = ['fixed', 'weekly', 'daily'];
 
 /** What to send the API for this value. */
 export function menuPayload(v: MenuValue) {
@@ -32,12 +28,16 @@ export function menuPayload(v: MenuValue) {
   };
 }
 
-/** The error to show before saving, or null. */
-export function menuError(v: MenuValue): string | null {
-  return v.menuType === 'weekly' && v.availableDays.length === 0 ? 'Pick at least one day for a weekly dish' : null;
+/** A weekly dish with no day picked: it could never be ordered, so it is not saved. */
+export function menuIncomplete(v: MenuValue): boolean {
+  return v.menuType === 'weekly' && v.availableDays.length === 0;
 }
 
 export default function MenuTypeField({ value, onChange }: { value: MenuValue; onChange: (v: MenuValue) => void }) {
+  const t = useT(kitchenProductFormMessages);
+  const { locale } = useLocale();
+  const dayName = (d: number) =>
+    new Intl.DateTimeFormat(locale === 'ur' ? 'ur-PK' : 'en-PK', { weekday: 'short' }).format(new Date(2024, 0, 7 + d));
   const toggleDay = (d: number) =>
     onChange({
       ...value,
@@ -46,27 +46,27 @@ export default function MenuTypeField({ value, onChange }: { value: MenuValue; o
   return (
     <div className="mt-6" data-testid="menu-type-field" role="group" aria-labelledby="menu-type-label">
       <p id="menu-type-label" className={labelClass}>
-        Menu type
+        {t('menuType')}
       </p>
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
         {OPTIONS.map((o) => (
           <button
-            key={o.value}
+            key={o}
             type="button"
-            data-testid={`menu-type-${o.value}`}
-            aria-pressed={value.menuType === o.value}
-            onClick={() => onChange({ ...value, menuType: o.value })}
-            className={optionClass(value.menuType === o.value)}
+            data-testid={`menu-type-${o}`}
+            aria-pressed={value.menuType === o}
+            onClick={() => onChange({ ...value, menuType: o })}
+            className={optionClass(value.menuType === o)}
           >
-            <span className="block text-[15px] font-semibold text-ink">{o.label}</span>
-            <span className="mt-0.5 block text-sm text-muted">{o.desc}</span>
+            <span className="block text-[15px] font-semibold text-ink">{t(`menu.${o}`)}</span>
+            <span className="mt-0.5 block text-sm text-muted">{t(`menu.${o}.desc`)}</span>
           </button>
         ))}
       </div>
 
       {value.menuType === 'weekly' && (
-        <div className="mt-4 flex flex-wrap gap-2" data-testid="menu-days" role="group" aria-label="Days it is available">
-          {DAYS.map((name, d) => (
+        <div className="mt-4 flex flex-wrap gap-2" data-testid="menu-days" role="group" aria-label={t('daysAvailable')}>
+          {[0, 1, 2, 3, 4, 5, 6].map((d) => (
             <button
               key={d}
               type="button"
@@ -74,7 +74,7 @@ export default function MenuTypeField({ value, onChange }: { value: MenuValue; o
               onClick={() => toggleDay(d)}
               className={chipClass(value.availableDays.includes(d))}
             >
-              {name}
+              {dayName(d)}
             </button>
           ))}
         </div>
@@ -85,8 +85,8 @@ export default function MenuTypeField({ value, onChange }: { value: MenuValue; o
           <SwitchRow
             checked={value.onTodaysMenu}
             onChange={() => onChange({ ...value, onTodaysMenu: !value.onTodaysMenu })}
-            label="On today's menu now"
-            hint="You can switch it on each day from your dish list"
+            label={t('onTodaysMenu')}
+            hint={t('onTodaysMenuHint')}
           />
         </div>
       )}

@@ -19,6 +19,7 @@ const mockPrisma: any = {
 jest.mock('../src/config/database', () => ({ __esModule: true, default: mockPrisma }));
 
 import sellerService from '../src/services/seller.service';
+import { pktDate } from '../src/utils/payoutWeek';
 
 const SELLER = 'seller-1';
 const today = new Date();
@@ -108,7 +109,7 @@ it('counts only the delivered, still-paid order as earned, net of the delivery f
   expect(ov.todayUnitsSold).toBe(2);
   expect(analytics.revenue.total).toBe(750);
   expect(analytics.revenue.dishes).toBe(900);
-  expect(analytics.revenue.graph).toEqual([{ date: today.toISOString().split('T')[0], revenue: 750 }]);
+  expect(analytics.revenue.graph).toEqual([{ date: pktDate(today), revenue: 750 }]);
 
   // "Orders today" are the orders of today that are still alive: the earned one and the one being cooked, not the cancelled
   // or the refunded ones. A kitchen with orders in the pot does not see 0.

@@ -9,7 +9,8 @@ import { LoadError } from '@/components/ui/LoadError';
 import { useToast } from '@/components/ui/toast';
 import { apiClient, apiErrorMessage } from '@/lib/api-client';
 import { useAuthStore } from '@/lib/store/auth-store';
-import { useLocale, useT } from '@/lib/i18n';
+import { formatDateTime } from '@/lib/utils';
+import { useT } from '@/lib/i18n';
 import { accountMessages } from '@/lib/i18n/messages/account';
 import { describeDevice, sortDevices, type SignedInDevice } from '@/lib/sessions';
 import { isPrivateIp } from './private-ip';
@@ -24,7 +25,6 @@ const SHOWN_DEVICES = 3;
  */
 export function SessionsCard() {
   const t = useT(accountMessages);
-  const { locale } = useLocale();
   const { showToast } = useToast();
   const logout = useAuthStore((s) => s.logout);
   const router = useRouter();
@@ -48,9 +48,6 @@ export function SessionsCard() {
   useEffect(() => {
     void load();
   }, [load]);
-
-  const when = (iso: string) =>
-    new Date(iso).toLocaleString(locale === 'ur' ? 'ur-PK' : 'en-PK', { dateStyle: 'medium', timeStyle: 'short' });
 
   const name = (d: SignedInDevice) => {
     const { browser, os } = describeDevice(d.userAgent);
@@ -86,12 +83,12 @@ export function SessionsCard() {
 
   return (
     <div className="p-4 bg-raised rounded-xl" data-testid="sessions-card">
-      <div className="flex items-start justify-between gap-3">
+      <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
         <div className="min-w-0">
           <p className="font-medium text-ink">{t('devicesTitle')}</p>
           <p className="text-xs text-muted">{t('devicesDesc')}</p>
         </div>
-        <Button variant="outline" size="sm" className="shrink-0 min-h-11" onClick={() => setConfirmAll(true)} data-testid="sessions-sign-out-all">
+        <Button variant="outline" size="sm" className="shrink-0 self-start" onClick={() => setConfirmAll(true)} data-testid="sessions-sign-out-all">
           {t('devicesSignOutAll')}
         </Button>
       </div>
@@ -115,13 +112,13 @@ export function SessionsCard() {
                       )}
                     </p>
                     <p className="text-xs text-muted">
-                      {t('deviceLastActive', { when: when(d.lastActiveAt) })}
+                      {t('deviceLastActive', { when: formatDateTime(d.lastActiveAt) })}
                       {!isPrivateIp(d.ipAddress) ? <span dir="ltr"> · {d.ipAddress}</span> : null}
                     </p>
                   </div>
                 </div>
                 {!d.current && (
-                  <Button variant="outline" size="sm" className="shrink-0 min-h-11" disabled={busyId === d.id} onClick={() => signOut(d)} aria-label={t('deviceSignOutNamed', { device: name(d) })} data-testid="session-sign-out">
+                  <Button variant="outline" size="sm" className="shrink-0" disabled={busyId === d.id} onClick={() => signOut(d)} aria-label={t('deviceSignOutNamed', { device: name(d) })} data-testid="session-sign-out">
                     {t('deviceSignOut')}
                   </Button>
                 )}

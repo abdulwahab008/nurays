@@ -75,6 +75,7 @@ export const riderMessages = defineMessages({
     handoverDone: 'Delivered. The payment is recorded.',
     pinInvalid: 'That code doesn\'t match. Check it with the customer.',
     pinTryAgain: 'Wrong code. Check it with the customer and enter it again.',
+    pinNoConnection: 'Could not check the code: no connection. Tap Confirm delivery to try again.',
     issueReported: 'Problem reported to Nuray',
     issueReportFailed: 'Could not report the problem',
 
@@ -86,6 +87,8 @@ export const riderMessages = defineMessages({
     // Active run
     noActiveBody: 'No job in progress. Take one from New jobs to start delivering.',
     viewAvailable: 'See new jobs ({count})',
+    cashBlockedTitle: 'Hand in cash to get new jobs',
+    cashBlockedBody: "You're holding {held} of your {limit} cash limit, so the cash orders waiting now are not open to you. Hand cash in at a Nuray hub to take them; prepaid orders still come to you.",
     orderNo: 'Order #{number}',
     kmAway: '{km} km away',
     collect: 'Collect',
@@ -93,6 +96,7 @@ export const riderMessages = defineMessages({
     youEarn: 'You earn',
     pickupKitchen: 'Kitchen',
     prepVerify: 'Check the order before you leave',
+    cookingHelp: 'You can pick it up once the kitchen marks it ready.',
     maps: 'Directions',
     startNavKitchen: 'Directions to the kitchen',
     startNavCustomer: 'Directions to the customer',
@@ -157,8 +161,9 @@ export const riderMessages = defineMessages({
     stillPreparing: 'Still preparing',
     pinLockedHelp: 'Too many wrong codes, so this handover is locked. Contact Nuray support and they will complete it with you.',
     pinLockedSupport: 'Open support',
-    atCapacity: 'You already have 2 jobs',
     cashLimitTitle: 'Cash limit reached.',
+    cashLimitedHeading: 'Needs cash handed in',
+    youHandedBack: 'You handed this back',
     cashLimitBody:
       'This is a cash order and would take you over your limit of {limit}. Hand in your cash to take cash orders again; prepaid orders are still open to you.',
     claiming: 'Taking job…',
@@ -170,13 +175,19 @@ export const riderMessages = defineMessages({
     successfulCount: '{count} delivered in total',
     noCompleted: 'Your finished deliveries will show here.',
     showOlder: 'Show older deliveries',
-    pinVerified: 'Code checked',
     notDelivered: 'Not delivered',
     failedNoticeTitle: 'Order #{number}: problem reported',
     failedNoticeBody: 'Take the food back to {kitchen} and keep it cold. Nuray support will call you.',
     failedNoticeKitchen: 'the kitchen',
     reportNext: 'After you send this, take the food back to the kitchen and keep it cold. Nuray support will call you about the order and the cash.',
     youEarned: 'You earned {amount}',
+    yourJobs: 'Your jobs',
+    orderShort: 'Order …{last}',
+    legPickup: 'Pick up from',
+    legDropoff: 'Deliver to',
+    thenDeliverTo: 'Then deliver to',
+    pickedUpFrom: 'Picked up from {kitchen}',
+    call: 'Call',
 
     // Cash card
     cashInHand: 'Cash in hand',
@@ -222,6 +233,7 @@ export const riderMessages = defineMessages({
     notesPlaceholder: 'What happened? Anything that helps Nuray sort it out.',
     reporting: 'Sending…',
     submitIssue: 'Send report',
+    chooseReason: 'Choose a reason to send the report',
 
     // Earnings page
     'earn.title': 'Earnings and cash',
@@ -245,6 +257,7 @@ export const riderMessages = defineMessages({
     'earn.history': 'History',
     'earn.empty': 'Nothing yet. Your first delivery will show here.',
     'earn.ref': 'Ref {ref}',
+    'earn.yesterday': 'Yesterday',
     'earn.showOlder': 'Show older',
 
     // Ledger entry types
@@ -356,6 +369,7 @@ export const riderMessages = defineMessages({
     handoverDone: 'ڈیلیوری ہو گئی۔ ادائیگی درج ہو گئی۔',
     pinInvalid: 'پن غلط ہے۔ تصدیق نہیں ہو سکی۔',
     pinTryAgain: 'غلط کوڈ۔ گاہک سے دوبارہ پوچھ کر درج کریں۔',
+    pinNoConnection: 'کوڈ چیک نہیں ہو سکا، انٹرنیٹ نہیں ہے۔ نیچے والا بٹن دوبارہ دبائیں۔',
     issueReported: 'مسئلہ ڈسپیچ ٹیم کو بتا دیا گیا',
     issueReportFailed: 'مسئلہ نہیں بھیجا جا سکا',
 
@@ -365,6 +379,8 @@ export const riderMessages = defineMessages({
 
     noActiveBody: 'آپ فارغ ہیں۔ ڈیلیوری شروع کرنے کے لیے "نئے آرڈرز" میں سے کوئی آرڈر لیں۔',
     viewAvailable: 'نئے آرڈرز دیکھیں ({count})',
+    cashBlockedTitle: 'نئے آرڈرز کے لیے کیش جمع کروائیں',
+    cashBlockedBody: 'آپ کے پاس {limit} کی حد میں سے {held} کیش ہے، اس لیے ابھی کے کیش آرڈرز آپ نہیں لے سکتے۔ انہیں لینے کے لیے Nuray ہب پر کیش جمع کروائیں؛ پہلے سے ادا شدہ آرڈرز آپ کو ملتے رہیں گے۔',
     kmAway: '{km} کلومیٹر دور',
     orderNo: 'آرڈر \u2066#{number}\u2069',
     collect: 'کیش لیں',
@@ -372,6 +388,7 @@ export const riderMessages = defineMessages({
     youEarn: 'آپ کی کمائی:',
     pickupKitchen: 'پک اپ (کچن)',
     prepVerify: 'کھانا چیک کر کے لیں',
+    cookingHelp: 'کچن کے تیار کرنے کے بعد ہی آپ اسے لے سکیں گے۔',
     maps: 'راستہ',
     startNavKitchen: 'کچن کا راستہ',
     startNavCustomer: 'گاہک کا راستہ',
@@ -436,8 +453,9 @@ export const riderMessages = defineMessages({
     stillPreparing: 'ابھی تیار ہو رہا ہے',
     pinLockedHelp: 'بہت زیادہ غلط کوڈ درج ہوئے، اس لیے یہ ہینڈ اوور لاک ہو گیا ہے۔ نورائے سپورٹ سے رابطہ کریں، وہ آپ کے ساتھ اسے مکمل کریں گے۔',
     pinLockedSupport: 'سپورٹ کھولیں',
-    atCapacity: 'آپ کے پاس پہلے ہی 2 آرڈرز ہیں',
     cashLimitTitle: 'کیش کی حد پوری۔',
+    cashLimitedHeading: 'پہلے کیش جمع کروائیں',
+    youHandedBack: 'یہ آپ نے واپس کیا تھا',
     cashLimitBody:
       'یہ کیش آرڈر ہے، اس سے آپ کی {limit} کی حد سے زیادہ ہو جائے گا۔ دوبارہ کیش آرڈر لینے کے لیے اپنا کیش جمع کروائیں؛ پہلے سے ادا شدہ آرڈرز آپ اب بھی لے سکتے ہیں۔',
     claiming: 'لے رہے ہیں...',
@@ -448,13 +466,19 @@ export const riderMessages = defineMessages({
     successfulCount: '{count} کامیاب ڈیلیوریز',
     noCompleted: 'ابھی تک کوئی ڈیلیوری مکمل نہیں ہوئی۔',
     showOlder: 'پرانی ڈیلیوریز دکھائیں',
-    pinVerified: 'کوڈ چیک ہو گیا',
     notDelivered: 'نہیں پہنچا',
     failedNoticeTitle: 'آرڈر #{number}: مسئلہ رپورٹ ہو گیا',
     failedNoticeBody: 'کھانا واپس {kitchen} لے جائیں اور ٹھنڈا رکھیں۔ Nuray سپورٹ آپ کو کال کرے گی۔',
     failedNoticeKitchen: 'کچن',
     reportNext: 'بھیجنے کے بعد کھانا واپس کچن لے جائیں اور ٹھنڈا رکھیں۔ Nuray سپورٹ آرڈر اور کیش کے بارے میں آپ کو کال کرے گی۔',
     youEarned: 'آپ کی کمائی {amount}',
+    yourJobs: 'آپ کے آرڈرز',
+    orderShort: 'آرڈر …{last}',
+    legPickup: 'یہاں سے اٹھائیں',
+    legDropoff: 'یہاں پہنچائیں',
+    thenDeliverTo: 'پھر یہاں پہنچائیں',
+    pickedUpFrom: '{kitchen} سے کھانا اٹھا لیا',
+    call: 'کال کریں',
 
     cashInHand: 'آپ کے پاس کیش',
     limitReached: 'حد پوری',
@@ -496,6 +520,7 @@ export const riderMessages = defineMessages({
     notesPlaceholder: 'کوئی بھی مفید بات لکھیں تاکہ مسئلہ جلدی حل ہو سکے...',
     reporting: 'بھیجا جا رہا ہے...',
     submitIssue: 'مسئلہ بھیجیں',
+    chooseReason: 'رپورٹ بھیجنے کے لیے وجہ چنیں',
 
     'earn.title': 'کمائی اور کیش',
     'earn.subtitle': 'آپ کی کمائی اور آپ کے پاس موجود کیش',
@@ -518,6 +543,7 @@ export const riderMessages = defineMessages({
     'earn.history': 'حساب کی تفصیل',
     'earn.empty': 'ابھی کچھ نہیں۔ آپ کی پہلی ڈیلیوری یہاں نظر آئے گی۔',
     'earn.ref': 'حوالہ {ref}',
+    'earn.yesterday': 'گزشتہ کل',
     'earn.showOlder': 'پرانا حساب دیکھیں',
 
     'ledger.delivery_fee': 'ڈیلیوری فیس',

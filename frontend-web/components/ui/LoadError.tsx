@@ -15,6 +15,8 @@ interface LoadErrorProps {
   title?: string;
   /** A smaller block, for one section of a page. */
   compact?: boolean;
+  /** No frame of its own, inside a panel that already has one. */
+  plain?: boolean;
   className?: string;
 }
 
@@ -49,7 +51,7 @@ export function useRequestErrorMessage(): (error: unknown, fallback: string) => 
  * Shown where a list or page should be when its data could not be loaded. A page that shows an empty list for a failed
  * request tells a customer their orders or their tray are gone, so this says what happened and offers to try again.
  */
-export function LoadError({ error, onRetry, title, compact = false, className = '' }: LoadErrorProps) {
+export function LoadError({ error, onRetry, title, compact = false, plain = false, className = '' }: LoadErrorProps) {
   const t = useT(commonMessages);
   const failureMessage = useLoadFailureMessage();
   const message = failureMessage(error);
@@ -58,16 +60,14 @@ export function LoadError({ error, onRetry, title, compact = false, className = 
   return (
     <div
       role="alert"
-      className={`rounded-[20px] border border-dashed border-line-strong bg-surface text-center ${compact ? 'p-5' : 'p-8 sm:p-12'} ${className}`}
+      className={`text-center ${plain ? '' : 'rounded-2xl border border-line bg-surface'} ${compact ? 'p-5' : 'p-8 sm:p-10'} ${className}`}
     >
-      <div className={`mx-auto flex items-center justify-center rounded-2xl bg-accent-soft text-accent-soft-ink ${compact ? 'mb-3 h-10 w-10' : 'mb-4 h-14 w-14'}`}>
-        <Icon className={compact ? 'h-5 w-5' : 'h-7 w-7'} aria-hidden="true" />
-      </div>
-      <h3 className={`font-extrabold text-ink ${compact ? 'text-sm' : 'text-lg'}`}>{title ?? t('loadFailedTitle')}</h3>
-      <p className={`mx-auto mt-1 max-w-md text-muted ${compact ? 'text-xs' : 'text-sm'}`}>{message}</p>
+      <Icon className={`mx-auto text-muted ${compact ? 'mb-2 h-5 w-5' : 'mb-3 h-7 w-7'}`} aria-hidden="true" />
+      <h3 className={`font-semibold text-ink ${compact ? 'text-sm' : 'text-base'}`}>{title ?? t('loadFailedTitle')}</h3>
+      <p className="mx-auto mt-1 max-w-md text-sm text-muted">{message}</p>
       {onRetry && (
-        <Button type="button" variant="primary" size="sm" onClick={onRetry} className="mt-4 h-11 px-5 font-extrabold">
-          <RefreshCw className="me-2 h-4 w-4" aria-hidden="true" />
+        <Button type="button" variant="outline" onClick={onRetry} className="mt-4">
+          <RefreshCw className="h-4 w-4" aria-hidden="true" />
           {t('retry')}
         </Button>
       )}

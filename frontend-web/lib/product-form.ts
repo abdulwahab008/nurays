@@ -148,6 +148,16 @@ export const PRODUCT_FIELD = {
   variantName: (index: number) => `variant-${index}-name`,
 } as const;
 
+/** What can stop the form from being saved: keys of the dish form's messages (kitchen-product-form.ts). */
+export type ProductProblem =
+  | 'problem.name'
+  | 'problem.category'
+  | 'problem.price'
+  | 'problem.originalPrice'
+  | 'problem.customUnit'
+  | 'problem.stock'
+  | 'problem.variantName';
+
 /**
  * What stops the form from being saved, by field (see PRODUCT_FIELD), in the order the fields appear; empty when it can be
  * saved. A new dish must have a category; an old dish saved before categories were required can still be edited without one.
@@ -157,20 +167,20 @@ export function productProblems(
   f: ProductFormData,
   customUnit: string,
   opts: { requireCategory: boolean; variants?: Array<Pick<VariantDraft, 'name'>> },
-): Record<string, string> {
-  const problems: Record<string, string> = {};
-  if (!f.name.trim()) problems[PRODUCT_FIELD.name] = "Add the dish's name.";
-  if (opts.requireCategory && !f.categoryId) problems[PRODUCT_FIELD.category] = 'Choose a category.';
+): Record<string, ProductProblem> {
+  const problems: Record<string, ProductProblem> = {};
+  if (!f.name.trim()) problems[PRODUCT_FIELD.name] = 'problem.name';
+  if (opts.requireCategory && !f.categoryId) problems[PRODUCT_FIELD.category] = 'problem.category';
   const price = parseFloat(f.price);
-  if (!f.price || !(price > 0)) problems[PRODUCT_FIELD.price] = 'Enter a price above Rs 0.';
+  if (!f.price || !(price > 0)) problems[PRODUCT_FIELD.price] = 'problem.price';
   if (f.originalPrice.trim() && price > 0 && !(parseFloat(f.originalPrice) > price)) {
-    problems[PRODUCT_FIELD.originalPrice] = 'The price before discount must be higher than the price.';
+    problems[PRODUCT_FIELD.originalPrice] = 'problem.originalPrice';
   }
-  if (f.unit === 'other' && !customUnit.trim()) problems[PRODUCT_FIELD.customUnit] = 'Say what the price is for, such as per tray.';
+  if (f.unit === 'other' && !customUnit.trim()) problems[PRODUCT_FIELD.customUnit] = 'problem.customUnit';
   const stock = f.stockQuantity.trim();
-  if (stock && !(Number.isInteger(Number(stock)) && Number(stock) >= 0)) problems[PRODUCT_FIELD.stock] = 'Enter a whole number, 0 or more.';
+  if (stock && !(Number.isInteger(Number(stock)) && Number(stock) >= 0)) problems[PRODUCT_FIELD.stock] = 'problem.stock';
   (opts.variants ?? []).forEach((v, i) => {
-    if (!v.name.trim()) problems[PRODUCT_FIELD.variantName(i)] = 'Give this size a name.';
+    if (!v.name.trim()) problems[PRODUCT_FIELD.variantName(i)] = 'problem.variantName';
   });
   return problems;
 }
@@ -180,7 +190,7 @@ export function productProblem(
   f: ProductFormData,
   customUnit: string,
   opts: { requireCategory: boolean; variants?: Array<Pick<VariantDraft, 'name'>> },
-): string | null {
+): ProductProblem | null {
   return Object.values(productProblems(f, customUnit, opts))[0] ?? null;
 }
 

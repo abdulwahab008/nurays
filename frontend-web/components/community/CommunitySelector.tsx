@@ -140,29 +140,33 @@ export function CommunitySelector({ variant = 'navbar' }: CommunitySelectorProps
       <button
         type="button"
         onClick={() => setLocalIsOpen(true)}
-        className={`group inline-flex max-w-full items-center gap-2 border transition-colors text-start ${
+        className={`group inline-flex max-w-full items-center gap-1 sm:gap-2 border transition-colors text-start ${
           variant === 'navbar'
-            ? 'h-11 rounded-xl px-3 border-line bg-surface hover:bg-raised text-ink'
+            ? 'h-11 rounded-xl px-1.5 sm:px-3 border-line bg-surface hover:bg-raised text-ink'
             : variant === 'hero'
             ? 'min-h-11 rounded-full px-4 border-brand/40 bg-brand/10 hover:bg-brand/20 text-white'
             : 'min-h-11 rounded-full px-3 text-xs border-line bg-raised text-ink'
         }`}
         aria-label={t('changeLocation')}
       >
-        <MapPin className={`h-4 w-4 shrink-0 ${onWhite ? 'text-brand-ink' : 'text-white'}`} aria-hidden />
+        <MapPin
+          className={`h-4 w-4 shrink-0 ${onWhite ? 'text-brand-ink' : 'text-white'} ${variant === 'navbar' ? 'max-sm:hidden' : ''}`}
+          aria-hidden
+        />
         <span className="flex min-w-0 flex-col">
-          <span className={`text-[11px] font-medium leading-none max-[380px]:hidden ${onWhite ? 'text-muted' : 'text-white/80'}`}>
+          <span className={`text-[11px] font-medium leading-none max-sm:hidden ${onWhite ? 'text-muted' : 'text-white/80'}`}>
             {selectedCommunity ? t('deliveringTo') : t('yourArea')}
           </span>
           <span
-            className={`text-sm font-bold truncate max-w-[120px] sm:max-w-[170px] leading-tight mt-0.5 max-[380px]:mt-0 ${
+            dir="auto"
+            className={`text-[13px] sm:text-sm font-bold truncate sm:max-w-[170px] leading-tight sm:mt-0.5 ${
               onWhite ? 'text-ink' : 'text-white'
             }`}
           >
             {selectedCommunity ? selectedCommunity.name : t('chooseArea')}
           </span>
         </span>
-        <ChevronDown className={`h-4 w-4 shrink-0 ${onWhite ? 'text-muted' : 'text-white/80'}`} aria-hidden />
+        <ChevronDown className={`h-4 w-4 shrink-0 ${onWhite ? 'text-muted' : 'text-white/80'} ${variant === 'navbar' ? 'max-sm:hidden' : ''}`} aria-hidden />
       </button>
 
       {mounted &&

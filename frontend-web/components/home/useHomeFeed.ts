@@ -11,6 +11,7 @@ import { favoriteService } from '@/lib/services/favorite.service';
 import { apiClient, type ApiResponse } from '@/lib/api-client';
 import { parseStats, type LoadState, type PublicStats } from '@/lib/home-filters';
 import { kitchensForArea, quoteParams, type QuotedSeller } from '@/components/marketplace/delivery-quote';
+import type { CatalogPromotionLike } from '@/lib/pricing';
 
 const NONE: never[] = [];
 
@@ -31,6 +32,7 @@ export function useHomeFeed(isAuthenticated: boolean, communityId: string | null
   const [dishesAttempt, setDishesAttempt] = useState(0);
   const [stats, setStats] = useState<PublicStats | null>(null);
   const [favoriteKitchenIds, setFavoriteKitchenIds] = useState<Set<string>>(new Set());
+  const [promotions, setPromotions] = useState<Record<string, CatalogPromotionLike[]>>({});
 
   // Verified kitchens. Requested directly rather than through sellerService.getPublicSellers,
   // which turns a failed request into an empty list — we need to tell "none yet" from "failed".
@@ -146,6 +148,24 @@ export function useHomeFeed(isAuthenticated: boolean, communityId: string | null
     };
   }, [isAuthenticated]);
 
+  // The kitchens' running deals on the dishes shown, so a card's price is the one the storefront, tray and order charge.
+  const dishIdsKey = [...new Set([...products, ...recommended, ...orderAgain].map((p) => p.id))].sort().join(',');
+  useEffect(() => {
+    if (!dishIdsKey) return;
+    let cancelled = false;
+    apiClient
+      .get<ApiResponse<Record<string, CatalogPromotionLike[]>>>('/promotions/catalog', { params: { productIds: dishIdsKey } })
+      .then((res) => {
+        if (!cancelled) setPromotions(res.data?.data ?? {});
+      })
+      .catch(() => {
+        if (!cancelled) setPromotions({});
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [dishIdsKey, isAuthenticated]);
+
   const retryKitchens = () => {
     setKitchensState('loading');
     setKitchensAttempt((n) => n + 1);
@@ -169,5 +189,6 @@ export function useHomeFeed(isAuthenticated: boolean, communityId: string | null
     stats,
     favoriteKitchenIds,
     setFavoriteKitchenIds,
+    promotions,
   };
 }

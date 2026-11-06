@@ -234,14 +234,14 @@ export class SupportService {
     return this.formatTicketWithMessages(ticketId);
   }
 
-  /**
-   * List all tickets (admin)
-   */
-  async adminGetTickets(filters: { status?: string; priority?: string; assignedTo?: string; search?: string; page?: number; limit?: number }) {
+  /** List all tickets (admin). status may be one status or a comma list ("open,in_progress"); sort "oldest" puts the longest-waiting first. */
+  async adminGetTickets(filters: { status?: string; priority?: string; assignedTo?: string; search?: string; sort?: string; page?: number; limit?: number }) {
     const { page, limit, skip } = pageArgs(filters.page, filters.limit);
 
     const where: Prisma.SupportTicketWhereInput = {};
-    if (filters.status) where.status = filters.status;
+    const statuses = (filters.status ?? '').split(',').map((s) => s.trim()).filter(Boolean);
+    if (statuses.length === 1) where.status = statuses[0];
+    else if (statuses.length > 1) where.status = { in: statuses };
     if (filters.priority) where.priority = filters.priority;
     if (filters.assignedTo === 'unassigned') where.assignedTo = null;
     else if (filters.assignedTo) where.assignedTo = filters.assignedTo;
@@ -263,7 +263,7 @@ export class SupportService {
           user: { select: { email: true, phone: true, profile: { select: { fullName: true } } } },
           order: { select: { orderNumber: true } },
         },
-        orderBy: { createdAt: 'desc' },
+        orderBy: { createdAt: filters.sort === 'oldest' ? 'asc' : 'desc' },
         skip,
         take: limit,
       }),

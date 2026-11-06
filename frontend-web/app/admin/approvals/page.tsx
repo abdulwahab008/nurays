@@ -2,8 +2,10 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
+import { ChevronRight } from 'lucide-react';
 import { AdminShell } from '@/components/layout/AdminShell';
 import { LoadError } from '@/components/ui/LoadError';
+import { LoadingLine, PageHeader, StatusPill } from '@/components/admin/AdminListParts';
 import { apiClient } from '@/lib/api-client';
 import { useAuthStore } from '@/lib/store/auth-store';
 import { useLiveRefresh } from '@/lib/hooks/use-live-refresh';
@@ -16,6 +18,9 @@ interface Queue {
   count: number;
   oldestWaitingSince: string | null;
 }
+
+// A red count says something went wrong for a customer or a kitchen; the rest is ordinary work waiting.
+const PROBLEM_QUEUES = new Set(['failedDeliveries', 'transfers', 'refunds', 'tickets']);
 
 const ROLE_LABEL: Record<string, string> = { super_admin: 'Super admin', admin: 'Admin', support: 'Support' };
 
@@ -55,48 +60,66 @@ export default function AdminApprovalsPage() {
   // Refreshes when something new arrives for a decision, when the tab comes back, and on a slow timer.
   useLiveRefresh(load, { events: ['order:new', 'order:status:update', 'notification:new', 'delivery:new'], intervalMs: 60_000 });
 
+  const waitingQueues = queues.filter((q) => q.count > 0).sort((a, b) => Number(PROBLEM_QUEUES.has(b.key)) - Number(PROBLEM_QUEUES.has(a.key)));
+  const clearQueues = queues.filter((q) => q.count === 0);
+
   return (
     <AdminShell>
-      <div className="max-w-4xl mx-auto p-4 sm:p-6">
-        <div className="mb-6">
-          <h1 className="text-2xl font-bold text-gray-900">Approvals</h1>
-          <p className="text-gray-500 mt-1">
-            Everything a kitchen, rider or customer has sent that needs a decision.
-            {user?.staffRole ? ` You are signed in as ${ROLE_LABEL[user.staffRole] ?? user.staffRole}.` : ''}
-          </p>
-        </div>
+      <div className="max-w-4xl">
+        <PageHeader
+          title="Approvals"
+          subtitle={`Everything a kitchen, rider or customer has sent that needs a decision${user?.staffRole && user.staffRole !== 'super_admin' ? `, limited to what ${ROLE_LABEL[user.staffRole] ?? user.staffRole} staff can decide` : ''}.`}
+        />
 
         {loading ? (
-          <p className="text-gray-500">Loading…</p>
+          <LoadingLine text="Checking what is waiting" />
         ) : loadError && queues.length === 0 ? (
           <LoadError error={loadError} onRetry={load} title="We couldn't load the approvals" />
         ) : (
           <>
-            {loadError && <LoadError compact error={loadError} onRetry={load} title="We couldn't refresh the approvals: these numbers may be out of date" className="mb-4" />}
-            <p className="mb-4 text-sm font-semibold text-gray-700" data-testid="approvals-total">
+            {Boolean(loadError) && <LoadError compact error={loadError} onRetry={load} title="We couldn't refresh the approvals: these numbers may be out of date" className="mb-4" />}
+            <h2 className="mb-3 text-sm font-semibold text-ink" data-testid="approvals-total">
               {total === 0 ? 'Nothing is waiting. All caught up.' : `${total} waiting for you`}
-            </p>
-            <ul className="grid gap-3" data-testid="approval-queues">
-              {queues.map((q) => (
-                <li key={q.key}>
-                  <Link
-                    href={q.href}
-                    className="flex items-center justify-between gap-4 rounded-xl border border-gray-200 bg-white p-4 shadow-sm hover:shadow-md transition-shadow"
-                  >
-                    <div>
-                      <p className="font-semibold text-gray-900">{q.label}</p>
-                      <p className="text-xs text-gray-500">{q.count > 0 ? `Oldest has waited ${waiting(q.oldestWaitingSince)}` : 'Nothing waiting'}</p>
-                    </div>
-                    <span
-                      className={`min-w-10 text-center rounded-full px-3 py-1 text-sm font-bold ${q.count > 0 ? 'bg-amber-100 text-amber-800' : 'bg-gray-100 text-gray-500'}`}
-                      data-testid={`queue-${q.key}`}
+            </h2>
+            {waitingQueues.length > 0 && (
+              <ul className="divide-y divide-line rounded-2xl border border-line bg-surface shadow-[var(--shadow-card)]" data-testid="approval-queues">
+                {waitingQueues.map((q) => (
+                  <li key={q.key}>
+                    <Link
+                      href={q.href}
+                      className="flex min-h-16 items-center gap-3 px-4 py-3 hover:bg-raised first:rounded-t-2xl last:rounded-b-2xl focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-brand/40"
                     >
-                      {q.count}
-                    </span>
-                  </Link>
-                </li>
-              ))}
-            </ul>
+                      <div className="min-w-0 flex-1">
+                        <p className="text-[15px] font-semibold text-ink">{q.label}</p>
+                        <p className="text-xs text-muted">Oldest has waited {waiting(q.oldestWaitingSince)}</p>
+                      </div>
+                      <StatusPill tone={PROBLEM_QUEUES.has(q.key) ? 'problem' : 'waiting'} className="min-w-8 justify-center text-sm tabular-nums">
+                        <span data-testid={`queue-${q.key}`}>{q.count}</span>
+                      </StatusPill>
+                      <ChevronRight aria-hidden="true" className="h-4 w-4 shrink-0 text-muted rtl:rotate-180" />
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            )}
+            {clearQueues.length > 0 && (
+              <section aria-labelledby="clear-heading" className={waitingQueues.length > 0 ? 'mt-8 border-t border-line pt-6' : ''}>
+                <h2 id="clear-heading" className="mb-1 text-sm font-semibold text-ink">
+                  Nothing waiting
+                </h2>
+                <ul className="divide-y divide-line">
+                  {clearQueues.map((q) => (
+                    <li key={q.key}>
+                      <Link href={q.href} className="flex min-h-12 items-center gap-3 py-2 text-sm text-muted hover:text-ink">
+                        <span className="min-w-0 flex-1">{q.label}</span>
+                        <span className="tabular-nums" data-testid={`queue-${q.key}`}>0</span>
+                        <ChevronRight aria-hidden="true" className="h-4 w-4 shrink-0 rtl:rotate-180" />
+                      </Link>
+                    </li>
+                  ))}
+                </ul>
+              </section>
+            )}
           </>
         )}
       </div>

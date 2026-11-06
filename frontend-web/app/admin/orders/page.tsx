@@ -8,8 +8,10 @@ import { AdminShell } from '@/components/layout/AdminShell';
 import { Button } from '@/components/ui/button';
 import { LoadError } from '@/components/ui/LoadError';
 import { apiClient } from '@/lib/api-client';
-import { formatPrice, formatDateTime } from '@/lib/utils';
-import { methodLabel, paymentState, statusLabel, statusTag } from './order-labels';
+import { formatPrice } from '@/lib/utils';
+import { formatDateTime } from '@/components/admin/admin-dates';
+import { FilterChips, OrderStatusPill, PageHeader, Pager, StatusPill } from '@/components/admin/AdminListParts';
+import { methodLabel, nothingToCollect, paymentState, statusLabel } from './order-labels';
 
 interface AdminOrder {
   id: string;
@@ -37,6 +39,7 @@ const PAYMENT_FILTERS = [
   ['refund_pending', 'Refund being sent'],
 ] as const;
 
+// A cancelled order that was never paid has no payment story: the pill would only repeat "cancelled".
 const kitchenOf = (order: AdminOrder) => {
   const names = Array.from(new Set((order.items ?? []).map((i) => i.seller?.businessName).filter(Boolean)));
   return names.length ? names.join(', ') : null;
@@ -66,6 +69,7 @@ function AdminOrdersContent() {
   const [loadError, setLoadError] = useState<unknown>(null);
   const [orders, setOrders] = useState<AdminOrder[]>([]);
   const [totalPages, setTotalPages] = useState(1);
+  const [total, setTotal] = useState(0);
   const [search, setSearch] = useState(query);
   const [kitchenName, setKitchenName] = useState<string | null>(null);
   // Only the newest request may fill the list: an older, slower one would show the previous filter's orders.
@@ -101,6 +105,7 @@ function AdminOrdersContent() {
       if (response.data.success) {
         setOrders(response.data.data.orders || []);
         setTotalPages(response.data.data.pagination?.totalPages || 1);
+        setTotal(response.data.data.pagination?.total ?? 0);
       }
     } catch (error) {
       if (request === latest.current) setLoadError(error);
@@ -132,11 +137,8 @@ function AdminOrdersContent() {
 
   return (
     <AdminShell>
-      <div className="max-w-7xl mx-auto space-y-4">
-        <div>
-          <h1 className="text-2xl font-semibold text-ink">Orders</h1>
-          <p className="text-sm text-muted mt-1">Every order on Nuray. Delivery failed orders need you to retry or cancel them.</p>
-        </div>
+      <div className="max-w-7xl space-y-4">
+        <PageHeader title="Orders" subtitle="Every order on Nuray. Delivery failed orders need you to retry or cancel them." />
 
         <form
           role="search"
@@ -165,25 +167,12 @@ function AdminOrdersContent() {
           )}
         </form>
 
-        <div className="-mx-4 px-4 flex gap-2 overflow-x-auto no-scrollbar sm:mx-0 sm:px-0 sm:flex-wrap" aria-label="Order status">
-          {STATUS_FILTERS.map((status) => (
-            <button
-              key={status}
-              type="button"
-              aria-pressed={filter === status}
-              onClick={() => setView({ status, page: 1 })}
-              className={`shrink-0 min-h-11 px-4 rounded-full text-sm font-medium border transition-colors ${
-                filter === status
-                  ? 'border-ink bg-ink text-page'
-                  : status === 'delivery_failed'
-                    ? 'border-red-200 bg-red-50 text-red-700 hover:bg-red-100'
-                    : 'border-line bg-surface text-ink hover:bg-raised'
-              }`}
-            >
-              {status === 'all' ? 'All' : statusLabel(status)}
-            </button>
-          ))}
-        </div>
+        <FilterChips
+          label="Order status"
+          value={filter}
+          onChange={(status) => setView({ status, page: 1 })}
+          options={STATUS_FILTERS.map((status) => ({ id: status, label: status === 'all' ? 'All' : statusLabel(status), problem: status === 'delivery_failed' }))}
+        />
 
         {sellerId && (
           <div className="flex flex-wrap items-center gap-2" data-testid="kitchen-filter">
@@ -230,13 +219,13 @@ function AdminOrdersContent() {
         ) : (
           <>
             {/* Phones: one tappable card per order, three lines. */}
-            <ul aria-busy={loading} className={`sm:hidden divide-y divide-line rounded-2xl border border-line bg-surface transition-opacity ${loading ? 'opacity-60' : ''}`} data-testid="admin-orders-cards">
+            <ul aria-busy={loading} className={`md:hidden divide-y divide-line rounded-2xl border border-line bg-surface transition-opacity ${loading ? 'opacity-60' : ''}`} data-testid="admin-orders-cards">
               {orders.map((order) => {
                 const payment = paymentState(order);
                 const kitchen = kitchenOf(order) ?? kitchenName;
                 return (
                   <li key={order.id}>
-                    <Link href={`/admin/orders/${order.id}`} className="flex items-center gap-3 px-4 py-3 hover:bg-raised">
+                    <Link href={`/admin/orders/${order.id}`} className="flex items-center gap-3 px-4 py-3 hover:bg-page">
                       <div className="min-w-0 flex-1 space-y-1">
                         <div className="flex items-baseline justify-between gap-2">
                           <span className="font-semibold text-ink break-all">#{order.orderNumber}</span>
@@ -247,8 +236,8 @@ function AdminOrdersContent() {
                           {kitchen ? ` · ${kitchen}` : ''}
                         </p>
                         <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-                          <span className={statusTag(order.orderStatus)}>{statusLabel(order.orderStatus)}</span>
-                          <span className={payment.tag}>{payment.label}</span>
+                          <OrderStatusPill status={order.orderStatus} label={statusLabel(order.orderStatus)} />
+                          {!nothingToCollect(order) && <StatusPill tone={payment.tone}>{payment.label}</StatusPill>}
                           <span className="text-xs text-muted">{formatDateTime(order.createdAt)}</span>
                         </div>
                       </div>
@@ -259,13 +248,13 @@ function AdminOrdersContent() {
               })}
             </ul>
 
-            <div aria-busy={loading} className={`hidden sm:block bg-surface border border-line rounded-2xl overflow-x-auto transition-opacity ${loading ? 'opacity-60' : ''}`}>
+            <div aria-busy={loading} className={`hidden md:block bg-surface border border-line rounded-2xl overflow-x-auto transition-opacity ${loading ? 'opacity-60' : ''}`}>
               <table className="w-full text-sm">
                 <thead className="bg-raised">
                   <tr className="text-start text-xs font-medium text-muted">
                     <th className="px-4 py-3 text-start">Order</th>
                     <th className="px-4 py-3 text-start">Customer</th>
-                    <th className="px-4 py-3 text-start">Kitchen</th>
+                    <th className="px-3 py-3 text-start lg:px-4">Kitchen</th>
                     <th className="px-4 py-3 text-start">Amount</th>
                     <th className="px-4 py-3 text-start">Status</th>
                     <th className="px-4 py-3 text-start">Payment</th>
@@ -274,8 +263,9 @@ function AdminOrdersContent() {
                 <tbody className="divide-y divide-line">
                   {orders.map((order) => {
                     const payment = paymentState(order);
+                    const kitchen = kitchenOf(order) ?? kitchenName;
                     return (
-                      <tr key={order.id} className="hover:bg-raised">
+                      <tr key={order.id} className="hover:bg-page">
                         <td className="px-4 py-3 whitespace-nowrap">
                           <Link href={`/admin/orders/${order.id}`} className="inline-flex min-h-11 items-center font-semibold text-brand-ink hover:underline">
                             #{order.orderNumber}
@@ -284,16 +274,22 @@ function AdminOrdersContent() {
                         </td>
                         <td className="px-4 py-3">
                           <p className="text-ink">{order.customer.profile?.fullName || order.customer.email}</p>
-                          <p className="text-xs text-muted break-all">{order.customer.email}</p>
+                          <p className="max-w-56 truncate text-xs text-muted" title={order.customer.email}>{order.customer.email}</p>
                         </td>
-                        <td className="px-4 py-3 text-ink">{kitchenOf(order) ?? kitchenName ?? <span className="text-muted">Not known</span>}</td>
+                        <td className="px-3 py-3 text-ink lg:px-4">
+                          {kitchen ? (
+                            <p className="line-clamp-2 min-w-22 max-w-48 break-words" title={kitchen}>{kitchen}</p>
+                          ) : (
+                            <span className="text-muted">Not known</span>
+                          )}
+                        </td>
                         <td className="px-4 py-3 whitespace-nowrap font-semibold text-ink tabular-nums">{formatPrice(order.totalAmount)}</td>
                         <td className="px-4 py-3">
-                          <span className={statusTag(order.orderStatus)}>{statusLabel(order.orderStatus)}</span>
+                          <OrderStatusPill status={order.orderStatus} label={statusLabel(order.orderStatus)} />
                         </td>
                         <td className="px-4 py-3">
-                          <span className={payment.tag}>{payment.label}</span>
-                          <p className="text-xs text-muted mt-1">{methodLabel(order.paymentMethod)}</p>
+                          {!nothingToCollect(order) && <StatusPill tone={payment.tone} className="mb-1">{payment.label}</StatusPill>}
+                          <p className="text-xs text-muted">{methodLabel(order.paymentMethod)}</p>
                         </td>
                       </tr>
                     );
@@ -302,19 +298,7 @@ function AdminOrdersContent() {
               </table>
             </div>
 
-            {totalPages > 1 && (
-              <div className="flex items-center justify-between">
-                <Button variant="outline" onClick={() => setView({ page: Math.max(1, page - 1) })} disabled={page <= 1}>
-                  Previous
-                </Button>
-                <span className="text-sm text-muted">
-                  Page {page} of {totalPages}
-                </span>
-                <Button variant="outline" onClick={() => setView({ page: Math.min(totalPages, page + 1) })} disabled={page >= totalPages}>
-                  Next
-                </Button>
-              </div>
-            )}
+            <Pager page={page} totalPages={totalPages} total={total} noun="orders" one="order" onChange={(next) => setView({ page: next })} />
           </>
         )}
       </div>

@@ -48,6 +48,8 @@ export interface Delivery {
   riderBonus?: number | null;
   // A cash order that would take the rider past their cash limit.
   exceedsCashLimit?: boolean;
+  /** In the open pool: this rider took the job earlier and handed it back. */
+  handedBackByYou?: boolean;
   /** Only once the job is the rider's: who to call and the exact spot. */
   customer?: { name: string | null; phone: string | null } | null;
   dropoffDetails?: { houseNumber: string | null; addressLine2: string | null; landmark: string | null; instructions: string | null } | null;
@@ -85,6 +87,7 @@ export interface RiderLedgerEntry {
   /** Signed: + the platform owes the rider more, − less. */
   amount: number;
   orderId: string | null;
+  orderNumber: string | null;
   reference: string | null;
   note: string | null;
   createdAt: string;

@@ -35,7 +35,6 @@ import {
   Sparkles,
   ChefHat,
   ShieldCheck,
-  Home,
   UtensilsCrossed,
   CheckCircle2,
   ChevronRight,
@@ -638,8 +637,8 @@ function ProductsContent() {
                     setPage(1);
                   }}
                   aria-pressed={isSelected}
-                  className={`h-10 px-4 rounded-full text-sm font-bold transition-colors shrink-0 cursor-pointer ${
-                    isSelected ? 'bg-ink text-page' : 'bg-surface text-ink border border-line hover:bg-raised'
+                  className={`h-11 px-4 rounded-full text-sm font-bold transition-colors shrink-0 cursor-pointer ${
+                    isSelected ? 'bg-brand-soft text-brand-soft-ink border border-brand' : 'bg-surface text-ink border border-line hover:bg-raised'
                   }`}
                 >
                   {t(type.labelKey)}
@@ -655,11 +654,11 @@ function ProductsContent() {
                 setPage(1);
               }}
               aria-pressed={openNow}
-              className={`h-10 px-4 rounded-full text-sm font-bold transition-colors shrink-0 flex items-center gap-1.5 cursor-pointer ${
-                openNow ? 'bg-brand text-on-brand' : 'bg-surface text-ink border border-line hover:bg-raised'
+              className={`h-11 px-4 rounded-full text-sm font-bold transition-colors shrink-0 flex items-center gap-1.5 cursor-pointer ${
+                openNow ? 'bg-brand-soft text-brand-soft-ink border border-brand' : 'bg-surface text-ink border border-line hover:bg-raised'
               }`}
             >
-              <span className={`w-2 h-2 rounded-full ${openNow ? 'bg-on-brand' : 'bg-brand'}`} />
+              <span className="w-2 h-2 rounded-full bg-brand" />
               <span>{t('openNow')}</span>
             </button>
 
@@ -669,8 +668,8 @@ function ProductsContent() {
                 setPage(1);
               }}
               aria-pressed={freeDelivery}
-              className={`h-10 px-4 rounded-full text-sm font-bold transition-colors shrink-0 cursor-pointer ${
-                freeDelivery ? 'bg-ink text-page' : 'bg-surface text-ink border border-line hover:bg-raised'
+              className={`h-11 px-4 rounded-full text-sm font-bold transition-colors shrink-0 cursor-pointer ${
+                freeDelivery ? 'bg-brand-soft text-brand-soft-ink border border-brand' : 'bg-surface text-ink border border-line hover:bg-raised'
               }`}
             >
               {t('freeDeliveryChip')}
@@ -682,8 +681,8 @@ function ProductsContent() {
                 setPage(1);
               }}
               aria-pressed={fastDeliveryOnly}
-              className={`h-10 px-4 rounded-full text-sm font-bold transition-colors shrink-0 cursor-pointer ${
-                fastDeliveryOnly ? 'bg-ink text-page' : 'bg-surface text-ink border border-line hover:bg-raised'
+              className={`h-11 px-4 rounded-full text-sm font-bold transition-colors shrink-0 cursor-pointer ${
+                fastDeliveryOnly ? 'bg-brand-soft text-brand-soft-ink border border-brand' : 'bg-surface text-ink border border-line hover:bg-raised'
               }`}
             >
               {t('under45')}
@@ -732,11 +731,11 @@ function ProductsContent() {
                 : t('pickCommunity')}
             </p>
             {communitiesError ? (
-              <Button onClick={() => loadCommunities(true)} className="flame-btn rounded-xl">
+              <Button onClick={() => loadCommunities(true)} className="rounded-xl">
                 {t('retry')}
               </Button>
             ) : (
-              <Button onClick={openSelectorModal} className="flame-btn rounded-xl">
+              <Button onClick={openSelectorModal} className="rounded-xl">
                 {t('chooseCommunity')}
               </Button>
             )}
@@ -810,7 +809,7 @@ function ProductsContent() {
                 </div>
               )}
 
-              <Button onClick={openSelectorModal} className="flame-btn rounded-xl">
+              <Button onClick={openSelectorModal} className="rounded-xl">
                 {t('switchCommunity')}
               </Button>
             </div>
@@ -1042,12 +1041,9 @@ function ProductsContent() {
                 {t('changeArea')}
               </Button>
             )}
-            <button
-              onClick={() => setViewMode('kitchens')}
-              className="flame-btn px-4 py-2 text-xs font-bold rounded-xl"
-            >
+            <Button onClick={() => setViewMode('kitchens')} className="rounded-xl text-xs font-semibold">
               {t('browseKitchens')}
-            </button>
+            </Button>
           </div>
         </div>
       );
@@ -1108,17 +1104,19 @@ function ProductsContent() {
                   {product.seller?.id && (
                     <button
                       onClick={(e) => handleToggleFavorite(e, product.seller.id, product.seller.businessName)}
-                      className="absolute top-2.5 end-2.5 w-9 h-9 rounded-full bg-surface/95 hover:bg-surface flex items-center justify-center text-ink transition-transform active:scale-90 shadow-xs z-10"
+                      className="absolute top-1 end-1 w-11 h-11 flex items-center justify-center z-10 active:scale-90 transition-transform"
                       title={t('saveFavKitchens')}
                       aria-label={t('saveFavKitchens')}
+                      aria-pressed={favoriteSellerIds.has(product.seller.id)}
                     >
-                      <Heart
-                        className={`w-3.5 h-3.5 transition-colors ${
-                          favoriteSellerIds.has(product.seller.id)
-                            ? 'fill-red-500 text-red-500'
-                            : 'text-muted hover:text-red-500'
-                        }`}
-                      />
+                      <span className="w-9 h-9 rounded-full bg-surface/95 flex items-center justify-center shadow-xs">
+                        <Heart
+                          className={`w-3.5 h-3.5 transition-colors ${
+                            favoriteSellerIds.has(product.seller.id) ? 'fill-red-500 text-red-500' : 'text-muted'
+                          }`}
+                          aria-hidden
+                        />
+                      </span>
                     </button>
                   )}
                 </div>
@@ -1137,12 +1135,8 @@ function ProductsContent() {
                         </span>
                       </div>
 
-                      {product.isSameCommunity ? (
-                        <span className="shrink-0 px-2 py-0.5 rounded-full bg-brand-soft text-brand-soft-ink text-[11px] font-extrabold flex items-center gap-1">
-                          <Home className="w-2.5 h-2.5" />
-                          <span>{t('inYourArea')}</span>
-                        </span>
-                      ) : distanceLabel ? (
+                      {/* The page is already about the chosen area; only a kitchen outside it says how far it is. */}
+                      {!product.isSameCommunity && distanceLabel ? (
                         <span className="shrink-0 px-2 py-0.5 rounded-full bg-raised text-muted text-[11px] font-medium">
                           {distanceLabel}
                         </span>
@@ -1178,19 +1172,13 @@ function ProductsContent() {
                           {formatPrice(product.price)}
                         </span>
                       )}
-                      <div className="flex items-center gap-1 mt-0.5 text-xs text-ink font-extrabold">
-                        {rating ? (
-                          <>
-                            <Star className="w-3 h-3 fill-accent text-accent" />
-                            <span>{rating}</span>
-                            {product.totalReviews ? (
-                              <span className="text-muted font-normal">({product.totalReviews})</span>
-                            ) : null}
-                          </>
-                        ) : (
-                          <span className="text-muted">{t('new')}</span>
-                        )}
-                      </div>
+                      {rating && (
+                        <div className="flex items-center gap-1 mt-0.5 text-xs text-ink font-extrabold">
+                          <Star className="w-3 h-3 fill-accent text-accent" aria-hidden />
+                          <span>{rating}</span>
+                          {product.totalReviews ? <span className="text-muted font-normal">({product.totalReviews})</span> : null}
+                        </div>
+                      )}
                     </div>
 
                     <button

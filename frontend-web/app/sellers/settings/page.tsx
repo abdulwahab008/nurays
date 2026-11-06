@@ -626,7 +626,7 @@ export default function SellerSettingsPage() {
       on ? 'border-brand-600 bg-brand-soft text-brand-soft-ink font-medium' : 'border-line-strong bg-surface text-ink hover:bg-raised'
     }`;
   const sectionClass = 'py-8 border-t border-line first:border-t-0 first:pt-0';
-  const headingClass = 'text-sm font-semibold text-ink';
+  const headingClass = 'text-sm font-semibold text-ink scroll-mt-24';
 
   // No form until the kitchen's own settings were read: the boxes would hold blanks, and saving them would replace the real ones.
   if (!settingsRead) {
@@ -659,6 +659,18 @@ export default function SellerSettingsPage() {
       userType="seller"
     >
       <form onSubmit={handleSubmit} className="max-w-3xl pb-16">
+        {/* A long page on a phone: one tap to the part the kitchen came for. */}
+        <nav aria-label={t('jumpTo')} className="-mx-4 px-4 sm:mx-0 sm:px-0 mb-2 flex gap-2 overflow-x-auto [scrollbar-width:none]">
+          {(['hours', 'kitchen', 'location', 'delivery', 'payout', 'stock'] as const).map((id) => (
+            <a
+              key={id}
+              href={`#${id}-heading`}
+              className="shrink-0 inline-flex items-center min-h-11 px-3.5 rounded-full border border-line text-sm text-ink whitespace-nowrap hover:bg-raised focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-brand/40"
+            >
+              {t(({ hours: 'hours', kitchen: 'kitchen', location: 'location', delivery: 'delivery', payout: 'accounts', stock: 'runningLow' } as const)[id])}
+            </a>
+          ))}
+        </nav>
         <section aria-labelledby="hours-heading" className={sectionClass}>
           <h2 id="hours-heading" className={headingClass}>{t('hours')}</h2>
           <p className="text-sm text-muted mt-1">{t('hoursHint')}</p>
@@ -1137,7 +1149,7 @@ export default function SellerSettingsPage() {
         </section>
 
         <section aria-labelledby="payout-heading" className={sectionClass}>
-          <h2 id="payout-heading" className={`${headingClass} scroll-mt-24`}>{t('accounts')}</h2>
+          <h2 id="payout-heading" className={headingClass}>{t('accounts')}</h2>
           <p className="text-sm text-muted mt-1">
             {t('accountsHint')}
           </p>
@@ -1277,7 +1289,7 @@ export default function SellerSettingsPage() {
           </div>
         </section>
 
-        <div className="sticky bottom-0 z-10 mt-8 flex justify-end border-t border-line bg-page/95 py-4 pb-[calc(1rem+var(--safe-bottom,0px))] backdrop-blur">
+        <div data-bottom-bar className="sticky bottom-0 z-10 mt-8 flex justify-end border-t border-line bg-page/95 py-4 pb-[calc(1rem+var(--safe-bottom,0px))] backdrop-blur">
           <Button type="submit" disabled={loading || !changed} className="min-h-11 w-full px-6 sm:w-auto">
             {loading ? t('saving') : t('saveChanges')}
           </Button>

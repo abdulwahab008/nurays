@@ -3,6 +3,8 @@
 import { LoadError } from '@/components/ui/LoadError';
 import { CategoryNode, PRODUCT_TYPE_OPTIONS, ProductType, locateCategory } from '@/lib/product-form';
 import { chipClass, labelClass, optionClass } from './fields';
+import { useT } from '@/lib/i18n';
+import { kitchenProductFormMessages } from '@/lib/i18n/messages/kitchen-product-form';
 
 export type GroupedCategories = Record<ProductType, CategoryNode[]>;
 
@@ -34,13 +36,13 @@ export default function CategoryPicker({
   const categories = productType ? grouped[productType] || [] : [];
   const parent = categories.find((c) => c.id === parentId) || null;
   const selected = locateCategory(categories, categoryId);
-  const typeOption = PRODUCT_TYPE_OPTIONS.find((t) => t.value === productType);
+  const t = useT(kitchenProductFormMessages);
 
   return (
     <>
       <div role="group" aria-labelledby="product-type-label">
         <p id="product-type-label" className={labelClass}>
-          Type
+          {t('type')}
         </p>
         <div className="grid grid-cols-2 gap-3">
           {PRODUCT_TYPE_OPTIONS.map((type) => {
@@ -55,8 +57,8 @@ export default function CategoryPicker({
                 }}
                 className={optionClass(isSelected)}
               >
-                <span className="block text-[15px] font-semibold text-ink">{type.label}</span>
-                <span className="mt-0.5 block text-sm text-muted">{type.description}</span>
+                <span className="block text-[15px] font-semibold text-ink">{t(`ptype.${type.value}`)}</span>
+                <span className="mt-0.5 block text-sm text-muted">{t(`ptype.${type.value}.desc`)}</span>
               </button>
             );
           })}
@@ -66,7 +68,7 @@ export default function CategoryPicker({
       {productType && (
         <div role="group" aria-labelledby="product-category-label">
           <p id="product-category-label" className={labelClass}>
-            Category
+            {t('category')}
           </p>
           {categories.length > 0 ? (
             <div className="flex flex-wrap gap-2">
@@ -84,9 +86,9 @@ export default function CategoryPicker({
               ))}
             </div>
           ) : loadError ? (
-            <LoadError compact error={loadError} onRetry={onRetry} title="We couldn't load the categories" />
+            <LoadError compact error={loadError} onRetry={onRetry} title={t('categoriesFailed')} />
           ) : (
-            <p className="text-sm text-muted">No categories yet for {typeOption ? typeOption.label.toLowerCase() : 'this type'} dishes.</p>
+            <p className="text-sm text-muted">{t('noCategories')}</p>
           )}
         </div>
       )}
@@ -94,7 +96,7 @@ export default function CategoryPicker({
       {parent?.children && parent.children.length > 0 && (
         <div role="group" aria-labelledby="product-subcategory-label">
           <p id="product-subcategory-label" className={labelClass}>
-            Kind of {parent.name.toLowerCase()}
+            {t('kindOf', { name: parent.name })}
           </p>
           <div className="flex flex-wrap gap-2">
             {parent.children.map((sub) => (
@@ -116,7 +118,7 @@ export default function CategoryPicker({
         <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1">
           {selected ? (
             <p className="text-sm text-muted">
-              Listed under{' '}
+              {t('listedUnder')}{' '}
               <span className="font-medium text-ink">
                 {selected.parent ? `${selected.parent.name}, ` : ''}
                 {selected.category.name}
@@ -126,7 +128,7 @@ export default function CategoryPicker({
             <span />
           )}
           <button type="button" onClick={onRequestCategory} className="min-h-11 text-sm font-medium text-brand-ink underline-offset-4 hover:underline">
-            Ask for a new category
+            {t('askCategory')}
           </button>
         </div>
       )}

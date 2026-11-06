@@ -120,14 +120,16 @@ export function UberLeftSidebar({
               {mainNavItems.map((item) => {
                 const Icon = item.icon;
                 const isActive = pathname === item.href;
+                // On a phone the tab bar already leads home, so a signed-in customer is not offered it twice.
+                const inTabBar = isAuthenticated && item.id === 'home';
                 return (
                   <Link
                     key={item.href}
                     href={item.href}
                     onClick={onClose}
-                    className={`flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-semibold transition-all ${
+                    className={`flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-semibold transition-all ${inTabBar ? 'max-md:hidden ' : ''}${
                       isActive
-                        ? 'bg-ink text-page shadow-xs'
+                        ? 'bg-brand-soft text-brand-soft-ink'
                         : 'text-ink hover:bg-raised hover:text-ink'
                     }`}
                   >
@@ -168,7 +170,7 @@ export function UberLeftSidebar({
                   <Link
                     href="/orders"
                     onClick={onClose}
-                    className="flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-medium text-ink hover:bg-raised"
+                    className="flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-medium text-ink hover:bg-raised max-md:hidden"
                   >
                     <Package className="w-4 h-4 text-muted" />
                     <span>{t('myFoodOrders')}</span>
@@ -199,14 +201,14 @@ export function UberLeftSidebar({
                     <Link
                       href="/login"
                       onClick={onClose}
-                      className="flex-1 text-center py-1.5 rounded-lg text-xs font-bold bg-surface border border-line text-ink hover:bg-raised transition-colors"
+                      className="flex-1 inline-flex h-11 items-center justify-center rounded-xl text-sm font-semibold bg-brand text-on-brand hover:bg-brand-500"
                     >
                       {t('signIn')}
                     </Link>
                     <Link
                       href="/register"
                       onClick={onClose}
-                      className="flex-1 text-center py-1.5 rounded-lg text-xs font-bold bg-brand text-on-brand hover:bg-brand-500 transition-colors shadow-2xs"
+                      className="flex-1 inline-flex h-11 items-center justify-center rounded-xl text-sm font-semibold border border-line-strong text-ink hover:bg-raised"
                     >
                       {t('join')}
                     </Link>

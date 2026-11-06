@@ -20,40 +20,43 @@ export function formatPrice(price: number | string | undefined | null): string {
 }
 
 /** Dates follow the page's language (Urdu month names, Western digits as on Pakistani apps). */
-function dateLocale(): string {
-  return typeof document !== 'undefined' && document.documentElement.lang === 'ur' ? 'ur-PK-u-nu-latn' : 'en-PK';
+const isUrdu = () => typeof document !== 'undefined' && document.documentElement.lang === 'ur';
+const dateLocale = () => (isUrdu() ? 'ur-PK-u-nu-latn' : 'en-PK');
+
+function toDate(date: string | Date | undefined | null): Date | null {
+  if (!date) return null;
+  const d = new Date(date);
+  return isNaN(d.getTime()) ? null : d;
+}
+
+/**
+ * In Urdu the time ("9:35 PM", Intl has no Urdu word for PM) sits inside right-to-left text, where the bidi algorithm
+ * would move "PM" ahead of the digits. A left-to-right isolate (LRI ... PDI) keeps it in one piece, and a no-break space
+ * keeps "PM" on the digits' line.
+ */
+function clock(d: Date, hour: 'numeric' | '2-digit'): string {
+  const time = new Intl.DateTimeFormat(dateLocale(), { hour, minute: '2-digit' }).format(d).replace(/\s/g, '\u00a0');
+  return isUrdu() ? `\u2066${time}\u2069` : time;
 }
 
 export function formatDate(date: string | Date | undefined | null): string {
-  if (!date) return '—';
-  try {
-    const d = new Date(date);
-    if (isNaN(d.getTime())) return '—';
-    return new Intl.DateTimeFormat(dateLocale(), {
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric',
-    }).format(d);
-  } catch {
-    return '—';
-  }
+  const d = toDate(date);
+  if (!d) return '—';
+  return new Intl.DateTimeFormat(dateLocale(), { year: 'numeric', month: 'long', day: 'numeric' }).format(d);
+}
+
+/** "9:35 pm", the one way to write a time of day. */
+export function formatTime(date: string | Date | undefined | null): string {
+  const d = toDate(date);
+  return d ? clock(d, 'numeric') : '—';
 }
 
 export function formatDateTime(date: string | Date | undefined | null): string {
-  if (!date) return '—';
-  try {
-    const d = new Date(date);
-    if (isNaN(d.getTime())) return '—';
-    return new Intl.DateTimeFormat(dateLocale(), {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-    }).format(d);
-  } catch {
-    return '—';
-  }
+  const d = toDate(date);
+  if (!d) return '—';
+  const options: Intl.DateTimeFormatOptions = { year: 'numeric', month: 'short', day: 'numeric' };
+  if (!isUrdu()) return new Intl.DateTimeFormat(dateLocale(), { ...options, hour: '2-digit', minute: '2-digit' }).format(d);
+  return `${new Intl.DateTimeFormat(dateLocale(), options).format(d)}، ${clock(d, '2-digit')}`;
 }
 
 export function formatPhoneNumber(phone: string): string {

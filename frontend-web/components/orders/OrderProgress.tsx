@@ -5,8 +5,10 @@ import { useT } from '@/lib/i18n';
 import { ordersMessages } from '@/lib/i18n/messages/orders';
 import { orderProgress } from './order-progress';
 
-/** The five-step tracker (placed, accepted, cooking, on the way, delivered); nothing for an order that ended early. */
-export function OrderProgress({ status, deliveryType, compact = false }: { status: string; deliveryType?: string | null; compact?: boolean }) {
+/**
+ * The five-step tracker (placed, accepted, cooking, on the way, delivered); nothing for an order that ended early.
+ */
+export function OrderProgress({ status, deliveryType }: { status: string; deliveryType?: string | null }) {
   const t = useT(ordersMessages);
   const progress = orderProgress(status, deliveryType);
   if (!progress) return null;
@@ -32,13 +34,9 @@ export function OrderProgress({ status, deliveryType, compact = false }: { statu
             >
               {done ? <Check className="w-3.5 h-3.5" strokeWidth={3} /> : i + 1}
             </span>
-            {!compact || current ? (
-              <span className={`mt-1.5 text-xs leading-tight px-0.5 ${current || done ? 'text-ink font-medium' : 'text-muted'}`}>
-                {t(`progress.${step}`)}
-              </span>
-            ) : (
-              <span className="sr-only">{t(`progress.${step}`)}</span>
-            )}
+            <span className={`mt-1.5 text-xs leading-tight px-0.5 ${current || done ? 'text-ink font-medium' : 'text-muted'}`}>
+              {t(`progress.${step}`)}
+            </span>
           </li>
         );
       })}

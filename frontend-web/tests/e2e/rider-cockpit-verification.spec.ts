@@ -16,8 +16,8 @@ test('Rider Mission Control Cockpit & Strict RBAC Verification', async ({ page }
   await page.waitForTimeout(2000);
 
   // 3. Verify Navbar RBAC
-  // - Eyebrow should say "Rider fleet"
-  await expect(page.locator('p.eyebrow').filter({ hasText: 'Rider fleet' })).toBeVisible({ timeout: 5000 });
+  // - Eyebrow should say "Rider"
+  await expect(page.locator('p.eyebrow').filter({ hasText: 'Rider' })).toBeVisible({ timeout: 5000 });
 
   // - Assigned zone should be visible and NOT be a link to customer addresses
   await expect(page.locator('div').filter({ hasText: 'Assigned Zone' }).first()).toBeVisible();

@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { DashboardLayout, SELLER_SIDEBAR_ITEMS } from '@/components/layout/DashboardShell';
 import { Button } from '@/components/ui/button';
+import { StatusPill, type StatusTone } from '@/components/ui/StatusPill';
 import { LoadError } from '@/components/ui/LoadError';
 import { useDialogs } from '@/components/ui/Dialogs';
 import { useToast } from '@/components/ui/toast';
@@ -175,11 +176,11 @@ export default function SellerEarningsPage() {
     }
   };
 
-  const statusPill = (status: string) => {
-    if (status === 'completed') return 'bg-brand-soft text-brand-soft-ink';
-    if (status === 'pending' || status === 'processing') return 'bg-accent-soft text-accent-soft-ink';
-    if (status === 'failed') return 'bg-red-50 text-red-700';
-    return 'bg-raised text-muted';
+  const payoutTone = (status: string): StatusTone => {
+    if (status === 'completed') return 'good';
+    if (status === 'pending' || status === 'processing') return 'waiting';
+    if (status === 'failed') return 'problem';
+    return 'neutral';
   };
 
   if (!isAuthenticated) {
@@ -382,13 +383,13 @@ export default function SellerEarningsPage() {
                           <span className="text-base font-semibold text-ink tabular-nums" data-ltr>
                             {payout.netAmount < 0 ? '-' : ''}{formatPrice(Math.abs(payout.netAmount))}
                           </span>
-                          <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${statusPill(payout.status)}`}>
+                          <StatusPill tone={payoutTone(payout.status)}>
                             {`payout.${payout.status}` in kitchenEarningsMessages.en
                               ? t(`payout.${payout.status}` as keyof typeof kitchenEarningsMessages.en)
                               : payout.status.charAt(0).toUpperCase() + payout.status.slice(1)}
-                          </span>
-                          {payout.automatic && <span className="rounded-full px-2 py-0.5 text-xs font-medium bg-raised text-muted">{t('weekly')}</span>}
-                          {payout.payoutMethod === 'paid_to_nuray' && <span className="rounded-full px-2 py-0.5 text-xs font-medium bg-raised text-muted">{t('paidToNuray')}</span>}
+                          </StatusPill>
+                          {payout.automatic && <StatusPill>{t('weekly')}</StatusPill>}
+                          {payout.payoutMethod === 'paid_to_nuray' && <StatusPill>{t('paidToNuray')}</StatusPill>}
                         </p>
                         <p className="mt-1 text-sm text-muted">
                           {[

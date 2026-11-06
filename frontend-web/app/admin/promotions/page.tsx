@@ -1,13 +1,15 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
+import { PageHeader } from '@/components/admin/AdminListParts';
 import { AdminShell } from '@/components/layout/AdminShell';
 import { Button } from '@/components/ui/button';
 import { LoadError } from '@/components/ui/LoadError';
 import { useToast } from '@/components/ui/toast';
 import { useDialogs } from '@/components/ui/Dialogs';
 import { apiClient, apiErrorMessage } from '@/lib/api-client';
-import { formatPrice, formatDate } from '@/lib/utils';
+import { formatPrice } from '@/lib/utils';
+import { formatDate } from '@/components/admin/admin-dates';
 
 // The server's limit (backend/src/validators/promotion.validator.ts): a fixed discount is at most the minimum order, or this.
 const MAX_FIXED_WITHOUT_MINIMUM = 5000;
@@ -166,16 +168,16 @@ export default function AdminPromotionsPage() {
 
   return (
     <AdminShell>
-      <div className="max-w-5xl mx-auto space-y-5">
-        <div className="flex flex-wrap items-end justify-between gap-3">
-          <div>
-            <h1 className="text-2xl font-semibold text-ink">Promo codes</h1>
-            <p className="text-sm text-muted mt-1">Codes Nuray pays for, valid at any kitchen. The kitchen&apos;s share isn&apos;t touched.</p>
-          </div>
-          <Button variant={showForm ? 'outline' : 'default'} onClick={() => setShowForm((v) => !v)}>
-            {showForm ? 'Close' : 'New code'}
-          </Button>
-        </div>
+      <div className="max-w-5xl space-y-5">
+        <PageHeader
+          title="Promo codes"
+          subtitle="Codes Nuray pays for, valid at any kitchen. The kitchen's share isn't touched."
+          actions={
+            <Button variant={showForm ? 'outline' : 'default'} onClick={() => setShowForm((v) => !v)}>
+              {showForm ? 'Close' : 'New code'}
+            </Button>
+          }
+        />
 
         {showForm && (
           <form onSubmit={create} onChange={() => formError && setFormError(null)} className="bg-surface border border-line rounded-2xl p-4 sm:p-5 grid grid-cols-1 sm:grid-cols-2 gap-4" data-testid="promo-form">

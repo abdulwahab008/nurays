@@ -11,8 +11,19 @@ import { useT } from '@/lib/i18n';
 import { homeMessages } from '@/lib/i18n/messages/home';
 import type { HomeDish } from '@/lib/home-filters';
 
-export default function HomeHero({ dishes }: { dishes: HomeDish[] }) {
+/** `greetingName` is set for a signed-in customer, who gets a one-line greeting instead of the introduction. */
+export default function HomeHero({ dishes, greetingName }: { dishes: HomeDish[]; greetingName?: string | null }) {
   const t = useT(homeMessages);
+  if (greetingName !== undefined) {
+    return (
+      <section className="max-w-[1280px] mx-auto px-4 sm:px-8 pt-5 sm:pt-8">
+        <h1 className="text-2xl sm:text-[32px] leading-tight font-extrabold tracking-tight text-ink">
+          {greetingName ? t('greeting', { name: greetingName }) : t('heroTitlePhone')}
+        </h1>
+        {greetingName && <p className="text-[15px] text-muted mt-1">{t('greetingSub')}</p>}
+      </section>
+    );
+  }
   const shown = dishes.filter((d) => d.photo).slice(0, 3);
   return (
     <section className="max-w-[1280px] mx-auto px-4 sm:px-8 pt-6 sm:pt-10 pb-2">

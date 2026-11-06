@@ -11,8 +11,14 @@ import { useToast } from '@/components/ui/toast';
 import { useDialogs } from '@/components/ui/Dialogs';
 import { useAuthStore } from '@/lib/store/auth-store';
 import { apiClient, apiErrorMessage, apiErrorDetails } from '@/lib/api-client';
-import { formatDateTime, formatPrice } from '@/lib/utils';
+import { formatPrice } from '@/lib/utils';
 import { useShallow } from 'zustand/react/shallow';
+import { StatusPill } from '@/components/ui/StatusPill';
+import { dateClock } from '@/components/sellers/order-timing';
+import { useLocale, useT } from '@/lib/i18n';
+import { kitchenPromotionMessages } from '@/lib/i18n/messages/kitchen-promotions';
+
+type PromoT = ReturnType<typeof useT<typeof kitchenPromotionMessages.en>>;
 
 const sidebarItems = SELLER_SIDEBAR_ITEMS;
 
@@ -66,29 +72,24 @@ type PromotionPayload = PromotionFormValues & { applyTo: 'selected'; selectedPro
 
 type Tab = 'all' | 'active' | 'scheduled' | 'expired';
 
-const TYPE_OPTIONS = [
-  { value: 'percentage', label: 'Percent off', hint: 'Like 20% off' },
-  { value: 'fixed', label: 'Rupees off', hint: 'Like Rs 200 off' },
-  { value: 'buy_x_get_y', label: 'Buy some, get one free', hint: 'Like buy 2, get 1' },
-  { value: 'bundle', label: 'Combo', hint: 'A few dishes together' },
-];
+const TYPE_OPTIONS = ['percentage', 'fixed', 'buy_x_get_y', 'bundle'] as const;
 
 const FIELD =
   'w-full min-h-11 px-3.5 rounded-xl bg-surface border border-line-strong text-[15px] text-ink placeholder:text-muted focus:outline-none focus:border-brand-600 focus:ring-3 focus:ring-brand/30';
 const LABEL = 'block text-sm font-medium text-ink mb-1.5';
 
-function offLabel(p: Pick<Promotion, 'type' | 'discountValue'>): string {
-  if (p.type === 'percentage') return `${p.discountValue}% off`;
-  if (p.type === 'fixed') return `${formatPrice(p.discountValue)} off`;
-  if (p.type === 'buy_x_get_y') return 'Buy some, get one free';
-  return 'Combo deal';
+function offLabel(p: Pick<Promotion, 'type' | 'discountValue'>, t: PromoT): string {
+  if (p.type === 'percentage') return t('percentOff', { value: p.discountValue });
+  if (p.type === 'fixed') return t('amountOff', { amount: formatPrice(p.discountValue) });
+  if (p.type === 'buy_x_get_y') return t('type.buy_x_get_y');
+  return t('comboDeal');
 }
 
-function whenLabel(p: Promotion): string {
-  if (p.status === 'active') return `Ends ${formatDateTime(p.endDate)}`;
-  if (p.status === 'scheduled') return `Starts ${formatDateTime(p.startDate)}`;
-  if (p.status === 'expired') return `Ended ${formatDateTime(p.endDate)}`;
-  return 'Not live';
+function whenLabel(p: Promotion, t: PromoT, locale: string): string {
+  if (p.status === 'active') return t('ends', { when: dateClock(p.endDate, locale) });
+  if (p.status === 'scheduled') return t('starts', { when: dateClock(p.startDate, locale) });
+  if (p.status === 'expired') return t('ended', { when: dateClock(p.endDate, locale) });
+  return t('notLive');
 }
 
 /**
@@ -139,6 +140,7 @@ function PromotionForm({
   initialData,
   promotionId,
 }: CreatePromotionModalProps) {
+  const t = useT(kitchenPromotionMessages);
   const isEditMode = Boolean(promotionId && initialData);
   const [formData, setFormData] = useState(() => promotionFormFor(initialData));
   const [selectedProductIds, setSelectedProductIds] = useState<string[]>(
@@ -188,13 +190,13 @@ function PromotionForm({
         const isNetwork = err.code === 'ERR_NETWORK' || err.message?.includes('Network Error');
         setProductsLoadError(
           isNetwork
-            ? "We can't reach Nuray right now. Check your connection and try again."
-            : err.response?.data?.error?.message ?? err.response?.data?.message ?? err.message ?? "We couldn't load your dishes"
+            ? t('offline')
+            : err.response?.data?.error?.message ?? err.response?.data?.message ?? err.message ?? t('dishesLoadFailed')
         );
-        if (!isNetwork) onErrorRef.current?.(err.response?.data?.error?.message ?? err.message ?? "We couldn't load your dishes");
+        if (!isNetwork) onErrorRef.current?.(err.response?.data?.error?.message ?? err.message ?? t('dishesLoadFailed'));
       })
       .finally(() => setProductsLoading(false));
-  }, []);
+  }, [t]);
 
   useEffect(() => {
     fetchProducts();
@@ -241,12 +243,12 @@ function PromotionForm({
       >
         <div className="flex items-center justify-between gap-3 px-5 sm:px-6 pt-5 pb-4 border-b border-line">
           <h2 id="promo-form-title" className="text-lg font-semibold text-ink">
-            {isEditMode ? 'Edit discount' : 'New discount'}
+            {isEditMode ? t('editTitle') : t('newTitle')}
           </h2>
           <button
             type="button"
             onClick={handleClose}
-            aria-label="Close"
+            aria-label={t('close')}
             className="-me-2 w-11 h-11 rounded-full flex items-center justify-center text-muted hover:text-ink hover:bg-raised focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-brand/40"
           >
             <X className="w-5 h-5" aria-hidden="true" />
@@ -257,37 +259,37 @@ function PromotionForm({
           <div className="flex-1 overflow-y-auto px-5 sm:px-6 py-5 space-y-6">
             <div>
               <label htmlFor="promo-name" className={LABEL}>
-                Name
+                {t('name')}
               </label>
               <input
                 id="promo-name"
                 type="text"
                 value={formData.name}
                 onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                placeholder="Like Weekend samosa deal"
+                placeholder={t('namePlaceholder')}
                 className={FIELD}
                 required
               />
             </div>
 
             <fieldset>
-              <legend className={LABEL}>Kind of discount</legend>
+              <legend className={LABEL}>{t('kind')}</legend>
               <div className="grid grid-cols-2 gap-2">
                 {TYPE_OPTIONS.map((type) => (
                   <label
-                    key={type.value}
+                    key={type}
                     className="min-h-11 rounded-xl border border-line-strong px-3.5 py-2.5 cursor-pointer hover:bg-raised has-[:checked]:border-brand-600 has-[:checked]:bg-brand-soft has-[:focus-visible]:ring-3 has-[:focus-visible]:ring-brand/40"
                   >
                     <input
                       type="radio"
                       name="promo-type"
-                      value={type.value}
-                      checked={formData.type === type.value}
-                      onChange={() => setFormData({ ...formData, type: type.value })}
+                      value={type}
+                      checked={formData.type === type}
+                      onChange={() => setFormData({ ...formData, type })}
                       className="sr-only"
                     />
-                    <span className="block text-sm font-medium text-ink">{type.label}</span>
-                    <span className="block text-xs text-muted">{type.hint}</span>
+                    <span className="block text-sm font-medium text-ink">{t(`type.${type}`)}</span>
+                    <span className="block text-xs text-muted">{t(`type.${type}.hint`)}</span>
                   </label>
                 ))}
               </div>
@@ -296,7 +298,7 @@ function PromotionForm({
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <label htmlFor="promo-value" className={LABEL}>
-                  {formData.type === 'fixed' ? 'Rupees off' : formData.type === 'percentage' ? 'Percent off' : 'How much off'}
+                  {formData.type === 'fixed' ? t('type.fixed') : formData.type === 'percentage' ? t('type.percentage') : t('howMuchOff')}
                 </label>
                 <div className="relative">
                   {formData.type === 'fixed' && (
@@ -319,25 +321,25 @@ function PromotionForm({
 
               <div>
                 <label htmlFor="promo-code" className={LABEL}>
-                  Code <span className="font-normal text-muted">(optional)</span>
+                  {t('code')} <span className="font-normal text-muted">{t('optional')}</span>
                 </label>
                 <input
                   id="promo-code"
                   type="text"
                   value={formData.code}
                   onChange={(e) => setFormData({ ...formData, code: e.target.value.toUpperCase() })}
-                  placeholder="Like SAMOSA15"
+                  placeholder={t('codePlaceholder')}
                   aria-describedby="promo-code-hint"
                   className={`${FIELD} font-mono uppercase placeholder:normal-case placeholder:font-sans`}
                 />
-                <p id="promo-code-hint" className="mt-1 text-xs text-muted">Customers type this at checkout.</p>
+                <p id="promo-code-hint" className="mt-1 text-xs text-muted">{t('codeHint')}</p>
               </div>
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <label htmlFor="promo-start" className={LABEL}>
-                  Starts
+                  {t('startsLabel')}
                 </label>
                 <input
                   id="promo-start"
@@ -350,7 +352,7 @@ function PromotionForm({
               </div>
               <div>
                 <label htmlFor="promo-end" className={LABEL}>
-                  Ends
+                  {t('endsLabel')}
                 </label>
                 <input
                   id="promo-end"
@@ -366,7 +368,7 @@ function PromotionForm({
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <label htmlFor="promo-min" className={LABEL}>
-                  Smallest order <span className="font-normal text-muted">(optional)</span>
+                  {t('smallestOrder')} <span className="font-normal text-muted">{t('optional')}</span>
                 </label>
                 <div className="relative">
                   <span className="absolute start-3.5 top-1/2 -translate-y-1/2 text-sm text-muted" aria-hidden="true">Rs</span>
@@ -375,21 +377,21 @@ function PromotionForm({
                     type="number"
                     value={formData.minOrderValue}
                     onChange={(e) => setFormData({ ...formData, minOrderValue: e.target.value })}
-                    placeholder="Any amount"
+                    placeholder={t('anyAmount')}
                     className={`${FIELD} ps-10 tabular-nums`}
                   />
                 </div>
               </div>
               <div>
                 <label htmlFor="promo-max" className={LABEL}>
-                  Times it can be used <span className="font-normal text-muted">(optional)</span>
+                  {t('timesUsable')} <span className="font-normal text-muted">{t('optional')}</span>
                 </label>
                 <input
                   id="promo-max"
                   type="number"
                   value={formData.maxUsage}
                   onChange={(e) => setFormData({ ...formData, maxUsage: e.target.value })}
-                  placeholder="No limit"
+                  placeholder={t('noLimit')}
                   className={`${FIELD} tabular-nums`}
                 />
               </div>
@@ -398,7 +400,7 @@ function PromotionForm({
             <fieldset>
               <div className="flex items-center justify-between gap-3 mb-1.5">
                 <legend className="text-sm font-medium text-ink">
-                  Dishes <span className="font-normal text-muted tabular-nums">({selectedProductIds.length} picked)</span>
+                  {t('dishes')} <span className="font-normal text-muted tabular-nums">{t('picked', { count: selectedProductIds.length })}</span>
                 </legend>
                 {!productsLoadError && filteredModalProducts.length > 0 && (
                   <div className="flex -me-2">
@@ -407,14 +409,14 @@ function PromotionForm({
                       onClick={() => setSelectedProductIds(products.map((p) => p.id))}
                       className="min-h-11 px-2 text-sm font-medium text-brand-ink hover:underline"
                     >
-                      Pick all
+                      {t('pickAll')}
                     </button>
                     <button
                       type="button"
                       onClick={() => setSelectedProductIds([])}
                       className="min-h-11 px-2 text-sm font-medium text-muted hover:text-ink"
                     >
-                      Clear
+                      {t('clear')}
                     </button>
                   </div>
                 )}
@@ -427,8 +429,8 @@ function PromotionForm({
                     type="search"
                     value={productSearch}
                     onChange={(e) => setProductSearch(e.target.value)}
-                    placeholder="Find a dish"
-                    aria-label="Find a dish"
+                    placeholder={t('findDish')}
+                    aria-label={t('findDish')}
                     className={`${FIELD} ps-10`}
                   />
                 </div>
@@ -439,16 +441,16 @@ function PromotionForm({
                   <div className="px-4 py-5 text-center">
                     <p className="text-sm text-red-700">{productsLoadError}</p>
                     <Button type="button" variant="outline" onClick={loadProductsForPromotion} className="mt-3">
-                      Try again
+                      {t('tryAgain')}
                     </Button>
                   </div>
                 ) : productsLoading ? (
-                  <p className="px-4 py-5 text-center text-sm text-muted">Loading your dishes</p>
+                  <p className="px-4 py-5 text-center text-sm text-muted">{t('loadingDishes')}</p>
                 ) : filteredModalProducts.length === 0 ? (
                   <p className="px-4 py-5 text-center text-sm text-muted">
                     {products.length === 0
-                      ? 'You have no dishes yet. Add a dish first, then come back.'
-                      : 'No dish has that name.'}
+                      ? t('noDishesYet')
+                      : t('noDishMatch')}
                   </p>
                 ) : (
                   filteredModalProducts.map((product) => {
@@ -464,7 +466,7 @@ function PromotionForm({
                           onChange={() => toggleProduct(product.id)}
                           className="w-4 h-4 accent-brand-600"
                         />
-                        <span className="flex-1 min-w-0 text-[15px] text-ink truncate">{product.name}</span>
+                        <bdi className="flex-1 min-w-0 text-[15px] text-ink truncate">{product.name}</bdi>
                         <span className="text-sm text-muted tabular-nums shrink-0">{formatPrice(product.price)}</span>
                       </label>
                     );
@@ -473,17 +475,17 @@ function PromotionForm({
               </div>
 
               {selectedProductIds.length === 0 && !productsLoadError && !productsLoading && (
-                <p className="mt-2 text-sm text-muted">Pick at least one dish for this discount.</p>
+                <p className="mt-2 text-sm text-muted">{t('pickOne')}</p>
               )}
             </fieldset>
           </div>
 
           <div className="flex gap-3 px-5 sm:px-6 py-4 border-t border-line">
             <Button type="button" variant="outline" onClick={handleClose} className="flex-1">
-              Cancel
+              {t('cancel')}
             </Button>
             <Button type="submit" disabled={selectedProductIds.length === 0} className="flex-1">
-              {isEditMode ? 'Save changes' : 'Create discount'}
+              {isEditMode ? t('saveChanges') : t('create')}
             </Button>
           </div>
         </form>
@@ -502,24 +504,24 @@ interface DealRowProps {
 }
 
 function DealRow({ promo, quiet, onCopy, onDetails, onEdit, onDelete }: DealRowProps) {
+  const t = useT(kitchenPromotionMessages);
+  const { locale } = useLocale();
   const hasLimit = promo.usageLimitTotal != null && promo.usageLimitTotal > 0;
   const usagePercent = hasLimit ? Math.min(100, Math.round((promo.usageCount / promo.usageLimitTotal!) * 100)) : 0;
   const dishCount = promo.products?.length ?? 0;
   const facts = [
-    whenLabel(promo),
-    promo.minOrderAmount != null && promo.minOrderAmount > 0 ? `Orders over ${formatPrice(promo.minOrderAmount)}` : null,
-    dishCount > 0 ? `${dishCount} ${dishCount === 1 ? 'dish' : 'dishes'}` : null,
+    whenLabel(promo, t, locale),
+    promo.minOrderAmount != null && promo.minOrderAmount > 0 ? t('ordersOver', { amount: formatPrice(promo.minOrderAmount) }) : null,
+    dishCount > 0 ? (dishCount === 1 ? t('dishCountOne') : t('dishCount', { count: dishCount })) : null,
   ].filter(Boolean);
 
   return (
     <li className="flex flex-col lg:flex-row lg:items-center gap-3 lg:gap-6 py-4">
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-baseline gap-x-3 gap-y-0.5">
-          <p className={`text-lg font-semibold tabular-nums ${quiet ? 'text-muted' : 'text-ink'}`}>{offLabel(promo)}</p>
-          <p className={`text-[15px] min-w-0 break-words ${quiet ? 'text-muted' : 'text-ink'}`}>{promo.name}</p>
-          {promo.status === 'draft' && (
-            <span className="rounded-full px-2 py-0.5 text-xs font-medium bg-raised text-muted">Not live</span>
-          )}
+          <p className={`text-lg font-semibold tabular-nums ${quiet ? 'text-muted' : 'text-ink'}`}>{offLabel(promo, t)}</p>
+          <p className={`text-[15px] min-w-0 break-words ${quiet ? 'text-muted' : 'text-ink'}`}><bdi>{promo.name}</bdi></p>
+          {promo.status === 'draft' && <StatusPill>{t('notLive')}</StatusPill>}
         </div>
         <p className="mt-1 text-sm text-muted">{facts.join(', ')}</p>
         {hasLimit && !quiet ? (
@@ -528,12 +530,16 @@ function DealRow({ promo, quiet, onCopy, onDetails, onEdit, onDelete }: DealRowP
               <div className="h-full rounded-full bg-brand-600" style={{ width: `${usagePercent}%` }} />
             </div>
             <span className="text-sm text-muted tabular-nums whitespace-nowrap">
-              {promo.usageCount} of {promo.usageLimitTotal} used
+              {t('usedOf', { used: promo.usageCount, total: promo.usageLimitTotal ?? 0 })}
             </span>
           </div>
         ) : (
           <p className="mt-1 text-sm text-muted tabular-nums">
-            {hasLimit ? `${promo.usageCount} of ${promo.usageLimitTotal} used` : `Used ${promo.usageCount} ${promo.usageCount === 1 ? 'time' : 'times'}`}
+            {hasLimit
+              ? t('usedOf', { used: promo.usageCount, total: promo.usageLimitTotal ?? 0 })
+              : promo.usageCount === 1
+                ? t('usedOnce')
+                : t('usedTimes', { count: promo.usageCount })}
           </p>
         )}
       </div>
@@ -543,7 +549,7 @@ function DealRow({ promo, quiet, onCopy, onDetails, onEdit, onDelete }: DealRowP
           <button
             type="button"
             onClick={() => onCopy(promo.code!)}
-            aria-label={`Copy code ${promo.code}`}
+            aria-label={t('copyCode', { code: promo.code })}
             className="inline-flex items-center gap-2 min-h-11 px-3 rounded-xl bg-raised text-ink font-mono text-sm hover:bg-brand-soft focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-brand/40"
           >
             {promo.code}
@@ -552,16 +558,16 @@ function DealRow({ promo, quiet, onCopy, onDetails, onEdit, onDelete }: DealRowP
         )}
         <div className="flex items-center gap-1">
           <Button type="button" variant="ghost" onClick={onDetails} className="px-3">
-            Details
+            {t('details')}
           </Button>
           <Button type="button" variant={quiet ? 'ghost' : 'outline'} onClick={onEdit} className={quiet ? 'px-3 text-muted hover:text-ink hover:bg-raised' : 'px-4'}>
             <Pencil className="w-4 h-4" aria-hidden="true" />
-            Edit
+            {t('edit')}
           </Button>
           <button
             type="button"
             onClick={onDelete}
-            aria-label={`Delete ${promo.name}`}
+            aria-label={t('deleteNamed', { name: promo.name })}
             className="w-11 h-11 rounded-xl flex items-center justify-center text-muted hover:text-red-700 hover:bg-red-50 focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-brand/40"
           >
             <Trash2 className="w-4 h-4" aria-hidden="true" />
@@ -577,6 +583,8 @@ export default function SellerPromotionsPage() {
   const { isAuthenticated, user } = useAuthStore(useShallow((s) => ({ isAuthenticated: s.isAuthenticated, user: s.user })));
   const { showToast } = useToast();
   const { confirm: confirmDialog } = useDialogs();
+  const t = useT(kitchenPromotionMessages);
+  const { locale } = useLocale();
 
   const [loading, setLoading] = useState(true);
   // Why the promotions could not be read; shown instead of "no discounts yet", which would be untrue.
@@ -644,7 +652,7 @@ export default function SellerPromotionsPage() {
 
     if (user?.userType !== 'seller' && user?.user_type !== 'seller') {
       router.push('/dashboard');
-      showToast('Access denied. Seller privileges required.', 'error');
+      showToast(t('accessDenied'), 'error');
       return;
     }
 
@@ -682,17 +690,17 @@ export default function SellerPromotionsPage() {
     try {
       const response = await apiClient.post('/promotions', payload);
       if (response.data.success) {
-        showToast('Discount created', 'success');
+        showToast(t('created'), 'success');
         setShowCreateModal(false);
         loadPromotions();
       } else {
-        showToast("We couldn't create the discount", 'error');
+        showToast(t('createFailed'), 'error');
       }
     } catch (error) {
       const details = apiErrorDetails(error) as Array<{ field?: string; message?: string }> | undefined;
       const msg = details?.length
         ? details.map((d) => (d.field ? `${d.field}: ${d.message}` : d.message)).join('. ')
-        : apiErrorMessage(error, "We couldn't create the discount");
+        : apiErrorMessage(error, t('createFailed'));
       showToast(msg, 'error');
     }
   };
@@ -728,27 +736,27 @@ export default function SellerPromotionsPage() {
     try {
       const response = await apiClient.patch(`/promotions/${id}`, payload);
       if (response.data.success) {
-        showToast('Changes saved', 'success');
+        showToast(t('savedToast'), 'success');
         setShowCreateModal(false);
         setEditingPromo(null);
         loadPromotions();
       } else {
-        showToast("We couldn't save your changes", 'error');
+        showToast(t('saveFailed'), 'error');
       }
     } catch (error) {
       const details = apiErrorDetails(error) as Array<{ field?: string; message?: string }> | undefined;
       const msg = details?.length
         ? details.map((d) => (d.field ? `${d.field}: ${d.message}` : d.message)).join('. ')
-        : apiErrorMessage(error, "We couldn't save your changes");
+        : apiErrorMessage(error, t('saveFailed'));
       showToast(msg, 'error');
     }
   };
 
   const handleDeletePromotion = async (id: string) => {
-    if (!(await confirmDialog({ title: 'Delete this discount?', message: 'Customers will not be able to use it any more.', confirmText: 'Delete' }))) return;
+    if (!(await confirmDialog({ title: t('deleteTitle'), message: t('deleteBody'), confirmText: t('delete') }))) return;
     try {
       await apiClient.delete(`/promotions/${id}`);
-      showToast('Discount deleted', 'success');
+      showToast(t('deleted'), 'success');
       setPromotions((prev) => prev.filter((p) => p.id !== id));
       if (detailPromo?.id === id) setDetailPromo(null);
       if (editingPromo?.id === id) {
@@ -756,13 +764,13 @@ export default function SellerPromotionsPage() {
         setShowCreateModal(false);
       }
     } catch (error) {
-      showToast(apiErrorMessage(error, "We couldn't delete the discount"), 'error');
+      showToast(apiErrorMessage(error, t('deleteFailed')), 'error');
     }
   };
 
   const copyPromoCode = (code: string) => {
     navigator.clipboard.writeText(code);
-    showToast(`Copied ${code}`, 'success');
+    showToast(t('copied', { code }), 'success');
   };
 
   const openNew = () => {
@@ -817,10 +825,10 @@ export default function SellerPromotionsPage() {
   const searching = searchFilter.trim().length > 0;
 
   const tabs: Array<{ id: Tab; label: string; count: number }> = [
-    { id: 'all', label: 'All', count: promotions.length },
-    { id: 'active', label: 'Running', count: activeDeals.length },
-    { id: 'scheduled', label: 'Later', count: scheduledDeals.length },
-    { id: 'expired', label: 'Ended', count: expiredDeals.length },
+    { id: 'all', label: t('tab.all'), count: promotions.length },
+    { id: 'active', label: t('tab.active'), count: activeDeals.length },
+    { id: 'scheduled', label: t('tab.scheduled'), count: scheduledDeals.length },
+    { id: 'expired', label: t('tab.expired'), count: expiredDeals.length },
   ];
 
   const runningCard =
@@ -830,7 +838,7 @@ export default function SellerPromotionsPage() {
       </ul>
     ) : (
       <p className="rounded-[20px] bg-surface border border-line shadow-[var(--shadow-card)] px-5 py-6 text-[15px] text-muted">
-        {searching ? 'No running discount matches your search.' : 'Nothing is running now. Customers pay your normal prices.'}
+        {searching ? t('noRunningMatch') : t('nothingRunning')}
       </p>
     );
 
@@ -840,15 +848,15 @@ export default function SellerPromotionsPage() {
 
   return (
     <DashboardLayout
-      title="Discounts"
-      subtitle="Lower prices on the dishes you pick, for the days you choose."
+      title={t('title')}
+      subtitle={t('subtitle')}
       sidebarItems={sidebarItems}
       userType="seller"
     >
       <div className="max-w-5xl">
         {!couldNotRead && !loading && hasAny ? (
           <div className="flex flex-col-reverse md:flex-row md:items-end md:justify-between gap-3 border-b border-line mb-6">
-            <div role="tablist" aria-label="Show discounts" className="flex gap-5 overflow-x-auto [scrollbar-width:none]">
+            <div role="tablist" aria-label={t('showDiscounts')} className="flex gap-5 overflow-x-auto [scrollbar-width:none]">
               {tabs.map((tab) => {
                 const selected = activeTab === tab.id;
                 return (
@@ -879,14 +887,14 @@ export default function SellerPromotionsPage() {
                   type="search"
                   value={searchFilter}
                   onChange={(e) => setSearchFilter(e.target.value)}
-                  placeholder="Name or code"
-                  aria-label="Find a discount by name or code"
+                  placeholder={t('searchPlaceholder')}
+                  aria-label={t('searchLabel')}
                   className={`${FIELD} ps-10`}
                 />
               </div>
               <Button onClick={openNew} className="shrink-0">
                 <Plus className="w-4 h-4" aria-hidden="true" />
-                New discount
+                {t('newTitle')}
               </Button>
             </div>
           </div>
@@ -894,7 +902,7 @@ export default function SellerPromotionsPage() {
           <div className="mb-6">
             <Button onClick={openNew}>
               <Plus className="w-4 h-4" aria-hidden="true" />
-              New discount
+              {t('newTitle')}
             </Button>
           </div>
         )}
@@ -902,22 +910,22 @@ export default function SellerPromotionsPage() {
         {loading ? (
           <div className="flex items-center gap-3 py-10 text-[15px] text-muted">
             <span className="animate-spin rounded-full h-5 w-5 border-2 border-line border-t-brand-600" aria-hidden="true" />
-            Loading your discounts
+            {t('loading')}
           </div>
         ) : loadError && promotions.length === 0 ? (
-          <LoadError error={loadError} onRetry={loadPromotions} title="We couldn't load your discounts" className="max-w-2xl" />
+          <LoadError error={loadError} onRetry={loadPromotions} title={t('loadFailed')} className="max-w-2xl" />
         ) : !hasAny ? (
           <p className="py-6 text-[15px] text-muted max-w-xl">
-            No discounts yet. A discount you create shows here, with how many orders used it.
+            {t('empty')}
           </p>
         ) : activeTab === 'all' ? (
           <div className="space-y-6">
             <section aria-labelledby="running-heading">
               <h2 id="running-heading" className="text-sm font-semibold text-ink mb-3">
-                Running now
+                {t('runningNow')}
                 {running.length > 0 && (
                   <span className="font-normal text-muted tabular-nums">
-                    , used on {runningRedemptions} {runningRedemptions === 1 ? 'order' : 'orders'} so far
+                    {runningRedemptions === 1 ? t('usedOnOrdersOne') : t('usedOnOrders', { count: runningRedemptions })}
                   </span>
                 )}
               </h2>
@@ -925,18 +933,18 @@ export default function SellerPromotionsPage() {
             </section>
             {later.length > 0 && (
               <section aria-labelledby="later-heading" className="pt-6 border-t border-line">
-                <h2 id="later-heading" className="text-sm font-semibold text-ink">Starting later</h2>
+                <h2 id="later-heading" className="text-sm font-semibold text-ink">{t('startingLater')}</h2>
                 {flatList(later)}
               </section>
             )}
             {ended.length > 0 && (
               <section aria-labelledby="ended-heading" className="pt-6 border-t border-line">
-                <h2 id="ended-heading" className="text-sm font-semibold text-muted">Ended</h2>
+                <h2 id="ended-heading" className="text-sm font-semibold text-muted">{t('endedHeading')}</h2>
                 {flatList(ended, true)}
               </section>
             )}
             {searching && filteredPromotions.length === 0 && (
-              <p className="text-[15px] text-muted">No discount matches your search.</p>
+              <p className="text-[15px] text-muted">{t('noMatch')}</p>
             )}
           </div>
         ) : activeTab === 'active' ? (
@@ -944,10 +952,10 @@ export default function SellerPromotionsPage() {
         ) : filteredPromotions.length === 0 ? (
           <p className="py-6 text-[15px] text-muted">
             {searching
-              ? 'No discount matches your search.'
+              ? t('noMatch')
               : activeTab === 'scheduled'
-              ? 'No discount is waiting to start.'
-              : 'No discount has ended yet.'}
+              ? t('noneWaiting')
+              : t('noneEnded')}
           </p>
         ) : (
           flatList(filteredPromotions, activeTab === 'expired')
@@ -955,11 +963,11 @@ export default function SellerPromotionsPage() {
 
         {!couldNotRead && !loading && (
           <section aria-labelledby="tips-heading" className="mt-10 pt-6 border-t border-line">
-            <h2 id="tips-heading" className="text-sm font-semibold text-ink mb-2">What works</h2>
+            <h2 id="tips-heading" className="text-sm font-semibold text-ink mb-2">{t('whatWorks')}</h2>
             <ul className="space-y-1.5 text-sm text-muted list-disc ps-5 max-w-2xl">
-              <li>Keep it short. A Friday-to-Sunday deal gets people ordering now.</li>
-              <li>Put a dish that sells slowly in a combo with one everyone loves.</li>
-              <li>Set a smallest order, like Rs 1,200, so the discount still pays.</li>
+              <li>{t('tip1')}</li>
+              <li>{t('tip2')}</li>
+              <li>{t('tip3')}</li>
             </ul>
           </section>
         )}
@@ -980,12 +988,12 @@ export default function SellerPromotionsPage() {
             <div className="flex items-start justify-between gap-3 px-5 sm:px-6 pt-5">
               <div className="min-w-0">
                 <h2 id="promo-detail-title" className="text-lg font-semibold text-ink break-words">{detailPromo.name}</h2>
-                <p className="text-sm text-muted">{whenLabel(detailPromo)}</p>
+                <p className="text-sm text-muted">{whenLabel(detailPromo, t, locale)}</p>
               </div>
               <button
                 type="button"
                 onClick={() => setDetailPromo(null)}
-                aria-label="Close"
+                aria-label={t('close')}
                 className="-me-2 -mt-2 w-11 h-11 shrink-0 rounded-full flex items-center justify-center text-muted hover:text-ink hover:bg-raised focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-brand/40"
               >
                 <X className="w-5 h-5" aria-hidden="true" />
@@ -993,39 +1001,39 @@ export default function SellerPromotionsPage() {
             </div>
             <dl className="px-5 sm:px-6 mt-4 divide-y divide-line border-y border-line">
               <div className="flex justify-between gap-4 py-3">
-                <dt className="text-sm text-muted">Discount</dt>
-                <dd className="text-[15px] font-semibold text-ink tabular-nums text-end">{offLabel(detailPromo)}</dd>
+                <dt className="text-sm text-muted">{t('discount')}</dt>
+                <dd className="text-[15px] font-semibold text-ink tabular-nums text-end">{offLabel(detailPromo, t)}</dd>
               </div>
               {detailPromo.code && (
                 <div className="flex justify-between gap-4 py-3">
-                  <dt className="text-sm text-muted">Code</dt>
+                  <dt className="text-sm text-muted">{t('code')}</dt>
                   <dd className="text-[15px] font-mono text-ink">{detailPromo.code}</dd>
                 </div>
               )}
               <div className="flex justify-between gap-4 py-3">
-                <dt className="text-sm text-muted">Starts</dt>
-                <dd className="text-[15px] text-ink text-end">{formatDateTime(detailPromo.startDate)}</dd>
+                <dt className="text-sm text-muted">{t('startsLabel')}</dt>
+                <dd className="text-[15px] text-ink text-end">{dateClock(detailPromo.startDate, locale)}</dd>
               </div>
               <div className="flex justify-between gap-4 py-3">
-                <dt className="text-sm text-muted">Ends</dt>
-                <dd className="text-[15px] text-ink text-end">{formatDateTime(detailPromo.endDate)}</dd>
+                <dt className="text-sm text-muted">{t('endsLabel')}</dt>
+                <dd className="text-[15px] text-ink text-end">{dateClock(detailPromo.endDate, locale)}</dd>
               </div>
               <div className="flex justify-between gap-4 py-3">
-                <dt className="text-sm text-muted">Used on</dt>
+                <dt className="text-sm text-muted">{t('usedOn')}</dt>
                 <dd className="text-[15px] text-ink tabular-nums">
-                  {detailPromo.usageCount} {detailPromo.usageCount === 1 ? 'order' : 'orders'}
+                  {detailPromo.usageCount === 1 ? t('ordersOne') : t('orders', { count: detailPromo.usageCount })}
                 </dd>
               </div>
               {detailPromo.minOrderAmount != null && detailPromo.minOrderAmount > 0 && (
                 <div className="flex justify-between gap-4 py-3">
-                  <dt className="text-sm text-muted">Smallest order</dt>
+                  <dt className="text-sm text-muted">{t('smallestOrder')}</dt>
                   <dd className="text-[15px] text-ink tabular-nums">{formatPrice(detailPromo.minOrderAmount)}</dd>
                 </div>
               )}
             </dl>
             <div className="flex gap-3 px-5 sm:px-6 py-4">
               <Button type="button" variant="outline" className="flex-1" onClick={() => setDetailPromo(null)}>
-                Close
+                {t('close')}
               </Button>
               <Button
                 type="button"
@@ -1036,7 +1044,7 @@ export default function SellerPromotionsPage() {
                   setShowCreateModal(true);
                 }}
               >
-                Edit discount
+                {t('editTitle')}
               </Button>
             </div>
           </div>

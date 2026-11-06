@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, Suspense } from 'react';
+import { useState, Suspense } from 'react';
 import Link from 'next/link';
 import { usePathname, useSearchParams } from 'next/navigation';
 import { useT } from '@/lib/i18n';
@@ -22,6 +22,7 @@ export interface SidebarItem {
   badge?: number;
   subItems?: SubItem[];
   needs?: string;
+  phoneTab?: boolean;
 }
 
 interface DashboardSidebarProps {
@@ -37,13 +38,13 @@ const IconComponents: Record<string, React.FC<{ className?: string }>> = {
       <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6A2.25 2.25 0 016 3.75h2.25A2.25 2.25 0 0110.5 6v2.25a2.25 2.25 0 01-2.25 2.25H6a2.25 2.25 0 01-2.25-2.25V6zM3.75 15.75A2.25 2.25 0 016 13.5h2.25a2.25 2.25 0 012.25 2.25V18a2.25 2.25 0 01-2.25 2.25H6A2.25 2.25 0 013.75 18v-2.25zM13.5 6a2.25 2.25 0 012.25-2.25H18A2.25 2.25 0 0120.25 6v2.25A2.25 2.25 0 0118 10.5h-2.25a2.25 2.25 0 01-2.25-2.25V6zM13.5 15.75a2.25 2.25 0 012.25-2.25H18a2.25 2.25 0 012.25 2.25V18A2.25 2.25 0 0118 20.25h-2.25A2.25 2.25 0 0113.5 18v-2.25z" />
     </svg>
   ),
-  // Kitchens & Menus / Store / Chef
+  // Kitchens and menus
   kitchens: ({ className }) => (
     <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
       <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 21v-7.5a.75.75 0 01.75-.75h3a.75.75 0 01.75.75V21m-4.5 0H2.36m11.14 0H18m0 0h3.64m-1.39 0V9.349m-16.5 11.65V9.35m0 0a3.001 3.001 0 003.75-.615A2.993 2.993 0 009.75 9.75c.896 0 1.7-.393 2.25-1.016a2.993 2.993 0 002.25 1.016c.896 0 1.7-.393 2.25-1.016a3.001 3.001 0 003.75.614m-16.5 0a3.004 3.004 0 01-.621-4.72L4.318 3.44A1.5 1.5 0 015.378 3h13.243a1.5 1.5 0 011.06.44l1.19 1.189a3 3 0 01-.621 4.72M6.75 21V17.25" />
     </svg>
   ),
-  // Favorite Kitchens / Heart
+  // Saved kitchens
   favorites: ({ className }) => (
     <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
       <path strokeLinecap="round" strokeLinejoin="round" d="M21 8.25c0-2.485-2.099-4.5-4.688-4.5-1.935 0-3.597 1.126-4.312 2.733-.715-1.607-2.377-2.733-4.313-2.733C5.1 3.75 3 5.765 3 8.25c0 7.22 9 12 9 12s9-4.78 9-12z" />
@@ -216,34 +217,6 @@ function DashboardSidebarContent({ items: allItems, userType }: DashboardSidebar
     return !moreSpecificActive;
   };
 
-  const effectiveUserType = pathname.startsWith('/riders')
-    ? 'rider'
-    : pathname.startsWith('/sellers')
-    ? 'seller'
-    : pathname.startsWith('/admin')
-    ? 'admin'
-    : pathname === '/hub' || pathname.startsWith('/hub/')
-    ? 'hub_manager'
-    : userType;
-
-  const getUserTypeLabel = () => {
-    switch (effectiveUserType) {
-      case 'admin': return 'Administrator';
-      case 'seller': return 'Seller';
-      case 'rider': return 'Rider Fleet';
-      case 'hub_manager': return 'Hub manager';
-      default: return 'Customer';
-    }
-  };
-
-  // Turquoise for everyone but the kitchen, whose menu is ink. Theme tokens, so the dark theme follows.
-  const seller = effectiveUserType === 'seller';
-  const accentColor = seller ? 'var(--fg-default)' : '#41DAC7';
-  const accentOn = seller ? 'var(--fg-inverse)' : '#06302B';
-  const accentSoft = seller ? 'var(--bg-raised)' : 'var(--brand-soft)';
-  // Words on the tinted background use the dark turquoise: the bright one is 1.8:1 there.
-  const accentText = seller ? 'var(--fg-default)' : 'var(--brand-soft-ink)';
-
   const getIcon = (iconKey: string) => {
     const IconComponent = IconComponents[iconKey] || DefaultIcon;
     return IconComponent;
@@ -256,7 +229,7 @@ function DashboardSidebarContent({ items: allItems, userType }: DashboardSidebar
       <div className="px-4 py-6">
 
         {/* Navigation Items */}
-        <nav className="space-y-1">
+        <nav className="space-y-0.5">
           {items.map((item) => {
             const hasSubItems = Boolean(item.subItems && item.subItems.length > 0);
             const isChildActive = Boolean(item.subItems?.some((sub) => isItemActive(sub.href)));
@@ -266,28 +239,23 @@ function DashboardSidebarContent({ items: allItems, userType }: DashboardSidebar
             const IconComponent = item.icon ? getIcon(item.icon) : null;
 
             return (
-              <div key={item.name} className="space-y-1">
+              <div key={item.name} className={`space-y-0.5 ${item.phoneTab ? 'max-md:hidden' : ''}`}>
                 <div className="flex items-center">
                   <Link
                     href={item.href}
-                    className="group flex-1 flex min-h-11 items-center gap-3 px-3 py-2.5 rounded-xl transition-all duration-200 relative"
-                    style={{
-                      background: isSelfActive ? accentSoft : 'transparent',
-                      color: isSectionActive ? accentText : 'var(--fg-muted)',
-                      fontWeight: isSectionActive ? 600 : 400,
-                    }}
+                    aria-current={isSelfActive ? 'page' : undefined}
+                    className={`flex-1 flex min-h-11 items-center gap-3 px-3 rounded-xl text-sm transition-colors ${
+                      isSelfActive ? 'bg-brand-soft' : 'hover:bg-raised'
+                    } ${isSectionActive ? 'font-semibold text-brand-soft-ink' : 'text-muted hover:text-ink'}`}
                   >
                     {IconComponent && (
                       <IconComponent
                         className="w-5 h-5 flex-shrink-0"
                       />
                     )}
-                    <span className="flex-1 text-[14px]">{label(item.name)}</span>
+                    <span className="flex-1">{label(item.name)}</span>
                     {item.badge !== undefined && item.badge > 0 && (
-                      <span
-                        className="text-xs font-medium px-2 py-0.5 rounded-full min-w-[20px] text-center"
-                        style={{ background: accentColor, color: accentOn }}
-                      >
+                      <span className="text-xs font-semibold px-2 py-0.5 rounded-full min-w-5 text-center bg-accent text-on-accent tabular-nums">
                         {item.badge > 99 ? '99+' : item.badge}
                       </span>
                     )}
@@ -314,38 +282,26 @@ function DashboardSidebarContent({ items: allItems, userType }: DashboardSidebar
                 </div>
 
                 {hasSubItems && isExpanded && (
-                  <div className="ms-5 ps-3.5 py-1 space-y-1 border-s-2 border-line">
+                  <div className="ms-5 ps-3 space-y-0.5 border-s border-line">
                     {item.subItems!.map((sub) => {
                       const isSubActive = isItemActive(sub.href);
                       return (
                         <Link
                           key={sub.href}
                           href={sub.href}
-                          className="flex min-h-11 items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-semibold transition-all duration-150 relative group/sub"
-                          style={{
-                            background: isSubActive ? accentSoft : 'transparent',
-                            color: isSubActive ? accentText : 'var(--fg-muted)',
-                            fontWeight: isSubActive ? 700 : 500,
-                          }}
+                          aria-current={isSubActive ? 'page' : undefined}
+                          className={`flex min-h-11 items-center gap-2.5 px-3 rounded-xl text-sm transition-colors ${
+                            isSubActive ? 'bg-brand-soft font-semibold text-brand-soft-ink' : 'text-muted hover:bg-raised hover:text-ink'
+                          }`}
                         >
-                          {sub.icon ? (
+                          {sub.icon &&
                             (() => {
                               const SubIconComponent = getIcon(sub.icon);
                               return <SubIconComponent className="w-4 h-4 shrink-0" />;
-                            })()
-                          ) : (
-                            <span
-                              className={`w-1.5 h-1.5 rounded-full transition-all shrink-0 ${
-                                isSubActive ? 'bg-ink scale-125' : 'bg-line-strong group-hover/sub:bg-muted'
-                              }`}
-                            />
-                          )}
+                            })()}
                           <span className="flex-1 truncate">{label(sub.name)}</span>
                           {sub.badge !== undefined && sub.badge > 0 && (
-                            <span
-                              className="text-xs font-medium px-1.5 py-0.5 rounded-full"
-                              style={{ background: accentColor, color: accentOn }}
-                            >
+                            <span className="text-xs font-semibold px-1.5 py-0.5 rounded-full bg-accent text-on-accent tabular-nums">
                               {sub.badge}
                             </span>
                           )}
@@ -365,14 +321,15 @@ function DashboardSidebarContent({ items: allItems, userType }: DashboardSidebar
 }
 
 function SidebarSkeleton({ items }: { items: SidebarItem[] }) {
+  const tNav = useT(navMessages);
   return (
     <aside className="w-64 h-full overflow-y-auto bg-surface border-e border-line">
       <div className="px-4 py-6">
-        <nav className="space-y-1">
+        <nav className="space-y-0.5">
           {items.map((item) => (
-            <div key={item.name} className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-muted">
+            <div key={item.name} className={`flex min-h-11 items-center gap-3 px-3 rounded-xl text-sm text-muted ${item.phoneTab ? 'max-md:hidden' : ''}`}>
               <div className="w-5 h-5 rounded-md bg-raised motion-safe:animate-pulse flex-shrink-0" />
-              <span>{item.name}</span>
+              <span>{tNav(item.name as keyof typeof navMessages.en)}</span>
             </div>
           ))}
         </nav>

@@ -28,13 +28,14 @@ import HomeHero from '@/components/home/HomeHero';
 import FilterBar from '@/components/home/FilterBar';
 import PromoBanners from '@/components/home/PromoBanners';
 import { KitchenGrid, TrendingKitchens } from '@/components/home/KitchenSections';
-import { PersonalDishes, PopularDishes } from '@/components/home/DishSections';
+import { OrderAgainDishes, PopularDishes, RecommendedDishes } from '@/components/home/DishSections';
 import StatsBand from '@/components/home/StatsBand';
 import HomeFooter from '@/components/home/HomeFooter';
 import { useHomeFeed } from '@/components/home/useHomeFeed';
 import { useCommunityStore } from '@/lib/store/community-store';
 import { quoteOf, type QuotedSeller } from '@/components/marketplace/delivery-quote';
 import { formatPrice } from '@/lib/utils';
+import { getStackedDiscountedPrice, type CatalogPromotionLike } from '@/lib/pricing';
 import type { HomeT } from '@/lib/home-feed';
 
 /** The kitchen's delivery fee and time to the chosen area, when the API quoted them. */
@@ -45,8 +46,16 @@ function quoteLabel(s: QuotedSeller, t: HomeT): string | null {
   return q.fee === 0 ? t('freeDeliveryQuote', { min: q.min, max: q.max }) : t('deliveryQuote', { fee: formatPrice(q.fee), min: q.min, max: q.max });
 }
 
+/** A dish at its kitchen's deal price, the menu price struck through, as the storefront and tray show it. */
+function withDeal(dish: HomeDish, promos: CatalogPromotionLike[] | undefined): HomeDish {
+  const price = getStackedDiscountedPrice(dish.price, promos);
+  return price < dish.price ? { ...dish, price, originalPrice: dish.price } : dish;
+}
+
 /** Kitchens shown on the home page before "View all". */
 const HOME_KITCHEN_LIMIT = 6;
+/** Popular dishes shown on the home page before "View all": one row on a desktop. */
+const HOME_DISH_LIMIT = 6;
 
 interface CartErrorBody {
   error?: { code?: string; details?: { existingSeller?: { name?: string } } };
@@ -93,6 +102,7 @@ export default function Home() {
     stats,
     favoriteKitchenIds,
     setFavoriteKitchenIds,
+    promotions,
   } = useHomeFeed(isAuthenticated, selectedCommunity?.id ?? null);
 
   useEffect(() => {
@@ -113,13 +123,19 @@ export default function Home() {
       }),
     [sellers, t, locale],
   );
-  const dishes = useMemo(() => products.map((p) => toHomeDish(p, t)), [products, t]);
+  const dishes = useMemo(() => products.map((p) => withDeal(toHomeDish(p, t), promotions[p.id])), [products, t, promotions]);
   const trendingKitchens = useMemo(() => trendingSellers.map((s) => toHomeKitchen(s, t, locale)), [trendingSellers, t, locale]);
   const recommendedDishes = useMemo(
-    () => recommended.map((p) => ({ dish: toHomeDish(p, t), reason: p.recommendationReason })),
-    [recommended, t],
+    () => recommended.map((p) => ({ dish: withDeal(toHomeDish(p, t), promotions[p.id]), reason: p.recommendationReason })),
+    [recommended, t, promotions],
   );
-  const orderAgainDishes = useMemo(() => orderAgain.map((p) => toHomeDish(p, t)), [orderAgain, t]);
+  const orderAgainDishes = useMemo(() => orderAgain.map((p) => withDeal(toHomeDish(p, t), promotions[p.id])), [orderAgain, t, promotions]);
+  // Dishes already in "Order again" or "Recommended for you" are not offered a second time as popular.
+  const popularDishes = useMemo(() => {
+    const shownAbove = new Set([...orderAgain, ...recommended].map((p) => p.id));
+    return dishes.filter((d) => !shownAbove.has(d.id)).slice(0, HOME_DISH_LIMIT);
+  }, [dishes, orderAgain, recommended]);
+  const firstName = user?.profile?.fullName?.trim().split(/\s+/)[0] ?? null;
   const filtering = selectedCuisine !== '' || selectedFilter !== 'all';
   const matching = filterKitchens(kitchens, '', selectedCuisine, selectedFilter);
   const filteredKitchens = filtering ? matching : matching.slice(0, HOME_KITCHEN_LIMIT);
@@ -254,14 +270,16 @@ export default function Home() {
         onOpenTray={() => setIsCartOpen(true)}
         onFrozen={() => setSelectedFilter('frozen')}
       />
-      <HomeHero dishes={dishes} />
+      <HomeHero dishes={dishes} greetingName={isAuthenticated ? firstName : undefined} />
       <FilterBar
         selectedCuisine={selectedCuisine}
         onSelectCuisine={setSelectedCuisine}
         selectedFilter={selectedFilter}
         onSelectFilter={setSelectedFilter}
       />
-      <PromoBanners forCustomer={isAuthenticated} />
+      {/* A visitor learns what Nuray is; a signed-in customer goes straight to what they order. */}
+      {!isAuthenticated && <PromoBanners />}
+      <OrderAgainDishes dishes={orderAgainDishes} onAdd={handleAddDishToCart} />
       <TrendingKitchens kitchens={trendingKitchens} />
       <KitchenGrid
         title={selectedCommunity ? t('kitchensForArea', { area: selectedCommunity.name }) : undefined}
@@ -274,13 +292,13 @@ export default function Home() {
         isAuthenticated={isAuthenticated}
         favoriteKitchenIds={favoriteKitchenIds}
         onToggleFavorite={toggleFavorite}
+        phoneLimit={!filtering}
       />
-      <PersonalDishes orderAgainDishes={orderAgainDishes} recommendedDishes={recommendedDishes} onAdd={handleAddDishToCart} />
-      <PopularDishes dishes={dishes} state={dishesState} onRetry={retryDishes} onAdd={handleAddDishToCart} />
-      <StatsBand stats={stats} />
+      <RecommendedDishes dishes={recommendedDishes} onAdd={handleAddDishToCart} />
+      <PopularDishes dishes={popularDishes} state={dishesState} onRetry={retryDishes} onAdd={handleAddDishToCart} />
+      {!isAuthenticated && <StatsBand stats={stats} />}
       <HomeFooter />
 
-      {/* Styled Modern Modal for Single Kitchen Batch Switching */}
       <ConfirmModal
         isOpen={conflictModal.isOpen}
         title={t('conflictTitle')}

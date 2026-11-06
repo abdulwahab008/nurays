@@ -1,16 +1,17 @@
 'use client';
 
-import { useCallback, useState, useEffect } from 'react';
+import { Suspense, useCallback, useState, useEffect } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { ChevronLeft } from 'lucide-react';
 import { DashboardLayout, adminSidebarFor } from '@/components/layout/DashboardShell';
 import { Button } from '@/components/ui/button';
 import { AdminFilterTabs } from '@/components/admin/AdminFilterTabs';
-import { LoadingLine, PhoneText, SearchForm, StatusPill, type PillTone } from '@/components/admin/AdminListParts';
+import { LoadingLine, Pager, PhoneText, SearchForm, StatusPill, type PillTone } from '@/components/admin/AdminListParts';
 import { useToast } from '@/components/ui/toast';
 import { LoadError } from '@/components/ui/LoadError';
 import { useAuthStore } from '@/lib/store/auth-store';
 import { apiClient, apiErrorMessage } from '@/lib/api-client';
-import { formatDateTime } from '@/lib/utils';
+import { formatDateTime } from '@/components/admin/admin-dates';
 import { useShallow } from 'zustand/react/shallow';
 
 interface TicketSummary {
@@ -43,9 +44,11 @@ interface TicketDetail extends TicketSummary {
   messages: TicketMessage[];
 }
 
-type Filter = 'open' | 'in_progress' | 'resolved' | 'closed' | 'all';
-const FILTERS: Filter[] = ['open', 'in_progress', 'resolved', 'closed', 'all'];
-const STATUS_LABEL: Record<string, string> = { open: 'Open', in_progress: 'In progress', resolved: 'Resolved', closed: 'Closed', all: 'All' };
+// "Needs a reply" is open and in progress together: what the approvals queue counts as complaints waiting.
+type Filter = 'waiting' | 'resolved' | 'closed' | 'all';
+const FILTERS: Filter[] = ['waiting', 'resolved', 'closed', 'all'];
+const FILTER_LABEL: Record<Filter, string> = { waiting: 'Needs a reply', resolved: 'Resolved', closed: 'Closed', all: 'All' };
+const STATUS_LABEL: Record<string, string> = { open: 'New', in_progress: 'In progress', resolved: 'Resolved', closed: 'Closed' };
 const STATUS_TONE: Record<string, PillTone> = { open: 'waiting', in_progress: 'waiting', resolved: 'good', closed: 'neutral' };
 const CATEGORY_LABEL: Record<string, string> = {
   order_issue: 'Order issue',
@@ -60,6 +63,17 @@ const PRIORITY_LABEL: Record<string, string> = { urgent: 'Urgent', high: 'High p
 const words = (map: Record<string, string>, v: string) => map[v] ?? v.replace(/_/g, ' ').replace(/^./, (c) => c.toUpperCase());
 
 export default function AdminSupportPage() {
+  return (
+    <Suspense fallback={null}>
+      <AdminSupportContent />
+    </Suspense>
+  );
+}
+
+function AdminSupportContent() {
+  const router = useRouter();
+  // The open ticket lives in the address, so an order's complaint link, Back and reload all land on it.
+  const ticketId = useSearchParams().get('ticket');
   const { isAuthenticated, user } = useAuthStore(useShallow((s) => ({ isAuthenticated: s.isAuthenticated, user: s.user })));
   const isAdmin = user?.user_type === 'admin' || user?.userType === 'admin';
   const { showToast } = useToast();
@@ -67,20 +81,29 @@ export default function AdminSupportPage() {
   // Why the tickets could not be read; shown instead of "No tickets here", which would be untrue.
   const [loadError, setLoadError] = useState<unknown>(null);
   const [tickets, setTickets] = useState<TicketSummary[]>([]);
-  const [filter, setFilter] = useState<Filter>('open');
-  const [selected, setSelected] = useState<TicketDetail | null>(null);
+  const [filter, setFilter] = useState<Filter>('waiting');
+  const [loaded, setLoaded] = useState<TicketDetail | null>(null);
+  const selected = ticketId && loaded?.id === ticketId ? loaded : null;
   const [reply, setReply] = useState('');
   const [nextStatus, setNextStatus] = useState('in_progress');
   const [sending, setSending] = useState(false);
   const [internal, setInternal] = useState(false);
   const [priority, setPriority] = useState('');
   const [searchApplied, setSearchApplied] = useState('');
+  const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [total, setTotal] = useState(0);
 
   const loadTickets = useCallback(async () => {
     try {
       setLoading(true);
-      const res = await apiClient.get('/admin/support/tickets', { params: { status: filter !== 'all' ? filter : undefined, priority: priority || undefined, search: searchApplied || undefined } });
-      if (res.data.success) setTickets(res.data.data.tickets || []);
+      const status = filter === 'waiting' ? 'open,in_progress' : filter === 'all' ? undefined : filter;
+      const res = await apiClient.get('/admin/support/tickets', {
+        params: { status, priority: priority || undefined, search: searchApplied || undefined, sort: 'oldest', page, limit: 20 },
+      });
+      setTickets(res.data.data?.tickets ?? []);
+      setTotalPages(res.data.data?.pagination?.totalPages || 1);
+      setTotal(res.data.data?.pagination?.total ?? 0);
       setLoadError(null);
     } catch (error) {
       // The tickets on the screen belong to the filter before this change, so they go with the failure.
@@ -89,24 +112,32 @@ export default function AdminSupportPage() {
     } finally {
       setLoading(false);
     }
-  }, [filter, priority, searchApplied]);
+  }, [filter, priority, searchApplied, page]);
 
   // Who may open this page is decided by app/admin/layout.tsx.
   useEffect(() => {
     if (isAuthenticated && isAdmin) void loadTickets();
   }, [isAuthenticated, isAdmin, loadTickets]);
 
-  const openTicket = async (id: string) => {
-    try {
-      const res = await apiClient.get(`/admin/support/tickets/${id}`);
-      if (res.data.success) {
-        setSelected(res.data.data);
-        setNextStatus(res.data.data.status === 'open' ? 'in_progress' : res.data.data.status);
+  const loadTicket = useCallback(
+    async (id: string) => {
+      try {
+        const res = await apiClient.get(`/admin/support/tickets/${id}`);
+        if (res.data.success) {
+          setLoaded(res.data.data);
+          setNextStatus(res.data.data.status === 'open' ? 'in_progress' : res.data.data.status);
+        }
+      } catch {
+        showToast('Failed to load ticket', 'error');
+        router.replace('/admin/support');
       }
-    } catch {
-      showToast('Failed to load ticket', 'error');
-    }
-  };
+    },
+    [router, showToast],
+  );
+
+  useEffect(() => {
+    if (isAuthenticated && isAdmin && ticketId) void loadTicket(ticketId);
+  }, [isAuthenticated, isAdmin, ticketId, loadTicket]);
 
   const sendReply = async () => {
     if (!selected || !reply.trim()) return;
@@ -118,9 +149,10 @@ export default function AdminSupportPage() {
         internal,
       });
       if (res.data.success) {
-        setSelected(res.data.data);
+        setLoaded(res.data.data);
         setReply('');
         setInternal(false);
+        showToast(internal ? 'Note saved' : 'Reply sent to the customer', 'success');
         loadTickets();
       }
     } catch (error) {
@@ -135,9 +167,11 @@ export default function AdminSupportPage() {
   return (
     <DashboardLayout title="Support" subtitle="Reply to and resolve what customers send." sidebarItems={adminSidebarFor(user?.permissions)} userType="admin">
       <div className="max-w-5xl">
-        {selected ? (
+        {ticketId && !selected ? (
+          <LoadingLine text="Loading the ticket" />
+        ) : selected ? (
           <div data-testid="ticket-detail">
-            <button onClick={() => setSelected(null)} className="-mt-2 mb-3 inline-flex min-h-11 items-center gap-1 text-sm font-medium text-brand-ink hover:underline">
+            <button onClick={() => router.push('/admin/support')} className="-mt-2 mb-3 inline-flex min-h-11 items-center gap-1 text-sm font-medium text-brand-ink hover:underline">
               <ChevronLeft aria-hidden="true" className="h-4 w-4 rtl:rotate-180" />
               All tickets
             </button>
@@ -157,7 +191,7 @@ export default function AdminSupportPage() {
               )}
             </p>
 
-            <dl className="mt-4 grid grid-cols-[auto_1fr] gap-x-4 gap-y-1.5 text-sm" data-testid="ticket-customer">
+            <dl className="mt-4 grid grid-cols-[auto_1fr] items-baseline gap-x-4 gap-y-1.5 text-sm" data-testid="ticket-customer">
               <dt className="text-muted">Customer</dt>
               <dd className="text-ink">{selected.customerName || 'Name not given'}</dd>
               <dt className="text-muted">Phone</dt>
@@ -215,7 +249,7 @@ export default function AdminSupportPage() {
                     onChange={(e) => setNextStatus(e.target.value)}
                     className="min-h-11 rounded-xl border border-line-strong bg-surface px-3 text-sm text-ink"
                   >
-                    <option value="open">Open</option>
+                    <option value="open">New</option>
                     <option value="in_progress">In progress</option>
                     <option value="resolved">Resolved</option>
                     <option value="closed">Closed</option>
@@ -235,14 +269,20 @@ export default function AdminSupportPage() {
             <AdminFilterTabs
               label="Ticket status"
               value={filter}
-              onChange={setFilter}
-              tabs={FILTERS.map((f) => ({ id: f, label: STATUS_LABEL[f] }))}
+              onChange={(f) => {
+                setFilter(f);
+                setPage(1);
+              }}
+              tabs={FILTERS.map((f) => ({ id: f, label: FILTER_LABEL[f] }))}
               className="mb-4"
             />
             <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center">
               <select
                 value={priority}
-                onChange={(e) => setPriority(e.target.value)}
+                onChange={(e) => {
+                  setPriority(e.target.value);
+                  setPage(1);
+                }}
                 className="min-h-11 rounded-xl border border-line-strong bg-surface px-3 text-sm text-ink"
                 data-testid="ticket-priority"
                 aria-label="Priority"
@@ -254,7 +294,14 @@ export default function AdminSupportPage() {
                 <option value="low">Low</option>
               </select>
               <div className="sm:ms-auto" data-testid="ticket-search">
-                <SearchForm placeholder="Subject, ticket, order or customer" label="Search tickets" onSearch={setSearchApplied} />
+                <SearchForm
+                  placeholder="Subject, ticket, order or customer"
+                  label="Search tickets"
+                  onSearch={(q) => {
+                    setSearchApplied(q);
+                    setPage(1);
+                  }}
+                />
               </div>
             </div>
 
@@ -266,15 +313,17 @@ export default function AdminSupportPage() {
               <p className="py-6 text-sm text-muted">
                 {searchApplied || priority
                   ? 'No ticket matches this search.'
-                  : filter === 'open'
-                    ? 'No open tickets. New complaints from customers show up here.'
-                    : `No ${STATUS_LABEL[filter].toLowerCase()} tickets.`}
+                  : filter === 'waiting'
+                    ? 'Nothing needs a reply. New complaints from customers show up here.'
+                    : filter === 'all'
+                      ? 'No tickets yet.'
+                      : `No ${FILTER_LABEL[filter].toLowerCase()} tickets.`}
               </p>
             ) : (
               <ul className="divide-y divide-line border-y border-line">
                 {tickets.map((t) => (
                   <li key={t.id}>
-                    <button onClick={() => openTicket(t.id)} className="flex min-h-[72px] w-full items-center gap-3 py-3 text-start hover:bg-raised">
+                    <button onClick={() => router.push(`/admin/support?ticket=${t.id}`)} className="flex min-h-[72px] w-full items-center gap-3 py-3 text-start hover:bg-raised">
                       <span className="min-w-0 flex-1">
                         <span className="block text-sm font-semibold text-ink">{t.subject}</span>
                         <span className="block text-xs text-muted">
@@ -291,6 +340,7 @@ export default function AdminSupportPage() {
                 ))}
               </ul>
             )}
+            {!loadError && tickets.length > 0 && <Pager page={page} totalPages={totalPages} total={total} noun="tickets" one="ticket" onChange={setPage} />}
           </>
         )}
       </div>

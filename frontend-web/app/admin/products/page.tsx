@@ -12,7 +12,8 @@ import { LoadingLine, Pager, SearchForm, StatusPill, type PillTone } from '@/com
 import { useToast } from '@/components/ui/toast';
 import { useAuthStore } from '@/lib/store/auth-store';
 import { apiClient, apiErrorMessage } from '@/lib/api-client';
-import { formatDateTime, formatPrice, imageVariant } from '@/lib/utils';
+import { formatPrice, imageVariant } from '@/lib/utils';
+import { formatDateTime } from '@/components/admin/admin-dates';
 import { useShallow } from 'zustand/react/shallow';
 
 interface Product {
@@ -196,7 +197,7 @@ function AdminProducts() {
                     <button
                       type="button"
                       onClick={() => setOpen(product)}
-                      className="flex w-full items-stretch gap-3 rounded-2xl border border-line bg-surface p-3 text-start hover:bg-raised focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-brand/40 sm:flex-col"
+                      className="flex w-full items-stretch gap-3 rounded-2xl border border-line bg-surface p-3 text-start hover:bg-page focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-brand/40 sm:flex-col"
                     >
                       <span className="block h-20 w-20 shrink-0 overflow-hidden rounded-xl bg-raised sm:h-40 sm:w-full">
                         {photo ? (
@@ -222,7 +223,7 @@ function AdminProducts() {
                 );
               })}
             </ul>
-            <Pager page={page} totalPages={pagination.totalPages} total={pagination.total} noun="dishes" onChange={(next) => setView({ page: next })} />
+            <Pager page={page} totalPages={pagination.totalPages} total={pagination.total} noun="dishes" one="dish" onChange={(next) => setView({ page: next })} />
           </>
         )}
       </div>
@@ -354,7 +355,7 @@ function DishSheet({
           )}
 
           <section className="border-t border-line pt-4">
-            <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-2 text-sm">
+            <dl className="grid grid-cols-[auto_1fr] items-baseline gap-x-4 gap-y-2 text-sm">
               {facts
                 .filter(([, v]) => v)
                 .map(([label, value]) => (

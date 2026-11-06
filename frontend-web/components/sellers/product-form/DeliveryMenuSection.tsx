@@ -2,12 +2,10 @@
 
 import { ProductFormData, StockType } from '@/lib/product-form';
 import { FormSection, labelClass, optionClass } from './fields';
+import { useT } from '@/lib/i18n';
+import { kitchenProductFormMessages } from '@/lib/i18n/messages/kitchen-product-form';
 
-const FULFILMENT: Array<{ value: StockType; label: string; desc: string }> = [
-  { value: 'direct', label: 'Direct delivery', desc: 'From your kitchen to the customer' },
-  { value: 'hub', label: 'Through a hub', desc: 'A hub handles delivery' },
-  { value: 'both', label: 'Both', desc: 'Either way' },
-];
+const FULFILMENT: StockType[] = ['direct', 'hub', 'both'];
 
 /** How the dish reaches customers, and which menu it is on. */
 export default function DeliveryMenuSection({
@@ -20,23 +18,24 @@ export default function DeliveryMenuSection({
   /** The menu (always / weekly / today) field. */
   menu: React.ReactNode;
 }) {
+  const t = useT(kitchenProductFormMessages);
   return (
-    <FormSection id="dish-delivery" title="Delivery and menu">
+    <FormSection id="dish-delivery" title={t('deliveryMenu')}>
       <div role="group" aria-labelledby="fulfilment-label">
         <p id="fulfilment-label" className={labelClass}>
-          How it reaches customers
+          {t('howReaches')}
         </p>
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
           {FULFILMENT.map((option) => (
             <button
-              key={option.value}
+              key={option}
               type="button"
-              aria-pressed={form.stockType === option.value}
-              onClick={() => update({ stockType: option.value })}
-              className={optionClass(form.stockType === option.value)}
+              aria-pressed={form.stockType === option}
+              onClick={() => update({ stockType: option })}
+              className={optionClass(form.stockType === option)}
             >
-              <span className="block text-[15px] font-semibold text-ink">{option.label}</span>
-              <span className="mt-0.5 block text-sm text-muted">{option.desc}</span>
+              <span className="block text-[15px] font-semibold text-ink">{t(`fulfil.${option}`)}</span>
+              <span className="mt-0.5 block text-sm text-muted">{t(`fulfil.${option}.desc`)}</span>
             </button>
           ))}
         </div>

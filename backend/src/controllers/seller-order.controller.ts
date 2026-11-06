@@ -12,6 +12,7 @@ export const getSellerOrders = async (req: Request, res: Response) => {
     limit: req.query.limit as number | undefined,
     status: req.query.status as string | undefined,
     orderStatus: req.query.orderStatus as string | undefined,
+    view: req.query.view as 'active' | 'delivered' | 'cancelled' | undefined,
     dateFrom: req.query.dateFrom as string | undefined,
     dateTo: req.query.dateTo as string | undefined,
   };

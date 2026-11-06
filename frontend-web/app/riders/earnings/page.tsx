@@ -8,10 +8,35 @@ import { apiErrorMessage } from '@/lib/api-client';
 import { useToast } from '@/components/ui/toast';
 import { useLiveRefresh } from '@/lib/hooks/use-live-refresh';
 import { riderService, RiderEarnings, RiderLedgerEntry } from '@/lib/services/rider.service';
-import { formatPrice, formatDateTime } from '@/lib/utils';
+import { formatPrice, formatDate, formatTime } from '@/lib/utils';
 import { useT } from '@/lib/i18n';
 import { riderMessages, riderKeyFor } from '@/lib/i18n/messages/rider';
 import { useShallow } from 'zustand/react/shallow';
+
+interface HistoryRow {
+  key: string;
+  orderNumber: string | null;
+  entries: RiderLedgerEntry[];
+}
+
+const dayKey = (iso: string) => new Date(iso).toDateString();
+
+/** Entries by day, newest first as the server sends them; a delivery's fee, bonus and cash collected are one row. */
+function groupByDay(entries: RiderLedgerEntry[]): { day: string; first: string; rows: HistoryRow[] }[] {
+  const days: { day: string; first: string; rows: HistoryRow[] }[] = [];
+  for (const e of entries) {
+    const day = dayKey(e.createdAt);
+    let group = days.find((d) => d.day === day);
+    if (!group) {
+      group = { day, first: e.createdAt, rows: [] };
+      days.push(group);
+    }
+    const row = e.orderId ? group.rows.find((r) => r.key === e.orderId) : undefined;
+    if (row) row.entries.push(e);
+    else group.rows.push({ key: e.orderId ?? e.id, orderNumber: e.orderNumber, entries: [e] });
+  }
+  return days;
+}
 
 /**
  * A rider's money with Nuray: what they've earned, the cash they carry for cash orders, and
@@ -87,7 +112,7 @@ export default function RiderEarningsPage() {
           <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_300px] lg:grid-rows-[auto_1fr] gap-x-10 gap-y-8">
             <div className="min-w-0 space-y-8 lg:col-start-1">
               <section className="rounded-[20px] bg-surface border border-line shadow-[var(--shadow-card)] p-5 sm:p-6">
-                <div className="grid grid-cols-1 min-[360px]:grid-cols-2 gap-x-5 sm:gap-x-10 gap-y-6">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-10 sm:gap-y-6 max-sm:divide-y max-sm:divide-line max-sm:[&>*:not(:first-child)]:pt-5 max-sm:[&>*:not(:last-child)]:pb-5">
                   <div data-testid="rider-balance">
                     <p className="text-sm text-muted">{data.balance >= 0 ? t('nurayOwesYou') : t('youOweNuray')}</p>
                     <p className="mt-1 text-[26px] sm:text-4xl leading-tight font-semibold text-ink tabular-nums">{formatPrice(Math.abs(data.balance))}</p>
@@ -157,28 +182,63 @@ export default function RiderEarningsPage() {
               {entries.length === 0 ? (
                 <p className="mt-3 text-sm text-muted">{t('earn.empty')}</p>
               ) : (
-                <ul className="mt-2 divide-y divide-line" data-testid="rider-ledger">
-                  {entries.map((e) => {
-                    const plus = e.amount > 0;
-                    const typeKey = riderKeyFor('ledger', e.type);
+                <div className="mt-2 space-y-5" data-testid="rider-ledger">
+                  {groupByDay(entries).map((group) => {
+                    const yesterday = new Date();
+                    yesterday.setDate(yesterday.getDate() - 1);
+                    const heading =
+                      group.day === new Date().toDateString()
+                        ? t('earn.today')
+                        : group.day === yesterday.toDateString()
+                          ? t('earn.yesterday')
+                          : formatDate(group.first);
                     return (
-                      <li key={e.id} className="py-3.5 flex items-center justify-between gap-4">
-                        <div className="min-w-0">
-                          <p className="text-sm font-medium text-ink truncate">{typeKey ? t(typeKey) : e.type}</p>
-                          <p className="text-sm text-muted truncate">
-                            {formatDateTime(e.createdAt)}
-                            {e.note ? `, ${e.note}` : ''}
-                            {e.reference ? `, ${t('earn.ref', { ref: e.reference })}` : ''}
-                          </p>
-                        </div>
-                        <p className={`shrink-0 text-sm font-semibold tabular-nums ${plus ? 'text-brand-ink' : 'text-ink'}`}>
-                          {plus ? '+' : '−'}
-                          {formatPrice(Math.abs(e.amount))}
-                        </p>
-                      </li>
+                      <section key={group.day} aria-label={heading}>
+                        <h3 className="pt-2 pb-1 text-sm font-medium text-muted">{heading}</h3>
+                        <ul className="divide-y divide-line border-t border-line">
+                          {group.rows.map((row) => {
+                            const single = row.entries.length === 1 ? row.entries[0] : null;
+                            // A delivery's several amounts sit under its order line on a phone, so the order number keeps to one line.
+                            const stacked = row.entries.length > 1;
+                            const typeLabel = (e: RiderLedgerEntry) => {
+                              const typeKey = riderKeyFor('ledger', e.type);
+                              return typeKey ? t(typeKey) : e.type;
+                            };
+                            const references = row.entries.map((e) => e.reference).filter(Boolean);
+                            // A delivery's entries are named by its order; the note on them only repeats the type in English.
+                            const detail = [row.orderNumber ? null : single?.note, ...references.map((ref) => t('earn.ref', { ref }))].filter(Boolean).join(', ');
+                            return (
+                              <li key={row.key} className={`py-3.5 flex gap-4 ${stacked ? 'max-sm:flex-col max-sm:gap-1.5 sm:items-start sm:justify-between' : 'items-start justify-between'}`}>
+                                <div className="min-w-0">
+                                  <p className="text-sm font-medium text-ink">
+                                    {row.orderNumber ? t('orderNo', { number: row.orderNumber }) : single ? typeLabel(single) : null}
+                                  </p>
+                                  <p className="text-sm text-muted tabular-nums">
+                                    {formatTime(row.entries[0].createdAt)}
+                                    {detail && <span className="tabular-nums">, {detail}</span>}
+                                  </p>
+                                </div>
+                                <dl className={`space-y-0.5 ${stacked ? 'sm:shrink-0 sm:text-end' : 'shrink-0 text-end'}`}>
+                                  {row.entries.map((e) => (
+                                    <div key={e.id} className={`flex items-baseline gap-2 ${stacked ? 'max-sm:justify-between sm:justify-end' : 'justify-end'}`}>
+                                      {row.orderNumber && <dt className="text-xs text-muted">{typeLabel(e)}</dt>}
+                                      <dd className={`text-sm font-semibold tabular-nums ${e.amount > 0 ? 'text-brand-ink' : 'text-ink'}`}>
+                                        <bdi dir="ltr">
+                                          {e.amount > 0 ? '+' : '−'}
+                                          {formatPrice(Math.abs(e.amount))}
+                                        </bdi>
+                                      </dd>
+                                    </div>
+                                  ))}
+                                </dl>
+                              </li>
+                            );
+                          })}
+                        </ul>
+                      </section>
                     );
                   })}
-                </ul>
+                </div>
               )}
               {page < data.pagination.totalPages && (
                 <div className="pt-2 border-t border-line">

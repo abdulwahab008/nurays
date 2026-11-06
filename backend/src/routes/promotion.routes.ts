@@ -9,15 +9,15 @@ import {
   updatePromotion,
   deletePromotion,
 } from '../controllers/promotion.controller';
-import { authenticate, authorize, blockSuspendedSeller } from '../middleware/auth.middleware';
+import { authenticate, authorize, blockSuspendedSeller, optionalAuthenticate } from '../middleware/auth.middleware';
 import { validate } from '../middleware/validation.middleware';
 import { validatePromotionCodeSchema, createPromotionSchema, updatePromotionSchema } from '../validators/promotion.validator';
 import { promoValidateLimiter } from '../middleware/rateLimiter';
 
 const router = Router();
 
-// Public: promotions per product for customer catalog (no auth)
-router.get('/catalog', getCatalogPromotions);
+// Public: promotions per product for customer catalog (signed-in customers get their per-user limits applied)
+router.get('/catalog', optionalAuthenticate, getCatalogPromotions);
 
 // All other routes require authentication
 router.use(authenticate);

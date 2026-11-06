@@ -19,7 +19,7 @@ export function FieldError({ id }: { id: string }) {
   const { message } = useFieldError(id);
   if (!message) return null;
   return (
-    <p id={`${id}-error`} className="mt-1.5 text-sm text-red-700">
+    <p id={`${id}-error`} className="mt-1.5 text-sm leading-relaxed text-red-700">
       {message}
     </p>
   );

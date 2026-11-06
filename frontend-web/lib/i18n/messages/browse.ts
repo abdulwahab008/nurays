@@ -13,11 +13,11 @@ export const browseMessages = defineMessages({
     'type.ready_to_eat': 'Ready to eat',
     'type.ready_to_cook': 'Ready to cook',
     // Kitchen types (the API's businessType)
-    'biz.home_kitchen': 'Home Kitchen',
+    'biz.home_kitchen': 'Home kitchen',
     'biz.restaurant': 'Restaurant',
     'biz.bakery': 'Bakery',
     'biz.cafe': 'Café',
-    'biz.cloud_kitchen': 'Cloud Kitchen',
+    'biz.cloud_kitchen': 'Cloud kitchen',
     // Kitchen availability statuses
     'avail.busy': 'busy',
     'avail.vacation': 'vacation',
@@ -86,7 +86,7 @@ export const browseMessages = defineMessages({
     nearbyCommunities: 'Nearby communities:',
     browseNamedKitchens: 'Browse {name} Kitchens',
     switchCommunity: 'Switch Community',
-    verifiedHomeChef: 'Verified Home Chef',
+    verifiedHomeChef: 'Verified home chef',
     closedPreorder: 'Closed • Pre-order',
     closedPreorderAt: 'Closed • Pre-order ({time})',
     closed: 'Closed',
@@ -116,7 +116,6 @@ export const browseMessages = defineMessages({
     browseKitchens: 'Browse Kitchens',
     foundDishOne: 'Found {count} dish',
     foundDishMany: 'Found {count} dishes',
-    inYourArea: 'In your area',
     perUnit: 'per {unit}',
     addToCart: 'Add to tray',
     addNameToTray: 'Add {name} to tray',
@@ -127,11 +126,11 @@ export const browseMessages = defineMessages({
     // Listing — page shell
     signInCaps: 'Sign In',
     joinNuray: 'Join Nuray',
-    loadingFallback: 'Loading Home Kitchens & Menus...',
+    loadingFallback: 'Loading home kitchens and menus…',
 
     // Dish page
     loadingProduct: 'Loading product...',
-    notFoundTitle: 'Product Not Found',
+    notFoundTitle: 'Dish not found',
     notFoundBody: "The product you're looking for doesn't exist or has been removed.",
     browseProducts: 'Browse Products',
     noImages: 'No images attached',
@@ -175,7 +174,7 @@ export const browseMessages = defineMessages({
     quantity: 'Quantity',
     decreaseQty: 'Decrease quantity',
     increaseQty: 'Increase quantity',
-    specialInstructions: 'Special Kitchen Instructions (Optional)',
+    specialInstructions: 'Note for the kitchen (optional)',
     specialPlaceholder: 'e.g. Mild spice, extra raita, less oil, no onions...',
     adding: 'Adding…',
     addToBag: 'Add to tray · {amount}',
@@ -246,6 +245,7 @@ export const browseMessages = defineMessages({
     chooseAreaEta: 'Choose your area to see the time',
     favLoading: 'Loading your saved kitchens…',
     favQuote: '{fee} delivery · {min}–{max} min',
+    favFreeQuote: 'Free delivery · {min}–{max} min',
   },
   ur: {
     'type.all': 'تمام آئٹمز',
@@ -347,7 +347,6 @@ export const browseMessages = defineMessages({
     browseKitchens: 'کچن دیکھیں',
     foundDishOne: '{count} ڈش ملی',
     foundDishMany: '{count} ڈشز ملیں',
-    inYourArea: 'آپ کے علاقے میں',
     perUnit: 'فی {unit}',
     addToCart: 'ٹرے میں ڈالیں',
     addNameToTray: '{name} ٹرے میں ڈالیں',
@@ -471,6 +470,7 @@ export const browseMessages = defineMessages({
     chooseAreaEta: 'وقت دیکھنے کے لیے اپنا علاقہ چنیں',
     favLoading: 'آپ کے محفوظ کچن لوڈ ہو رہے ہیں…',
     favQuote: 'ڈیلیوری {fee} · {min}–{max} منٹ',
+    favFreeQuote: 'مفت ڈیلیوری · {min}–{max} منٹ',
   },
 });
 

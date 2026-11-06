@@ -340,6 +340,7 @@ export async function listRiderEntries(riderId: string, page = 1, limit = 30) {
       orderBy: { createdAt: 'desc' },
       skip,
       take: safeLimit,
+      include: { delivery: { select: { order: { select: { orderNumber: true } } } } },
     }),
     prisma.riderLedgerEntry.count({ where: { riderId } }),
   ]);
@@ -349,6 +350,7 @@ export async function listRiderEntries(riderId: string, page = 1, limit = 30) {
       type: e.type,
       amount: Number(e.amount),
       orderId: e.orderId,
+      orderNumber: e.delivery?.order?.orderNumber ?? null,
       reference: e.reference,
       note: e.note,
       createdAt: e.createdAt,

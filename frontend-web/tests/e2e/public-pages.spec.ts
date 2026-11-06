@@ -13,7 +13,7 @@ test.describe('the help page', () => {
   test('is public, answers questions and says how to reach support', async ({ page }) => {
     await page.goto('/help');
     await expect(page).toHaveURL(/\/help$/);
-    await expect(page.getByRole('heading', { level: 1, name: 'Help & contact' })).toBeVisible();
+    await expect(page.getByRole('heading', { level: 1, name: 'Help and contact' })).toBeVisible();
     await expect(page.getByRole('heading', { name: 'Talk to us' })).toBeVisible();
     // The support e-mail is listed only when one is configured, never as a bracketed placeholder.
     await expect(page.getByText(/\[support email\]/)).toHaveCount(0);
@@ -40,7 +40,7 @@ test.describe('the help page', () => {
 
   test('is where the footer and the legal pages send "Help"', async ({ page }) => {
     await page.goto('/terms');
-    await page.getByRole('link', { name: 'Help & contact' }).click();
+    await page.getByRole('link', { name: 'Help and contact' }).click();
     await expect(page).toHaveURL(/\/help$/);
   });
 });

@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import { LoadingLine, PageHeader } from '@/components/admin/AdminListParts';
 import { AdminShell } from '@/components/layout/AdminShell';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/toast';
@@ -75,15 +76,12 @@ export default function AdminSettingsPage() {
   if (!formData) {
     return (
       <AdminShell>
-        <div className="max-w-4xl mx-auto">
-          <div className="mb-6">
-            <h1 className="text-2xl font-semibold text-ink">Settings</h1>
-            <p className="text-sm text-muted mt-1">Platform details, commission and Nuray delivery prices.</p>
-          </div>
+        <div className="max-w-4xl">
+          <PageHeader title="Settings" subtitle="Platform details, commission and Nuray delivery prices." />
           {loadError ? (
             <LoadError error={loadError} onRetry={loadSettings} title="We couldn't load the settings" />
           ) : (
-            <p className="text-sm text-muted">Loading…</p>
+            <LoadingLine text="Loading the settings" />
           )}
         </div>
       </AdminShell>
@@ -92,11 +90,8 @@ export default function AdminSettingsPage() {
 
   return (
     <AdminShell>
-      <div className="max-w-4xl mx-auto">
-        <div className="mb-6">
-          <h1 className="text-2xl font-semibold text-ink">Settings</h1>
-          <p className="text-sm text-muted mt-1">Platform details, commission and Nuray delivery prices.</p>
-        </div>
+      <div className="max-w-4xl">
+        <PageHeader title="Settings" subtitle="Platform details, commission and Nuray delivery prices." />
 
         {!canEdit && (
           <p className="mb-4 rounded-xl bg-accent-soft px-4 py-3 text-sm text-accent-soft-ink" data-testid="settings-read-only">
@@ -188,12 +183,14 @@ export default function AdminSettingsPage() {
           {/* Nuray delivery prices */}
           <div data-testid="delivery-pricing">
             <h2 className="text-base font-semibold text-ink mb-1">Nuray delivery prices</h2>
-            <p className="text-sm text-muted mb-4">
-              Charged when a Nuray rider delivers. Within a community the fee is fixed: set it for each community on the{' '}
-              <Link href="/admin/communities" className="text-brand-ink underline">Communities</Link> page. To another community it&apos;s
-              that community&apos;s &quot;to other communities&quot; base fee plus the rate below for every km beyond the included
-              distance, rounded up to Rs 10. Kitchens that deliver themselves charge their own fees.
+            <p className="text-sm text-muted">
+              Charged when a Nuray rider delivers. Within a community the fee is fixed and set for each community. To another
+              community it&apos;s that community&apos;s &quot;to other communities&quot; base fee plus the rate below for every km beyond
+              the included distance, rounded up to Rs 10. Kitchens that deliver themselves charge their own fees.
             </p>
+            <Link href="/admin/communities" className="mb-2 inline-flex min-h-11 items-center text-sm font-medium text-brand-ink hover:underline">
+              Set the fee inside each community
+            </Link>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               {(
                 [

@@ -8,7 +8,7 @@ import { DashboardLayout, CUSTOMER_SIDEBAR_ITEMS } from '@/components/layout/Das
 import { Button } from '@/components/ui/button';
 import { LoadError } from '@/components/ui/LoadError';
 import { useAuthStore } from '@/lib/store/auth-store';
-import { formatDate } from '@/lib/utils';
+import { formatDateTime } from '@/lib/utils';
 import { apiClient, apiErrorCode, apiErrorMessage } from '@/lib/api-client';
 import { useToast } from '@/components/ui/toast';
 import { useT } from '@/lib/i18n';
@@ -21,7 +21,6 @@ import {
   Truck,
   BellOff,
   X,
-  ArrowRight,
   CheckCheck,
 } from 'lucide-react';
 import { useShallow } from 'zustand/react/shallow';
@@ -224,7 +223,7 @@ export default function NotificationsPage() {
               onClick={() => setFilter('all')}
               className={`min-h-11 px-4 rounded-full text-sm font-semibold whitespace-nowrap transition-colors ${
                 filter === 'all'
-                  ? 'bg-ink text-page'
+                  ? 'bg-brand-soft text-brand-soft-ink border border-brand'
                   : 'bg-surface text-ink border border-line hover:bg-raised'
               }`}
             >
@@ -234,7 +233,7 @@ export default function NotificationsPage() {
               onClick={() => setFilter('unread')}
               className={`min-h-11 px-4 rounded-full text-sm font-semibold whitespace-nowrap transition-colors ${
                 filter === 'unread'
-                  ? 'bg-ink text-page'
+                  ? 'bg-brand-soft text-brand-soft-ink border border-brand'
                   : 'bg-surface text-ink border border-line hover:bg-raised'
               }`}
             >
@@ -284,7 +283,7 @@ export default function NotificationsPage() {
           {filteredNotifications.map((notification) => (
             <div
               key={notification.id}
-              className={`bg-surface rounded-[20px] border p-4 transition-colors hover:border-line-strong ${
+              className={`relative bg-surface rounded-[20px] border p-4 transition-colors hover:border-line-strong ${
                 !notification.isRead ? 'border-line border-s-4 border-s-brand' : 'border-line'
               }`}
             >
@@ -294,12 +293,22 @@ export default function NotificationsPage() {
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-start justify-between gap-1">
-                    <div className="min-w-0">
-                      <h3 className={`font-semibold ${!notification.isRead ? 'text-ink' : 'text-ink'}`}>
-                        {notification.title}
-                      </h3>
-                    </div>
-                    <div className="flex items-center shrink-0 -me-2 -mt-2">
+                    <h3 dir="auto" className="min-w-0 font-semibold text-ink">
+                      {notification.link ? (
+                        <Link
+                          href={notification.link}
+                          onClick={() => {
+                            if (!notification.isRead) void markAsRead(notification.id);
+                          }}
+                          className="hover:underline after:absolute after:inset-0 after:rounded-[20px]"
+                        >
+                          {notification.title}
+                        </Link>
+                      ) : (
+                        notification.title
+                      )}
+                    </h3>
+                    <div className="relative z-10 flex items-center shrink-0 -me-2 -mt-2">
                       {!notification.isRead && (
                         <button
                           onClick={() => markAsRead(notification.id)}
@@ -319,17 +328,8 @@ export default function NotificationsPage() {
                       </button>
                     </div>
                   </div>
-                  <p className="text-muted text-sm mt-1">{notification.message}</p>
-                  <p className="text-xs text-muted mt-2">{formatDate(notification.createdAt)}</p>
-                  {notification.link && (
-                    <Link
-                      href={notification.link}
-                      className="inline-flex items-center gap-1 mt-3 text-sm text-brand-ink hover:underline font-medium"
-                    >
-                      <span>{t('viewDetails')}</span>
-                      <ArrowRight className="rtl:-scale-x-100 w-4 h-4" />
-                    </Link>
-                  )}
+                  <p dir="auto" className="text-muted text-sm">{notification.message}</p>
+                  <p className="text-xs text-muted mt-1.5">{formatDateTime(notification.createdAt)}</p>
                 </div>
               </div>
             </div>
