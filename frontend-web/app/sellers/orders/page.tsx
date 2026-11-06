@@ -15,7 +15,7 @@ import { apiClient, apiErrorMessage } from '@/lib/api-client';
 import { formatPrice, formatTime } from '@/lib/utils';
 import OrderChatModal from '@/components/orders/OrderChatModal';
 import SelfHandoverActions from '@/components/orders/SelfHandoverActions';
-import { useLocale, useT } from '@/lib/i18n';
+import { useT } from '@/lib/i18n';
 import { commonMessages } from '@/lib/i18n/messages/common';
 import { cancelReasonText, kitchenOrderMessages, kitchenStatusLabel, paymentMethodLabel, paymentStatusLabel } from '@/lib/i18n/messages/kitchen-orders';
 import { ExternalLink } from '@/components/ExternalLink';
@@ -28,8 +28,8 @@ import {
   PrepTimePicker,
   ReadyBy,
   RiderStatus,
-  dateClock,
   useAge,
+  useDayLabel,
   useNow,
   useReadyFor,
 } from '@/components/sellers/order-timing';
@@ -118,10 +118,10 @@ export default function SellerOrdersPage() {
   const { showToast } = useToast();
   const t = useT(kitchenOrderMessages);
   const tc = useT(commonMessages);
-  const { locale } = useLocale();
   const now = useNow();
   const age = useAge();
   const readyFor = useReadyFor();
+  const dayLabel = useDayLabel();
   const [loading, setLoading] = useState(true);
   // Why the orders could not be read; shown instead of "No orders yet", which a kitchen with orders waiting must never be told.
   const [loadError, setLoadError] = useState<unknown>(null);
@@ -457,14 +457,18 @@ export default function SellerOrdersPage() {
     const status = ord.orderStatus;
     const tabStatuses = TAB_STATUSES[filter];
     const showPill = filter === 'all' || (!!tabStatuses && !tabStatuses.includes(status));
+    const when =
+      filter !== 'active' ? formatTime(ord.createdAt) : status === 'ready' && ord.readyAt ? readyFor(ord.readyAt, now) : age(ord.createdAt, now);
+    const firstName = ord.customerName?.trim().split(/\s+/)[0];
+    const meta = [when, firstName && <bdi key="name">{firstName}</bdi>, <OrderNo key="no" number={ord.orderNumber} />].filter(Boolean);
     return (
       <li key={ord.id}>
         <Link
           href={`/sellers/orders/${ord.id}`}
-          className="flex items-center gap-3 sm:gap-4 px-4 sm:px-5 py-3.5 min-h-11 hover:bg-raised focus-visible:outline-none focus-visible:bg-raised"
+          className="flex items-center gap-3 sm:gap-4 px-4 sm:px-5 py-4 min-h-11 hover:bg-raised focus-visible:outline-none focus-visible:bg-raised"
         >
           <div className="min-w-0 flex-1">
-            <p dir="auto" className="text-[15px] text-ink truncate rtl:text-right">
+            <p dir="auto" className="text-base text-ink truncate rtl:text-right">
               {(ticket.items || []).map((i, n) => (
                 <span key={i.id}>
                   {n > 0 && ', '}
@@ -472,28 +476,62 @@ export default function SellerOrdersPage() {
                 </span>
               ))}
             </p>
-            <p className="text-sm text-muted">
-              {status === 'ready' && ord.readyAt ? readyFor(ord.readyAt, now) : dateClock(ord.createdAt, locale)}, <OrderNo number={ord.orderNumber} />
+            <p className="mt-0.5 text-sm text-muted">
+              {meta.map((part, n) => (
+                <span key={n}>
+                  {n > 0 && ' '}
+                  <span className="whitespace-nowrap">
+                    {n > 0 && '· '}
+                    {part}
+                  </span>
+                </span>
+              ))}
             </p>
             {['ready', 'dispatched', 'in_transit'].includes(status) &&
               (ord.rider ? (
-                <RiderStatus rider={ord.rider} />
+                <RiderStatus rider={ord.rider} className="mt-1" />
               ) : (
-                <p className="text-sm text-ink">{status === 'ready' ? t('rider.comingNoName') : t('list.riderOnWay')}</p>
+                <p className="mt-1 text-sm text-ink">{status === 'ready' ? t('rider.comingNoName') : t('list.riderOnWay')}</p>
               ))}
             {ord.cancellationReason && ['cancelled', 'refunded'].includes(status) && (
-              <p className="text-sm text-muted line-clamp-2">
-                {t('list.reason')} {cancelReasonText(ord.cancellationReason, t)}
+              <p className="mt-1 text-sm text-muted line-clamp-2">
+                {cancelReasonText(ord.cancellationReason, t)}
               </p>
             )}
           </div>
           <div className="text-end shrink-0">
-            <p className="text-[15px] font-semibold text-ink tabular-nums">{formatPrice(ord.dishesTotal ?? ord.totalAmount)}</p>
-            {showPill && <OrderStatusPill status={status} label={kitchenStatusLabel(status, t, tc)} className="mt-0.5" />}
+            <p className="text-base font-semibold text-ink tabular-nums">{formatPrice(ord.dishesTotal ?? ord.totalAmount)}</p>
+            {showPill && <OrderStatusPill status={status} label={kitchenStatusLabel(status, t, tc)} className="mt-1" />}
           </div>
           <ChevronRight className="w-4 h-4 text-muted shrink-0 rtl:-scale-x-100" aria-hidden="true" />
         </Link>
       </li>
+    );
+  };
+
+  /** The history, a list card for each day under its date, the day's orders beside it, and on Delivered what they earned. */
+  const renderHistory = () => {
+    const days: { key: string; tickets: OrderTicket[] }[] = [];
+    for (const ticket of orderTickets) {
+      const key = new Date(ticket.order.createdAt).toDateString().replace(/ /g, '-');
+      const last = days[days.length - 1];
+      if (last?.key === key) last.tickets.push(ticket);
+      else days.push({ key, tickets: [ticket] });
+    }
+    return (
+      <div className="space-y-6">
+        {days.map((day) => {
+          return (
+            <section key={day.key} aria-labelledby={`day-${day.key}`}>
+              {/* No day count or total here: the list is paged, so a day can run onto the next page. */}
+              <h2 id={`day-${day.key}`} className="mb-2 px-1 text-sm font-semibold text-ink">
+                {dayLabel(day.tickets[0].order.createdAt, now)}
+              </h2>
+              <ul className="rounded-[20px] bg-surface border border-line divide-y divide-line overflow-hidden">{day.tickets.map(renderRow)}</ul>
+            </section>
+          );
+        })}
+      </div>
     );
   };
 
@@ -511,8 +549,12 @@ export default function SellerOrdersPage() {
   return (
     <DashboardLayout title={t('list.title')} sidebarItems={sidebarItems} userType="seller">
       <div className="max-w-6xl">
-        <div className="mb-6 flex items-end gap-2 border-b border-line">
-          <div role="tablist" aria-label={t('list.title')} className="flex-1 min-w-0 flex gap-x-5 sm:gap-x-6 overflow-x-auto [scrollbar-width:none]">
+        <div className="mb-6 flex items-center gap-1.5 sm:gap-2">
+          <div
+            role="tablist"
+            aria-label={t('list.title')}
+            className="flex-1 sm:flex-none min-w-0 grid grid-cols-4 sm:inline-grid sm:grid-flow-col sm:auto-cols-max sm:gap-1 p-1 rounded-2xl bg-raised"
+          >
             {filterTabs.map((tab) => {
               const selected = filter === tab.id;
               return (
@@ -525,13 +567,13 @@ export default function SellerOrdersPage() {
                     setFilter(tab.id);
                     setPage(1);
                   }}
-                  className={`-mb-px inline-flex items-center gap-1.5 min-h-11 pb-1 text-[15px] whitespace-nowrap border-b-2 rounded-t transition-colors focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-inset focus-visible:ring-brand/40 ${
-                    selected ? 'border-brand-600 text-ink font-semibold' : 'border-transparent text-muted hover:text-ink'
+                  className={`inline-flex items-center justify-center gap-1 min-w-0 h-11 px-1 sm:px-4 rounded-xl text-[13px] tracking-tight rtl:text-[15px] rtl:tracking-normal sm:text-[15px] sm:tracking-normal whitespace-nowrap transition-colors focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-brand/40 ${
+                    selected ? 'bg-surface text-ink font-semibold shadow-[var(--shadow-card)] ring-1 ring-line' : 'text-muted hover:text-ink'
                   }`}
                 >
                   {tab.label}
                   {tab.count ? (
-                    <span className={`min-w-6 px-1.5 rounded-full text-xs font-semibold tabular-nums ${counts?.new ? 'bg-accent text-on-accent' : 'bg-raised text-muted'}`}>
+                    <span className={`min-w-5 px-1.5 rounded-full text-xs font-semibold tabular-nums ${counts?.new ? 'bg-accent text-on-accent' : 'bg-line text-ink'}`}>
                       {tab.count}
                     </span>
                   ) : null}
@@ -544,7 +586,7 @@ export default function SellerOrdersPage() {
             onClick={() => loadOrders(false)}
             aria-label={t('list.refresh')}
             title={t('list.refresh')}
-            className="shrink-0 mb-0.5 inline-flex items-center justify-center w-11 h-11 rounded-lg text-muted hover:text-ink hover:bg-raised focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-brand/40"
+            className="shrink-0 sm:ms-auto inline-flex items-center justify-center w-11 h-11 rounded-xl text-muted hover:text-ink hover:bg-raised focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-brand/40"
           >
             <RefreshCw className="w-4 h-4" aria-hidden="true" />
           </button>
@@ -610,7 +652,7 @@ export default function SellerOrdersPage() {
             })}
           </div>
         ) : (
-          <ul className="rounded-[20px] bg-surface border border-line divide-y divide-line overflow-hidden">{orderTickets.map(renderRow)}</ul>
+          renderHistory()
         )}
 
         {filter !== 'active' && totalPages > 1 && (

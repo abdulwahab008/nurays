@@ -56,7 +56,7 @@ export const kitchenOrderMessages = defineMessages({
     'dash.allQuiet': 'New orders will show here as soon as they come in.',
     'dash.today': 'Today',
     'dash.todayEarnings': 'Earned today',
-    'dash.earnedMeans': "Earned is what delivered, paid orders leave you after Nuray's fee.",
+    'dash.earnedMeans': "After Nuray's fee, on delivered orders.",
     'dash.ordersToday': 'Orders',
     'dash.money': 'Money',
     'dash.afterRiderCash': '{amount} of it after riders hand in the cash',
@@ -77,7 +77,7 @@ export const kitchenOrderMessages = defineMessages({
     'dash.viewAll': 'All orders',
     'dash.moreActive': '{count} more in progress',
     'dash.comingToYouLabel': 'Coming to you',
-    'dash.earnedSoFar': 'Earned since you joined',
+    'dash.earnedSoFar': 'Total earned',
 
     // Orders list
     'reason.item_unavailable': 'Dish not available',
@@ -90,6 +90,7 @@ export const kitchenOrderMessages = defineMessages({
     'reason.customerMistake': 'Ordered by mistake',
     'reason.customerChangedMind': 'Changed their mind',
     'reason.customerTooLong': 'Taking too long',
+    'reason.withDetail': '{reason}\u00a0— {detail}',
     'cancel.byKitchen': 'You rejected it: {reason}',
     'cancel.notAcceptedInTime': 'Not accepted in time',
     'cancel.notPaidInTime': 'Payment not completed in time',
@@ -128,7 +129,7 @@ export const kitchenOrderMessages = defineMessages({
     'list.confirmPaid': 'I got the money',
     'list.dispute': 'Not received',
     'list.note': 'Note:',
-    'list.reason': 'Reason:',
+    'list.reason': 'Reason: {reason}',
     'list.foodItem': 'Dish',
     'list.acceptStart': 'Accept and start cooking',
     'list.markReady': 'Mark ready',
@@ -160,6 +161,8 @@ export const kitchenOrderMessages = defineMessages({
     'list.showNow': 'See them',
     'list.emptyNow': 'Nothing to cook right now. New orders show here as soon as they come in.',
     'list.acceptedReadyBy': 'Accepted. Ready by {time}.',
+    'list.today': 'Today',
+    'list.yesterday': 'Yesterday',
     'prep.label': 'Ready in (minutes)',
     'prep.option': '{min} minutes',
     'rider.finding': 'Finding a rider to collect it',
@@ -331,7 +334,7 @@ export const kitchenOrderMessages = defineMessages({
     'dash.allQuiet': 'نئے آرڈر آتے ہی یہاں نظر آئیں گے۔',
     'dash.today': 'آج',
     'dash.todayEarnings': 'آج کی کمائی',
-    'dash.earnedMeans': 'کمائی وہ رقم ہے جو ڈیلیور اور ادا شدہ آرڈرز سے نورے کی فیس کے بعد آپ کو ملتی ہے۔',
+    'dash.earnedMeans': 'ڈیلیور شدہ آرڈرز پر، نورے کی فیس کے بعد۔',
     'dash.ordersToday': 'آرڈرز',
     'dash.money': 'رقم',
     'dash.afterRiderCash': 'اس میں سے {amount} رائیڈرز کے نقد جمع کرانے کے بعد',
@@ -352,7 +355,7 @@ export const kitchenOrderMessages = defineMessages({
     'dash.viewAll': 'تمام آرڈرز',
     'dash.moreActive': 'مزید {count} جاری ہیں',
     'dash.comingToYouLabel': 'آپ کو ملنے والی رقم',
-    'dash.earnedSoFar': 'شروع سے اب تک کی کمائی',
+    'dash.earnedSoFar': 'مجموعی کمائی',
 
     'reason.item_unavailable': 'ڈش دستیاب نہیں',
     'reason.too_busy': 'ابھی بہت مصروف ہیں',
@@ -364,6 +367,7 @@ export const kitchenOrderMessages = defineMessages({
     'reason.customerMistake': 'غلطی سے آرڈر ہو گیا',
     'reason.customerChangedMind': 'ارادہ بدل گیا',
     'reason.customerTooLong': 'بہت دیر ہو رہی تھی',
+    'reason.withDetail': '{reason}\u00a0— {detail}',
     'cancel.byKitchen': 'آپ نے مسترد کیا: {reason}',
     'cancel.notAcceptedInTime': 'وقت پر قبول نہیں ہوا',
     'cancel.notPaidInTime': 'ادائیگی وقت پر مکمل نہیں ہوئی',
@@ -402,7 +406,7 @@ export const kitchenOrderMessages = defineMessages({
     'list.confirmPaid': 'رقم مل گئی',
     'list.dispute': 'نہیں ملی',
     'list.note': 'نوٹ:',
-    'list.reason': 'وجہ:',
+    'list.reason': 'وجہ: {reason}',
     'list.foodItem': 'ڈش',
     'list.acceptStart': 'قبول کریں اور پکانا شروع کریں',
     'list.markReady': 'تیار ہے',
@@ -434,6 +438,8 @@ export const kitchenOrderMessages = defineMessages({
     'list.showNow': 'دیکھیں',
     'list.emptyNow': 'ابھی پکانے کو کچھ نہیں۔ نئے آرڈر آتے ہی یہاں نظر آئیں گے۔',
     'list.acceptedReadyBy': 'قبول ہو گیا۔ {time} تک تیار۔',
+    'list.today': 'آج',
+    'list.yesterday': 'کل',
     'prep.label': 'تیار ہونے میں (منٹ)',
     'prep.option': '{min} منٹ',
     'rider.finding': 'لینے کے لیے رائیڈر تلاش کیا جا رہا ہے',
@@ -602,12 +608,15 @@ const REASON_KEYS: Record<string, keyof typeof kitchenOrderMessages.en> = {
 };
 // The order's cancellation reason says "Rejected by kitchen: …", its history note "Order rejected by kitchen: …".
 const BY_KITCHEN = /^(?:Order rejected|Rejected) by kitchen: /;
+// Reasons that already say who cancelled ("You rejected it: …"), so they need no "Reason:" in front.
+const NAMES_WHO = /^(?:(?:Order rejected|Rejected) by |Order cancelled by (?:customer|admin|system): )/;
 
 /** Why an order was cancelled, in the kitchen's words: a known reason is translated, the customer's own words stay as written. */
 export function cancelReasonText(raw: string, t: KitchenT): string {
-  return reasonParts(raw, t)
+  const text = reasonParts(raw, t)
     .map((part) => (typeof part === 'string' ? part : part.value))
     .join('');
+  return NAMES_WHO.test(raw.trim()) ? text : t('list.reason', { reason: text });
 }
 
 /** A piece of a history note: the kitchen's own words, or a value the server filled in (a reason, a reference) shown as written. */
@@ -649,7 +658,7 @@ function reasonParts(raw: string, t: KitchenT): NotePart[] {
   const head = split > 0 ? text.slice(0, split) : text;
   const key = REASON_KEYS[head.trim().toLowerCase()];
   if (!key) return [{ value: text }];
-  return split > 0 ? [t(key), ': ', { value: text.slice(split + 2) }] : [t(key)];
+  return split > 0 ? fill(t, 'reason.withDetail', { reason: [t(key)], detail: text.slice(split + 2) }) : [t(key)];
 }
 
 // The notes the server writes in an order's history that carry nothing of their own, to their words.

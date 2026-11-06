@@ -419,7 +419,7 @@ export default function ProductForm(props: Props) {
                 {t('cancel')}
               </Button>
             </Link>
-            <Button type="submit" disabled={saving} className="flex-1 sm:flex-none sm:px-8">
+            <Button type="submit" disabled={saving} className="flex-1 sm:flex-none sm:px-8 disabled:bg-raised disabled:text-muted disabled:opacity-100">
               {saving ? (mode === 'create' ? t('adding') : t('saving')) : mode === 'create' ? t('addDish') : t('saveChanges')}
             </Button>
           </div>

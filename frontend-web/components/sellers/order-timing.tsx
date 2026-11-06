@@ -25,13 +25,32 @@ export function useNow(): number {
 
 const intlLocale = (locale: string) => (locale === 'ur' ? 'ur-PK-u-nu-latn' : 'en-PK');
 
+/** "6 Nov", the year only when it is not this one. */
+export function shortDay(date: string | Date, locale: string): string {
+  const d = new Date(date);
+  const thisYear = d.getFullYear() === new Date().getFullYear();
+  return new Intl.DateTimeFormat(intlLocale(locale), { day: 'numeric', month: 'short', ...(thisYear ? {} : { year: 'numeric' }) }).format(d);
+}
+
 /** "6 Nov, 9:05 pm" (the year only when it is not this one), the time kept in one piece in Urdu as formatTime keeps it. */
 export function dateClock(iso: string | Date, locale: string): string {
   const d = new Date(iso);
   if (isNaN(d.getTime())) return '';
-  const thisYear = d.getFullYear() === new Date().getFullYear();
-  const day = new Intl.DateTimeFormat(intlLocale(locale), { day: 'numeric', month: 'short', ...(thisYear ? {} : { year: 'numeric' }) }).format(d);
-  return `${day}${locale === 'ur' ? '، ' : ', '}${formatTime(d)}`;
+  return `${shortDay(d, locale)}${locale === 'ur' ? '، ' : ', '}${formatTime(d)}`;
+}
+
+/** "Today", "Yesterday", then "6 Nov": the heading over a day's orders. */
+export function useDayLabel() {
+  const t = useT(kitchenOrderMessages);
+  const { locale } = useLocale();
+  return (iso: string, now: number) => {
+    const d = new Date(iso);
+    const today = new Date(now);
+    if (d.toDateString() === today.toDateString()) return t('list.today');
+    today.setDate(today.getDate() - 1);
+    if (d.toDateString() === today.toDateString()) return t('list.yesterday');
+    return shortDay(d, locale);
+  };
 }
 
 /** The clock time for today, with the date in front for anything older ("6 Nov, 12:42 PM" read after midnight). */

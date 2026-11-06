@@ -4,6 +4,7 @@ import { useState, useEffect, type ReactNode } from 'react';
 import { loginUrlHere } from '@/lib/auth-redirect';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import { AlertTriangle, ChevronDown, ChevronRight } from 'lucide-react';
 import { DashboardLayout, SELLER_SIDEBAR_ITEMS } from '@/components/layout/DashboardShell';
 import { Button } from '@/components/ui/button';
 import { StatusPill, type StatusTone } from '@/components/ui/StatusPill';
@@ -12,21 +13,39 @@ import { useDialogs } from '@/components/ui/Dialogs';
 import { useToast } from '@/components/ui/toast';
 import { useAuthStore } from '@/lib/store/auth-store';
 import { apiClient, apiErrorMessage } from '@/lib/api-client';
-import { formatPrice, formatDate } from '@/lib/utils';
-import { useT } from '@/lib/i18n';
+import { formatPrice } from '@/lib/utils';
+import { useLocale, useT } from '@/lib/i18n';
 import { commonMessages } from '@/lib/i18n/messages/common';
 import { kitchenEarningsMessages } from '@/lib/i18n/messages/kitchen-earnings';
 import { payoutDestinationIsWrong } from '@/lib/payout-account';
 import { sendAskingForPassword } from '@/lib/send-asking-for-password';
 import { useShallow } from 'zustand/react/shallow';
 import { PayoutStatement } from '@/components/payouts/PayoutStatement';
+import { shortDay } from '@/components/sellers/order-timing';
 
 const sidebarItems = SELLER_SIDEBAR_ITEMS;
 
-/** Puts React nodes where a translated sentence has {name} placeholders. */
-function withNodes(text: string, nodes: Record<string, ReactNode>) {
-  return text.split(/\{(\w+)\}/g).map((part, i) => (i % 2 === 1 ? <span key={i}>{nodes[part] ?? `{${part}}`}</span> : part));
+function Figure({ label, value }: { label: string; value: ReactNode }) {
+  return (
+    <div className="flex items-baseline justify-between gap-3 py-2">
+      <dt className="text-sm text-muted">{label}</dt>
+      <dd className="text-base font-semibold text-ink tabular-nums" data-ltr>{value}</dd>
+    </div>
+  );
 }
+
+function Why({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <details className="group">
+      <summary className="inline-flex min-h-11 cursor-pointer list-none items-center gap-1 text-sm font-semibold text-brand-ink [&::-webkit-details-marker]:hidden">
+        {label}
+        <ChevronDown className="h-4 w-4 transition-transform group-open:rotate-180" aria-hidden="true" />
+      </summary>
+      <p className="pb-1 text-sm text-muted leading-relaxed">{children}</p>
+    </details>
+  );
+}
+
 
 interface EarningsData {
   todayEarnings: number;
@@ -68,6 +87,7 @@ export default function SellerEarningsPage() {
   const { showToast } = useToast();
   const t = useT(kitchenEarningsMessages);
   const tc = useT(commonMessages);
+  const { locale } = useLocale();
   const { ask: askDialog } = useDialogs();
   const [loading, setLoading] = useState(true);
   // Why the earnings could not be read; shown instead of "no data", which would say there is nothing to see.
@@ -78,6 +98,7 @@ export default function SellerEarningsPage() {
   const [payoutMethod, setPayoutMethod] = useState<'bank_transfer' | 'jazzcash' | 'easypaisa'>('jazzcash');
   const [accountNumber, setAccountNumber] = useState('');
   const [statementFor, setStatementFor] = useState<string | null>(null);
+  const [owingWhyOpen, setOwingWhyOpen] = useState(false);
 
   const loadEarnings = async () => {
     try {
@@ -187,6 +208,8 @@ export default function SellerEarningsPage() {
     return null;
   }
 
+  const onItsWay = earnings ? earnings.pendingPayout || earnings.pendingSettlement : 0;
+
   return (
     <DashboardLayout
       title={t('title')}
@@ -202,62 +225,84 @@ export default function SellerEarningsPage() {
           </div>
         ) : earnings ? (
           <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_300px] lg:grid-rows-[auto_1fr] gap-x-10 gap-y-8">
-            <div className="min-w-0 space-y-8 lg:col-start-1">
-              {/* Still owed to Nuray after netting: and when (or that) cash orders pause */}
-              {earnings.owing.amount > 0 && (
-                <div
-                  className={`rounded-2xl px-5 py-4 ${earnings.owing.cashPaused ? 'bg-red-50 text-red-800' : 'bg-accent-soft text-accent-soft-ink'}`}
-                  role="status"
-                  data-testid="owing-banner"
-                >
-                  <p className="font-semibold">{t('owingTitle', { amount: formatPrice(earnings.owing.amount) })}</p>
-                  <p className="text-sm mt-1 leading-relaxed">{t('owingBody')}</p>
-                  <p className="text-sm mt-2 font-medium leading-relaxed">
-                    {earnings.owing.cashPaused
-                      ? t('owingPaused')
-                      : t('owingPausesOn', { date: earnings.owing.cashPausesAt ? formatDate(earnings.owing.cashPausesAt) : '—' })}
-                  </p>
-                </div>
-              )}
-
+            <div className="min-w-0 space-y-3 lg:col-start-1">
               <section className="rounded-[20px] bg-surface border border-line shadow-[var(--shadow-card)] p-5 sm:p-6">
-                <div className="flex flex-wrap items-start justify-between gap-x-10 gap-y-4">
-                  <div>
-                    <p className="text-sm text-muted">{t('available')}</p>
-                    <p className="mt-1 text-4xl leading-tight font-semibold text-ink tabular-nums" data-ltr>
-                      {formatPrice(earnings.availableBalance)}
-                    </p>
-                  </div>
-                  {(earnings.pendingPayout || earnings.pendingSettlement) > 0 && (
-                    <div>
-                      <p className="text-sm text-muted">{t('pendingSettlement')}</p>
-                      <p className="mt-1 text-2xl font-semibold text-ink tabular-nums" data-ltr>
-                        {formatPrice(earnings.pendingPayout || earnings.pendingSettlement)}
-                      </p>
-                    </div>
-                  )}
-                </div>
-                {earnings.hasPayoutAccount ? (
-                  <p className="mt-3 text-sm text-muted leading-relaxed">{t('availableHint')}</p>
-                ) : (
-                  <p className="mt-3 rounded-lg bg-accent-soft px-3 py-2.5 text-sm text-accent-soft-ink leading-relaxed">
-                    {t('noPayoutAccount')}{' '}
-                    <Link href="/sellers/settings#payout-heading" className="font-semibold underline underline-offset-2">
+                <p className="text-sm text-muted">{t('available')}</p>
+                <p className="mt-1 text-4xl leading-tight font-semibold text-ink tabular-nums" data-ltr>
+                  {formatPrice(earnings.availableBalance)}
+                </p>
+                {!earnings.hasPayoutAccount ? (
+                  <p className="mt-1 flex flex-wrap items-center gap-x-2 text-sm text-muted">
+                    {t('noPayoutAccount')}
+                    <Link
+                      href="/sellers/settings#payout-heading"
+                      className="inline-flex min-h-11 items-center font-semibold text-brand-ink underline underline-offset-2"
+                    >
                       {t('addPayoutAccount')}
                     </Link>
                   </p>
+                ) : earnings.availableBalance > 0 && !earnings.owing.cashPaused ? (
+                  <p className="mt-1 text-sm text-muted">{t('availableHint')}</p>
+                ) : null}
+
+                {(onItsWay > 0 || earnings.awaitingRiderCash > 0) && (
+                  <dl className="mt-4 pt-2 border-t border-line">
+                    {onItsWay > 0 && <Figure label={t('pendingSettlement')} value={formatPrice(onItsWay)} />}
+                    {earnings.awaitingRiderCash > 0 && <Figure label={t('awaitingRiderCash')} value={formatPrice(earnings.awaitingRiderCash)} />}
+                  </dl>
                 )}
-                {earnings.awaitingRiderCash > 0 && (
-                  <p className="mt-2 text-sm font-medium text-accent-soft-ink">
-                    {t('awaitingRiderCash', { amount: formatPrice(earnings.awaitingRiderCash) })}
-                  </p>
+
+                {earnings.owing.amount > 0 && (
+                  <div
+                    className={`mt-3 rounded-xl px-3 ${earnings.owing.cashPaused ? 'bg-red-50 text-red-800' : 'bg-accent-soft text-accent-soft-ink'}`}
+                    data-testid="owing-banner"
+                  >
+                    <div className="pt-2.5">
+                      <p role="status" className="flex items-baseline justify-between gap-3 font-semibold">
+                        <span className="inline-flex items-center gap-1.5 whitespace-nowrap">
+                          <AlertTriangle className="h-4 w-4 shrink-0 self-center" aria-hidden="true" />
+                          {t('owed')}
+                        </span>
+                        <span className="shrink-0 text-base tabular-nums" data-ltr>{formatPrice(earnings.owing.amount)}</span>
+                      </p>
+                      <div className="flex items-center justify-between gap-3 text-sm">
+                        <span>
+                          {earnings.owing.cashPaused
+                            ? t('owingCashPaused')
+                            : earnings.owing.cashPausesAt
+                              ? t('owingDue', { date: shortDay(earnings.owing.cashPausesAt, locale) })
+                              : null}
+                        </span>
+                        <button
+                          type="button"
+                          aria-expanded={owingWhyOpen}
+                          aria-controls="owing-why"
+                          onClick={() => setOwingWhyOpen((open) => !open)}
+                          className="inline-flex min-h-11 shrink-0 items-center gap-1 font-semibold underline underline-offset-2 focus:outline-none focus-visible:ring-3 focus-visible:ring-brand/30 rounded-md"
+                        >
+                          {t('why')}
+                          <ChevronDown className={`h-4 w-4 transition-transform ${owingWhyOpen ? 'rotate-180' : ''}`} aria-hidden="true" />
+                        </button>
+                      </div>
+                    </div>
+                    {owingWhyOpen && (
+                      <div id="owing-why" className="space-y-2 pb-3 text-sm leading-relaxed">
+                        <p>{t('owingBody')}</p>
+                        <p>
+                          {earnings.owing.cashPaused
+                            ? t('owingPaused')
+                            : t('owingPausesOn', { date: earnings.owing.cashPausesAt ? shortDay(earnings.owing.cashPausesAt, locale) : '—' })}
+                        </p>
+                      </div>
+                    )}
+                  </div>
                 )}
 
                 {earnings.availableBalance > 0 && (
-                  <div className="mt-5 pt-5 border-t border-line">
+                  <div className="mt-4 pt-4 border-t border-line">
                     {!showPayoutForm ? (
-                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                        <p className="text-sm text-muted leading-relaxed">{t('weeklyNote')}</p>
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                        <p className="text-sm text-muted">{t('weeklyNote')}</p>
                         <Button onClick={() => setShowPayoutForm(true)} className="shrink-0">
                           {t('requestPayout')}
                         </Button>
@@ -360,12 +405,12 @@ export default function SellerEarningsPage() {
               {/* Money the seller collected themselves */}
               {earnings.codCommissionOwed > 0 && earnings.owing.amount === 0 && (
                 <section className="pt-6 border-t border-line">
-                  <p className="text-sm text-muted leading-relaxed">
-                    {withNodes(t('codNote'), {
-                      you: <span className="font-semibold text-ink">{t('codNoteYou')}</span>,
-                      amount: <span className="font-semibold text-ink tabular-nums">{formatPrice(earnings.codCommissionOwed)}</span>,
-                    })}
-                  </p>
+                  <h2 className="text-sm font-semibold text-ink">{t('codTitle')}</h2>
+                  <dl className="mt-1">
+                    <Figure label={t('codOwed')} value={formatPrice(earnings.codCommissionOwed)} />
+                  </dl>
+                  <p className="text-sm text-muted">{t('codLine')}</p>
+                  <Why label={t('why')}>{t('codWhy')}</Why>
                 </section>
               )}
             </aside>
@@ -375,12 +420,31 @@ export default function SellerEarningsPage() {
               {earnings.payouts.length === 0 ? (
                 <p className="mt-3 text-sm text-muted">{t('noHistory')}</p>
               ) : (
-                <ul className="mt-2 divide-y divide-line">
-                  {earnings.payouts.map((payout) => (
-                    <li key={payout.id} className="py-4 flex items-start sm:items-center justify-between gap-4">
-                      <div className="min-w-0">
-                        <p className="flex flex-wrap items-center gap-x-2 gap-y-1">
-                          <span className="text-base font-semibold text-ink tabular-nums" data-ltr>
+                <ul className="mt-3 space-y-2">
+                  {earnings.payouts.map((payout) => {
+                    const toNuray = payout.payoutMethod === 'paid_to_nuray';
+                    const row = (
+                      <>
+                        <span className="min-w-0 flex-1">
+                          <span className="block text-sm font-semibold text-ink">
+                            {payout.processedAt
+                              ? t('processed', { date: shortDay(payout.processedAt, locale) })
+                              : t('requested', { date: shortDay(payout.requestedAt, locale) })}
+                          </span>
+                          {payout.periodStart && payout.periodEnd && !toNuray && (
+                            <span className="mt-0.5 block text-sm text-muted">
+                              {t('periodShort', { from: shortDay(payout.periodStart, locale), to: shortDay(payout.periodEnd, locale) })}
+                            </span>
+                          )}
+                          {(payout.automatic || toNuray) && (
+                            <span className="mt-1.5 flex flex-wrap gap-1.5">
+                              {payout.automatic && <StatusPill>{t('weekly')}</StatusPill>}
+                              {toNuray && <StatusPill>{t('paidToNuray')}</StatusPill>}
+                            </span>
+                          )}
+                        </span>
+                        <span className="shrink-0 flex flex-col items-end gap-1.5">
+                          <span className="text-lg font-semibold text-ink tabular-nums" data-ltr>
                             {payout.netAmount < 0 ? '-' : ''}{formatPrice(Math.abs(payout.netAmount))}
                           </span>
                           <StatusPill tone={payoutTone(payout.status)}>
@@ -388,26 +452,29 @@ export default function SellerEarningsPage() {
                               ? t(`payout.${payout.status}` as keyof typeof kitchenEarningsMessages.en)
                               : payout.status.charAt(0).toUpperCase() + payout.status.slice(1)}
                           </StatusPill>
-                          {payout.automatic && <StatusPill>{t('weekly')}</StatusPill>}
-                          {payout.payoutMethod === 'paid_to_nuray' && <StatusPill>{t('paidToNuray')}</StatusPill>}
-                        </p>
-                        <p className="mt-1 text-sm text-muted">
-                          {[
-                            payout.periodStart && payout.periodEnd && payout.payoutMethod !== 'paid_to_nuray'
-                              ? t('period', { from: payout.periodStart, to: payout.periodEnd })
-                              : null,
-                            t('requested', { date: formatDate(payout.requestedAt) }),
-                            payout.processedAt ? t('processed', { date: formatDate(payout.processedAt) }) : null,
-                          ].filter(Boolean).join(', ')}
-                        </p>
-                      </div>
-                      {payout.payoutMethod !== 'paid_to_nuray' && (
-                        <Button variant="ghost" className="shrink-0 px-3 -me-3" onClick={() => setStatementFor(payout.id)} data-testid="open-statement">
-                          {t('statement')}
-                        </Button>
-                      )}
-                    </li>
-                  ))}
+                        </span>
+                      </>
+                    );
+                    const box = 'flex w-full items-start gap-3 rounded-2xl px-4 py-3.5 text-start';
+                    return (
+                      <li key={payout.id}>
+                        {toNuray ? (
+                          <div className={box}>{row}</div>
+                        ) : (
+                          <button
+                            type="button"
+                            className={`${box} border border-line bg-surface hover:bg-raised focus:outline-none focus-visible:ring-3 focus-visible:ring-brand/30`}
+                            onClick={() => setStatementFor(payout.id)}
+                            data-testid="open-statement"
+                          >
+                            {row}
+                            <span className="sr-only">{t('statement')}</span>
+                            <ChevronRight className="mt-1 h-4 w-4 shrink-0 text-muted rtl:-scale-x-100" aria-hidden="true" />
+                          </button>
+                        )}
+                      </li>
+                    );
+                  })}
                 </ul>
               )}
             </section>
@@ -425,4 +492,3 @@ export default function SellerEarningsPage() {
     </DashboardLayout>
   );
 }
-

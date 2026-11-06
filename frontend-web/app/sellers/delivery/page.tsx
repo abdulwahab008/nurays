@@ -11,7 +11,7 @@ import { useToast } from '@/components/ui/toast';
 import { useAuthStore } from '@/lib/store/auth-store';
 import { apiClient } from '@/lib/api-client';
 import LocationMap from '@/components/ui/LocationMap';
-import { Plus, X } from 'lucide-react';
+import { ChevronDown, Plus, X } from 'lucide-react';
 import { useShallow } from 'zustand/react/shallow';
 import { useT } from '@/lib/i18n';
 import { kitchenDeliveryMessages } from '@/lib/i18n/messages/kitchen-delivery';
@@ -93,7 +93,6 @@ export default function SellerDeliveryPage() {
   const [showOtherCities, setShowOtherCities] = useState(false);
   const [drafts, setDrafts] = useState<Record<string, CommunityDraft>>({});
   const [allowCrossCommunity, setAllowCrossCommunity] = useState(true);
-  const [homeCommunityName, setHomeCommunityName] = useState<string | null>(null);
   // The page as the server holds it (as loaded, or as last saved): Save changes stays quiet until something differs.
   const [savedSnapshot, setSavedSnapshot] = useState('');
   const snapshot = JSON.stringify({ deliveryModel, formData, drafts, allowCrossCommunity });
@@ -148,7 +147,6 @@ export default function SellerDeliveryPage() {
           setCommunities(rows);
           setDrafts(Object.fromEntries(rows.map((r) => [r.id, toDraft(r)])));
           setAllowCrossCommunity(d.allowCrossCommunity !== false);
-          setHomeCommunityName(d.homeCommunity?.name ?? null);
           setCommunitiesError(null);
         }
       } catch (err: unknown) {
@@ -475,7 +473,6 @@ export default function SellerDeliveryPage() {
   };
 
   const homeFee = communities.find((c) => c.isHome)?.nurayFee;
-  const nurayRiderBody = homeFee != null ? t('nurayRiderBodyFee', { fee: homeFee }) : t('nurayRiderBody');
 
   return (
     <DashboardLayout title={t('title')} subtitle={subtitle} sidebarItems={SELLER_SIDEBAR_ITEMS} userType="seller">
@@ -490,7 +487,7 @@ export default function SellerDeliveryPage() {
         )}
 
         <form onSubmit={handleSubmit}>
-          <section aria-labelledby="who-delivers">
+          <section aria-labelledby="who-delivers" className="[&:lang(ur)]:pt-2">
             <h2 id="who-delivers" className="text-sm font-semibold text-ink">{t('whoDelivers')}</h2>
             <div role="radiogroup" aria-labelledby="who-delivers" className="mt-3 grid gap-3 sm:grid-cols-2">
               {(
@@ -498,7 +495,7 @@ export default function SellerDeliveryPage() {
                   {
                     value: 'model_a',
                     title: t('nurayRiders'),
-                    body: nurayRiderBody,
+                    body: t('nurayRiderBody'),
                   },
                   {
                     value: 'model_b',
@@ -525,22 +522,37 @@ export default function SellerDeliveryPage() {
                     />
                     <span>
                       <span className="block text-[15px] font-semibold text-ink">{option.title}</span>
-                      <span className="mt-1 block text-sm text-muted">{option.body}</span>
+                      <span className="mt-0.5 block text-sm text-muted">{option.body}</span>
                     </span>
                   </label>
                 );
               })}
             </div>
+            <details className="group mt-2">
+              <summary className="inline-flex min-h-11 cursor-pointer list-none items-center gap-1 rounded text-sm font-semibold text-brand-ink focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-brand/40 [&::-webkit-details-marker]:hidden">
+                {t('howFeesWork')}
+                <ChevronDown className="h-4 w-4 transition-transform group-open:rotate-180" aria-hidden="true" />
+              </summary>
+              <dl className="mt-1 grid gap-3 rounded-xl bg-raised px-4 py-3 text-sm sm:grid-cols-2">
+                <div>
+                  <dt className="font-semibold text-ink">{t('nurayRiders')}</dt>
+                  <dd className="mt-0.5 text-muted">
+                    {homeFee != null ? t('feesNurayHome', { fee: homeFee }) : t('feesNurayHomeSet')} {t('feesNurayPaid')}
+                  </dd>
+                </div>
+                <div>
+                  <dt className="font-semibold text-ink">{t('selfDeliver')}</dt>
+                  <dd className="mt-0.5 text-muted">{t('feesSelf')}</dd>
+                </div>
+              </dl>
+            </details>
           </section>
 
-          <section aria-labelledby="where-you-deliver" className="mt-8 border-t border-line pt-6">
+          <section aria-labelledby="where-you-deliver" className="mt-6 border-t border-line pt-6">
             <h2 id="where-you-deliver" className="text-sm font-semibold text-ink">
               {selfDelivery ? t('feePerCommunity') : t('whereYouDeliver')}
             </h2>
-            <p className="mt-1 text-sm text-muted">
-              {homeCommunityName ? `${t('kitchenIn', { name: homeCommunityName })} ` : ''}
-              {selfDelivery ? t('selfCommunityHint') : t('nurayCommunityHint')}
-            </p>
+            <p className="mt-1 text-sm text-muted">{selfDelivery ? t('selfCommunityHint') : t('nurayCommunityHint')}</p>
 
             <div className="mt-4 flex items-center justify-between gap-4">
               <span>
@@ -805,7 +817,7 @@ export default function SellerDeliveryPage() {
                         key={name}
                         type="button"
                         onClick={() => handleQuickAddSociety(name)}
-                        className="inline-flex min-h-9 items-center gap-1 rounded-full border border-line px-3 text-sm text-ink hover:bg-raised focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-brand/30"
+                        className="inline-flex min-h-11 items-center gap-1 rounded-full border border-line px-3 text-sm text-ink hover:bg-raised focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-brand/30"
                       >
                         <Plus className="h-3.5 w-3.5 text-muted" aria-hidden="true" />
                         {name}
@@ -822,7 +834,7 @@ export default function SellerDeliveryPage() {
                           type="button"
                           onClick={() => handleRemoveArea(area)}
                           aria-label={t('removeArea', { area })}
-                          className="flex h-9 w-9 items-center justify-center rounded-full hover:bg-brand-100 focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-brand/30"
+                          className="flex h-11 w-11 items-center justify-center rounded-full hover:bg-brand-100 focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-brand/30"
                         >
                           <X className="h-4 w-4" aria-hidden="true" />
                         </button>
@@ -870,7 +882,11 @@ export default function SellerDeliveryPage() {
           )}
 
           <div data-bottom-bar className="sticky bottom-0 z-10 mt-8 flex justify-end border-t border-line bg-page/95 py-4 pb-[calc(1rem+var(--safe-bottom,0px))] backdrop-blur">
-            <Button type="submit" disabled={saving || !changed} className="min-h-11 w-full px-6 sm:w-auto">
+            <Button
+              type="submit"
+              disabled={saving || !changed}
+              className="min-h-11 w-full px-6 sm:w-auto disabled:bg-raised disabled:text-muted disabled:opacity-100"
+            >
               {saving ? t('saving') : t('save')}
             </Button>
           </div>

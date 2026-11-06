@@ -302,7 +302,7 @@ L.tileLayer(MAP_TILE_URL, { attribution: MAP_ATTRIBUTION, maxZoom: MAP_MAX_ZOOM 
   };
 
   return (
-    <div className="relative rounded-2xl overflow-hidden border border-line bg-surface">
+    <div className="relative rounded-2xl overflow-hidden border border-line bg-surface pointer-coarse:[&_.leaflet-bar_a]:size-11! pointer-coarse:[&_.leaflet-bar_a]:leading-11!">
       <div className="p-3 bg-surface border-b border-line space-y-2.5">
         <div className="flex items-center gap-2">
           <div className="flex-1 min-w-0 relative">
@@ -339,7 +339,7 @@ L.tileLayer(MAP_TILE_URL, { attribution: MAP_ATTRIBUTION, maxZoom: MAP_MAX_ZOOM 
                 key={c.name}
                 type="button"
                 onClick={() => jumpTo(c.lat, c.lng, c.name === 'Askari 11' ? 16 : 13)}
-                className="min-h-9 px-3 rounded-full bg-raised hover:bg-line text-ink text-xs font-medium transition-colors shrink-0 cursor-pointer focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-brand/40"
+                className="min-h-9 pointer-coarse:min-h-11 px-3 rounded-full bg-raised hover:bg-line text-ink text-xs font-medium transition-colors shrink-0 cursor-pointer focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-brand/40"
               >
                 {c.name}
               </button>
