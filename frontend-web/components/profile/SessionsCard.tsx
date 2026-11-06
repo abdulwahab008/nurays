@@ -121,7 +121,7 @@ export function SessionsCard() {
                   </div>
                 </div>
                 {!d.current && (
-                  <Button variant="outline" size="sm" className="shrink-0 min-h-11" disabled={busyId === d.id} onClick={() => signOut(d)} data-testid="session-sign-out">
+                  <Button variant="outline" size="sm" className="shrink-0 min-h-11" disabled={busyId === d.id} onClick={() => signOut(d)} aria-label={t('deviceSignOutNamed', { device: name(d) })} data-testid="session-sign-out">
                     {t('deviceSignOut')}
                   </Button>
                 )}

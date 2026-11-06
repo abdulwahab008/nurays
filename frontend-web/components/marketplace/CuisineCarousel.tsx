@@ -131,6 +131,8 @@ export function CuisineCarousel({ selectedCuisine, onSelectCuisine }: CuisineCar
                 <img
                   src={item.image}
                   alt={cuisineLabel(item)}
+                  loading="lazy"
+                  decoding="async"
                   className="w-full h-full object-cover group-hover/card:scale-105 transition-transform duration-300"
                 />
 

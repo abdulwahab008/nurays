@@ -16,7 +16,7 @@ test.describe('Nuray smoke', () => {
   // lists the whole catalog.
   test('/products lists items fetched from backend', async ({ page }) => {
     await page.goto('/products');
-    await expect(page.getByRole('heading', { level: 1, name: /Home Kitchens & Menus/i })).toBeVisible({ timeout: 15000 });
+    await expect(page.getByRole('heading', { level: 1, name: /Dishes near you/i })).toBeVisible({ timeout: 15000 });
     await page.getByRole('button', { name: /^Dishes/ }).click();
     const cards = page.locator('a[href*="/products/"]');
     await expect(cards.first()).toBeVisible({ timeout: 15000 });

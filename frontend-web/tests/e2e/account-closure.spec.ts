@@ -11,7 +11,7 @@ test.describe('Leaving from the profile page', () => {
     await signIn(page, customer);
     await page.goto('/profile');
     await expect(page.getByTestId('delete-account')).toBeVisible({ timeout: 20000 });
-    await page.getByRole('button', { name: /^Sign Out$/ }).click();
+    await page.getByTestId('profile-sign-out').click();
     await expect(page).toHaveURL(/\/$/, { timeout: 15000 });
     await expect(page).not.toHaveURL(/\/login/);
   });
